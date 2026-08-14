@@ -40,6 +40,16 @@ export type { PublicDecisionList, PublicIdentity, PublicRun, PublicService }
  *
  * Takes the two fields it addresses rather than the whole config, so a command that holds only the
  * BOARD half (`reset`) drives the same client the scenarios do instead of a second one built beside it.
+ *
+ * **The raised retry budget is where a deployment restart is absorbed for every ONE-SHOT call**,
+ * and it belongs here rather than at any call site: the polls have their own tolerance
+ * (`deploymentOutage.ts`), but a pass makes dozens of reads between them (`tasks.getRun`,
+ * `evidence.getReport`, `services.list`, every preflight probe) and a restart landing on one of
+ * those threw straight out with no observation, which is the failure the poll tolerance was
+ * written for arriving one call to the left. The SDK's OWN rule decides what may be replayed:
+ * `GET`/`HEAD`/`DELETE` only, never a `POST`, so answering a decision is still exactly-once. Eight
+ * attempts against its capped exponential backoff is tens of seconds, which covers a supervisor
+ * relaunch; a longer absence is what the poll's two-minute grace is for.
  */
 export function createClient(
   config: Pick<AcceptanceConfig, 'baseUrl' | 'apiKey'>,
@@ -48,6 +58,7 @@ export function createClient(
   return new CatFactoryClient({
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
+    maxRetries: 8,
     ...(unlock
       ? {
           fetch: ((input, init) =>
@@ -220,11 +231,12 @@ function kinds(decisions: PublicDecisionList['decisions']): string {
  * which is authoritative by construction and carries every step's whole output (the stream
  * clips them; see `truncated` on the run-step contract).
  *
- * **This is the wait that carries the outage tolerance**, and it is the only one that needs it:
- * it is where a pass spends its hours, so it is where a deployment restart lands (see
- * `deploymentOutage.ts`). The one-shot calls around it are exposed for a second each and would
- * have to answer a harder question than "poll again" if they were retried, since some of them
- * write.
+ * **This is the wait that carries the outage tolerance**, because it is where a pass spends its
+ * hours and therefore where a long outage lands (see `deploymentOutage.ts`). It is not the only
+ * cover: the one-shot calls around it ride the client's raised retry budget, which absorbs a
+ * restart on any READ (see {@link createClient}). What neither covers is a restart landing exactly
+ * on a write, and deliberately so: replaying `decisions.answer` is not a decision this suite may
+ * make on the deployment's behalf.
  */
 export function waitForDecisionOrSettled(options: {
   client: CatFactoryClient

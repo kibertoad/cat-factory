@@ -17,6 +17,7 @@
 // reader with a different remedy). It classifies through `describeProbeFailure` rather than
 // matching on messages, so this suite keeps ONE reading of a thrown probe.
 
+import type { ConnectionFailureCause } from '@cat-factory/kernel'
 import type { ProbeTolerance } from './deadline.ts'
 import { describeProbeFailure } from './probeFailure.ts'
 
@@ -46,16 +47,65 @@ export const DEPLOYMENT_OUTAGE_GRACE_MS = 2 * 60 * 1000
 const GATEWAY_STATUSES = new Set([502, 504])
 
 /**
+ * Which unanswered causes have the shape of a RESTART, and are therefore worth sitting through.
+ *
+ * An ALLOW-list rather than a deny-list, because "no answer" is not one condition. kernel's
+ * classification (`CAUSE_CODES`) covers eleven, and only four of them describe a deployment that
+ * might be back in a minute: the port is not listening yet (`refused`), the socket died under the
+ * request (`reset`, which is what a process killed mid-response produces), nothing answered in
+ * time (`timeout`, which is a boot running its migrations before it binds), and the host or its
+ * network is momentarily absent (`unreachable`, a container coming back).
+ *
+ * The other seven are configuration, not weather, and each is its OWN diagnosis. A DNS entry that
+ * stopped resolving, a certificate that expired or is self-signed, a credential pasted with a
+ * newline in it (`invalid-header`) and a cancelled request are all facts a pass should report in
+ * the seconds it takes to read them, not sit out for two minutes and then blame on a restart that
+ * never happened. `unknown` stays excluded for the reason it always was: the thrown value was read
+ * and matched nothing, which is as true of a bug in this suite as of an exotic socket failure.
+ *
+ * An exhaustive `Record` rather than a `Set`, so a cause added to kernel's vocabulary fails this
+ * file to compile and gets a decision, rather than defaulting into the tolerated half.
+ */
+const TRANSIENT_CAUSES: Record<ConnectionFailureCause, boolean> = {
+  refused: true,
+  reset: true,
+  timeout: true,
+  unreachable: true,
+  dns: false,
+  aborted: false,
+  'tls-untrusted': false,
+  'tls-expired': false,
+  'tls-hostname': false,
+  'tls-protocol': false,
+  'invalid-header': false,
+  unknown: false,
+}
+
+/**
+ * How much of a cause chain ONE observation carries.
+ *
+ * `describeProbeFailure` renders the whole chain at kernel's LOG budget (4000 characters), which
+ * is right for the one-shot refusal it was written for and wrong here: this line is written every
+ * poll interval for as long as the outage lasts, into a journal whose value is that a person can
+ * read it. What separates one outage from another is the cause class and the first line of the
+ * chain, both of which fit.
+ */
+const OBSERVED_DETAIL_CHARS = 200
+
+function briefly(detail: string): string {
+  const dropped = detail.length - OBSERVED_DETAIL_CHARS
+  // Says what it dropped: a reader who assumes a whole chain would take the last link they see as
+  // the root cause.
+  return dropped > 0 ? `${detail.slice(0, OBSERVED_DETAIL_CHARS)} (+${dropped} more chars)` : detail
+}
+
+/**
  * The tolerance a deployment-polling wait runs with.
  *
- * What it tolerates is the absence of an ANSWER. Anything the deployment (or something in its
- * place) actually said is returned as `null` and ends the wait, because a refusal is evidence and
- * sitting through evidence is how a wait turns a broken key or a retired route into a two-minute
- * silence followed by the wrong message.
- *
- * The `unknown` transport cause is excluded on the same principle. It means the thrown value was
- * read and matched nothing, which is as true of a bug in this suite as of an exotic socket
- * failure, and a bug that presents as an outage is a bug that gets waited on instead of reported.
+ * What it tolerates is the absence of an ANSWER, for the four causes above. Anything the deployment
+ * (or something in its place) actually said is returned as `null` and ends the wait, because a
+ * refusal is evidence and sitting through evidence is how a wait turns a broken key or a retired
+ * route into a two-minute silence followed by the wrong message.
  */
 export function deploymentOutageTolerance(
   graceMs: number = DEPLOYMENT_OUTAGE_GRACE_MS,
@@ -65,14 +115,14 @@ export function deploymentOutageTolerance(
     describe: (error) => {
       const failure = describeProbeFailure(error)
       if (failure.kind === 'unanswered') {
-        return failure.cause === 'unknown'
-          ? null
-          : `the deployment did not answer (${failure.cause}): ${failure.detail}`
+        return TRANSIENT_CAUSES[failure.cause]
+          ? `the deployment did not answer (${failure.cause}): ${briefly(failure.detail)}`
+          : null
       }
       if (failure.kind === 'answered' && GATEWAY_STATUSES.has(failure.status)) {
         return (
           `something in front of the deployment answered ${failure.status}, so it could not reach ` +
-          `it: ${failure.detail}`
+          `it: ${briefly(failure.detail)}`
         )
       }
       return null

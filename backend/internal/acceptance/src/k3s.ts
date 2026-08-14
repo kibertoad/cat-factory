@@ -34,6 +34,14 @@ import type { ClusterConfig } from './config.ts'
 export const MANIFEST_DIR = 'deploy/k8s'
 
 /**
+ * The doc that owns the cluster half of this setup.
+ *
+ * Here rather than in each file that cites it: `prerequisites.ts` and `manifestTemplates.ts` both
+ * end k3s remedies on it, and two copies of a path is one of them surviving a rename.
+ */
+export const K3S_DOC = 'backend/docs/local-k3s-environments.md'
+
+/**
  * The two configured templates a scaffold brief has to state, so it asks for manifests the engine
  * this suite registers can actually render. Threaded rather than re-read, so the pair travels
  * together: a brief holding one of them and a literal for the other is the drift they exist to
@@ -108,16 +116,73 @@ export function buildServiceProvisioning(): PublicServiceProvisioning {
  */
 export function renderEnvironmentHost(hostTemplate: string, namespace: string): string | null {
   const rendered = hostTemplate.replaceAll('{{namespace}}', namespace)
-  return rendered.includes('{{') ? null : rendered
+  return rendered.includes('{{') || rendered.includes('}}') ? null : rendered
 }
 
-/** The per-pull-request values the platform fills an image template's holes with. */
-export type ImageTemplateSample = {
-  repoOwner: string
-  repoName: string
-  pullNumber: string
-  branch: string
-  namespace: string
+/**
+ * The per-pull-request values the platform fills an image template's holes with.
+ *
+ * **The KEY SET is the load-bearing half**, not the values: it decides which templates the gate
+ * below refuses as unfillable, so it has to be exactly what the deployer supplies. That set is
+ * assembled in two places on the other side. `DeployerStepController` passes the block's own
+ * inputs (`blockId`, `title`, `type`, `description`) plus the frontend/peer URLs it derives, and
+ * `EnvironmentProvisioningService` flattens the typed `ProvisionContext` (`branch`, `pullNumber`,
+ * `pullUrl`, `repoOwner`, `repoName`) into the same namespace. A key missing from here is a
+ * WORKING template refused with a message naming the wrong vocabulary; a key invented here is a
+ * broken one waved through.
+ *
+ * **`namespace` is deliberately absent, and that is the trap this comment exists for.** It is a
+ * hole in the INGRESS HOST template and in the manifests, which makes it look like a per-PR value
+ * an image may be built from too. It is not: `KubernetesEnvironmentProvider.provisionContext`
+ * renders `imageTemplate` against the bare inputs and only THEN adds `namespace` (and `image`) to
+ * the vars the manifests are rendered with. So `…:{{namespace}}` renders here as a plausible tag
+ * and on the platform as nothing at all, which is the `image: ""` refusal this whole gate exists
+ * to move to the front of a pass.
+ */
+export type ImageTemplateSample = Record<ImageTemplateKey, string>
+
+type ImageTemplateKey =
+  | 'blockId'
+  | 'title'
+  | 'type'
+  | 'description'
+  | 'branch'
+  | 'pullNumber'
+  | 'pullUrl'
+  | 'repoOwner'
+  | 'repoName'
+  | 'frontendOrigins'
+  | 'peerEnvUrls'
+
+/**
+ * A sample provision of the named repository, for rendering a template before a pass opens
+ * anything.
+ *
+ * Built here rather than at the call site so the key set travels with the renderer that judges
+ * against it. The VALUES only have to be representative, and two of them are chosen rather than
+ * arbitrary: `branch` carries the platform's own `cat-factory/<taskId>` shape, because the slash
+ * is what makes `{{branch}}` unusable as a tag, and `title` carries a space, because a template
+ * built from one renders a reference no registry accepts.
+ *
+ * `frontendOrigins` and `peerEnvUrls` are CONDITIONAL on the other side (a service no frontend
+ * binds is provisioned without them). They are sampled as present anyway: a template naming one
+ * is refused either way, and refusing it as "not a legal reference" is true where "a provision
+ * does not fill it" would not be.
+ */
+export function imageTemplateSample(repo: { owner: string; name: string }): ImageTemplateSample {
+  return {
+    blockId: 'blk_19312e8862264172b1fa1051',
+    title: 'Stand up the catalog API service',
+    type: 'feature',
+    description: 'The catalog API',
+    branch: 'cat-factory/task_19312e8862264172b1fa1051',
+    pullNumber: '1',
+    pullUrl: `https://github.com/${repo.owner}/${repo.name}/pull/1`,
+    repoOwner: repo.owner,
+    repoName: repo.name,
+    frontendOrigins: 'http://cf-acc-1.127.0.0.1.nip.io',
+    peerEnvUrls: 'catalog-web=http://cf-acc-1.127.0.0.1.nip.io',
+  }
 }
 
 /** Whether a template yields an image reference a cluster could actually pull. */
@@ -132,10 +197,11 @@ export type ImageTemplateVerdict = { ok: true; rendered: string } | { ok: false;
  * (`kubernetes-environment.logic.ts`), and then NAMES the key, because that substitution is
  * silent on the other side and its symptom is an apiserver error about a field the manifest sets.
  *
- * It is not a reference parser and does not try to be. It checks the three things that are wrong
- * ABOUT A TEMPLATE rather than about an image: a hole nothing fills, a name the registry will
- * reject on case, and a tag built from something that is not tag-shaped. Everything else is a fact
- * about the registry, which reports it honestly at pull time.
+ * It is not a reference parser and does not try to be. It checks what is wrong ABOUT A TEMPLATE
+ * rather than about an image: a hole nothing fills, a hole that is not even hole-SHAPED, a value
+ * that renders whitespace into the reference, a name the registry will reject on case, and a tag
+ * built from something that is not tag-shaped. Everything else is a fact about the registry, which
+ * reports it honestly at pull time.
  */
 export function renderEnvironmentImage(
   template: string,
@@ -144,9 +210,14 @@ export function renderEnvironmentImage(
   const unfilled = new Set<string>()
   const fill = (part: string): string =>
     part.replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (_match, key: string) => {
-      const value = (sample as Record<string, string>)[key]
-      if (value === undefined) unfilled.add(key)
-      return value ?? ''
+      // `Object.hasOwn`, never a nullish read: `{{toString}}` and `{{constructor}}` both match the
+      // hole charset and both find a FUNCTION up the prototype chain, so an optional read reports
+      // them as filled and splices `function toString() { [native code] }` into the reference.
+      if (!Object.hasOwn(sample, key)) {
+        unfilled.add(key)
+        return ''
+      }
+      return sample[key as ImageTemplateKey]
     })
 
   // The tag boundary is read off the TEMPLATE rather than off the rendered string, and that is
@@ -158,8 +229,11 @@ export function renderEnvironmentImage(
   const lastSlash = template.lastIndexOf('/')
   const lastColon = template.lastIndexOf(':')
   const tagged = lastColon > lastSlash
-  const name = fill(tagged ? template.slice(0, lastColon) : template).trim()
-  const tag = tagged ? fill(template.slice(lastColon + 1)).trim() : null
+  // NOT trimmed, deliberately: `renderTemplate` on the other side trims nothing, so a template
+  // carrying a stray space renders one into the reference. Trimming here reported a value the
+  // platform would never produce, and this gate's whole contract is to render as the platform does.
+  const name = fill(tagged ? template.slice(0, lastColon) : template)
+  const tag = tagged ? fill(template.slice(lastColon + 1)) : null
   const rendered = tag === null ? name : `${name}:${tag}`
 
   if (unfilled.size > 0) {
@@ -171,7 +245,29 @@ export function renderEnvironmentImage(
         `unfilled hole as nothing`,
     }
   }
+  // A leftover brace is a hole the SUBSTITUTION never saw: the syntax is `{{[a-zA-Z0-9_.]+}}`, so
+  // `{{repo-owner}}`, `{{pull number}}` and a half-typed `{{pullNumber}` match nothing and survive
+  // rendering verbatim, on this side and on the platform's. Without this they read as an ordinary
+  // literal, and braces are not legal in a reference, so the manifest reaches the apiserver broken.
+  // The sibling `renderEnvironmentHost` has always guarded this; the tag half here was only ever
+  // covered by accident, through the tag charset, and the NAME half not at all.
+  if (rendered.includes('{{') || rendered.includes('}}')) {
+    return {
+      ok: false,
+      problem:
+        `renders as '${rendered}', which still holds a brace: a placeholder is ` +
+        `{{someName}} with no punctuation inside, so anything else is copied through as text`,
+    }
+  }
   if (name === '') return { ok: false, problem: 'renders to nothing' }
+  if (/\s/.test(rendered)) {
+    return {
+      ok: false,
+      problem:
+        `renders as '${rendered}', which contains whitespace; no image reference may. Either the ` +
+        `template holds a stray space (nothing trims one) or a hole it names renders prose`,
+    }
+  }
   if (tag === null) {
     return {
       ok: false,
@@ -184,8 +280,18 @@ export function renderEnvironmentImage(
     return {
       ok: false,
       problem:
-        `renders as '${rendered}', whose name is not lowercase; registries reject that. ` +
-        `ACCEPTANCE_REPO_OWNER is the usual source, since {{repoOwner}} is copied verbatim`,
+        `renders as '${rendered}', whose name is not lowercase; registries reject that` +
+        // Named only when the template actually asks for the owner, because it is then the likely
+        // source and the operator has a variable to edit. Said unconditionally it accused
+        // ACCEPTANCE_REPO_OWNER of an uppercase letter that came from a hard-coded name or from
+        // `{{title}}`. What it can NEVER promise is that a lowercase value here stays lowercase:
+        // the platform re-derives `{{repoOwner}}` from the pull request URL, so what lands is the
+        // provider's canonical spelling of the login, whatever this variable says.
+        (template.includes('{{repoOwner}}')
+          ? `. ACCEPTANCE_REPO_OWNER is the likely source, though the platform fills ` +
+            `{{repoOwner}} from the pull request URL, so an owner whose canonical login carries ` +
+            `a capital renders one however this variable is spelled`
+          : ''),
     }
   }
   if (!/^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/.test(tag)) {

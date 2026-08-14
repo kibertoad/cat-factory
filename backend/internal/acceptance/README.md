@@ -223,23 +223,23 @@ diagnosis, `deployment-health` relays it verbatim, doc link included: the backen
 remedy already names the exact `openssl`/`npx` line, and a paraphrase here would be a second copy
 of it, one release behind.
 
-| Prerequisite         | Checked | What it means                                                                                                                                                                                                                   |
-| -------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `deployment-health`  | yes     | The backend booted. A misconfigured one serves a fallback app, and its own problem list is reported.                                                                                                                            |
-| `api-key`            | yes     | `CAT_FACTORY_API_KEY` names `ACCEPTANCE_WORKSPACE_ID` and is scoped `admin`.                                                                                                                                                    |
-| `spend-budget`       | yes     | The workspace is not over budget, which pauses every run.                                                                                                                                                                       |
-| `agent-model`        | yes     | At least one catalog model is selectable. Distinguishes "unconfigured" from "blocked by account policy".                                                                                                                        |
-| `model-preset`       | yes     | `ACCEPTANCE_MODEL_PRESET` exists here AND its base model can be dispatched to (see below).                                                                                                                                      |
-| `vcs-connection`     | yes     | Connected to `ACCEPTANCE_REPO_OWNER` and may write workflow files.                                                                                                                                                              |
-| `target-repos`       | yes     | Both named repositories are REACHABLE (linked already, or point-read through `/repos/available`) AND adoptable: no monorepo, nothing homed on another board, and any existing service link is one this pass's own ledger names. |
-| `issue-credential`   | yes     | `ACCEPTANCE_VCS_TOKEN` can reach the backend repository and open an issue on it (which needs its Issues feature switched on).                                                                                                   |
-| `tracker-writeback`  | yes     | The workspace comments on a linked tracker issue when a pull request opens AND closes it when the pull request merges: scenario 04's whole claim.                                                                               |
-| `auto-merge-policy`  | yes     | The workspace's default risk policy permits auto-merge (see below).                                                                                                                                                             |
-| `board-titles`       | yes     | A fresh pass is not about to create a second frame under a title this board already has.                                                                                                                                        |
-| `cluster-connection` | yes     | The apiserver answers the ServiceAccount token, probed without persisting anything.                                                                                                                                             |
-| `ingress-template`   | yes     | An environment URL renders from the configured host template.                                                                                                                                                                   |
-| `image-template`     | yes     | The manifests' `{{image}}` renders to a reference a cluster could pull. It says outright what it did NOT check: whether anything publishes that reference, and whether the cluster may pull it.                                 |
-| `pipeline-catalog`   | note    | Advisory: an unadopted pipeline materialises on first start, so this is a heads-up rather than a refusal.                                                                                                                       |
+| Prerequisite         | Checked | What it means                                                                                                                                                                                                                                           |
+| -------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `deployment-health`  | yes     | The backend booted. A misconfigured one serves a fallback app, and its own problem list is reported.                                                                                                                                                    |
+| `api-key`            | yes     | `CAT_FACTORY_API_KEY` names `ACCEPTANCE_WORKSPACE_ID` and is scoped `admin`.                                                                                                                                                                            |
+| `spend-budget`       | yes     | The workspace is not over budget, which pauses every run.                                                                                                                                                                                               |
+| `agent-model`        | yes     | At least one catalog model is selectable. Distinguishes "unconfigured" from "blocked by account policy".                                                                                                                                                |
+| `model-preset`       | yes     | `ACCEPTANCE_MODEL_PRESET` exists here AND its base model can be dispatched to (see below).                                                                                                                                                              |
+| `vcs-connection`     | yes     | Connected to `ACCEPTANCE_REPO_OWNER` and may write workflow files.                                                                                                                                                                                      |
+| `target-repos`       | yes     | Both named repositories are REACHABLE (linked already, or point-read through `/repos/available`) AND adoptable: no monorepo, nothing homed on another board, and any existing service link is one this pass's own ledger names.                         |
+| `issue-credential`   | yes     | `ACCEPTANCE_VCS_TOKEN` can reach the backend repository and open an issue on it (which needs its Issues feature switched on).                                                                                                                           |
+| `tracker-writeback`  | yes     | The workspace comments on a linked tracker issue when a pull request opens AND closes it when the pull request merges: scenario 04's whole claim.                                                                                                       |
+| `auto-merge-policy`  | yes     | The workspace's default risk policy permits auto-merge (see below).                                                                                                                                                                                     |
+| `board-titles`       | yes     | A fresh pass is not about to create a second frame under a title this board already has.                                                                                                                                                                |
+| `cluster-connection` | yes     | The apiserver answers the ServiceAccount token, probed without persisting anything.                                                                                                                                                                     |
+| `ingress-template`   | yes     | An environment URL renders from the configured host template.                                                                                                                                                                                           |
+| `image-template`     | yes     | The manifests' `{{image}}` renders to a reference a cluster could pull. It says outright what it did NOT check: whether anything publishes that reference, whether the cluster may pull it, and whether the owner is spelled as the provider spells it. |
+| `pipeline-catalog`   | note    | Advisory: an unadopted pipeline materialises on first start, so this is a heads-up rather than a refusal.                                                                                                                                               |
 
 Three things it deliberately does NOT check, because none is knowable from where it stands:
 
@@ -413,12 +413,28 @@ No deploy runner is needed. The suite uses a `raw` manifest source, which the ba
 directly over the apiserver; a `kustomize` overlay would need `LOCAL_DEPLOY_RUNTIME=container` and
 a deploy image on top. That is real product surface and is covered by the doc above, not here.
 
-**One thing to know about images.** The bootstrapped repositories ship a workflow that builds and
-pushes their image on every push, and their manifests reference the platform's `{{image}}`
-placeholder. The `deployer` step runs after `coder` and `reviewer`, so the image is normally
-already pushed by then; where it is not, the pods sit in `ImagePullBackOff` and Kubernetes retries
-until it lands, which the environment status poll absorbs. The registry must be readable by the
-cluster (a public package, or an `imagePullSecret` you have already installed).
+**Two things to know about images**, and the second one is a setup step nobody can do for you.
+
+The bootstrapped repositories ship a workflow that builds and pushes their image, and their
+manifests reference the platform's `{{image}}` placeholder, which the connection resolves from
+`ACCEPTANCE_K3S_IMAGE_TEMPLATE` (default `ghcr.io/{{repoOwner}}/{{repoName}}:pr-{{pullNumber}}`).
+Tagging by pull-request number is what forces the workflow's `pull_request` trigger: a provision
+carries no commit sha, so the tag is built from the number, and the number does not exist until the
+pull request does. `pl_build` puts a whole `reviewer` pass between the pull request opening and the
+`deployer` step, so the image is normally already pushed by then; where it is not, the pods sit in
+`ImagePullBackOff` and the kubelet retries until it lands, which the environment status poll
+absorbs as an environment that took longer to become ready.
+
+**The cluster must be able to pull that reference with NO credential.** A GHCR package published by
+Actions is private until somebody makes it public, and the kubelet then answers 403 for the whole
+life of the environment. There is no configuration path out of that here: the Kubernetes
+environment connection carries no registry credential, and the per-PR namespace is created by the
+platform seconds before the manifests are applied, so an `imagePullSecret` cannot be waiting in it.
+So make each repository's package public once (its **Package settings → Change visibility**, after
+the first publish), or point `ACCEPTANCE_K3S_IMAGE_TEMPLATE` at a registry the cluster reads
+anonymously. The `image-template` prerequisite states this omission in its PASS text, because it
+cannot check it: a private package presents as an environment that provisions and never becomes
+ready, which reads like a broken cluster.
 
 ## Configuration
 
@@ -819,7 +835,22 @@ unanswered poll an OBSERVATION for two minutes (journalled, and the recovery is 
 because an unexplained gap in the observations is how a restart becomes invisible), and an outage
 that outlasts that says the deployment stopped answering rather than blaming the run. An ANSWER is
 never waited through: a refusal is evidence, and the typed SDK error is rethrown untouched so its
-status and request id survive.
+status and request id survive. What is waited through is an allow-list of four transport causes
+that have the shape of a restart (refused, reset, timeout, unreachable); a DNS entry that stopped
+resolving, an expired certificate and a credential pasted with a newline in it are each their own
+diagnosis, and sitting on one for two minutes only delays it and then blames a restart that never
+happened.
+
+**And an outage never becomes the LAST OBSERVATION.** "The deployment did not answer" says nothing
+about the run, so it is journalled but never overwrites the last thing the deployment actually
+said; a wait that expires mid-outage prints the last real observation plus the silence as a
+separate clause. Otherwise both expiry messages report the silence, while the outage message is
+still telling its reader the run may well be fine, having discarded the only evidence about it.
+
+Between the waits, a restart is absorbed by the SDK client's raised retry budget
+(`createClient`), which covers every READ a scenario makes one-shot. A write is deliberately not
+retried: replaying an answered decision is not a call this suite may make on the deployment's
+behalf.
 
 **4. Every failing claim is reported, not just the first.** A run that both skipped its environment
 and failed CI is one story, and learning the second half on tomorrow's re-run wastes a day per bug.

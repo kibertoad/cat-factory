@@ -87,6 +87,19 @@ export const SERVICE_DESCRIPTIONS: Record<'backend' | 'frontend', string> = {
  * something the cluster will never pull. Neither would fail loudly: the first ends as an
  * environment that never answers, the second as one whose pods sit in `ImagePullBackOff` until the
  * rollout deadline.
+ *
+ * **The publish is triggered by the PULL REQUEST, which is forced by what the tag can be made of.**
+ * A provision knows no commit sha, so the reference is discriminated by pull-request number, and
+ * that number does not exist until the pull request does: a `push`-triggered workflow could not
+ * name the image the environment will pull. The cost is the head start a push-triggered build used
+ * to have. `pl_build` puts a whole `reviewer` pass between the pull request opening and the
+ * `deployer` step, which is normally more than a small image needs, and a provision that does lose
+ * the race backs off and pulls on a later attempt rather than failing: it presents as an
+ * environment that takes a few extra minutes to become ready.
+ *
+ * **The per-PR tag is MUTABLE, so `imagePullPolicy: Always` is not decoration.** A rebuild
+ * republishes the same reference, and a node that has already cached it would otherwise keep
+ * serving the code the pull request had an hour ago while every log line says the image is current.
  */
 function manifestBrief(servicePort: number, targets: ManifestTargets): string {
   const { ingressHostTemplate, imageTemplate } = targets
@@ -97,7 +110,9 @@ render step, so every file must be valid Kubernetes YAML exactly as committed.
 
 Rules that are NOT negotiable, because the platform renders them:
 - Use the literal placeholder \`{{image}}\` as the container image. Do not resolve it to a real
-  image reference; the platform substitutes it per environment.
+  image reference; the platform substitutes it per environment. Set \`imagePullPolicy: Always\` on
+  that container: the reference is republished under the same tag as the branch moves, so a node
+  that cached an earlier build would otherwise serve it.
 - Use the literal placeholder \`{{namespace}}\` wherever the namespace appears, and do not set a
   hard-coded \`namespace:\` on any resource.
 - The Ingress host must be exactly \`${ingressHostTemplate}\`, placeholders included and unresolved.
@@ -106,9 +121,11 @@ Rules that are NOT negotiable, because the platform renders them:
 
 Also ship a GitHub Actions workflow that publishes the image this environment pulls. The platform
 renders \`{{image}}\` as \`${imageTemplate}\`, filling its placeholders from the pull request, so
-the workflow must build the Dockerfile and push exactly that reference (image names are lowercase)
-on \`pull_request\` events including \`synchronize\`, so every push to the branch republishes it
-before the environment is provisioned again.`.trim()
+the workflow must build the Dockerfile and push exactly that reference (image names are lowercase).
+Trigger it on \`pull_request\` with types \`[opened, synchronize, reopened]\`, so the image exists
+from the moment the pull request does and every later push to the branch republishes it under the
+same tag. Nothing else may gate the publish: the environment is provisioned while the pull request
+is still open, so a workflow that only runs on merge publishes too late to be pulled at all.`.trim()
 }
 
 /** The backend scaffold brief. Note the 1-based \`offset\`: one half of the planted mismatch. */

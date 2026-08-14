@@ -18,14 +18,15 @@
 // of these the default is a working answer.
 
 import type { AcceptanceConfig } from './config.ts'
-import { renderEnvironmentHost, renderEnvironmentImage } from './k3s.ts'
+import { DEFAULT_IMAGE_TEMPLATE, DEFAULT_INGRESS_HOST_TEMPLATE } from './config.ts'
+import {
+  imageTemplateSample,
+  K3S_DOC,
+  renderEnvironmentHost,
+  renderEnvironmentImage,
+} from './k3s.ts'
 import { envAssignment } from './operatorText.ts'
 import { type Prerequisite, satisfied, unsatisfied } from './preflight.ts'
-
-const K3S_DOC = 'backend/docs/local-k3s-environments.md'
-
-const DEFAULT_INGRESS_HOST_TEMPLATE = '{{namespace}}.127.0.0.1.nip.io'
-const DEFAULT_IMAGE_TEMPLATE = 'ghcr.io/{{repoOwner}}/{{repoName}}:pr-{{pullNumber}}'
 
 /**
  * All these two checks need. Narrower than `PreflightContext` on purpose, and assignable from it,
@@ -85,31 +86,34 @@ export const MANIFEST_TEMPLATE_PREREQUISITES: readonly Prerequisite<ManifestTemp
       // spec.template.spec.containers[0].image: Required value` — an apiserver complaining about a
       // field the manifest sets perfectly well.
       const template = config.cluster.imageTemplate
-      const verdict = renderEnvironmentImage(template, {
-        repoOwner: config.repoOwner,
-        repoName: config.repos.backend,
-        // A pull request this suite has not opened yet, and the platform's own branch shape: the
-        // slash is what makes `{{branch}}` unusable as a tag, so the sample has to carry one.
-        pullNumber: '1',
-        branch: 'cat-factory/task_19312e8862264172b1fa1051',
-        namespace: 'cf-acc-1',
-      })
+      // The sample's KEY SET is `k3s.ts`'s, beside the renderer that judges against it: it has to
+      // be what the deployer supplies, and `{{namespace}}` is NOT among them however much the
+      // manifests' own use of that hole suggests otherwise (the image is rendered one step before
+      // the namespace joins the vars).
+      const verdict = renderEnvironmentImage(
+        template,
+        imageTemplateSample({ owner: config.repoOwner, name: config.repos.backend }),
+      )
       if (verdict.ok) {
-        // States what it did NOT check, in the same breath as the pass. Both omissions are
-        // reachable states of a correctly configured suite (nothing has published a first image
-        // yet; a fresh GHCR package is private until someone says otherwise), and both present as
-        // an environment that provisions and never becomes ready, which reads like a cluster fault.
+        // States what it did NOT check, in the same breath as the pass. All three omissions are
+        // reachable states of a correctly configured suite, and each presents as an environment
+        // that provisions and never becomes ready, which reads like a cluster fault.
         return satisfied(
-          `'${template}' renders as '${verdict.rendered}'. Whether anything PUBLISHES that ` +
-            `reference, and whether the cluster may pull it, is not readable from here: a private ` +
-            `registry package answers 403 to the kubelet and the environment then never becomes ready`,
+          `'${template}' renders as '${verdict.rendered}'. Three things are not readable from ` +
+            `here: whether anything PUBLISHES that reference (the workflow the briefs ask for ` +
+            `first runs when the pull request opens), whether the cluster may PULL it (a GHCR ` +
+            `package is private until someone makes it public, and the kubelet then answers 403 ` +
+            `with no way to pass a credential: see the README), and whether the owner is spelled ` +
+            `as the provider spells it (the platform fills {{repoOwner}} from the pull request URL)`,
         )
       }
       return unsatisfied(`ACCEPTANCE_K3S_IMAGE_TEMPLATE ('${template}') ${verdict.problem}`, {
         steps: [
           'Build the reference from what a per-PR provision knows: {{repoOwner}}, {{repoName}}, ' +
-            '{{pullNumber}}, {{branch}} and {{namespace}}. There is no commit sha among them, and ' +
-            'a tag may not contain the slash {{branch}} renders.',
+            '{{pullNumber}}, {{pullUrl}}, {{branch}} and {{blockId}}. There is no commit sha ' +
+            'among them, a tag may not contain the slash {{branch}} renders, and {{namespace}} is ' +
+            'not one of them: the platform renders the image BEFORE the namespace exists, so a ' +
+            'template naming it produces exactly the empty image this check exists to prevent.',
           'The briefs ask each scaffold for a workflow that publishes exactly this reference, so ' +
             'changing it changes what the agent is asked to push; the two are threaded from this ' +
             'one variable and cannot be set apart.',

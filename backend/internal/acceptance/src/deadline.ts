@@ -18,6 +18,12 @@
 // window: the policy (which throws are outages, and how long one may last) is injected, because
 // this module is the clock and has no business knowing what a deployment is. `deploymentOutage.ts`
 // owns that judgement.
+//
+// **An outage is journalled but never becomes the LAST OBSERVATION**, and that is the rule above
+// defending itself against its own tolerance. "The deployment did not answer (refused)" says
+// nothing whatever about the run, so letting it overwrite the last real observation would leave
+// both expiry messages reporting the silence and nothing else, while `formatOutage` was still
+// telling its reader the run may well be fine, having just thrown away the only evidence about it.
 
 /** What one poll saw: either the value the caller wanted, or a description of what it got. */
 export type Probe<T> = () => Promise<ProbeResult<T>>
@@ -60,18 +66,21 @@ const DEFAULT_INTERVAL_MS = 10_000
  * The budget is checked BEFORE each sleep rather than after, so a wait never sleeps past its own
  * deadline and then reports the overshoot as the elapsed time.
  *
- * A tolerated throw becomes an ordinary not-done observation, so it is journalled, counted against
- * the same budget, and carried into the expiry message exactly as a poll that answered would be.
- * Only the outage's OWN grace expiring short-circuits that, and it says so in its own words.
+ * A tolerated throw becomes an ordinary not-done observation, so it is journalled and counted
+ * against the same budget exactly as a poll that answered would be. What it does NOT become is the
+ * last observation: an expiry reports the last thing the deployment actually SAID, plus the silence
+ * as a separate clause when the wait ended inside one. Only the outage's OWN grace expiring
+ * short-circuits the budget, and it says so in its own words.
  */
 export async function waitFor<T>(options: WaitOptions<T>): Promise<T> {
   const { label, probe, budgetMs, intervalMs = DEFAULT_INTERVAL_MS, onProgress, tolerate } = options
   const startedAt = Date.now()
-  let lastState = '(nothing observed yet)'
+  let lastAnswer = '(nothing observed yet)'
   let outageStartedAt: number | null = null
 
   for (;;) {
     let result: ProbeResult<T>
+    let answered = true
     try {
       result = await probe()
       if (outageStartedAt !== null) {
@@ -91,22 +100,28 @@ export async function waitFor<T>(options: WaitOptions<T>): Promise<T> {
       if (tolerate === undefined) throw error
       const outage = tolerate.describe(error)
       if (outage === null) throw error
+      answered = false
       outageStartedAt ??= Date.now()
       const outageMs = Date.now() - outageStartedAt
       if (outageMs >= tolerate.graceMs) {
-        throw new Error(formatOutage(label, outage, outageMs, tolerate.graceMs))
+        // BOTH facts: the silence (which carries the transport cause, the half that says what to
+        // fix) and the last ANSWER (what the run was doing, the half that says whether to worry).
+        // Either alone was a message that answered half of what its own advice asks the reader.
+        throw new Error(formatOutage(label, outage, lastAnswer, outageMs, tolerate.graceMs))
       }
       result = { done: false, state: `${outage} (no answer for ${formatDuration(outageMs)})` }
     }
 
     if (result.done) return result.value
 
-    lastState = result.state
+    if (answered) lastAnswer = result.state
     const elapsedMs = Date.now() - startedAt
-    onProgress?.(lastState, elapsedMs)
+    onProgress?.(result.state, elapsedMs)
 
     if (elapsedMs + intervalMs >= budgetMs) {
-      throw new Error(formatExpiry(label, lastState, elapsedMs, budgetMs))
+      throw new Error(
+        formatExpiry(label, lastAnswer, elapsedMs, budgetMs, answered ? undefined : result.state),
+      )
     }
     await sleep(intervalMs)
   }
@@ -116,17 +131,27 @@ export async function waitFor<T>(options: WaitOptions<T>): Promise<T> {
  * The expiry message. Split out and exported so `test/deadline.test.ts` can pin that the last
  * observation survives into it: the one property this whole module exists for, and the one a
  * refactor would silently drop by throwing a generic timeout.
+ *
+ * `lastState` is the last thing the deployment ANSWERED. `silence` is the separate fact that the
+ * budget ran out while it was not answering, and it is a second clause rather than a replacement
+ * because the two are read together: an observation from four minutes ago is worth having, and
+ * worth knowing to be four minutes old.
  */
 export function formatExpiry(
   label: string,
   lastState: string,
   elapsedMs: number,
   budgetMs: number,
+  silence?: string,
 ): string {
   return (
     `Timed out waiting for ${label} after ${formatDuration(elapsedMs)} ` +
     `(budget ${formatDuration(budgetMs)}).\n` +
-    `Last observed: ${lastState}\n${leftInPlace()}`
+    `Last observed: ${lastState}\n` +
+    (silence
+      ? `The budget ran out mid-outage, so that observation predates it: ${silence}\n`
+      : '') +
+    leftInPlace()
   )
 }
 
@@ -134,9 +159,16 @@ export function formatExpiry(
  * The message for an outage that outlasted its grace, which is a DIFFERENT failure from an expiry
  * and reads as one: the run under observation is not what stopped, so nothing about it is evidence
  * here, and the thing to go and look at is the deployment rather than the pipeline.
+ *
+ * It carries TWO observations because its own advice needs both. `outage` is the silence, and with
+ * it the transport cause, which is what says where the fix is. `lastState` is the last thing the
+ * deployment ANSWERED, which is what says whether the run is worth worrying about; a message that
+ * printed the silence in that slot told its reader the run may well be fine while having discarded
+ * the only evidence about it.
  */
 export function formatOutage(
   label: string,
+  outage: string,
   lastState: string,
   outageMs: number,
   graceMs: number,
@@ -145,6 +177,7 @@ export function formatOutage(
     `The deployment stopped answering while waiting for ${label}, and has now been silent for ` +
     `${formatDuration(outageMs)} (a wait sits through ${formatDuration(graceMs)} of it, which ` +
     `covers a restart).\n` +
+    `No answer since: ${outage}\n` +
     `Last observed: ${lastState}\n` +
     `The run itself may well be fine: a deployment that restarts re-drives it. Check that the ` +
     `backend is up before reading anything into the run.\n${leftInPlace()}`

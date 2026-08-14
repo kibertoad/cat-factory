@@ -19,10 +19,20 @@ So an unanswered poll is now an observation for two minutes rather than an immed
 policy is injected into `waitFor` rather than built into it (the clock knows nothing about
 deployments) and classifies through the suite's existing `describeProbeFailure` rather than matching
 messages, so there is still one reading of a thrown probe. What it tolerates is the ABSENCE of an
-answer: an answered refusal ends the wait and is rethrown untouched, because a refusal is evidence
-and because callers read the SDK error's status and request id off it. The recovery is journalled as
-well as the outage, since an unexplained gap in a long observation log is how a restart becomes
-invisible.
+answer, for the four transport causes shaped like a restart (refused, reset, timeout, unreachable):
+an answered refusal ends the wait and is rethrown untouched, because a refusal is evidence and
+because callers read the SDK error's status and request id off it, and so does a DNS entry that
+stopped resolving or a certificate that expired, each of which is its own diagnosis rather than
+weather. The recovery is journalled as well as the outage, since an unexplained gap in a long
+observation log is how a restart becomes invisible, and an outage never becomes the LAST
+observation: "the deployment did not answer" says nothing about the run, so both expiry messages
+still print the last thing the deployment actually said, with the silence beside it rather than in
+its place.
+
+Between the waits, the same restart is absorbed by the SDK client's retry budget, raised once where
+the client is built. That covers every read a scenario makes one-shot, on the SDK's own rule about
+what may be replayed: a `GET` is retried, a `POST` never, so answering a decision stays
+exactly-once.
 
 The second failure is why that pass would have failed anyway, and it had never been reached before:
 every previous attempt stopped in preflight, so the deployer step ran for the first time. It failed
@@ -37,7 +47,17 @@ spent.
 
 The default tags by pull-request number rather than by commit sha, which is the interesting
 constraint: a provision carries no sha (`ProvisionContext` has branch, number, url, owner, name),
-and `{{branch}}` is `cat-factory/<taskId>`, which no image tag may contain. The gate refuses both of
-those mistakes by name, and its PASS states what it did not check: nothing readable from here says
-whether anything published that reference or whether the cluster may pull it, and both present as an
-environment that provisions and never becomes ready.
+and `{{branch}}` is `cat-factory/<taskId>`, which no image tag may contain. It also decides the
+workflow's trigger, since a number that does not exist until the pull request does cannot be built
+on `push`, and it makes the tag MUTABLE, which is why the manifests are now asked for
+`imagePullPolicy: Always`.
+
+The gate refuses the mistakes by name, `{{namespace}}` included: that hole is filled in the
+manifests and in the ingress host but NOT in the image, which the platform renders one step before
+the namespace exists, so a sample carrying it would have green-lit exactly the empty image this
+check was built to prevent. And the PASS states what it did not check: whether anything published
+that reference, whether the cluster may pull it (a GHCR package is private until someone says
+otherwise, and there is no registry credential on the connection to fix that with, so the README now
+names the one-time action), and whether the owner is spelled as the provider spells it, since the
+platform re-derives `{{repoOwner}}` from the pull request URL rather than from the variable this
+gate can read. Each of the three presents as an environment that provisions and never becomes ready.

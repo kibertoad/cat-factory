@@ -990,13 +990,28 @@ describe('image-template', () => {
     expect(verdict.problem).toContain("may not contain '/'")
   })
 
+  it('refuses {{namespace}}, and never offers it as a key to build the reference from', async () => {
+    // The hole that looks most like a per-PR discriminator and is the one the platform cannot
+    // fill here: the image is rendered a step BEFORE the namespace joins the vars, so a gate that
+    // sampled one would green-light exactly the `image: ""` refusal it exists to prevent, and its
+    // own remedy would be recommending the key that caused it.
+    const verdict = await refusal('image-template', {
+      config: config({
+        cluster: { ...config().cluster, imageTemplate: 'ghcr.io/acme/api:{{namespace}}' },
+      }),
+    })
+    expect(verdict.problem).toContain('{{namespace}}')
+    expect(verdict.remedy.steps.join('\n')).toContain('{{namespace}} is')
+  })
+
   it('passes on the default, and says what it did NOT check', async () => {
-    // Both unchecked facts are reachable states of a correctly configured suite, and both present
-    // as an environment that provisions and never becomes ready, so a pass that implied otherwise
-    // would send the next reader to the cluster.
+    // All three unchecked facts are reachable states of a correctly configured suite, and each
+    // presents as an environment that provisions and never becomes ready, so a pass that implied
+    // otherwise would send the next reader to the cluster.
     const detail = await satisfied('image-template', { config: config() })
     expect(detail).toContain('ghcr.io/intended-org/cf-acc-catalog-api:pr-1')
     expect(detail).toContain('PUBLISHES')
     expect(detail).toContain('403')
+    expect(detail).toContain('pull request URL')
   })
 })

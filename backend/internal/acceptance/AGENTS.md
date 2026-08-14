@@ -260,7 +260,10 @@ failed`), with the SDK's own deadline corrected to `timeout` since its abort mar
    pass on a single `ECONNREFUSED` while the run it was watching carried on. `src/deploymentOutage.ts`
    makes an unanswered poll an observation for two minutes and journals the recovery; an ANSWER is
    never waited through, because a refusal is evidence, and it is rethrown untouched so the SDK's
-   status and request id survive.
+   status and request id survive. Two corollaries bite: only the four transport causes shaped like
+   a restart are waited through (a DNS or TLS failure is its own diagnosis, and delaying it two
+   minutes to then blame a restart is worse than reporting it), and an outage is journalled but
+   never becomes the last OBSERVATION, since "it did not answer" is not evidence about the run.
 4. **Report every failing claim, not just the first.** A pass costs an afternoon.
 
 **The defect scenario 03 hunts is planted in the SPECIFICATION, not the code.** The two briefs in

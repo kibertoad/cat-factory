@@ -17,6 +17,19 @@
 
 import { OperatorRefusal } from './operatorText.ts'
 
+/**
+ * The two templates a pass falls back to, exported because the CHECKS offer them as the fix.
+ *
+ * Both `manifestTemplates.ts` remedies end on "unsetting the variable is also a fix, since the
+ * default below is what it falls back to", and that sentence is only true while the value it
+ * prints is the value {@link resolveConfig} actually falls back to. As two literals in two files
+ * it was true by coincidence: changing the fallback would have handed the operator a pasteable
+ * command setting something else, with nothing failing.
+ */
+export const DEFAULT_INGRESS_HOST_TEMPLATE = '{{namespace}}.127.0.0.1.nip.io'
+
+export const DEFAULT_IMAGE_TEMPLATE = 'ghcr.io/{{repoOwner}}/{{repoName}}:pr-{{pullNumber}}'
+
 /** A k3s/Kubernetes apiserver the `deployer` step provisions per-PR namespaces against. */
 export type ClusterConfig = {
   apiServerUrl: string
@@ -321,16 +334,14 @@ export function resolveConfig(env: EnvRecord): ConfigResolution {
         caCertPem,
         insecureSkipTlsVerify: insecure,
         ingressHostTemplate:
-          trimmed(env.ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE) ?? '{{namespace}}.127.0.0.1.nip.io',
+          trimmed(env.ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE) ?? DEFAULT_INGRESS_HOST_TEMPLATE,
         namespaceTemplate:
           trimmed(env.ACCEPTANCE_K3S_NAMESPACE_TEMPLATE) ?? 'cf-acc-{{pullNumber}}',
         // GHCR under the repository's own owner, which needs no second credential decision: the
         // workflow the briefs ask for pushes there with the `GITHUB_TOKEN` it already has. The
         // `image-template` prerequisite renders this before a pass starts and says outright that
         // it did not check whether anything publishes it, or whether the cluster may pull it.
-        imageTemplate:
-          trimmed(env.ACCEPTANCE_K3S_IMAGE_TEMPLATE) ??
-          'ghcr.io/{{repoOwner}}/{{repoName}}:pr-{{pullNumber}}',
+        imageTemplate: trimmed(env.ACCEPTANCE_K3S_IMAGE_TEMPLATE) ?? DEFAULT_IMAGE_TEMPLATE,
       },
       // The reporter half, resolved by the function `reset --purge-repos` calls rather than beside
       // it: a second spelling of the default REST base is a second thing to change on the day an
