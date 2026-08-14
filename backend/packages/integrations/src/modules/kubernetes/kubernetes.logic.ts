@@ -3,7 +3,12 @@ import type {
   ProviderConfigField,
   RunnerDispatchOptions,
 } from '@cat-factory/kernel'
-import { isCloudMetadataHost, UnavailableError, ValidationError } from '@cat-factory/kernel'
+import {
+  isCloudMetadataHost,
+  RUNNER_IMAGE_UNWIRED_REASON,
+  UnavailableError,
+  ValidationError,
+} from '@cat-factory/kernel'
 import { KUBERNETES_RUNNER_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
 
 // Pure helpers for the native Kubernetes runner backend. No I/O here — URL
@@ -219,7 +224,7 @@ export function resolveImage(
         "runner pool configures no UI-tester image. Set the pool's `imageUi` to a published " +
         'cat-factory-executor-ui tag. Until then, drop the `tester-ui` step from the pipeline: ' +
         'the visual-confirmation gate still runs on screenshots a person uploads.',
-      'runner_image_unwired',
+      RUNNER_IMAGE_UNWIRED_REASON,
       { image: options.image, setting: 'imageUi' },
     )
   }

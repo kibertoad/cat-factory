@@ -6,6 +6,7 @@ import {
   type AgentRunResult,
   type AsyncAgentExecutor,
   isAsyncAgentExecutor,
+  type RunReclaimTarget,
 } from '@cat-factory/kernel'
 import type { DispatchToolServers } from '@cat-factory/contracts'
 import {
@@ -140,13 +141,13 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
 
   /**
    * Best-effort container reclaim. The engine narrows the composite (not the inner
-   * container executor) when stopping a run, so the composite must forward stopJob
+   * container executor) when stopping a run, so the composite must forward the reclaim
    * to the container — otherwise the Layer-2 reclaim silently no-ops and leaks a
    * warm instance. Delegates only when a container that supports it is wired.
    */
-  async stopJob(handle: AgentJobHandle): Promise<void> {
-    if (this.container && isAsyncAgentExecutor(this.container) && this.container.stopJob) {
-      await this.container.stopJob(handle)
+  async reclaimRun(target: RunReclaimTarget): Promise<void> {
+    if (this.container && isAsyncAgentExecutor(this.container) && this.container.reclaimRun) {
+      await this.container.reclaimRun(target)
     }
   }
 }

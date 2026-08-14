@@ -588,7 +588,7 @@ recipe, release-PR re-sync, new-published-package checklist: [`docs/internal/rel
 - `pnpm exec changeset status --since=origin/main`: after committing locally.
 - `pnpm lint:monorepo` (sherif): cross-package dependency-version consistency.
 - `pnpm check:publish` (after `pnpm build`): publish-artifact integrity.
-- `node scripts/check-runner-image-tag.mjs --since origin/main`: whenever anything image-affecting changed.
+- `node scripts/check-runner-image-{tag.mjs --since origin/main,paths.mjs}`: whenever anything image-affecting changed.
 - `pnpm exec turbo run typecheck --filter=<touched package>` (it covers tests, which build excludes).
 
 ## Execution flow (the canonical async + observable pattern)

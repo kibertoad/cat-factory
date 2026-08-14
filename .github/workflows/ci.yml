@@ -536,6 +536,15 @@ jobs:
       - name: Guard conformance group parity
         run: node scripts/check-conformance-group-parity.mjs
 
+      # Requires every workflow that gates on a runner image's sources to gate on the SAME list
+      # `scripts/runner-images.mjs` declares that image is built from. The descriptors already
+      # feed the tag guard and the tag sync; the path filters were the one copy left by hand, and
+      # both ways they can drift are silent — a source the publisher then never publishes, or a
+      # change the PR-side image smoketest skips. Its fixtures run in the `node --test` step
+      # above. Pure node, no install, no network.
+      - name: Guard runner image path gates
+        run: node scripts/check-runner-image-paths.mjs
+
   # The former monolithic "Build & typecheck" job was one long SERIAL chain (build →
   # publint/attw → knip → typechecks → nuxt generate → drizzle) and, at ~3m, a co-critical
   # blocking path. It is split into three lanes that run in PARALLEL — `build-typecheck`

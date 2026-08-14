@@ -1,6 +1,10 @@
 import type { AgentJobHandle, PipelineStep } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
-import { recordDispatchAttribution, recordInlineToolServers } from './step-fold.logic.js'
+import {
+  dispatchedAgentKinds,
+  recordDispatchAttribution,
+  recordInlineToolServers,
+} from './step-fold.logic.js'
 
 // `recordDispatchAttribution` is the one funnel every dispatch site calls right after
 // `startJob`, which is why the dispatched KIND is recorded here rather than at each site: a step
@@ -128,5 +132,32 @@ describe('recordInlineToolServers', () => {
     )
     recordInlineToolServers(s, undefined, 'reviewer')
     expect(s.toolServers?.wired).toHaveLength(1)
+  })
+})
+
+describe('dispatchedAgentKinds', () => {
+  it('collects every kind the RUN dispatched, across steps and without duplicates', () => {
+    // What the run-level container reclaim addresses: a run holds one container per executor
+    // IMAGE, and only the kinds say which images those were.
+    const coder = step({ agentKind: 'coder' })
+    const ci = step({ agentKind: 'ci' })
+    recordDispatchAttribution(coder, handle, 'coder')
+    recordDispatchAttribution(ci, handle, 'ci-fixer')
+    recordDispatchAttribution(ci, handle, 'ci-fixer')
+    expect(dispatchedAgentKinds({ steps: [coder, ci] })).toEqual(['coder', 'ci-fixer'])
+  })
+
+  it("reports the kind that RAN, not the step's own", () => {
+    // The reason it reads `dispatches` rather than `step.agentKind`: a gate escalates to its
+    // helper, and it is the helper that opened a container.
+    const gate = step({ agentKind: 'ci' })
+    recordDispatchAttribution(gate, handle, 'ci-fixer')
+    expect(dispatchedAgentKinds({ steps: [gate] })).toEqual(['ci-fixer'])
+  })
+
+  it('is empty for a run that has dispatched nothing', () => {
+    // Empty is a valid answer, not a missing one: the reclaim still addresses the run's ordinary
+    // container, because the kinds only ever ADD to it.
+    expect(dispatchedAgentKinds({ steps: [step()] })).toEqual([])
   })
 })

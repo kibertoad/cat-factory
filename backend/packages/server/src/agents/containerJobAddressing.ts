@@ -60,6 +60,31 @@ export function imageVariantFor(
 }
 
 /**
+ * Every container a RUN holds, as image variants: `undefined` (the ordinary one, always — it is
+ * where the run's default-image steps ran) plus one per NON-DEFAULT image any of the dispatched
+ * kinds declared.
+ *
+ * This is what makes a run-level reclaim total. A per-run container backend hosts a whole run in
+ * ONE container UNLESS a step declared a different image, and then there are two; addressing
+ * only the ordinary one leaves a browser container running until its maximum lifetime elapses.
+ * Deriving the set from the kinds the run DISPATCHED (rather than reclaiming every variant this
+ * build knows) keeps the reclaim to containers that exist: `idFromName` answers a stub for a
+ * container that never ran, so a blanket sweep would instantiate one per unused variant and
+ * report the kill as a success.
+ */
+export function runImageVariants(
+  agentKinds: readonly string[],
+  registry: AgentKindRegistry,
+): (RunnerImageVariant | undefined)[] {
+  const variants = new Set<RunnerImageVariant | undefined>([undefined])
+  for (const kind of agentKinds) {
+    const image = imageVariantFor(kind, registry)
+    if (image && image !== 'default') variants.add(image)
+  }
+  return [...variants]
+}
+
+/**
  * The {@link RunnerJobRef} a job handle addresses: the run (for the per-run container)
  * plus the per-step job id. Falls back to the job id as the run id for a handle minted
  * before run ids were carried (or a single-job flow where the two coincide).

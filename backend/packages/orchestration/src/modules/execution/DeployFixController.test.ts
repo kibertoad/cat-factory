@@ -47,7 +47,7 @@ function controller(overrides: Record<string, unknown> = {}) {
   const startJob = vi.fn(async () => ({ jobId: 'job_1', model: 'anthropic:opus', runId: 'exec_1' }))
   const deps = {
     // `isAsyncAgentExecutor` keys off `runsAsync`/`startJob`/`pollJob` all being present.
-    agentExecutor: { runsAsync: () => true, startJob, pollJob: vi.fn(), stopJob: vi.fn() },
+    agentExecutor: { runsAsync: () => true, startJob, pollJob: vi.fn(), reclaimRun: vi.fn() },
     contextBuilder: { buildContext: vi.fn(async () => ({ priorOutputs: [], block })) },
     runStateMachine: { persistAndEmit: vi.fn(async () => {}) },
     clock: { now: () => 1_700_000_000_000 },
@@ -149,7 +149,7 @@ describe('escalate: the admission rule', () => {
           throw new Error('no pull request to clone')
         }),
         pollJob: vi.fn(),
-        stopJob: vi.fn(),
+        reclaimRun: vi.fn(),
       },
     })
     const s = step()

@@ -123,7 +123,6 @@ import {
   maybeWrapConsensus,
   selectAgentExecutor,
   type WorkerExecutorDeps,
-  selectDeployDeps,
   selectEmailInvitationDeps,
   selectEnvironmentsDeps,
   selectFragmentLibraryDeps,
@@ -139,6 +138,7 @@ import {
   selectTraceSink,
   selectWorkRunner,
 } from './container.js'
+import { selectDeployDeps } from './containers/deployJobDeps'
 import { selectRecurringDeps } from './container-tracker-deps.js'
 import { selectDocumentsDeps } from './container-documents-deps'
 import { selectGitHubDeps } from './github-deps.js'

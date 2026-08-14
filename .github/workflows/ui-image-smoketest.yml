@@ -15,12 +15,21 @@ name: UI image smoketest
 # Chromium build. It is the PR-side counterpart of docker-publish.yml's pre-push smoketest: the
 # same script, so a red run here is reproducible with one command locally
 # (`pnpm --filter @cat-factory/executor-harness image:smoketest:ui`).
+#
+# The gate is EVERY source of the `executor-ui` image (scripts/runner-images.mjs's descriptor,
+# which `scripts/check-runner-image-paths.mjs` holds this list to), not just the two Dockerfiles.
+# docker-publish republishes the UI image on any executor source change, so a harness `src/**`
+# change that breaks the image's boot has to be caught HERE: gated on the Dockerfiles alone it
+# passed the PR green and failed first in `publish-ui`, after merge to main.
 
 on:
   pull_request:
     paths:
+      - 'backend/internal/executor-harness/src/**'
       - 'backend/internal/executor-harness/Dockerfile'
       - 'backend/internal/executor-harness/Dockerfile.ui'
+      - 'backend/internal/executor-harness/tsconfig.json'
+      - 'backend/internal/executor-harness/package.json'
       - 'backend/internal/executor-harness/scripts/ui-image-checks.sh'
       - 'backend/internal/executor-harness/scripts/smoketest-ui-image.sh'
       - '.github/workflows/ui-image-smoketest.yml'

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { containerKeyForRef, runIdFromContainerKey } from './runner-transport.js'
+import {
+  containerKeyForRef,
+  isRunnerImageVariant,
+  parseContainerKey,
+  RUNNER_IMAGE_VARIANTS,
+  runIdFromContainerKey,
+} from './runner-transport.js'
 
 // The container-identity pair. Both facades' per-run container backends derive a job's container
 // from these, and three call sites have to agree on the answer with nothing passed between them:
@@ -50,5 +56,43 @@ describe('runIdFromContainerKey', () => {
     // Run ids are minted ids today, but the inverse must not corrupt one that is not: only the
     // FIRST separator is the variant, so everything after it is the run.
     expect(runIdFromContainerKey('ui:run:with:colons')).toBe('run:with:colons')
+  })
+
+  it('leaves a key whose prefix is not a known variant WHOLE', () => {
+    // The direction that destroys data. A key carrying a colon for any other reason (a job-id
+    // scheme, an operator-created label, a future id shape) is not one this pair produced, and
+    // truncating it yields a run id that matches no run — which is exactly what makes the orphan
+    // sweep delete a live container. `default` counts as unknown here: `containerKeyForRef`
+    // never emits it as a prefix, so a key spelling it out came from somewhere else.
+    expect(runIdFromContainerKey('bootstrap:ws1')).toBe('bootstrap:ws1')
+    expect(runIdFromContainerKey('default:run-1')).toBe('default:run-1')
+  })
+})
+
+describe('parseContainerKey', () => {
+  it('reports the variant a key was qualified with, and none for a bare run id', () => {
+    expect(parseContainerKey('ui:run-1')).toEqual({ runId: 'run-1', image: 'ui' })
+    expect(parseContainerKey('run-1')).toEqual({ runId: 'run-1' })
+  })
+
+  it('round-trips every variant through containerKeyForRef', () => {
+    // What an adapter re-encoding the key into a name (Apple `container`, whose names cannot hold
+    // a colon) has to preserve: the variant AND the run, or its inverse cannot answer either.
+    for (const image of RUNNER_IMAGE_VARIANTS) {
+      const parsed = parseContainerKey(containerKeyForRef({ runId: 'run-1', jobId: 'j', image }))
+      expect(parsed.runId).toBe('run-1')
+      expect(parsed.image ?? 'default').toBe(image)
+    }
+  })
+})
+
+describe('isRunnerImageVariant', () => {
+  it('accepts exactly the declared vocabulary', () => {
+    // Derived from the picklist rather than restated, so a member added to the union without a
+    // row here fails the build rather than being narrowed away at run time.
+    for (const image of RUNNER_IMAGE_VARIANTS) expect(isRunnerImageVariant(image)).toBe(true)
+    expect(isRunnerImageVariant('browser')).toBe(false)
+    expect(isRunnerImageVariant(null)).toBe(false)
+    expect(isRunnerImageVariant(undefined)).toBe(false)
   })
 })

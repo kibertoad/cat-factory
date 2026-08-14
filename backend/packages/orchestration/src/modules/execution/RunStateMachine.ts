@@ -40,6 +40,7 @@ import type { MergeTrackRecordService } from '../merge/MergeTrackRecordService.j
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
 import type { AdvanceResult } from './advance.js'
+import { dispatchedAgentKinds } from './step-fold.logic.js'
 import type { StepGraph } from './StepGraph.js'
 
 /**
@@ -622,8 +623,9 @@ export class RunStateMachine {
    *
    * Two invariants live in this method and nowhere else:
    *
-   *  - **`stopRunContainer` fires ONLY on the final step.** Every step of a pipeline shares one
-   *    container keyed by the execution id, so reclaiming it between steps kills the next step's
+   *  - **`stopRunContainer` fires ONLY on the final step.** A pipeline's steps share the run's
+   *    container (a step declaring a different executor image gets a second one, but that one is
+   *    shared by every step on that image too), so reclaiming between steps kills the next step's
    *    workspace. It was re-asserted by hand at seven call sites before this existed.
    *  - **`updateBlockProgress` → `casPersist` → `emitInstance`, in that order** (via
    *    {@link persistAndEmit}), so no observer ever sees a state the durable row does not hold.
@@ -1005,16 +1007,29 @@ export class RunStateMachine {
     if (failed) await this.emitInstance(workspaceId, failed)
   }
 
-  /** Reclaim the per-run container (per-job backends cancel the parked job; run-container
-   * backends use the run id). Best-effort: a vanished container is nothing to reclaim. */
+  /**
+   * Reclaim the run's containers (per-job backends cancel the parked job; run-container backends
+   * use the run id). Best-effort: a vanished container is nothing to reclaim.
+   *
+   * ContainerS, plural, and the kinds are why: a step declaring a non-default executor image runs
+   * in its OWN container beside the run's ordinary one, and only the executor knows which kind
+   * declared which image. So the reclaim hands over every kind this run dispatched and lets the
+   * executor map them to the containers it opened; naming one job here reclaimed exactly one, and
+   * a run with a `tester-ui` step leaked the browser container on every terminal path.
+   */
   async stopRunContainer(workspaceId: string, instance: ExecutionInstance): Promise<void> {
     const executor = this.agentExecutor
-    if (!isAsyncAgentExecutor(executor) || !executor.stopJob) return
+    if (!isAsyncAgentExecutor(executor) || !executor.reclaimRun) return
     // The in-flight step's job id (when a job is parked), so a per-job backend can
     // cancel exactly it; the run-container backends ignore it and use the run id.
     const jobId = instance.steps[instance.currentStep]?.jobId ?? instance.id
     try {
-      await executor.stopJob({ jobId, runId: instance.id, workspaceId })
+      await executor.reclaimRun({
+        jobId,
+        runId: instance.id,
+        workspaceId,
+        agentKinds: dispatchedAgentKinds(instance),
+      })
     } catch {
       // The container may already be gone (eviction/completion) — nothing to reclaim.
     }

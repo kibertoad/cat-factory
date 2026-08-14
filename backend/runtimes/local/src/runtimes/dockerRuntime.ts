@@ -11,11 +11,16 @@ import {
 
 // The Docker-CLI adapter — covers Docker, Podman, OrbStack and Colima, which all speak
 // the same `run/ps/port/inspect/rm` surface. It is the behaviour the transport had
-// inline before the seam was extracted, parameterised by binary + networking. A run's
-// container is labelled with the run id (the container key) and a managed marker; the
-// harness `:8080` is published to an ephemeral host port read back with `docker port`.
+// inline before the seam was extracted, parameterised by binary + networking. A container
+// is labelled with its container key and a managed marker; the harness `:8080` is published
+// to an ephemeral host port read back with `docker port`.
 
-/** Labels the per-run container by its run id (a run's steps share one container). */
+/**
+ * Labels a per-run container by its CONTAINER KEY: the run id for the ordinary one, and the
+ * variant-qualified `ui:<runId>` for a step on another executor image. The label NAME still says
+ * `runId` (it is written into live containers, so renaming it would orphan every one a running
+ * daemon holds); what it carries is the key, which round-trips verbatim through a label.
+ */
 const LABEL_RUN = 'cat-factory.runId'
 const LABEL_MANAGED = 'cat-factory.managed=local-docker'
 /** Marks a reusable warm-pool member (not bound to any run id; leased in-process). */
@@ -68,14 +73,14 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
   }
 
   async run(exec: ContainerExec, spec: RunContainerSpec): Promise<string> {
-    // A pool member is labelled `pool=1` and NOT bound to a run id (the transport leases
-    // it in-process); a classic per-run container is labelled by its run id. Every container also
+    // A pool member is labelled `pool=1` and NOT bound to a container key (the transport leases
+    // it in-process); a classic per-run container is labelled by its key. Every container also
     // carries the per-install label so a neighbouring install can't adopt/reap/reuse it.
     const args = [
       'run',
       '-d',
       '--label',
-      spec.pool ? LABEL_POOL : `${LABEL_RUN}=${spec.runId}`,
+      spec.pool ? LABEL_POOL : `${LABEL_RUN}=${spec.containerKey}`,
       '--label',
       LABEL_MANAGED,
       '--label',
@@ -104,12 +109,12 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
     return containerId
   }
 
-  async find(exec: ContainerExec, runId: string): Promise<string | undefined> {
+  async find(exec: ContainerExec, containerKey: string): Promise<string | undefined> {
     const { stdout } = await exec([
       'ps',
       '-aq',
       '--filter',
-      `label=${LABEL_RUN}=${runId}`,
+      `label=${LABEL_RUN}=${containerKey}`,
       '--filter',
       `label=${LABEL_MANAGED}`,
       ...this.installFilter(),
@@ -194,12 +199,12 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
     await exec(['rm', '-f', containerId]).catch(() => undefined)
   }
 
-  async removeRun(exec: ContainerExec, runId: string): Promise<void> {
+  async removeRun(exec: ContainerExec, containerKey: string): Promise<void> {
     const { stdout } = await exec([
       'ps',
       '-aq',
       '--filter',
-      `label=${LABEL_RUN}=${runId}`,
+      `label=${LABEL_RUN}=${containerKey}`,
       '--filter',
       `label=${LABEL_MANAGED}`,
       ...this.installFilter(),
@@ -250,10 +255,11 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
 
   async listRunContainers(
     exec: ContainerExec,
-  ): Promise<Array<{ runId: string; containerId: string }>> {
-    // Running (not exited) per-run containers, printed as "<runId>|<containerId>" so we get
-    // both the run-id label and the id in one call. `status=running` excludes what reapExited
-    // already handles; the `runId` label excludes pool members (which carry `pool=1` instead).
+  ): Promise<Array<{ containerKey: string; containerId: string }>> {
+    // Running (not exited) per-run containers, printed as "<containerKey>|<containerId>" so we
+    // get both the key label and the id in one call. `status=running` excludes what reapExited
+    // already handles; the key label excludes pool members (which carry `pool=1` instead). The
+    // key rides a LABEL, so it round-trips verbatim however it is spelled.
     const { stdout } = await exec([
       'ps',
       '--filter',
@@ -273,8 +279,8 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
       .filter(Boolean)
       .map((line) => {
         const sep = line.indexOf('|')
-        return { runId: line.slice(0, sep), containerId: line.slice(sep + 1) }
+        return { containerKey: line.slice(0, sep), containerId: line.slice(sep + 1) }
       })
-      .filter((c) => c.runId && c.containerId)
+      .filter((c) => c.containerKey && c.containerId)
   }
 }

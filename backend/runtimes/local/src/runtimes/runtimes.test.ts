@@ -101,7 +101,7 @@ describe('DockerRuntimeAdapter', () => {
     })
     const { exec, calls } = fakeExec({ run: 'cid\n' })
     const id = await adapter.run(exec, {
-      runId: 'r1',
+      containerKey: 'r1',
       image: 'img:test',
       sharedSecret: 'sek',
       privileged: true,
@@ -126,7 +126,7 @@ describe('DockerRuntimeAdapter', () => {
     })
     const { exec, calls } = fakeExec({ run: 'cid\n' })
     await adapter.run(exec, {
-      runId: 'r',
+      containerKey: 'r',
       image: 'i',
       sharedSecret: 's',
       privileged: false,
@@ -161,7 +161,7 @@ describe('DockerRuntimeAdapter', () => {
     })
     const { exec, calls } = fakeExec({ run: 'cid\n' })
     await adapter.run(exec, {
-      runId: 'preview-blk_fe',
+      containerKey: 'preview-blk_fe',
       image: 'img',
       sharedSecret: 's',
       privileged: false,
@@ -187,7 +187,7 @@ describe('DockerRuntimeAdapter', () => {
     })
     const { exec, calls } = fakeExec({ run: 'cid\n' })
     await adapter.run(exec, {
-      runId: 'preview-blk_fe',
+      containerKey: 'preview-blk_fe',
       image: 'img',
       sharedSecret: 's',
       privileged: false,
@@ -305,7 +305,7 @@ describe('DockerRuntimeAdapter', () => {
     })
     const { exec, calls } = fakeExec({ run: 'cid\n' })
     await adapter.run(exec, {
-      runId: 'r1',
+      containerKey: 'r1',
       image: 'i',
       sharedSecret: 's',
       privileged: false,
@@ -315,7 +315,7 @@ describe('DockerRuntimeAdapter', () => {
     calls.length = 0
     // A warm-pool member carries the SAME per-install label, so a neighbour never re-leases it.
     await adapter.run(exec, {
-      runId: 'm1',
+      containerKey: 'm1',
       image: 'i',
       sharedSecret: 's',
       privileged: false,
@@ -337,16 +337,16 @@ describe('DockerRuntimeAdapter', () => {
 })
 
 describe('AppleContainerRuntimeAdapter', () => {
-  // The container NAME is `cf-<installId>-<runId>` — the install id namespaces the reaper +
+  // The container NAME is `cf-<installId>-<containerKey>` — the install id namespaces the reaper +
   // enumerations so a shared `container` daemon can't cross installs (ADR 0026 D5).
   const adapter = new AppleContainerRuntimeAdapter({ hostAlias: '192.168.64.1', installId: 'i0' })
-  /** This install's deterministic name for a run id. */
-  const n = (runId: string) => `cf-i0-${runId}`
+  /** This install's deterministic name for a container key whose variant is the default one. */
+  const n = (containerKey: string) => `cf-i0-${containerKey}`
 
   it('runs detached by a per-install deterministic name, no published port, no privileged', async () => {
     const { exec, calls } = fakeExec()
     const id = await adapter.run(exec, {
-      runId: 'run_42',
+      containerKey: 'run_42',
       image: 'ghcr.io/x/harness:1',
       sharedSecret: 'sek',
       privileged: true, // ignored: Apple has no DinD
@@ -486,7 +486,7 @@ describe('AppleContainerRuntimeAdapter', () => {
     expect(del).toEqual(['delete', '--force', n('old')])
   })
 
-  it('recovers the run id by stripping the per-install prefix in listRunContainers', async () => {
+  it('recovers the container key by stripping the per-install prefix in listRunContainers', async () => {
     const list = JSON.stringify([
       { id: n('run_42'), status: 'running' },
       { id: 'cf-other-nope', status: 'running' }, // a neighbour's — excluded
@@ -494,7 +494,56 @@ describe('AppleContainerRuntimeAdapter', () => {
     ])
     const { exec } = fakeExec({ list })
     expect(await adapter.listRunContainers(exec)).toEqual([
-      { runId: 'run_42', containerId: n('run_42') },
+      { containerKey: 'run_42', containerId: n('run_42') },
+    ])
+  })
+
+  it('round-trips a variant-qualified key through the container name', async () => {
+    // The name sanitiser cannot keep the key's `:`, so the variant is re-encoded with a `.`. The
+    // property that matters is the ROUND TRIP: `reapOrphanedRuns` maps what this reports back to
+    // a run to ask whether that run is live, so a key it cannot recover names no run and the
+    // sweep deletes a browser container out from under a step still using it.
+    const { exec, calls } = fakeExec()
+    await adapter.run(exec, {
+      containerKey: 'ui:run_42',
+      image: 'ghcr.io/x/harness-ui:1',
+      sharedSecret: 'sek',
+      privileged: false,
+      env: {},
+    })
+    const name = calls[0]![calls[0]!.indexOf('--name') + 1]!
+    expect(name).toBe('cf-i0-ui.run_42')
+
+    const listed = fakeExec({ list: JSON.stringify([{ id: name, status: 'running' }]) })
+    expect(await adapter.listRunContainers(listed.exec)).toEqual([
+      { containerKey: 'ui:run_42', containerId: name },
+    ])
+  })
+
+  it('keeps a UI container distinct from a run whose id looks like one', async () => {
+    // Sanitising the `:` to a `-` collapsed `ui:run_42` and a run literally called `ui-run_42`
+    // onto ONE container name, so the two runs shared a container and the sweep could not tell
+    // which run either belonged to.
+    const { exec, calls } = fakeExec()
+    const base = {
+      image: 'ghcr.io/x/harness:1',
+      sharedSecret: 'sek',
+      privileged: false,
+      env: {},
+    }
+    await adapter.run(exec, { containerKey: 'ui:run_42', ...base })
+    await adapter.run(exec, { containerKey: 'ui-run_42', ...base })
+    const names = calls.map((c) => c[c.indexOf('--name') + 1])
+    expect(new Set(names).size).toBe(2)
+  })
+
+  it('leaves a container name whose leading segment is not a variant whole', async () => {
+    // A run id is `[a-zA-Z0-9_]` today, but the inverse must not split one that is not on its
+    // first dot: an unrecognised leading segment is part of the key, not a variant.
+    const name = 'cf-i0-not.a.variant'
+    const { exec } = fakeExec({ list: JSON.stringify([{ id: name, status: 'running' }]) })
+    expect(await adapter.listRunContainers(exec)).toEqual([
+      { containerKey: 'not.a.variant', containerId: name },
     ])
   })
 })

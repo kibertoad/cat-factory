@@ -4,7 +4,8 @@ import { makeResolveDeployCloneTarget, RunnerJobClient } from '@cat-factory/serv
 import type { D1Database } from '@cloudflare/workers-types'
 import type { AppConfig } from '../config'
 import type { Env } from '../env'
-import { buildAppRegistry, buildResolveRepoTarget, workerDispatchTokenMint } from '../container'
+import { buildAppRegistry, buildResolveRepoTarget } from '../container-vcs-identity'
+import { workerDispatchTokenMint } from '../dispatchTokenMint'
 import {
   CloudflareContainerTransport,
   fixedContainerNamespace,

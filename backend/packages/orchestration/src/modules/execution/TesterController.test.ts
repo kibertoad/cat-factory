@@ -30,7 +30,7 @@ function makeController(over: Partial<TesterControllerDeps> = {}) {
   const deps = {
     blockRepository: { get: async () => block() },
     notificationService: { raise },
-    agentExecutor: { runsAsync: () => true, startJob, pollJob: vi.fn(), stopJob: vi.fn() },
+    agentExecutor: { runsAsync: () => true, startJob, pollJob: vi.fn(), reclaimRun: vi.fn() },
     contextBuilder: { buildContext: vi.fn() },
     resolveRiskPolicy: async () => ({ ciMaxAttempts: 10 }),
     stateMachine: {

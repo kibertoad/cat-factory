@@ -62,8 +62,13 @@ one `RunnerTransport.release` seam** (`CloudflareContainerTransport.release`),
 which goes through the `ContainerInstanceRegistry`'s single kill path
 (SIGKILL **+** clears the live-inventory row, see Layer 4):
 
-- **Execution:** `transport.release(jobId)` ← port `AsyncAgentExecutor.stopJob`
-  (`ContainerAgentExecutor.stopJob`) ← `ExecutionService.stopRunContainer`.
+- **Execution:** `transport.release(ref)` ← port `AsyncAgentExecutor.reclaimRun`
+  (`ContainerAgentExecutor.reclaimRun`) ← `ExecutionService.stopRunContainer`.
+  ONE reclaim, N releases: a run holds one container per executor IMAGE, so the
+  engine hands over every agent kind the run dispatched (`dispatchedAgentKinds`,
+  off the persisted `step.dispatches`) and the executor maps them to the
+  variant-qualified refs (`runImageVariants`). A reclaim that named a single job
+  left a `tester-ui` step's browser container running to its max lifetime.
 - **Bootstrap:** `ContainerRepoBootstrapper.stopBootstrap` →
   `transport.release(jobId)` (the bootstrapper rides the same transport now,
   rather than hand-rolling its own `EXEC_CONTAINER` call) ←
@@ -83,8 +88,9 @@ the failure/teardown handling that calls it.
 | Job **succeeds**                 | ✅ `recordStepResult` final step → `stopRunContainer`                    | ✅ `pollBootstrapJob` success path → `stopContainer` |
 
 Every terminal path now reclaims explicitly. The success-path reclaim is only safe
-on the **final** step (all pipeline steps share one container keyed by the
-execution id); the failure reclaim funnels through `failRun` so every failure kind
+on the **final** step (a pipeline's steps share the run's container, and a step on
+another executor image shares the second one); the failure reclaim funnels through
+`failRun` so every failure kind
 (driver `job_failed`, spend/decision timeouts, user stop) reclaims once,
 idempotently. These calls are no-ops where no async container executor is wired
 (e.g. the test `FakeAgentExecutor`).
@@ -119,14 +125,23 @@ row per live container: the Cloudflare transport `register`s a row on dispatch a
 age.
 
 - `ContainerInstanceRegistry` (`src/infrastructure/containers/ContainerInstanceRegistry.ts`)
-  owns the `EXEC_CONTAINER` namespace + the `LiveContainerStore`
-  (`D1LiveContainerRepository`) + a `Clock`. Its `release(key)` is the **single kill
-  path** (SIGKILL via `shutdown` **+** remove the row), shared by Layer 2 and this
-  reaper so they can't diverge.
+  owns the container-class RESOLVER (which namespace serves a row's `image`) + the
+  `LiveContainerStore` (`D1LiveContainerRepository`) + a `Clock`. Its
+  `release(key, image)` is the **single kill path** (SIGKILL via `shutdown` **+**
+  remove the row), shared by Layer 2 and this reaper so they can't diverge. The
+  `image` is load-bearing: `idFromName` answers a usable stub in ANY namespace, so a
+  UI-tester container killed through the executor class reports success while the
+  browser keeps running.
 - `reapStaleBefore(now − maxAgeMs)` (`src/index.ts` `scheduled`, the `*/2` cron, in
   `ctx.waitUntil`) lists every row older than the ceiling, kills each through
   `release`, and **warn-logs each kill** (`cron: 'container-reaper'`). With normal
   runs self-reclaiming, a reap is a genuine **leak signal**.
+- A kill that FAILS keeps its row, so the next pass retries it — **except** a row
+  whose variant's container class is no longer BOUND (the binding was removed, or the
+  Worker rolled back past it). No retry can produce a namespace for it, so the row is
+  dropped, the pass reports it as `unreachable` beside `reaped`, and one error line
+  names the binding to restore. The two counts are never merged: an unreachable row is
+  a container still burning, not a reclaimed one.
 - Ceiling = `CONTAINER_MAX_AGE_MINUTES` (default **90**, hard-clamped to **≥75**),
   sized above the longest legitimate lifetime (harness 60-min max-duration; driver
   ≈70-min polling) so it never kills live work
