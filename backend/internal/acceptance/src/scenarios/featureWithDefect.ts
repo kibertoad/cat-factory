@@ -26,15 +26,15 @@ import {
   checkEphemeralEnvironment,
   checkMergeDecision,
   checkNotTruncated,
-} from '../evidence.ts'
+  fileAndDrive,
+  requireRunDone,
+  type RunRecord,
+  type Scenario,
+} from '@cat-factory/acceptance-kit'
 import type { Harness } from '../harness.ts'
 import { backendFeatureBrief, frontendFeatureBrief } from '../instructions.ts'
 import { hostSuffix } from '../k3s.ts'
 import { filePinnedTask } from '../publicApi.ts'
-import { fileAndDrive } from '../resume.ts'
-import { requireRunDone } from '../runDriver.ts'
-import type { Scenario } from '../scenarioRunner.ts'
-import type { RunRecord } from '../world.ts'
 
 const PIPELINE = 'pl_build'
 
@@ -47,7 +47,7 @@ const STEER =
   'worked examples. Do not broaden the scope.'
 
 export function featureWithDefectScenario(harness: Harness): Scenario {
-  const { config, client, world, journal, unlock } = harness
+  const { config, client, world, journal, credentials, epilogue } = harness
 
   return {
     id: '02-feature-with-defect',
@@ -136,7 +136,8 @@ export function featureWithDefectScenario(harness: Harness): Scenario {
     const { run, answered, record } = await fileAndDrive({
       client,
       journal,
-      unlock,
+      credentials,
+      epilogue,
       existing: world.value[options.ledgerKey],
       label: options.title,
       createTask: () =>

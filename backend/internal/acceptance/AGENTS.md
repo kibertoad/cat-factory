@@ -9,7 +9,7 @@ delivered it and CLOSED it, against a LIVE local deployment with nothing faked. 
 **Entry:** `src/runAcceptance.ts` via
 `pnpm --filter @cat-factory/acceptance run acceptance`.
 **No test framework**: five scenarios (`src/scenarios/`) in ONE process, in the order
-`src/scenarios/index.ts` lists them, driven by `src/scenarioRunner.ts`, asserting with
+`src/scenarios/index.ts` lists them, driven by the kit's `runScenarios`, asserting with
 `node:assert/strict`, bailing at the first failure. What that replaced, and the four properties the
 driver now owns (order, bail, the gate before every scenario, no timeout):
 [ADR 0057](../../docs/adr/0057-acceptance-standalone-runner.md).
@@ -22,6 +22,15 @@ is no evidence of the version. Needs a running deployment, a k3s cluster
 and real model credentials; `src/config.ts` refuses with the whole list of missing VARIABLES, and
 `src/prerequisites.ts` then refuses with the whole list of unsatisfied DEPLOYMENT conditions, each
 carrying the steps and commands that fix it.
+
+**Built on [`@cat-factory/acceptance-kit`](../../packages/acceptance-kit)**, which is this suite with
+the suite taken out: the scenario driver, the ledger and journal mechanics, the prerequisite
+vocabulary and its refusals, the waits, the run driver and the evidence reductions. What stays here
+is what the kit cannot know: the prerequisites, the scenarios, the briefs, the configuration, the
+personal-subscription prompt, and `src/identity.ts`, the one declaration the kit's refusals render
+against (the run command, the resume variable, the configuration file, the docs link). Trap: the kit
+is a BUILT workspace package while this suite is type-stripped, so a checkout that has never run
+`pnpm build` cannot start a pass; any tree that can serve a local deployment has already done it.
 
 **Setup entry:** `pnpm --filter @cat-factory/acceptance run configure` (`src/configureCli.ts`) writes
 that `.env`. Its rule is **resolve rather than ask**: the workspace from `GET /api/v1/me`, the owner
@@ -206,18 +215,18 @@ under `src/`.
 
 **Where things live**
 
-| File                         | What                                                                                                               |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `src/runAcceptance.ts`       | The pass: what is settled before it starts, what an operator reads, the exit code.                                 |
-| `src/scenarioRunner.ts`      | The driver: order, bail, the gate before every gated scenario, the summary. Unit-tested.                           |
-| `src/scenarios/index.ts`     | The ORDER, as an array, pinned by a test against each id's own numeric prefix rather than a copy of the list.      |
-| `src/scenarios/preflight`    | Reports each prerequisite as its own step. Creates nothing, and is the one UNGATED scenario.                       |
-| `src/scenarios/adoptAndSca…` | k3s engine + a service per adopted repo + each one's manifest source + two `pl_build` scaffolds.                   |
-| `src/scenarios/featureWith…` | `pl_build` across both services; environment / CI / merge evidence.                                                |
-| `src/scenarios/investigate…` | `pl_bugfix`; the `clarity-review` gate answered over `/api/v1`; the repro proof.                                   |
-| `src/scenarios/issueIntake…` | An issue filed as the REPORTER, delivered from its `ticket` link, and closed by the writeback.                     |
-| `src/`                       | The harness, plus `configure` and `reset`. Per-file roles are tabled in the README.                                |
-| `test/`                      | Unit tests for the pure logic (config, gate, probe failures, ledger, journal, status, evidence, waits, configure). |
+| File                         | What                                                                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `src/runAcceptance.ts`       | The pass: what is settled before it starts, what an operator reads, the exit code.                            |
+| `src/identity.ts`            | Who this suite is, as the kit's refusals render it, plus the three commands only it prints. Unit-tested.      |
+| `src/scenarios/index.ts`     | The ORDER, as an array, pinned by a test against each id's own numeric prefix rather than a copy of the list. |
+| `src/scenarios/preflight`    | Reports each prerequisite as its own step. Creates nothing, and is the one UNGATED scenario.                  |
+| `src/scenarios/adoptAndSca…` | k3s engine + a service per adopted repo + each one's manifest source + two `pl_build` scaffolds.              |
+| `src/scenarios/featureWith…` | `pl_build` across both services; environment / CI / merge evidence.                                           |
+| `src/scenarios/investigate…` | `pl_bugfix`; the `clarity-review` gate answered over `/api/v1`; the repro proof.                              |
+| `src/scenarios/issueIntake…` | An issue filed as the REPORTER, delivered from its `ticket` link, and closed by the writeback.                |
+| `src/`                       | The harness, plus `configure` and `reset`. Per-file roles are tabled in the README.                           |
+| `test/`                      | Unit tests for the pure logic (config, prerequisites, ledger shape, status, k3s templates, configure).        |
 
 **The rules the scenarios are written to** (each expanded in the README, and each the reason a
 particular file exists):
@@ -227,7 +236,7 @@ particular file exists):
    first one runs is one the resume path skips. The DRIVER runs it, off the scenario's own `gated`
    flag, so a new scenario cannot spend an afternoon without answering the question, and it is
    re-evaluated per scenario rather than cached, because a budget can be spent mid-pass. An unreadable probe is its own verdict, never read as
-   "unmet", and it NAMES its cause: `src/probeFailure.ts` is a discriminated verdict over three
+   "unmet", and it NAMES its cause: the kit's `probeFailure.ts` is a discriminated verdict over three
    states. "Never answered" is classified through kernel's `describeConnectionFailure` (because
    `error.message` renders every transport failure this gate can hit as undici's contentless `fetch
 failed`), with the SDK's own deadline corrected to `timeout` since its abort marker is NAMED
@@ -244,20 +253,20 @@ failed`), with the SDK's own deadline corrected to `timeout` since its abort mar
    built by the check from what it just READ, so the command holds the real workspace id or account
    rather than a hole. A fix with no CLI names the screen and offers the read that confirms it:
    never a plausible-looking invented command.
-1. **Assert on evidence the platform COMPUTED, never on agent prose.** `src/evidence.ts` reduces
+1. **Assert on evidence the platform COMPUTED, never on agent prose.** The kit's `evidence.ts` reduces
    the verification report; grepping a coder's reply tests the model's phrasing, not the product.
 2. **Never auto-answer an unplanned decision, and never answer one in FLIGHT.**
-   `src/decisions.ts` answers `follow-ups` and `clarity-review` and hard-fails on everything else,
+   The kit's `decisions.ts` answers `follow-ups` and `clarity-review` and hard-fails on everything else,
    naming the kind. Which of those two may be acted on NOW is `isActionable`, read off the status
    the platform reports and shared with the poll wait: the list keeps showing a review the driver
    is mid-cycle on, and reading "listed" as "answer me" waives the gate one poll after answering
    it. A loop that settles whatever it finds drives a run past decisions a person was meant to make
    and still ends `done`.
-3. **A wait that expires states its last observation.** `src/deadline.ts` is the suite's only
+3. **A wait that expires states its last observation.** The kit's `deadline.ts` is the pass's only
    clock, and the runner introduces no timeout of its own (the vitest one was disabled for the same
    reason). A THROWN poll obeys the same rule: the deployment this suite polls restarts by design
    (a supervisor repairs it, `node --watch` cycles it), and one such restart killed a 41-minute
-   pass on a single `ECONNREFUSED` while the run it was watching carried on. `src/deploymentOutage.ts`
+   pass on a single `ECONNREFUSED` while the run it was watching carried on. The kit's `deploymentOutage.ts`
    makes an unanswered poll an observation for two minutes and journals the recovery; an ANSWER is
    never waited through, because a refusal is evidence, and it is rethrown untouched so the SDK's
    status and request id survive. Two corollaries bite: only the four transport causes shaped like
@@ -307,7 +316,7 @@ preset pin and the wiring reads are all `/api/v1` operations. So a surface chang
 breaks this suite at compile time, which is most of why it is worth driving the SDK rather than raw
 `fetch`.
 
-The only exceptions are `GET /health` and `GET /auth/config` in `src/deploymentApi.ts`, and the
+The only exceptions are `GET /health` and `GET /auth/config` in the kit's `deploymentApi.ts`, and the
 reason is not convenience: both must answer for a deployment whose config failed to validate, which
 serves a fallback app that 503s every other route. **A new call does not belong there.** Anything
 scoped to a workspace has a key available, so it is a public endpoint, and adding one means adding it

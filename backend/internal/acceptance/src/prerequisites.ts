@@ -13,7 +13,7 @@
 // `advisory` disposition is for.
 //
 // Each check answers with a REMEDY, and a probe that cannot read an answer says so as `unknown`
-// rather than guessing a verdict. `preflight.ts` explains why that is three states and not two.
+// rather than guessing a verdict. The kit's `preflight.ts` explains why that is three states and not two.
 //
 // **A remedy here is INSTRUCTIONS, and it is built from what the probe just read.** Every command
 // below is rendered with this deployment's base URL, this workspace's id, this pass's run id and
@@ -45,30 +45,31 @@ import {
   sameRepo,
   unreachableRepoSteps,
 } from './adopt.ts'
-import type { DeploymentApi } from './deploymentApi.ts'
+import {
+  baseUrlStep,
+  type DeploymentApi,
+  envAssignment,
+  type Prerequisite,
+  type Remedy,
+  type RemedyCommand,
+  satisfied,
+  shellQuoted,
+  unsatisfied,
+} from '@cat-factory/acceptance-kit'
 import type { AcceptanceConfig } from './config.ts'
 import { K3S_DOC } from './config.ts'
 import { buildK3sConnection, buildK3sSecrets } from './k3s.ts'
 import { MANIFEST_TEMPLATE_PREREQUISITES } from './manifestTemplates.ts'
 import {
-  envAssignment,
+  ACCEPTANCE_IDENTITY,
   perPersonPrefixInvocation,
   resetInvocation,
   resumeInvocation,
-  shellQuoted,
-} from './operatorText.ts'
-import {
-  type Prerequisite,
-  type Remedy,
-  type RemedyCommand,
-  satisfied,
-  unsatisfied,
-} from './preflight.ts'
-import { baseUrlStep } from './probeFailure.ts'
-import type { PassOwnership } from './world.ts'
+} from './identity.ts'
 import { usablePresets } from './presets.ts'
 import { describeKeyProblem, type KeyProblem, type PublicIdentity } from './publicApi.ts'
 import { type IssueApi, issueTarget, slug, UNSUPPORTED_PROVIDER_REASON } from './vcsIssues.ts'
+import type { PassOwnership } from './world.ts'
 
 export type PreflightContext = {
   config: AcceptanceConfig
@@ -424,11 +425,11 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
           steps: [
             'Read the deployment log. Nothing downstream of a backend in this state is diagnosable.',
             // What is specific to THIS verdict, then the shared re-read step. The instruction itself
-            // is `probeFailure.ts`'s and is relayed rather than restated: three near-copies of one
+            // is the kit's `probeFailure.ts` and is relayed rather than restated: three near-copies of one
             // sentence lived in this package, each worded slightly differently.
             'The SPA serves a /health of its own, and a base URL pointing at it produces exactly ' +
               'this verdict against a backend that is perfectly healthy.',
-            baseUrlStep(config.baseUrl),
+            baseUrlStep(config.baseUrl, ACCEPTANCE_IDENTITY),
           ],
           commands: [
             {

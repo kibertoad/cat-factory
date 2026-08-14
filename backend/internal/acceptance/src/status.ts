@@ -1,6 +1,6 @@
 // "Where is this pass?", answered from the two files a pass leaves behind.
 //
-// This is the read side of `journal.ts` and `world.ts`, and it exists because the question is
+// This is the read side of the kit's `journal.ts` and of `world.ts`, and it exists because the question is
 // asked from OUTSIDE the process doing the work: from another terminal while a run is going, or
 // the next morning after one died. It reduces the ledger (what exists) and the journal (what
 // happened) into one report, and it is a pure function of both plus a clock so
@@ -11,15 +11,9 @@
 // between "still working" and "nothing has written here since 14:07" is the whole reason someone
 // runs this.
 
-import type { JournalEvent } from './journal.ts'
-import { resumeInvocation } from './operatorText.ts'
-import {
-  type IssueRecord,
-  recordsFacts,
-  type RunRecord,
-  type ServiceRecord,
-  type World,
-} from './world.ts'
+import { type JournalEvent, type RunRecord } from '@cat-factory/acceptance-kit'
+import { resumeInvocation } from './identity.ts'
+import { type IssueRecord, recordsFacts, type ServiceRecord, type World } from './world.ts'
 
 /** Which pass a `status` invocation is about, or the reason there is none to report. */
 export type StatusTarget =

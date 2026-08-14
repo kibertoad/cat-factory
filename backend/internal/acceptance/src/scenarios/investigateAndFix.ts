@@ -31,14 +31,14 @@ import {
   checkMergeDecision,
   checkNotTruncated,
   checkReproductionProof,
+  fileAndDrive,
+  requireRunDone,
   retainedEnvironmentUrl,
-} from '../evidence.ts'
+  type Scenario,
+} from '@cat-factory/acceptance-kit'
 import type { Harness } from '../harness.ts'
 import { bugReportBrief } from '../instructions.ts'
 import { filePinnedTask } from '../publicApi.ts'
-import { fileAndDrive } from '../resume.ts'
-import { requireRunDone } from '../runDriver.ts'
-import type { Scenario } from '../scenarioRunner.ts'
 
 const PIPELINE = 'pl_bugfix'
 
@@ -53,7 +53,7 @@ const STEER =
   'should show the next 10 items with no repeats.'
 
 export function investigateAndFixScenario(harness: Harness): Scenario {
-  const { config, client, world, journal, unlock } = harness
+  const { config, client, world, journal, credentials, epilogue } = harness
 
   return {
     id: '03-investigate-and-fix',
@@ -67,7 +67,8 @@ export function investigateAndFixScenario(harness: Harness): Scenario {
           const { run, answeredKinds } = await fileAndDrive({
             client,
             journal,
-            unlock,
+            credentials,
+            epilogue,
             existing: world.value.bugfix,
             label: 'the paging bug report',
             // The report names an environment only when the platform says one OUTLIVED its run. Under
