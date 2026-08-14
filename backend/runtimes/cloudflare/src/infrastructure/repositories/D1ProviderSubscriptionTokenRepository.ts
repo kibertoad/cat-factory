@@ -70,6 +70,18 @@ export class D1ProviderSubscriptionTokenRepository implements ProviderSubscripti
     return (results ?? []).map(rowToRecord)
   }
 
+  async listByWorkspace(workspaceId: string): Promise<ProviderSubscriptionTokenRecord[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM provider_subscription_tokens
+          WHERE workspace_id = ? AND deleted_at IS NULL
+          ORDER BY created_at ASC`,
+      )
+      .bind(workspaceId)
+      .all<ProviderSubscriptionTokenRow>()
+    return (results ?? []).map(rowToRecord)
+  }
+
   async getById(workspaceId: string, id: string): Promise<ProviderSubscriptionTokenRecord | null> {
     const row = await this.db
       .prepare(

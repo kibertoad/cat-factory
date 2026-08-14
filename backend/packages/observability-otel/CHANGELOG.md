@@ -1,5 +1,529 @@
 # @cat-factory/observability-otel
 
+## 0.21.1
+
+### Patch Changes
+
+- Updated dependencies [409238f]
+  - @cat-factory/kernel@0.301.0
+  - @cat-factory/contracts@0.313.0
+
+## 0.21.0
+
+### Minor Changes
+
+- 0ef48d1: Stop an agent's own cleanup command from killing the harness that supervises it, and report a
+  harness that WAS stopped as what it is.
+
+  A local acceptance run failed as "the container kept vanishing, treating as deterministic" after
+  two full coder passes. Nothing evicted anything. The harness ran as PID 1 with the command line
+  `node dist/server.js`, which is also where the Fastify service the coder was scaffolding built to;
+  the agent started that service in the background to smoke-test it over a real socket, then ran
+  `pkill -f 'node dist/server.js'` to stop it again. The image ships no `pkill`, so that failed with
+  `command not found` and the next turn used something that works without procps, which matched PID 1
+  and shut the harness down. The container exited 0, the engine could only see a backend that had
+  stopped answering, so it called it an eviction, spent its crash-recovery budget re-running the same
+  agent into the same wall, and blamed infrastructure churn.
+
+  **The harness no longer answers to a pattern kill aimed at anything else.** It runs from
+  `dist/harness-server.js` and sets `process.title = 'cat-factory-harness'`, which on Linux rewrites
+  both `/proc/<pid>/cmdline` and (truncated) `/proc/<pid>/comm`, so neither `pkill -f 'node dist/…'`
+  nor a bare `pkill node` nor a hand-rolled `/proc` sweep can name it. It is not a security boundary
+  and is not claimed as one: the agent shares the harness's uid, and separating them needs a PID 1
+  running as root, which this image deliberately does not have. What it removes is the accident.
+
+  **`procps` + `psmisc` are now in the image**, which reads backwards until you look at what the
+  absence caused: `pkill`/`pgrep`/`ps` are the narrow tools an agent reaches for first, and the
+  fallback it writes when they are missing is the unbounded one that took the harness down.
+
+  **A harness that exits cleanly mid-job is no longer an eviction.** Every transport that can read an
+  exit code (the local container and native-process legs, the Cloudflare per-run container, and a
+  Kubernetes runner pod's `state.terminated`) now distinguishes a workload that exited 0 with a job
+  still in flight from one that crashed or was reclaimed, and reports `harnessShutdown` instead of
+  `evicted`. The engine fails that run immediately with a new `harness_shutdown` failure kind
+  (additive to the public failure-kind vocabulary; OpenAPI surface 1.54.0) and a hint that names the
+  causes worth checking, rather than spending an automatic retry that walks back into whatever
+  stopped it. A backend that reports no exit code (Apple `container`, a manifest-driven runner pool
+  whose scheduler exposes only status words) keeps reporting an eviction, because an absent code is
+  not a zero.
+
+  The distinction is only ever drawn where NOTHING else explains the stop. Infrastructure churn is
+  named and recovers on its own budget, and it stays named even after its attribution window passes:
+  a rollout drain the harness answered by exiting 0, discovered minutes later by a re-driven poll, is
+  still that drain rather than a shutdown. The same rule orders the engine's own reading: a killed
+  job that some branch settles WITHOUT failing the run (a parked PR review's read-only Challenge
+  Investigator) keeps that settlement, since losing a human's in-flight curation is worse than the
+  retry this failure kind exists to prevent. `container.harness_shutdown` counts the class, kept out
+  of `container.evicted` so the eviction rate an operator sizes infrastructure by is not inflated by
+  deaths no infrastructure change prevents.
+
+  **An aborted agent run says who aborted it.** The Claude Code / Codex runner rejected with a
+  hard-coded "agent run aborted by watchdog" for every abort, including the shutdown handler's, so a
+  job killed by something else filed its failure against a watchdog that never fired. It now carries
+  the abort reason the caller supplied, the way the Pi runner already did, and an abort that supplied
+  none falls back to saying so rather than quoting the platform's own contentless "This operation was
+  aborted" (a reasonless `abort()` sets an `AbortError` that IS an `Error`, so the fallback was
+  unreachable).
+
+  The image moves to `cat-factory-executor:1.121.0` across the wrangler config, the publish script and
+  `RECOMMENDED_HARNESS_IMAGE`: the entrypoint rename and `procps` are only in effect once a deployment
+  runs a tag that contains them.
+
+  **The acceptance suite stops blaming the merge threshold for a failed run.** Its "the merge was
+  HELD" hint fired on "there is a pull request and the status is not done", which is also true of a
+  run that died three phases before any merge was considered; it is now offered only where nothing
+  else explains the stop.
+
+### Patch Changes
+
+- Updated dependencies [0ef48d1]
+  - @cat-factory/kernel@0.300.0
+  - @cat-factory/contracts@0.312.0
+
+## 0.20.4
+
+### Patch Changes
+
+- Updated dependencies [d5c1f1c]
+- Updated dependencies [c67e924]
+  - @cat-factory/kernel@0.299.1
+  - @cat-factory/contracts@0.311.0
+
+## 0.20.3
+
+### Patch Changes
+
+- Updated dependencies [056e18d]
+  - @cat-factory/contracts@0.310.0
+  - @cat-factory/kernel@0.299.0
+
+## 0.20.2
+
+### Patch Changes
+
+- Updated dependencies [a81879b]
+  - @cat-factory/contracts@0.309.0
+  - @cat-factory/kernel@0.298.2
+
+## 0.20.1
+
+### Patch Changes
+
+- Updated dependencies [0e1e0fa]
+  - @cat-factory/contracts@0.308.1
+  - @cat-factory/kernel@0.298.1
+
+## 0.20.0
+
+### Minor Changes
+
+- 7312e0a: Stop a refused work-branch push from failing a run whose work is already on the branch.
+
+  The harness checkpoint-pushes the agent's commits every 60s so an evicted container's work
+  survives, which makes it its own competing writer: a commit is published within a minute of being
+  made, the agent cannot see that from inside the container, and amending it afterwards is ordinary
+  git hygiene (the delivery contract even asks it to validate AFTER committing, which is exactly the
+  sequence that produces an amend). The final push was then refused as a non-fast-forward and the
+  whole run failed with a complete scaffold sitting on the branch.
+
+  Every push after the first now carries `--force-with-lease` against the sha THIS pass published,
+  which is the sha the push itself named: `pushBranch` pushes `<sha>:refs/heads/<branch>` and returns
+  it, rather than reading `refs/remotes/origin/<branch>` back afterwards, which a fresh coding run's
+  single-branch clone never creates. That is the whole discrimination: the run's own rewrite lands, and
+  a second writer's commits (a concurrent dispatch, a person) still refuse the push as `(stale info)`,
+  which is the "never clobber another run's work" property the resume design leans on.
+
+  The lease is withheld entirely unless the branch still contains the tip this pass started from
+  (`workBranchLease`), because the lease alone does not bound the force to this pass's own commits: a
+  resumed run that had already landed one checkpoint would otherwise force over the commits it
+  resumed from and take an earlier run's work with them.
+
+  A refused push is no longer a generic `git` fault. It reports the new `branch-contended` failure
+  cause, and the engine recovers by re-dispatching the step once (`MAX_BRANCH_CONTENTION_RECOVERIES`,
+  recorded on `PipelineStep.branchContentionRecoveries` and projected by the debug API): the fresh
+  dispatch resumes the branch as it now stands, so the agent continues on top of whatever is on it.
+  Past the budget the run fails with a remedy naming which of the two causes it was, rather than git's
+  own "use `git pull`" hint, which is advice for a person at a terminal. Each refusal also increments
+  the new `container.branch_contended` operational counter, since a re-dispatch that a run reports as
+  a clean success is invisible per run and costs a whole agent run twice.
+
+  The checkpoint also stops re-pushing an unchanged branch. Its gate was "the branch advanced past the
+  pre-run tip", which stays true forever once it has, so every tick issued a push: an hour-long run
+  that commits eight times spent ~60 authenticated round trips, ~52 of them answering "Everything
+  up-to-date" and each counting against the host's push rate limits. It now pushes only an
+  UNPUBLISHED tip, which makes the interval a loss window rather than a rate (one push per commit the
+  agent makes, whatever the model or the run's length) and leaves the durability guarantee unchanged.
+
+  The `build` prompt bumps to v6 with the matching half of the rule stated to the agent: add commits,
+  never rewrite them.
+
+  `/api/v1/debug/runs/:runId` gains `branchContentionRecoveries` per step (OpenAPI 1.52.0, additive):
+  a run that recovered reports as an ordinary success, so nothing else tells a post-mortem that one
+  agent pass was paid for twice.
+
+  Also fixes a git failure printing its stderr twice (`execFile` already folds it into the rejection
+  message), which made one refused push read as two attempts.
+
+### Patch Changes
+
+- Updated dependencies [7312e0a]
+  - @cat-factory/kernel@0.298.0
+  - @cat-factory/contracts@0.308.0
+
+## 0.19.10
+
+### Patch Changes
+
+- Updated dependencies [95408c2]
+  - @cat-factory/contracts@0.307.0
+  - @cat-factory/kernel@0.297.0
+
+## 0.19.9
+
+### Patch Changes
+
+- Updated dependencies [792ecde]
+  - @cat-factory/kernel@0.296.1
+
+## 0.19.8
+
+### Patch Changes
+
+- Updated dependencies [fc56d82]
+- Updated dependencies [fc9afb4]
+  - @cat-factory/contracts@0.306.0
+  - @cat-factory/kernel@0.296.0
+
+## 0.19.7
+
+### Patch Changes
+
+- Updated dependencies [edd4fd0]
+  - @cat-factory/kernel@0.295.0
+  - @cat-factory/contracts@0.305.0
+
+## 0.19.6
+
+### Patch Changes
+
+- Updated dependencies [36e0c9b]
+  - @cat-factory/contracts@0.304.0
+  - @cat-factory/kernel@0.294.1
+
+## 0.19.5
+
+### Patch Changes
+
+- Updated dependencies [569181d]
+  - @cat-factory/contracts@0.303.0
+  - @cat-factory/kernel@0.294.0
+
+## 0.19.4
+
+### Patch Changes
+
+- Updated dependencies [1a0b593]
+  - @cat-factory/contracts@0.302.0
+  - @cat-factory/kernel@0.293.0
+
+## 0.19.3
+
+### Patch Changes
+
+- Updated dependencies [7d1477c]
+  - @cat-factory/kernel@0.292.2
+
+## 0.19.2
+
+### Patch Changes
+
+- Updated dependencies [c09ddbe]
+  - @cat-factory/kernel@0.292.1
+
+## 0.19.1
+
+### Patch Changes
+
+- Updated dependencies [fc4a1e4]
+  - @cat-factory/contracts@0.301.0
+  - @cat-factory/kernel@0.292.0
+
+## 0.19.0
+
+### Minor Changes
+
+- ee733ee: A run whose stored row cannot be decoded is now closed instead of re-driven forever, and one
+  unrecoverable run no longer ends the stale-run sweep.
+
+  The two are the same incident. A `kind='execution'` row with no `block_id` fails `rowToExecution`,
+  and every path that could settle such a run begins by READING it: the re-drive throws on the load,
+  and so does the hard-stall backstop whose entire job is to settle a run recovery cannot resume. The
+  row therefore stayed `running` forever, was re-listed by every sweep (`listStale` is ordered oldest
+  first, so it sorted to the front of each one), and past the hard-stall deadline its throw escaped
+  the per-run body and ended the whole pass: no other stale run recovered, no spend-paused run
+  resumed, no batch enqueue happened, tick after tick, while the sweeper reported itself as running.
+
+  - **Disposal.** `RunStateMachine.loadOrDispose` recognises a `DataIntegrityError` by TYPE (a
+    transient database failure still propagates and leaves the run alone) and settles the run through
+    `markFailed`, the one write that decodes nothing. Both the driver entry point
+    (`ExecutionService.advanceInstance`) and the settle path (`failRun`) read through it, so such a
+    row is closed on its first re-drive rather than an hour later.
+  - **The owning block goes with it.** A settled run row with the card still `in_progress` leaves the
+    human half of the incident unresolved forever, because the run is dropped from the board snapshot
+    and there is no failure card and no Retry. The run names no block, but the block names the run:
+    the new `BlockRepository.getByExecution` reads that reverse link, and the card drops to `blocked`
+    with a pushed board event and no fabricated progress.
+  - **Only a MALFORMED row is disposed of.** A stored value this build does not RECOGNISE is a fact
+    about the reader, not the row: during a rolling deploy an unknown `ExecutionStatus` member is a
+    healthy run the newer replica wrote, and disposal is irreversible while a re-drive costs a tick.
+    `DataIntegrityError` now carries a `DataIntegrityFault`, and the reversible half is the fallback
+    wherever the fault is unknown or absent.
+  - **Isolation.** Both facades' sweeps recover one run at a time inside a per-run boundary, log the
+    run they skipped, and count it as `sweep.run_recovery_failed`. A pass that took runs on and
+    recovered NONE of them reports itself as a FAILED pass, since such a pass now completes and a
+    recorded success would reset `sweep_degraded` on precisely the wedged sweeper it watches for. A
+    run whose probe threw keeps its per-process orphan clock, so the hard-stall backstop can still
+    reach it.
+  - **A new failure kind, `state_unreadable`** (surface version 1.48.0, additive), so these runs are
+    distinguishable in the operator's failure-kind breakdown rather than filed under `stalled`, whose
+    advice is "retry" and whose retry would re-read the same row.
+  - **A write-side guard.** Composing the stored `detail` for a run that `rowToExecution` would refuse
+    now throws, for both invariants it checks (no `blockId`, a cursor outside its step list), so the
+    writer that produces one reports the fault instead of a sweeper hours later. Both facades'
+    `upsert`/`insertLive`/`compareAndSwap` compose through that one function.
+
+  `DataIntegrityError` moved to `@cat-factory/kernel` (re-exported from `@cat-factory/server`, so no
+  import breaks) because the engine has to be able to recognise it. It also survives the mothership
+  persistence RPC as its own error code rather than an opaque 500, without which the disposal would be
+  a no-op on mothership deployments.
+
+  Documented on the website in kibertoad/cat-factory-website#53.
+
+### Patch Changes
+
+- Updated dependencies [ee733ee]
+  - @cat-factory/contracts@0.300.0
+  - @cat-factory/kernel@0.291.0
+
+## 0.18.42
+
+### Patch Changes
+
+- Updated dependencies [01086d8]
+  - @cat-factory/contracts@0.299.1
+  - @cat-factory/kernel@0.290.1
+
+## 0.18.41
+
+### Patch Changes
+
+- Updated dependencies [1bcdacc]
+  - @cat-factory/kernel@0.290.0
+
+## 0.18.40
+
+### Patch Changes
+
+- Updated dependencies [195b248]
+  - @cat-factory/contracts@0.299.0
+  - @cat-factory/kernel@0.289.1
+
+## 0.18.39
+
+### Patch Changes
+
+- Updated dependencies [bc2478d]
+  - @cat-factory/contracts@0.298.0
+  - @cat-factory/kernel@0.289.0
+
+## 0.18.38
+
+### Patch Changes
+
+- Updated dependencies [a634746]
+  - @cat-factory/contracts@0.297.0
+  - @cat-factory/kernel@0.288.0
+
+## 0.18.37
+
+### Patch Changes
+
+- Updated dependencies [7893f35]
+  - @cat-factory/contracts@0.296.0
+  - @cat-factory/kernel@0.287.0
+
+## 0.18.36
+
+### Patch Changes
+
+- Updated dependencies [07ff467]
+  - @cat-factory/contracts@0.295.0
+  - @cat-factory/kernel@0.286.3
+
+## 0.18.35
+
+### Patch Changes
+
+- Updated dependencies [9b3473a]
+  - @cat-factory/contracts@0.294.0
+  - @cat-factory/kernel@0.286.2
+
+## 0.18.34
+
+### Patch Changes
+
+- b889842: Report the actual cause of a failure everywhere, not just on a "Test connection" button.
+
+  The previous slice taught the connection PROBES to read the cause chain, because on Node a transport
+  failure is `TypeError: fetch failed` and what happened hangs off `.cause`. It turned out the repo had
+  three describers of a thrown value and the other two stopped at `error.message`: `getErrorMessage`
+  (the string a human is shown, and what a persisted failure reason or a PR comment records) and
+  `describeError` (every log line). So a probe could name `connect ECONNREFUSED 127.0.0.1:6443` while
+  the log line and the toast for the same failure still said `fetch failed`, which is what made a
+  Kubernetes connect failure unexplainable even with the probe fixed.
+
+  All three now flatten through one kernel core (`shared/error-chain.logic.ts`): `.cause` plus each
+  `AggregateError` branch (so a dual-stack `localhost` reports what happened on each address), scrubbed
+  through `redactSecrets`, capped with a marker saying what it dropped, and bounded by link identity so
+  a cause cycle terminates. Roughly 90 hand-rolled `e instanceof Error ? e.message : String(e)` copies
+  across the backend now call `getErrorMessage`, and five local `errMessage`/`messageOf` wrappers are
+  deleted.
+
+  Who may read a chain is part of the rule. An AUTHENTICATED reader gets it, because the inner link is
+  usually the only thing saying whether the fix is theirs or the deployment's; where a deployment's
+  model endpoints are platform-internal, their host and port do reach a workspace member through an
+  ordinary 4xx. An UNAUTHENTICATED surface does not: `/ready` on BOTH facades answers with kernel's
+  `publicDiagnostic` (the outermost link, scrubbed) rather than publishing the deployment's database
+  address, sharing one helper so the two runtimes cannot drift to different depths.
+
+  A VERDICT does not read the rendered string either. `errorChainMatches` tests each link uncapped, so
+  a sentinel phrase pushed past the display budget by a long wrapper cannot silently turn a recognised
+  rollout stop into a crash. Relatedly, log fields get their own, much wider cap than the 400 characters
+  a human-facing message is held to, and an error with nothing to say answers with the empty string
+  rather than the bare constructor name, so a call site's `getErrorMessage(e) || '<what to do>'` guard
+  still fires.
+
+  `redactSecrets` now spares a single-case word and an env-var-shaped identifier where a field-name rule
+  matched: it scrubs the message a person reads, and `Missing required key: OPENAI_API_KEY` must not
+  lose the name they have to go and set. Every credential shape the rules exist for still matches.
+
+  An error message may therefore now carry appended causes where it did not before. The opening phrase
+  is unchanged, which is what the downstream `/dispatch failed/i` and eviction-sentinel checks match on.
+
+  On the SPA, every failure toast goes through the one funnel that already existed for pipeline errors,
+  instead of 29 per-component copies of the same `notifyError(title, e)` and ~83 direct `toast.add`
+  calls rendering the raw message. Beyond the translated copy that funnel already resolved, a failure
+  toast now stays until dismissed instead of vanishing after about five seconds, its text is
+  selectable, and one click copies the whole report: the action that failed, the class of failure, the
+  backend's own account, and the `requestId` that is the only join between what the user saw and the
+  server log line explaining it. Conflict (409) toasts get the same treatment, which matters most on
+  the unknown-reason path, since that is where a reason an older SPA build has never heard of lands.
+
+  `@cat-factory/cli` carries its own copy of the describer rather than importing kernel. That package is
+  published and deliberately runtime-dependency-free, so a `workspace:*` import from its `bin` resolves
+  through pnpm's link locally and is simply absent off the registry; a conformity test pins the copy to
+  kernel's output byte for byte.
+
+- Updated dependencies [b889842]
+  - @cat-factory/kernel@0.286.1
+
+## 0.18.33
+
+### Patch Changes
+
+- Updated dependencies [b25732f]
+  - @cat-factory/contracts@0.293.0
+  - @cat-factory/kernel@0.286.0
+
+## 0.18.32
+
+### Patch Changes
+
+- Updated dependencies [7119ca7]
+  - @cat-factory/contracts@0.292.2
+  - @cat-factory/kernel@0.285.3
+
+## 0.18.31
+
+### Patch Changes
+
+- Updated dependencies [57a7ecd]
+  - @cat-factory/contracts@0.292.1
+  - @cat-factory/kernel@0.285.2
+
+## 0.18.30
+
+### Patch Changes
+
+- Updated dependencies [5f6699a]
+  - @cat-factory/contracts@0.292.0
+  - @cat-factory/kernel@0.285.1
+
+## 0.18.29
+
+### Patch Changes
+
+- Updated dependencies [22b2459]
+- Updated dependencies [2428b6b]
+  - @cat-factory/kernel@0.285.0
+  - @cat-factory/contracts@0.291.0
+
+## 0.18.28
+
+### Patch Changes
+
+- Updated dependencies [19baddf]
+  - @cat-factory/kernel@0.284.0
+
+## 0.18.27
+
+### Patch Changes
+
+- Updated dependencies [31f43c1]
+  - @cat-factory/contracts@0.290.0
+  - @cat-factory/kernel@0.283.0
+
+## 0.18.26
+
+### Patch Changes
+
+- Updated dependencies [3ff215a]
+  - @cat-factory/contracts@0.289.1
+  - @cat-factory/kernel@0.282.1
+
+## 0.18.25
+
+### Patch Changes
+
+- Updated dependencies [e3cf16a]
+  - @cat-factory/contracts@0.289.0
+  - @cat-factory/kernel@0.282.0
+
+## 0.18.24
+
+### Patch Changes
+
+- Updated dependencies [83764b5]
+  - @cat-factory/contracts@0.288.0
+  - @cat-factory/kernel@0.281.3
+
+## 0.18.23
+
+### Patch Changes
+
+- Updated dependencies [1fbd83c]
+- Updated dependencies [00228c6]
+  - @cat-factory/contracts@0.287.1
+  - @cat-factory/kernel@0.281.2
+
+## 0.18.22
+
+### Patch Changes
+
+- Updated dependencies [bf473bd]
+  - @cat-factory/contracts@0.287.0
+  - @cat-factory/kernel@0.281.1
+
 ## 0.18.21
 
 ### Patch Changes

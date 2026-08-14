@@ -1,29 +1,31 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useRafFn } from '@vueuse/core'
+import { ref, shallowRef, computed, watch } from 'vue'
+import { useBoardActivity } from '~/composables/useBoardActivity'
+import { useSettlingRaf } from '~/composables/useSettlingRaf'
+import { commitSegments, type EdgeSegment } from '~/utils/edgeSegments'
 
 /**
  * Draws dependency arrows between task cards as an SVG overlay on top of the
  * board. Tasks are plain DOM nodes (inside frame cards), so we resolve their
- * on-screen rectangles by `[data-block-id]` every frame — this makes arrows
- * follow pan / zoom / drag / expand for free. When a task's frame is collapsed
- * (its card isn't rendered), the arrow anchors to the frame card instead.
+ * on-screen rectangles by `[data-block-id]` — this makes arrows follow pan /
+ * zoom / drag / expand for free. When a task's frame is collapsed (its card
+ * isn't rendered), the arrow anchors to the frame card instead.
+ *
+ * Measuring is O(edges) `querySelector` + forced layout reads, so it runs only
+ * while something is actually moving: the board's activity pulse wakes it and
+ * `useSettlingRaf` parks it again once the resolved segments hold still.
  */
 const board = useBoardStore()
 
 const svg = ref<SVGSVGElement | null>(null)
 
-type Seg = { id: string; x1: number; y1: number; x2: number; y2: number; done: boolean }
-const segments = ref<Seg[]>([])
+const segments = shallowRef<EdgeSegment[]>([])
 // Epic→member membership links (distinct style from dependency edges).
-type MemberSeg = { id: string; x1: number; y1: number; x2: number; y2: number }
-const memberSegments = ref<MemberSeg[]>([])
+const memberSegments = shallowRef<EdgeSegment[]>([])
 // Frontend frame → bound service frame links (from a frontend's backend bindings).
-type FrontendSeg = { id: string; x1: number; y1: number; x2: number; y2: number }
-const frontendSegments = ref<FrontendSeg[]>([])
+const frontendSegments = shallowRef<EdgeSegment[]>([])
 // Service frame → connected provider service frame links (from serviceConnections).
-type ConnectionSeg = { id: string; x1: number; y1: number; x2: number; y2: number }
-const connectionSegments = ref<ConnectionSeg[]>([])
+const connectionSegments = shallowRef<EdgeSegment[]>([])
 
 // task → its dependencies, both ends being tasks
 const taskDeps = computed(() => {
@@ -129,8 +131,8 @@ function segmentBetween(sourceId: string, targetId: string, origin: DOMRect) {
 function linkSegments(
   links: { id: string; source: string; target: string }[],
   origin: DOMRect,
-): { id: string; x1: number; y1: number; x2: number; y2: number }[] {
-  const out: { id: string; x1: number; y1: number; x2: number; y2: number }[] = []
+): EdgeSegment[] {
+  const out: EdgeSegment[] = []
   for (const link of links) {
     const seg = segmentBetween(link.source, link.target, origin)
     if (seg) out.push({ id: link.id, ...seg })
@@ -138,27 +140,34 @@ function linkSegments(
   return out
 }
 
-function recompute() {
+/** Re-measure every overlay link; reports whether any of them moved. */
+function recompute(): boolean {
   const el = svg.value
-  if (!el) return
+  if (!el) return false
   const origin = el.getBoundingClientRect()
 
-  const next: Seg[] = []
+  const deps: EdgeSegment[] = []
   for (const d of taskDeps.value) {
     const seg = segmentBetween(d.source, d.target, origin)
     if (!seg) continue
-    next.push({ id: d.id, ...seg, done: board.getBlock(d.source)?.status === 'done' })
+    deps.push({ id: d.id, ...seg, done: board.getBlock(d.source)?.status === 'done' })
   }
-  segments.value = next
 
-  memberSegments.value = linkSegments(epicLinks.value, origin)
-  frontendSegments.value = linkSegments(frontendLinks.value, origin)
-  connectionSegments.value = linkSegments(connectionLinks.value, origin)
+  // An array literal, so every list is committed before the result is reduced: a `||` chain
+  // would short-circuit and leave the later overlays drawn at stale coordinates.
+  return [
+    commitSegments(segments, deps),
+    commitSegments(memberSegments, linkSegments(epicLinks.value, origin)),
+    commitSegments(frontendSegments, linkSegments(frontendLinks.value, origin)),
+    commitSegments(connectionSegments, linkSegments(connectionLinks.value, origin)),
+  ].some(Boolean)
 }
 
-const { pause, resume } = useRafFn(recompute, { immediate: false })
-onMounted(resume)
-onBeforeUnmount(pause)
+const { poke } = useSettlingRaf(recompute)
+useBoardActivity(poke)
+// A link set can change with no visible change to any card (toggling a dependency between two
+// tasks draws an arrow and nothing else), which the DOM-level pulse would never see.
+watch([taskDeps, epicLinks, frontendLinks, connectionLinks], poke)
 </script>
 
 <template>

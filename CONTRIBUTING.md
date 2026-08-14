@@ -61,6 +61,11 @@ or open the website PR yourself.
 
 ## Common commands
 
+**Node 24 or newer**, which the root `package.json` declares as `engines.node`. Below that is not
+supported and not worked around: several entry points here are TypeScript run by Node's own type
+stripping (on by default from 23.6), and the source targets that floor rather than the oldest
+runtime it might meet.
+
 ```sh
 pnpm install            # one install for the whole workspace
 pnpm build              # build the publishable libraries (dist)
@@ -91,6 +96,17 @@ in its own non-blocking workflow (`.github/workflows/mutation.yml`) and no local
 command you need for a PR runs it. To measure a branch, dispatch that workflow on it.
 Which packages are covered, how to add one, and how to read a surviving mutant:
 [`docs/internal/mutation-testing.md`](./docs/internal/mutation-testing.md).
+
+**The Gatekeeper's Cloudflare OS leg is nightly CI only.** It boots a pinned commit of
+`cloudflare/cloudflare-os` beside our Worker, so it needs a partner checkout no
+ordinary PR should have to make, and a change on their side must never turn this
+repository red: it lives in its own non-blocking workflow
+(`.github/workflows/gatekeeper-os.yml`), like mutation testing. To run it on a branch,
+dispatch that workflow, or clone the partner repository INSIDE this one (at
+`.cloudflare-os`, which is gitignored, because wrangler's harness boots both Workers
+under one root) and point `GATEKEEPER_OS_DIR` at it. The recipe is in
+[`sdk/gatekeeper-worker/README.md`](./sdk/gatekeeper-worker/README.md). What it covers and why:
+[ADR 0052](./backend/docs/adr/0052-cloudflare-os-gatekeeper.md).
 
 **The Node and Local facade suites need a real Postgres, and Turbo will not pass
 `DATABASE_URL` through to them.** Without a server they fail with `DATABASE_URL is
@@ -127,7 +143,7 @@ image to GHCR.
 ### Runner image changes: special rule
 
 The `@cat-factory/executor-harness` package is published to npm (its
-zero-dependency `dist/server.js` is the entry `@cat-factory/local-server`
+zero-dependency `dist/harness-server.js` is the entry `@cat-factory/local-server`
 spawns in local native mode), it **is** versioned, and that same version
 becomes the runner Docker image tag. **Always add a changeset bumping
 `@cat-factory/executor-harness` whenever you change anything that goes into the

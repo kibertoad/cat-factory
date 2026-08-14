@@ -8,6 +8,7 @@ import type {
 } from '@cat-factory/kernel'
 import {
   describeComposeSource,
+  getErrorMessage,
   materializedComposePath,
   normalizeComposeFileRefs,
 } from '@cat-factory/kernel'
@@ -895,9 +896,7 @@ export function prepareComposeProject(
   } catch (err) {
     return {
       content: renderedText,
-      issues: [
-        `compose file is not valid YAML: ${err instanceof Error ? err.message : String(err)}`,
-      ],
+      issues: [`compose file is not valid YAML: ${getErrorMessage(err)}`],
     }
   }
   if (!parsed || typeof parsed !== 'object') {
@@ -1030,6 +1029,27 @@ export function tailOutput(output: string, lines = 12): string {
     .join('\n')
 }
 
+/**
+ * A connect-form failure line for the compose probe: the REMEDY first, then whatever docker said,
+ * on ONE line.
+ *
+ * Both halves are deliberate. The verdict renders as a paragraph that collapses newlines, so a
+ * multi-line stderr spliced mid-sentence ran together into an unreadable wall and glued its own
+ * trailing period onto the next clause; and the remedy is what the operator acts on, so it goes
+ * where it is read rather than after twelve lines of captured output.
+ *
+ * `label` names WHO is speaking, because the two are different faults: a non-zero exit is docker
+ * reporting something, while a throw is the invocation never getting that far.
+ */
+export function composeProbeFailure(
+  remedy: string,
+  output: string,
+  label = 'Docker reported',
+): string {
+  const captured = tailOutput(output).replace(/\s+/g, ' ').trim()
+  return captured ? `${remedy} ${label}: ${captured}` : remedy
+}
+
 // ---------------------------------------------------------------------------
 // STACK RECIPES — multi-`-f` layering, profiles, env-file materialization, ordered setup
 // steps + a terminal health gate. All pure (no I/O): the provider drives the daemon / host
@@ -1107,9 +1127,7 @@ function parseRecipeComposeDoc(input: RecipeComposeInput): { doc?: ComposeDoc; i
     parsed = parse(input.text)
   } catch (err) {
     return {
-      issue: `compose file '${input.path}' is not valid YAML: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
+      issue: `compose file '${input.path}' is not valid YAML: ${getErrorMessage(err)}`,
     }
   }
   if (!parsed || typeof parsed !== 'object') {

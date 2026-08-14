@@ -1,4 +1,43 @@
 {
+  "mcpAuthorize": {
+    "title": "Collegare {client}?",
+    "subtitle": "Dichiara di essere {client}, e questa installazione lo rimanderà a {origin}.",
+    "workspace": {
+      "label": "Bacheca su cui potrà agire"
+    },
+    "scopeLabel": "Cosa potrà fare",
+    "scopeHint": "Ogni livello include quelli precedenti.",
+    "scope": {
+      "read": {
+        "label": "Sola lettura",
+        "description": "Vedere servizi, attività, pipeline ed esecuzioni."
+      },
+      "write": {
+        "label": "Lettura e scrittura",
+        "description": "Inoltre creare e avviare attività."
+      },
+      "decide": {
+        "label": "Lettura, scrittura e decisione",
+        "description": "Inoltre rispondere alle domande su cui un'esecuzione è in attesa."
+      },
+      "admin": {
+        "label": "Accesso completo",
+        "description": "Inoltre eliminare attività e agire sulle notifiche, il che può unire una pull request."
+      }
+    },
+    "requestedScope": "{client} ha richiesto {scope}. Seleziona quell'opzione qui sopra solo se intendi davvero concederla.",
+    "approve": "Collega",
+    "deny": "Annulla",
+    "back": "Torna all'app",
+    "noWorkspaces": "Non hai ancora una bacheca a cui collegarlo.",
+    "revokeHint": "Questo emette una chiave API che puoi revocare in qualsiasi momento dalle impostazioni della bacheca.",
+    "error": {
+      "title": "Non è stato possibile creare questo collegamento",
+      "noRequest": "Questa pagina è stata aperta senza una richiesta di autorizzazione. Avvia il collegamento dal tuo host MCP.",
+      "expired": "Questa richiesta di autorizzazione non è valida o è scaduta. Riavvia il collegamento dal tuo host MCP.",
+      "failed": "Non è stato possibile registrare la decisione. Riavvia il collegamento dal tuo host MCP."
+    }
+  },
   "settings": {
     "modelConfiguration": {
       "title": "Configurazione del modello",
@@ -77,7 +116,8 @@
         "team": "Team e accesso",
         "fragments": "Frammenti di contesto",
         "skills": "Competenze",
-        "foundational": "Servizi fondamentali"
+        "foundational": "Servizi fondamentali",
+        "riskPolicies": "Criteri di rischio"
       }
     },
     "infrastructure": {
@@ -136,6 +176,7 @@
         "urlHttpRouteStatus": "Stato dell'HTTPRoute (Gateway API)",
         "hostTemplate": "Template dell'host",
         "hostTemplateHelp": "Il template dell'host, renderizzato con le variabili di provisioning (es. branch, sha).",
+        "ingressPortHelp": "Porta host su cui risponde il controller ingress; vuoto indica la porta predefinita dello schema. Va qui e non nel template dell'host, perché un host Ingress di Kubernetes non può contenere una porta.",
         "ingressName": "Nome dell'Ingress",
         "serviceName": "Nome del Service",
         "port": "Porta",
@@ -239,6 +280,11 @@
           "blurb": "Dove vengono eseguiti gli agenti di coding quando non si usano i Cloudflare Containers. Scegli un pool di runner self-hosted (il tuo scheduler) o un cluster Kubernetes, poi configura il suo endpoint e le sue credenziali."
         }
       },
+      "serviceAccountToken": {
+        "whitespace": "Questo token contiene uno spazio o un'interruzione di riga, cosa che un token bearer non ha mai. Probabilmente è stato copiato a cavallo di una riga mandata a capo nel terminale. Ricopialo come un'unica riga ininterrotta.",
+        "base64Encoded": "Sembra il valore base64 del campo .data.token del Secret, non il token vero e proprio. Decodificalo prima, ad esempio con base64 -d.",
+        "notAJwt": "Non sembra un token di ServiceAccount, che è un JWT composto da tre parti separate da punti. Verifica di aver copiato il valore completo. Ignora questo avviso se il tuo cluster usa token bearer statici."
+      },
       "kubernetesEnv": {
         "label": "Nome",
         "labelPlaceholder": "Cluster di anteprima",
@@ -261,6 +307,7 @@
         "urlServiceStatus": "Leggi lo stato del Service",
         "hostTemplate": "Template dell'host",
         "hostTemplateHelp": "Template dell'host renderizzato con le variabili di provisioning come branch e pullNumber; l'host renderizzato diventa l'URL dell'ambiente.",
+        "ingressPortHelp": "Porta host su cui risponde il controller ingress; vuoto indica la porta predefinita dello schema. Va qui e non nel template dell'host, perché un host Ingress di Kubernetes non può contenere una porta.",
         "ingressName": "Nome dell'Ingress",
         "ingressNameHelp": "Ingress da cui leggere l'host del load balancer. Se vuoto, usa l'unico Ingress applicato.",
         "serviceName": "Nome del Service",
@@ -325,13 +372,27 @@
         "button": "Testa la connessione",
         "ok": "Connessione OK",
         "failed": "Connessione fallita",
+        "causes": {
+          "refused": "Nessuno è in ascolto a quell'indirizzo: la connessione è stata rifiutata.",
+          "dns": "Quel nome host non viene risolto da questa installazione.",
+          "timeout": "Nessuna risposta è arrivata prima della scadenza del test.",
+          "aborted": "La richiesta è stata annullata prima che arrivasse una risposta.",
+          "unreachable": "Non esiste una rotta di rete verso quell'indirizzo da questa installazione.",
+          "reset": "La connessione è stata chiusa prima che arrivasse una risposta.",
+          "tlsUntrusted": "Questa installazione non considera attendibile il certificato TLS.",
+          "tlsExpired": "Il certificato TLS è fuori dal suo periodo di validità.",
+          "tlsHostname": "Il certificato TLS non è stato emesso per quel nome host.",
+          "tlsProtocol": "L'handshake TLS è fallito.",
+          "invalidHeader": "Non è stato possibile costruire la richiesta: una credenziale contiene un carattere che un header HTTP non può trasportare."
+        },
         "warningsTitle": "Lacune in questa configurazione",
         "warnings": {
           "runner_manifest_no_release": "Nessun template di release: annullare un'esecuzione non può dire al pool di fermare il suo job, quindi un job orfano tiene occupato il suo runner finché il pool non lo recupera da solo.",
           "runner_manifest_no_status_path": "Nessun percorso di stato: ogni polling viene letto come ancora in corso, quindi un job può terminare solo esaurendo il budget di polling dell'esecuzione.",
           "github_pat_classic_account_wide": "È un token classico con l'ambito 'repo': raggiunge ogni repository su cui puoi fare push, compresi quelli in cui l'App GitHub di questo spazio di lavoro non è mai stata installata. Le esecuzioni che avvii lo usano di preferenza rispetto all'App. Un token granulare limitato ai repository di questa installazione è più ristretto.",
           "github_pat_scopes_beyond_need": "Questo token concede permessi che cat-factory non usa mai. Rimuoverli non costa nulla e restringe ciò che un'esecuzione compromessa potrebbe raggiungere.",
-          "github_pat_scope_unreadable": "GitHub ha accettato questo token ma non ne ha segnalato gli ambiti, quindi la sua portata non può essere mostrata qui. Verifica cosa concede nelle impostazioni dei token di GitHub."
+          "github_pat_scope_unreadable": "GitHub ha accettato questo token ma non ne ha segnalato gli ambiti, quindi la sua portata non può essere mostrata qui. Verifica cosa concede nelle impostazioni dei token di GitHub.",
+          "github_pat_no_scopes": "GitHub non riporta alcun ambito per questo token classico, quindi può solo leggere dati pubblici. Le esecuzioni che clonano, inviano commit o aprono una pull request con esso falliranno. Generane uno nuovo con 'repo' e 'workflow' selezionati."
         }
       },
       "toast": {
@@ -467,6 +528,8 @@
       "default": "Predefinito",
       "makeDefault": "Imposta come predefinito",
       "deleteDefaultBlocked": "Il criterio predefinito non puo essere eliminato",
+      "deleteUnattendedDefaultBlocked": "La policy predefinita per le esecuzioni non presidiate non può essere eliminata",
+      "deleteBothDefaultsBlocked": "Questa policy è sia la predefinita in-app sia quella non presidiata, quindi non può essere eliminata",
       "deletePreset": "Elimina criterio",
       "field": {
         "maxComplexity": "Complessita max %",
@@ -475,6 +538,7 @@
         "ciMaxAttempts": "Tentativi di correzione CI",
         "maxRequirementIterations": "Iterazioni sui requisiti",
         "maxRequirementConcernAllowed": "Auto-pass per criticita pari o inferiori a",
+        "companionMaxReworks": "Cicli di rielaborazione del companion",
         "autoMerge": "Auto-merge"
       },
       "autoMergeOnHint": "Mergia automaticamente quando rientra nei limiti del criterio.",
@@ -488,6 +552,7 @@
         "impact": "Impatto%",
         "ciFix": "Corr. CI",
         "reqIter": "Iter req",
+        "companionRework": "Rielab.",
         "autoPass": "Auto-pass pari o inferiore a"
       },
       "add": "Aggiungi",
@@ -497,7 +562,11 @@
         "created": "Criterio creato",
         "createFailed": "Impossibile creare il criterio",
         "defaultFailed": "Impossibile impostare il predefinito",
-        "deleteFailed": "Impossibile eliminare il criterio"
+        "deleteFailed": "Impossibile eliminare il criterio",
+        "cloned": "Criterio clonato in questa bacheca",
+        "cloneFailed": "Impossibile clonare il criterio",
+        "hideFailed": "Impossibile nascondere il criterio",
+        "unhideFailed": "Impossibile ripristinare il criterio"
       },
       "forkDecision": {
         "label": "Decisione di biforcazione dell'implementazione",
@@ -541,6 +610,44 @@
         "redundant": "Nessun effetto: questo criterio è già almeno altrettanto severo.",
         "alreadyStrictest": "Già sempre in revisione",
         "baseHint": "Questo criterio confronta i punteggi per ogni categoria, quindi un ruolo può restringere una categoria solo fino alla revisione obbligatoria."
+      },
+      "unattendedDefault": "Predefinita non presidiata",
+      "makeUnattendedDefault": "Imposta come predefinita per le esecuzioni non presidiate (API, tracker, pianificazione)",
+      "makeUnattendedDefaultShort": "Predefinita non presidiata",
+      "autonomy": {
+        "label": "Completare le esecuzioni non presidiate senza attendere una persona",
+        "unattendedHint": "Quando un ciclo automatico si arrende (un companion al suo limite di rilavorazioni, una revisione al suo limite di passaggi, follow-up non smistati), l'esecuzione prosegue lasciandone traccia invece di fermarsi. I varchi richiesti dalla pipeline, come test manuale, revisione e approvazione, fermano comunque l'esecuzione.",
+        "attendedHint": "Quando un ciclo automatico si arrende, l'esecuzione si ferma e attende una scelta. Adatto a una board che qualcuno sta guardando; un'esecuzione avviata via API attende all'infinito."
+      },
+      "autoAnswer": {
+        "label": "Confidenza minima per la risposta automatica (%)",
+        "hint": "Quanto deve essere sicuro il Requirement Writer perché un run non presidiato mantenga la risposta suggerita invece di fermarsi per una persona. Sono ammessi solo i rilievi che il revisore ha giudicato risolvibili senza un product owner."
+      },
+      "tier": {
+        "account": "Dall'account",
+        "accountHint": "Definita per tutto l'account. Ogni bacheca la eredita; solo un'amministrazione dell'account può modificarla."
+      },
+      "own": {
+        "heading": "Criteri di questa bacheca"
+      },
+      "inherited": {
+        "heading": "Ereditati dall'account",
+        "hint": "Condivisi con tutte le bacheche di questo account. Clona un criterio per modificarne una copia qui, oppure nascondilo così nessuna attività di questa bacheca potrà scegliolo.",
+        "clone": "Clona nella bacheca",
+        "cloneHint": "Copia questo criterio nella bacheca, dove puoi modificarne i limiti.",
+        "copyName": "{name} (copia)",
+        "hide": "Nascondi",
+        "hideHint": "Non offrire più questo criterio in questa bacheca. Potrai ripristinarlo più tardi."
+      },
+      "hidden": {
+        "heading": "Criteri dell'account nascosti",
+        "restore": "Ripristina",
+        "withdrawn": "Non più definito dall'account",
+        "loadFailed": "Non è stato possibile caricare questo elenco, quindi un criterio potrebbe essere nascosto senza comparire qui."
+      },
+      "confirmHide": {
+        "title": "Nascondere questo criterio?",
+        "body": "«{name}» non verrà più offerto in questa bacheca e le attività che lo avevano scelto torneranno al criterio predefinito della bacheca. Potrai ripristinarlo più tardi."
       }
     },
     "observabilityConnection": {
@@ -656,6 +763,7 @@
         "ok": "Ha risposto",
         "credentialsMissing": "Nessuna credenziale",
         "credentialRefused": "Credenziale rifiutata",
+        "credentialUnusable": "Credenziale non inviabile",
         "oauthNotConnected": "Non collegato",
         "oauthTokenFailed": "Il collegamento ha smesso di funzionare",
         "unreachable": "Nessuna risposta",
@@ -669,6 +777,7 @@
       "allowedToolsUnchecked": "L’elenco degli strumenti era troppo lungo per leggerlo tutto, quindi i nomi limitati non hanno potuto essere verificati.",
       "unresolvedCredentials": "Nulla è stato risolto per {keys}. Inseriscilo qui sotto, oppure impostalo nell’ambiente dell’installazione.",
       "refusedCredentials": "{keys} nomina una variabile che appartiene alla configurazione della piattaforma stessa, quindi non viene mai risolta. Modifica la dichiarazione nel codice dell’installazione.",
+      "unusableCredentials": "{keys} non nomina alcuna intestazione, quindi un server HTTP non la riceve mai. Aggiungi nel codice dell’installazione l’intestazione con cui il server si autentica.",
       "httpStatus": "HTTP {status}",
       "showDetails": "Mostra dettagli",
       "hideDetails": "Nascondi dettagli",
@@ -731,7 +840,9 @@
         "createdBy": "creato da {user}",
         "createdByYou": "te",
         "createdByKey": "la chiave API {id}",
-        "revoke": "Revoca token"
+        "revoke": "Revoca token",
+        "boundToYou": "Il tuo abbonamento",
+        "boundToOther": "Abbonamento di {user}"
       },
       "add": {
         "heading": "Crea un token",
@@ -740,7 +851,12 @@
         "labelPlaceholder": "es. pipeline CI",
         "scope": "Ambito",
         "scopeHelp": "Cosa può fare questo token: sola lettura, lettura e scrittura o accesso completo (che consente anche l'eliminazione).",
-        "create": "Crea token"
+        "create": "Crea token",
+        "identity": "Viene eseguito come",
+        "identitySystem": "Questo spazio di lavoro (token di sistema)",
+        "identitySelf": "Io (token personale)",
+        "identitySystemHelp": "Le esecuzioni avviate con questo token appartengono allo spazio di lavoro e non sono attribuite a nessuna persona. Non può usare l'abbonamento personale Claude / Codex / GLM di nessuno: un'attività fissata su uno di quei modelli viene rifiutata anziché addebitata a chi non c'è. Usalo per la CI e le integrazioni condivise.",
+        "identitySelfHelp": "Le esecuzioni avviate con questo token sono attribuite a te e possono usare il tuo abbonamento personale Claude / Codex / GLM. Ogni chiamata deve inviare anche la tua password personale nell'intestazione X-Personal-Password; non viene mai memorizzata. Usalo per le tue esecuzioni headless."
       },
       "scopes": {
         "read": "Sola lettura",
@@ -1080,6 +1196,15 @@
       "reachable": "Raggiungibile · nessun modello | Raggiungibile · {count} modello | Raggiungibile · {count} modelli",
       "noModels": "Nessun modello riportato.",
       "enableModels": "Abilita i modelli",
+      "imageInputHint": "Alcuni modelli locali leggono screenshot e render di design. Le famiglie note vengono riconosciute automaticamente e l'opzione Non impostato di ogni modello indica come verrà trattato; impostalo tu per una build che la piattaforma non può conoscere, come una quantizzazione solo testo o un fine-tuning.",
+      "imageInputLabel": "Supporto immagini per {model}",
+      "imageInput": {
+        "autoYes": "Non impostato: {family} legge immagini",
+        "autoNo": "Non impostato: {family} è solo testo",
+        "unknown": "Immagini: non impostato",
+        "yes": "Legge immagini",
+        "no": "Solo testo"
+      },
       "toast": {
         "saved": "{name} salvato",
         "saveFailed": "Impossibile salvare il runner",
@@ -1091,6 +1216,7 @@
         "body": "\"{name}\" verra rimosso. Questa operazione non puo essere annullata."
       },
       "blocked": "L'URL di questo runner non è consentito su questo deployment, quindi i suoi modelli sono nascosti nel selettore.",
+      "modelsDiscarded": "Alcuni dei modelli abilitati di questo runner non sono risultati leggibili e sono stati scartati. Riseleziona quelli che vuoi e salva.",
       "urlReason": {
         "invalid_url": "Questo URL non è valido.",
         "scheme_not_allowed": "L'URL di un runner deve iniziare con http:// o https://.",
@@ -1123,7 +1249,8 @@
         "qwen": "Qwen (Alibaba)",
         "kimi": "Kimi (Moonshot)",
         "deepseek": "DeepSeek",
-        "glm": "GLM (Z.ai)"
+        "glm": "GLM (Z.ai)",
+        "grok": "Grok (xAI)"
       },
       "regions": {
         "usa": "Stati Uniti",
@@ -1917,6 +2044,13 @@
       "awaitingChoice": "In attesa di una scelta umana",
       "approvalGate": "Gate di approvazione",
       "companionReview": "Revisione companion",
+      "findingSeverity": {
+        "blocker": "Da correggere",
+        "major": "Da sistemare",
+        "minor": "Minore",
+        "ungraded": "Commento",
+        "unrecognized": "Livello non riconosciuto ({level})"
+      },
       "correctionIterations": "{count} iterazione di correzione. | {count} iterazioni di correzione.",
       "state": {
         "pending": "In attesa",
@@ -1953,6 +2087,10 @@
       "closeEsc": "Chiudi (Esc)",
       "companionCapHeading": "{agent} ha raggiunto il suo limite di {attempts} tentativi di rielaborazione, ancora al di sotto della soglia {threshold}.",
       "companionCapDetail": "Esegui un altro ciclo di rielaborazione automatica, procedi al passaggio successivo accettando l'output attuale, oppure arresta e reimposta l'attivita' cosi' da poter modificare gli input e reinviare.",
+      "companionCapBlockedHeading": "{agent} ha raggiunto il suo limite di {attempts} tentativi di rielaborazione con {count} rilievo bloccante ancora aperto. | {agent} ha raggiunto il suo limite di {attempts} tentativi di rielaborazione con {count} rilievi bloccanti ancora aperti.",
+      "companionCapBlockedDetail": "Procedere significa accettare il lavoro con quei rilievi irrisolti, per questo la policy di rischio di questa esecuzione non prendera' mai quella decisione al posto tuo. Esegui un altro ciclo di rielaborazione automatica, procedi comunque con l'output attuale, oppure arresta e reimposta l'attivita' cosi' da poter modificare gli input e reinviare.",
+      "companionStalledHeading": "{agent} ha interrotto il ciclo di rielaborazione dopo {attempts} round su {maxAttempts}: l'ultima revisione e' tornata identica e il punteggio non e' cambiato.",
+      "companionStalledDetail": "I round rimanenti non sono stati usati perche' avrebbero solo ripetuto un verdetto gia' espresso. Esegui comunque un altro round, procedi al passaggio successivo accettando l'output attuale, oppure arresta e reimposta l'attivita' cosi' da poter modificare gli input e reinviare.",
       "infraAttempts": "Tentativi di infrastruttura",
       "hideInfraAttempts": "Nascondi i tentativi di infrastruttura",
       "executionHistory": "Cronologia delle esecuzioni",
@@ -2001,9 +2139,11 @@
           "transportUnsupported": "non era disponibile: la CLI dell'agente di questo passo non riesce a raggiungere server di questo tipo.",
           "missingSecret": "non era disponibile: una credenziale che gli serve non è impostata per questa lavagna.",
           "reservedSecret": "non era disponibile: chiede una variabile che appartiene alla configurazione della piattaforma, quindi va cambiata la dichiarazione.",
+          "unusableSecret": "non era disponibile: una credenziale che dichiara non può raggiungerlo, quindi il server sarebbe partito senza autenticazione.",
           "oauthNotConnected": "non era disponibile: nessuno ha ancora collegato questa lavagna al server.",
           "oauthTokenFailed": "non era disponibile: la connessione ha smesso di produrre un token di accesso.",
           "overBudget": "non era disponibile: questo agente dichiara più server di strumenti di quanti ne porti una singola esecuzione.",
+          "consensusPanel": "non era disponibile: questo passo è stato eseguito come panel di consenso, e un panel non ha un runtime dell'agente a cui collegare un server di strumenti.",
           "unknown": "non era disponibile ({reason})."
         },
         "remedy": {
@@ -2011,9 +2151,11 @@
           "transportUnsupported": "Dichiara un server stdio al suo posto, oppure esegui il passo su una CLI dell'agente che raggiunge i server HTTP.",
           "missingSecret": "Imposta la credenziale che indica, come variabile d'ambiente del deployment oppure nelle credenziali delle capability, dalla finestra Infrastruttura.",
           "reservedSecret": "Cambia la dichiarazione perché chieda un'altra chiave; impostare quella variabile è proprio ciò che non aiuterà.",
+          "unusableSecret": "Correggi la dichiarazione nel codice dell’installazione: la credenziale di un server remoto viaggia in un’intestazione, quella di uno locale viene iniettata nel processo del server.",
           "oauthNotConnected": "Collega questa lavagna al server dalla finestra Infrastruttura. Un deployment senza ENCRYPTION_KEY non ha dove conservare una concessione, quindi un operatore deve impostarla prima.",
           "oauthTokenFailed": "Ricollegalo dalla finestra Infrastruttura, oppure attendi la fine del disservizio del fornitore.",
-          "overBudget": "Riduci ciò che l'agente dichiara, così una singola esecuzione può portarlo tutto."
+          "overBudget": "Riduci ciò che l'agente dichiara, così una singola esecuzione può portarlo tutto.",
+          "consensusPanel": "Disattiva il consenso per questo passo se gli serve lo strumento, oppure accetta che il panel giudichi senza. Del server non va cambiato nulla."
         },
         "observed": {
           "ready": "avviato",
@@ -2400,6 +2542,27 @@
       "createToken": "Crea un token GitHub (scope pre-selezionati)",
       "thenSet": "Poi imposta {envVar} e riavvia."
     },
+    "githubPatPermissionsBanner": {
+      "title": "Il token GitHub non può fare push né aprire pull request",
+      "rejectedTitle": "GitHub ha rifiutato il token usato dalle tue esecuzioni",
+      "body": "Le esecuzioni avviate qui si autenticano con un personal access token GitHub, e a questo mancano permessi necessari alla pipeline. Le fasi degli agenti che effettuano push di un branch, aprono una pull request o uniscono falliranno.",
+      "rejectedBody": "Il personal access token GitHub con cui si autenticano le tue esecuzioni non è valido, è scaduto, è stato revocato o è bloccato da una policy dell'organizzazione. Ogni fase che clona, effettua push, apre una pull request o unisce fallirà finché non lo sostituisci.",
+      "missing": "Manca:",
+      "alsoMissing": "Manca anche, sebbene blocchi solo le modifiche ai file di workflow: {capabilities}.",
+      "capability": {
+        "push": "effettuare push dei commit",
+        "pullRequests": "aprire e unire pull request",
+        "workflows": "modificare i file di workflow"
+      },
+      "sourceDeployment": "Questo è il token con cui è configurato questo deployment, quindi sostituirlo significa aggiornare il deployment.",
+      "sourceInitiator": "Questo è il tuo token memorizzato, che le tue esecuzioni usano al posto delle credenziali del deployment. Sostituiscilo nelle tue impostazioni personali.",
+      "createClassic": "Crea un token sostitutivo (scope pre-selezionati)",
+      "createFineGrained": "Crea un token sostitutivo fine-grained",
+      "classicHint": "Il link apre il modulo del token classico con gli scope richiesti già selezionati.",
+      "fineGrainedHint": "Il modulo fine-grained di GitHub non accetta pre-selezioni, quindi concedi tu stesso questi permessi di repository: {permissions}.",
+      "sampled": "Verificato su {checked} repository in uso; altri {remaining} non sono stati verificati.",
+      "deniedRepos": "Il token non raggiunge questi repository usati dai tuoi servizi: {repos}. Rigeneralo selezionando quei repository."
+    },
     "providerConfigBanner": {
       "titleMany": "I provider necessitano di configurazione",
       "titleOne": {
@@ -2739,6 +2902,12 @@
         "load": "Impossibile caricare il registro di controllo.",
         "loadMore": "Impossibile caricare le voci precedenti"
       }
+    },
+    "accountRiskPolicies": {
+      "intro": "Posture di merge condivise da tutte le bacheche di questo account. Ogni bacheca le eredita in sola lettura e può clonarne una per modificarne una copia oppure nasconderla. Quale criterio governa un'attività che non ne ha scelto nessuno si imposta per bacheca.",
+      "empty": "Ancora nessun criterio di rischio dell'account. Le bacheche usano le proprie librerie finché non ne aggiungi uno.",
+      "loadFailed": "Impossibile caricare i criteri di rischio dell'account",
+      "confirmDelete": "«{name}» verrà ritirato da tutte le bacheche di questo account. Le attività che lo avevano scelto torneranno al criterio predefinito della loro bacheca."
     }
   },
   "board": {
@@ -2758,6 +2927,7 @@
       "archiveFailed": "Impossibile archiviare il servizio",
       "restoreFailed": "Impossibile ripristinare il servizio",
       "moveRefused": {
+        "relaxes_run_oversight": "Dove stai spostando questa attività, un’esecuzione risponde da sola ai propri punti di controllo invece di fermarsi per una persona, mentre la policy di merge che la governa qui non lo fa. Chiedi all’amministrazione dello spazio di lavoro di spostarla.",
         "relaxes_role_sandbox": "Le esecuzioni di questa attività sono isolate per il tuo ruolo dove si trova ora, mentre il criterio di merge che la governerebbe a destinazione non lo è. Chiedi a un’amministrazione dello spazio di lavoro di spostarla.",
         "relaxes_role_submission_allowlist": "Il criterio di merge a destinazione ti permetterebbe di unire tipi di modifica che qui ti sono preclusi. Chiedi a un’amministrazione dello spazio di lavoro di spostarla.",
         "relaxes_role_class_rule": "Il criterio di merge a destinazione unisce automaticamente modifiche che qui devi revisionare. Chiedi a un’amministrazione dello spazio di lavoro di spostarla."
@@ -3300,6 +3470,11 @@
           "step1": "Apri platform.moonshot.ai → API Keys e crea una chiave.",
           "step2": "Copia la chiave; autentica l'endpoint Moonshot compatibile con OpenAI."
         },
+        "xai": {
+          "label": "xAI (Grok API)",
+          "step1": "Apri console.x.ai → API Keys e crea una chiave.",
+          "step2": "Copia la chiave; autentica l'endpoint xAI compatibile con OpenAI."
+        },
         "openrouter": {
           "label": "OpenRouter",
           "step1": "Apri openrouter.ai → Keys e crea una chiave API.",
@@ -3472,6 +3647,9 @@
       "monorepoBrowseHint": "Sfoglia il repository e seleziona le directory dei servizi che vuoi aggiungere, da qualsiasi cartella. Gli agenti che lavorano su un servizio verranno eseguiti all'interno della sua sottodirectory.",
       "selectedServices": "Servizi selezionati",
       "noServicesSelected": "Nessun servizio ancora selezionato. Scegli le directory sopra.",
+      "frontendLabel": "App frontend (facoltativo)",
+      "frontendHint": "Indica una delle directory selezionate come frontend delle altre. Viene aggiunta come app frontend ancorata a quella sottodirectory e collegata a ogni servizio backend aggiunto accanto. Assegna poi il nome a ciascuna variabile d'ambiente con l'URL del backend nell'inspector del frontend.",
+      "frontendNone": "Nessuna: tutte le selezioni sono servizi backend",
       "addServices": "Aggiungi {count} servizio | Aggiungi {count} servizi",
       "removeService": "Rimuovi {directory}",
       "addedConfigure": "{title} aggiunto, configuralo",
@@ -3485,7 +3663,9 @@
         "addedDescription": "{title} è sulla board, configuralo qui sotto.",
         "addFailedTitle": "Impossibile aggiungere il servizio",
         "servicesAddedTitle": "Servizi aggiunti",
-        "servicesAddedDescription": "{count} servizio aggiunto alla board. | {count} servizi aggiunti alla board."
+        "servicesAddedDescription": "{count} servizio aggiunto alla board. | {count} servizi aggiunti alla board.",
+        "frontendLinkedNote": "{directory} è stata aggiunta come frontend e collegata alle altre. Assegna il nome alle sue variabili d'ambiente con gli URL dei backend nel suo inspector.",
+        "frontendWiringFailedNote": "Le impostazioni del frontend non sono state salvate. Apri l'inspector di ogni app frontend per impostarne la sottodirectory e i servizi backend."
       }
     },
     "repoTree": {
@@ -3749,12 +3929,14 @@
       "dispatch": "Invio",
       "environment": "Ambiente",
       "evicted": "Sfrattata",
+      "harness_shutdown": "Harness arrestato",
       "timeout": "Timeout",
       "agent": "Agente",
       "job_failed": "Job fallito",
       "rejected": "Rifiutata",
       "companion_rejected": "Companion rifiutato",
       "stalled": "In stallo",
+      "state_unreadable": "Stato illeggibile",
       "cancelled": "Annullata",
       "unknown": "Sconosciuto"
     },
@@ -4196,7 +4378,9 @@
     "tracker": "Tracker",
     "board": "Bacheca",
     "pickBoard": "Scegli una bacheca",
-    "boardPlaceholder": "Chiave progetto, id team oppure owner/repo",
+    "boardPlaceholder": "Chiave progetto o id team",
+    "boardFromService": "Il repository collegato a questo servizio",
+    "boardNeedsRepo": "A questo servizio non è collegato alcun repository, quindi non ci sono issue da cercare. Collegane uno dal pannello del servizio.",
     "boardsFailed": "Impossibile caricare le board: {reason}",
     "issueType": "Tipo di ticket",
     "issueTypeHelp": "Per impostazione predefinita bug. Ignorato dai tracker senza tipi di ticket.",
@@ -4205,6 +4389,8 @@
     "labelsHelp": "Separate da virgole. Devono essere tutte presenti.",
     "adoptInto": "Aggiungi il bug scelto a",
     "adoptingInto": "Il bug scelto viene aggiunto a {container}",
+    "huntIn": "Servizio da esaminare",
+    "huntingIn": "Viene esaminato il repository collegato a {container}; il bug scelto viene aggiunto lì.",
     "run": "Cerca",
     "running": "Lettura della bacheca e valutazione di quanto trovato…",
     "huntFailed": "La caccia non è riuscita",
@@ -4217,6 +4403,7 @@
     "noCandidates": "Nessun bug aperto e non assegnato corrisponde su questa bacheca.",
     "ratings": "Impatto {impact}/5, complessità {complexity}/5, confidenza {confidence}",
     "viaModel": "Valutato da {model}.",
+    "scannedBoard": "Esaminato {board}.",
     "truncated": "Sono stati esaminati solo i primi {count} bug corrispondenti; questa bacheca ne contiene altri.",
     "comments": "{count} commento | {count} commenti",
     "confidence": {
@@ -4230,6 +4417,10 @@
       "failed": "La valutazione non è stata completata, quindi non sono valutati.",
       "over_budget": "Questo spazio di lavoro ha superato il budget di spesa, quindi non sono stati valutati.",
       "empty": "Nulla da valutare."
+    },
+    "refusal": {
+      "boardFromService": "Questo tracker analizza il repository a cui è collegato il servizio scelto, quindi non ha una board propria.",
+      "missingBoard": "Scegli la board su cui cercare."
     }
   },
   "pipeline": {
@@ -4300,6 +4491,7 @@
       "purposeUnrecognized": "Non riconosciuto ({purpose})",
       "purposeOption": {
         "build": "Sviluppo",
+        "bugfix": "Correzione di bug",
         "document": "Documentazione",
         "review": "Revisione",
         "research": "Ricerca",
@@ -4368,7 +4560,7 @@
       "skillNoneAvailable": "Nessuna competenza disponibile. Collega una fonte di competenze nelle impostazioni dell'account.",
       "skillMissing": "Questa competenza non è più nel catalogo; scegline un'altra.",
       "skillNeedsPick": "Un passo Skill richiede una competenza selezionata prima di poter salvare.",
-      "purposeStepsConflict": "Questo scopo non scrive codice né esegue test, ma la pipeline contiene ancora passaggi di implementazione o di test. Rimuovili o imposta lo scopo su Sviluppo.",
+      "purposeStepsConflict": "Questo scopo non scrive codice né esegue test, ma la pipeline contiene ancora passaggi di implementazione o di test. Rimuovili oppure scegli uno scopo che rilascia codice (Sviluppo o Correzione di bug).",
       "promptEditTooltip": "Modifica il prompt di sistema di questo agente",
       "promptEditedTooltip": "Il prompt di sistema di questo agente è modificato per questo spazio di lavoro",
       "consensusGroups": "Gruppi di consenso",
@@ -4407,6 +4599,8 @@
       "binaryOutputMediaTypeUnusable": "Non salvato, perché questi non sono tipi di media: {entries}. Scrivi ciascuno come type/subtype.",
       "binaryOutputGeneratorMissing": "Questa installazione non registra queste integrazioni generative: {ids}. Si registrano nel codice dell'installazione, non in questo spazio di lavoro.",
       "binaryOutputGeneratorOverlap": "Più di un’integrazione selezionata produce lo stesso tipo di contenuto ({overlaps}). Non c’è nulla di sbagliato, ma il tipo di contenuto non decide più quale l’agente chiama: indica nel prompt di questo passaggio quale usare e per cosa, altrimenti ne sceglierà una e continuerà a usare quella.",
+      "binaryOutputGeneratorVia": "tramite {harness}",
+      "binaryOutputGeneratorHarness": "Queste integrazioni sono generate da una CLI dell’agente anziché da un’API ({generators}), quindi questo passaggio funziona solo con un modello eseguito su quella CLI. Un’esecuzione con un altro modello viene rifiutata all’avvio.",
       "binaryOutputModalityUncovered": "Nessuna integrazione selezionata produce {modalities}, che questo passaggio deve fornire.",
       "binaryOutputModalityRetired": "{modality} (non più disponibile: riseleziona i tipi di contenuto di questo passaggio)",
       "binaryOutputModality": {
@@ -4434,6 +4628,9 @@
       "binaryCapabilityUnknown": "{capability} (una capacità che questa installazione non definisce)",
       "binaryCapabilityUnsupported": "Nessuna integrazione selezionata supporta {capabilities}, richiesta dalle opzioni di generazione di questo passo. Rimuovi l’opzione oppure seleziona un’integrazione che dichiari la capacità.",
       "binaryCapabilityUnverifiable": "Nessuna integrazione selezionata dichiara di supportare {capabilities}, ma una di esse non dichiara alcuna capacità, quindi non è stato possibile verificarlo. Il passo parte comunque; conferma dall’API dell’integrazione.",
+      "binaryOptionValueUnaccepted": "Nessuna integrazione selezionata accetta {option} di {requested}. Insieme accettano: {accepted}. Richiedi uno di questi valori oppure seleziona un'integrazione che generi questo.",
+      "binaryOptionValuePartial": "{generators} non accetta {option} di {requested}, mentre un'altra integrazione selezionata sì. Il passo si avvia comunque: invia questa opzione solo alle integrazioni che la accettano, oppure rimuovi le altre.",
+      "binaryOptionValueUnverifiable": "Un'integrazione selezionata dichiara i valori che accetta e non accetta quello richiesto da questo passo ({options}), mentre un'altra non ne dichiara nessuno, quindi non è stato possibile verificarlo. Il passo si avvia comunque e solo alcune delle tue integrazioni lo serviranno.",
       "binaryReferenceImages": "Immagini di riferimento",
       "binaryReferenceImagesPlaceholder": "ruolo{'|'}posizione{'|'}servizio, una per riga",
       "binaryReferenceImagesUnusable": "Non salvate come riferimento: {entries}. Ogni riga deve essere ruolo{'|'}posizione, con ruolo style, subject, composition o base.",
@@ -4460,7 +4657,17 @@
       "binaryComparison": "Confronta i candidati prima di consegnare",
       "binaryPerGenerator": "Candidati per integrazione",
       "binaryMultiSelect": "Consenti di tenerne più di uno",
-      "binaryComparisonUnreachable": "Questo passo può produrre un solo candidato per soggetto, quindi non ci sarebbe nulla da confrontare e l’unico verrebbe tenuto senza chiedere. Seleziona una seconda integrazione oppure aumenta il numero di candidati per integrazione."
+      "binaryComparisonUnreachable": "Questo passo può produrre un solo candidato per soggetto, quindi non ci sarebbe nulla da confrontare e l’unico verrebbe tenuto senza chiedere. Seleziona una seconda integrazione oppure aumenta il numero di candidati per integrazione.",
+      "scopeDefault": {
+        "interactive": "Predefinita nell'app",
+        "interactiveHint": "Cosa esegue un task avviato dalla board quando non fissa una pipeline propria.",
+        "unattended": "Predefinita non presidiata",
+        "unattendedHint": "Cosa esegue un run che nessuno sta guardando (API, ticket, pianificazione) quando il task non fissa una pipeline.",
+        "claimInteractive": "Rendi predefinita nell'app",
+        "releaseInteractive": "Non più predefinita nell'app",
+        "claimUnattended": "Rendi predefinita non presidiata",
+        "releaseUnattended": "Non più predefinita non presidiata"
+      }
     },
     "progress": {
       "status": {
@@ -4745,6 +4952,17 @@
       "reReview": "Impossibile rivedere di nuovo i requisiti",
       "proceed": "Impossibile procedere",
       "resolveReview": "Impossibile risolvere la revisione"
+    },
+    "findingClass": {
+      "judgement": "Serve una tua decisione",
+      "judgementHint": "Una scelta di business, prodotto o dominio, o qualcosa che il revisore non sapeva. Solo tu puoi deciderlo.",
+      "practice": "Risolvibile con la prassi",
+      "practiceHint": "Risolto dalla prassi consolidata, dallo stack già in uso o dal contesto fornito. Precompilato: confermalo o modificalo."
+    },
+    "confidence": {
+      "high": "Confidenza alta",
+      "medium": "Confidenza media",
+      "low": "Confidenza bassa"
     }
   },
   "bootstrap": {
@@ -5706,7 +5924,9 @@
         "document_already_linked": "Documento già allegato",
         "dry_run_not_mergeable": "Una prova non può essere unita",
         "submission_not_allowed": "Unione non consentita per questa esecuzione",
-        "webhook_limit_reached": "Limite di webhook raggiunto"
+        "webhook_limit_reached": "Limite di webhook raggiunto",
+        "risk_policy_inherited": "Questo criterio appartiene all'account",
+        "risk_policy_not_inherited": "Questo criterio appartiene a questa bacheca"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -5737,7 +5957,7 @@
         "pipeline_schedule_intake_unconfigured": "Un passo di raccolta bug prende il lavoro dalle impostazioni di raccolta ticket della pianificazione, e la pianificazione collegata non le ha. Configura prima la raccolta ticket sulla pianificazione.",
         "foundational_service_exists": "Un servizio fondamentale con questo identificatore è già registrato in questo ambito. Apri la voce esistente e modificala: due servizi non possono condividere un identificatore, perché è il nome che un architetto indica nella sua progettazione.",
         "binary_output_service_invalid": "Un passaggio che genera output binari seleziona un servizio fondamentale che il catalogo di questo workspace non riesce a risolvere: l'identificatore è sconosciuto, oppure il servizio di archiviazione scelto non ha la capacità asset-storage. Correggi la selezione del passaggio o registra il servizio, poi riavvia.",
-        "binary_output_generator_invalid": "Un passaggio che genera output binari seleziona un'integrazione generativa che questa installazione non registra, oppure nessuna delle integrazioni selezionate produce un tipo di contenuto che il passaggio deve consegnare. Le integrazioni generative si registrano nel codice dell'installazione, non in questo workspace: registrala o correggi la selezione del passaggio, poi riavvia.",
+        "binary_output_generator_invalid": "Un passaggio che genera output binari seleziona un’integrazione generativa che questa installazione non registra, nessuna delle integrazioni selezionate produce un tipo di contenuto che il passaggio deve consegnare, oppure una di esse è generata da una CLI dell’agente su cui il modello di questo passaggio non viene eseguito. Le integrazioni generative si registrano nel codice dell’installazione, non in questo workspace: registrala, correggi la selezione del passaggio, oppure fissa per il passaggio un modello che esegua la CLI richiesta, poi riavvia.",
         "foundational_service_not_inherited": "L'esclusione vale per un servizio ereditato dall'account. Questo id è registrato da questa bacheca, quindi non c'è nulla da escludere: elimina invece la voce propria della bacheca.",
         "input_gate_not_parked": "Questa esecuzione non attende più il controllo dell'input. Forse qualcuno ha già risposto, o l'esecuzione è andata avanti.",
         "input_gate_parked": "Questa esecuzione è in attesa del suo controllo di input, a cui l'approvazione non può rispondere. Usa l'avviso sull'esecuzione: correggi l'attività e ricontrolla, oppure eseguila comunque.",
@@ -5745,7 +5965,9 @@
         "document_already_linked": "Quel documento è allegato a un'altra attività. Scollegalo prima da lì oppure allega una copia separata.",
         "dry_run_not_mergeable": "Questa pull request proviene da una prova, quindi non può essere unita da qui. Riavvia l’attività come esecuzione reale per produrre una pull request che questo spazio di lavoro unirà.",
         "submission_not_allowed": "La politica di unione di questa attività non consente al ruolo che ha avviato l'esecuzione di unire questo tipo di modifica. Un collega il cui ruolo lo consente può farlo, oppure un amministratore può ampliare la politica nel preset di unione.",
-        "webhook_limit_reached": "Questo spazio di lavoro ha già registrato il numero massimo di webhook in uscita. Rimuovine uno che non ti serve più, poi registra di nuovo questo."
+        "webhook_limit_reached": "Questo spazio di lavoro ha già registrato il numero massimo di webhook in uscita. Rimuovine uno che non ti serve più, poi registra di nuovo questo.",
+        "risk_policy_inherited": "È condiviso con tutte le bacheche dell'account, quindi non può essere modificato da qui. Clonalo in questa bacheca e modifica la copia.",
+        "risk_policy_not_inherited": "È già il criterio proprio di questa bacheca: modificalo direttamente, oppure eliminalo se non vuoi più che venga offerto."
       },
       "action": {
         "connectGitHub": "Collega GitHub",
@@ -6485,6 +6707,31 @@
         "none_captured": "L'interfaccia doveva essere catturata, ma non è stata catturata alcuna vista."
       }
     },
+    "environments": {
+      "title": "Ambiente attivo",
+      "open": "Apri l'ambiente attivo",
+      "retained": "Questo ambiente è pensato per sopravvivere all’esecuzione.",
+      "expires": "Scade il {date}",
+      "expired": "Scaduto il {date}",
+      "state": {
+        "live": "Attivo",
+        "provisioning": "In avvio",
+        "failed": "Mai avviato",
+        "reclaiming": "In dismissione",
+        "reclaimed": "Dismesso",
+        "expired": "Scaduto"
+      },
+      "origin": {
+        "deployer": "Avviato da questa esecuzione",
+        "human_test": "Avviato per il test manuale",
+        "projected": "L'esecuzione è ancora in corso, quindi può ancora cambiare"
+      },
+      "gap": {
+        "no_environment_step": "In questa pipeline nulla avvia un ambiente, quindi non c'è niente da aprire.",
+        "not_provisioned": "Doveva essere avviato un ambiente e finora non ne è stato registrato nessuno.",
+        "infraless": "Questo servizio non dichiara un ambiente proprio, quindi non è stato avviato nulla."
+      }
+    },
     "checks": {
       "title": "Controlli",
       "row": "{kind}: {state}",
@@ -6774,6 +7021,7 @@
       "workspaceDefaultCaption": "Si applica perche questa attivita non sceglie un criterio proprio.",
       "noneHint": "Nessun criterio di rischio configurato. Ogni pull request attende una revisione umana.",
       "refused": {
+        "relaxes_run_oversight": "Non disponibile per il tuo ruolo: questa policy lascia che un’esecuzione risponda da sola ai propri punti di controllo invece di fermarsi per una persona. L’amministrazione dello spazio di lavoro può modificarlo.",
         "relaxes_role_sandbox": "Non disponibile per il tuo ruolo: le esecuzioni di questa attività sono isolate e questo criterio ne consentirebbe il merge. Un amministratore dello spazio di lavoro può cambiarlo.",
         "relaxes_role_submission_allowlist": "Non disponibile per il tuo ruolo: questo criterio ti permetterebbe di unire tipi di modifica che questa attività ti preclude. Un amministratore dello spazio di lavoro può cambiarlo.",
         "relaxes_role_class_rule": "Non disponibile per il tuo ruolo: questo criterio unisce automaticamente modifiche che devi revisionare in questa attività. Un amministratore dello spazio di lavoro può cambiarlo."

@@ -15,6 +15,7 @@ import { computed, ref, toRaw, watch } from 'vue'
 import type { ConnectionTestResult } from '@cat-factory/contracts'
 import type { ProviderConfigField, ProviderConnectionKind } from '~/types/providerConnections'
 import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
+import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor.vue'
 import KubernetesEnvironmentForm from '~/components/settings/KubernetesEnvironmentForm.vue'
@@ -35,6 +36,7 @@ const emit = defineEmits<{ connected: [] }>()
 const { t } = useI18n()
 const store = useProviderConnectionsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirmAction } = useConfirmAction()
 
 const descriptor = computed(() => store.descriptorFor(props.kind))
@@ -204,15 +206,6 @@ function buildFlatPayload() {
   return isNativeConfig.value ? buildConfigPayload() : buildManifestPayload()
 }
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 function toastSaved() {
   toast.add({
     title: t('settings.providerConnection.toast.saved', { title: title.value }),
@@ -245,7 +238,7 @@ async function saveNative() {
     resetDraft()
     toastSaved()
   } catch (e) {
-    notifyError(t('settings.providerConnection.toast.saveFailed'), e)
+    present(e, 'settings.providerConnection.toast.saveFailed')
   } finally {
     busy.value = false
   }
@@ -279,7 +272,7 @@ async function saveManifest(payload: {
     emit('connected')
     toastSaved()
   } catch (e) {
-    notifyError(t('settings.providerConnection.toast.saveFailed'), e)
+    present(e, 'settings.providerConnection.toast.saveFailed')
   } finally {
     busy.value = false
   }
@@ -324,7 +317,7 @@ async function saveConfig(payload: {
     emit('connected')
     toastSaved()
   } catch (e) {
-    notifyError(t('settings.providerConnection.toast.saveFailed'), e)
+    present(e, 'settings.providerConnection.toast.saveFailed')
   } finally {
     busy.value = false
   }
@@ -338,7 +331,7 @@ async function remove() {
     resetDraft()
     toast.add({ title: t('settings.providerConnection.toast.removed'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError(t('settings.providerConnection.toast.removeFailed'), e)
+    present(e, 'settings.providerConnection.toast.removeFailed')
   } finally {
     busy.value = false
   }
@@ -498,7 +491,7 @@ function fieldHelp(key: string): string | undefined {
         />
       </UFormField>
 
-      <div v-if="descriptor.supportsTest" class="flex items-center gap-2">
+      <div v-if="descriptor.supportsTest" class="space-y-1.5">
         <UButton
           color="neutral"
           variant="soft"
@@ -509,12 +502,7 @@ function fieldHelp(key: string): string | undefined {
         >
           {{ t('settings.providerConnection.test.button') }}
         </UButton>
-        <span v-if="testResult && testResult.ok" class="text-xs text-emerald-400">
-          {{ testResult.message ?? t('settings.providerConnection.test.ok') }}
-        </span>
-        <span v-else-if="testResult" class="text-xs text-rose-400">
-          {{ testResult.message ?? t('settings.providerConnection.test.failed') }}
-        </span>
+        <ConnectionTestVerdict :result="testResult" />
       </div>
 
       <ConnectionWarnings :warnings="testResult?.warnings" />

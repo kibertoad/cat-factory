@@ -1,12 +1,11 @@
 import {
-  ConflictError,
-  UnavailableError,
-  ValidationError,
   type BugCandidate,
+  ConflictError,
+  getErrorMessage,
   type GitHubClient,
   type GitHubInstallation,
-  type GitHubIssueSearchHit,
   type GitHubInstallationRepository,
+  type GitHubIssueSearchHit,
   type IssueIntakeQuery,
   type NormalizedTaskConnection,
   type TaskContent,
@@ -16,7 +15,8 @@ import {
   type TaskSourceDiagnostic,
   type TaskSourceProvider,
   type TaskSourceWritebackAdapter,
-  type TrackerBoard,
+  UnavailableError,
+  ValidationError,
 } from '@cat-factory/kernel'
 import type { TaskSourceReadReason } from '@cat-factory/contracts'
 import { GITLAB_ISSUES_DESCRIPTOR } from './gitlab-issues.logic.js'
@@ -278,18 +278,6 @@ export class GitLabIssuesProvider implements TaskSourceProvider {
   }
 
   /**
-   * List the projects the workspace's GitLab connection can reach, as hunt boards. No GitLab
-   * connection ⇒ an empty list, matching every other read on this provider (the connection
-   * authenticates out of band, so "not connected" is an absence rather than an error).
-   */
-  async listBoards(_credentials: TaskCredentials, workspaceId: string): Promise<TrackerBoard[]> {
-    const connection = await this.deps.installations.getByWorkspace(workspaceId)
-    if (!connection || connection.provider !== 'gitlab') return []
-    const page = await this.deps.gitlabClient.listInstallationRepos(connection.installationId)
-    return gitlabIssuesLogic.gitlabProjectsToBoards(page.items)
-  }
-
-  /**
    * Bug-hunt candidate search: the SAME walk as {@link searchIssues}, projected onto the richer
    * candidate shape the ranking model reads. GitLab's project-issues response already carries the
    * description, labels, age and note count, so the whole scan is one request per page and never
@@ -503,7 +491,7 @@ export class GitLabIssuesProvider implements TaskSourceProvider {
     return {
       ...base,
       status: 'error',
-      message: `GitLab returned ${status} while ${whileDoing}: ${err instanceof Error ? err.message : String(err)}`,
+      message: `GitLab returned ${status} while ${whileDoing}: ${getErrorMessage(err)}`,
     }
   }
 

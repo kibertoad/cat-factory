@@ -33,9 +33,9 @@ observability tables live in a **dedicated telemetry store** rather than the mai
   `db/schema.ts`), served by the same connection/pool; `migrate()` creates it on boot.
 
 Two tables live there: `llm_call_metrics` (per-call LLM telemetry) and
-`agent_context_snapshots` (the complete, redacted context provided to each container
-agent; composed prompts, folded-in fragment bodies, and the full content of the files
-injected into the container). Both are pruned to the same window
+`agent_context_snapshots` (the complete, redacted context provided to each agent dispatch,
+container and inline alike; composed prompts, folded-in fragment bodies, and the full content
+of the files injected into the container). Both are pruned to the same window
 (`LLM_CALL_METRICS_RETENTION_DAYS`, default 14 days). The window is sized for POST-MORTEMS
 rather than for live debugging: an investigation into a failed run routinely starts days after
 it, and the earlier 3-day default expired the record first.

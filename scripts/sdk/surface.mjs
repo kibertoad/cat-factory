@@ -25,6 +25,8 @@ const SURFACE = {
   // ---- Services -------------------------------------------------------------------------
   listPublicServices: { group: 'services', method: 'list' },
   createPublicService: { group: 'services', method: 'create' },
+  updatePublicService: { group: 'services', method: 'update' },
+  deletePublicService: { group: 'services', method: 'delete' },
 
   // ---- The service SPEC: what a service is committed to honouring -------------------------
   // Its own group rather than a `services.getSpec`, because the spec is a resource in its own
@@ -38,6 +40,17 @@ const SURFACE = {
 
   // ---- Repositories: what a service can be created against --------------------------------
   listPublicRepos: { group: 'repos', method: 'list' },
+  // `bootstrap`/`getBootstrap` and not a `bootstraps` group of their own: the resource being
+  // created is a REPOSITORY, and a caller reading `client.repos.bootstrap(...)` beside
+  // `client.repos.list()` is choosing between the repositories that exist and making one.
+  startPublicRepoBootstrap: { group: 'repos', method: 'bootstrap' },
+  getPublicRepoBootstrap: { group: 'repos', method: 'getBootstrap' },
+  // `listAvailable`/`link` and not a group of their own: a caller choosing what to file work against
+  // is choosing between the repositories this workspace already has (`list`), the ones it could adopt
+  // (`listAvailable`), adopting one (`link`) and making a new one (`bootstrap`). Four methods, one
+  // decision.
+  listPublicAvailableRepos: { group: 'repos', method: 'listAvailable' },
+  linkPublicRepo: { group: 'repos', method: 'link' },
 
   // ---- Tasks ----------------------------------------------------------------------------
   createPublicTask: { group: 'tasks', method: 'create' },
@@ -61,6 +74,30 @@ const SURFACE = {
 
   // ---- Task types: what a task may be created AS, and the form each one accepts -----------
   listPublicTaskTypes: { group: 'taskTypes', method: 'list' },
+
+  // ---- Environments: the cluster a run's per-PR environment is provisioned onto -------------
+  // `connections`, not `handlers`: the caller is describing a connection to infrastructure,
+  // where "handler" names the engine-side object that services it.
+  connectPublicEnvironment: { group: 'environments', method: 'connect' },
+  testPublicEnvironmentConnection: { group: 'environments', method: 'testConnection' },
+
+  // ---- What this deployment has WIRED ------------------------------------------------------
+  // Three groups rather than one `wiring` bag: each names a real resource a caller asks about on
+  // its own, and a bag's shape would have been dictated by whatever the first consumer happened
+  // to probe.
+  listPublicWiredModels: { group: 'models', method: 'list' },
+  getPublicVcsConnection: { group: 'vcs', method: 'getConnection' },
+  listPublicRiskPolicies: { group: 'riskPolicies', method: 'list' },
+  listPublicModelPresets: { group: 'modelPresets', method: 'list' },
+
+  // ---- The workspace's tracker writeback disposition ----------------------------------------
+  // A `tracker` group with `getWriteback`/`updateWriteback` rather than a `trackerWriteback` group
+  // with `get`/`update`: the resource is the workspace's TRACKER configuration, of which the
+  // writeback disposition is the half `/api/v1` publishes today. The filing selection (which
+  // tracker raises a tech-debt ticket, and that vendor's target) is the sibling this leaves room
+  // for, and it would be `tracker.getSettings` beside these rather than a second group.
+  getPublicTrackerWriteback: { group: 'tracker', method: 'getWriteback' },
+  updatePublicTrackerWriteback: { group: 'tracker', method: 'updateWriteback' },
 
   // ---- Notifications --------------------------------------------------------------------
   listPublicNotifications: { group: 'notifications', method: 'list' },
@@ -248,6 +285,10 @@ export const MCP_TOOL_HINTS = {
   // Destructive AND idempotent, which is the pair `readOnlyHint` alone cannot express: deleting a
   // task twice leaves the board in the same state, and the first call is still irreversible.
   deletePublicTask: { destructive: true, idempotent: true },
+  // The same pair one level up, and the consequence is strictly larger: a service delete takes its
+  // whole subtree and every run recorded under it. Idempotent in EFFECT (a second call finds
+  // nothing left to remove and 404s), which says nothing about the first one being recoverable.
+  deletePublicService: { destructive: true, idempotent: true },
   // The outbound webhook, same pair and for a subtler reason: neither call spends anything, and
   // both overwrite state whose previous value cannot be recovered through this API: the endpoint
   // someone else's integration is registered at, and a signing secret that is never readable back.
@@ -267,16 +308,27 @@ export const MCP_TOOL_HINTS = {
 export const GROUP_DOCS = {
   jobs: 'Headless jobs (a public, inline pipeline run against a brief): start, poll or stream one.',
   services:
-    "The workspace's board services, the frames tasks are created under: list them, or create one (optionally backed by a repository).",
+    "The workspace's board services, the frames tasks are created under: list them, create one (optionally backed by a repository), patch one (including declaring where the manifests for its per-run environments are read from), or delete one with everything under it. The delete refuses a service holding unfinished tasks rather than discarding work in flight.",
   spec: "A service's in-repo specification: the structured requirement tree (modules → feature groups → requirements, with their acceptance criteria and domain rules), the Gherkin rendered from it, and the branch and commit the read describes. Read-only; the requirement ids are the join key onto a run's report and outcome.",
   repos:
-    'The repositories this workspace can back a service with, and which service each already backs: the discovery half of service creation.',
+    'The repositories this workspace can back a service with, and which service each already backs (the discovery half of service creation); the ones its connection could reach but has not adopted yet, and adopting one by name; plus creating a brand-new one, where a bootstrap writes the repository with an agent and reports the board service it materialises.',
   tasks:
     "A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete, plus the two relationships that outlive a create: the tasks it waits for, and the requirements documents it is built against.",
   pipelines: 'The pipelines a task can be started with, and whether each is headless-startable.',
   taskTypes:
     'What a task can be created AS in this workspace (the built-in kinds plus the operations the deployment registered), and the fields each one accepts.',
   notifications: "The workspace's human-actionable inbox: list, act on, or dismiss a run tail.",
+  environments:
+    'The cluster this workspace provisions per-run environments onto: probe a candidate connection without saving it, or bind one. The credential is write-only, so a read reports which secret keys are stored and never their values.',
+  models:
+    'The models a run in this workspace could actually dispatch to, and why an unavailable one is unavailable: unconfigured, or refused by the account model-family policy. Those two need opposite fixes.',
+  vcs: "The workspace's source-control connection: which account it talks to, how it authenticates, and whether it may create repositories and write workflow files. Both permissions are enforced by the provider at push time, so reading them beats discovering one missing halfway through an automated setup.",
+  tracker:
+    "What this workspace does to a task's LINKED tracker issue as its pull request progresses: comment when it opens, comment and close the issue when it merges, and post a headless run's parked review findings so the reporter can answer where they filed. The write MERGES, so turning one action on leaves the other two as they were. It is the writeback half of the workspace's tracker configuration; the filing selection (which tracker a tech-debt ticket is raised on) is not published yet.",
+  riskPolicies:
+    'The risk policies a task can pin, including which is the workspace default: what decides whether a run can land its pull request without a person, and how many attempts its CI fixer, requirement rounds and release watch are given. Broader than merging, which is why it is not called a merge preset.',
+  modelPresets:
+    'The model presets a task can pin, including which is the workspace default: what decides which model each agent step runs on, and so what a run costs. Availability is not repeated here; join `baseModelId` against the models group, which keeps unconfigured and policy-refused apart.',
   webhook:
     "The workspace's outbound endpoints: register, inspect or remove the receivers that notifications, run-lifecycle events and health alerts are pushed to. The unnamed calls address the `default` endpoint; the named ones let an integration enroll its own receiver, with its own signing secret and filters, beside whatever else is registered.",
   usage:

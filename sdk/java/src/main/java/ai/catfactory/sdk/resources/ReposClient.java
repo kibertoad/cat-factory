@@ -13,8 +13,10 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The repositories this workspace can back a service with, and which service each already backs:
- * the discovery half of service creation.
+ * The repositories this workspace can back a service with, and which service each already backs
+ * (the discovery half of service creation); the ones its connection could reach but has not
+ * adopted yet, and adopting one by name; plus creating a brand-new one, where a bootstrap writes
+ * the repository with an agent and reports the board service it materialises.
  * Reached from {@link CatFactoryClient}; not constructed directly.
  */
 public final class ReposClient {
@@ -25,14 +27,85 @@ public final class ReposClient {
     }
 
     /**
+     * Create a repository and adapt it with the bootstrapper agent
+     * Create a brand-new repository under the account the workspace is connected to, then run the
+     * bootstrapper agent in a container to write it against the supplied brief (or to adapt a
+     * reference architecture). Answers 201 with a job to poll rather than blocking for the minutes
+     * a container takes. The job names the board service frame it materialises, so work can be
+     * filed against the service before the repository has finished being written. This is the one
+     * act of board setup with no other public counterpart: creating a service takes a repoId, and
+     * nothing else here makes one.
+     * {@code POST /api/v1/repos/bootstrap} (operation {@code startPublicRepoBootstrap}).
+     */
+    public StartPublicRepoBootstrapResponse bootstrap(StartPublicRepoBootstrapRequest body) {
+        return transport.request("POST", "/api/v1/repos/bootstrap", body, Map.of(), new TypeReference<StartPublicRepoBootstrapResponse>() {});
+    }
+
+    /**
+     * Poll one repository bootstrap
+     * Read a bootstrap run’s current state. `failureKind` says whether a retry could plausibly
+     * help: a `preflight` refusal (the target repository already has content, nothing is
+     * connected) cannot be retried into success, where an `evicted` container can.
+     * {@code GET /api/v1/repos/bootstrap/{jobId}} (operation {@code getPublicRepoBootstrap}).
+     */
+    public StartPublicRepoBootstrapResponse getBootstrap(String jobId) {
+        return transport.request("GET", "/api/v1/repos/bootstrap/" + Transport.pathSegment(jobId), null, Map.of(), new TypeReference<StartPublicRepoBootstrapResponse>() {});
+    }
+
+    /**
+     * Adopt an existing repository into this workspace
+     * Link a repository the connection can reach, by `owner` and `name`, so a service can be
+     * created against it. The act that had no headless counterpart: nothing links a repository for
+     * you (the provider webhook for an added repository does not project one, and a resync
+     * refreshes what is already linked), so a repository created by any means stayed invisible to
+     * the repos list and unusable by service creation until a person opened the app. Takes a NAME
+     * rather than the numeric `repoId` its sibling reads report, because a caller setting a
+     * workspace up from configuration knows the name and cannot know a provider id for a
+     * repository no public read lists; the response carries the `repoId` for the service-creation
+     * call that follows. Idempotent: a repository this workspace already links returns its row
+     * rather than refusing, so a setup script re-running itself needs no special case. A
+     * repository the connection cannot reach is a 404 with `details.reason: repo_not_reachable`,
+     * which covers both "it does not exist" and "your credential is not granted it": a provider
+     * answers those identically, and inventing a split would be a guess.
+     * {@code POST /api/v1/repos/link} (operation {@code linkPublicRepo}).
+     */
+    public ListPublicReposResponseRepo link(LinkPublicRepoRequest body) {
+        return transport.request("POST", "/api/v1/repos/link", body, Map.of(), new TypeReference<ListPublicReposResponseRepo>() {});
+    }
+
+    /**
      * List the repositories a service can be created against
-     * List the repositories the key’s workspace has connected, each with the service that already
+     * List the repositories the key’s workspace has LINKED, each with the service that already
      * backs it (null when nothing does, and always null for a monorepo, which can back several).
      * The discovery half of service creation: the create takes a repoId, and this is where one
-     * comes from.
+     * comes from. A repository the connection can reach but nobody has adopted yet is NOT here;
+     * list those with the available-repos endpoint and adopt one with the link endpoint.
      * {@code GET /api/v1/repos} (operation {@code listPublicRepos}).
      */
     public ListPublicReposResponse list() {
         return transport.request("GET", "/api/v1/repos", null, Map.of(), new TypeReference<ListPublicReposResponse>() {});
+    }
+
+    /**
+     * List the repositories this workspace could adopt (no query parameters).
+     */
+    public ListPublicAvailableReposResponse listAvailable() {
+        return listAvailable(ReposListAvailableQuery.none());
+    }
+
+    /**
+     * List the repositories this workspace could adopt
+     * The repositories the workspace’s source-control connection can REACH, whether or not this
+     * workspace links them, with `linked` as the join onto the repos list. It exists because those
+     * two populations differ and the difference is invisible otherwise: linking is explicit per
+     * workspace, so a repository that exists and is perfectly reachable is absent from the repos
+     * list in exactly the way one that was never created is, and those need opposite fixes. Pass
+     * `q` as an exact `owner/name` for an authoritative point-read, as a substring to search, or
+     * omit it to browse what is accessible. Each call reaches the provider, so it is a setup-time
+     * read rather than one to poll.
+     * {@code GET /api/v1/repos/available} (operation {@code listPublicAvailableRepos}).
+     */
+    public ListPublicAvailableReposResponse listAvailable(ReposListAvailableQuery query) {
+        return transport.request("GET", "/api/v1/repos/available", null, query.toQuery(), new TypeReference<ListPublicAvailableReposResponse>() {});
     }
 }

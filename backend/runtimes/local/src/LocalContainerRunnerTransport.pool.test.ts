@@ -493,7 +493,10 @@ describe('post-mortem on a pooled member', () => {
       find: vi.fn(async () => undefined),
       endpoint: vi.fn(async () => ({ host: '127.0.0.1', port: 51234 })),
       isRunning: vi.fn(async () => running()),
-      exitState: vi.fn(async () => 'exit code 137, OOM-killed by the container runtime'),
+      exitState: vi.fn(async () => ({
+        description: 'exit code 137, OOM-killed by the container runtime',
+        code: 137,
+      })),
       logs: vi.fn(async () => LOG_TAIL),
       remove: vi.fn(async () => {}),
       removeRun: vi.fn(async () => {}),

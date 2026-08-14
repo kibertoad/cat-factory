@@ -468,6 +468,10 @@ export class RequirementReviewService extends IterativeReviewService<
     // Writer's own report stands, null included (see `recommendationSourceSchema`: unreported is
     // not the same as unsupported).
     rec.groundedIn = standard ? 'standard' : suggestion.groundedIn
+    // The Writer's own grade, kept even on a resolved standard: matching a fragment id settles where
+    // the answer CAME FROM, and says nothing about how completely that fragment answers this
+    // finding — which is the question an unwatched run's floor is asking.
+    rec.confidence = suggestion.confidence
     rec.updatedAt = now
     if (!rec.auto) {
       rec.status = 'ready'

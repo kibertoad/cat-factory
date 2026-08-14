@@ -34,7 +34,13 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   headlessly without the cross-workspace view the admin gate exists for), `PublicKeyController` (HEADLESS key provisioning at `admin`
   scope, delegating to the same `PublicApiKeyService` the session panel calls; the mintable rungs
   are derived from the gate, so a key minted here can never mint another),
-  `PublicMcpController` (the
+  `PublicProvisioningController` (**deployment provisioning**, all `admin`: repo bootstrap, the
+  cluster connection a run's environments deploy onto, a service's manifest source, and the three
+  reads that report what this deployment has wired. Every public shape it answers in is a
+  PROJECTION of an internal one, so its mappers are where an internal rename stops being a public
+  break; the model read shares `modules/models/workspaceCatalog.ts` with the SPA's own picker,
+  because two surfaces answering "can a run dispatch here" differently is the bug that seam
+  exists to prevent), `PublicMcpController` (the
   HOSTED **MCP** endpoint, `POST /api/v1/mcp`: mounts `@cat-factory/mcp-server`'s server behind a
   Web-standard Streamable HTTP transport, stateless per request, with the key's SCOPE deciding the
   tool list and every tool call looping back through `http/loopback.ts` to `/api/v1` under the
@@ -80,6 +86,14 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   gated mount: it is a third-party browser navigation, so it is mounted at the app ROOT and gates
   itself on the sealed state, the user who started the flow, and a re-loaded `secrets.manage`.
   See `backend/docs/mcp-tool-servers.md`.
+- `modules/mcpAuthServer/`: MCP authorization on the SERVING side, in two controllers split by what
+  authenticates them. `McpAuthorizationController.ts` is unauthenticated by construction (the
+  metadata documents, dynamic client registration, the authorize redirect and the token exchange:
+  a host has no credential yet, which is what it came for) and answers refusals in OAuth's own
+  `{ error, error_description }` rather than the deployment envelope.
+  `McpAuthorizationConsentController.ts` is the half that needs a human, root-mounted and
+  session-gated, re-resolving `secrets.manage` on the board the person PICKED. `consentRedirect.ts`
+  holds the SPA path both halves derive. See `backend/docs/mcp-authorization.md`.
 - `modules/tasks/TaskWebhookController.ts` + `webhooks/`: the PUBLIC, session-gate-bypassing
   webhook receivers (`/github`, `/vcs/:provider`, `/webhooks/tasks/:source/:workspaceId`) and their
   shared body-limit + signature-rejection logging. Each verifies over the RAW body before parsing,

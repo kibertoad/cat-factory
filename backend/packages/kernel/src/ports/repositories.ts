@@ -5,6 +5,7 @@ import type {
   ExecutionInstance,
   ExecutionStatus,
   Pipeline,
+  RunDefaultScope,
   Workspace,
   WorkspaceAccessMode,
 } from '../domain/types.js'
@@ -133,6 +134,20 @@ export interface BlockRepository {
   listByServices(serviceIds: string[]): Promise<Block[]>
   get(workspaceId: string, id: string): Promise<Block | null>
   /**
+   * The block currently running `executionId`, read off the `execution_id` REVERSE LINK a run
+   * start/retry stamps on it, or null when no block in this workspace carries that run.
+   *
+   * It exists for the one case where the run itself cannot answer: a run row that fails its own
+   * decode names no block, and yet the block naming the RUN is right there. Without this the
+   * disposal of a poison run settles the row and leaves the card wedged `in_progress` forever, with
+   * the run dropped from the board snapshot so there is no failure card and no Retry either.
+   *
+   * At most one block matches: the id is minted per run and only the block the run was started on
+   * is ever stamped with it. Cheap without an index of its own, being anchored on the
+   * `(workspace_id, …)` primary-key prefix over one board's blocks.
+   */
+  getByExecution(workspaceId: string, executionId: string): Promise<Block | null>
+  /**
    * Resolve a block by its (globally unique) id, regardless of which workspace homes it,
    * returning the block plus its home `workspaceId` and its `serviceId` (or null). Backs
    * the shared-board mutation path: a block belonging to a service mounted from another
@@ -233,6 +248,27 @@ export interface PipelineRepository {
   insertIfAbsent(workspaceId: string, pipeline: Pipeline): Promise<void>
   /** Overwrite an existing pipeline in place (preserving its catalog order). */
   update(workspaceId: string, pipeline: Pipeline): Promise<void>
+  /**
+   * Claim (`claimed`) or release this pipeline as the workspace's default for `scope`, demoting
+   * whichever row held that scope first.
+   *
+   * Its OWN method rather than two fields on {@link update}, because the two writes are different
+   * kinds of thing. `update` overwrites one row's structure and is refused on a built-in; the
+   * default flags are selection metadata, are the only pipeline write a built-in accepts, and
+   * touch a SECOND row (the incumbent). Folding them into `update` would mean every ordinary edit
+   * carried the demotion of a scope it said nothing about.
+   *
+   * The demote and the promote land as one transaction (a `batch` on D1), for the reason
+   * `RiskPolicyRepository.upsert` does: run loose, a demote that commits before a failed promote
+   * leaves the scope with NO holder, and "the operator un-set their default" is a state no caller
+   * asked for. Releasing a flag nothing holds, or claiming one this row already holds, is a no-op.
+   */
+  setDefault(
+    workspaceId: string,
+    id: string,
+    scope: RunDefaultScope,
+    claimed: boolean,
+  ): Promise<void>
   delete(workspaceId: string, id: string): Promise<void>
 }
 

@@ -1,4 +1,4 @@
-import type { GitHubClient, GitHubRepo, GroupCacheHandle } from '@cat-factory/kernel'
+import type { GitHubClient, GitHubRepo, GroupCacheHandle, Paged } from '@cat-factory/kernel'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createLocalGitHubClient } from '../src/github.js'
 
@@ -63,7 +63,7 @@ function stubUserRepos(pages: Array<Array<{ id: number; name: string }>>): strin
   return enumerationPages
 }
 
-function makeClient(cache?: GroupCacheHandle<GitHubRepo[]>): GitHubClient {
+function makeClient(cache?: GroupCacheHandle<Paged<GitHubRepo>>): GitHubClient {
   return createLocalGitHubClient({ GITHUB_API_BASE: API }, () => 'pat-token', cache)
 }
 
@@ -101,13 +101,16 @@ describe('[local] PAT GitHub client repo enumeration', () => {
         { id: 2, name: 'beta' },
       ],
     ])
-    const client = makeClient(makeCache<GitHubRepo[]>())
+    const client = makeClient(makeCache<Paged<GitHubRepo>>())
 
     const first = await client.searchInstallationRepos(7, 'alp')
     const second = await client.searchInstallationRepos(7, 'bet')
 
-    expect(namesOf(first)).toEqual(['alpha'])
-    expect(namesOf(second)).toEqual(['beta'])
+    expect(namesOf(first.items)).toEqual(['alpha'])
+    expect(namesOf(second.items)).toEqual(['beta'])
+    // The whole PAGE is cached, so a keystroke served from it still knows whether the
+    // enumeration behind it was complete.
+    expect(second.truncated).toBe(false)
     // The second keystroke filtered the cached set in memory — no fresh enumeration.
     expect(calls).toEqual(['1'])
   })

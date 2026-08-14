@@ -1,5 +1,427 @@
 # @cat-factory/sandbox
 
+## 0.11.154
+
+### Patch Changes
+
+- Updated dependencies [409238f]
+  - @cat-factory/kernel@0.301.0
+  - @cat-factory/contracts@0.313.0
+  - @cat-factory/agents@0.131.0
+  - @cat-factory/sandbox-fixtures@0.7.355
+
+## 0.11.153
+
+### Patch Changes
+
+- Updated dependencies [0ef48d1]
+  - @cat-factory/kernel@0.300.0
+  - @cat-factory/contracts@0.312.0
+  - @cat-factory/agents@0.130.2
+  - @cat-factory/sandbox-fixtures@0.7.354
+
+## 0.11.152
+
+### Patch Changes
+
+- Updated dependencies [d5c1f1c]
+- Updated dependencies [c67e924]
+  - @cat-factory/agents@0.130.1
+  - @cat-factory/kernel@0.299.1
+  - @cat-factory/contracts@0.311.0
+  - @cat-factory/sandbox-fixtures@0.7.353
+
+## 0.11.151
+
+### Patch Changes
+
+- Updated dependencies [056e18d]
+  - @cat-factory/contracts@0.310.0
+  - @cat-factory/kernel@0.299.0
+  - @cat-factory/agents@0.130.0
+  - @cat-factory/sandbox-fixtures@0.7.352
+
+## 0.11.150
+
+### Patch Changes
+
+- Updated dependencies [a81879b]
+  - @cat-factory/contracts@0.309.0
+  - @cat-factory/kernel@0.298.2
+  - @cat-factory/agents@0.129.2
+  - @cat-factory/sandbox-fixtures@0.7.351
+
+## 0.11.149
+
+### Patch Changes
+
+- Updated dependencies [0e1e0fa]
+  - @cat-factory/contracts@0.308.1
+  - @cat-factory/agents@0.129.1
+  - @cat-factory/kernel@0.298.1
+  - @cat-factory/sandbox-fixtures@0.7.350
+
+## 0.11.148
+
+### Patch Changes
+
+- Updated dependencies [7312e0a]
+  - @cat-factory/kernel@0.298.0
+  - @cat-factory/contracts@0.308.0
+  - @cat-factory/agents@0.129.0
+  - @cat-factory/sandbox-fixtures@0.7.349
+
+## 0.11.147
+
+### Patch Changes
+
+- Updated dependencies [95408c2]
+  - @cat-factory/contracts@0.307.0
+  - @cat-factory/kernel@0.297.0
+  - @cat-factory/agents@0.128.2
+  - @cat-factory/sandbox-fixtures@0.7.348
+
+## 0.11.146
+
+### Patch Changes
+
+- Updated dependencies [792ecde]
+  - @cat-factory/agents@0.128.1
+  - @cat-factory/kernel@0.296.1
+
+## 0.11.145
+
+### Patch Changes
+
+- Updated dependencies [fc56d82]
+- Updated dependencies [fc9afb4]
+  - @cat-factory/contracts@0.306.0
+  - @cat-factory/kernel@0.296.0
+  - @cat-factory/agents@0.128.0
+  - @cat-factory/sandbox-fixtures@0.7.347
+
+## 0.11.144
+
+### Patch Changes
+
+- Updated dependencies [edd4fd0]
+  - @cat-factory/kernel@0.295.0
+  - @cat-factory/contracts@0.305.0
+  - @cat-factory/agents@0.127.3
+  - @cat-factory/sandbox-fixtures@0.7.346
+
+## 0.11.143
+
+### Patch Changes
+
+- Updated dependencies [36e0c9b]
+  - @cat-factory/contracts@0.304.0
+  - @cat-factory/agents@0.127.2
+  - @cat-factory/kernel@0.294.1
+  - @cat-factory/sandbox-fixtures@0.7.345
+
+## 0.11.142
+
+### Patch Changes
+
+- Updated dependencies [569181d]
+  - @cat-factory/contracts@0.303.0
+  - @cat-factory/kernel@0.294.0
+  - @cat-factory/agents@0.127.1
+  - @cat-factory/sandbox-fixtures@0.7.344
+
+## 0.11.141
+
+### Patch Changes
+
+- Updated dependencies [1a0b593]
+  - @cat-factory/contracts@0.302.0
+  - @cat-factory/kernel@0.293.0
+  - @cat-factory/agents@0.127.0
+  - @cat-factory/sandbox-fixtures@0.7.343
+
+## 0.11.140
+
+### Patch Changes
+
+- Updated dependencies [7d1477c]
+  - @cat-factory/kernel@0.292.2
+  - @cat-factory/agents@0.126.8
+
+## 0.11.139
+
+### Patch Changes
+
+- c09ddbe: Render a review verdict as blocks a human can skim, and ask the reviewer to write it that way.
+
+  A companion's verdict (the architect/spec/code/doc reviewers) arrives as ONE string: `comments`
+  only exist where the graded output has ids to anchor to, so everything the reviewer found lands in
+  `summary`. Unshaped, a model writes that as a single dense paragraph numbering its points inline
+  ("(1) … (2) …"), and the run panel then appended it to the score inside the same line
+  (`78% < 80% — <four hundred words>`). Nothing about that is skimmable: a reader cannot tell what
+  blocks the work from what is a nit without reading all of it.
+
+  Both halves move. `REVIEW_SUMMARY_LAYOUT` (agents, `prompts/shared.ts`) asks for a fixed skeleton,
+  a one-line verdict then `**Must fix**` / `**Should fix**` / `**Minor**` bullet groups, and is
+  carried by every companion (built-in and deployment-registered, since they share one prompt). It
+  survives a per-workspace prompt override, like the other fragments that describe how the platform
+  reads a reply rather than what it should look for. A reviewer that already reports structured
+  findings beside its summary is deliberately excluded: every judge, the `pr-reviewer` and the tester
+  have that array rendered as its own list, so the layout would make them write each point twice.
+  The SPA renders those summaries through the existing `MarkdownProse` reader instead of plain-text
+  dumps, and each companion round is now its own card rather than a continuation of the score line.
+  The same render fix reaches the reviewer prose the first markdown sweep missed: judge summary and
+  findings, best-practice adherence, the PR-review summary, findings and challenge verdicts, and the
+  tester report. It stops at the fields carrying a VALUE a human copies rather than prose (a
+  suggested fix, a gate's failure summary), which stay preformatted: markdown would emphasise the
+  `__dunder__` in a path and curl the quotes in a command.
+
+  Kernel's `extractJson` now repairs raw control characters inside a JSON string literal. A
+  multi-line summary is exactly what makes a model forget the `\n` escape, and refusing that reply
+  costs the whole verdict (a companion that returns nothing parseable fails the run) over a quoting
+  slip. The repair is a SECOND pass, run only once every candidate in the reply has been read as
+  written: a repair makes text parse that was meant to be skipped, so tried inline it would let an
+  example shape or a prose aside shadow the real verdict written after it. Fence bodies are now all
+  searched, not just the first. The harness's own reader gained the same repair (hence a runner image
+  bump), because it reads the reply FIRST and each refusal there costs a billed repair completion
+  before the engine ever sees it.
+
+  The judge prompt bumps to `judge@v2`: its summary is now rendered beside its findings, so it is
+  asked for a short whole-verdict paragraph that does not restate them. Scoring is untouched. A
+  companion kind also stops resolving to the `review` phase's prompt version — a companion runs the
+  companion prompt, so both the editor's baseline label and the sandbox baseline named a revision of
+  text the kind never sends.
+
+- Updated dependencies [c09ddbe]
+  - @cat-factory/agents@0.126.7
+  - @cat-factory/kernel@0.292.1
+
+## 0.11.138
+
+### Patch Changes
+
+- Updated dependencies [fc4a1e4]
+  - @cat-factory/contracts@0.301.0
+  - @cat-factory/kernel@0.292.0
+  - @cat-factory/agents@0.126.6
+  - @cat-factory/sandbox-fixtures@0.7.342
+
+## 0.11.137
+
+### Patch Changes
+
+- Updated dependencies [ee733ee]
+  - @cat-factory/contracts@0.300.0
+  - @cat-factory/kernel@0.291.0
+  - @cat-factory/agents@0.126.5
+  - @cat-factory/sandbox-fixtures@0.7.341
+
+## 0.11.136
+
+### Patch Changes
+
+- Updated dependencies [01086d8]
+  - @cat-factory/contracts@0.299.1
+  - @cat-factory/kernel@0.290.1
+  - @cat-factory/agents@0.126.4
+  - @cat-factory/sandbox-fixtures@0.7.340
+
+## 0.11.135
+
+### Patch Changes
+
+- Updated dependencies [1bcdacc]
+  - @cat-factory/kernel@0.290.0
+  - @cat-factory/agents@0.126.3
+
+## 0.11.134
+
+### Patch Changes
+
+- Updated dependencies [195b248]
+  - @cat-factory/contracts@0.299.0
+  - @cat-factory/agents@0.126.2
+  - @cat-factory/kernel@0.289.1
+  - @cat-factory/sandbox-fixtures@0.7.339
+
+## 0.11.133
+
+### Patch Changes
+
+- Updated dependencies [bc2478d]
+  - @cat-factory/contracts@0.298.0
+  - @cat-factory/kernel@0.289.0
+  - @cat-factory/agents@0.126.1
+  - @cat-factory/sandbox-fixtures@0.7.338
+
+## 0.11.132
+
+### Patch Changes
+
+- Updated dependencies [a634746]
+  - @cat-factory/contracts@0.297.0
+  - @cat-factory/kernel@0.288.0
+  - @cat-factory/agents@0.126.0
+  - @cat-factory/sandbox-fixtures@0.7.337
+
+## 0.11.131
+
+### Patch Changes
+
+- Updated dependencies [7893f35]
+  - @cat-factory/contracts@0.296.0
+  - @cat-factory/kernel@0.287.0
+  - @cat-factory/agents@0.125.8
+  - @cat-factory/sandbox-fixtures@0.7.336
+
+## 0.11.130
+
+### Patch Changes
+
+- Updated dependencies [07ff467]
+  - @cat-factory/contracts@0.295.0
+  - @cat-factory/agents@0.125.7
+  - @cat-factory/kernel@0.286.3
+  - @cat-factory/sandbox-fixtures@0.7.335
+
+## 0.11.129
+
+### Patch Changes
+
+- Updated dependencies [9b3473a]
+  - @cat-factory/contracts@0.294.0
+  - @cat-factory/agents@0.125.6
+  - @cat-factory/kernel@0.286.2
+  - @cat-factory/sandbox-fixtures@0.7.334
+
+## 0.11.128
+
+### Patch Changes
+
+- Updated dependencies [b889842]
+  - @cat-factory/kernel@0.286.1
+  - @cat-factory/agents@0.125.5
+
+## 0.11.127
+
+### Patch Changes
+
+- Updated dependencies [b25732f]
+  - @cat-factory/contracts@0.293.0
+  - @cat-factory/kernel@0.286.0
+  - @cat-factory/agents@0.125.4
+  - @cat-factory/sandbox-fixtures@0.7.333
+
+## 0.11.126
+
+### Patch Changes
+
+- Updated dependencies [7119ca7]
+  - @cat-factory/contracts@0.292.2
+  - @cat-factory/kernel@0.285.3
+  - @cat-factory/agents@0.125.3
+  - @cat-factory/sandbox-fixtures@0.7.332
+
+## 0.11.125
+
+### Patch Changes
+
+- Updated dependencies [57a7ecd]
+  - @cat-factory/contracts@0.292.1
+  - @cat-factory/kernel@0.285.2
+  - @cat-factory/agents@0.125.2
+  - @cat-factory/sandbox-fixtures@0.7.331
+
+## 0.11.124
+
+### Patch Changes
+
+- Updated dependencies [5f6699a]
+  - @cat-factory/contracts@0.292.0
+  - @cat-factory/agents@0.125.1
+  - @cat-factory/kernel@0.285.1
+  - @cat-factory/sandbox-fixtures@0.7.330
+
+## 0.11.123
+
+### Patch Changes
+
+- Updated dependencies [22b2459]
+- Updated dependencies [2428b6b]
+  - @cat-factory/kernel@0.285.0
+  - @cat-factory/agents@0.125.0
+  - @cat-factory/contracts@0.291.0
+  - @cat-factory/sandbox-fixtures@0.7.329
+
+## 0.11.122
+
+### Patch Changes
+
+- Updated dependencies [19baddf]
+  - @cat-factory/kernel@0.284.0
+  - @cat-factory/agents@0.124.0
+
+## 0.11.121
+
+### Patch Changes
+
+- Updated dependencies [31f43c1]
+  - @cat-factory/contracts@0.290.0
+  - @cat-factory/kernel@0.283.0
+  - @cat-factory/agents@0.123.6
+  - @cat-factory/sandbox-fixtures@0.7.328
+
+## 0.11.120
+
+### Patch Changes
+
+- Updated dependencies [3ff215a]
+  - @cat-factory/contracts@0.289.1
+  - @cat-factory/kernel@0.282.1
+  - @cat-factory/agents@0.123.5
+  - @cat-factory/sandbox-fixtures@0.7.327
+
+## 0.11.119
+
+### Patch Changes
+
+- Updated dependencies [e3cf16a]
+  - @cat-factory/contracts@0.289.0
+  - @cat-factory/kernel@0.282.0
+  - @cat-factory/agents@0.123.4
+  - @cat-factory/sandbox-fixtures@0.7.326
+
+## 0.11.118
+
+### Patch Changes
+
+- Updated dependencies [83764b5]
+  - @cat-factory/contracts@0.288.0
+  - @cat-factory/agents@0.123.3
+  - @cat-factory/kernel@0.281.3
+  - @cat-factory/sandbox-fixtures@0.7.325
+
+## 0.11.117
+
+### Patch Changes
+
+- Updated dependencies [1fbd83c]
+- Updated dependencies [00228c6]
+  - @cat-factory/contracts@0.287.1
+  - @cat-factory/kernel@0.281.2
+  - @cat-factory/agents@0.123.2
+  - @cat-factory/sandbox-fixtures@0.7.324
+
+## 0.11.116
+
+### Patch Changes
+
+- Updated dependencies [bf473bd]
+  - @cat-factory/contracts@0.287.0
+  - @cat-factory/agents@0.123.1
+  - @cat-factory/kernel@0.281.1
+  - @cat-factory/sandbox-fixtures@0.7.323
+
 ## 0.11.115
 
 ### Patch Changes

@@ -26,6 +26,7 @@ const props = defineProps<{ accountId: string }>()
 
 const store = useAccountSettingsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
 const WINDOWS = ['1h', '24h', '7d'] as const satisfies readonly PlatformAlertWindow[]
@@ -234,11 +235,7 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('settings.platformAlerts.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'settings.platformAlerts.saveFailed')
   } finally {
     saving.value = false
   }

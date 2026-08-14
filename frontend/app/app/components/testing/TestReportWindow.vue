@@ -20,6 +20,8 @@ import StepContainerStatus from '~/components/panels/StepContainerStatus.vue'
 import AttemptEntryHeader from '~/components/panels/AttemptEntryHeader.vue'
 import EnvironmentStatusPanel from '~/components/environments/EnvironmentStatusPanel.vue'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
+import MarkdownProse from '~/components/common/MarkdownProse.vue'
+import { runIsActive } from '~/utils/pipelineRender'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -64,12 +66,10 @@ const qualityVerdicts = computed(() => [...(quality.value?.verdicts ?? [])].reve
 // run's infrastructure attempts + logs (container/runner/env spin-up), not just the
 // report. The container/subtask signals already flow onto the step via the generic poll.
 const runFailed = computed(() => instance.value?.status === 'failed')
-// A terminal run (done/failed) can't spin more infra: the attempts drawer stops its
-// background live-polling (manual refresh stays available).
-const runLive = computed(() => {
-  const status = instance.value?.status
-  return status != null && status !== 'done' && status !== 'failed'
-})
+// Whether the engine is still driving this run. A run that is terminal OR parked can't spin more
+// infra, so the attempts drawer stops its background poll (manual refresh stays available) and
+// neither the container card nor the environment panel keeps animating over it.
+const runActive = computed(() => runIsActive(instance.value?.status))
 const stepEnvironment = computed(() => step.value?.environment ?? null)
 const executionId = computed(() => instance.value?.id ?? null)
 // The infra-attempts log drawer is opened on demand (it fetches the per-run log rows).
@@ -354,8 +354,12 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
           <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             {{ t('testing.infrastructure') }}
           </h3>
-          <StepContainerStatus :step="step" :run-failed="runFailed" />
-          <EnvironmentStatusPanel v-if="stepEnvironment" :environment="stepEnvironment" />
+          <StepContainerStatus :step="step" :run-failed="runFailed" :run-active="runActive" />
+          <EnvironmentStatusPanel
+            v-if="stepEnvironment"
+            :environment="stepEnvironment"
+            :run-active="runActive"
+          />
 
           <!-- In-container docker-compose dependency stand-up (local-infra tester): the
                    outcome + the captured `docker compose up` logs. This is the stand-up that
@@ -458,7 +462,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
               v-if="showProvisioning"
               class="mt-2"
               :execution-id="executionId"
-              :live="runLive"
+              :live="runActive"
             />
           </div>
         </section>
@@ -489,9 +493,11 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                 :icon="a.outcome === 'completed' ? 'i-lucide-wrench' : 'i-lucide-circle-x'"
                 :icon-class="a.outcome === 'completed' ? 'text-amber-300' : 'text-rose-400'"
               />
-              <p v-if="a.summary" class="mt-1 max-w-3xl text-[12px] leading-snug text-slate-400">
-                {{ a.summary }}
-              </p>
+              <MarkdownProse
+                v-if="a.summary"
+                :text="a.summary"
+                class="mt-1 max-w-3xl text-[12px] leading-snug text-slate-400"
+              />
               <div v-if="a.concerns && a.concerns.length" class="mt-1.5">
                 <p class="text-[11px] text-slate-500">
                   {{ t('testing.fixerTimeline.addressed') }}
@@ -575,9 +581,11 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                   d(new Date(vd.at), 'short')
                 }}</span>
               </div>
-              <p v-if="vd.feedback" class="mt-1 text-[12px] leading-snug text-slate-400">
-                {{ vd.feedback }}
-              </p>
+              <MarkdownProse
+                v-if="vd.feedback"
+                :text="vd.feedback"
+                class="mt-1 text-[12px] leading-snug text-slate-400"
+              />
               <div v-if="vd.gaps.length" class="mt-1.5">
                 <p class="text-[11px] text-slate-500">{{ t('testing.quality.gaps') }}</p>
                 <ul class="mt-1 space-y-0.5">
@@ -610,12 +618,11 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
           <!-- Summary — the tester's own prose, so it takes the reading measure the shell's `full`
                width obliges (see the `width` prop). The scenario rows and log tails below keep the
                full span. -->
-          <p
+          <MarkdownProse
             v-if="report.summary"
+            :text="report.summary"
             class="mb-4 max-w-3xl text-[13px] leading-relaxed text-slate-300"
-          >
-            {{ report.summary }}
-          </p>
+          />
 
           <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             {{ t('testing.scenariosOutcomes') }}
@@ -680,9 +687,11 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                   />
                   <div class="min-w-0">
                     <span class="text-[13px] text-slate-200">{{ o.name }}</span>
-                    <p v-if="o.detail" class="max-w-3xl text-[12px] leading-snug text-slate-400">
-                      {{ o.detail }}
-                    </p>
+                    <MarkdownProse
+                      v-if="o.detail"
+                      :text="o.detail"
+                      class="max-w-3xl text-[12px] leading-snug text-slate-400"
+                    />
                   </div>
                 </div>
                 <p v-if="!g.outcomes.length" class="py-0.5 text-[12px] italic text-slate-500">
@@ -710,9 +719,11 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                         {{ SEVERITY_LABELS[c.severity] }}
                       </span>
                     </div>
-                    <p v-if="c.detail" class="max-w-3xl text-[12px] leading-snug text-slate-400">
-                      {{ c.detail }}
-                    </p>
+                    <MarkdownProse
+                      v-if="c.detail"
+                      :text="c.detail"
+                      class="max-w-3xl text-[12px] leading-snug text-slate-400"
+                    />
                   </div>
                 </div>
 

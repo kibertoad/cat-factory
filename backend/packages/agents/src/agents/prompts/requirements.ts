@@ -74,13 +74,17 @@ export const REVIEW_PROMPT: BespokeSystemPrompt = {
     'severity: drop it entirely rather than raising it.\n' +
     NO_ASSUMED_PRODUCT +
     '\n' +
-    'For EVERY finding, also judge whether it can be answered without the product owner: set ' +
-    '"autoAnswerable" to true ONLY when a confident, defensible answer follows from universal ' +
-    'engineering / product best practice OR is already determinable from the context provided ' +
-    '(so a senior engineer could reasonably decide it without new input). Set it to false when ' +
-    'answering the finding genuinely requires a business, product or domain decision, or ' +
-    'information not present in the context — anything where guessing would risk building the ' +
-    'wrong thing. When unsure, prefer false. ' +
+    'For EVERY finding, also sort it into one of exactly TWO groups, which is what "autoAnswerable" ' +
+    'says. TRUE: a confident, defensible answer follows from universal engineering / product best ' +
+    'practice, from the idiomatic approach of a stack or framework this work already uses, or from ' +
+    'the context provided (so a senior engineer could reasonably decide it without new input). ' +
+    'FALSE: answering it takes a business, product or domain decision, a judgement call whose ' +
+    'consequences someone should own, or information not present in the context — anything where ' +
+    'guessing would risk building the wrong thing. ' +
+    'The two groups are shown to a person separately, and a run nobody is watching may resolve the ' +
+    'first group from a graded recommendation while it always stops for the second. So this flag ' +
+    'decides who answers, and TRUE on a finding that really needed an owner is the one mistake ' +
+    'here nobody sees: when unsure, prefer false. ' +
     'Respond with ONLY a JSON object — no prose, no code fences. ' +
     FINAL_ANSWER_IN_REPLY,
 }
@@ -191,12 +195,20 @@ export const WRITER_PROMPT: BespokeSystemPrompt = {
     '{ "recommendations": [ { "itemId": "<the finding id>", "recommendation": "<the concrete ' +
     'suggested answer — precise and succinct>", "fromStandard": "<best-practice fragment id if the ' +
     'answer came straight from one, else null>", "groundedIn": "standard|project-spec|web|' +
-    'general-practice" } ] }\n' +
+    'general-practice", "confidence": <0..1> } ] }\n' +
     'Set "groundedIn" to the precedence level the answer actually came from — `standard` for a ' +
     "team/org standard, `project-spec` for the project's own `spec/`/`tech-spec/`, `web` for a " +
     'search result, `general-practice` when it rests on your own general knowledge with none of ' +
     'the above behind it. Report where the answer came FROM, never where it would ideally come ' +
     'from: a human deciding whether to trust a suggestion needs that to be accurate.\n' +
+    'Set "confidence" to how sure you are that THIS answer is the one this project would choose, ' +
+    'from 0 to 1. It is a separate judgement from "groundedIn": a standard can settle a finding ' +
+    'only partly, and a general practice can be near-universal. Reserve 0.9 and above for an ' +
+    'answer you would defend as the only sensible default, and use 0.5 or below wherever the ' +
+    'finding turns on something about this business you were not told. A run nobody is watching ' +
+    'may adopt a high-confidence answer with no person reading it first, so a confident number is ' +
+    'a claim that nobody needs to be asked: grade honestly rather than helpfully, and omit the ' +
+    'field entirely if you cannot judge it.\n' +
     FINAL_ANSWER_IN_REPLY,
 }
 

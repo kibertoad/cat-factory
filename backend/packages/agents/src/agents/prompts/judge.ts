@@ -1,5 +1,6 @@
 import type { JudgeSubject } from '@cat-factory/kernel'
 import { FINAL_ANSWER_IN_REPLY } from './shared.js'
+import { anchoredQualityScale, PRIOR_ROUNDS_DIRECTIVE } from './review-rounds.js'
 
 // ---------------------------------------------------------------------------
 // The JUDGE assessment prompt — the inline LLM call behind the fourth step-taxonomy bucket
@@ -29,7 +30,17 @@ import { FINAL_ANSWER_IN_REPLY } from './shared.js'
  *
  * The scale is stated explicitly and anchored, because an unanchored 0..1 score is the one
  * thing that makes thresholds meaningless across rubrics: two judges must mean the same thing
- * by `0.7` or a workspace cannot set one number in its merge preset.
+ * by `0.7` or a workspace cannot set one number in its merge preset. It comes from
+ * {@link anchoredQualityScale}, SHARED with the companion prompt, because the same argument
+ * holds across the two grading buckets and not merely across rubrics.
+ *
+ * It deliberately does NOT carry `REVIEW_FINDINGS_LAYOUT`, the companions' findings contract. A
+ * judge already returns its points as `findings`, graded on its own severity vocabulary, and
+ * `JudgeResultView` renders that array as its own list directly below the summary — so the
+ * fragment would impose a SECOND grading scheme over the same points. The same reasoning excludes
+ * the `pr-reviewer` and the tester. What the two buckets do share is stated where it belongs: the
+ * anchored scale above, and the "summary is a verdict, not a restatement" rule this prompt makes
+ * in its own words.
  */
 export const JUDGE_SYSTEM_PROMPT =
   'You are an impartial reviewer scoring a piece of work against a RUBRIC you are given. You ' +
@@ -39,14 +50,14 @@ export const JUDGE_SYSTEM_PROMPT =
   'that satisfies or violates the rubric, and never invent a problem you cannot point at. If ' +
   'the evidence is too thin to judge a rubric point, say so in the summary rather than ' +
   'guessing — an unverifiable concern is a finding of its own, not a low score in disguise. ' +
-  'Score on this anchored 0..1 scale: 1.0 fully meets the rubric with nothing to raise; ' +
-  '0.8 meets it with minor, non-blocking nits; 0.6 has a real gap a reviewer would ask about; ' +
-  '0.4 clearly violates the rubric in a way that should be fixed before merge; 0.2 or below ' +
-  'ignores the rubric or does something the rubric forbids. Reply with ONLY a JSON object of ' +
+  `${anchoredQualityScale('the rubric')} Reply with ONLY a JSON object of ` +
   'the shape {"score": number 0..1, "summary": string, "findings": [{"title": string, ' +
   '"detail": string, "severity": "low"|"medium"|"high"|"critical", "where": string}]} — no ' +
   'prose around it, no code fences. Report `findings` for everything that pulled the score ' +
-  'below 1.0, worst first; return an empty array when the work is clean. ' +
+  'below 1.0, worst first; return an empty array when the work is clean. Keep `summary` to a ' +
+  'few sentences on the verdict as a whole — what the work is, what holds it back, what would ' +
+  'raise the score — and do NOT restate the findings there: they are shown to the reader as ' +
+  'their own list beside it. ' +
   FINAL_ANSWER_IN_REPLY
 
 /** Trim + cap one prior step's output so a long transcript can't blow the assessment prompt. */
@@ -98,12 +109,7 @@ export function renderJudgePrompt(subject: JudgeSubject): string {
     for (const f of previous.findings ?? []) {
       lines.push(`- [${f.severity}] ${f.title}${f.detail ? ` — ${f.detail}` : ''}`)
     }
-    lines.push(
-      '',
-      'Judge the CURRENT work on its own merits, but state plainly for each previous finding ' +
-        'whether it was addressed.',
-      '',
-    )
+    lines.push('', PRIOR_ROUNDS_DIRECTIVE, '')
   }
   lines.push(
     `Score this work against the "${subject.rubricName}" rubric and reply with the JSON object.`,

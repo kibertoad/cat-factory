@@ -9,7 +9,9 @@ import { isLocalRunner } from '@cat-factory/contracts'
 import {
   type ApiKeyProvider,
   contextWindowFor,
+  getErrorMessage,
   normalizeCallPhase,
+  redactImagePayloads,
   runBestEffort,
 } from '@cat-factory/kernel'
 import { openAiCompatibleBaseUrlError } from '../../agents/providerErrors.js'
@@ -92,6 +94,27 @@ export function workersAiOutputCeiling(args: {
   return ceiling
 }
 
+/**
+ * How much text this request is actually SENDING: the messages plus the tool definitions, which is
+ * what {@link workersAiOutputCeiling} reserves window room for.
+ *
+ * Measured off the payload being forwarded, never off the redacted copy the telemetry records.
+ * Those two used to be one string, which quietly made a RECORDING decision into a correctness one:
+ * an OpenAI-shape multimodal turn carries its picture inline as a `data:` URL, describing it
+ * instead of copying it shrinks the measurement by the whole size of the picture, and the cap then
+ * under-reserves input room by exactly that much. Under-reserving is the one direction this
+ * estimate must never err in: over-reserving trims output a little, while under-reserving invites
+ * the context overflow the reservation exists to prevent.
+ *
+ * Exported for the regression test, which is the only way to pin the coupling: both halves are
+ * plausible-looking strings, so nothing else distinguishes them.
+ */
+export function forwardedInputChars(payload: Record<string, unknown>): number {
+  const messagesText = Array.isArray(payload.messages) ? JSON.stringify(payload.messages) : ''
+  const toolsText = Array.isArray(payload.tools) ? JSON.stringify(payload.tools) : ''
+  return messagesText.length + toolsText.length
+}
+
 /** Pull the bearer token from the Authorization header. */
 function bearer(header: string | undefined): string | null {
   if (!header) return null
@@ -111,16 +134,15 @@ function bearer(header: string | undefined): string | null {
 function applyWorkersAiCeiling(
   session: ContainerSession,
   payload: Record<string, unknown>,
-  promptText: string,
   current: number | null,
 ): number | null {
   if (session.provider !== 'workers-ai') return current
   const asked = typeof payload.max_tokens === 'number' ? payload.max_tokens : 0
-  const toolsText = Array.isArray(payload.tools) ? JSON.stringify(payload.tools) : ''
   const floored = workersAiOutputCeiling({
     asked,
     contextWindow: contextWindowFor({ provider: session.provider, model: session.model }),
-    inputChars: promptText.length + toolsText.length,
+    // Measured past the provider check, so no other provider pays for the serialization.
+    inputChars: forwardedInputChars(payload),
   })
   payload.max_tokens = floored
   // Record the ceiling we actually applied, not the (often absent) asked value.
@@ -216,7 +238,7 @@ async function dispatchInProcess(c: Context<AppEnv>, ctx: ProxyCallContext): Pro
   try {
     return await inProcess
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = getErrorMessage(err)
     log.error('llm proxy: in-process call failed', { err: message })
     observe({
       usage: null,
@@ -376,7 +398,7 @@ async function resolveUpstreamTarget(
       fetchRunner: null,
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = getErrorMessage(err)
     log.error('llm proxy: no API key configured for provider', { err: message })
     observe({
       usage: null,
@@ -437,7 +459,7 @@ async function relayUpstream(
     try {
       upstreamRes = await fetchRunner(upstreamUrl, upstreamInit)
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      const message = getErrorMessage(err)
       log.error('llm proxy: local runner request blocked', { err: message })
       observe({
         usage: null,
@@ -657,7 +679,7 @@ function makeCallObserver(
         // Observability must never break the proxy.
         .catch((err) =>
           log.warn('llm proxy: failed to record metric', {
-            err: err instanceof Error ? err.message : String(err),
+            err: getErrorMessage(err),
           }),
         ),
     )
@@ -731,7 +753,13 @@ async function handleChatCompletion(c: Context<AppEnv>): Promise<Response> {
   // (e.g. the Workers AI floor), so the recorded metric reflects what actually
   // applied, not just what the client asked for.
   let requestMaxTokens = typeof payload.max_tokens === 'number' ? payload.max_tokens : null
-  const promptText = JSON.stringify(payload.messages ?? [])
+  // What gets RECORDED, and nothing else: serialised with any image payload described rather than
+  // included, because an OpenAI-shape multimodal turn carries the picture inline as a `data:` URL
+  // and recording it verbatim would put a base64 copy of every attached image into the telemetry
+  // store on every turn that carried one. Nothing may size the REQUEST off this string
+  // (`applyWorkersAiCeiling` measures the forwarded payload itself): a shrunken record must not
+  // become a shrunken measurement.
+  const promptText = JSON.stringify(redactImagePayloads(payload.messages ?? []))
 
   // Correlate every proxied call with its run so a bootstrap/execution can be
   // traced end to end. We log the tool count explicitly: an agent (Pi) that gets
@@ -799,7 +827,7 @@ async function handleChatCompletion(c: Context<AppEnv>): Promise<Response> {
 
   // Give container agents generous output room for in-process Workers AI models (a no-op
   // for other providers); records the ceiling actually applied so the metric is accurate.
-  requestMaxTokens = applyWorkersAiCeiling(session, payload, promptText, requestMaxTokens)
+  requestMaxTokens = applyWorkersAiCeiling(session, payload, requestMaxTokens)
 
   // The pooled API key leased for this call (non-binding providers), so usage can be
   // folded back into its rolling-window rotation counters when the call completes.

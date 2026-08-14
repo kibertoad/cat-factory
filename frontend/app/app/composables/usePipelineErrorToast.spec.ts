@@ -8,6 +8,25 @@ import { ApiError } from '~/composables/api/errors'
 import en from '../../i18n/locales/en.json'
 
 /**
+ * The clipboard seam is mocked so the COPIED TEXT is assertable (and so the spec needs no
+ * `navigator.clipboard`). What the copy action carries is the whole point of it: a reader pastes
+ * that string into a bug report, and if the `requestId` is missing from it there is nothing joining
+ * the report to the one server log line that explains the failure.
+ */
+const copied: string[] = []
+vi.mock('~/composables/useCopyToClipboard', () => ({
+  useCopyToClipboard: () => ({
+    copy: async (text: string) => void copied.push(text),
+    copyAction: (text: string) => ({
+      label: 'common.copyDetails',
+      icon: 'i-lucide-clipboard',
+      onClick: () => void copied.push(text),
+    }),
+    isSupported: { value: true },
+  }),
+}))
+
+/**
  * The i18n pilot: the pipeline-error toast resolves user-facing copy from
  * `errors.conflict.*` message KEYS by the backend's machine-readable `reason` — both the
  * title AND the description (G1) — and only ever shows raw backend prose as a last-resort
@@ -93,21 +112,30 @@ describe('usePipelineErrorToast', () => {
     expect(arg.description).toBe('errors.conflict.description.dependencies_unmet')
   })
 
-  it('falls back to the caller fallback key + raw message for an UNKNOWN reason', () => {
+  it('keeps raw prose as DETAIL for an UNKNOWN reason, never as the headline', () => {
+    // An unmapped reason is the path a reason this build has never heard of takes, so it is the
+    // one that most needs the funnel's two properties rather than the least: translated copy up
+    // front, the backend's untranslated prose behind the disclosure.
     usePipelineErrorToast().present(
       conflict('totally_unknown_reason', {}, 'raw detail'),
       'errors.action.retryFailed',
     )
     const arg = add.mock.calls[0]![0]
     expect(arg.title).toBe('errors.action.retryFailed')
-    // Unmapped reason ⇒ raw backend prose is the last-resort description.
-    expect(arg.description).toBe('raw detail')
-    expect(arg.actions).toBeUndefined()
+    expect(arg.description).toBe('errors.conflict.fallbackMessage')
+    arg.actions[0].onClick()
+    expect(update).toHaveBeenCalledWith(
+      'toast-1',
+      expect.objectContaining({ description: 'raw detail' }),
+    )
   })
 
   it('shows the fallback message for an unknown reason with no backend message', () => {
     usePipelineErrorToast().present(conflict('totally_unknown_reason'))
-    expect(add.mock.calls[0]![0].description).toBe('errors.conflict.fallbackMessage')
+    const arg = add.mock.calls[0]![0]
+    expect(arg.description).toBe('errors.conflict.fallbackMessage')
+    // Nothing to disclose ⇒ no reveal, but the copy action is still the point.
+    expect(arg.actions).toHaveLength(1)
   })
 
   it('offers a jump action for a reason with a UI remedy (github_not_connected → connect GitHub)', () => {
@@ -122,11 +150,15 @@ describe('usePipelineErrorToast', () => {
     expect(ui.openGitHub).toHaveBeenCalledOnce()
   })
 
-  it('leaves a reason without a UI remedy as a plain (auto-dismissing) toast', () => {
+  it('keeps a conflict on screen and copyable even with no UI remedy to jump to', () => {
+    // A conflict is a failure like any other: the reader has to be able to finish it, quote it,
+    // and paste it into a report. A remedy-less reason used to be the one that auto-dismissed.
     usePipelineErrorToast().present(conflict('dependencies_unmet'))
     const arg = add.mock.calls[0]![0]
-    expect(arg.duration).toBeUndefined()
-    expect(arg.actions).toBeUndefined()
+    expect(arg.duration).toBe(0)
+    expect(arg.actions.map((a: { label: string }) => a.label)).toEqual(['common.copyDetails'])
+    arg.actions[0].onClick()
+    expect(copied.at(-1)).toContain('errors.conflict.description.dependencies_unmet')
   })
 
   it('interpolates the model list for providers_unconfigured and offers the AI setup jump', () => {
@@ -159,22 +191,46 @@ describe('usePipelineErrorToast', () => {
     expect(add.mock.calls[0]![0].description).toBe('errors.generic.description.unavailable')
   })
 
-  it('reveals the raw detail in place when "Show details" is clicked, and makes it sticky', () => {
+  it('reveals the raw detail in place when "Show details" is clicked', () => {
     usePipelineErrorToast().present(
       new ApiError(503, { error: { code: 'unavailable', message: 'Task sources not configured' } }),
     )
     const arg = add.mock.calls[0]![0]
-    // Auto-dismissing until the user asks for detail: no `duration` override up front.
-    expect(arg.duration).toBeUndefined()
     expect(arg.actions[0].label).toBe('errors.generic.showDetail')
     arg.actions[0].onClick()
-    // Same toast, not a second one; sticky, and the button is dropped so it can't be re-clicked.
+    // The SAME toast, not a second one, so the two readings can't sit on screen disagreeing. The
+    // disclosure button is dropped (it would now be a no-op) and the copy action is re-passed,
+    // because `update` merges over the existing toast and copying is still the point.
     expect(add).toHaveBeenCalledTimes(1)
     expect(update).toHaveBeenCalledWith('toast-1', {
       description: 'Task sources not configured',
-      duration: 0,
-      actions: [],
+      actions: [expect.objectContaining({ label: 'common.copyDetails' })],
     })
+  })
+
+  it('does NOT auto-dismiss, and can be copied whole in one click', () => {
+    // Both properties are the reason a failure goes through this funnel at all: the toast a user
+    // needs to read, quote or act on used to vanish after ~5s, and its detail could only be
+    // retyped off the screen. `duration: 0` keeps it until dismissed (it still has a close
+    // button); the copy action carries the failed action, the failure class, the backend prose and
+    // the requestId in one string.
+    usePipelineErrorToast().present(
+      new ApiError(503, {
+        error: { code: 'unavailable', message: 'Task sources not configured', requestId: 'req-9' },
+      }),
+      'errors.action.startFailed',
+    )
+    const arg = add.mock.calls[0]![0]
+    expect(arg.duration).toBe(0)
+    const copy = arg.actions.find((a: { label: string }) => a.label === 'common.copyDetails')
+    copy.onClick()
+    expect(copied[copied.length - 1]).toBe(
+      [
+        'errors.action.startFailed',
+        'errors.generic.description.unavailable',
+        'Task sources not configured · errors.generic.requestId',
+      ].join('\n'),
+    )
   })
 
   it('folds validation issues and the requestId into the revealed detail', () => {
@@ -199,7 +255,7 @@ describe('usePipelineErrorToast', () => {
     )
   })
 
-  it('offers no disclosure when there is no detail to reveal', () => {
+  it('offers no disclosure when there is no detail to reveal, but still offers the copy', () => {
     usePipelineErrorToast().present(new ApiError(503, { error: { code: 'unavailable' } }))
     const arg = add.mock.calls[0]![0]
     // `ApiError` synthesises `Request failed (HTTP 503)` when the envelope carries no message,
@@ -207,7 +263,11 @@ describe('usePipelineErrorToast', () => {
     expect(arg.description).toBe('errors.generic.description.unavailable')
     expect(arg.actions[0].label).toBe('errors.generic.showDetail')
     usePipelineErrorToast().present(null)
-    expect(add.mock.calls[1]![0].actions).toBeUndefined()
+    // A disclosure that reveals nothing is worse than none, but the two translated lines are still
+    // worth copying: they name the action that failed and the class of failure.
+    expect(add.mock.calls[1]![0].actions).toEqual([
+      expect.objectContaining({ label: 'common.copyDetails' }),
+    ])
   })
 })
 

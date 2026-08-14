@@ -1,20 +1,23 @@
+import { DEFAULT_TRACKER_WRITEBACK } from '@cat-factory/contracts'
 import {
-  createTaskWritebackContext,
-  describeError,
-  type Logger,
-  noopLogger,
-  redactSecrets,
-  resolveWritebackFlag,
-  runBestEffort,
-  REVIEW_QUESTION_POLICIES,
-  REVIEW_QUESTION_POST_CLAIM_TTL_MS,
   type Block,
   type Clock,
+  createTaskWritebackContext,
+  describeError,
+  getErrorMessage,
   type IssueWritebackProvider,
+  type Logger,
+  noopLogger,
   type PullRequestRef,
+  redactSecrets,
+  resolveWritebackFlag,
+  REVIEW_QUESTION_POLICIES,
+  REVIEW_QUESTION_POST_CLAIM_TTL_MS,
   type ReviewQuestionPost,
   type ReviewQuestionPostOutcome,
   type ReviewQuestionPostRepository,
+  type ReviewReplyAck,
+  runBestEffort,
   type TaskConnectionStore,
   type TaskCredentials,
   type TaskRecord,
@@ -23,7 +26,6 @@ import {
   type TaskSourceProvider,
   type TaskSourceWritebackAdapter,
   type TaskWritebackContext,
-  type ReviewReplyAck,
   type TrackerSettingsRepository,
   trackerWebhookSecret,
 } from '@cat-factory/kernel'
@@ -134,7 +136,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
   async onPullRequestOpened(workspaceId: string, block: Block, pr: PullRequestRef): Promise<void> {
     const settings = await this.deps.trackerSettingsRepository.get(workspaceId)
     const enabled = resolveWritebackFlag(
-      settings?.writebackCommentOnPrOpen ?? false,
+      settings?.writebackCommentOnPrOpen ?? DEFAULT_TRACKER_WRITEBACK.writebackCommentOnPrOpen,
       block.trackerCommentOnPrOpen,
     )
     if (!enabled) return
@@ -154,7 +156,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
   async onPullRequestMerged(workspaceId: string, block: Block, pr: PullRequestRef): Promise<void> {
     const settings = await this.deps.trackerSettingsRepository.get(workspaceId)
     const enabled = resolveWritebackFlag(
-      settings?.writebackResolveOnMerge ?? false,
+      settings?.writebackResolveOnMerge ?? DEFAULT_TRACKER_WRITEBACK.writebackResolveOnMerge,
       block.trackerResolveOnMerge,
     )
     if (!enabled) return
@@ -219,7 +221,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
     if (REVIEW_QUESTION_POLICIES[post.subject].optIn) {
       const settings = await this.deps.trackerSettingsRepository.get(workspaceId)
       const enabled = resolveWritebackFlag(
-        settings?.writebackQuestionsOnPark ?? false,
+        settings?.writebackQuestionsOnPark ?? DEFAULT_TRACKER_WRITEBACK.writebackQuestionsOnPark,
         block.trackerQuestionsOnPark,
       )
       if (!enabled) return empty
@@ -307,7 +309,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
         outcome.failed += 1
         // Scrubbed like every other stored free text: a transport error can quote the request
         // URL, and this row is read back by operators (and, in slice 2b, by support tooling).
-        const raw = e instanceof Error ? e.message : String(e)
+        const raw = getErrorMessage(e)
         const error = (redactSecrets(raw) ?? '').slice(0, 500)
         this.log.warn('review question post failed', {
           workspaceId,

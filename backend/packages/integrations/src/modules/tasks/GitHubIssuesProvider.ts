@@ -1,12 +1,13 @@
 import {
-  ConflictError,
-  ValidationError,
   type BugCandidate,
+  ConflictError,
+  getErrorMessage,
   type GitHubClient,
   type GitHubInstallation,
   type GitHubInstallationRepository,
   type GitHubIssueSearchHit,
   type IssueIntakeQuery,
+  type NormalizedTaskConnection,
   type TaskContent,
   type TaskCredentials,
   type TaskSearchRepoScope,
@@ -14,8 +15,7 @@ import {
   type TaskSourceDiagnostic,
   type TaskSourceProvider,
   type TaskSourceWritebackAdapter,
-  type TrackerBoard,
-  type NormalizedTaskConnection,
+  ValidationError,
 } from '@cat-factory/kernel'
 import type { TaskSourceReadReason } from '@cat-factory/contracts'
 import { GITHUB_ISSUES_DESCRIPTOR } from './github-issues.logic.js'
@@ -282,18 +282,6 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
   }
 
   /**
-   * List the workspace installation's repositories as hunt boards. No installation ⇒ an empty
-   * list, matching every other read on this provider (GitHub Issues rides the App, so "not
-   * installed" is an absence, not an error).
-   */
-  async listBoards(_credentials: TaskCredentials, workspaceId: string): Promise<TrackerBoard[]> {
-    const installation = await this.deps.installations.getByWorkspace(workspaceId)
-    if (!installation) return []
-    const page = await this.deps.githubClient.listInstallationRepos(installation.installationId)
-    return githubIssuesLogic.githubReposToBoards(page.items)
-  }
-
-  /**
    * Bug-hunt candidate search: the SAME repo-scoped walk as {@link searchIssues} (now also
    * carrying `no:assignee`, from `query.unassignedOnly`), projected onto the richer candidate
    * shape. GitHub's search response already carries the body, labels, age and comment count,
@@ -447,7 +435,7 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
     return {
       ...base,
       status: 'error',
-      message: `GitHub returned ${status} while ${whileDoing}: ${err instanceof Error ? err.message : String(err)}`,
+      message: `GitHub returned ${status} while ${whileDoing}: ${getErrorMessage(err)}`,
     }
   }
 

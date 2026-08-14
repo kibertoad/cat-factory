@@ -107,6 +107,7 @@ import {
   WebCryptoSecretCipher,
   checkKeyFingerprint,
   sweepKeyDriftAndRaise,
+  sweepPassRecoveredNothing,
 } from '@cat-factory/server'
 
 // Cloudflare Worker entry. In addition to the Hono `fetch` handler, we expose a
@@ -313,6 +314,7 @@ export {
   SIMPLE_PIPELINE_ID,
   ADAPTIVE_BUILD_PIPELINE_ID,
   COMPLEX_BUILD_PIPELINE_ID,
+  UNATTENDED_BUILD_PIPELINE_ID,
   defaultBuildPipelineId,
   BUG_TRIAGE_PIPELINE_ID,
   BUGFIX_PIPELINE_ID,
@@ -620,7 +622,13 @@ function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): v
       ? new WorkflowsEnvConfigRepairRunner(env.ENV_CONFIG_REPAIR_WORKFLOW)
       : null
     tick.run(
-      { name: 'stale-run', failureMessage: 'run sweep failed' },
+      {
+        name: 'stale-run',
+        failureMessage: 'run sweep failed',
+        // Per-run isolation means this pass resolves even when every run it touched threw, so
+        // "resolved" alone is no longer evidence it worked. Same rule as the Node sweeper's tick.
+        degraded: sweepPassRecoveredNothing,
+      },
       sweepStuckRuns({
         agentRunRepository: new D1AgentRunRepository({ db: env.DB }),
         instanceState: (ref) => {
@@ -697,9 +705,11 @@ function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): v
         logger,
       })
         // Surface what the sweep did — the key signal for "are runs getting stuck?"
-        // Only log when it actually acted.
-        .then(({ redriven, finalized, stalled, unknown }) => {
-          if (redriven > 0 || finalized > 0 || stalled > 0 || unknown > 0) {
+        // Only log when it actually acted. The tally is RETURNED as well as logged, because
+        // `tick.run`'s `degraded` predicate above reads it to decide the pass's health.
+        .then((result) => {
+          const { redriven, finalized, stalled, unknown, failed } = result
+          if (redriven > 0 || finalized > 0 || stalled > 0 || unknown > 0 || failed > 0) {
             logger.warn('swept stuck runs', {
               cron: 'stale-run',
               redriven,
@@ -708,8 +718,14 @@ function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): v
               // Reported even when nothing else happened: a pass that classified nothing is
               // the one shape of sweep failure that produces no other evidence at all.
               unknown,
+              // Likewise for runs whose recovery threw: the pass no longer dies with them, so
+              // this line is where a pass that skipped everything it touched still says so.
+              failed,
+              // What `failed` is measured against, so the line answers "how bad" on its own.
+              attempted: result.attempted,
             })
           }
+          return result
         }),
     )
   }

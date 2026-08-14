@@ -35,7 +35,7 @@
     // stale one fails the initial run and aborts the whole thing). NEVER cached: a mutation
     // score is a measurement nothing downstream consumes, and a restored one would report a
     // number no run in this session produced. Runs in its own nightly workflow only, never
-    // as part of `pnpm test:run` — see docs/mutation-testing.md.
+    // as part of `pnpm test:run`: see docs/internal/mutation-testing.md.
     "test:mutation": {
       "dependsOn": ["^build"],
       "cache": false

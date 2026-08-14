@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { publicServiceProvisioningSchema } from './public-provisioning.js'
 import { documentSourceKindSchema } from './documents.js'
 import { descriptorFieldValuesSchema } from './form-fields.js'
 import { notificationSchema } from './notifications.js'
@@ -216,6 +217,17 @@ export const publicServiceSchema = v.object({
   /** The service's architectural classification (service / frontend / library / …). */
   type: blockTypeSchema,
   status: publicTaskStatusSchema,
+  /**
+   * Where this service's per-run environment manifests are read from, when it declares any.
+   *
+   * Absent means the service provisions no environment, which is the normal state: most services
+   * never deploy a per-run environment at all. It is projected because a caller that just SET it
+   * (`PATCH /api/v1/services/:serviceId`) otherwise has no way to confirm what landed, and the
+   * value is a discriminated union whose non-matching branches are ignored on write: a wrong-shaped
+   * patch is accepted and stored as something the deploy step later reads as "no manifests", which
+   * surfaces as an empty environment that looks like a cluster fault.
+   */
+  provisioning: v.optional(publicServiceProvisioningSchema),
 })
 export type PublicService = v.InferOutput<typeof publicServiceSchema>
 
@@ -257,6 +269,18 @@ export const publicTaskSchema = v.object({
    * dependent is merely refused until its blocker lands, and something has to notice and start it.
    */
   autoStartDependents: v.boolean(),
+  /**
+   * The model preset this task pins, or null when it resolves the workspace default.
+   *
+   * Served for the reason `dependsOn` is: a caller that declared something needs to read back what
+   * the board holds, or the declaration is fire-and-forget. It is the difference between an
+   * acceptance pass that can state which model it measured and one that assumes. Null is not the
+   * default's ID, because a task pinning nothing FOLLOWS the default: move it and this task moves
+   * with it, where a pinned copy of the same id would not.
+   */
+  modelPresetId: v.nullable(v.string()),
+  /** The risk policy this task pins, or null when it resolves the workspace default. */
+  riskPolicyId: v.nullable(v.string()),
 })
 export type PublicTask = v.InferOutput<typeof publicTaskSchema>
 
@@ -377,10 +401,37 @@ export const publicTaskDocumentSchema = v.variant('kind', [
 export type PublicTaskDocument = v.InferOutput<typeof publicTaskDocumentSchema>
 
 /**
- * Create a task under a service. A deliberately MINIMAL external input mapped onto the
- * internal `AddTaskInput`: it exposes only title/description/taskType/ticket/documents, not the
- * rich internal knobs (risk/model presets, pinned pipeline, agent config), so the public
- * surface stays small and stable.
+ * A pinned library id (`modelPresetId`, `riskPolicyId`), on create and on patch alike.
+ *
+ * One schema for all four holes rather than the same pipe written out four times: the pins are the
+ * same kind of value everywhere they appear, and the day one of them grows a rule (a prefix check,
+ * a longer bound) the other three want it too.
+ */
+const presetPinSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))
+
+/**
+ * Create a task under a service: a NARROW external input mapped onto the internal `AddTaskInput`.
+ *
+ * Narrow is not the same as minimal, and the line has moved. It first exposed only
+ * title/description/taskType/ticket/documents on the reasoning that fewer fields meant a smaller
+ * thing to keep stable. What that missed is that a knob withheld does not go away, it just gets
+ * reached another way: the only route to "run this task on the cheap model" without
+ * `modelPresetId` is to move the WORKSPACE default, which changes every other caller's runs to
+ * settle one task. A per-task field is the smaller blast radius, not the larger one.
+ *
+ * So the two knobs are here, discoverable through `GET /api/v1/model-presets` and
+ * `GET /api/v1/risk-policies` (the same pairing the pipeline list has with `start`'s `pipelineId`),
+ * and read back on {@link publicTaskSchema} so a caller can confirm what a task actually holds.
+ * What stays off is what a caller cannot act on meaningfully: per-agent-kind model overrides,
+ * consensus wiring, and the rest of the internal agent config, which are workspace-shaped
+ * decisions with no per-task question behind them.
+ *
+ * **`riskPolicyId` selects how much oversight this task's merge takes, so read
+ * `docs/initiatives/role-scoped-risk-policy-admission.md` before treating it as ordinary.** An API
+ * key holds scopes rather than a workspace role, so it is already `UNATTRIBUTED` at the merge exits
+ * (ADR 0037) and no role-scoped restriction narrows it today. That is precisely why WHICH policies
+ * a caller may pin needs to become a real admission rule rather than staying an accident of what
+ * the surface happens not to expose.
  */
 export const createPublicTaskSchema = v.object({
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
@@ -433,12 +484,68 @@ export const createPublicTaskSchema = v.object({
    * what it actually decides.
    */
   fields: v.optional(descriptorFieldValuesSchema),
+  /**
+   * The model preset this task's agent steps run on, from `GET /api/v1/model-presets`. Omitted ⇒
+   * the workspace's default preset, exactly as before.
+   *
+   * An id no preset in this workspace carries is a `422` (`details.reason:
+   * 'model_preset_not_found'`) rather than a silent fallback to the default. The two outcomes are
+   * indistinguishable afterwards from anything a caller can read, and a pass that quietly ran on
+   * another model is worse than one that refused: the run still succeeds, the numbers are just
+   * about something else.
+   *
+   * Pinning a preset does NOT widen what the account allows. The base model still resolves through
+   * the account's model-family policy, so a preset naming a blocked model fails at dispatch with
+   * the same refusal it would have had on the workspace default. `GET /api/v1/models` reports that
+   * up front, keeping "unconfigured" and "refused by policy" apart.
+   */
+  modelPresetId: v.optional(presetPinSchema),
+  /**
+   * The risk policy this task's `merger` step resolves, from `GET /api/v1/risk-policies`. Omitted ⇒
+   * the workspace's default policy, exactly as before.
+   *
+   * Unknown ids refuse the same way (`details.reason: 'risk_policy_not_found'`).
+   *
+   * **This one chooses how much oversight landing takes**, since a policy carries
+   * `autoMergeEnabled` and the score ceilings. It is exposed because withholding it was never the
+   * control it looked like: a caller wanting a different policy could always move the workspace
+   * default, which is the same power aimed at every other task as well. The real control is an
+   * admission rule over WHICH policies a caller may pin, tracked in
+   * `docs/initiatives/role-scoped-risk-policy-admission.md`. Until that lands, an `admin` key can
+   * pin any policy its workspace holds, which is the same authority it already had by editing one.
+   */
+  riskPolicyId: v.optional(presetPinSchema),
+  /**
+   * The pipeline this task runs, from `GET /api/v1/pipelines`. Omitted ⇒ the task type's own
+   * default where it has one (a `document` task is created on the document pipeline), else nothing
+   * is pinned and the start call decides.
+   *
+   * Pinning it AT CREATION is what lets a caller file a task now and have somebody start it later,
+   * from the board or from `POST /tasks/:taskId/start` with an empty body, and still get the chain
+   * the filer chose. Without it the choice had to be repeated on every start, and a task filed by an
+   * integration and started from the app silently ran whatever that board defaults to.
+   *
+   * Unlike `modelPresetId` / `riskPolicyId`, an id nothing defines is NOT refused here: it is
+   * refused when the task is STARTED, with the same `404` the board gets, because a pipeline id is
+   * resolved rather than defaulted (`PipelineService.resolveForRun`). The distinction is worth
+   * knowing rather than tidying away: a dangling PRESET pin falls back to the workspace default and
+   * runs, which is why that one has to be caught at the write; a dangling pipeline pin can start
+   * nothing, so the failure is loud on its own and arrives at the door that has a picker.
+   */
+  pipelineId: v.optional(presetPinSchema),
 })
 export type CreatePublicTaskInput = v.InferOutput<typeof createPublicTaskSchema>
 
 /**
- * Start (run) a task. `pipelineId` is optional — it falls back to the task's pinned
- * pipeline; a task with neither is rejected with `pipeline_required`.
+ * Start (run) a task. `pipelineId` is optional — it falls back to the task's pinned pipeline, then,
+ * for a key that satisfies `decide`, to the workspace's default pipeline for a run nothing is
+ * watching (`Pipeline.isUnattendedDefault`, the seeded `pl_unattended`). A task with none of those
+ * is rejected with `pipeline_required`.
+ *
+ * The scope condition on that last rung is deliberate rather than incidental: the seeded rung
+ * reaches a human test and a human PR review on a risky task, and a key that cannot answer a park
+ * would be handed a `pipeline_requires_decide_scope` refusal about a pipeline it never picked. A
+ * `write` key therefore keeps exactly its former behaviour and is told the thing it can act on.
  */
 export const startPublicTaskSchema = v.object({
   pipelineId: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))),
@@ -516,6 +623,22 @@ export const updatePublicTaskSchema = v.object({
    * the caller cannot have it.
    */
   autoStartDependents: v.optional(v.boolean()),
+  /**
+   * Re-point the task at another model preset, or another risk policy. Same ids, same refusals and
+   * same omitted-value rule as on {@link createPublicTaskSchema}: a field you omit is untouched,
+   * which is not the same as pinning nothing.
+   *
+   * Here because a pin a caller can set once and never correct is a pin it has to DELETE THE TASK
+   * to fix, losing the id every stored reference points at, its ticket claim and its attached
+   * documents. Re-pointing does not re-drive a run already in flight, exactly as editing the
+   * authored input does not: the next run resolves what the task holds then.
+   *
+   * There is deliberately no way to CLEAR a pin back to "follow the workspace default" here, on the
+   * same reading as `fields`: an empty value means "not supplied". Adding one later is additive
+   * where guessing at the spelling now would not be.
+   */
+  modelPresetId: v.optional(presetPinSchema),
+  riskPolicyId: v.optional(presetPinSchema),
 })
 export type UpdatePublicTaskInput = v.InferOutput<typeof updatePublicTaskSchema>
 
@@ -647,10 +770,39 @@ export const publicPipelineSchema = v.object({
    * can be driven end-to-end with no interactive user; others may park awaiting input.
    */
   headlessStartable: v.boolean(),
+  /**
+   * Whether THIS row is what `POST /tasks/:taskId/start` runs for your key when neither the call
+   * nor the task names a pipeline. The same answer as {@link publicPipelineListSchema}'s
+   * `unattendedDefaultPipelineId`, matched against this row.
+   *
+   * At most one row carries it, and NO row does in two cases that read alike here and differ
+   * entirely: the workspace released its default (the start call then refuses with
+   * `pipeline_required`), or the default resolves to a rung this list does not carry. Read the
+   * list-level field to tell them apart.
+   */
+  unattendedDefault: v.boolean(),
 })
 export type PublicPipeline = v.InferOutput<typeof publicPipelineSchema>
 
-export const publicPipelineListSchema = v.object({ pipelines: v.array(publicPipelineSchema) })
+export const publicPipelineListSchema = v.object({
+  pipelines: v.array(publicPipelineSchema),
+  /**
+   * The pipeline `POST /tasks/:taskId/start` runs for your key when neither the call nor the task
+   * names one, or `null` when that call would refuse with `pipeline_required`.
+   *
+   * Exposed because the alternative is a caller unable to find out what an empty start body does:
+   * omitting `pipelineId` is the ordinary way to use that route, and "whatever the workspace
+   * decided" is only a usable contract if the decision is readable. Stated at the LIST level rather
+   * than only as a per-row flag because the resolution has a rung the list cannot show: a workspace
+   * that never adopted the catalog's declared rung still resolves it (and adopts it on that first
+   * start), so every row would report `false` while empty start bodies kept working.
+   *
+   * Answered for the key that asked. A key below the `decide` scope cannot answer the human doors
+   * the seeded rung reaches, so no default is offered to it and this reads `null`: the same rule the
+   * start route applies, from the same resolution, so the two can never disagree.
+   */
+  unattendedDefaultPipelineId: v.nullable(v.string()),
+})
 export type PublicPipelineList = v.InferOutput<typeof publicPipelineListSchema>
 
 // ---------------------------------------------------------------------------

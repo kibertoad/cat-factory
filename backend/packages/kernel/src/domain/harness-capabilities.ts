@@ -26,18 +26,34 @@ import type { RunnerDispatchAck, RunnerJobStopOutcome } from '../ports/runner-tr
  * (`packageRegistries`, `validation`) needs no handshake, because an older image simply does less and
  * the run reports what it did. Adding a member here is a claim that the PROMPT would lie.
  *
+ * That is also why `designImages` is a member and `referenceScreenshots` is not, though they are the
+ * same wire shape: the capture block is composed BY the harness out of what actually landed, so an
+ * image that ignores the field simply says nothing, while the design block is composed by the
+ * BACKEND (only it knows the delivery verdict and the views no container was sent) and would name a
+ * directory an older image never wrote.
+ *
+ * `generateImages` is a member for exactly that reason and not for its own shape: it is a bare
+ * flag, but the generator brief it turns on names a staging directory unconditionally, so an image
+ * that ignores the flag leaves the agent hunting for output in a directory nothing created, and the
+ * run reports a vendor problem for what is a runner pool one release behind. `artifactUpload` is
+ * NOT a member for the opposite reason: it is delivered as environment variables the prompt names
+ * only where they are read, and an image that ignores it produces a run that uploaded nothing
+ * rather than one that was told it had.
+ *
  * Keyed as an exhaustive `Record` so the list below cannot drift from the union, and mirrored
  * byte-for-byte by the harness's own `HARNESS_BODY_CAPABILITIES` (the image is built from `src/`
  * plus typescript alone, so it can depend on no workspace package). The pairing is pinned by the
  * harness's `test/agent-capabilities.conformity.test.ts`, the same copy-plus-pin arrangement the
  * id/tool-name patterns use.
  */
-export type HarnessBodyCapability = 'mcpServers' | 'skills'
+export type HarnessBodyCapability = 'mcpServers' | 'skills' | 'designImages' | 'generateImages'
 
 /** Operator-facing prose for each capability: what the body carried, in words. */
 const HARNESS_BODY_CAPABILITY_LABELS: Record<HarnessBodyCapability, string> = {
   mcpServers: 'tool servers (MCP)',
   skills: 'skills',
+  designImages: 'design pictures',
+  generateImages: "the agent CLI's own image generation",
 }
 
 /** Every capability the handshake covers. Derived, so it cannot drift from the union. */
@@ -75,6 +91,40 @@ export function parseHarnessBodyCapabilities(value: unknown): HarnessBodyCapabil
   return value.filter(isHarnessBodyCapability)
 }
 
+/** A non-empty array: the wire shape of every capability that is simply a list. */
+function isPopulatedList(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0
+}
+
+/**
+ * What "the body carries this capability" means for each one, as an exhaustive `Record` so a new
+ * member cannot be added without stating its own answer.
+ *
+ * A predicate per capability rather than one shape test over all of them, because the field shapes
+ * genuinely differ and the wrong generalisation is SILENT in the worst direction: `designImages` is
+ * an object (`{ url, token, files }`), so the populated-list test every list-shaped capability
+ * shares reads it as absent, the handshake never fires for it, and an image that predates the field
+ * ignores the manifest while the backend's prompt names a directory nothing wrote. That is
+ * precisely the blind run this whole handshake exists to refuse.
+ *
+ * The KEY is still the body field name, which is what keeps the harness's own list a list of field
+ * names and needs no second mapping there; only the emptiness test lives here.
+ */
+const HARNESS_BODY_CAPABILITY_CARRIED: Record<HarnessBodyCapability, (value: unknown) => boolean> =
+  {
+    mcpServers: isPopulatedList,
+    skills: isPopulatedList,
+    // A manifest with no files promises the agent nothing, exactly as an empty server list does.
+    designImages: (value) =>
+      typeof value === 'object' &&
+      value !== null &&
+      isPopulatedList((value as { files?: unknown }).files),
+    // A plain flag, and the only shape here that is neither a list nor a manifest. `=== true`
+    // rather than truthiness, because the field is the wire's own boolean and anything else in it
+    // is a body this backend did not compose.
+    generateImages: (value) => value === true,
+  }
+
 /**
  * Which capabilities a job body actually CARRIES, which is what the handshake is checked against.
  *
@@ -82,18 +132,13 @@ export function parseHarnessBodyCapabilities(value: unknown): HarnessBodyCapabil
  * dropped every tool server for its own reasons (an unsupported harness, a missing credential)
  * promised the agent nothing and has nothing to verify. What must line up is the body and the
  * PROMPT, and the prompt is composed from the same resolution the body is.
- *
- * A capability's name IS its body field name, deliberately. That is what lets this stay one
- * filter instead of a second mapping to keep in step, and it is why the harness's own list is a
- * list of field names too.
  */
 export function requiredHarnessCapabilities(
   body: Readonly<Record<string, unknown>>,
 ): HarnessBodyCapability[] {
-  return HARNESS_BODY_CAPABILITIES.filter((capability) => {
-    const value = body[capability]
-    return Array.isArray(value) && value.length > 0
-  })
+  return HARNESS_BODY_CAPABILITIES.filter((capability) =>
+    HARNESS_BODY_CAPABILITY_CARRIED[capability](body[capability]),
+  )
 }
 
 /**

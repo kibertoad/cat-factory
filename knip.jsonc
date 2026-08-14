@@ -105,7 +105,7 @@
       "project": ["src/**/*.ts"],
       // `@cat-factory/executor-harness` is resolved dynamically at runtime via
       // createRequire(import.meta.url).resolve('@cat-factory/executor-harness') in
-      // LocalProcessRunnerTransport (native mode spawns its bundled dist/server.js), so knip
+      // LocalProcessRunnerTransport (native mode spawns its bundled dist/harness-server.js), so knip
       // sees no static import.
       "ignoreDependencies": ["@cat-factory/executor-harness"],
     },
@@ -200,7 +200,14 @@
       "vitest": false,
       // `cloudflare` is knip misreading the `cloudflare:workers` / `cloudflare:test` module
       // specifier scheme as an npm package, exactly as it does in `backend/runtimes/cloudflare`.
-      "ignoreDependencies": ["cloudflare"],
+      //
+      // `@gadgets/integration-tests` is Cloudflare OS's own test toolkit, which the OS leg imports
+      // BY NAME and `vitest.os.config.ts` aliases at run time into the partner checkout
+      // `GATEKEEPER_OS_DIR` points at. It is deliberately not a dependency (the initiative's CI rule
+      // refuses putting a partner's release cadence in front of this package's build) and it is not
+      // on a registry, so declaring it to silence this would be the lie. Ignored here, and the
+      // nightly leg is what proves the import still resolves.
+      "ignoreDependencies": ["cloudflare", "@gadgets/integration-tests"],
     },
     "deploy/frontend": {
       // Backs `nuxt typecheck` in the deploy consumer.

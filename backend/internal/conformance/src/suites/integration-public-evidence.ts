@@ -9,7 +9,7 @@ import {
 } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
-import { memoryBinaryArtifactStore } from './shared.js'
+import { memoryBinaryArtifactStore, mintPublicApiKey } from './shared.js'
 
 // Cross-runtime conformance for the public run-EVIDENCE surface (`/api/v1/runs/:runId/report`,
 // `…/outcome`, `…/artifacts`, `/api/v1/artifacts/:id/blob`) and for HEADLESS key provisioning
@@ -22,21 +22,6 @@ import { memoryBinaryArtifactStore } from './shared.js'
 // 404/503 here instead of shipping a surface a trial harness silently cannot use.
 //
 // See backend/docs/public-api.md and backend/docs/adr/0043-public-decision-surface.md.
-
-/** Mint a public-API key through the SESSION surface and return its bearer header. */
-async function mintKey(
-  app: Awaited<ReturnType<ConformanceHarness['makeApp']>>,
-  workspaceId: string,
-  scope: 'read' | 'write' | 'decide' | 'admin',
-): Promise<Record<string, string>> {
-  const created = await app.call<{ key: { id: string }; secret: string }>(
-    'POST',
-    `/workspaces/${workspaceId}/public-api-keys`,
-    { label: `conformance-evidence-${scope}`, scope },
-  )
-  expect(created.status).toBe(201)
-  return { authorization: `Bearer ${created.body.secret}` }
-}
 
 /**
  * The opaque identity a provisioner attaches to a per-person key. Shaped like something an
@@ -81,7 +66,7 @@ function defineRunEvidenceCases(harness: ConformanceHarness): void {
       // Public-API keys are ACCOUNT-scoped, so the mint route refuses an account-less board.
       const { workspace } = await app.createOrgWorkspace({ seed: true })
       const wsId = workspace.id
-      const auth = await mintKey(app, wsId, 'read')
+      const auth = await mintPublicApiKey(app, wsId, 'read', 'evidence')
       const runId = await startRun(app, wsId)
 
       const read = await app.call('GET', `/api/v1/runs/${runId}/report`, undefined, auth)
@@ -114,7 +99,7 @@ function defineRunEvidenceCases(harness: ConformanceHarness): void {
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace({ seed: true })
       const wsId = workspace.id
-      const auth = await mintKey(app, wsId, 'read')
+      const auth = await mintPublicApiKey(app, wsId, 'read', 'evidence')
       const runId = await startRun(app, wsId)
 
       const read = await app.call('GET', `/api/v1/runs/${runId}/outcome`, undefined, auth)
@@ -140,7 +125,7 @@ function defineRunEvidenceCases(harness: ConformanceHarness): void {
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace({ seed: true })
       const wsId = workspace.id
-      const auth = await mintKey(app, wsId, 'read')
+      const auth = await mintPublicApiKey(app, wsId, 'read', 'evidence')
       const runId = await startRun(app, wsId)
 
       const missing = await app.call('GET', '/api/v1/runs/exec_nope/report', undefined, auth)
@@ -169,7 +154,7 @@ function defineRunEvidenceCases(harness: ConformanceHarness): void {
       })
       const { workspace } = await app.createOrgWorkspace({ seed: true })
       const wsId = workspace.id
-      const auth = await mintKey(app, wsId, 'read')
+      const auth = await mintPublicApiKey(app, wsId, 'read', 'evidence')
       const runId = await startRun(app, wsId)
 
       const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
@@ -243,7 +228,7 @@ function defineRunEvidenceCases(harness: ConformanceHarness): void {
       })
       const { workspace } = await app.createOrgWorkspace({ seed: true })
       const wsId = workspace.id
-      const auth = await mintKey(app, wsId, 'read')
+      const auth = await mintPublicApiKey(app, wsId, 'read', 'evidence')
       const runId = await startRun(app, wsId)
       const bytes = new Uint8Array([1, 2, 3])
       const row = (over: Partial<BinaryArtifactRecord> & { id: string }): BinaryArtifactRecord => ({
@@ -299,7 +284,7 @@ function defineRunEvidenceCases(harness: ConformanceHarness): void {
       })
       const { workspace } = await app.createOrgWorkspace({ seed: true })
       const { workspace: other } = await app.createOrgWorkspace({ seed: true })
-      const auth = await mintKey(app, workspace.id, 'read')
+      const auth = await mintPublicApiKey(app, workspace.id, 'read', 'evidence')
       store.seed(
         {
           id: 'art_foreign',
@@ -335,7 +320,7 @@ function defineRunEvidenceCases(harness: ConformanceHarness): void {
       })
       const { workspace } = await app.createOrgWorkspace({ seed: true })
       const wsId = workspace.id
-      const auth = await mintKey(app, wsId, 'read')
+      const auth = await mintPublicApiKey(app, wsId, 'read', 'evidence')
       const runId = await startRun(app, wsId)
 
       // 503, never an empty list: "this deployment stores no artifacts" and "this run captured
@@ -359,10 +344,10 @@ function defineKeyProvisioningCases(harness: ConformanceHarness): void {
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace({ seed: true })
       const wsId = workspace.id
-      const adminAuth = await mintKey(app, wsId, 'admin')
+      const adminAuth = await mintPublicApiKey(app, wsId, 'admin', 'evidence')
 
       // A `decide` key is one rung below the gate and must not be able to provision at all.
-      const decideAuth = await mintKey(app, wsId, 'decide')
+      const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'evidence')
       const refused = await app.call<{ error: { code: string } }>(
         'POST',
         '/api/v1/keys',
@@ -445,7 +430,7 @@ function defineKeyProvisioningCases(harness: ConformanceHarness): void {
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace({ seed: true })
       const wsId = workspace.id
-      const adminAuth = await mintKey(app, wsId, 'admin')
+      const adminAuth = await mintPublicApiKey(app, wsId, 'admin', 'evidence')
       const minted = await app.call<{ key: PublicApiKey; secret: string }>(
         'POST',
         '/api/v1/keys',
@@ -536,7 +521,7 @@ function defineKeyProvisioningCases(harness: ConformanceHarness): void {
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace({ seed: true })
       const wsId = workspace.id
-      const adminAuth = await mintKey(app, wsId, 'admin')
+      const adminAuth = await mintPublicApiKey(app, wsId, 'admin', 'evidence')
 
       const minted = await app.call<{ key: PublicApiKey; secret: string }>(
         'POST',
@@ -556,6 +541,16 @@ function defineKeyProvisioningCases(harness: ConformanceHarness): void {
       )
       const stored = listed.body.keys.find((k) => k.id === minted.body.key.id)
       expect(stored?.externalIdentity).toBe(IDENTITY)
+
+      // A headlessly-minted key is a SYSTEM key: it acts for nobody and reaches no personal
+      // subscription. Asserted on the LIST read for the reason above — this column is written by
+      // one facade's SQL and read back by its own row mapping, so a facade that added it to the
+      // INSERT and forgot the SELECT (or vice versa) answers `undefined` here rather than `null`,
+      // and `toBeNull` is what tells those two apart. There is deliberately no wire field that
+      // could set it here: binding is a person's consent about their own credential, given in the
+      // app, so a provisioning key cannot mint one for anybody.
+      expect(minted.body.key.actsAsUserId).toBeNull()
+      expect(stored?.actsAsUserId).toBeNull()
 
       // And on `/me`, which is how a subsystem handed the credential discovers who it runs as.
       const perUserAuth = { authorization: `Bearer ${minted.body.secret}` }
@@ -613,7 +608,7 @@ function defineKeyProvisioningCases(harness: ConformanceHarness): void {
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace({ seed: true })
       const wsId = workspace.id
-      const adminAuth = await mintKey(app, wsId, 'admin')
+      const adminAuth = await mintPublicApiKey(app, wsId, 'admin', 'evidence')
       const minted = await app.call<{ key: PublicApiKey; secret: string }>(
         'POST',
         '/api/v1/keys',
@@ -651,7 +646,7 @@ function defineKeyProvisioningCases(harness: ConformanceHarness): void {
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace({ seed: true })
       const wsId = workspace.id
-      const adminAuth = await mintKey(app, wsId, 'admin')
+      const adminAuth = await mintPublicApiKey(app, wsId, 'admin', 'evidence')
 
       // The deployment this feature exists for: one key per person, minted by a provisioner.
       const mintFor = async (identity: string) => {

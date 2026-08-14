@@ -16,6 +16,7 @@ const workspace = useWorkspaceStore()
 const workspaceSettings = useWorkspaceSettingsStore()
 const services = useServicesStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const access = useWorkspaceAccess()
 const { t, n } = useI18n()
 const { fitView, zoomIn, zoomOut, resetZoom } = useBoardFlow()
@@ -29,11 +30,7 @@ async function mountService(serviceId: string, title: string) {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('board.toolbar.serviceAddFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'board.toolbar.serviceAddFailed')
   }
 }
 
@@ -60,11 +57,7 @@ async function restoreService(id: string, title: string) {
       color: 'neutral',
     })
   } catch (e) {
-    toast.add({
-      title: t('board.toast.restoreFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'board.toast.restoreFailed')
   }
 }
 

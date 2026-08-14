@@ -12,11 +12,10 @@ import { useBoardStore } from '~/stores/board'
  */
 export const useRecurringPipelinesStore = defineStore('recurringPipelines', () => {
   const api = useApi()
-  const toast = useToast()
-  // Resolve translations through the Nuxt app's global i18n instance — a store runs outside a
-  // component `setup`, so `useI18n()` is unavailable (see the board store for the same pattern).
-  const nuxtApp = useNuxtApp()
-  const tr = (key: string): string => (nuxtApp.$i18n as { t: (k: string) => string }).t(key)
+  // The failure funnel resolves its own translations through the Nuxt app's global i18n instance,
+  // which is what a store (running outside a component `setup`) needs, so this store no longer
+  // carries a `tr` bridge or a raw toast handle of its own.
+  const { present } = usePipelineErrorToast()
 
   const schedules = ref<PipelineSchedule[]>([])
   /** Lazily-loaded run history, keyed by schedule id. */
@@ -71,12 +70,7 @@ export const useRecurringPipelinesStore = defineStore('recurringPipelines', () =
     } catch (e) {
       schedules.value = prevSchedules
       if (blockSnap) board.reattach(blockSnap)
-      toast.add({
-        title: tr('board.toast.recurringDeleteFailed'),
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
+      present(e, 'board.toast.recurringDeleteFailed')
     }
   }
 

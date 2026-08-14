@@ -12,7 +12,6 @@ import {
 import type { AgentRunContext, GateRegistry } from '@cat-factory/kernel'
 import {
   TOOL_SERVER_BUDGET,
-  defaultBinaryGeneratorRegistry,
   defaultFoundationalServiceRegistry,
   defaultGateRegistry,
   defaultPipelineRegistry,
@@ -961,6 +960,85 @@ describe('agent-capability validation: credentials', () => {
     expect(warning?.severity).toBe('warn')
   })
 
+  it('rejects a HEADER on a stdio server, whose value would reach nothing', () => {
+    // An error where the case above is a warning: a stdio server is a child process with no
+    // request to carry a header, and the dispatch's env projection selects by channel, so the
+    // server would be wired and advertised while starting unauthenticated.
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      toolServers: [
+        {
+          id: 'docs',
+          transport: { kind: 'stdio', command: 'docs-mcp' },
+          secretKeys: [{ key: 'DOCS_TOKEN', header: 'Authorization' }],
+        },
+      ],
+    })
+    const problems = collectRegistrationProblems({
+      registries: {
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      },
+    })
+    const problem = problems.find((p) => p.code === 'unusable_credential_header')
+    expect(problem?.severity).toBe('error')
+  })
+
+  it('still rejects a stdio HEADER when an envName is declared beside it', () => {
+    // The remedy the first spelling of this rule offered ("declare an envName instead") was not
+    // one: the check keys on the CHANNEL, and a key naming a header stays on the header channel
+    // however it is also named, so the dispatch would go on skipping it. Pinned here because the
+    // message is what an operator acts on, and a remedy that re-fires the error costs them the
+    // attempt as well as the diagnosis.
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      toolServers: [
+        {
+          id: 'docs',
+          transport: { kind: 'stdio', command: 'docs-mcp' },
+          secretKeys: [{ key: 'DOCS_TOKEN', header: 'Authorization', envName: 'DOCS_ENV' }],
+        },
+      ],
+    })
+    const problems = collectRegistrationProblems({
+      registries: {
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      },
+    })
+    expect(problems.find((p) => p.code === 'unusable_credential_header')?.severity).toBe('error')
+  })
+
+  it('rejects an http credential that names NO header, the exact mirror', () => {
+    // The other direction of the same rule, and the one the first pass left open: an http server
+    // is a remote url with no process to inject a variable into, so a credential naming no header
+    // resolves, is folded into nothing, and the server is called unauthenticated. Its first
+    // evidence would be a 401 several minutes into a run the prompt promised the tool for.
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      toolServers: [
+        {
+          id: 'docs',
+          transport: { kind: 'http', url: 'https://mcp.example.com/sse' },
+          secretKeys: [{ key: 'DOCS_TOKEN', envName: 'DOCS_ENV' }],
+        },
+      ],
+    })
+    const problems = collectRegistrationProblems({
+      registries: {
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      },
+    })
+    expect(problems.find((p) => p.code === 'missing_credential_header')?.severity).toBe('error')
+  })
+
   it('accepts an https endpoint, and a plain-http one on loopback', () => {
     // A server running beside the agent in its own container has no certificate to present.
     registry.register({
@@ -1220,100 +1298,5 @@ describe('foundational-service registry validation', () => {
     expect(problemsFor([{ ...valid, id: 'Bad Id', capabilities: ['asset_storage'] }])).toHaveLength(
       1,
     )
-  })
-})
-
-describe('generative binary integration registry validation', () => {
-  const gates = defaultGateRegistry()
-  const kinds = defaultAgentKindRegistry()
-  const problemsFor = (
-    definitions: Parameters<ReturnType<typeof defaultBinaryGeneratorRegistry>['register']>[0][],
-  ) => {
-    const binaryGeneratorRegistry = defaultBinaryGeneratorRegistry()
-    binaryGeneratorRegistry.registerAll(definitions)
-    return collectRegistrationProblems({
-      registries: {
-        agentKindRegistry: kinds,
-        gateRegistry: gates,
-        binaryGeneratorRegistry,
-      },
-    }).filter((p) => p.code.startsWith('binary_generator') || p.code.endsWith('generator_endpoint'))
-  }
-
-  const valid = {
-    id: 'retro-diffusion',
-    name: 'Retro Diffusion',
-    summary: 'Pixel-art image generation.',
-    description: 'Sprites and tiles; not photorealism.',
-    modalities: ['image' as const],
-    mediaTypes: ['image/png'],
-    endpoint: 'https://api.retrodiffusion.ai/v1',
-    credential: { key: 'RD_TOKEN', usage: 'the X-RD-Token header' },
-  }
-
-  it('passes a well-formed registration', () => {
-    expect(problemsFor([valid])).toEqual([])
-  })
-
-  it('fails boot on a credential key that is not a usable environment variable name', () => {
-    // The failure it replaces: the harness drops the malformed name at parse and the integration
-    // 401s mid-run, naming nothing that points back at the registration.
-    const problems = problemsFor([{ ...valid, credential: { key: 'x-rd-token' } }])
-    expect(problems[0]?.message).toContain('environment variable name')
-  })
-
-  it('fails boot on a credential naming a PLATFORM configuration variable', () => {
-    // A definition names both the key it wants and the endpoint that key is sent to, so this is a
-    // registration that booted clean and shipped the deployment's master sealing key to a third
-    // party. Enforced by the credential SCHEMA, so it reaches boot through the same parse.
-    const problems = problemsFor([{ ...valid, credential: { key: 'ENCRYPTION_KEY' } }])
-    expect(problems[0]?.code).toBe('binary_generator_invalid')
-    expect(problems[0]?.message).toContain('the platform')
-    // Case-insensitively, because `process.env` lookup is on Windows.
-    expect(problemsFor([{ ...valid, credential: { key: 'encryption_key' } }])).toHaveLength(1)
-  })
-
-  it('fails boot on a cleartext endpoint off loopback, because the credential rides it', () => {
-    const problems = problemsFor([{ ...valid, endpoint: 'http://api.example.com/v1' }])
-    expect(problems[0]?.code).toBe('insecure_binary_generator_endpoint')
-    expect(problemsFor([{ ...valid, endpoint: 'http://localhost:8080' }])).toEqual([])
-  })
-
-  it('fails boot when a declared media type contradicts the declared content types', () => {
-    // Both halves drive selection — coverage is checked against `modalities`, while the brief
-    // tells the agent the `mediaTypes` — so this integration would be picked for one job and
-    // asked to do the other.
-    const problems = problemsFor([{ ...valid, modalities: ['audio'], mediaTypes: ['image/png'] }])
-    expect(problems[0]?.code).toBe('binary_generator_modality_mismatch')
-  })
-
-  it('accepts a media type it cannot classify rather than refusing a format it has not heard of', () => {
-    expect(problemsFor([{ ...valid, mediaTypes: ['application/x-newfangled'] }])).toEqual([])
-  })
-
-  it('accepts EITHER 3D content type against a container that could hold both', () => {
-    // Contradiction is an empty INTERSECTION, not an absent member. A `.glb` is one asset or a
-    // whole scene and the container does not record which, so requiring every consistent member
-    // would refuse a scene generator for declaring the only format it can emit.
-    for (const modalities of [['3d-model'], ['3d-scene'], ['3d-model', '3d-scene']] as const) {
-      expect(
-        problemsFor([{ ...valid, modalities: [...modalities], mediaTypes: ['model/gltf-binary'] }]),
-      ).toEqual([])
-    }
-    // …and a genuine contradiction is still one.
-    expect(
-      problemsFor([{ ...valid, modalities: ['audio'], mediaTypes: ['model/gltf-binary'] }])[0]
-        ?.code,
-    ).toBe('binary_generator_modality_mismatch')
-  })
-
-  it('reports a malformed definition ONCE rather than restating it as several', () => {
-    expect(
-      problemsFor([{ ...valid, id: 'Retro Diffusion', endpoint: 'http://api.example.com' }]),
-    ).toHaveLength(1)
-  })
-
-  it('requires at least one content type — a generator that produces nothing is not one', () => {
-    expect(problemsFor([{ ...valid, modalities: [] }])).toHaveLength(1)
   })
 })

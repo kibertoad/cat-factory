@@ -102,9 +102,15 @@ describe('asGitHubClient (VcsClient → GitHubClient)', () => {
       },
     })
     const hits = await client.searchInstallationRepos(123, 'gateway')
-    expect(hits.map((r) => r.githubId)).toEqual([1])
-    // A blank query short-circuits to no results (no listing round-trip needed).
-    expect(await client.searchInstallationRepos(123, '   ')).toEqual([])
+    expect(hits.items.map((r) => r.githubId)).toEqual([1])
+    // The listing it filtered was complete, so the result is not a prefix of anything.
+    expect(hits.truncated).toBe(false)
+    // A blank query short-circuits to no results (no listing round-trip needed), and omitted
+    // nothing in doing so: an empty answer and a capped one are different facts.
+    expect(await client.searchInstallationRepos(123, '   ')).toEqual({
+      items: [],
+      truncated: false,
+    })
   })
 
   it('resolves a repo by id against the accessible-projects listing', async () => {

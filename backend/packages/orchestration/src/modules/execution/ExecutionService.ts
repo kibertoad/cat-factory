@@ -75,7 +75,7 @@ import type { Clock, IdGenerator, PreloadedBlocks } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import type { ReviewEffort } from '@cat-factory/kernel'
 import { RunMergePolicy } from './RunMergePolicy.js'
-import type { ResolvedRunRiskPolicy } from './policy-types.js'
+import type { ResolvedRunRiskPolicy, RunPolicyScope } from './policy-types.js'
 import type { WorkRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
 import type { BoardService } from '../board/BoardService.js'
@@ -323,7 +323,7 @@ export class ExecutionService {
       documentRepository,
       llmObservability,
       pullRequestMerger,
-      riskPolicyRepository,
+      riskPolicyReader,
       mergeTrackRecord,
       riskPolicyCache,
       issueWriteback,
@@ -348,7 +348,7 @@ export class ExecutionService {
     // run's merge track record when a human merges or declines), extracted as one collaborator so
     // neither concern re-accretes onto the engine.
     this.mergePolicy = new RunMergePolicy({
-      riskPolicyRepository,
+      riskPolicyReader,
       riskPolicyCache,
       mergeTrackRecord,
     })
@@ -387,7 +387,7 @@ export class ExecutionService {
       blockRepository,
       notificationService,
       mergeTrackRecord,
-      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
+      resolveRiskPolicy: (ws, block, run) => this.resolveRiskPolicy(ws, block, run),
       finalizeMerge: (ws, blockId) => this.finalizeMerge(ws, blockId),
     })
     this.companionController = new CompanionController({
@@ -396,9 +396,12 @@ export class ExecutionService {
       spend: spendService,
       idGenerator,
       previewStepModel: (ctx) => this.runDispatcher.previewStepModel(ctx),
+      previewStepToolServers: (ctx) => this.runDispatcher.previewStepToolServers(ctx),
       runAgent: (ctx, opts) => this.runDispatcher.runAgent(ctx, opts),
       stateMachine: this.runStateMachine,
       stepGraph: this.stepGraph,
+      resolveRiskPolicy: (ws, block, run) => this.resolveRiskPolicy(ws, block, run),
+      ...(dependencies.logger ? { logger: dependencies.logger } : {}),
       inferTechnicalLabel: (ws, block, producer, companionStep) =>
         this.inferBlockTechnical(ws, block, producer, companionStep),
     })
@@ -418,7 +421,7 @@ export class ExecutionService {
       idGenerator,
       clock,
       clockNow: () => this.clock.now(),
-      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
+      resolveRiskPolicy: (ws, block, run) => this.resolveRiskPolicy(ws, block, run),
       dispatchIterationCap: (ws, blockId, choice, handlers) =>
         this.runActions.iterationCap.dispatchIterationCap(ws, blockId, choice, handlers),
       testerQualityReviewer,
@@ -516,8 +519,8 @@ export class ExecutionService {
       logger: this.log,
       // The one merge-policy fact the start path needs, as a bound callback: the lifecycle
       // controller launches runs and has no other business with the preset layer.
-      resolveDryRunRoles: async (ws, block) =>
-        (await this.mergePolicy.resolve(ws, block)).dryRunRoles,
+      resolveDryRunRoles: async (ws, block, run) =>
+        (await this.mergePolicy.resolve(ws, block, run)).dryRunRoles,
       requireWorkspace: (ws) => this.requireWorkspace(ws),
       requireBlock: (ws, id) => this.requireBlock(ws, id),
       failRun: (ws, id, message, kind, detail, reason) =>
@@ -632,7 +635,7 @@ export class ExecutionService {
       interviewControllers: this.wiredInterviewGates,
       prVerificationReport: this.prVerificationReport,
       runInitiatorScope: runInitiatorScopeFn,
-      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
+      resolveRiskPolicy: (ws, block, run) => this.resolveRiskPolicy(ws, block, run),
       modelIdIsMetered: (id, caps) => this.admission.modelIdIsMetered(id, caps),
     })
   }
@@ -827,8 +830,14 @@ export class ExecutionService {
     executionId: string,
     options: AdvanceOptions = {},
   ): Promise<AdvanceResult> {
+    // The run-row load sits OUTSIDE the step's try/catch, and reads through `loadOrDispose`: a
+    // row that cannot be decoded is poison (no driver will ever get past this line), so it is
+    // settled terminally there rather than re-driven on every sweep until the end of time, and
+    // arrives here as a plain `null`. Keeping it out of the block below is what keeps the
+    // disposition honest: a `DataIntegrityError` raised deeper in the step (about some OTHER row)
+    // must never be read as this run being unreadable.
+    const instance = await this.runStateMachine.loadOrDispose(workspaceId, executionId)
     try {
-      const instance = await this.executionRepository.get(workspaceId, executionId)
       // A paused run is still drivable: the spend gate in stepInstance resumes it
       // once the budget frees up (or re-pauses it otherwise).
       if (!instance || (instance.status !== 'running' && instance.status !== 'paused')) {
@@ -1104,7 +1113,7 @@ export class ExecutionService {
     const ordered = orderPrsForMerge(
       allPullRequests(block).map((p) => ({
         ...(p.repo ? { repo: p.repo } : {}),
-        ...(p.frameId ? { frameId: p.frameId } : {}),
+        ...(p.frameIds?.length ? { frameIds: p.frameIds } : {}),
         ref: p.ref,
       })),
     )
@@ -1199,8 +1208,12 @@ export class ExecutionService {
    * Resolve the merge threshold preset that governs a task — delegated to {@link RunMergePolicy}
    * (preset resolution + its cache read-through live there, alongside the track-record settle).
    */
-  private resolveRiskPolicy(workspaceId: string, block: Block): Promise<ResolvedRunRiskPolicy> {
-    return this.mergePolicy.resolve(workspaceId, block)
+  private resolveRiskPolicy(
+    workspaceId: string,
+    block: Block,
+    run: RunPolicyScope,
+  ): Promise<ResolvedRunRiskPolicy> {
+    return this.mergePolicy.resolve(workspaceId, block, run)
   }
 
   /**
@@ -1386,7 +1399,11 @@ export class ExecutionService {
   }
 
   /** @see RunLifecycleController.teardownForBlockTree */
-  teardownForBlockTree(workspaceId: string, rootId: string): Promise<PreloadedBlocks> {
-    return this.runActions.lifecycle.teardownForBlockTree(workspaceId, rootId)
+  teardownForBlockTree(
+    workspaceId: string,
+    rootId: string,
+    opts: { preloaded?: PreloadedBlocks } = {},
+  ): Promise<PreloadedBlocks> {
+    return this.runActions.lifecycle.teardownForBlockTree(workspaceId, rootId, opts)
   }
 }

@@ -1,3 +1,5 @@
+import { binaryGeneratorCapabilitySchema } from '@cat-factory/contracts'
+import type { BinaryGeneratorCapability, BinaryModality } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   BinaryGeneratorRegistry,
@@ -8,27 +10,13 @@ import {
   binaryGeneratorContextFileFor,
   binaryGeneratorSelectionIssues,
   describeBinaryGeneratorSelectionIssues,
+  describeCapability,
   dispatchBinaryGenerators,
   renderBinaryGeneratorSection,
   resolveBinaryGeneratorSelection,
 } from './binary-generators.js'
+import { generator } from './binary-generators.fixtures.js'
 import { binaryContextFileFor, renderBinaryOutputBrief } from './binary-outputs.js'
-
-function generator(overrides: Partial<BinaryGeneratorView> = {}): BinaryGeneratorView {
-  return {
-    id: 'retro-diffusion',
-    name: 'Retro Diffusion',
-    summary: 'Pixel-art image generation.',
-    description: 'Good for sprites and tiles; not for photorealism.',
-    modalities: ['image'],
-    mediaTypes: ['image/png'],
-    capabilities: [],
-    endpoint: 'https://api.retrodiffusion.ai/v1',
-    credential: { key: 'RD_TOKEN', usage: 'the X-RD-Token request header' },
-    contracts: [],
-    ...overrides,
-  }
-}
 
 const music = generator({
   id: 'studio-music',
@@ -36,7 +24,7 @@ const music = generator({
   summary: 'Instrumental music generation.',
   modalities: ['audio'],
   mediaTypes: ['audio/mpeg'],
-  credential: { key: 'STUDIO_KEY' },
+  credentials: [{ key: 'STUDIO_KEY' }],
 })
 
 describe('BinaryGeneratorRegistry', () => {
@@ -279,6 +267,105 @@ describe('binaryGeneratorSelectionIssues', () => {
     expect(message).toContain('no longer defines')
     expect(message).not.toContain('undefined')
   })
+
+  // The REACHABILITY axis: a harness-served integration is a tool inside ONE agent CLI, so a step
+  // whose model runs a different one has selected a generator that is not in the process at all.
+  describe('harness-transport reachability', () => {
+    const codexImages = generator({
+      id: 'codex-images',
+      name: 'Codex image generation',
+      summary: 'gpt-image-2 through the Codex CLI.',
+      transport: 'harness',
+      harness: 'codex',
+      endpoint: undefined,
+      credentials: [],
+    })
+    const selection = {
+      storageServiceId: 'asset-store',
+      generatorIds: ['codex-images'],
+      modalities: ['image'] as BinaryModality[],
+    }
+
+    it('admits the selection when the step resolves to the serving harness', () => {
+      expect(binaryGeneratorSelectionIssues(selection, [codexImages], 'codex')).toEqual([])
+    })
+
+    it('refuses it when the step resolves to a different harness', () => {
+      // The whole point of the pin: claude-code has no image tool, so this step would brief the
+      // agent on a generator it cannot call and take the failure as the model's.
+      expect(binaryGeneratorSelectionIssues(selection, [codexImages], 'claude-code')).toEqual([
+        {
+          problem: 'generator_harness_unavailable',
+          generatorId: 'codex-images',
+          requiredHarness: 'codex',
+          resolvedHarness: 'claude-code',
+        },
+      ])
+    })
+
+    it('refuses it for the default Pi harness too, which is a resolved answer and not a gap', () => {
+      expect(binaryGeneratorSelectionIssues(selection, [codexImages], 'pi')).toHaveLength(1)
+    })
+
+    it('says nothing when the harness could not be resolved', () => {
+      // The third outcome the format, capability and value axes all take. A guess here would
+      // refuse correct steps on every deployment whose catalog this build cannot resolve.
+      expect(binaryGeneratorSelectionIssues(selection, [codexImages])).toEqual([])
+    })
+
+    it('never raises it for an API-transport integration, whatever the harness', () => {
+      // An API generator is called by the agent's own code over HTTP: every CLI can do that.
+      expect(
+        binaryGeneratorSelectionIssues(
+          {
+            storageServiceId: 'asset-store',
+            generatorIds: ['retro-diffusion'],
+            modalities: ['image'],
+          },
+          [generator()],
+          'claude-code',
+        ),
+      ).toEqual([])
+    })
+
+    it('states the unreachable generator ONCE, not once per axis it now fails', () => {
+      // An unreachable generator covers nothing, so every coverage judgement below would restate
+      // one misconfiguration as several, each with its own remedy, on a surface that renders every
+      // problem it recognises as its own line.
+      const issues = binaryGeneratorSelectionIssues(
+        { ...selection, modalities: ['audio'], mediaTypes: ['audio/mpeg'] },
+        [codexImages],
+        'claude-code',
+      )
+      expect(issues.map((issue) => issue.problem)).toEqual(['generator_harness_unavailable'])
+    })
+
+    it('still reports an unresolved id beside it, being a different fault about a different id', () => {
+      const issues = binaryGeneratorSelectionIssues(
+        { ...selection, generatorIds: ['codex-images', 'nope'] },
+        [codexImages],
+        'claude-code',
+      )
+      expect(issues.map((issue) => issue.problem)).toEqual([
+        'unknown_generator',
+        'generator_harness_unavailable',
+      ])
+    })
+
+    it('names both harnesses in the message, since the fix is the MODEL not the integration', () => {
+      const message = describeBinaryGeneratorSelectionIssues('image-generator', [
+        {
+          problem: 'generator_harness_unavailable',
+          generatorId: 'codex-images',
+          requiredHarness: 'codex',
+          resolvedHarness: 'claude-code',
+        },
+      ])
+      expect(message).toContain('codex')
+      expect(message).toContain('claude-code')
+      expect(message).not.toContain('undefined')
+    })
+  })
 })
 
 describe('resolveBinaryGeneratorSelection', () => {
@@ -347,12 +434,100 @@ describe('renderBinaryGeneratorSection', () => {
     const section = renderBinaryGeneratorSection({
       selection: resolveBinaryGeneratorSelection(
         { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
-        [generator({ credential: { key: 'ACME_RD_TOKEN', envName: 'GITHUB_MODELS_TOKEN' } })],
+        [generator({ credentials: [{ key: 'ACME_RD_TOKEN', envName: 'GITHUB_MODELS_TOKEN' }] })],
       ),
       requestedModalities: [],
     }).join('\n')
     expect(section).toContain('`GITHUB_MODELS_TOKEN`')
     expect(section).not.toContain('ACME_RD_TOKEN')
+  })
+
+  it('names SEVERAL credentials as parts of one, so a key pair is never tried by halves', () => {
+    // Two credential paragraphs on their own read as two independent keys, and the agent has no
+    // reason not to try the first alone. For a Basic-auth pair that is a 401 it would then report
+    // as a bad key, with the half it never sent invisible in the report.
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+        [
+          generator({
+            credentials: [
+              { key: 'SCENARIO_API_KEY', usage: 'the Basic-auth username half' },
+              { key: 'SCENARIO_API_SECRET', usage: 'the Basic-auth password half' },
+            ],
+          }),
+        ],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(section).toContain('`SCENARIO_API_KEY`, `SCENARIO_API_SECRET`')
+    expect(section).toContain('never call the integration with a subset')
+    // Each half still carries its own usage, which is what tells the agent how to combine them.
+    expect(section).toContain('the Basic-auth username half')
+    expect(section).toContain('the Basic-auth password half')
+  })
+
+  it('binds the "never a subset" rule to the REQUIRED members, so a mixed set states one rule', () => {
+    // The set line and an optional member's own line are about the same call, so a joint rule
+    // stated over ALL of them contradicts the member that says "still call it when this is
+    // missing". An agent holding both resolves them by guessing, and either guess costs the run:
+    // obeying the set line strands a working endpoint, obeying the member line makes the subset
+    // call the pair rule exists to prevent.
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+        [
+          generator({
+            credentials: [
+              { key: 'SCENARIO_API_KEY' },
+              { key: 'SCENARIO_API_SECRET' },
+              { key: 'SCENARIO_ORG_ID', required: false },
+            ],
+          }),
+        ],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    // The joint rule names the two required halves and stops there.
+    expect(section).toContain(
+      '`SCENARIO_API_KEY`, `SCENARIO_API_SECRET` are parts of ONE credential',
+    )
+    expect(section).not.toContain('with a subset of them')
+    // And the optional member is told what calling without it actually means here, which is not
+    // an unauthenticated call: the Basic pair did arrive.
+    expect(section).toContain('`SCENARIO_ORG_ID` is OPTIONAL')
+    expect(section).toContain('using whichever of its other values arrived')
+    expect(section).not.toContain('still call the integration, unauthenticated')
+  })
+
+  it('claims no joint rule where at most ONE credential of several is required', () => {
+    // Nothing to join: a subset rule would invent a constraint the declaration never made, and
+    // the agent would withhold a call the deployment declared as legitimate.
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+        [
+          generator({
+            credentials: [{ key: 'SCENARIO_API_KEY' }, { key: 'SCENARIO_ORG_ID', required: false }],
+          }),
+        ],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(section).toContain('They are not parts of one credential')
+    expect(section).not.toContain('parts of ONE credential')
+  })
+
+  it('leaves a SINGLE credential unqualified, so the ordinary case gains no confusing plural', () => {
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+        [generator({ credentials: [{ key: 'RD_TOKEN' }] })],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(section).not.toContain('separate values')
+    expect(section).toContain('`RD_TOKEN`')
   })
 
   it('tells an OPTIONAL credential’s agent to call the integration anyway when it is unset', () => {
@@ -362,7 +537,7 @@ describe('renderBinaryGeneratorSection', () => {
     const section = renderBinaryGeneratorSection({
       selection: resolveBinaryGeneratorSelection(
         { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
-        [generator({ credential: { key: 'RD_TOKEN', required: false } })],
+        [generator({ credentials: [{ key: 'RD_TOKEN', required: false }] })],
       ),
       requestedModalities: [],
     }).join('\n')
@@ -597,13 +772,13 @@ describe('dispatchBinaryGenerators', () => {
         id: 'retro-diffusion',
         label: 'Retro Diffusion',
         modalities: ['image'],
-        credentialKey: 'RD_TOKEN',
+        credentials: [{ key: 'RD_TOKEN' }],
       },
       {
         id: 'studio-music',
         label: 'Studio Music',
         modalities: ['audio'],
-        credentialKey: 'STUDIO_KEY',
+        credentials: [{ key: 'STUDIO_KEY' }],
       },
     ])
     // An unresolved id contributes nothing here: it is the BRIEF that says what to do about one,
@@ -822,118 +997,169 @@ describe('describeModality', () => {
   })
 })
 
-describe('generation options', () => {
-  // The THIRD refusal axis, and it has the same three outcomes the format one does. That is what
-  // lets it ship without invalidating every integration registered before capabilities existed.
-  it('refuses an option no DECLARING integration supports', () => {
-    const issues = binaryGeneratorSelectionIssues(
-      {
-        storageServiceId: 'store',
-        generatorIds: ['retro-diffusion'],
-        generation: { seed: 7 },
-      },
-      [generator({ capabilities: ['aspect-ratio'] })],
-    )
-    expect(issues).toEqual([{ problem: 'capability_unsupported', capability: 'seed' }])
-  })
-
-  // The motivating case, end to end at the refusal: a step whose deliverable is a 96x96 sprite,
-  // holding an integration that can only be asked for a bucket, is refused BEFORE it spends
-  // anything. Left admitted it succeeds, charges, stores a downscaled render, and every other
-  // check on it passes.
-  it('refuses an exact size against an integration that only takes a shape', () => {
-    const issues = binaryGeneratorSelectionIssues(
-      {
-        storageServiceId: 'store',
-        generatorIds: ['retro-diffusion'],
-        generation: { outputSize: { width: 96, height: 96 } },
-      },
-      [generator({ capabilities: ['aspect-ratio'] })],
-    )
-    expect(issues).toEqual([{ problem: 'capability_unsupported', capability: 'exact-size' }])
-  })
-
-  it('states the exact size to the agent as a requirement, not a preference', () => {
-    const section = renderBinaryGeneratorSection({
-      selection: resolveBinaryGeneratorSelection(
-        { storageServiceId: 'store', generatorIds: ['retro-diffusion'] },
-        [generator({ capabilities: ['exact-size'] })],
-      ),
-      requestedModalities: [],
-      generation: { outputSize: { width: 96, height: 96 } },
-    }).join('\n')
-    expect(section).toContain('EXACTLY 96x96 pixels')
-    // The brief deliberately states NO resize policy: the platform has no view of whether a
-    // downscale is acceptable for a given asset. What it does require is that a substitution is
-    // reported and the delivered size declared, so the loss is never silent.
-    expect(section).toContain('declare the size you actually delivered')
-  })
-
-  it('admits an option nothing has declared either way', () => {
-    const issues = binaryGeneratorSelectionIssues(
-      { storageServiceId: 'store', generatorIds: ['retro-diffusion'], generation: { seed: 7 } },
-      [generator({ capabilities: [] })],
-    )
-    expect(issues).toEqual([])
-  })
-
-  // The requirement is DERIVED, so one reference image never trips the multi-reference rule.
-  it('asks for multi-reference only above one reference image', () => {
-    const config = (count: number) => ({
-      storageServiceId: 'store',
-      generatorIds: ['retro-diffusion'],
-      generation: {
-        referenceImages: Array.from({ length: count }, () => ({
-          location: 'a.png',
-          role: 'style' as const,
-        })),
-      },
+describe('describeCapability', () => {
+  // The sibling of `describeModality`'s retired-value case, and the reason it needs its own test:
+  // both keep a `default` that a passing typecheck can never reach, so the ONLY thing that can
+  // demonstrate the runtime half works is a value the union does not have.
+  it('renders every member of the picklist as its own distinct phrase', () => {
+    const described = binaryGeneratorCapabilitySchema.options.map((capability) => {
+      const phrase = describeCapability(capability)
+      // Handing back the member's own identifier is not a description, and it is what a `Record`
+      // missing an entry degrades to if someone replaces this switch with a lookup and a fallback.
+      expect(phrase).not.toBe(capability)
+      // ...and it must not have fallen through to the unknown-capability describer either, which
+      // would report every current member as one this deployment does not define.
+      expect(phrase).not.toContain('does not define')
+      return phrase
     })
-    const only = [generator({ capabilities: ['reference-image'] })]
-    expect(binaryGeneratorSelectionIssues(config(1), only)).toEqual([])
-    expect(binaryGeneratorSelectionIssues(config(2), only)).toEqual([
-      { problem: 'capability_unsupported', capability: 'multi-reference' },
+    expect(new Set(described).size).toBe(binaryGeneratorCapabilitySchema.options.length)
+  })
+
+  it('names a capability this build does not define rather than rendering it as undefined', () => {
+    // How it gets here: a mothership-mode node resolves its integrations over
+    // `/internal/binary-generators` from a process one build AHEAD of it, so the value is real and
+    // this build has no case for it. It reaches the refusal whose whole job is to say what a
+    // selection cannot do, so falling off the end would splice `undefined` into that sentence.
+    const unknown = 'holographic' as BinaryGeneratorCapability
+    expect(describeCapability(unknown)).toBe(
+      "'holographic' (a capability this deployment does not define)",
+    )
+    expect(
+      describeBinaryGeneratorSelectionIssues('illustrator', [
+        { problem: 'capability_unsupported', capability: unknown },
+      ]),
+    ).toContain("'holographic' (a capability this deployment does not define)")
+  })
+})
+
+describe('binaryGeneratorSelectionIssues: a step with no binary-output config at all', () => {
+  // The three states the initiative doc keeps apart: no declaration, an empty declaration, and an
+  // unknown id. This is the FIRST, and it reaches both entry points as `undefined`: every read
+  // here goes through `config?.`, so dropping one optional chain is not a wrong verdict but a
+  // `TypeError` thrown out of run admission.
+  it('resolves an absent config into an empty selection rather than throwing', () => {
+    expect(resolveBinaryGeneratorSelection(undefined, [generator()])).toEqual({
+      selected: [],
+      unresolvedIds: [],
+    })
+    expect(binaryGeneratorSelectionIssues(undefined, [generator()])).toEqual([])
+  })
+
+  it('imposes no requirement of its own when a config declares only its storage', () => {
+    // An empty declaration is admitted for the same reason by a different path: the fields are
+    // there and empty, so every loop runs zero times.
+    expect(
+      binaryGeneratorSelectionIssues(
+        { storageServiceId: 'asset-store', generatorIds: [], modalities: [], mediaTypes: [] },
+        [generator()],
+      ),
+    ).toEqual([])
+  })
+})
+
+describe('describeBinaryGeneratorSelectionIssues: one issue versus several', () => {
+  it('states a single issue inline, and several as a list', () => {
+    const one = describeBinaryGeneratorSelectionIssues('illustrator', [
+      { problem: 'unknown_generator', generatorId: 'ghost-synth' },
+    ])
+    // Inline, because a one-item bulleted list reads as though something was cut from it.
+    expect(one).toContain(
+      "does not resolve: 'ghost-synth' is not a generative integration this deployment registers",
+    )
+    expect(one).not.toContain('\n  - ')
+
+    const two = describeBinaryGeneratorSelectionIssues('illustrator', [
+      { problem: 'unknown_generator', generatorId: 'ghost-synth' },
+      { problem: 'modality_uncovered', modality: 'audio' },
+    ])
+    expect(two).toContain("\n  - 'ghost-synth' is not a generative integration")
+    expect(two).toContain('\n  - no selected integration produces audio')
+  })
+})
+
+describe('renderBinaryGeneratorSection: a selection that resolved to NOTHING', () => {
+  const unresolvedOnly = {
+    selection: { selected: [], unresolvedIds: ['ghost-synth'] },
+    requestedModalities: [] as BinaryModality[],
+  }
+
+  it('keeps "nothing is configured" apart from "what you selected is not registered"', () => {
+    // Both render an empty integration list, and the two need opposite things from the agent:
+    // generate with what you have, versus report a gap in a step somebody configured. Collapsed,
+    // an agent is told to improvise around an integration an operator meant it to use.
+    const text = renderBinaryGeneratorSection(unresolvedOnly).join('\n')
+    expect(text).toContain('`ghost-synth`')
+    expect(text).toContain('which this deployment does not register')
+    expect(text).not.toContain('No generative integration is configured for this step')
+
+    const nothing = renderBinaryGeneratorSection({
+      selection: { selected: [], unresolvedIds: [] },
+      requestedModalities: [],
+    }).join('\n')
+    expect(nothing).toContain('No generative integration is configured for this step')
+    expect(nothing).not.toContain('does not register')
+  })
+
+  it('does not open the per-integration section when every selected id was unresolved', () => {
+    const text = renderBinaryGeneratorSection(unresolvedOnly).join('\n')
+    expect(text).not.toContain('Generate every artifact through these integrations')
+    expect(text).not.toContain('### `')
+  })
+})
+
+describe('renderBinaryGeneratorSection: an integration with no credential and no contract', () => {
+  const bare = generator({ credentials: [], contracts: [] })
+  const text = renderBinaryGeneratorSection({
+    selection: { selected: [bare], unresolvedIds: [] },
+    requestedModalities: [],
+  }).join('\n')
+
+  // The agent is the only party that can see whether a value arrived, so an absent credential has
+  // to be STATED. Silence reads as "a key is coming", and an agent that decides one is missing
+  // either invents a header or abandons an endpoint that works unauthenticated.
+  it('says no credential is configured rather than omitting the paragraph', () => {
+    expect(text).toContain('No credential is configured for `retro-diffusion`')
+    expect(text).toContain('call it unauthenticated as its contract describes')
+    expect(text).toContain('report a rejection rather than inventing a key')
+    expect(text).not.toContain('is provided to your process as the environment variable')
+  })
+
+  it('says no API contract is registered rather than pointing at a file that is not there', () => {
+    expect(text).toContain('No API contract is registered for `retro-diffusion`')
+    expect(text).toContain('do not invent operations or fields')
+    expect(text).not.toContain('.cat-context/')
+  })
+})
+
+describe('dispatchBinaryGenerators: the credential projection', () => {
+  const project = (credentials: BinaryGeneratorView['credentials']) =>
+    dispatchBinaryGenerators({ selected: [generator({ credentials })], unresolvedIds: [] })[0]
+      ?.credentials
+
+  // A credential has TWO names and only one of them is a boundary (ADR 0041). The executor asks the
+  // resolver for `key` and injects under `envName`, so a projection that dropped `envName` would
+  // deliver the value under a variable the agent is never told to read.
+  it('carries the injection name when it differs from the lookup key', () => {
+    expect(project([{ key: 'RD_TOKEN', envName: 'RETRO_DIFFUSION_API_KEY' }])).toEqual([
+      { key: 'RD_TOKEN', envName: 'RETRO_DIFFUSION_API_KEY' },
     ])
   })
 
-  it('names the unsupported capability in words an operator can act on', () => {
-    const message = describeBinaryGeneratorSelectionIssues('imager', [
-      { problem: 'capability_unsupported', capability: 'mask-edit' },
+  it('OMITS the injection name where the lookup key is also the variable', () => {
+    // `toEqual` cannot tell an absent key from one holding `undefined`, and that difference is the
+    // whole point of the optional field: `{ envName: undefined }` on the wire is a claim that a
+    // second name was declared. So the KEYS are what gets asserted.
+    const [projected] = project([{ key: 'RD_TOKEN' }]) ?? []
+    expect(Object.keys(projected ?? {})).toEqual(['key'])
+  })
+
+  it('carries an OPTIONAL credential as optional, and leaves a required one to the default', () => {
+    // Inverted, this is the failure `required: false` exists to prevent: the executor refusing to
+    // call a working unauthenticated endpoint because an absent value read as mandatory.
+    expect(project([{ key: 'OPENAI_API_KEY', required: false }])).toEqual([
+      { key: 'OPENAI_API_KEY', required: false },
     ])
-    expect(message).toContain('editing only the region an image mask names')
-    expect(message).not.toContain('undefined')
-  })
-
-  it('states the options, who honours them, and what could not be checked', () => {
-    const lines = renderBinaryGeneratorSection({
-      selection: {
-        selected: [
-          generator({ id: 'flux', capabilities: ['seed', 'reference-image'] }),
-          generator({ id: 'nano', capabilities: ['reference-image'] }),
-        ],
-        unresolvedIds: [],
-      },
-      requestedModalities: [],
-      generation: {
-        seed: 7,
-        referenceImages: [{ location: 'refs/hero.png', service: 'asset-store', role: 'subject' }],
-      },
-    }).join('\n')
-    // A reference the platform never fetches has to be NAMED, or the agent generates without it
-    // and reports success.
-    expect(lines).toContain('`refs/hero.png` in the `asset-store` service')
-    // With two producers, "supported" is not the whole answer: an option one of them ignores
-    // leaves nothing on the artifact to say which happened.
-    expect(lines).toContain('a fixed seed: `flux`.')
-    expect(lines).toContain('The others do not declare it')
-  })
-
-  it('states an unverifiable option as unknown rather than as unavailable', () => {
-    const lines = renderBinaryGeneratorSection({
-      selection: { selected: [generator({ capabilities: [] })], unresolvedIds: [] },
-      requestedModalities: [],
-      generation: { tileable: true },
-    }).join('\n')
-    expect(lines).toContain('unknown rather than settled')
+    const [required] = project([{ key: 'RD_TOKEN', required: true }]) ?? []
+    expect(Object.keys(required ?? {})).toEqual(['key'])
   })
 })

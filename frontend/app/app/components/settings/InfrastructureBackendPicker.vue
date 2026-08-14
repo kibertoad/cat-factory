@@ -27,7 +27,7 @@ const { t } = useI18n()
 const auth = useAuthStore()
 const settings = useWorkspaceSettingsStore()
 const providerConnections = useProviderConnectionsStore()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 type BackendKind = ExecutionBackendKind | TestEnvBackendKind
 // A radio item: the built-in facade runtime, one per registered backend kind (built-in +
@@ -223,12 +223,7 @@ async function setDelegate(value: boolean) {
     // Only reachable on the execution axis (`writable` is false for testEnv now).
     await settings.update({ delegateAgentsToRunnerPool: value })
   } catch (e) {
-    toast.add({
-      title: t('settings.infrastructure.updateFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'settings.infrastructure.updateFailed')
   } finally {
     saving.value = false
   }

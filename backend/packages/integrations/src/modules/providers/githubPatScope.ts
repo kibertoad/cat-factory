@@ -1,4 +1,4 @@
-import type { ConnectionWarning } from '@cat-factory/contracts'
+import { GITHUB_PAT_CLASSIC_SCOPES, type ConnectionWarning } from '@cat-factory/contracts'
 
 // What a stored GitHub personal access token can actually REACH, derived from the one probe the
 // connect form already runs (`GET /user`).
@@ -66,6 +66,13 @@ export interface GitHubPatScopeReport {
  * Classify a validated token's reach. `scopeHeader` is the raw `x-oauth-scopes` value (null when
  * GitHub sent none). Never throws — an unrecognisable header degrades to `unknown`, which is
  * REPORTED as its own warning rather than quietly passing as narrow.
+ *
+ * A header that is PRESENT and EMPTY is its own answer and not the same as an absent one: GitHub
+ * sends `x-oauth-scopes` for every classic token, so an empty value states that this classic
+ * token grants nothing. Folding the two together classified a scopeless classic token as
+ * `unknown`, which sent every downstream reader to the fine-grained code path — where a
+ * repository read succeeds for a repository its OWNER can see and the token that cannot push
+ * anywhere at all reads as reaching it.
  */
 export function describeGitHubPatScope(
   token: string,
@@ -75,6 +82,22 @@ export function describeGitHubPatScope(
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
+
+  if (scopes.length === 0 && scopeHeader !== null) {
+    return {
+      kind: 'classic',
+      scopes: [],
+      warnings: [
+        {
+          code: 'github_pat_no_scopes',
+          message:
+            `GitHub reports no scopes for this classic token, so it can read public data and ` +
+            `nothing else. Runs that clone, push or open a pull request with it will fail. Mint ` +
+            `a replacement with '${GITHUB_PAT_CLASSIC_SCOPES.join("', '")}' selected.`,
+        },
+      ],
+    }
+  }
 
   if (scopes.length > 0) {
     const warnings: ConnectionWarning[] = []
@@ -125,7 +148,9 @@ export function describeGitHubPatScope(
 export function summarizeGitHubPatScope(report: GitHubPatScopeReport): string {
   switch (report.kind) {
     case 'classic':
-      return `classic token, scopes: ${report.scopes.join(', ')}`
+      return report.scopes.length > 0
+        ? `classic token, scopes: ${report.scopes.join(', ')}`
+        : 'classic token with no scopes granted'
     case 'fine_grained':
       return 'fine-grained token (limited to the repositories you selected)'
     case 'unknown':

@@ -149,6 +149,7 @@
       "archiveFailed": "Impossible d'archiver le service",
       "restoreFailed": "Impossible de restaurer le service",
       "moveRefused": {
+        "relaxes_run_oversight": "Là où tu déplaces cette tâche, une exécution répond elle-même à ses points de contrôle au lieu de s’arrêter pour une personne, ce que la politique de fusion en vigueur ici ne fait pas. Demande à l’administration de l’espace de travail de la déplacer.",
         "relaxes_role_sandbox": "Les exécutions de cette tâche sont isolées pour votre rôle là où elle se trouve, et la politique de fusion qui la régirait à destination ne l’est pas. Demandez à une administration de l’espace de travail de la déplacer.",
         "relaxes_role_submission_allowlist": "La politique de fusion à destination vous laisserait fusionner des types de changement dont vous êtes privé ici. Demandez à une administration de l’espace de travail de la déplacer.",
         "relaxes_role_class_rule": "La politique de fusion à destination fusionne automatiquement des changements que vous devez relire ici. Demandez à une administration de l’espace de travail de la déplacer."
@@ -659,7 +660,9 @@
         "document_already_linked": "Document déjà joint",
         "dry_run_not_mergeable": "Une exécution à blanc ne peut pas être fusionnée",
         "submission_not_allowed": "Fusion non autorisée pour cette exécution",
-        "webhook_limit_reached": "Limite de webhooks atteinte"
+        "webhook_limit_reached": "Limite de webhooks atteinte",
+        "risk_policy_inherited": "Cette politique appartient au compte",
+        "risk_policy_not_inherited": "Cette politique appartient à ce tableau"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -690,7 +693,7 @@
         "pipeline_schedule_intake_unconfigured": "Une étape de collecte de bogues tire son travail des réglages de collecte de tickets de la planification, et la planification associée n'en a aucun. Configurez d'abord la collecte de tickets sur la planification.",
         "foundational_service_exists": "Un service fondamental portant cet identifiant est déjà enregistré dans cette portée. Ouvrez l’entrée existante et modifiez-la : deux services ne peuvent pas partager un identifiant, car c’est le nom qu’un architecte emploie dans sa conception.",
         "binary_output_service_invalid": "Une étape qui génère des sorties binaires sélectionne un service fondamental que le catalogue de cet espace de travail ne peut pas résoudre : l’identifiant est inconnu, ou le service de stockage choisi ne porte pas la capacité asset-storage. Corrigez la sélection de l’étape ou enregistrez le service, puis relancez.",
-        "binary_output_generator_invalid": "Une étape qui génère des sorties binaires sélectionne une intégration générative que ce déploiement n’enregistre pas, ou aucune des intégrations sélectionnées ne produit un type de contenu que l’étape doit livrer. Les intégrations génératives sont enregistrées dans le code du déploiement, pas dans cet espace de travail : enregistrez-la ou corrigez la sélection de l’étape, puis relancez.",
+        "binary_output_generator_invalid": "Une étape qui génère des sorties binaires sélectionne une intégration générative que ce déploiement n’enregistre pas, aucune des intégrations sélectionnées ne produit un type de contenu que l’étape doit livrer, ou l’une d’elles est générée par une CLI d’agent sur laquelle le modèle de cette étape ne s’exécute pas. Les intégrations génératives sont enregistrées dans le code du déploiement, pas dans cet espace de travail : enregistrez-la, corrigez la sélection de l’étape, ou fixez pour l’étape un modèle exécutant la CLI requise, puis relancez.",
         "foundational_service_not_inherited": "L'écartement s'applique à un service hérité du compte. Cet identifiant est enregistré par ce tableau : il n'y a donc rien à écarter - supprimez plutôt l'entrée propre au tableau.",
         "input_gate_not_parked": "Cette exécution n'attend plus sa vérification d'entrée. Quelqu'un y a peut-être déjà répondu, ou l'exécution a avancé.",
         "input_gate_parked": "Cette exécution est en attente de sa vérification d'entrée, à laquelle la validation ne peut pas répondre. Utilisez l'avis sur l'exécution : corrigez la tâche et relancez la vérification, ou exécutez-la quand même.",
@@ -698,7 +701,9 @@
         "document_already_linked": "Ce document est joint à une autre tâche. Détachez-le d'abord, ou joignez-en une copie distincte.",
         "dry_run_not_mergeable": "Cette pull request provient d'une exécution à blanc et ne peut pas être fusionnée ici. Relancez la tâche en exécution réelle pour produire une pull request que cet espace de travail fusionnera.",
         "submission_not_allowed": "La politique de fusion de cette tâche n'autorise pas le rôle qui a lancé cette exécution à fusionner ce type de changement. Un coéquipier dont le rôle le permet peut le faire, ou un admin peut élargir la politique dans le préréglage de fusion.",
-        "webhook_limit_reached": "Cet espace de travail a déjà enregistré le nombre maximal de webhooks sortants. Supprimez-en un dont vous n’avez plus besoin, puis enregistrez celui-ci à nouveau."
+        "webhook_limit_reached": "Cet espace de travail a déjà enregistré le nombre maximal de webhooks sortants. Supprimez-en un dont vous n’avez plus besoin, puis enregistrez celui-ci à nouveau.",
+        "risk_policy_inherited": "Elle est partagée par tous les tableaux du compte et ne peut donc pas être modifiée ici. Clonez-la vers ce tableau et modifiez la copie.",
+        "risk_policy_not_inherited": "C'est déjà la politique propre à ce tableau : modifiez-la directement, ou supprimez-la si vous ne voulez plus qu'elle soit proposée."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -1409,6 +1414,13 @@
       "awaitingChoice": "En attente d'un choix humain",
       "approvalGate": "Gate d'approbation",
       "companionReview": "Revue du compagnon",
+      "findingSeverity": {
+        "blocker": "À corriger absolument",
+        "major": "À corriger",
+        "minor": "Mineur",
+        "ungraded": "Commentaire",
+        "unrecognized": "Niveau non reconnu ({level})"
+      },
       "correctionIterations": "{count} itération de correction. | {count} itérations de correction.",
       "state": {
         "pending": "En attente",
@@ -1464,6 +1476,10 @@
       "closeEsc": "Fermer (Esc)",
       "companionCapHeading": "{agent} a atteint sa limite de {attempts} tentatives de retravail, toujours en dessous du seuil {threshold}.",
       "companionCapDetail": "Effectuer un tour de retravail automatique supplémentaire, passer à l'étape suivante en acceptant la sortie actuelle, ou arrêter et réinitialiser la tâche pour modifier les entrées et la resoumettre.",
+      "companionCapBlockedHeading": "{agent} a atteint sa limite de {attempts} tentatives de retravail avec {count} point bloquant encore ouvert. | {agent} a atteint sa limite de {attempts} tentatives de retravail avec {count} points bloquants encore ouverts.",
+      "companionCapBlockedDetail": "Poursuivre revient à accepter le travail avec ces points non corrigés, c’est pourquoi la politique de risque de cette exécution ne prendra jamais cette décision à votre place. Effectuer un tour de retravail automatique supplémentaire, poursuivre malgré tout avec la sortie actuelle, ou arrêter et réinitialiser la tâche pour modifier les entrées et la resoumettre.",
+      "companionStalledHeading": "{agent} a arrêté la boucle de retravail après {attempts} tours sur {maxAttempts} : la dernière révision est revenue inchangée et la note n'a pas bougé.",
+      "companionStalledDetail": "Les tours restants n'ont pas été utilisés car ils ne feraient que répéter un verdict déjà rendu. Effectuer tout de même un tour supplémentaire, passer à l'étape suivante en acceptant la sortie actuelle, ou arrêter et réinitialiser la tâche pour modifier les entrées et la resoumettre.",
       "infraAttempts": "Tentatives d'infrastructure",
       "hideInfraAttempts": "Masquer les tentatives d'infrastructure",
       "executionHistory": "Historique d'exécution",
@@ -1512,9 +1528,11 @@
           "transportUnsupported": "n'était pas disponible : la CLI d'agent de cette étape ne peut pas atteindre ce type de serveur.",
           "missingSecret": "n'était pas disponible : un identifiant dont il a besoin n'est pas renseigné pour ce tableau.",
           "reservedSecret": "n'était pas disponible : il demande une variable qui appartient à la configuration de la plateforme, la déclaration doit donc changer.",
+          "unusableSecret": "n’était pas disponible : un identifiant qu’il déclare ne peut pas lui parvenir, le serveur aurait donc tourné sans authentification.",
           "oauthNotConnected": "n'était pas disponible : personne n'a encore connecté ce tableau à ce serveur.",
           "oauthTokenFailed": "n'était pas disponible : la connexion ne produit plus de jeton d'accès.",
           "overBudget": "n'était pas disponible : cet agent déclare plus de serveurs d'outils qu'une exécution n'en transporte.",
+          "consensusPanel": "n'était pas disponible : cette étape s'est exécutée comme un panel de consensus, et un panel n'a pas d'environnement d'agent auquel rattacher un serveur d'outils.",
           "unknown": "n'était pas disponible ({reason})."
         },
         "remedy": {
@@ -1522,9 +1540,11 @@
           "transportUnsupported": "Déclarez un serveur stdio à sa place, ou exécutez l’étape sur une CLI d’agent qui atteint les serveurs HTTP.",
           "missingSecret": "Renseignez l’identifiant qu’il nomme, soit comme variable d’environnement du déploiement, soit dans les identifiants de capacités, depuis la fenêtre Infrastructure.",
           "reservedSecret": "Modifiez la déclaration pour demander une autre clé ; définir cette variable est précisément ce qui n’aidera pas.",
+          "unusableSecret": "Corrigez la déclaration dans le code du déploiement : l’identifiant d’un serveur distant voyage dans un en-tête, celui d’un serveur local est injecté dans son processus.",
           "oauthNotConnected": "Connectez ce tableau à ce serveur depuis la fenêtre Infrastructure. Un déploiement sans ENCRYPTION_KEY n’a nulle part où conserver une autorisation : un opérateur doit d’abord la définir.",
           "oauthTokenFailed": "Reconnectez-le depuis la fenêtre Infrastructure, ou attendez la fin de la panne du fournisseur.",
-          "overBudget": "Réduisez ce que l’agent déclare, pour qu’une exécution puisse tout transporter."
+          "overBudget": "Réduisez ce que l’agent déclare, pour qu’une exécution puisse tout transporter.",
+          "consensusPanel": "Désactivez le consensus pour cette étape si elle a besoin de l'outil, ou acceptez que le panel juge sans lui. Rien n'est à changer côté serveur."
         },
         "observed": {
           "ready": "démarré",
@@ -1840,12 +1860,14 @@
       "dispatch": "Envoi",
       "environment": "Environnement",
       "evicted": "Évincée",
+      "harness_shutdown": "Harness arrêté",
       "timeout": "Délai dépassé",
       "agent": "Agent",
       "job_failed": "Tâche échouée",
       "rejected": "Rejetée",
       "companion_rejected": "Compagnon rejeté",
       "stalled": "Bloquée",
+      "state_unreadable": "État illisible",
       "cancelled": "Annulée",
       "unknown": "Inconnu"
     },
@@ -2296,6 +2318,27 @@
       "createToken": "Créer un jeton GitHub (portées présélectionnées)",
       "thenSet": "Définissez ensuite {envVar} et redémarrez."
     },
+    "githubPatPermissionsBanner": {
+      "title": "Le jeton GitHub ne peut ni pousser ni ouvrir de pull requests",
+      "rejectedTitle": "GitHub a rejeté le jeton utilisé par vos exécutions",
+      "body": "Les exécutions lancées ici s'authentifient avec un jeton d'accès personnel GitHub, et celui-ci n'a pas les autorisations dont le pipeline a besoin. Les étapes d'agent qui poussent une branche, ouvrent une pull request ou fusionnent échoueront.",
+      "rejectedBody": "Le jeton d'accès personnel GitHub avec lequel vos exécutions s'authentifient est invalide, expiré, révoqué ou bloqué par une politique d'organisation. Toute étape qui clone, pousse, ouvre une pull request ou fusionne échouera tant qu'il n'est pas remplacé.",
+      "missing": "Manquant :",
+      "alsoMissing": "Manque également, bien que cela ne bloque que les modifications des fichiers de workflow : {capabilities}.",
+      "capability": {
+        "push": "pousser des commits",
+        "pullRequests": "ouvrir et fusionner des pull requests",
+        "workflows": "modifier les fichiers de workflow"
+      },
+      "sourceDeployment": "C'est le jeton configuré pour ce déploiement ; le remplacer suppose donc de mettre à jour le déploiement.",
+      "sourceInitiator": "C'est votre propre jeton enregistré, que vos exécutions utilisent de préférence aux identifiants du déploiement. Remplacez-le dans vos paramètres personnels.",
+      "createClassic": "Créer un jeton de remplacement (portées présélectionnées)",
+      "createFineGrained": "Créer un jeton de remplacement à portée fine",
+      "classicHint": "Le lien ouvre le formulaire de jeton classique avec les portées requises déjà sélectionnées.",
+      "fineGrainedHint": "Le formulaire à portée fine de GitHub n'accepte aucune présélection : accordez vous-même ces autorisations de dépôt : {permissions}.",
+      "sampled": "Vérifié sur {checked} dépôts utilisés ; {remaining} autres non vérifiés.",
+      "deniedRepos": "Le jeton n'atteint pas ces dépôts utilisés par vos services : {repos}. Régénérez-le en sélectionnant ces dépôts."
+    },
     "providerConfigBanner": {
       "titleMany": "Les fournisseurs nécessitent une configuration",
       "titleOne": {
@@ -2635,6 +2678,51 @@
         "load": "Le journal d’audit n’a pas pu être chargé.",
         "loadMore": "Impossible de charger les entrées plus anciennes"
       }
+    },
+    "accountRiskPolicies": {
+      "intro": "Postures de fusion partagées par tous les tableaux de ce compte. Chaque tableau en hérite en lecture seule et peut en cloner une pour modifier une copie, ou la masquer. La politique qui régit une tâche sans choix se définit par tableau.",
+      "empty": "Aucune politique de risque du compte pour l'instant. Les tableaux utilisent leurs propres bibliothèques jusqu'à ce que vous en ajoutiez une.",
+      "loadFailed": "Impossible de charger les politiques de risque du compte",
+      "confirmDelete": "« {name} » sera retirée de tous les tableaux de ce compte. Les tâches qui l'avaient choisie repasseront à la politique par défaut de leur tableau."
+    }
+  },
+  "mcpAuthorize": {
+    "title": "Connecter {client} ?",
+    "subtitle": "Il se présente comme {client}, et ce déploiement le renverra vers {origin}.",
+    "workspace": {
+      "label": "Tableau sur lequel il pourra agir"
+    },
+    "scopeLabel": "Ce qu'il pourra faire",
+    "scopeHint": "Chaque niveau inclut les précédents.",
+    "scope": {
+      "read": {
+        "label": "Lecture seule",
+        "description": "Voir les services, les tâches, les pipelines et les exécutions."
+      },
+      "write": {
+        "label": "Lecture et écriture",
+        "description": "Et aussi créer et lancer des tâches."
+      },
+      "decide": {
+        "label": "Lecture, écriture et décision",
+        "description": "Et aussi répondre aux questions qu'attend une exécution en pause."
+      },
+      "admin": {
+        "label": "Accès complet",
+        "description": "Et aussi supprimer des tâches et agir sur les notifications, ce qui peut fusionner une pull request."
+      }
+    },
+    "requestedScope": "{client} a demandé {scope}. Ne choisissez cette option ci-dessus que si vous voulez vraiment l'accorder.",
+    "approve": "Connecter",
+    "deny": "Annuler",
+    "back": "Retour à l'application",
+    "noWorkspaces": "Vous n'avez encore aucun tableau auquel le connecter.",
+    "revokeHint": "Cela émet une clé d'API que vous pouvez révoquer à tout moment depuis les réglages du tableau.",
+    "error": {
+      "title": "Cette connexion n'a pas pu être établie",
+      "noRequest": "Cette page a été ouverte sans demande d'autorisation. Lancez la connexion depuis votre hôte MCP.",
+      "expired": "Cette demande d'autorisation est invalide ou a expiré. Relancez la connexion depuis votre hôte MCP.",
+      "failed": "La décision n'a pas pu être enregistrée. Relancez la connexion depuis votre hôte MCP."
     }
   },
   "settings": {
@@ -2715,7 +2803,8 @@
         "team": "Équipe et accès",
         "fragments": "Fragments de contexte",
         "skills": "Compétences",
-        "foundational": "Services fondamentaux"
+        "foundational": "Services fondamentaux",
+        "riskPolicies": "Politiques de risque"
       }
     },
     "providerConnection": {
@@ -2767,13 +2856,27 @@
         "button": "Tester la connexion",
         "ok": "Connexion réussie",
         "failed": "Échec de la connexion",
+        "causes": {
+          "refused": "Rien n'écoute à cette adresse : la connexion a été refusée.",
+          "dns": "Ce nom d'hôte n'est pas résolu depuis ce déploiement.",
+          "timeout": "Aucune réponse n'est arrivée avant l'expiration du test.",
+          "aborted": "La requête a été annulée avant l'arrivée d'une réponse.",
+          "unreachable": "Aucune route réseau ne mène à cette adresse depuis ce déploiement.",
+          "reset": "La connexion a été fermée avant l'arrivée d'une réponse.",
+          "tlsUntrusted": "Ce déploiement ne fait pas confiance au certificat TLS.",
+          "tlsExpired": "Le certificat TLS est en dehors de sa période de validité.",
+          "tlsHostname": "Le certificat TLS n'a pas été émis pour ce nom d'hôte.",
+          "tlsProtocol": "La négociation TLS a échoué.",
+          "invalidHeader": "La requête n'a pas pu être construite : un identifiant contient un caractère qu'un en-tête HTTP ne peut pas transporter."
+        },
         "warningsTitle": "Lacunes dans cette configuration",
         "warnings": {
           "runner_manifest_no_release": "Aucun modèle de release : annuler une exécution ne permet pas de demander au pool d'arrêter son job, donc un job orphelin occupe son runner jusqu'à ce que le pool le récupère de lui-même.",
           "runner_manifest_no_status_path": "Aucun chemin de statut : chaque interrogation est lue comme toujours en cours, donc un job ne peut se terminer qu'en épuisant le budget d'interrogation de l'exécution.",
           "github_pat_classic_account_wide": "Il s'agit d'un jeton classique avec la portée 'repo' : il atteint tous les dépôts sur lesquels vous pouvez pousser, y compris ceux où l'App GitHub de cet espace de travail n'a jamais été installée. Les exécutions que vous lancez l'utilisent de préférence à l'App. Un jeton à portée fine, limité aux dépôts de cette installation, est plus restreint.",
           "github_pat_scopes_beyond_need": "Ce jeton accorde des permissions que cat-factory n'utilise jamais. Les retirer ne coûte rien et réduit ce qu'une exécution compromise pourrait atteindre.",
-          "github_pat_scope_unreadable": "GitHub a accepté ce jeton mais n'a signalé aucune portée, sa portée ne peut donc pas être affichée ici. Vérifiez ce qu'il accorde dans vos paramètres de jetons GitHub."
+          "github_pat_scope_unreadable": "GitHub a accepté ce jeton mais n'a signalé aucune portée, sa portée ne peut donc pas être affichée ici. Vérifiez ce qu'il accorde dans vos paramètres de jetons GitHub.",
+          "github_pat_no_scopes": "GitHub ne signale aucune portée pour ce jeton classique : il ne peut lire que des données publiques. Les exécutions qui clonent, poussent ou ouvrent une pull request avec lui échoueront. Créez-en un nouveau avec 'repo' et 'workflow' sélectionnés."
         }
       },
       "toast": {
@@ -2781,6 +2884,11 @@
         "saveFailed": "Impossible d'enregistrer la connexion",
         "removed": "Connexion supprimée",
         "removeFailed": "Impossible de supprimer la connexion"
+      },
+      "serviceAccountToken": {
+        "whitespace": "Ce jeton contient une espace ou un saut de ligne, ce qu'un jeton porteur ne contient jamais. Il a probablement été copié à cheval sur un retour à la ligne du terminal. Recopiez-le sur une seule ligne ininterrompue.",
+        "base64Encoded": "Ceci ressemble à la valeur base64 du champ .data.token du Secret, et non au jeton lui-même. Décodez-la d'abord, par exemple avec base64 -d.",
+        "notAJwt": "Ceci ne ressemble pas à un jeton de ServiceAccount, qui est un JWT composé de trois parties séparées par des points. Vérifiez que la valeur a été copiée en entier. Ignorez cet avertissement si votre cluster utilise des jetons porteurs statiques."
       },
       "kubernetesEnv": {
         "label": "Nom",
@@ -2804,6 +2912,7 @@
         "urlServiceStatus": "Lire l'état du Service",
         "hostTemplate": "Modèle d'hôte",
         "hostTemplateHelp": "Modèle d'hôte rendu avec les variables de provisionnement telles que branch et pullNumber ; l'hôte obtenu devient l'URL de l'environnement.",
+        "ingressPortHelp": "Port hôte sur lequel le contrôleur ingress répond ; vide signifie le port par défaut du schéma. Il se place ici et non dans le modèle d'hôte, car un hôte Ingress Kubernetes ne peut pas contenir de port.",
         "ingressName": "Nom de l'Ingress",
         "ingressNameHelp": "Ingress dont lire l'hôte du load-balancer. Vide utilise le seul Ingress appliqué.",
         "serviceName": "Nom du Service",
@@ -2960,6 +3069,8 @@
       "default": "Par défaut",
       "makeDefault": "Définir par défaut",
       "deleteDefaultBlocked": "La politique par défaut ne peut pas être supprimée",
+      "deleteUnattendedDefaultBlocked": "La politique par défaut des exécutions sans surveillance ne peut pas être supprimée",
+      "deleteBothDefaultsBlocked": "Cette politique est à la fois le défaut dans l’app et le défaut sans surveillance, elle ne peut donc pas être supprimée",
       "deletePreset": "Supprimer la politique",
       "field": {
         "maxComplexity": "Complexité max %",
@@ -2968,6 +3079,7 @@
         "ciMaxAttempts": "Tentatives de correction CI",
         "maxRequirementIterations": "Itérations d'exigences",
         "maxRequirementConcernAllowed": "Validation auto. des préoccupations jusqu'à",
+        "companionMaxReworks": "Cycles de retravail du compagnon",
         "autoMerge": "Fusion automatique"
       },
       "newPreset": "Nouvelle politique",
@@ -2979,6 +3091,7 @@
         "impact": "Impact%",
         "ciFix": "Corr. CI",
         "reqIter": "Itér. exig.",
+        "companionRework": "Retrav.",
         "autoPass": "Valid. auto. jusqu'à"
       },
       "add": "Ajouter",
@@ -2988,7 +3101,11 @@
         "created": "Politique créée",
         "createFailed": "Impossible de créer la politique",
         "defaultFailed": "Impossible de définir par défaut",
-        "deleteFailed": "Impossible de supprimer la politique"
+        "deleteFailed": "Impossible de supprimer la politique",
+        "cloned": "Politique clonée vers ce tableau",
+        "cloneFailed": "Impossible de cloner la politique",
+        "hideFailed": "Impossible de masquer la politique",
+        "unhideFailed": "Impossible de rétablir la politique"
       },
       "autoMergeOnHint": "Fusionner automatiquement si dans les limites de la politique.",
       "autoMergeOffHint": "Toujours envoyer la PR en revue humaine.",
@@ -3038,6 +3155,44 @@
         "redundant": "Sans effet : cette politique est déjà au moins aussi stricte.",
         "alreadyStrictest": "Déjà toujours relu",
         "baseHint": "Cette politique compare les scores pour chaque catégorie : un rôle ne peut donc durcir une catégorie que jusqu'à la revue obligatoire."
+      },
+      "unattendedDefault": "Par défaut sans surveillance",
+      "makeUnattendedDefault": "Définir par défaut pour les exécutions sans surveillance (API, tracker, planification)",
+      "makeUnattendedDefaultShort": "Défaut sans surveillance",
+      "autonomy": {
+        "label": "Terminer les exécutions sans surveillance sans attendre une personne",
+        "unattendedHint": "Quand une boucle automatique abandonne (un companion à sa limite de reprises, une revue à sa limite de passes, des suivis non triés), l'exécution continue en le consignant au lieu de s'arrêter. Les points de contrôle demandés par le pipeline, comme le test humain, la revue et l'approbation, arrêtent toujours l'exécution.",
+        "attendedHint": "Quand une boucle automatique abandonne, l'exécution s'arrête et attend un choix. Adapté à un tableau que quelqu'un surveille ; une exécution lancée via l'API attend indéfiniment."
+      },
+      "autoAnswer": {
+        "label": "Confiance minimale pour une réponse automatique (%)",
+        "hint": "Le degré de certitude que le Requirement Writer doit atteindre pour qu'un run sans surveillance conserve sa réponse suggérée au lieu de s'arrêter. Seuls les constats jugés traitables sans product owner sont éligibles."
+      },
+      "tier": {
+        "account": "Du compte",
+        "accountHint": "Définie pour tout le compte. Chaque tableau en hérite ; seule une administration du compte peut la modifier."
+      },
+      "own": {
+        "heading": "Politiques de ce tableau"
+      },
+      "inherited": {
+        "heading": "Héritées du compte",
+        "hint": "Partagées par tous les tableaux de ce compte. Clonez-en une pour en modifier une copie ici, ou masquez-la afin qu'aucune tâche de ce tableau ne puisse la choisir.",
+        "clone": "Cloner vers le tableau",
+        "cloneHint": "Copier cette politique dans le tableau, où vous pourrez modifier ses limites.",
+        "copyName": "{name} (copie)",
+        "hide": "Masquer",
+        "hideHint": "Ne plus proposer cette politique sur ce tableau. Vous pourrez la rétablir plus tard."
+      },
+      "hidden": {
+        "heading": "Politiques du compte masquées",
+        "restore": "Rétablir",
+        "withdrawn": "Plus définie par le compte",
+        "loadFailed": "Cette liste n'a pas pu être chargée : une politique peut donc être masquée sans figurer ici."
+      },
+      "confirmHide": {
+        "title": "Masquer cette politique ?",
+        "body": "« {name} » ne sera plus proposée sur ce tableau et les tâches qui l'avaient choisie repasseront à la politique par défaut du tableau. Vous pourrez la rétablir plus tard."
       }
     },
     "observabilityConnection": {
@@ -3153,6 +3308,7 @@
         "ok": "A répondu",
         "credentialsMissing": "Aucun identifiant",
         "credentialRefused": "Identifiant refusé",
+        "credentialUnusable": "Identifiant non transmissible",
         "oauthNotConnected": "Non connecté",
         "oauthTokenFailed": "La connexion ne fonctionne plus",
         "unreachable": "Aucune réponse",
@@ -3166,6 +3322,7 @@
       "allowedToolsUnchecked": "La liste d’outils était trop longue pour être lue en entier, les noms restreints n’ont donc pas pu être vérifiés.",
       "unresolvedCredentials": "Rien n’a été résolu pour {keys}. Renseignez la valeur ci-dessous, ou définissez-la dans l’environnement du déploiement.",
       "refusedCredentials": "{keys} désigne une variable qui appartient à la configuration de la plateforme elle-même : elle n’est jamais résolue. Modifiez la déclaration dans le code du déploiement.",
+      "unusableCredentials": "{keys} ne désigne aucun en-tête : un serveur HTTP ne le reçoit donc jamais. Ajoutez dans le code du déploiement l’en-tête avec lequel le serveur s’authentifie.",
       "httpStatus": "HTTP {status}",
       "showDetails": "Afficher les détails",
       "hideDetails": "Masquer les détails",
@@ -3228,7 +3385,9 @@
         "createdBy": "créé par {user}",
         "createdByYou": "vous",
         "createdByKey": "la clé d’API {id}",
-        "revoke": "Révoquer le jeton"
+        "revoke": "Révoquer le jeton",
+        "boundToYou": "Votre abonnement",
+        "boundToOther": "Abonnement de {user}"
       },
       "add": {
         "heading": "Créer un jeton",
@@ -3237,7 +3396,12 @@
         "labelPlaceholder": "ex. pipeline CI",
         "scope": "Portée",
         "scopeHelp": "Ce que ce jeton peut faire : lecture seule, lecture et écriture, ou accès complet (qui autorise aussi la suppression).",
-        "create": "Créer le jeton"
+        "create": "Créer le jeton",
+        "identity": "S'exécute en tant que",
+        "identitySystem": "Cet espace de travail (jeton système)",
+        "identitySelf": "Moi (jeton personnel)",
+        "identitySystemHelp": "Les exécutions lancées avec ce jeton appartiennent à l'espace de travail et ne sont attribuées à personne. Il ne peut utiliser l'abonnement personnel Claude / Codex / GLM de qui que ce soit : une tâche fixée sur un tel modèle est refusée plutôt que facturée à quelqu'un d'absent. À utiliser pour la CI et les intégrations partagées.",
+        "identitySelfHelp": "Les exécutions lancées avec ce jeton vous sont attribuées et peuvent utiliser votre abonnement personnel Claude / Codex / GLM. Chaque appel doit aussi envoyer votre mot de passe personnel dans l'en-tête X-Personal-Password ; il n'est jamais conservé. À utiliser pour vos propres exécutions headless."
       },
       "scopes": {
         "read": "Lecture seule",
@@ -3577,6 +3741,15 @@
       "reachable": "Joignable · aucun modèle | Joignable · {count} modèle | Joignable · {count} modèles",
       "noModels": "Aucun modèle signalé.",
       "enableModels": "Activer les modèles",
+      "imageInputHint": "Certains modèles locaux lisent les captures d'écran et les rendus de design. Les familles connues sont reconnues automatiquement, et l'option Non défini de chaque modèle indique ce qui s'appliquera ; définissez-la vous-même pour une version que la plateforme ne peut pas connaître, comme une quantification texte seulement ou un modèle affiné.",
+      "imageInputLabel": "Prise en charge des images pour {model}",
+      "imageInput": {
+        "autoYes": "Non défini : {family} lit les images",
+        "autoNo": "Non défini : {family} est texte seulement",
+        "unknown": "Images : non défini",
+        "yes": "Lit les images",
+        "no": "Texte seulement"
+      },
       "toast": {
         "saved": "{name} enregistré",
         "saveFailed": "Impossible d'enregistrer le runner",
@@ -3588,6 +3761,7 @@
         "body": "\"{name}\" sera supprimé. Cette action est irréversible."
       },
       "blocked": "L'URL de ce runner n'est pas autorisée sur ce déploiement, ses modèles sont donc masqués dans le sélecteur.",
+      "modelsDiscarded": "Certains modèles activés de ce runner n'ont pas pu être lus et ont été supprimés. Sélectionnez à nouveau ceux que vous voulez, puis enregistrez.",
       "urlReason": {
         "invalid_url": "Cette URL n'est pas valide.",
         "scheme_not_allowed": "L'URL d'un runner doit commencer par http:// ou https://.",
@@ -3653,6 +3827,7 @@
         "urlHttpRouteStatus": "Statut de l'HTTPRoute (Gateway API)",
         "hostTemplate": "Modèle d'hôte",
         "hostTemplateHelp": "Le modèle d'hôte, rendu avec les variables de provisionnement (p. ex. branch, sha).",
+        "ingressPortHelp": "Port hôte sur lequel le contrôleur ingress répond ; vide signifie le port par défaut du schéma. Il se place ici et non dans le modèle d'hôte, car un hôte Ingress Kubernetes ne peut pas contenir de port.",
         "ingressName": "Nom de l'Ingress",
         "serviceName": "Nom du Service",
         "port": "Port",
@@ -3761,7 +3936,8 @@
         "qwen": "Qwen (Alibaba)",
         "kimi": "Kimi (Moonshot)",
         "deepseek": "DeepSeek",
-        "glm": "GLM (Z.ai)"
+        "glm": "GLM (Z.ai)",
+        "grok": "Grok (xAI)"
       },
       "regions": {
         "usa": "États-Unis",
@@ -4037,6 +4213,11 @@
           "step1": "Ouvrez platform.moonshot.ai → API Keys et créez une clé.",
           "step2": "Copiez la clé ; elle authentifie l'endpoint Moonshot compatible OpenAI."
         },
+        "xai": {
+          "label": "xAI (API Grok)",
+          "step1": "Ouvrez console.x.ai → API Keys et créez une clé.",
+          "step2": "Copiez la clé ; elle authentifie l'endpoint xAI compatible OpenAI."
+        },
         "openrouter": {
           "label": "OpenRouter",
           "step1": "Ouvrez openrouter.ai → Keys et créez une clé d'API.",
@@ -4207,6 +4388,9 @@
       "monorepoBrowseHint": "Parcourez le dépôt et sélectionnez les répertoires des services que vous voulez ajouter, depuis n'importe quel dossier. Les agents travaillant sur un service s'exécutent dans son sous-répertoire.",
       "selectedServices": "Services sélectionnés",
       "noServicesSelected": "Aucun service sélectionné pour le moment. Choisissez des répertoires ci-dessus.",
+      "frontendLabel": "Application frontend (facultatif)",
+      "frontendHint": "Désignez l'un des répertoires sélectionnés comme le frontend des autres. Il est ajouté en tant qu'application frontend rattachée à ce sous-répertoire et relié à chaque service backend ajouté à ses côtés. Nommez ensuite chaque variable d'environnement d'URL backend dans l'inspecteur du frontend.",
+      "frontendNone": "Aucun : toutes les sélections sont des services backend",
       "addServices": "Ajouter {count} service | Ajouter {count} services",
       "removeService": "Retirer {directory}",
       "addedConfigure": "{title} ajouté, configurez-le",
@@ -4220,7 +4404,9 @@
         "addedDescription": "{title} est sur le tableau, configurez-le ci-dessous.",
         "addFailedTitle": "Impossible d'ajouter le service",
         "servicesAddedTitle": "Services ajoutés",
-        "servicesAddedDescription": "{count} service ajouté au tableau. | {count} services ajoutés au tableau."
+        "servicesAddedDescription": "{count} service ajouté au tableau. | {count} services ajoutés au tableau.",
+        "frontendLinkedNote": "{directory} a été ajouté comme frontend et relié aux autres. Nommez ses variables d'environnement d'URL backend dans son inspecteur.",
+        "frontendWiringFailedNote": "Les réglages du frontend n'ont pas été enregistrés. Ouvrez l'inspecteur de chaque application frontend pour définir son sous-répertoire et ses services backend."
       },
       "repoType": "Type de dépôt",
       "repoTypeHint": "Ce qu'est ce dépôt : un service backend, une application frontend, une bibliothèque partagée ou un dépôt de documentation (documents/spikes uniquement)."
@@ -4635,7 +4821,9 @@
     "tracker": "Gestionnaire de tickets",
     "board": "Tableau",
     "pickBoard": "Choisir un tableau",
-    "boardPlaceholder": "Clé de projet, id d'équipe ou owner/repo",
+    "boardPlaceholder": "Clé de projet ou id d'équipe",
+    "boardFromService": "Le dépôt lié à ce service",
+    "boardNeedsRepo": "Aucun dépôt n'est lié à ce service : il n'y a donc pas de tickets à explorer. Liez-en un depuis le panneau du service.",
     "boardsFailed": "Impossible de charger les tableaux : {reason}",
     "issueType": "Type de ticket",
     "issueTypeHelp": "Par défaut bug. Ignoré par les gestionnaires sans types de tickets.",
@@ -4644,6 +4832,8 @@
     "labelsHelp": "Séparées par des virgules. Toutes doivent être présentes.",
     "adoptInto": "Ajouter le bug retenu à",
     "adoptingInto": "Le bug retenu est ajouté à {container}",
+    "huntIn": "Service à explorer",
+    "huntingIn": "Exploration du dépôt lié à {container} ; le bug retenu y est ajouté.",
     "run": "Chasser",
     "running": "Lecture du tableau et évaluation des résultats…",
     "huntFailed": "La chasse a échoué",
@@ -4656,6 +4846,7 @@
     "noCandidates": "Aucun bug ouvert et non assigné ne correspond sur ce tableau.",
     "ratings": "Impact {impact}/5, complexité {complexity}/5, confiance {confidence}",
     "viaModel": "Évalué par {model}.",
+    "scannedBoard": "{board} exploré.",
     "truncated": "Seuls les {count} premiers bugs correspondants ont été parcourus ; ce tableau en contient davantage.",
     "comments": "{count} commentaire | {count} commentaires",
     "confidence": {
@@ -4669,6 +4860,10 @@
       "failed": "L'évaluation n'a pas pu aboutir, ils sont donc non évalués.",
       "over_budget": "Cet espace de travail a dépassé son budget de dépenses, ces bogues n'ont donc pas été évalués.",
       "empty": "Rien à évaluer."
+    },
+    "refusal": {
+      "boardFromService": "Ce traqueur analyse le dépôt auquel le service choisi est lié : il n'a donc pas de tableau propre.",
+      "missingBoard": "Choisissez le tableau sur lequel chercher."
     }
   },
   "pipeline": {
@@ -4739,6 +4934,7 @@
       "purposeUnrecognized": "Non reconnu ({purpose})",
       "purposeOption": {
         "build": "Développement",
+        "bugfix": "Correction de bug",
         "document": "Documentation",
         "review": "Revue",
         "research": "Recherche",
@@ -4807,7 +5003,7 @@
       "skillNoneAvailable": "Aucune compétence disponible. Reliez une source de compétences dans les paramètres du compte.",
       "skillMissing": "Cette compétence n'est plus dans le catalogue ; choisissez-en une autre.",
       "skillNeedsPick": "Une étape Skill a besoin d'une compétence sélectionnée avant de pouvoir enregistrer.",
-      "purposeStepsConflict": "Cet objectif n'écrit aucun code et n'exécute aucun test, mais le pipeline contient encore des étapes d'implémentation ou de test. Supprimez-les ou définissez l'objectif sur Développement.",
+      "purposeStepsConflict": "Cet objectif n'écrit aucun code et n'exécute aucun test, mais le pipeline contient encore des étapes d'implémentation ou de test. Supprimez-les ou choisissez un objectif qui livre du code (Développement ou Correction de bug).",
       "promptEditTooltip": "Modifier l'invite système de cet agent",
       "promptEditedTooltip": "L'invite système de cet agent est modifiée pour cet espace de travail",
       "consensusGroups": "Groupes de consensus",
@@ -4846,6 +5042,8 @@
       "binaryOutputMediaTypeUnusable": "Non enregistré, car ce ne sont pas des types de média : {entries}. Écrivez chacun sous la forme type/subtype.",
       "binaryOutputGeneratorMissing": "Ce déploiement n'enregistre pas ces intégrations génératives : {ids}. Elles s'enregistrent dans le code du déploiement, pas dans cet espace de travail.",
       "binaryOutputGeneratorOverlap": "Plusieurs intégrations sélectionnées produisent le même type de contenu ({overlaps}). Ce n’est pas un problème en soi, mais le type de contenu ne décide plus laquelle l’agent appelle : indiquez dans le prompt de cette étape laquelle utiliser et pour quoi, sinon il en choisira une et s’y tiendra.",
+      "binaryOutputGeneratorVia": "via {harness}",
+      "binaryOutputGeneratorHarness": "Ces intégrations sont générées par une CLI d’agent et non par une API ({generators}) : cette étape ne fonctionne donc qu’avec un modèle exécuté sur cette CLI. Une exécution avec un autre modèle est refusée au démarrage.",
       "binaryOutputModalityUncovered": "Aucune intégration sélectionnée ne produit {modalities}, que cette étape doit livrer.",
       "binaryOutputModalityRetired": "{modality} (n'est plus proposé — resélectionnez les types de contenu de cette étape)",
       "binaryOutputModality": {
@@ -4873,6 +5071,9 @@
       "binaryCapabilityUnknown": "{capability} (une capacité que ce déploiement ne définit pas)",
       "binaryCapabilityUnsupported": "Aucune intégration sélectionnée ne prend en charge {capabilities}, que les options de génération de cette étape demandent. Retirez l’option ou sélectionnez une intégration qui déclare la capacité.",
       "binaryCapabilityUnverifiable": "Aucune intégration sélectionnée ne déclare prendre en charge {capabilities}, mais l’une d’elles ne déclare aucune capacité, la vérification est donc impossible. L’étape démarre quand même ; confirmez-le dans l’API de l’intégration.",
+      "binaryOptionValueUnaccepted": "Aucune intégration sélectionnée n'accepte {option} de {requested}. Ensemble, elles acceptent : {accepted}. Demandez l'une de ces valeurs ou sélectionnez une intégration capable de produire celle-ci.",
+      "binaryOptionValuePartial": "{generators} n'accepte pas {option} de {requested}, contrairement à une autre intégration sélectionnée. L'étape démarre quand même : n'envoyez cette option qu'aux intégrations qui l'acceptent, ou retirez les autres.",
+      "binaryOptionValueUnverifiable": "Une intégration sélectionnée indique les valeurs qu'elle accepte et refuse ce que demande cette étape ({options}), tandis qu'une autre n'en indique aucune : impossible de trancher. L'étape démarre quand même, et seule une partie de vos intégrations la servira.",
       "binaryReferenceImages": "Images de référence",
       "binaryReferenceImagesPlaceholder": "rôle{'|'}emplacement{'|'}service, une par ligne",
       "binaryReferenceImagesUnusable": "Non enregistrées comme référence : {entries}. Chaque ligne doit être rôle{'|'}emplacement, le rôle étant style, subject, composition ou base.",
@@ -4899,7 +5100,17 @@
       "binaryComparison": "Comparer les candidats avant livraison",
       "binaryPerGenerator": "Candidats par intégration",
       "binaryMultiSelect": "Autoriser à en conserver plusieurs",
-      "binaryComparisonUnreachable": "Cette étape ne peut produire qu’un candidat par sujet : il n’y aurait rien à comparer et le seul serait conservé sans être présenté. Sélectionnez une deuxième intégration ou augmentez le nombre de candidats par intégration."
+      "binaryComparisonUnreachable": "Cette étape ne peut produire qu’un candidat par sujet : il n’y aurait rien à comparer et le seul serait conservé sans être présenté. Sélectionnez une deuxième intégration ou augmentez le nombre de candidats par intégration.",
+      "scopeDefault": {
+        "interactive": "Défaut dans l'application",
+        "interactiveHint": "Ce qu'exécute une tâche lancée depuis le tableau lorsqu'elle ne fixe aucun pipeline.",
+        "unattended": "Défaut sans surveillance",
+        "unattendedHint": "Ce qu'exécute un run que personne ne surveille (API, ticket, planification) quand la tâche ne fixe aucun pipeline.",
+        "claimInteractive": "Définir comme défaut dans l'application",
+        "releaseInteractive": "Ne plus être le défaut dans l'application",
+        "claimUnattended": "Définir comme défaut sans surveillance",
+        "releaseUnattended": "Ne plus être le défaut sans surveillance"
+      }
     },
     "progress": {
       "status": {
@@ -5347,6 +5558,17 @@
       "reReview": "Impossible de relire les exigences",
       "proceed": "Impossible de continuer",
       "resolveReview": "Impossible de résoudre la revue"
+    },
+    "findingClass": {
+      "judgement": "Votre décision requise",
+      "judgementHint": "Un choix métier, produit ou de domaine, ou une information que le relecteur n'avait pas. Vous seul pouvez trancher.",
+      "practice": "Traitable par la pratique",
+      "practiceHint": "Tranché par la pratique établie, la stack déjà utilisée ou le contexte fourni. Prérempli : gardez-le ou modifiez-le."
+    },
+    "confidence": {
+      "high": "Confiance élevée",
+      "medium": "Confiance moyenne",
+      "low": "Confiance faible"
     }
   },
   "clarity": {
@@ -5920,6 +6142,31 @@
       "gap": {
         "no_visual_step": "Rien dans ce pipeline ne capture l'interface, il n'y a donc rien à regarder.",
         "none_captured": "L'interface devait être capturée, mais aucune vue ne l'a été."
+      }
+    },
+    "environments": {
+      "title": "Environnement en ligne",
+      "open": "Ouvrir l'environnement en ligne",
+      "retained": "Cet environnement est censé survivre à l’exécution.",
+      "expires": "Expire le {date}",
+      "expired": "Expiré le {date}",
+      "state": {
+        "live": "En ligne",
+        "provisioning": "En cours de création",
+        "failed": "Jamais démarré",
+        "reclaiming": "En cours de suppression",
+        "reclaimed": "Supprimé",
+        "expired": "Expiré"
+      },
+      "origin": {
+        "deployer": "Créé par cette exécution",
+        "human_test": "Créé pour le test manuel",
+        "projected": "L'exécution est toujours en cours, cela peut encore changer"
+      },
+      "gap": {
+        "no_environment_step": "Rien dans ce pipeline ne crée d'environnement, il n'y a donc rien à ouvrir.",
+        "not_provisioned": "Un environnement devait être créé et aucun n'a encore été enregistré.",
+        "infraless": "Ce service ne déclare aucun environnement propre, rien n'a donc été créé."
       }
     },
     "checks": {
@@ -6641,6 +6888,7 @@
       "workspaceDefaultCaption": "Appliquée parce que cette tâche ne choisit aucune politique.",
       "noneHint": "Aucune politique de risque configurée. Chaque pull request attend une revue humaine.",
       "refused": {
+        "relaxes_run_oversight": "Indisponible pour ton rôle : cette politique laisse une exécution répondre elle-même à ses points de contrôle au lieu de s’arrêter pour une personne. L’administration de l’espace de travail peut le changer.",
         "relaxes_role_sandbox": "Indisponible pour votre rôle : les exécutions de cette tâche sont isolées, et cette politique les laisserait fusionner. Un administrateur de l’espace de travail peut le changer.",
         "relaxes_role_submission_allowlist": "Indisponible pour votre rôle : cette politique vous laisserait fusionner des types de changement dont cette tâche vous prive. Un administrateur de l’espace de travail peut le changer.",
         "relaxes_role_class_rule": "Indisponible pour votre rôle : cette politique fusionne automatiquement des changements que vous devez relire sur cette tâche. Un administrateur de l’espace de travail peut le changer."

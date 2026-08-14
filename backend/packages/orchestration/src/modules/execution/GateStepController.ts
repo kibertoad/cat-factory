@@ -15,6 +15,7 @@ import type { AgentRunResult } from '@cat-factory/kernel'
 import type { AdvanceResult } from './advance.js'
 import type { GateHelperDispatcher } from './GateHelperDispatcher.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import type { RunPolicyScope } from './policy-types.js'
 import type { SettledGate } from '../observability/GateOutcomeRecorder.js'
 
 // ---------------------------------------------------------------------------
@@ -43,6 +44,7 @@ export interface GateStepControllerDeps {
   resolveRiskPolicy: (
     workspaceId: string,
     block: Block,
+    run: RunPolicyScope,
   ) => Promise<
     Pick<RiskPolicy, 'ciMaxAttempts' | 'releaseMaxAttempts'> & {
       releaseWatchWindowMinutes: number
@@ -110,7 +112,7 @@ export class GateStepController {
     // Initialise the gate's state on first entry, resolving the attempt budget from the
     // task's merge preset (stable across polls once set).
     if (!step.gate) {
-      const preset = await this.deps.resolveRiskPolicy(workspaceId, block)
+      const preset = await this.deps.resolveRiskPolicy(workspaceId, block, instance)
       // The step's OWN parameters for this gate, validated against the gate's declared fields at
       // pipeline save and again at run admission. Copied onto the gate state once, alongside the
       // budget it may itself override, so every subsequent poll reads one settled snapshot rather

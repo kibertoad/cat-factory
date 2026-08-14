@@ -15,9 +15,14 @@ import type {
   ResolveRepoOrigin,
   ResolveRepoTarget,
 } from '../agents/ContainerAgentExecutor.js'
-import type { ResolveRepoTargets } from '../agents/resolveRepoTarget.js'
+import type { RepoCheckout, ResolveRepoTargets } from '../agents/resolveRepoTarget.js'
 import { githubRepoOrigin } from '../agents/containerAgentBody.js'
 import { splitRepo } from './repoFullName.js'
+
+/** The `owner/name` key a recorded pull request's repo is matched on. */
+function repoKey(repo: RepoTarget): string {
+  return `${repo.owner}/${repo.name}`
+}
 
 export interface GitHubPrReportPublisherDependencies {
   /**
@@ -46,9 +51,9 @@ export interface GitHubPrReportPublisherDependencies {
    */
   resolveRepoOrigin?: ResolveRepoOrigin
   /**
-   * Optional logger for the one best-effort path here: PEER target resolution, which is
-   * swallowed so a broken peer linkage cannot cost the own-service report. Wire it, or that
-   * swallow leaves no trace and the peers simply stop getting reports.
+   * Optional logger for the one best-effort path here: the multi-repo repo resolution, which is
+   * swallowed so a broken involved-service linkage cannot cost the own-service report. Wire it,
+   * or that swallow leaves no trace and the peers simply stop getting reports.
    */
   logger?: Logger
 }
@@ -105,8 +110,8 @@ export class GitHubPrReportPublisher implements PrVerificationReportPublisher {
    *
    * ONE block read and ONE repo resolution for the whole set: the own-service target is
    * resolved first (it is needed regardless, and lets the multi-repo resolver skip re-walking
-   * the block's ancestry), then a single `resolveRepoTargets` call covers every peer. Resolving
-   * per recorded peer PR would be the N+1 this codebase bans.
+   * the block's ancestry), then a single `resolveRepoTargets` call covers every repo the run
+   * touched. Resolving per recorded peer PR would be the N+1 this codebase bans.
    */
   async resolveTargets(workspaceId: string, blockId: string): Promise<PrReportTarget[]> {
     const block = await this.deps.blockRepository.get(workspaceId, blockId)
@@ -118,33 +123,79 @@ export class GitHubPrReportPublisher implements PrVerificationReportPublisher {
     const prs = allPullRequests(block)
     if (prs.length === 0) return []
 
-    const targets: PrReportTarget[] = []
-    // The own-service PR FIRST when it exists: the engine reads the peer reports' back-pointer
-    // off the head of this list rather than re-resolving it. Matched on an ABSENT `repo` rather
-    // than a falsy one, and only when the block records an own PR at all: a peer whose recorded
-    // repo is the empty string is unaddressable, not the own-service one.
+    // The own-service PR is matched on an ABSENT `repo` rather than a falsy one, and only when
+    // the block records an own PR at all: a peer whose recorded repo is the empty string is
+    // unaddressable, not the own-service one.
     const own = block.pullRequest ? prs.find((pr) => pr.repo === undefined) : undefined
+    const peers = prs.filter((pr) => pr.repo !== undefined)
     const ownRepo = own ? await this.deps.resolveRepoTarget(workspaceId, blockId) : null
-    if (own?.ref.number != null && ownRepo) {
-      targets.push(this.describe(ownRepo, own.ref.number, { role: 'own', url: own.ref.url }))
-    }
+
     // BEST-EFFORT, and deliberately so: the multi-repo resolver THROWS on a workspace with no
     // installation or an involved frame that lost its repo linkage, and letting that propagate
-    // would mean one broken peer linkage costs the OWN-SERVICE report too — the one a reviewer is
+    // would mean one broken linkage costs the OWN-SERVICE report too, the one a reviewer is
     // most likely reading. The same "a failure on one target does not cost the others" rule the
     // engine applies when publishing, applied one step earlier where the targets are found.
-    const peers = await runBestEffort(
+    const checkouts = await runBestEffort(
       this.deps.logger ?? noopLogger,
-      'pr-report peer target resolution',
-      () => this.peerTargets(workspaceId, blockId, block, prs, ownRepo),
+      'pr-report repo resolution',
+      () => this.resolveCheckouts(workspaceId, blockId, block, peers, ownRepo),
       { workspaceId, blockId },
     )
-    targets.push(...(peers ?? []))
+
+    const targets: PrReportTarget[] = []
+    // The own-service PR FIRST when it exists: the engine reads the peer reports' back-pointer
+    // off the head of this list rather than re-resolving it.
+    if (own?.ref.number != null && ownRepo) {
+      targets.push(
+        this.describe(ownRepo, own.ref.number, {
+          role: 'own',
+          // The involved frames co-located in the PRIMARY repo. They have no peer checkout and
+          // no PR of their own: their changes ride this one, so this report is the only place
+          // they are reported at all, and naming only the peers left a co-located service
+          // looking like one the run opened no pull request for.
+          frameIds: checkouts?.get(repoKey(ownRepo))?.involved.map((i) => i.frameId),
+          url: own.ref.url,
+        }),
+      )
+    }
+    targets.push(...(checkouts ? this.peerTargets(peers, checkouts) : []))
     return targets
   }
 
   /**
-   * The run's PEER pull requests, addressed through the multi-repo repo resolution.
+   * Every repo this run touched, indexed by `owner/name`: the primary plus one checkout per
+   * involved service frame, deduped by repo (a monorepo hosting several of them is ONE entry
+   * carrying all their frames). Undefined when there is nothing to resolve, or when the
+   * multi-repo resolver is not wired.
+   *
+   * Resolved even when the run opened no peer PR, because the co-located case has none to open:
+   * an involved service sharing the primary's monorepo rides the own-service pull request, and
+   * this is what tells the own target which frames those are.
+   */
+  private async resolveCheckouts(
+    workspaceId: string,
+    blockId: string,
+    block: Block,
+    peers: readonly RecordedPullRequest[],
+    ownRepo: RepoTarget | null,
+  ): Promise<Map<string, RepoCheckout> | undefined> {
+    const resolveAll = this.deps.resolveRepoTargets
+    if (!resolveAll) return undefined
+
+    // The frames to resolve: the task's declared involved services, plus any frame a recorded
+    // peer PR attributes itself to. The union rather than either alone, because the declared
+    // list is what the run fanned out over while the recorded PRs are what it actually opened,
+    // and a peer whose frame left the task's involved list still has an open PR owed a report.
+    const frameIds = [
+      ...new Set([...(block.involvedServiceIds ?? []), ...peers.flatMap((p) => p.frameIds ?? [])]),
+    ]
+    if (frameIds.length === 0) return undefined
+    const resolved = await resolveAll(workspaceId, blockId, frameIds, ownRepo ?? undefined)
+    return new Map(resolved.checkouts.map((c) => [repoKey(c.target), c]))
+  }
+
+  /**
+   * The run's PEER pull requests, addressed through the resolved checkout set.
    *
    * A recorded peer PR is only targetable when two things line up: it carries a `number` (the
    * unit the description write addresses, absent on a ref that was only ever a URL) and its
@@ -154,40 +205,23 @@ export class GitHubPrReportPublisher implements PrVerificationReportPublisher {
    * is harness-reported, and writing a report onto a pull request we cannot confirm the identity
    * of is the one failure mode worse than not writing it.
    */
-  private async peerTargets(
-    workspaceId: string,
-    blockId: string,
-    block: Block,
-    prs: readonly RecordedPullRequest[],
-    ownRepo: RepoTarget | null,
-  ): Promise<PrReportTarget[]> {
-    // Every entry that names a repo: the complement of the own-service one above.
-    const peers = prs.filter((pr) => pr.repo !== undefined)
-    const resolveAll = this.deps.resolveRepoTargets
-    if (!peers.length || !resolveAll) return []
-
-    // The frames to resolve: the task's declared involved services, plus any frame a recorded
-    // peer PR attributes itself to. The union rather than either alone, because the declared
-    // list is what the run fanned out over while the recorded PRs are what it actually opened,
-    // and a peer whose frame left the task's involved list still has an open PR owed a report.
-    const frameIds = [
-      ...new Set([
-        ...(block.involvedServiceIds ?? []),
-        ...peers.map((p) => p.frameId).filter((id): id is string => !!id),
-      ]),
-    ]
-    const resolved = await resolveAll(workspaceId, blockId, frameIds, ownRepo ?? undefined)
-    const byRepo = new Map(
-      resolved.checkouts.map((c) => [`${c.target.owner}/${c.target.name}`, c.target]),
-    )
-
+  private peerTargets(
+    peers: readonly RecordedPullRequest[],
+    checkouts: Map<string, RepoCheckout>,
+  ): PrReportTarget[] {
     const out: PrReportTarget[] = []
     for (const peer of peers) {
       const number = peer.ref.number
-      const repo = peer.repo ? byRepo.get(peer.repo) : undefined
-      if (number == null || !repo) continue
+      const checkout = peer.repo ? checkouts.get(peer.repo) : undefined
+      if (number == null || !checkout) continue
       out.push(
-        this.describe(repo, number, { role: 'peer', frameId: peer.frameId, url: peer.ref.url }),
+        this.describe(checkout.target, number, {
+          role: 'peer',
+          // The recorded attribution when the run stated one, else the frames this checkout
+          // hosts: the same derivation the dispatch made, off a resolution already paid for.
+          frameIds: peer.frameIds?.length ? peer.frameIds : checkout.involved.map((i) => i.frameId),
+          url: peer.ref.url,
+        }),
       )
     }
     return out
@@ -206,16 +240,16 @@ export class GitHubPrReportPublisher implements PrVerificationReportPublisher {
   private describe(
     repo: RepoTarget,
     prNumber: number,
-    scope: { role: 'own' | 'peer'; frameId?: string; url?: string | null },
+    scope: { role: 'own' | 'peer'; frameIds?: string[]; url?: string | null },
   ): PrReportTarget {
     const origin = (this.deps.resolveRepoOrigin ?? githubRepoOrigin)(repo)
     return {
       prNumber,
-      repo: `${repo.owner}/${repo.name}`,
+      repo: repoKey(repo),
       provider: origin.provider,
       connection: { provider: origin.provider, connectionId: String(repo.installationId) },
       role: scope.role,
-      frameId: scope.frameId ?? null,
+      ...(scope.frameIds?.length ? { frameIds: scope.frameIds } : {}),
       url: scope.url ?? null,
     }
   }

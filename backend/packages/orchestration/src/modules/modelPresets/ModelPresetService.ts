@@ -48,8 +48,9 @@ export interface ModelPresetServiceDependencies {
  * mapping from). A preset is one `baseModelId` applied to every agent kind plus
  * per-kind `overrides`. Maintains the invariant that a workspace always has at least
  * one preset, exactly one of which is the default: {@link list} lazily seeds the
- * built-in catalog ({@link seedModelPresets}: Kimi K2.7, GLM-5.2, Claude Opus 5) on
- * first use, with the deployment's {@link ModelPresetServiceDependencies.defaultPresetId}
+ * built-in catalog on first use (whatever {@link seedModelPresets} ships, named there
+ * rather than listed here so this doc cannot fall behind the catalog it describes),
+ * with the deployment's {@link ModelPresetServiceDependencies.defaultPresetId}
  * flagged default, and the default cannot be deleted. The single-default promotion is
  * enforced in the repository. {@link reseed} restores a built-in to the current catalog
  * (adopting an update, repairing drift, or materialising a NEW built-in that appeared
@@ -229,15 +230,18 @@ export class ModelPresetService {
     const current = await this.presets.list(workspaceId)
     if (current.length > 0) return
     const now = this.clock.now()
-    // Stamp createdAt by catalog order so `list` (ordered by created_at) preserves it.
-    let offset = 0
-    for (const seed of seedModelPresets()) {
-      await this.presets.upsert(workspaceId, {
+    // ONE batched write, not a serial upsert per built-in: this runs on a workspace's first board
+    // load, and looping the single-row method made the cost of shipping a built-in a round-trip on
+    // that path. `createdAt` is stamped by catalog order so `list` (ordered by created_at)
+    // preserves it, which the batch has to keep since it writes the rows together.
+    await this.presets.upsertMany(
+      workspaceId,
+      seedModelPresets().map((seed, i) => ({
         ...this.fromSeed(seed),
         isDefault: seed.id === this.defaultPresetId,
-        createdAt: now + offset++,
-      })
-    }
+        createdAt: now + i,
+      })),
+    )
     // A dispatch that resolved before first-use seeding cached the null default; drop it so the
     // very next one sees the seeded library rather than the deployment's routing fallback.
     await this.invalidate(workspaceId)

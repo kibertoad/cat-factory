@@ -1,5 +1,1140 @@
 # @cat-factory/integrations
 
+## 0.162.1
+
+### Patch Changes
+
+- Updated dependencies [409238f]
+  - @cat-factory/kernel@0.301.0
+  - @cat-factory/contracts@0.313.0
+
+## 0.162.0
+
+### Minor Changes
+
+- 0ef48d1: Stop an agent's own cleanup command from killing the harness that supervises it, and report a
+  harness that WAS stopped as what it is.
+
+  A local acceptance run failed as "the container kept vanishing, treating as deterministic" after
+  two full coder passes. Nothing evicted anything. The harness ran as PID 1 with the command line
+  `node dist/server.js`, which is also where the Fastify service the coder was scaffolding built to;
+  the agent started that service in the background to smoke-test it over a real socket, then ran
+  `pkill -f 'node dist/server.js'` to stop it again. The image ships no `pkill`, so that failed with
+  `command not found` and the next turn used something that works without procps, which matched PID 1
+  and shut the harness down. The container exited 0, the engine could only see a backend that had
+  stopped answering, so it called it an eviction, spent its crash-recovery budget re-running the same
+  agent into the same wall, and blamed infrastructure churn.
+
+  **The harness no longer answers to a pattern kill aimed at anything else.** It runs from
+  `dist/harness-server.js` and sets `process.title = 'cat-factory-harness'`, which on Linux rewrites
+  both `/proc/<pid>/cmdline` and (truncated) `/proc/<pid>/comm`, so neither `pkill -f 'node dist/…'`
+  nor a bare `pkill node` nor a hand-rolled `/proc` sweep can name it. It is not a security boundary
+  and is not claimed as one: the agent shares the harness's uid, and separating them needs a PID 1
+  running as root, which this image deliberately does not have. What it removes is the accident.
+
+  **`procps` + `psmisc` are now in the image**, which reads backwards until you look at what the
+  absence caused: `pkill`/`pgrep`/`ps` are the narrow tools an agent reaches for first, and the
+  fallback it writes when they are missing is the unbounded one that took the harness down.
+
+  **A harness that exits cleanly mid-job is no longer an eviction.** Every transport that can read an
+  exit code (the local container and native-process legs, the Cloudflare per-run container, and a
+  Kubernetes runner pod's `state.terminated`) now distinguishes a workload that exited 0 with a job
+  still in flight from one that crashed or was reclaimed, and reports `harnessShutdown` instead of
+  `evicted`. The engine fails that run immediately with a new `harness_shutdown` failure kind
+  (additive to the public failure-kind vocabulary; OpenAPI surface 1.54.0) and a hint that names the
+  causes worth checking, rather than spending an automatic retry that walks back into whatever
+  stopped it. A backend that reports no exit code (Apple `container`, a manifest-driven runner pool
+  whose scheduler exposes only status words) keeps reporting an eviction, because an absent code is
+  not a zero.
+
+  The distinction is only ever drawn where NOTHING else explains the stop. Infrastructure churn is
+  named and recovers on its own budget, and it stays named even after its attribution window passes:
+  a rollout drain the harness answered by exiting 0, discovered minutes later by a re-driven poll, is
+  still that drain rather than a shutdown. The same rule orders the engine's own reading: a killed
+  job that some branch settles WITHOUT failing the run (a parked PR review's read-only Challenge
+  Investigator) keeps that settlement, since losing a human's in-flight curation is worse than the
+  retry this failure kind exists to prevent. `container.harness_shutdown` counts the class, kept out
+  of `container.evicted` so the eviction rate an operator sizes infrastructure by is not inflated by
+  deaths no infrastructure change prevents.
+
+  **An aborted agent run says who aborted it.** The Claude Code / Codex runner rejected with a
+  hard-coded "agent run aborted by watchdog" for every abort, including the shutdown handler's, so a
+  job killed by something else filed its failure against a watchdog that never fired. It now carries
+  the abort reason the caller supplied, the way the Pi runner already did, and an abort that supplied
+  none falls back to saying so rather than quoting the platform's own contentless "This operation was
+  aborted" (a reasonless `abort()` sets an `AbortError` that IS an `Error`, so the fallback was
+  unreachable).
+
+  The image moves to `cat-factory-executor:1.121.0` across the wrangler config, the publish script and
+  `RECOMMENDED_HARNESS_IMAGE`: the entrypoint rename and `procps` are only in effect once a deployment
+  runs a tag that contains them.
+
+  **The acceptance suite stops blaming the merge threshold for a failed run.** Its "the merge was
+  HELD" hint fired on "there is a pull request and the status is not done", which is also true of a
+  run that died three phases before any merge was considered; it is now offered only where nothing
+  else explains the stop.
+
+### Patch Changes
+
+- Updated dependencies [0ef48d1]
+  - @cat-factory/kernel@0.300.0
+  - @cat-factory/contracts@0.312.0
+
+## 0.161.0
+
+### Minor Changes
+
+- c67e924: A bug hunt on a repo-backed tracker scopes to the service's repository, not a picked board
+
+  GitHub Issues and GitLab Issues put every issue in one repository, and the only repository a hunt
+  may read is the one its service frame is linked to. Both now offer NO board control: the hunt
+  carries the container an adopted bug will land in, and the board is that container's service repo,
+  resolved through the same `resolveRepoTarget` walk an issue search scopes with (now shared as
+  `server/src/modules/tasks/sourceRepoScope.ts`). A board picker there could scan, rate and adopt a
+  bug from a repository nothing on the board points at, whose run would then open its PR somewhere
+  else entirely.
+
+  Internal wire break (`POST /workspaces/:ws/bug-hunt/:source/hunts`): the body now takes
+  `containerId` plus a REQUIRED, NULLABLE `board`. `null` is the only legal value for a repo-backed
+  source, and naming one there is refused (`details.reason: 'board_from_service'`) rather than
+  ignored; a repo-less source with no board is refused too. Board LISTING is refused for a repo-backed
+  source with the same reason, so `GitHubIssuesProvider.listBoards` and
+  `GitLabIssuesProvider.listBoards` are gone along with the shared `repoRefsToBoards` projection.
+  `TaskSourceState` gains `repoBacked` (derived from the provider's declared `repoScope`) so the SPA
+  knows which surface to render before it asks.
+
+  Every refusal now lands as soon as it is decidable, cheapest first: an unhuntable source on the
+  registry, then the board shape from the request body alone, then the repository walk, then the
+  container. So an unregistered source is refused by name instead of being told to pick a board it
+  has no control for, a board named beside an unlinked service no longer costs two round trips to
+  learn it was never allowed, and a `containerId` naming no block on this workspace refuses before
+  the vendor read and the ranking call rather than at adoption.
+
+### Patch Changes
+
+- d5c1f1c: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with (`ai@7.0.64`,
+  `@ai-sdk/openai@4.0.41`, `@ai-sdk/amazon-bedrock@5.0.55`). The Cloudflare toolchain moves
+  together again: `wrangler@4.122.0` and `@cloudflare/vitest-pool-workers@0.21.2`, whose bundled
+  wrangler tracks it. `@aws-sdk/client-s3` goes to 3.1109.0 and the SPA's store engine to
+  `pinia@4.0.3` / `@pinia/nuxt@1.0.2`.
+
+  `capnweb` moves 0.10.0 to 0.11.0 in the Gatekeeper Worker. The release is additive (stubs as
+  stream chunks, exact ArrayBuffer/DataView serialization, URL over RPC) and touches neither
+  `RpcTarget` nor `newWorkersRpcResponse`, the only two symbols we import. Its 0.11.1 patch, which
+  enforces an ASCII-only dist bundle so a consumer's `btoa()` cannot choke on the runtime, missed
+  the release-age window by two hours and is the first thing the next sweep should pick up.
+
+  Held back deliberately: `@changesets/cli` 3.0.0 and, in the frontend, `typescript` 7 (Nuxt 4.5.2
+  itself depends on `typescript@6.0.3`). No `minimumReleaseAgeExclude` entries were added: every
+  version above already satisfies the gate.
+
+- Updated dependencies [d5c1f1c]
+- Updated dependencies [c67e924]
+  - @cat-factory/kernel@0.299.1
+  - @cat-factory/contracts@0.311.0
+
+## 0.160.17
+
+### Patch Changes
+
+- Updated dependencies [056e18d]
+  - @cat-factory/contracts@0.310.0
+  - @cat-factory/kernel@0.299.0
+
+## 0.160.16
+
+### Patch Changes
+
+- Updated dependencies [a81879b]
+  - @cat-factory/contracts@0.309.0
+  - @cat-factory/kernel@0.298.2
+
+## 0.160.15
+
+### Patch Changes
+
+- Updated dependencies [0e1e0fa]
+  - @cat-factory/contracts@0.308.1
+  - @cat-factory/kernel@0.298.1
+
+## 0.160.14
+
+### Patch Changes
+
+- Updated dependencies [7312e0a]
+  - @cat-factory/kernel@0.298.0
+  - @cat-factory/contracts@0.308.0
+
+## 0.160.13
+
+### Patch Changes
+
+- Updated dependencies [95408c2]
+  - @cat-factory/contracts@0.307.0
+  - @cat-factory/kernel@0.297.0
+
+## 0.160.12
+
+### Patch Changes
+
+- 792ecde: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with (`ai@7.0.62`,
+  `@ai-sdk/anthropic@4.0.38` / `openai@4.0.40` / `openai-compatible@3.0.30` /
+  `amazon-bedrock@5.0.54`). The Cloudflare toolchain moves together: `wrangler@4.121.0`,
+  `@cloudflare/workers-types@5.20260812.1` and `@cloudflare/vitest-pool-workers@0.21.1`, whose only
+  change over 0.20.3 is the wrangler and miniflare it bundles, so the pool now carries the same
+  wrangler the workspace declares instead of one release behind it.
+
+  `esbuild` gains three scoped `pnpm-workspace.yaml` overrides pinning vite's, tsx's and nitropack's
+  loose ranges to the 0.28.1 that wrangler and `@cloudflare/vitest-pool-workers` pin exactly. Without
+  them a re-resolve hands vite's optional PEER slot the newer 0.28.2 and the tree gains a second
+  esbuild; because pnpm resolves an auto-installed peer without its own `optionalDependencies`, that
+  copy never gets its platform binary and esbuild's postinstall aborts the entire install. The
+  overrides are deliberately scoped rather than top-level: `drizzle-kit`, `@intlify/bundle-utils` and
+  `fontless` declare narrower ranges that a blanket pin would force them out of.
+
+  Held back deliberately: `@changesets/cli` 3.0.0 and, in the frontend, `typescript` 7 (Nuxt 4.5.2
+  itself depends on `typescript@6.0.3`). No `minimumReleaseAgeExclude` entries were added: every
+  version above already satisfies the gate.
+
+- Updated dependencies [792ecde]
+  - @cat-factory/kernel@0.296.1
+
+## 0.160.11
+
+### Patch Changes
+
+- Updated dependencies [fc56d82]
+- Updated dependencies [fc9afb4]
+  - @cat-factory/contracts@0.306.0
+  - @cat-factory/kernel@0.296.0
+
+## 0.160.10
+
+### Patch Changes
+
+- Updated dependencies [edd4fd0]
+  - @cat-factory/kernel@0.295.0
+  - @cat-factory/contracts@0.305.0
+
+## 0.160.9
+
+### Patch Changes
+
+- Updated dependencies [36e0c9b]
+  - @cat-factory/contracts@0.304.0
+  - @cat-factory/kernel@0.294.1
+
+## 0.160.8
+
+### Patch Changes
+
+- Updated dependencies [569181d]
+  - @cat-factory/contracts@0.303.0
+  - @cat-factory/kernel@0.294.0
+
+## 0.160.7
+
+### Patch Changes
+
+- Updated dependencies [1a0b593]
+  - @cat-factory/contracts@0.302.0
+  - @cat-factory/kernel@0.293.0
+
+## 0.160.6
+
+### Patch Changes
+
+- Updated dependencies [7d1477c]
+  - @cat-factory/kernel@0.292.2
+
+## 0.160.5
+
+### Patch Changes
+
+- Updated dependencies [c09ddbe]
+  - @cat-factory/kernel@0.292.1
+
+## 0.160.4
+
+### Patch Changes
+
+- Updated dependencies [fc4a1e4]
+  - @cat-factory/contracts@0.301.0
+  - @cat-factory/kernel@0.292.0
+
+## 0.160.3
+
+### Patch Changes
+
+- Updated dependencies [ee733ee]
+  - @cat-factory/contracts@0.300.0
+  - @cat-factory/kernel@0.291.0
+
+## 0.160.2
+
+### Patch Changes
+
+- 01086d8: `GET /api/v1/models` now says whether a model's subscription is actually CONNECTED for the person a
+  key belongs to, and stops calling the commonest one unwired. Surface version 1.47.0, additive: two
+  new response fields and no change to anything already published.
+
+  **The bug.** `userScoped` was added so a caller could tell "your credential was never consulted" from
+  "no provider is wired", and it was derived from the route IN FORCE. A model with more than one route
+  resolves, when nothing is configured, to the most-preferred route it merely DECLARES, and
+  `subscription` is last in that order, so `claude-opus`, the built-in Claude preset's own model, which
+  also declares OpenRouter, answered `userScoped: false`. The flag shipped to remove that misreport
+  never fired for the model every report of it has been about; the acceptance suite kept printing "no
+  provider wired for it" at operators whose workspace runs Claude every day, and the fix it named (add
+  a provider key) was for a deployment that was already correct.
+
+  **Why a new field rather than a corrected one.** `userScoped` is published, and correcting it in
+  place would have moved its meaning in two directions at once: true where a model merely declares a
+  subscription route (right), and no longer true for a POOLED vendor whose subscription route is in
+  force (also right, and also a change under any consumer branching on it). So `userScoped` keeps
+  answering exactly what it always answered and is marked superseded, `personalSubscription` is served
+  beside it, and dropping the old half is a later change. `personalSubscription` is true where a model
+  declares a subscription route whose vendor is individual-usage only, read through kernel's own
+  `individualVendorForModelId`, the same predicate the run path gates a personal credential on. The
+  pooled exclusion matters: a Kimi or DeepSeek token belongs to the WORKSPACE, so every key can already
+  see it, and reporting one as personal sent an operator to re-mint a token when the fix was a pooled
+  token or a provider key.
+
+  **The existence field.** `personalSubscription` alone still stops one step short of useful: told a
+  row cannot be judged, an operator's next move is to re-mint the token bound and see what happens,
+  which is exactly how the last person to hit this found the answer. Each row now carries
+  `subscriptionConfigured`: whether a personal subscription for that vendor is stored for the person
+  the key belongs to (`actsAsUserId` when bound, else its minter), and `null` when there was nobody to
+  ask about. Existence is a row lookup, so the deployment answers it without the personal password that
+  OPENS the credential.
+
+  That is also the correction to 1.45.0's reasoning, which rejected reporting this on the grounds that
+  "the server cannot know whether one exists without a user". An unbound key does have a user for
+  DESCRIPTION purposes: its minter, who is exactly who the remedy names. Reading it changes nothing
+  about admission: `available` is still resolved under `actsAsUserId` alone, so a system token reads
+  `available: false` beside `subscriptionConfigured: true`, and both are true. `createdByUserId` rides
+  `PublicApiKeyAuth` for that one reader and stays provenance; nothing authorizes off it. The
+  disclosure this trades (an `admin`-scoped key learns one bit about its minter, who need not be its
+  holder) is documented on the field and in `public-api.md`.
+
+  **Three fixes underneath.** A LAPSED personal subscription reported as configured (`has` checked
+  existence where `unlock` checks expiry), so the catalog offered a model whose run was then refused at
+  its first dispatch, naming the model rather than the subscription. Both credential stores answered
+  the vendor sweep one single-row question at a time; `PersonalSubscriptionService.liveVendors` and the
+  new `ProviderSubscriptionService.liveVendors` each answer the whole vocabulary in one read, on a path
+  both the catalog render and every run start take. The pooled half needed a new
+  `ProviderSubscriptionTokenRepository.listByWorkspace`, mirrored across D1, Drizzle and the local
+  sqlite credential store with a conformance assertion.
+
+  The acceptance suite reads all of it: `configure`'s menu and the `model-preset` / `agent-model` gates
+  now distinguish five states with five different fixes, with the account model-family policy ranked
+  ahead of every credential state (it is the one cause no credential can undo) and the state that
+  matters most saying the subscription is connected and naming the token as the only thing in the way.
+
+- Updated dependencies [01086d8]
+  - @cat-factory/contracts@0.299.1
+  - @cat-factory/kernel@0.290.1
+
+## 0.160.1
+
+### Patch Changes
+
+- Updated dependencies [1bcdacc]
+  - @cat-factory/kernel@0.290.0
+
+## 0.160.0
+
+### Minor Changes
+
+- 195b248: Tracker writeback is ON by default, and `/api/v1` can now read and change it:
+  `GET /api/v1/tracker/writeback` reports what a task's linked tracker issue hears as its pull request
+  progresses, and `PATCH /api/v1/tracker/writeback` changes one action without moving the others.
+  Surface version 1.46.0, additive.
+
+  **BEHAVIOUR CHANGE, and worth reading before upgrading.** All three writeback actions (comment when
+  the pull request opens, comment and CLOSE the issue when it merges, post a headless run's parked
+  review findings) now default to ON for a workspace that has never configured them. All three were
+  off. Nothing published said what the defaults were, so this is not an `/api/v1` break, but it IS a
+  change a deployment notices: a board that never opened the issue-tracker settings panel now closes a
+  linked ticket when its task's pull request merges, and comments on it twice on the way. A deployment
+  that wants the old behaviour turns it off with one call to the new PATCH (or in the app), and a single
+  task can still opt out through its own per-task override.
+
+  The reasoning for the flip is that these actions only ever touch an issue a task is LINKED to, and
+  nothing links one by accident: a link arrives because somebody imported the issue, the recurring
+  intake picked it up, or a headless caller filed a task with `ticket`. Every one of those is a request
+  to work the issue where it was filed, so the half-closed loop was the common outcome and the wrong
+  one: a merged pull request beside an issue still sitting open with nothing on it saying the work was
+  done. The default now lives in ONE place (`DEFAULT_TRACKER_WRITEBACK` in `@cat-factory/contracts`),
+  read by the settings service, the writeback service and the SPA's panel, which previously spelled it
+  three times.
+
+  The public pair closes the last gap in the ticket-driven loop. A caller could file a task FROM a
+  ticket and the platform would write back to that issue, but WHETHER it did was workspace
+  configuration reachable only from the app, so the deployment shape that most needs the loop closed
+  (nobody in the SPA at all) could neither read the disposition nor change it, and could not tell "this
+  deployment leaves tickets open" from "the writeback is broken". Three things about the shape: it
+  publishes the WRITEBACK half of `tracker_settings` and not the filing selection, which is a separate
+  decision the writeback does not key off; the write MERGES, so a caller acting on one action cannot
+  move the other two; and `updatedAt` is null when nobody has ever chosen, which is how a caller knows
+  it is reading defaults rather than somebody's decision.
+
+  **Every writeback write now merges, the app's own included.** An omitted action used to revert to the
+  deployment default on the internal wholesale PUT, which the default flip above turns from harmless
+  into a silent re-enable: the recurring-pipeline dialog persists a FILING tracker and names no
+  writeback action, so scheduling a tech-debt pipeline switched writeback back on for a workspace that
+  had deliberately turned it off. Absence now means "not moving this action" on both doors, which is
+  the only reading any caller wanted, and the merge itself moved down into the two repositories
+  (`TrackerSettingsRepository.merge`, replacing `put`), so the SPA panel and a headless patch naming
+  different actions both land instead of one silently losing to the other's stale snapshot.
+
+  The acceptance suite gains a fifth spec built on all of it: an issue filed on the backend repository
+  by an OUTSIDE reporter (its own provider credential, since an issue the platform created and closed
+  proves only that the credential works), a task filed FROM that issue over `/api/v1`, delivery through
+  `pl_build`, and then the pair of claims that the platform CLOSED the issue and commented on it at both
+  edges of the pull request's life. The pair matters because a provider closes an issue by itself when a
+  merged pull request's text carries `Closes #12`, and that path posts no comment: a closed issue alone
+  cannot tell the writeback from the host noticing a word an agent wrote. Two new prerequisites refuse
+  before any of it spends anything, and `run configure` opens the token page prefilled.
+
+### Patch Changes
+
+- Updated dependencies [195b248]
+  - @cat-factory/contracts@0.299.0
+  - @cat-factory/kernel@0.289.1
+
+## 0.159.0
+
+### Minor Changes
+
+- bc2478d: A public-API key now has an IDENTITY as well as a scope: a SYSTEM token (the default, unchanged) or
+  a PERSONAL token its minter bound to themselves, which can run their own individual-usage
+  subscription headlessly. Surface version 1.45.0, additive. Plus two bug fixes that made the old
+  behaviour unreadable rather than merely limited.
+
+  **The reported problem.** A workspace whose Claude runs come from a stored personal subscription was
+  told by `GET /api/v1/models` that `claude-opus` was `available: false`, which the acceptance suite
+  rendered as "no provider wired for it". Both statements are false, and the remedy they imply (add a
+  provider key) is for a deployment that was already correct. The model was wired — as a credential
+  belonging to a person, which a key-authenticated read is not allowed to see.
+
+  **Two things were genuinely broken, independent of the feature.**
+
+  `resolveWorkspaceCapabilities` did not know about NATIVE ambient execution. A vendor served by the
+  host's own `claude`/`codex` CLI login (`LOCAL_NATIVE_AGENTS`) has no credential in either store, and
+  the resolver consulted only those two stores, so the catalog and the pipeline-start guard called the
+  model unconfigured on the very machine that would have run it. The personal-credential gate, reading
+  the same allow-list, had already decided such a vendor needs no unlock: two halves of one decision,
+  disagreeing. They now share `isAmbientNativeVendor`, which is where the executor's half already was.
+
+  `GET /api/v1/models` could not say why a personal subscription's model was unavailable. The existing
+  `excludesUserScopedModels` flag reports what an answer OMITS, and a subscription model is not omitted
+  — it is listed, unjudged, because no user's credential store was consulted. Each row now carries
+  `userScoped`, so the distinction is stated where it applies. Widening the response flag instead was
+  tried and rejected: with no user resolved the server cannot know whether a personal subscription
+  exists, so the honest predicate is "this deployment has `ENCRYPTION_KEY`", which is true nearly
+  everywhere. A flag that is always true stops answering its question, and it would have re-pointed a
+  published field at a new predicate under the same name.
+
+  **The feature.** `POST /workspaces/:ws/public-api-keys` takes `actsAsSelf`, and the key row carries
+  `actsAsUserId`. A personal token's runs record that person as initiator, `GET /api/v1/models`
+  resolves under them, and a start/retry/decision call may unlock their subscription by sending
+  `X-Personal-Password` — the same header, the same 428, and the same per-run activation the app uses.
+  A system token behaves exactly as every key did before, including the `409
+individual_model_unsupported` refusal, which is now reserved for the case no password could fix.
+
+  Three properties bound it, and each is a shape rather than a rule to remember. The wire field is a
+  BOOLEAN and the server reads the id off the session, so minting a key onto a colleague's
+  subscription is unrepresentable rather than merely forbidden; a mint with no signed-in user is
+  refused instead of quietly producing an unbound key. Headless provisioning (`POST /api/v1/keys`)
+  can never bind, because a provisioning key holds nobody's consent to inherit. And the password is
+  stored NOWHERE — not on the row, not in a session — so the binding alone spends nothing and a
+  leaked personal token reaches that user's PAT (as a leaked session would) but not their
+  subscription.
+
+  A bound key attributes EVERY run it starts, not only the ones needing an unlock. The alternative
+  makes one key produce runs under two identities depending on which model a task happened to pin,
+  with two credential scopes and two merge-policy roles, and nothing in the request to say which.
+
+  **And a bound run is that person's run all the way through, policy included.** The two public start
+  routes resolve the bound user's workspace ROLE and pin it, so a headless start is admitted under the
+  same role-scoped merge narrowing and the same dry-run sandbox its holder gets in the app: a key
+  cannot land what the person behind it could not. An initiator with no role is not a lenient run, it
+  is a run with no policy — which is what the bug-hunt adopt route once shipped, and why
+  `runAdmission.coverage.spec.ts` makes every start route CLASSIFY itself. A retry deliberately keeps
+  the ORIGINAL run's pinned authority instead (`buildResumedInstance`), because a re-drive is the same
+  work under the authority it was first granted, and dropping it would launder a dry run into a live
+  one via restart-from-step-0.
+
+  `POST /api/v1/jobs` runs the same personal-credential gate as the board start. Being inline-only
+  settles what a public run may DO (no container, no push) and says nothing about whose credential it
+  needs: the inline harness leases a personal subscription for every individual-usage vendor, so
+  skipping the gate there traded an actionable refusal for a run that dies at its first dispatch.
+
+  Deliberately not lifted: `POST /api/v1/notifications/:id/act`. Its ci-/test-failure arm retries
+  through a shared effect that mints no activation, so admitting a bound key there would trade a
+  refusal the caller can act on for a run that dies at its first dispatch. Lifting it means threading
+  the gate through that effect for the SPA and this surface at once.
+
+  **Answering a park no longer re-derives a credential that is already fresh.** Each re-mint runs
+  210k PBKDF2 iterations per vendor, which a human clicking through a run pays once and a headless
+  driver answering eight follow-ups would pay eight times in a row — seconds of blocked event loop on
+  Node, a CPU-limit kill on workerd. The interaction path now skips the whole gate while the run holds
+  an activation with over half its life left, and both facades share one helper, so the SPA gets the
+  same. The decision surface's refusal is returned as DATA (a `428` in that surface's own envelope,
+  carrying the vendor and reason) rather than thrown, which is the invariant every other gate there
+  already keeps.
+
+  **`X-Personal-Password` is declared on the operations that read it**, so it reaches
+  `docs/openapi.json` and the four generated clients instead of being discoverable only by getting a 428. Each client also gained a post-construction setter for it, since that is when a caller learns
+  it is needed.
+
+  **The acceptance suite** now runs on the operator's own subscription. It prompts for the personal
+  password at the terminal on the first call that needs one — never at `configure` time, and never at
+  all for a workspace on a provider API key — and holds it in memory only: not the `.env`, not the
+  ledger, not the journal, because a copy beside `CAT_FACTORY_API_KEY` would put both halves of a
+  two-factor credential in one file. The header then rides every request, since answering a park
+  re-mints the run's activation server-side. `configure` and the `model-preset` gate now say "not
+  visible to this system token" and name the fix, instead of the wrong one they used to name — read
+  off the ROW, so a model that genuinely has no provider still reads as unwired, and an invisible
+  workspace default stays SELECTED rather than being quietly swapped for a model nobody chose.
+
+  The prompt opens the CONTROLLING TERMINAL rather than reading `process.stdin`. The suite runs under
+  vitest, whose workers are forked with piped stdio, so a prompt built on stdin could never have asked
+  anything: the one path this exists for would have thrown "stdin is not a terminal" on every pass. It
+  is also stricter than the check it replaces, since a controlling terminal cannot be fed from a pipe
+  or a file at all. And the entered password is no longer trimmed: a space is printable ASCII, so a
+  legal password with one at either end was being silently altered and then reported as wrong.
+
+### Patch Changes
+
+- Updated dependencies [bc2478d]
+  - @cat-factory/contracts@0.298.0
+  - @cat-factory/kernel@0.289.0
+
+## 0.158.0
+
+### Minor Changes
+
+- a634746: A locally-run model can now be given a run's design renders. Its image support resolves in two
+  tiers: a table of recognised open-weights families (`KNOWN_LOCAL_MODELS`, so ticking Gemma 4 or Muse
+  Glimmer needs no second step), overridden by a per-model declaration on the user's own runner entry
+  for anything the table cannot know about.
+
+  The gap was structural rather than a missed case. `acceptsImages` is a per-FLAVOUR fact declared on
+  `MODEL_CATALOG`, and a local model has no catalog row: it lives on one person's machine, its id is
+  free text, and the OpenAI-compatible `/models` probe the panel discovers models with returns ids and
+  nothing else. So every local ref arrived with the modality absent and `resolveDesignImageDelivery`
+  answered `unknown_model_image_input` for all of them, forever. That reason exists precisely so this
+  would stay visible instead of reading as a text-only model, and the arrival of image-capable local
+  models is what turned it from a latent hole into a lost capability.
+
+  The declaration wins over the table on purpose: the person who pulled the weights is the one who
+  knows whether they are running a text-only quant, a fine-tune or a re-tagged copy. The table
+  therefore carries only families whose SILENCE costs a capability (every member is image-capable; a
+  text-only entry would behave identically to an absent one), and a family whose modality depends on
+  the size is left out rather than approximated, which is why Gemma 3 is absent while Gemma 4 is
+  present. It lives in `@cat-factory/contracts` because the settings panel labels its "not set" option
+  with what the table will do and the engine folds the same answer onto the dispatched ref.
+
+  The initiator's declarations are read on EVERY dispatch, because the winning model is not known
+  until the shared resolver has walked its sources, so the read goes through a new `AppCaches`
+  slice keyed on the user (the endpoint write paths invalidate it). Without that, a deployment with no
+  local runners at all still paid a query per step, and a mothership-mode node an extra
+  `/internal/persistence` round trip per step.
+
+  Delivery still joins the HARNESS's answer first, and that is what decides where this lands today: a
+  local ref names no harness, so a container dispatch runs it on Pi, whose `HARNESS_IMAGE_INPUT` entry
+  is `false` and refuses without consulting the ref. The modality is therefore acted on by the inline
+  path, and the container path becomes a reader the day an image-carrying harness serves a local model,
+  which is a one-line table edit rather than new plumbing. It is resolved for every path regardless,
+  because the winning model is not known until the shared resolver has walked its sources.
+
+  `contextTokens` is deliberately NOT declared for a local model, though the same shape could carry it.
+  The window a runner serves is a fact about its config rather than about the weights (Ollama's
+  `num_ctx` default sits far below what a 128K-window model can do), nothing enforces it for a local
+  ref, and stating a number the runner silently ignores would be worse than stating none. The
+  truncation trap that follows from that is now written down in `backend/docs/model-support.md`.
+
+  **Internal break:** the endpoint row's enabled-model list changes from `string[]` to a declaration
+  array. A row written before this loses its entries on read: bare strings are dropped rather than
+  coerced, so the break cannot arrive as a model id of `[object Object]`. The endpoint reports the
+  discard (`unreadableModels`) and the panel names it per runner, because a shortened list on its own
+  reads exactly like a runner nobody ever enabled a model on and only one of those is fixed by
+  re-ticking. The fix is to re-tick the models in "My local runners", which rewrites the whole blob.
+
+### Patch Changes
+
+- Updated dependencies [a634746]
+  - @cat-factory/contracts@0.297.0
+  - @cat-factory/kernel@0.288.0
+
+## 0.157.0
+
+### Minor Changes
+
+- 7893f35: `/api/v1` can ADOPT a repository that already exists: `GET /api/v1/repos/available` lists what a
+  workspace's connection can reach, and `POST /api/v1/repos/link` adopts one by name. Surface version
+  1.44.0, additive.
+
+  The hole they close was invisible from the surface. `GET /api/v1/repos` serves the repositories a
+  workspace has LINKED, which is a set someone assembles in the app: linking is explicit per workspace,
+  the provider webhook for an added repository does not project one, and a resync refreshes what is
+  already linked rather than rediscovering the installation. So a repository that exists and is
+  perfectly reachable is absent from every public read until a human opens the picker, and
+  `POST /api/v1/services` answers 404 for its `repoId`, which is byte-for-byte what a caller gets for a
+  repository that does not exist. A deployment could CREATE a repository through this API (1.41.0's
+  bootstrap) and could not adopt one it already had.
+
+  The two reads are a population pair rather than a duplicate, with `linked` as the join, so an absent
+  repository is now diagnosable: reachable-but-unadopted appears in `/repos/available` with
+  `linked: false`, and one that does not exist appears in neither. The adopt takes `owner`/`name`
+  because a caller setting a workspace up from configuration knows the name and cannot know a provider
+  id for a repository no public read lists; it is idempotent, answers the same row shape `/repos`
+  serves (projected from the same read, so the two cannot disagree about whether a repository is free),
+  and refuses an unreachable one with `404 repo_not_reachable`, a reason that covers "does not exist"
+  and "your credential is not granted it" together because a provider answers those identically.
+  `GitHubSyncService.linkRepoBySlug` resolves through the same path the app's own picker uses, and
+  matches the OWNER as well as the name: a slug search can surface a look-alike, and linking that one
+  would file a caller's work in someone else's account while answering 200.
+
+  The acceptance suite uses them, which is what makes a hand-written `.env` a supported way in rather
+  than a setup only `configure` could finish. Spec 01 adopts a repository the workspace does not hold
+  instead of refusing; `target-repos` gates on REACHABILITY, point-reading `/repos/available` for
+  anything unlinked and reporting "reachable but not adopted yet" as a pass; and `configure` adopts each
+  repository rather than printing instructions for doing it by hand. Every attempt states its outcome,
+  because a loop that reports only its positive answer is indistinguishable from one doing nothing, and
+  what a refusal now asks for is only what no API can do: create the repository, and grant the
+  credential access to it.
+
+  Review follow-ups on the pair, all still inside 1.44.0 and still additive:
+
+  Both rows now report whether a repository is SPOKEN FOR, from one account-scoped judgement.
+  `/repos/available` publishes `serviceId` and `linkedElsewhere` exactly as `/repos` does, because a
+  repository nobody here has linked can still back a service on another board of the account, and
+  `POST /api/v1/services` refuses it either way. A discovery read that could not say so handed a
+  caller a repository whose next call fails, and it was the acceptance gate that felt it first: it
+  green-lit a pass that then died on the adopt, after the run the gate exists to precede. The
+  judgement is now `PublicBoardReads.repoUse`, asked once of the projection (the repos list) and once
+  of a batch of ids (the available read), so there is no second derivation to drift.
+
+  The available read also publishes `truncated`. The provider legs behind it stop at a page cap and a
+  search cap, so on a wide connection the rows are a prefix and a reachable repository can be missing
+  from them, which is indistinguishable from the non-existence this read exists to diagnose. A
+  point-read (`?q=owner/name`) resolves the exact slug directly and stays authoritative either way.
+
+  A provider refusal is answered as one on BOTH operations and on either provider. The available read
+  was left unwrapped, so a revoked credential or a rate limit on it arrived as `500 internal` rather
+  than the documented 503/429; and the mapping recognised `GitHubApiError` alone, so a GitLab-connected
+  workspace got that same `500` for a revoked token on both routes. Kernel now owns a `VcsApiError`
+  base that both provider clients extend, which is the identity a consumer above the adapters branches
+  on.
+
+  The adopt is idempotent for a repository the credential can no longer reach: it resolves from what
+  the workspace LINKS before consulting the provider, so a re-run no longer answers 404 for a
+  repository `GET /api/v1/repos` still lists (a personal repository, or a narrowed App grant). And the
+  link's `owner` accepts a namespace PATH, so a GitLab project under nested groups can be adopted at
+  all: the available read published `group/subgroup` and the adopt refused it with a 422.
+
+  In the suite, "the connection cannot reach it" is now recognised by `details.reason`, not by the 404
+  alone: a deployment older than these endpoints answers an unmatched route with the same status, and
+  reading that as "create the repository" sent an operator to create one they already had.
+
+  Internal, breaking for in-repo callers only: `GitHubSyncService.listAvailableRepos` answers
+  `{ repos, truncated }` rather than an array, the kernel `GitHubClient.searchInstallationRepos` port
+  answers a `Paged` rather than an array (every adapter caps something, and a search that filters a
+  bounded listing can return two rows and still be a prefix, which no row count reveals), and the
+  `viewerRepos` / `patInstallationRepos` caches hold the whole page rather than its items (an
+  enumeration that stopped at the cap is a prefix, and caching only the rows served that prefix to
+  every later keystroke as the complete set).
+
+### Patch Changes
+
+- Updated dependencies [7893f35]
+  - @cat-factory/contracts@0.296.0
+  - @cat-factory/kernel@0.287.0
+
+## 0.156.1
+
+### Patch Changes
+
+- Updated dependencies [07ff467]
+  - @cat-factory/contracts@0.295.0
+  - @cat-factory/kernel@0.286.3
+
+## 0.156.0
+
+### Minor Changes
+
+- 9b3473a: `cat-factory k3s` no longer promises an ingress-derived environment URL it has not established, and
+  can recreate a local cluster.
+
+  An ingress-template URL needs two things: an ingress controller inside the cluster, and a host port
+  published into it. The command assumed both. It published no host port when creating a k3d cluster
+  (k3d forwards only the ports asked for at create time), created kind clusters with neither the port
+  mapping nor an ingress controller, and checked nothing at all when reusing an existing cluster. The
+  printed summary and the SPA connect-form deep link then named `{{branch}}.127.0.0.1.nip.io` as
+  wired. Provisioning still succeeded, because environment readiness is workload readiness, so the
+  failure surfaced later at the `tester` step against a URL that answered nothing.
+
+  Now: a create publishes the port (`--ingress-port`, default 80), and every path probes both halves
+  and reports one of three outcomes (verified, verified-missing with the fix, or could-not-tell). An
+  unestablished ingress withholds the host-template prefill rather than filling the form with a
+  promise, and the summary says what is missing and how to get it. Where the cluster is one the CLI
+  can name, the port half is settled against the container runtime's own port table, so a host port
+  answered by something other than the cluster is reported as the gap it is instead of as ready.
+
+  New `--recreate`: destroy a named k3d/kind cluster and build it again from the current flags, which
+  is the only way to change a published host port. It names what is on the cluster before deleting it,
+  only ever targets a k3d/kind cluster the CLI can name, and is never selected for you (`--yes` alone
+  cannot pick it). `--recreate --runtime k3s` is refused: k3s is a host service, not a cluster this
+  command can delete and build again.
+
+  The `ingressTemplate` environment URL source gains an optional `port`, on `/api/v1` (OpenAPI
+  `info.version` 1.42.0, so the four SDK clients gain the field) and on the internal handler config
+  alike. Additive, and existing configs are unaffected. A non-default host port needs its own carrier
+  because the rendered `hostTemplate` is also the Ingress `spec.rules[].host` a service's manifests
+  declare, and Kubernetes rejects a `host` with a port in it: folding the port into the template gave
+  the right URL and an invalid manifest. Both connect forms gain the field beside the host template.
+
+  Breaking for anyone scripting the CLI hand-off: the deep link now carries `scheme=http` (a local
+  ingress controller's TLS is self-signed) plus `ingressPort` for a non-default port, and omits
+  `hostTemplate` when the ingress was not verified. `buildK3sHandler` now returns `null` for a
+  connection whose ingress was not established (there is no honest `url` block to register), and
+  `buildK3sSetupUrl` takes the resolved connection rather than a built handler plus a verification
+  flag.
+
+### Patch Changes
+
+- Updated dependencies [9b3473a]
+  - @cat-factory/contracts@0.294.0
+  - @cat-factory/kernel@0.286.2
+
+## 0.155.5
+
+### Patch Changes
+
+- b889842: Report the actual cause of a failure everywhere, not just on a "Test connection" button.
+
+  The previous slice taught the connection PROBES to read the cause chain, because on Node a transport
+  failure is `TypeError: fetch failed` and what happened hangs off `.cause`. It turned out the repo had
+  three describers of a thrown value and the other two stopped at `error.message`: `getErrorMessage`
+  (the string a human is shown, and what a persisted failure reason or a PR comment records) and
+  `describeError` (every log line). So a probe could name `connect ECONNREFUSED 127.0.0.1:6443` while
+  the log line and the toast for the same failure still said `fetch failed`, which is what made a
+  Kubernetes connect failure unexplainable even with the probe fixed.
+
+  All three now flatten through one kernel core (`shared/error-chain.logic.ts`): `.cause` plus each
+  `AggregateError` branch (so a dual-stack `localhost` reports what happened on each address), scrubbed
+  through `redactSecrets`, capped with a marker saying what it dropped, and bounded by link identity so
+  a cause cycle terminates. Roughly 90 hand-rolled `e instanceof Error ? e.message : String(e)` copies
+  across the backend now call `getErrorMessage`, and five local `errMessage`/`messageOf` wrappers are
+  deleted.
+
+  Who may read a chain is part of the rule. An AUTHENTICATED reader gets it, because the inner link is
+  usually the only thing saying whether the fix is theirs or the deployment's; where a deployment's
+  model endpoints are platform-internal, their host and port do reach a workspace member through an
+  ordinary 4xx. An UNAUTHENTICATED surface does not: `/ready` on BOTH facades answers with kernel's
+  `publicDiagnostic` (the outermost link, scrubbed) rather than publishing the deployment's database
+  address, sharing one helper so the two runtimes cannot drift to different depths.
+
+  A VERDICT does not read the rendered string either. `errorChainMatches` tests each link uncapped, so
+  a sentinel phrase pushed past the display budget by a long wrapper cannot silently turn a recognised
+  rollout stop into a crash. Relatedly, log fields get their own, much wider cap than the 400 characters
+  a human-facing message is held to, and an error with nothing to say answers with the empty string
+  rather than the bare constructor name, so a call site's `getErrorMessage(e) || '<what to do>'` guard
+  still fires.
+
+  `redactSecrets` now spares a single-case word and an env-var-shaped identifier where a field-name rule
+  matched: it scrubs the message a person reads, and `Missing required key: OPENAI_API_KEY` must not
+  lose the name they have to go and set. Every credential shape the rules exist for still matches.
+
+  An error message may therefore now carry appended causes where it did not before. The opening phrase
+  is unchanged, which is what the downstream `/dispatch failed/i` and eviction-sentinel checks match on.
+
+  On the SPA, every failure toast goes through the one funnel that already existed for pipeline errors,
+  instead of 29 per-component copies of the same `notifyError(title, e)` and ~83 direct `toast.add`
+  calls rendering the raw message. Beyond the translated copy that funnel already resolved, a failure
+  toast now stays until dismissed instead of vanishing after about five seconds, its text is
+  selectable, and one click copies the whole report: the action that failed, the class of failure, the
+  backend's own account, and the `requestId` that is the only join between what the user saw and the
+  server log line explaining it. Conflict (409) toasts get the same treatment, which matters most on
+  the unknown-reason path, since that is where a reason an older SPA build has never heard of lands.
+
+  `@cat-factory/cli` carries its own copy of the describer rather than importing kernel. That package is
+  published and deliberately runtime-dependency-free, so a `workspace:*` import from its `bin` resolves
+  through pnpm's link locally and is simply absent off the registry; a conformity test pins the copy to
+  kernel's output byte for byte.
+
+- Updated dependencies [b889842]
+  - @cat-factory/kernel@0.286.1
+
+## 0.155.4
+
+### Patch Changes
+
+- Updated dependencies [b25732f]
+  - @cat-factory/contracts@0.293.0
+  - @cat-factory/kernel@0.286.0
+
+## 0.155.3
+
+### Patch Changes
+
+- 7119ca7: Warn on board load when the GitHub token a run would use cannot push or open pull requests.
+
+  A personal access token is the operational credential on two deployment shapes: local mode, where
+  one token is both the sign-in identity and what every agent step clones, pushes and merges with,
+  and a hosted deployment whose run initiator stored a `github_pat`, which outranks the App
+  installation on the run path. On both, a token minted without `repo` (or a fine-grained token
+  pointed at the wrong repositories) reached its first failure several steps into a pipeline, as a
+  403 out of a container, after the run had already spent money. Local mode logged a boot warning
+  about it, which is a line in a terminal nobody is looking at; a hosted deployment said nothing at
+  all.
+
+  A new `GET /workspaces/:id/github/pat-check` answers what that token can actually do, and the SPA
+  raises a banner linking straight to GitHub's token form, pre-filled where GitHub allows it.
+
+  The parts worth reviewing:
+
+  **Which token gets judged, and whether one is judged at all.** The check resolves through the same
+  `resolveRunInitiatorToken` the dispatch mint and the engine's GitHub client already share, now
+  surfaced on `CoreDependencies`, so a workspace that turned `allowInitiatorPat` off is not nagged
+  about a credential none of its runs touch. Re-deriving the gate in the controller was the
+  alternative, and it would have been a fourth copy of a security decision that exists to be singular.
+
+  The second half of that question is answered by a new `listWorkspaceRunRepos` seam, the block-free
+  counterpart of `resolveRepoTarget`, built beside it on every facade: every repository this board's
+  mounted services target. A token is judged only where a run would present it, so a board that
+  targets no GitHub repository (bound to GitLab, or nothing linked yet) answers `not_applicable`
+  rather than rendering a scope verdict over pipelines that never reach GitHub. The same set is what
+  a fine-grained token is probed against, so the probe's cap samples the work rather than the
+  alphabet: the repository projection lists everything the connection can see and is ordered by owner
+  and name, which no run consults.
+
+  **Per capability, not a boolean.** GitHub reports a classic token's scopes in `x-oauth-scopes` and
+  reports nothing whatsoever for a fine-grained one, whose reach is knowable only by probing a
+  repository: that answers for push and answers nothing for pull requests or workflows. Each
+  capability therefore carries `granted` / `missing` / `unknown`, and only `missing` raises anything.
+  Folding `unknown` into either would have meant silencing a real gap or nagging every correctly
+  configured fine-grained deployment forever. The fine-grained probe is a capped sample of the
+  targeted repositories and says how many it did not read.
+
+  **What a repository read can and cannot establish.** GitHub's repository payload reports the
+  authenticated IDENTITY's role, not the grants of the credential presenting it, and a token's reach
+  is a subset of its owner's. So `push: false` refutes the token while `push: true` only fails to
+  refute it, and only the first is reported as a verdict. The one positive statement available about
+  the credential itself is a 404, which GitHub returns rather than a 403 for a repository a
+  credential may not see; a 404 on every targeted repository is therefore `missing`, and the report
+  names those repositories, which is the fine-grained-token-pointed-at-the-wrong-repositories case
+  this feature exists to catch. A single 404 among readable repositories stays `unknown`: it is
+  ambiguous with a projection row pointing at a renamed repository, and a stale row must not be
+  reported as a broken credential.
+
+  **A throttled token is not a rejected one.** GitHub spells an exhausted primary or secondary rate
+  limit with the same 403 it uses to refuse a credential, so the rate-limit markers are read first
+  and answer `probe_failed`. Read as a rejection, a throttled board load raises the loudest banner
+  the product has and advertises minting a replacement.
+
+  **A classic token with no scopes is a distinct fact from an unreadable one.** GitHub sends
+  `x-oauth-scopes` for every classic token, so an empty value states that this one grants nothing.
+  Treating an empty header as an absent one classified it as unreadable, which sent it down the
+  fine-grained path where a repository read its owner could satisfy reported it as fine. It now
+  classifies as a classic token missing everything, and the connect form gained a warning
+  (`github_pat_no_scopes`) saying so.
+
+  **The scope list is not on the wire.** Nothing renders it, reads pass the route's permission mount,
+  and the one source whose scopes this endpoint could expose is a shared deployment credential.
+
+  **What does not raise the banner.** An unreachable GitHub is `probe_failed`, not a verdict: the
+  remedy a permissions banner advertises is wrong and expensive during an upstream blip. A missing
+  `workflow` scope is advisory, listed inside the card but never its reason for opening, because
+  without it a run still pushes, opens its PR and merges and fails only on changes that touch
+  `.github/workflows/*`.
+
+  **Classic versus fine-grained.** The re-mint link carries over the kind of the token being
+  replaced, so a deployment that standardised on fine-grained tokens is not pushed back to a classic
+  one by a warning. Only the classic form accepts a prefill; GitHub's fine-grained form takes no
+  permission parameters at all, so that half is a bare link and the banner names the permissions to
+  grant. Saying so is deliberate: a link that silently arrived with nothing selected reads as
+  "already done for you".
+
+  **On the SPA side**, the check is single-flighted separately from the connection reads and never
+  awaited by them. It is the only one of the three that leaves the deployment, and two modals block
+  their open on `probe()`; awaited, an unreachable GitHub held those modals for the full outbound
+  timeout to settle a banner they do not render. It follows the door rather than the batch: the
+  on-board-open fan-out checks at most once per board, while the deliberate-refresh door re-checks,
+  because the surfaces that force a refresh are the ones that just changed what the answer depends
+  on. Three panels whose own comments said "probe once so the pickers light up" moved onto
+  `ensureProbed`, which is what they meant.
+
+  The required-scope list is now one constant in `@cat-factory/contracts`, read by the local
+  facade's boot warning and setup link, its scope classifier, and the SPA — it was two copies before,
+  which is two answers to "what should I tick".
+
+- Updated dependencies [7119ca7]
+  - @cat-factory/contracts@0.292.2
+  - @cat-factory/kernel@0.285.3
+
+## 0.155.2
+
+### Patch Changes
+
+- 3dde85c: Fix every Kubernetes apiserver call that carries a custom CA or "skip TLS verification": the
+  undici `Agent` holding the TLS options was handed to Node's global `fetch`, whose request handler
+  comes from Node's own bundled undici, so one undici validated the other's handler and the request
+  died before a socket was opened as `fetch failed: invalid onRequestStart method
+(UND_ERR_INVALID_ARG)`. The dispatcher and the `fetch` that uses it now come from one undici
+  instance. A k3s apiserver serves a self-signed certificate, so this was every k3s connection.
+
+  `undici` moves from `devDependencies` to `dependencies`, where the runtime import that path
+  performs has always belonged. Declared as dev-only it resolved in every test lane and in no
+  production image (`pnpm install --prod` prunes it), so the same calls would have kept failing
+  once deployed, and a load failure now reports the load error itself instead of claiming the
+  runtime is not Node.
+
+## 0.155.1
+
+### Patch Changes
+
+- 57a7ecd: Report what actually went wrong when a connection test fails.
+
+  Every "Test connection" button rendered the thrown error's `message`, which on Node is undici's
+  generic `fetch failed` wrapper; the real failure hangs off the cause chain. A stopped k3s cluster,
+  an untrusted certificate, an unresolvable host and a firewalled port all read identically. A new
+  kernel helper flattens the chain into the exact failure and adds a remedy for each cause it
+  recognises, wired into the Kubernetes environment + runner probes, the shared HTTP probe behind the
+  manifest environment/runner-pool providers, the Cloudflare preview probe, and the Compose probe. An
+  unrecognised failure is still reported verbatim, with no hint.
+
+  The failure CLASS also rides the wire as `ConnectionTestResult.failureCause` (a new optional field,
+  with the vocabulary in `@cat-factory/contracts`), so the connect forms state what failed in the
+  operator's own language and keep the backend's English account, which names the concrete host and
+  the remedy, as the detail beneath it.
+
+  A pasted ServiceAccount token is also checked on the field now: a token copied across a wrapped
+  terminal line carries a newline that no HTTP header can hold, and it previously surfaced as an
+  opaque request failure minutes later. The impossible case blocks Test and Save and is refused by
+  the apiserver client; a still-base64 `.data.token` value or a non-JWT shape is an overrulable
+  warning, since an apiserver using static bearer tokens accepts arbitrary strings.
+
+  The `cat-factory k3s` deep link now scrolls the Infrastructure window to the Kubernetes section
+  instead of opening at the top of the tab, and the CLI no longer lists the ServiceAccount among the
+  values to type into a form that has no such field.
+
+- Updated dependencies [57a7ecd]
+  - @cat-factory/contracts@0.292.1
+  - @cat-factory/kernel@0.285.2
+
+## 0.155.0
+
+### Minor Changes
+
+- 5f6699a: Let an MCP host connect over OAuth, instead of being handed a key to paste into a config file.
+
+  The hosted endpoint (`POST /api/v1/mcp`) has always accepted a public-API key, and a key was the only
+  way in. That rules out the hosts the endpoint exists for: claude.ai, Claude Desktop and the IDE
+  clients discover authorization from the server and have no console at someone else's deployment to
+  paste a credential into. It also puts a long-lived credential in a config file on disk, which is the
+  exact hazard this project's own docs warn about for the stdio path.
+
+  This deployment now speaks the MCP authorization spec, as its own authorization server. A host asks
+  the endpoint, is answered `401` with a `WWW-Authenticate` naming the protected-resource metadata,
+  walks that to the authorization-server metadata, registers itself dynamically, and opens a browser.
+  A signed-in person with `secrets.manage` picks the board and the rung of the scope ladder, and the
+  host is issued a credential of its own.
+
+  **What it issues is an ordinary public-API key**, and that one choice decides most of the rest.
+  Nothing downstream learns a second token format, every `/api/v1` route the tools reach authenticates
+  exactly as before, and revoking the connection is the button already in the board's key panel, where
+  it appears as `MCP: <host name>`. The honest cost is stated on the wire rather than hidden: a key
+  does not expire, so `expires_in` is OMITTED (RFC 6749 makes it optional precisely so a server can say
+  this by absence) and NO refresh grant is advertised, because a refresh could only mint duplicates. A
+  client asking for one is refused in the protocol's own vocabulary rather than by a 404 it would read
+  as a broken deployment. Giving keys a real expiry is what would make a refresh grant honest, and it
+  needs an `expiresAt` column on both runtimes.
+
+  **Nothing is persisted.** The `client_id`, the in-flight authorization request and the code are each
+  sealed into the value the other party carries, under the deployment's own key with an explicit `kind`
+  the opener pins. A table would have cost a migration on both runtimes, a repository pair, a
+  mothership routing decision, and a sweeper for the rows behind every consent screen anyone abandoned.
+  It buys two residual gaps, both recorded rather than papered over. There is no single-use enforcement
+  on the code, which PKCE makes survivable (redeeming needs the verifier, which never left the host, so
+  a code lifted from a history or a proxy log is unredeemable by whoever lifted it) and which a 60
+  second TTL bounds; and a registration cannot be revoked, which is acceptable because it confers
+  nothing at all until a human approves a specific board.
+
+  **Dynamic client registration IS performed here, the opposite of the decision on the consuming side**,
+  where this platform is the OAuth client of a vendor's MCP server and deliberately does not register
+  itself. There, a runtime-minted client is deployment state with no operator-visible identity at the
+  vendor, so nobody can find, rotate or revoke it. Here the registration is a name and a redirect list
+  that grant nothing until a `secrets.manage` holder approves a board and a scope, and what they
+  approve is a key they can see and delete.
+
+  **The consent screen is a page in the SPA, not a screen the backend renders**, which is the same
+  shape the consuming side's vendor callback settled on, reached from the opposite direction. An
+  authorization endpoint is a top-level browser navigation a third party triggers, so it carries no
+  bearer token, and a screen served there could not say who was approving; any "is this the right
+  person" check written on it is unreachable code that reads like protection. So `GET /oauth/authorize`
+  validates, seals, and redirects to `/mcp-authorize`, whose two calls are ordinary session-gated API.
+  On an SSO deployment that is also where the identity provider gets into a flow that otherwise knows
+  about nobody.
+
+  Two asymmetries in that controller are deliberate. A DENIAL takes no permission, because a person who
+  cannot approve must still be able to answer, or the host waits out its timeout and its user goes
+  looking for a fault in the deployment. And WHERE a refusal at the authorize endpoint goes turns on
+  one line: until the `redirect_uri` has been matched against the registration there is no address it
+  may be sent to, because bouncing it back would BE the open redirect that check exists to prevent, so
+  it renders as a page; once it has been matched, RFC 6749 §4.1.2.1 puts every remaining fault (a bad
+  `response_type`, missing PKCE, a `resource` naming somewhere else) on the client's own registered
+  address, because a page instead leaves a conforming host waiting on a callback that never arrives.
+  The distinction is carried by the error the service throws rather than re-derived at the route, so
+  nothing downstream re-decides it from attacker-supplied input.
+
+  **The consent screen preselects the platform's default scope, never the host's ask above it.**
+  Registration is unauthenticated, so `scope=admin` costs an attacker nothing, and an ask arriving as
+  the checked radio button would put the rung that deletes tasks and merges pull requests in front of a
+  person as though it were the shipped default. The ask is honoured only downward; above the default it
+  is REPORTED on the screen instead, so raising the grant stays something a person does.
+
+  **The 401 challenge is the piece with no second source.** Everything else in the chain was already
+  serveable and would have been unreachable, because nothing told a client to look. It is set by the
+  route on the request context and rendered by `handleError`, which stays the one producer of the error
+  envelope: the route knows its challenge before it knows whether it will refuse, and the refusal is
+  raised inside shared key-authentication code that has no business knowing which surface it protects.
+  `WWW-Authenticate` also joins `CORS_EXPOSED_HEADERS`, without which a browser-hosted client cannot
+  read the one header it cannot connect without.
+
+  **Verified against a real vendor rather than against expectations written beside the code.** The
+  serving documents are asserted by driving this repository's own CONSUMING discovery walk over them,
+  and the same test drives that walk over the documents Figma's live MCP server actually serves,
+  recorded verbatim. One client, two servers, and the second held to what the first demonstrates is
+  enough. The Figma fixture earns its place twice: it is also the only regression test the consuming
+  walk has against a shipping, OAuth-protected MCP server.
+
+  **`/.well-known/*` and `/oauth/*` answer any browser origin**, whatever `CORS_ALLOWED_ORIGINS` says,
+  through one predicate in the shared CORS layer both facades read. That is the complement of the
+  allowlist rather than a hole in it: the allowlist names the origins that may drive an existing
+  credential's surface, every route under these two prefixes is reached by a party that has no
+  credential yet, and the hosts this exists for run on origins no operator can be expected to have
+  listed. It belongs in the CORS layer rather than on a handler because a preflight is answered before
+  any route runs: covering the documents alone reads as working, since discovery is a plain GET nobody
+  preflights, and then the first call that ACTS on what was discovered is dropped by the browser.
+
+  Serving is enabled exactly when a deployment can complete the flow: an `ENCRYPTION_KEY` (everything
+  carried is sealed under it) and the public-API key store (what it issues). Absent either, NOTHING is
+  advertised: the discovery documents refuse with the same 503 as the routes they describe, and a host
+  falls back to asking for a key. A deployment that described an authorization server it cannot run
+  would send every host down a chain that fails at the last step, which reads as a broken deployment
+  rather than as one that has not enabled a capability.
+  `APP_BASE_URL` is read only for the consent redirect and falls back to the request's own origin,
+  which is right for every same-origin install; unlike the consuming side's `MCP_OAUTH_REDIRECT_URL`,
+  no third party holds this string.
+
+### Patch Changes
+
+- Updated dependencies [5f6699a]
+  - @cat-factory/contracts@0.292.0
+  - @cat-factory/kernel@0.285.1
+
+## 0.154.0
+
+### Minor Changes
+
+- 2428b6b: Attribute a cross-service run's pull request to every involved service frame whose changes ride
+  it, not just the first.
+
+  The multi-repo fan-out checks out one repo per REPO, so several involved services living in one
+  monorepo already shared a checkout, a work branch and a single pull request. Only the RECORD was
+  singular, which left every frame but the first looking like a service the run had opened no pull
+  request for. The attribution is now a set (`frameIds`) from the dispatch through the harness echo
+  to `block.peerPullRequests`, the merge order, and the verification report. The own-service report
+  carries it too, naming the involved services co-located in the task's own repo: those open no pull
+  request of their own, so that report is the only place their change is reported. A peer checkout
+  also stops inheriting one co-located service's `serviceDirectory`: it is whole-repo, as the primary
+  already was, so the services that resolved second are reachable.
+
+  A recorded peer pull request is now ADDRESSED by its repo rather than by its frames, which is what
+  a checkout is identified by, and one the platform cannot resolve is named to the merger instead of
+  being dropped from the combined diff it scores.
+
+  Internal break: `peerPullRequestSchema.frameId`, `allPullRequests`, `MergePrEntry.frameId`,
+  `PrReportTarget.frameId` and the harness `peerRepos`/`peerPullRequests` wire fields are replaced
+  by `frameIds`. Peer PRs recorded on a block before this ship lose their frame attribution (the
+  pull requests themselves are untouched). Public `/api/v1` is additive only: `PrReportScope` gains
+  `frameIds` and keeps `frameId` as its head (surface version 1.40.0). `frameId` is no longer always
+  null on an own-service report: it names a co-located involved service when there is one.
+
+  The runner image moves to `cat-factory-executor:1.109.0`.
+
+### Patch Changes
+
+- Updated dependencies [22b2459]
+- Updated dependencies [2428b6b]
+  - @cat-factory/kernel@0.285.0
+  - @cat-factory/contracts@0.291.0
+
+## 0.153.12
+
+### Patch Changes
+
+- Updated dependencies [19baddf]
+  - @cat-factory/kernel@0.284.0
+
+## 0.153.11
+
+### Patch Changes
+
+- Updated dependencies [31f43c1]
+  - @cat-factory/contracts@0.290.0
+  - @cat-factory/kernel@0.283.0
+
+## 0.153.10
+
+### Patch Changes
+
+- Updated dependencies [3ff215a]
+  - @cat-factory/contracts@0.289.1
+  - @cat-factory/kernel@0.282.1
+
+## 0.153.9
+
+### Patch Changes
+
+- Updated dependencies [e3cf16a]
+  - @cat-factory/contracts@0.289.0
+  - @cat-factory/kernel@0.282.0
+
+## 0.153.8
+
+### Patch Changes
+
+- Updated dependencies [83764b5]
+  - @cat-factory/contracts@0.288.0
+  - @cat-factory/kernel@0.281.3
+
+## 0.153.7
+
+### Patch Changes
+
+- Updated dependencies [1fbd83c]
+- Updated dependencies [00228c6]
+  - @cat-factory/contracts@0.287.1
+  - @cat-factory/kernel@0.281.2
+
+## 0.153.6
+
+### Patch Changes
+
+- Updated dependencies [bf473bd]
+  - @cat-factory/contracts@0.287.0
+  - @cat-factory/kernel@0.281.1
+
 ## 0.153.5
 
 ### Patch Changes

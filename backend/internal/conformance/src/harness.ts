@@ -11,6 +11,7 @@ import type {
   BlockRepository,
   BoardChange,
   DocInterviewRepository,
+  AccountRiskPolicyRepository,
   AccountSettingsRepository,
   DocumentRepository,
   DeployCloneTarget,
@@ -44,7 +45,7 @@ import type {
   WorkspaceRepository,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
-import type { DispatchToolServers } from '@cat-factory/contracts'
+import type { DispatchToolServers, LocalModelDeclaration } from '@cat-factory/contracts'
 import { boardChangeSubject } from '@cat-factory/kernel'
 import type { FakeAgentOptions } from './FakeAgentExecutor.js'
 import type { OnboardingProbe } from './onboarding.js'
@@ -366,6 +367,19 @@ export interface ConformanceApp {
    */
   accountSettingsRepository(): AccountSettingsRepository
   /**
+   * The facade's ACCOUNT-tier risk policy store (ADR 0055), so the tier-merge suite can author an
+   * account policy and then assert what a BOARD in that account resolves.
+   *
+   * Seeded through the repository rather than the account HTTP route because that route requires a
+   * signed session and account membership, which the dev-open harnesses have no user for. What the
+   * suite is asserting is not the account controller (a server test covers it) but the part only a
+   * real store can answer: that each facade's account table, its board table and the suppression
+   * table compose into the SAME visible library, and that the engine resolves a task pinning an
+   * inherited policy through it. A facade whose account read mapped one column differently would
+   * hand a run a merge posture nobody chose, silently.
+   */
+  accountRiskPolicyRepository(): AccountRiskPolicyRepository
+  /**
    * Seed an account-owned service row linked to a frame block straight into the facade's real
    * service store, so the frame-deletion test can assert the batched frame→service reclaim
    * actually deletes the backing service on every runtime. The only production path that
@@ -375,6 +389,34 @@ export interface ConformanceApp {
   seedService(service: Service): Promise<void>
   /** Read a service back by id (null once reclaimed), for the frame-deletion reclaim assertion. */
   getService(id: string): Promise<Service | null>
+  /**
+   * Link a service FRAME to a repository, so `resolveRepoTarget` resolves for that frame and
+   * every block under it.
+   *
+   * ONE method for what is three stores expressing one fact (the workspace's VCS installation,
+   * the repo projection row, the frame's own service→repo link), because a suite that had to
+   * write them separately would be encoding this facade's storage shape rather than asserting
+   * behaviour. Each facade implements it over its OWN repositories, which is what makes an
+   * assertion built on it a real cross-runtime one: the ancestry walk reads three different
+   * stores per runtime and a mapping that drifts in any of them fails here.
+   *
+   * Patches the service the frame ALREADY has (every top-level frame gets one at creation)
+   * rather than inserting a second: `getByFrameBlock` is an unordered single-row read, so two
+   * rows for one frame would resolve nondeterministically.
+   *
+   * **Pass a frame the test CREATED, never a seeded one.** `getByFrameBlock` matches on the frame
+   * id alone (block ids are unique per workspace, not per database) and every seeded board in a
+   * facade's shared test database reuses the same fixed ids, so `blk_auth` names one service row
+   * per workspace created so far and this would patch an arbitrary one of them.
+   */
+  linkFrameRepo(input: {
+    workspaceId: string
+    frameBlockId: string
+    installationId: number
+    githubId: number
+    owner: string
+    name: string
+  }): Promise<void>
   /**
    * The facade's user-identity + onboarding services over its real store, so the suite
    * can assert identity/invitation behaviour parity (the unauthenticated HTTP `call`
@@ -493,13 +535,26 @@ export interface OpenRouterCatalogProbe {
 
 /** The subset of the local-model-endpoints service the conformance suite drives. */
 export interface LocalModelEndpointsProbe {
-  list(
-    userId: string,
-  ): Promise<{ provider: string; baseUrl: string; hasApiKey: boolean; models: string[] }[]>
+  list(userId: string): Promise<
+    {
+      provider: string
+      baseUrl: string
+      hasApiKey: boolean
+      models: LocalModelDeclaration[]
+      /** Whether the store had to discard part of the row's stored model list. */
+      unreadableModels: boolean
+    }[]
+  >
   upsert(
     userId: string,
-    input: { provider: string; label?: string; baseUrl: string; apiKey?: string; models: string[] },
-  ): Promise<{ provider: string; hasApiKey: boolean; models: string[] }>
+    input: {
+      provider: string
+      label?: string
+      baseUrl: string
+      apiKey?: string
+      models: LocalModelDeclaration[]
+    },
+  ): Promise<{ provider: string; hasApiKey: boolean; models: LocalModelDeclaration[] }>
   resolve(
     userId: string,
     provider: string,

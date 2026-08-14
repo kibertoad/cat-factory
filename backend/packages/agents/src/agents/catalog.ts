@@ -16,7 +16,18 @@ import { testingSystemPrompt, testerEnvironmentSection } from './prompts/testing
 import type { AgentKindRegistry } from './kinds/registry.js'
 import { traitGuidanceFor } from './kinds/traits.js'
 import { roleSystemPrompt } from './prompts/roles.js'
-import { FINAL_ANSWER_IN_REPLY, PLATFORM_IS_NOT_THE_PRODUCT } from './prompts/shared.js'
+import {
+  FINAL_ANSWER_IN_REPLY,
+  PLATFORM_IS_NOT_THE_PRODUCT,
+  REVIEW_FINDINGS_LAYOUT,
+} from './prompts/shared.js'
+import {
+  ACCOUNTING_REVIEW_DIRECTIVE,
+  FEEDBACK_ACCOUNTING_DIRECTIVE,
+  PRIOR_ROUNDS_DIRECTIVE,
+  renderPriorReviewRounds,
+  renderRevisionComments,
+} from './prompts/review-rounds.js'
 import {
   customTaskTypeSection,
   environmentSection,
@@ -45,8 +56,20 @@ import {
  * track prompt. That difference is invisible from the outside and is exactly the trap: an
  * override replaces the track prompt, so for a built-in kind it silently takes the inline copy
  * with it. See {@link restoreShippedInvariants}.
+ *
+ * {@link REVIEW_FINDINGS_LAYOUT} belongs here for the same reason the final-answer rule does: it
+ * is a fact about how the platform READS a reviewer's reply, not editorial content. The severities
+ * it asks for are what the ENGINE acts on (a `blocker` holds the step), the `summary` it shapes is
+ * rendered as markdown in the run panel, and the escaping sentence it carries is what keeps a
+ * multi-line verdict from arriving as invalid JSON. A workspace that edits its reviewer prompt for
+ * an unrelated reason would otherwise get ungraded findings back — every point reaching the engine
+ * as equally urgent — with nothing in the editor saying why.
  */
-const OVERRIDE_PRESERVED_FRAGMENTS = [READ_ONLY_GUARDRAIL, FINAL_ANSWER_IN_REPLY] as const
+const OVERRIDE_PRESERVED_FRAGMENTS = [
+  READ_ONLY_GUARDRAIL,
+  FINAL_ANSWER_IN_REPLY,
+  REVIEW_FINDINGS_LAYOUT,
+] as const
 
 /**
  * Re-append any invariant the SHIPPED prompt for this kind guaranteed and the overridden
@@ -221,9 +244,26 @@ export function baseSystemPromptFor(kind: AgentKind, registry: AgentKindRegistry
 }
 
 /**
- * When a human requested changes on this step's gated proposal, append their
- * feedback and the previous proposal so the agent revises rather than restarts.
- * Applied to every inline agent kind (standard-phase and generic alike).
+ * Who asked for the revision, said in one sentence. An exhaustive `Record`, so a third kind of
+ * reviewer fails to compile here rather than silently borrowing one of these two framings.
+ *
+ * The distinction is load-bearing in both directions: a companion's automatic round framed as a
+ * person's request tells the agent somebody is waiting on work no person has read, and a real
+ * "request changes" flattened into "your work was reviewed" loses the one fact that outranks the
+ * feedback itself.
+ */
+const REVISION_REQUESTER_FRAMING: Record<
+  NonNullable<AgentRunContext['revision']>['requestedBy'],
+  string
+> = {
+  human: 'A person reviewed your previous proposal and requested changes.',
+  reviewer: 'An automated reviewer graded your previous proposal and asked for changes.',
+}
+
+/**
+ * When changes were requested on this step's previous proposal — by a person on its gate, or by
+ * the reviewer that grades it — append the feedback and that proposal so the agent revises rather
+ * than restarts. Applied to every inline agent kind (standard-phase and generic alike).
  */
 function withRevision(prompt: string, context: AgentRunContext): string {
   const revision = context.revision
@@ -231,9 +271,13 @@ function withRevision(prompt: string, context: AgentRunContext): string {
   const lines = [
     prompt,
     '',
-    'A human reviewed your previous proposal and requested changes. Revise that',
-    'proposal to address their feedback — keep what still holds, change what they',
+    // Falls back to the reviewer framing for a rework row written before `requestedBy` existed:
+    // it is the common case, and it is the false-human claim that this exists to stop.
+    REVISION_REQUESTER_FRAMING[revision.requestedBy] ?? REVISION_REQUESTER_FRAMING.reviewer,
+    'Revise that proposal to answer the feedback: keep what still holds, change what was',
     'flagged. Do not start from scratch.',
+    '',
+    FEEDBACK_ACCOUNTING_DIRECTIVE,
     '',
     'Your previous proposal:',
     revision.previousProposal || '(empty)',
@@ -241,20 +285,15 @@ function withRevision(prompt: string, context: AgentRunContext): string {
     'Reviewer feedback:',
     revision.feedback || '(none given)',
   ]
-  // Per-block comments the reviewer left on specific parts of the proposal. Each
-  // quotes the exact text it targets, so the agent can locate and revise it.
-  if (revision.comments?.length) {
-    lines.push('', 'Comments on specific parts of your proposal:')
-    for (const c of revision.comments) {
-      lines.push(
-        '',
-        'On this part:',
-        c.quotedSource || '(empty)',
-        'Comment:',
-        c.body || '(none given)',
-      )
-    }
-  }
+  // Per-block comments the reviewer left on specific parts of the proposal, each naming what it
+  // targets so the agent can locate and revise it.
+  //
+  // Rendered by `renderRevisionComments`, beside the renderer for the ROUNDS BEFORE this one: worst
+  // first (because a `blocker` left open sends the work straight back however much else was
+  // addressed), labelled with the urgency it was raised at, and anchored the way the reviewer
+  // anchored it. A person's comment carries no grade and is simply unlabelled: they are already
+  // holding the run, so there is nothing for a label to add.
+  if (revision.comments?.length) lines.push(...renderRevisionComments(revision.comments))
   return lines.join('\n')
 }
 
@@ -292,7 +331,60 @@ export function userPromptFor(
   // "respond with ONLY a JSON object" is the shape), and both wrappers append. Folded in earlier,
   // a revision re-run would end on the reviewer's feedback and an inline run on a context-file
   // dump, leaving the reply-shape instruction buried mid-prompt.
-  return withSuffix(withInjectedContext(withRevision(prompt, context), context, opts), suffix)
+  return withSuffix(
+    withInjectedContext(withPriorReview(withRevision(prompt, context), context), context, opts),
+    suffix,
+  )
+}
+
+/**
+ * Append the rounds this step's companion loop has already been through.
+ *
+ * ONE site, deliberately, and it is what makes the memory arrive for every companion rather than
+ * for whichever one somebody wired: `userPromptFor` is the single prompt assembly both surfaces
+ * go through, so an inline companion (`architect-companion`, `spec-companion`), a
+ * container-backed one (`reviewer`, `doc-reviewer`) and a companion a DEPLOYMENT registered all
+ * receive it on the same terms, as does the producer being reworked.
+ *
+ * Applied AFTER {@link withRevision} so a producer reads the current round's asks first (that is
+ * the work) and the older rounds after it (that is the thing not to regress on). `context.role`
+ * decides the framing, since the two sides need opposite instructions from the same data.
+ */
+function withPriorReview(prompt: string, context: AgentRunContext): string {
+  const prior = context.priorReview
+  if (!prior?.rounds.length) return prompt
+  const grading = prior.role === 'grader'
+  const lines = [
+    prompt,
+    '',
+    grading
+      ? `You have already reviewed earlier revisions of this work ${prior.rounds.length} time(s), ` +
+        `against a bar of ${prior.threshold.toFixed(2)}. Your own previous verdicts:`
+      : `This work has been through ${prior.rounds.length} review round(s) before the feedback ` +
+        `above. Everything previously raised, so you do not undo a fix or drop an open point:`,
+    ...renderPriorReviewRounds(prior.rounds),
+    '',
+    grading
+      ? PRIOR_ROUNDS_DIRECTIVE
+      : 'Keep every earlier point that was already addressed addressed. Where an earlier point ' +
+        'is still open, deal with it in this revision too, not only the feedback above, and ' +
+        'account for it in the same way.',
+  ]
+  // Only the grader, and only here: an accounting can exist only once a round has been answered,
+  // which is exactly the condition this whole section renders under.
+  if (grading) lines.push('', ACCOUNTING_REVIEW_DIRECTIVE)
+  // How much rope is left, stated to the GRADER only. A producer told "this is the last round"
+  // optimises for the grader rather than for the work; a grader that knows it is holding the run
+  // has the context to weigh a marginal call, which is the call this loop keeps getting wrong.
+  if (grading) {
+    lines.push(
+      prior.roundsRemaining > 0
+        ? `${prior.roundsRemaining} automatic rework round(s) remain after this one.`
+        : 'This is the LAST automatic round: below the bar, the run stops for a person or ' +
+            "proceeds on this work under the run's risk policy. Rate what is actually there.",
+    )
+  }
+  return lines.join('\n')
 }
 
 /** Append a kind's closing task instructions ({@link buildBaseUserPrompt}'s `suffix`), if any. */

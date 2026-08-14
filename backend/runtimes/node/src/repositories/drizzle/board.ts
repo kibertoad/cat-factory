@@ -386,6 +386,15 @@ export class DrizzleBlockRepository implements BlockRepository {
     return row ? rowToBlock(row) : null
   }
 
+  async getByExecution(workspaceId: string, executionId: string): Promise<Block | null> {
+    const [row] = await this.db
+      .select()
+      .from(blocks)
+      .where(and(eq(blocks.workspace_id, workspaceId), eq(blocks.execution_id, executionId)))
+      .limit(1)
+    return row ? rowToBlock(row) : null
+  }
+
   async findById(
     blockId: string,
   ): Promise<{ workspaceId: string; serviceId: string | null; block: Block } | null> {

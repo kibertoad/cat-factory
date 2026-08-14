@@ -64,6 +64,24 @@ export const SPEC_AWARE_TRAIT: AgentTrait = 'spec-aware'
 export const BINARY_STORAGE_TRAIT: AgentTrait = 'binary-storage'
 
 /**
+ * Design-image kinds are handed the PICTURES of the task's designs, not just the textual
+ * `.cat-context/` description of them: a kind that builds or plans a screen should see the screen.
+ *
+ * A pure MARKER trait: the engine reads it to decide whether a dispatch resolves the task's
+ * reference set at all, which is what keeps the two reads (documents + artifact store) off the
+ * dispatch path of every kind that has no use for them. Whether the pictures then REACH the model
+ * is a separate, per-dispatch question (the harness and the resolved model), and one the trait
+ * deliberately says nothing about: a kind carrying it on a text-only pair still resolves the set,
+ * so its prompt can state what was withheld.
+ *
+ * Distinct from {@link BINARY_STORAGE_TRAIT}, which is a PRECONDITION (a run whose kind carries it
+ * is refused when the account stores no binaries). This one is an ENRICHMENT: a task with no
+ * linked design, or a deployment with no storage, is simply a run with no pictures, which is the
+ * ordinary case and not a misconfiguration.
+ */
+export const DESIGN_IMAGES_TRAIT: AgentTrait = 'design-images'
+
+/**
  * Interview-gate kinds run the shared interactive-INTERVIEWER spine
  * (`InterviewGateController`): they PARK the run on a durable decision-wait while a human answers
  * the interviewer's clarifying questions in a dedicated window, then RESUME by re-running the
@@ -173,6 +191,8 @@ export const SPEC_AWARE_GUIDANCE = [
  *  - `spec-aware`: every code-touching kind (anything that clones and reads the repo),
  *    so each is pointed at the in-repo spec. The `spec-writer` is intentionally absent —
  *    it AUTHORS the spec rather than consuming it.
+ *  - `design-images`: the kinds that build or plan a SCREEN, so a task's design renders are
+ *    resolved and put in front of them where the harness/model pair can carry an image.
  *  - `doc-aware`: the document-authoring companion `doc-reviewer` (the writer/outliner/
  *    finalizer producer kinds are REGISTERED kinds, so they carry `doc-aware` on their own
  *    `AgentKindDefinition.traits` in `./document`, not here — the same way the code
@@ -181,15 +201,24 @@ export const SPEC_AWARE_GUIDANCE = [
 export const STANDARD_AGENT_TRAITS: Partial<Record<AgentKind, AgentTrait[]>> = {
   // The architect DESIGNS, so it is the one built-in kind that chooses foundational services
   // and declares them; `researcher` and `coder` CONSUME that declaration.
-  architect: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, FOUNDATIONAL_CATALOG_TRAIT],
-  coder: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, BRIEF_STANDARDS_TRAIT, FOUNDATIONAL_CONTRACTS_TRAIT],
+  architect: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, FOUNDATIONAL_CATALOG_TRAIT, DESIGN_IMAGES_TRAIT],
+  coder: [
+    CODE_AWARE_TRAIT,
+    SPEC_AWARE_TRAIT,
+    BRIEF_STANDARDS_TRAIT,
+    FOUNDATIONAL_CONTRACTS_TRAIT,
+    DESIGN_IMAGES_TRAIT,
+  ],
   // The researcher plans the solution against the design, so it needs the same contracts the
   // coder will build to — investigating prior art for a capability the org already runs, from
   // the catalog entry alone, is how a plan ends up proposing a library beside a shared service.
   researcher: [FOUNDATIONAL_CONTRACTS_TRAIT],
   reviewer: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
   'ci-fixer': [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, BRIEF_STANDARDS_TRAIT],
-  fixer: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, BRIEF_STANDARDS_TRAIT],
+  // The fixer is the kind a visual-confirmation `request-fix` dispatches, so it is acting on a
+  // human's "this does not match the design" the moment it runs: it needs the design as much as
+  // the coder that produced the screen.
+  fixer: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, BRIEF_STANDARDS_TRAIT, DESIGN_IMAGES_TRAIT],
   'conflict-resolver': [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, BRIEF_STANDARDS_TRAIT],
   'tester-api': [SPEC_AWARE_TRAIT],
   // The UI Tester captures screenshots and uploads them to the binary-artifact store
@@ -243,6 +272,11 @@ export const STANDARD_TRAIT_DEFINITIONS: readonly AgentTraitDefinition[] = [
   { id: FOUNDATIONAL_CATALOG_TRAIT, guidance: FOUNDATIONAL_CATALOG_GUIDANCE },
   { id: FOUNDATIONAL_CONTRACTS_TRAIT, guidance: FOUNDATIONAL_CONTRACTS_GUIDANCE },
   { id: BINARY_OUTPUT_TRAIT, guidance: BINARY_OUTPUT_GUIDANCE },
+  // A marker: the pictures are delivered as context (files or attached parts) and the prompt
+  // section that names them is rendered from what the dispatch actually achieved, so there is no
+  // static guidance to fold. Standing advice about consuming a design lives in the
+  // `design.context` fragment, which the engine folds by the same presence rule.
+  { id: DESIGN_IMAGES_TRAIT },
 ]
 
 /**

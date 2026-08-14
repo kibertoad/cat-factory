@@ -20,6 +20,8 @@ const KEYS: Record<string, Awaited<ReturnType<PublicApiKeyService['authenticate'
     scope: 'read',
     label: 'CI pipeline',
     externalIdentity: null,
+    actsAsUserId: null,
+    createdByUserId: 'usr_1',
     createdAt: 1_700_000_000_000,
   },
   // A key a provisioner minted FOR someone: `/me` is how the subsystem holding it discovers which
@@ -31,6 +33,9 @@ const KEYS: Record<string, Awaited<ReturnType<PublicApiKeyService['authenticate'
     scope: 'read',
     label: 'os user',
     externalIdentity: 'os-user:42',
+    actsAsUserId: null,
+    // Provisioned headlessly through `POST /api/v1/keys`, so there is no minting person at all.
+    createdByUserId: null,
     createdAt: 1_700_000_000_000,
   },
 }

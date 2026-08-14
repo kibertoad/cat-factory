@@ -49,6 +49,10 @@ describe('board-load read surface (workspace-scoped)', () => {
     { repo: 'bootstrapJobRepository', method: 'listByWorkspace', args: [] },
     { repo: 'executionRepository', method: 'listRecent', args: [{ limit: 10 }] },
     { repo: 'executionRepository', method: 'exists', args: ['exec_1'] },
+    // The run→block reverse link. It is on the DISPOSAL path of a run whose row cannot be decoded,
+    // so an unrouted method would leave a mothership-mode board's card wedged `in_progress` for
+    // good, with the run row settled and nothing on screen to say so.
+    { repo: 'blockRepository', method: 'getByExecution', args: ['exec_1'] },
     { repo: 'tokenUsageRepository', method: 'totalsSinceForWorkspace', args: [0] },
     { repo: 'requirementReviewRepository', method: 'getByBlock', args: ['blk_1'] },
     { repo: 'clarityReviewRepository', method: 'getByBlock', args: ['blk_1'] },
@@ -280,21 +284,22 @@ describe('agent-context run-path + lazy-seed surface (workspace-scoped)', () => 
 
   // The lazy default-preset seeds a board load triggers (`*PresetService` ensure-default writes).
   // They return void, so assert they forward in scope and are scope-rejected out of scope.
-  const SEED_WRITES: Array<{ repo: string; method: string }> = [
-    { repo: 'riskPolicyRepository', method: 'upsert' },
-    { repo: 'modelPresetRepository', method: 'upsert' },
+  const SEED_WRITES: Array<{ repo: string; method: string; arg: unknown }> = [
+    { repo: 'riskPolicyRepository', method: 'upsert', arg: { id: 'p_1' } },
+    { repo: 'modelPresetRepository', method: 'upsert', arg: { id: 'p_1' } },
+    // The BATCHED model-preset seed, whose payload is an array rather than a row: it is the call a
+    // first board load actually makes, so an unrouted one fails the load itself.
+    { repo: 'modelPresetRepository', method: 'upsertMany', arg: [{ id: 'p_1' }] },
   ]
-  for (const { repo, method } of SEED_WRITES) {
+  for (const { repo, method, arg } of SEED_WRITES) {
     it(`forwards ${repo}.${method} for an in-scope workspace`, async () => {
-      await expect(
-        remoteRegistry()[repo]![method]!('ws_in', { id: 'p_1' }),
-      ).resolves.toBeUndefined()
+      await expect(remoteRegistry()[repo]![method]!('ws_in', arg)).resolves.toBeUndefined()
     })
 
     it(`rejects ${repo}.${method} for an out-of-scope workspace (404)`, async () => {
-      await expect(remoteRegistry()[repo]![method]!('ws_out', { id: 'p_1' })).rejects.toMatchObject(
-        { code: 'not_found' },
-      )
+      await expect(remoteRegistry()[repo]![method]!('ws_out', arg)).rejects.toMatchObject({
+        code: 'not_found',
+      })
     })
   }
 })
@@ -331,7 +336,7 @@ describe('settings, preset & schedule management surface (workspace-scoped write
   // workspace; void writes just resolve.
   const WRITES: Array<{ repo: string; method: string; args: unknown[]; echoes?: boolean }> = [
     { repo: 'workspaceSettingsRepository', method: 'upsert', args: [{ storeAgentContext: true }] },
-    { repo: 'trackerSettingsRepository', method: 'put', args: [{}] },
+    { repo: 'trackerSettingsRepository', method: 'merge', args: [{}, {}, 1], echoes: true },
     { repo: 'serviceFragmentDefaultsRepository', method: 'set', args: [['frag_1']] },
     { repo: 'riskPolicyRepository', method: 'get', args: ['preset_1'], echoes: true },
     { repo: 'riskPolicyRepository', method: 'remove', args: ['preset_1'] },
@@ -1359,4 +1364,64 @@ describe('document / task integration surface (workspace-scoped)', () => {
       })
     }
   }
+})
+
+describe('parked-review question writeback markers (workspaceField-scoped)', () => {
+  // `IssueWritebackService.postReviewQuestions` claims one marker per `(workspace, review,
+  // iteration, linked issue)` BEFORE posting, so a replaying durable driver cannot comment the same
+  // findings onto the reporter's issue twice. The ENGINE writes it, so a mothership-mode node
+  // reaches it on the run path; every method takes the KEY as arg0, whose `workspaceId` is a FIELD.
+  const key = (workspaceId: string) => ({
+    workspaceId,
+    reviewId: 'rev_1',
+    iteration: 2,
+    issueRef: 'github:acme/api#42',
+  })
+  const WINDOW = { now: 1_000, reclaimPendingBefore: 0 }
+  const CALLS: Array<{ method: string; extra: unknown[] }> = [
+    { method: 'claim', extra: [WINDOW] },
+    { method: 'settle', extra: [{ status: 'posted' }, 1_000] },
+    { method: 'get', extra: [] },
+  ]
+
+  for (const { method, extra } of CALLS) {
+    it(`forwards ${method} when the key targets an in-scope workspace`, async () => {
+      // `claim` echoes the bound workspace through its boolean and `get` echoes the whole key, so
+      // this proves the marker the repo saw is the one the caller named — not merely that the call
+      // was admitted.
+      const result = await remoteRegistry().reviewQuestionPostRepository![method]!(
+        key('ws_in'),
+        ...extra,
+      )
+      if (method === 'claim') expect(result).toBe(true)
+      if (method === 'get') expect(result).toMatchObject({ workspaceId: 'ws_in', iteration: 2 })
+    })
+
+    it(`rejects ${method} when the key targets an out-of-scope workspace (404, no leak)`, async () => {
+      await expect(
+        remoteRegistry().reviewQuestionPostRepository![method]!(key('ws_out'), ...extra),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    for (const [label, arg] of [
+      ['no workspaceId field', { reviewId: 'rev_1' }],
+      ['null', null],
+      ['a non-record primitive', 'not-a-record'],
+    ] as const) {
+      it(`rejects ${method} when the key is ${label} (404, fail-closed)`, async () => {
+        await expect(
+          remoteRegistry().reviewQuestionPostRepository![method]!(arg, ...extra),
+        ).rejects.toMatchObject({ code: 'not_found' })
+      })
+    }
+  }
+
+  it('still refuses the INBOUND tracker-comment ingest markers (off the allow-list)', async () => {
+    // The mirror-image surface, and the reason it is a permanent exclusion rather than a backlog
+    // item: a tracker comment reaches the deployment holding the public webhook URL, so a laptop
+    // never receives a delivery and has nothing to claim.
+    await expect(
+      remoteRegistry().trackerCommentIngestRepository!.claim!({ workspaceId: 'ws_in' }),
+    ).rejects.toThrow(/not callable/)
+  })
 })

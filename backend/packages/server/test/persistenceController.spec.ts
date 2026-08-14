@@ -161,6 +161,63 @@ describe('persistence RPC controller: memo overrides never fake a wired reposito
   })
 })
 
+describe('persistence RPC controller: an unreadable source table never reads as an absent row', () => {
+  // `fragmentSourceRepository.upsert` binds through `ownerFieldUpsert`, whose STORED half is
+  // decided by row EXISTENCE — an id no row holds is a create, admitted on the declared owner
+  // alone. That admission is only sound while "no such row" is distinguishable from "this
+  // deployment cannot read that table": a facade wiring the write without the read (or a library
+  // added to `LibrarySourceEntity` with no resolver row) would otherwise turn every foreign id
+  // into a create and hand back the cross-tenant repoint the rule exists to close.
+  const upsertBody = (id: string) => [{ id, ownerKind: 'account', ownerId: ACCOUNT }]
+
+  /** The write wired, the read NOT — the half-wired facade the rule must not trust. */
+  const writeOnly = () =>
+    ({
+      fragmentSourceRepository: { upsert: async () => undefined },
+    }) as unknown as PersistenceRegistry
+
+  /** Both wired, with one source owned by ANOTHER account. */
+  const readable = () =>
+    ({
+      fragmentSourceRepository: {
+        upsert: async () => undefined,
+        get: async (id: string) =>
+          id === 'fragsrc_out' ? { id, ownerKind: 'account', ownerId: OTHER_ACCOUNT } : null,
+      },
+    }) as unknown as PersistenceRegistry
+
+  it('refuses the upsert when the source table has no readable `get`', async () => {
+    const { body } = await call(
+      makeApp(writeOnly()),
+      'fragmentSourceRepository',
+      'upsert',
+      upsertBody('fragsrc_anything'),
+    )
+    expect(body).toMatchObject({ ok: false, error: { code: 'not_found' } })
+  })
+
+  it('still admits a genuine CREATE when the table IS readable', async () => {
+    const { status, body } = await call(
+      makeApp(readable()),
+      'fragmentSourceRepository',
+      'upsert',
+      upsertBody('fragsrc_new'),
+    )
+    expect(status).toBe(200)
+    expect(body).toMatchObject({ ok: true })
+  })
+
+  it("still refuses an id naming another tenant's existing source", async () => {
+    const { body } = await call(
+      makeApp(readable()),
+      'fragmentSourceRepository',
+      'upsert',
+      upsertBody('fragsrc_out'),
+    )
+    expect(body).toMatchObject({ ok: false, error: { code: 'not_found' } })
+  })
+})
+
 describe('persistence RPC controller: revoked machine nodes (SEC-5)', () => {
   it('refuses a REVOKED node with the same 403 as an invalid token', async () => {
     // The token itself still verifies (valid signature, live exp); the roster tombstone

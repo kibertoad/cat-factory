@@ -22,10 +22,16 @@ import type {
   WorkspaceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import type {
+  AgentContextRecorder,
+  Clock,
+  IdGenerator,
+  ResolveBinaryArtifactStore,
+} from '@cat-factory/kernel'
 import {
   type AppConfig,
   createInlineInstrumentation,
+  logger,
   wrapResolverWithTelemetry,
 } from '@cat-factory/server'
 import { buildTraceSink } from './container-executor-deps.js'
@@ -109,6 +115,18 @@ export interface NodeModelDepsInput {
    * and inline calls fall back to the trace sink alone.
    */
   llmCallMetricRepository?: LlmCallMetricRepository
+  /**
+   * The account's binary-artifact store, for the design pictures an inline dispatch attaches to
+   * its model call. Absent ⇒ an inline kind's prompt states that the pictures could not be
+   * delivered rather than pretending the task holds none.
+   */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /**
+   * The agent-context observability sink, so an INLINE dispatch files the provided-context
+   * snapshot its container sibling has always filed. Absent ⇒ no inline snapshots, as on a
+   * deployment retaining no telemetry.
+   */
+  agentContextRecorder?: AgentContextRecorder
 }
 
 /**
@@ -140,6 +158,7 @@ export function buildNodeModelDeps(input: NodeModelDepsInput) {
     caches,
     workspaceSettingsRepository,
     llmCallMetricRepository,
+    resolveBinaryArtifactStore,
   } = input
 
   // The direct-provider API-key pool + the per-scope model-provider resolver, shared by
@@ -308,6 +327,12 @@ export function buildNodeModelDeps(input: NodeModelDepsInput) {
     // INLINE_WEB_SEARCH_ENABLED and an Anthropic/OpenAI model).
     webSearch: inlineWebSearchOptionsFromEnv(env),
     agentKindRegistry,
+    ...(resolveBinaryArtifactStore ? { resolveBinaryArtifactStore } : {}),
+    // Symmetric with the Worker's `selectAgentExecutor`: the inline executor files its provided
+    // context to the same sink the container executor does. A required key, so this facade cannot
+    // drop it back to nothing without failing to typecheck.
+    agentContextRecorder: input.agentContextRecorder,
+    logger,
   })
 
   return {

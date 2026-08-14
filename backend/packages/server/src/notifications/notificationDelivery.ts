@@ -10,7 +10,7 @@ import type {
   WorkspaceMemberRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { RoutedNotificationChannel } from '@cat-factory/kernel'
+import { getErrorMessage, RoutedNotificationChannel } from '@cat-factory/kernel'
 import { NotificationSettingsService } from '@cat-factory/orchestration'
 import { logger } from '../observability/logger.js'
 
@@ -79,7 +79,7 @@ export function buildNotificationDelivery(
       // The gate fell back to the shipped default rather than dropping the notification; say
       // so, because a settings store that cannot be read is an outage in its own right.
       logger.warn('notification routing lookup failed; using the default route', {
-        err: error instanceof Error ? error.message : String(error),
+        err: getErrorMessage(error),
         ...ctx,
       }),
     )
@@ -99,7 +99,7 @@ export function buildNotificationDelivery(
           // address) through the structured logger so a broken sender is diagnosable.
           onError: (error, ctx) =>
             logger.warn('email notification delivery failed', {
-              err: error instanceof Error ? error.message : String(error),
+              err: getErrorMessage(error),
               ...ctx,
             }),
         }),

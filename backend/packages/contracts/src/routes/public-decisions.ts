@@ -21,7 +21,7 @@ import {
   publicResolveExceededSchema,
   publicSetFindingStatusSchema,
 } from '../public-decisions.js'
-import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
+import { errorResponses, singleStringParam, withMinScope, withPersonalUnlock } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Public-API route contracts for a run's PARKED HUMAN DECISIONS — the external counterpart of
@@ -37,6 +37,21 @@ import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
 // ladder — the same rung that admits a parking pipeline in the first place (see
 // `backend/docs/adr/0047-headless-clarification-loop.md`, D1).
 // ---------------------------------------------------------------------------
+
+/**
+ * A route that ANSWERS a park: the `decide` floor plus the personal-unlock header.
+ *
+ * The two are one fact on this surface, which is why they are declared together rather than route
+ * by route. Answering a park WAKES the run: the durable driver advances, dispatches the next step,
+ * and that step leases whatever credential the run needs — so every route that may answer is a
+ * route that may need the run's owner to unlock their subscription first (the server's
+ * `gateDecisionAction` reads the header in the one preamble they all share). Forty routes declaring
+ * that individually is forty chances for the newest one to omit it and publish an input it reads;
+ * `public-api-scope.test.ts` pins the pairing from the barrel so a mutation added with a bare
+ * `withMinScope` fails there.
+ */
+const decides = <TContract extends object>(contract: TContract) =>
+  withPersonalUnlock(withMinScope('decide', contract))
 
 const runIdParams = singleStringParam('runId')
 const runItemParams = withObjectKeys(v.object({ runId: v.string(), itemId: v.string() }))
@@ -66,8 +81,7 @@ export const listPublicRunDecisionsContract = withMinScope(
 // ---- requirements review ---------------------------------------------------
 
 /** Answer one reviewer finding. */
-export const replyPublicRunFindingContract = withMinScope(
-  'decide',
+export const replyPublicRunFindingContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runItemParams,
@@ -79,8 +93,7 @@ export const replyPublicRunFindingContract = withMinScope(
 )
 
 /** Dismiss a finding as not applicable, or reopen one dismissed by mistake. */
-export const setPublicRunFindingStatusContract = withMinScope(
-  'decide',
+export const setPublicRunFindingStatusContract = decides(
   defineApiContract({
     method: 'patch',
     requestPathParamsSchema: runItemParams,
@@ -96,8 +109,7 @@ export const setPublicRunFindingStatusContract = withMinScope(
  * durable driver folds and re-reviews in the background, so the response shows the review
  * `incorporating`; poll (or watch the SSE stream) for the next round or convergence.
  */
-export const incorporatePublicRunRequirementsContract = withMinScope(
-  'decide',
+export const incorporatePublicRunRequirementsContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runIdParams,
@@ -108,8 +120,7 @@ export const incorporatePublicRunRequirementsContract = withMinScope(
 )
 
 /** Run one more reviewer pass over the incorporated document. */
-export const reReviewPublicRunRequirementsContract = withMinScope(
-  'decide',
+export const reReviewPublicRunRequirementsContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runIdParams,
@@ -120,8 +131,7 @@ export const reReviewPublicRunRequirementsContract = withMinScope(
 )
 
 /** Settle the requirements phase and advance the parked run (used when nothing is outstanding). */
-export const proceedPublicRunRequirementsContract = withMinScope(
-  'decide',
+export const proceedPublicRunRequirementsContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runIdParams,
@@ -132,8 +142,7 @@ export const proceedPublicRunRequirementsContract = withMinScope(
 )
 
 /** Resolve a review that hit its iteration cap (extra round / proceed / stop and reset). */
-export const resolvePublicRunRequirementsExceededContract = withMinScope(
-  'decide',
+export const resolvePublicRunRequirementsExceededContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runIdParams,
@@ -146,8 +155,7 @@ export const resolvePublicRunRequirementsExceededContract = withMinScope(
 // ---- implementation fork ---------------------------------------------------
 
 /** Choose an implementation approach (a proposed fork id or a custom approach). */
-export const choosePublicRunForkContract = withMinScope(
-  'decide',
+export const choosePublicRunForkContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runIdParams,
@@ -160,8 +168,7 @@ export const choosePublicRunForkContract = withMinScope(
 // ---- judge ------------------------------------------------------------------
 
 /** Resolve a parked judge verdict: proceed anyway / bounce for rework / stop the run. */
-export const resolvePublicRunJudgeContract = withMinScope(
-  'decide',
+export const resolvePublicRunJudgeContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runIdParams,
@@ -184,8 +191,7 @@ export const resolvePublicRunJudgeContract = withMinScope(
  * `recheck` then verifies rather than takes the claim on trust, and a still-blocked verdict comes
  * back as an ordinary 200 with refreshed findings, because nothing went wrong.
  */
-export const resolvePublicRunInputGateContract = withMinScope(
-  'decide',
+export const resolvePublicRunInputGateContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runIdParams,
@@ -204,8 +210,7 @@ export const resolvePublicRunInputGateContract = withMinScope(
 // a slow integration would approve a step nobody looked at.
 
 /** Approve a parked gate's proposal (optionally replacing it with an edited one). */
-export const approvePublicRunStepContract = withMinScope(
-  'decide',
+export const approvePublicRunStepContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runApprovalParams,
@@ -217,8 +222,7 @@ export const approvePublicRunStepContract = withMinScope(
 )
 
 /** Request changes on a parked gate: the step re-runs with the supplied guidance. */
-export const requestPublicRunStepChangesContract = withMinScope(
-  'decide',
+export const requestPublicRunStepChangesContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runApprovalParams,
@@ -230,8 +234,7 @@ export const requestPublicRunStepChangesContract = withMinScope(
 )
 
 /** Reject a parked gate: the run stops entirely (a terminal, retryable failure). */
-export const rejectPublicRunStepContract = withMinScope(
-  'decide',
+export const rejectPublicRunStepContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runApprovalParams,
@@ -248,8 +251,7 @@ export const rejectPublicRunStepContract = withMinScope(
  * asking a different question, and letting the generic approve settle it would ship output the
  * companion never passed.
  */
-export const resolvePublicRunStepExceededContract = withMinScope(
-  'decide',
+export const resolvePublicRunStepExceededContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runApprovalParams,
@@ -266,8 +268,7 @@ export const resolvePublicRunStepExceededContract = withMinScope(
  * Answer a decision an agent raised mid-work. Resolving RE-RUNS the asking step with the choice
  * folded in, rather than advancing past it — the difference from an approval gate.
  */
-export const resolvePublicRunAgentDecisionContract = withMinScope(
-  'decide',
+export const resolvePublicRunAgentDecisionContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runDecisionParams,
@@ -286,8 +287,7 @@ export const resolvePublicRunAgentDecisionContract = withMinScope(
 // caller thread through a review id it never chose.
 
 /** Answer one clarity finding. */
-export const replyPublicRunClarityFindingContract = withMinScope(
-  'decide',
+export const replyPublicRunClarityFindingContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runItemParams,
@@ -299,8 +299,7 @@ export const replyPublicRunClarityFindingContract = withMinScope(
 )
 
 /** Dismiss a clarity finding as not applicable, or reopen one dismissed by mistake. */
-export const setPublicRunClarityFindingStatusContract = withMinScope(
-  'decide',
+export const setPublicRunClarityFindingStatusContract = decides(
   defineApiContract({
     method: 'patch',
     requestPathParamsSchema: runItemParams,
@@ -312,8 +311,7 @@ export const setPublicRunClarityFindingStatusContract = withMinScope(
 )
 
 /** Fold the recorded answers into the standardized bug report. ASYNCHRONOUS, as requirements. */
-export const incorporatePublicRunClarityContract = withMinScope(
-  'decide',
+export const incorporatePublicRunClarityContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runIdParams,
@@ -324,8 +322,7 @@ export const incorporatePublicRunClarityContract = withMinScope(
 )
 
 /** Run one more triage pass over the clarified report. */
-export const reReviewPublicRunClarityContract = withMinScope(
-  'decide',
+export const reReviewPublicRunClarityContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runIdParams,
@@ -336,8 +333,7 @@ export const reReviewPublicRunClarityContract = withMinScope(
 )
 
 /** Settle the clarity phase and advance the parked run. */
-export const proceedPublicRunClarityContract = withMinScope(
-  'decide',
+export const proceedPublicRunClarityContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runIdParams,
@@ -348,8 +344,7 @@ export const proceedPublicRunClarityContract = withMinScope(
 )
 
 /** Resolve a clarity review that hit its iteration cap (extra round / proceed / stop and reset). */
-export const resolvePublicRunClarityExceededContract = withMinScope(
-  'decide',
+export const resolvePublicRunClarityExceededContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runIdParams,
@@ -362,8 +357,7 @@ export const resolvePublicRunClarityExceededContract = withMinScope(
 // ---- brainstorm dialogues ---------------------------------------------------
 
 /** Respond to one proposed option (pick it, or steer it). */
-export const replyPublicRunBrainstormOptionContract = withMinScope(
-  'decide',
+export const replyPublicRunBrainstormOptionContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runStageItemParams,
@@ -375,8 +369,7 @@ export const replyPublicRunBrainstormOptionContract = withMinScope(
 )
 
 /** Dismiss a proposed option, or reopen one dismissed by mistake. */
-export const setPublicRunBrainstormOptionStatusContract = withMinScope(
-  'decide',
+export const setPublicRunBrainstormOptionStatusContract = decides(
   defineApiContract({
     method: 'patch',
     requestPathParamsSchema: runStageItemParams,
@@ -388,8 +381,7 @@ export const setPublicRunBrainstormOptionStatusContract = withMinScope(
 )
 
 /** Fold the picks into one converged direction. ASYNCHRONOUS, as requirements. */
-export const incorporatePublicRunBrainstormContract = withMinScope(
-  'decide',
+export const incorporatePublicRunBrainstormContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runStageParams,
@@ -401,8 +393,7 @@ export const incorporatePublicRunBrainstormContract = withMinScope(
 )
 
 /** Run one more brainstorm pass against the converged direction. */
-export const reReviewPublicRunBrainstormContract = withMinScope(
-  'decide',
+export const reReviewPublicRunBrainstormContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runStageParams,
@@ -414,8 +405,7 @@ export const reReviewPublicRunBrainstormContract = withMinScope(
 )
 
 /** Settle the brainstorm (the last converged direction wins downstream) and advance the run. */
-export const proceedPublicRunBrainstormContract = withMinScope(
-  'decide',
+export const proceedPublicRunBrainstormContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runStageParams,
@@ -427,8 +417,7 @@ export const proceedPublicRunBrainstormContract = withMinScope(
 )
 
 /** Resolve a brainstorm that hit its iteration cap (extra round / proceed / stop and reset). */
-export const resolvePublicRunBrainstormExceededContract = withMinScope(
-  'decide',
+export const resolvePublicRunBrainstormExceededContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runStageParams,
@@ -447,8 +436,7 @@ export const resolvePublicRunBrainstormExceededContract = withMinScope(
  * an effect outside the platform — reachable only for a board task run, since a `pr-reviewer` step
  * is container-backed and the jobs surface is inline-only.
  */
-export const resolvePublicRunPrReviewContract = withMinScope(
-  'decide',
+export const resolvePublicRunPrReviewContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runIdParams,
@@ -459,8 +447,7 @@ export const resolvePublicRunPrReviewContract = withMinScope(
 )
 
 /** Drop one finding from the parked review entirely (curation; the run stays parked). */
-export const dismissPublicRunPrReviewFindingContract = withMinScope(
-  'decide',
+export const dismissPublicRunPrReviewFindingContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runFindingParams,
@@ -472,8 +459,7 @@ export const dismissPublicRunPrReviewFindingContract = withMinScope(
 )
 
 /** Challenge one finding: a read-only investigator re-examines it against the full source. */
-export const challengePublicRunPrReviewFindingContract = withMinScope(
-  'decide',
+export const challengePublicRunPrReviewFindingContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runFindingParams,
@@ -493,8 +479,7 @@ export const challengePublicRunPrReviewFindingContract = withMinScope(
 // A caller that needs a fresh environment requests a fix or stops the run.
 
 /** Confirm the change works in the ephemeral environment: tear it down and advance the run. */
-export const confirmPublicRunHumanTestContract = withMinScope(
-  'decide',
+export const confirmPublicRunHumanTestContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runIdParams,
@@ -505,8 +490,7 @@ export const confirmPublicRunHumanTestContract = withMinScope(
 )
 
 /** Submit findings against the tested environment and dispatch a fixer. */
-export const requestPublicRunHumanTestFixContract = withMinScope(
-  'decide',
+export const requestPublicRunHumanTestFixContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runIdParams,
@@ -517,8 +501,7 @@ export const requestPublicRunHumanTestFixContract = withMinScope(
 )
 
 /** Approve the reviewed screenshots and advance the run. */
-export const approvePublicRunVisualConfirmContract = withMinScope(
-  'decide',
+export const approvePublicRunVisualConfirmContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runIdParams,
@@ -529,8 +512,7 @@ export const approvePublicRunVisualConfirmContract = withMinScope(
 )
 
 /** Submit findings against the reviewed screenshots and dispatch a fixer. */
-export const requestPublicRunVisualConfirmFixContract = withMinScope(
-  'decide',
+export const requestPublicRunVisualConfirmFixContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runIdParams,
@@ -554,8 +536,7 @@ export const requestPublicRunVisualConfirmFixContract = withMinScope(
 // is what a caller reads back.
 
 /** File a `follow_up` item as a tracker issue, recording the ticket ref on the item. */
-export const filePublicRunFollowUpContract = withMinScope(
-  'decide',
+export const filePublicRunFollowUpContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runItemParams,
@@ -567,8 +548,7 @@ export const filePublicRunFollowUpContract = withMinScope(
 )
 
 /** Send a `follow_up` item back to the Coder: it is folded into another pass (status `queued`). */
-export const sendBackPublicRunFollowUpContract = withMinScope(
-  'decide',
+export const sendBackPublicRunFollowUpContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runItemParams,
@@ -580,8 +560,7 @@ export const sendBackPublicRunFollowUpContract = withMinScope(
 )
 
 /** Answer a `question` item; the answer steers the Coder's next pass. */
-export const answerPublicRunFollowUpContract = withMinScope(
-  'decide',
+export const answerPublicRunFollowUpContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runItemParams,
@@ -593,8 +572,7 @@ export const answerPublicRunFollowUpContract = withMinScope(
 )
 
 /** Wave one item off without acting on it. Valid for either item kind. */
-export const dismissPublicRunFollowUpContract = withMinScope(
-  'decide',
+export const dismissPublicRunFollowUpContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runItemParams,
@@ -623,8 +601,7 @@ export const dismissPublicRunFollowUpContract = withMinScope(
 // irrelevant answers it saying so or proceeds past it.
 
 /** Record an answer to one interview question. Does NOT resume the run. */
-export const answerPublicRunInterviewContract = withMinScope(
-  'decide',
+export const answerPublicRunInterviewContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runIdParams,
@@ -639,8 +616,7 @@ export const answerPublicRunInterviewContract = withMinScope(
  * ASYNCHRONOUS: the pass runs in the durable driver, so the response shows the interview as it
  * stands and the next round's questions arrive on a later read.
  */
-export const continuePublicRunInterviewContract = withMinScope(
-  'decide',
+export const continuePublicRunInterviewContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runIdParams,
@@ -651,8 +627,7 @@ export const continuePublicRunInterviewContract = withMinScope(
 )
 
 /** Stop asking: the interviewer converges on the answers so far and the run advances. */
-export const proceedPublicRunInterviewContract = withMinScope(
-  'decide',
+export const proceedPublicRunInterviewContract = decides(
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: runIdParams,

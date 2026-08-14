@@ -57,7 +57,25 @@ function minterLabel(key: PublicApiKey): string | null {
     ? t('settings.apiTokens.list.createdByYou')
     : key.createdByUserId
 }
+
+/**
+ * The badge for a key bound to a person's subscription, WHOSE person named.
+ *
+ * Keys are workspace-scoped and this list is shared, so a colleague's bound key is right here in
+ * everyone's panel: a fixed "your subscription" tells every other member that a token they never
+ * minted reaches theirs, which is alarming and false. The same comparison {@link minterLabel} makes
+ * is available (a binding is always to the minter), so the honest badge names the owner, and falls
+ * back to the `usr_*` id for the same reason that function does — there is no user-name lookup here,
+ * and an id is not misleading.
+ */
+function boundLabel(key: PublicApiKey): string | null {
+  if (!key.actsAsUserId) return null
+  return key.actsAsUserId === auth.user?.id
+    ? t('settings.apiTokens.list.boundToYou')
+    : t('settings.apiTokens.list.boundToOther', { user: key.actsAsUserId })
+}
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirmAction, toastDone } = useConfirmAction()
 
 const open = computed({
@@ -69,19 +87,39 @@ const back = useIntegrationBack(open)
 const label = ref('')
 // The scope the next minted key will carry; defaults to the safe middle of the ladder.
 const scope = ref<PublicApiScope>('write')
+// WHO the next key runs as. Two named options rather than an unchecked box, because they are two
+// different credentials with two different blast radii and neither is a mere setting on the other:
+//
+//  - `system` (the default): the token belongs to the workspace. Its runs are attributed to nobody
+//    and it can reach no personal subscription, so a leaked shared credential can never spend one
+//    person's Claude quota. This is what a CI job or a shared integration should hold.
+//  - `self`: the token belongs to the person minting it. Its runs are theirs and may unlock their
+//    personal Claude / Codex / GLM subscription, with the password sent on each such call.
+//
+// NOT gated on the interface mode, unlike an override field. This whole panel is the Integrations
+// hub's Development surface, reached only by someone already minting an API key, and `scope` next
+// to it is ungated for the same reason. Hiding it in basic mode would leave that person a key that
+// silently cannot run their own models, with nothing on screen to say why.
+type TokenIdentity = 'system' | 'self'
+const identity = ref<TokenIdentity>('system')
+// Nobody to bind on a board with no signed-in user (a dev-open deployment): the server refuses
+// such a mint outright, so the choice is withheld and every key is a system key, which is what
+// that deployment can honestly offer.
+const canBindSelf = computed(() => auth.user !== null && auth.user !== undefined)
+const identityItems = computed(() => [
+  { value: 'system' as const, label: t('settings.apiTokens.add.identitySystem') },
+  { value: 'self' as const, label: t('settings.apiTokens.add.identitySelf') },
+])
+/** The help text under the picker, so each option explains ITSELF rather than only its opposite. */
+const identityHelp = computed(() =>
+  identity.value === 'self'
+    ? t('settings.apiTokens.add.identitySelfHelp')
+    : t('settings.apiTokens.add.identitySystemHelp'),
+)
 const busy = ref(false)
 // The full raw secret from the most recent create — surfaced once, then dismissed. Never
 // re-fetchable, so it lives only in this transient ref (not the store).
 const newSecret = ref<string | null>(null)
-
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
 
 watch(
   open,
@@ -94,7 +132,7 @@ watch(
     try {
       await store.ensureLoaded()
     } catch (e) {
-      notifyError(t('settings.apiTokens.toast.loadFailed'), e)
+      present(e, 'settings.apiTokens.toast.loadFailed')
     }
   },
   { immediate: true },
@@ -105,17 +143,22 @@ async function createToken() {
   if (!trimmed) return
   busy.value = true
   try {
-    const created = await store.create(trimmed, scope.value)
+    const created = await store.create(
+      trimmed,
+      scope.value,
+      canBindSelf.value && identity.value === 'self',
+    )
     newSecret.value = created.secret
     label.value = ''
     scope.value = 'write'
+    identity.value = 'system'
     toast.add({
       title: t('settings.apiTokens.toast.created'),
       icon: 'i-lucide-check',
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('settings.apiTokens.toast.createFailed'), e)
+    present(e, 'settings.apiTokens.toast.createFailed')
   } finally {
     busy.value = false
   }
@@ -132,7 +175,7 @@ async function revokeToken(key: PublicApiKey) {
     await store.revoke(key.id)
     toastDone('revoke', key.label)
   } catch (e) {
-    notifyError(t('settings.apiTokens.toast.revokeFailed'), e)
+    present(e, 'settings.apiTokens.toast.revokeFailed')
   } finally {
     busy.value = false
   }
@@ -203,6 +246,18 @@ async function revokeToken(key: PublicApiKey) {
                 >
                   {{ scopeLabel(key.scope) }}
                 </UBadge>
+                <!-- Always shown, never mode-gated: an existing key can already carry the
+                     binding, and this is the only place its holder can see that a token they
+                     are about to hand out reaches a personal subscription. -->
+                <UBadge
+                  v-if="boundLabel(key)"
+                  color="warning"
+                  variant="subtle"
+                  size="sm"
+                  :data-testid="`api-token-bound-${key.id}`"
+                >
+                  {{ boundLabel(key) }}
+                </UBadge>
               </div>
               <div class="text-[11px] text-slate-500">
                 {{
@@ -261,6 +316,18 @@ async function revokeToken(key: PublicApiKey) {
               :items="scopeItems"
               class="w-full"
               data-testid="api-token-scope"
+            />
+          </UFormField>
+          <UFormField
+            v-if="canBindSelf"
+            :label="t('settings.apiTokens.add.identity')"
+            :help="identityHelp"
+          >
+            <USelect
+              v-model="identity"
+              :items="identityItems"
+              class="w-full"
+              data-testid="api-token-identity"
             />
           </UFormField>
           <UButton

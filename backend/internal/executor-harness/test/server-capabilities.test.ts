@@ -1,7 +1,7 @@
 import type { AddressInfo } from 'node:net'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { HARNESS_BODY_CAPABILITIES } from '../src/agent-capabilities.js'
-import { server } from '../src/server.js'
+import { server } from '../src/harness-server.js'
 
 // The capability handshake as the backend actually reads it: off the wire.
 //

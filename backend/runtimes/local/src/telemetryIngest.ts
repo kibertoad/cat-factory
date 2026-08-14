@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { Clock, Logger } from '@cat-factory/kernel'
 import { startSweeper } from '@cat-factory/node-server'
 import {
@@ -264,7 +265,7 @@ export async function sweepTelemetryIngest(
       deps.log.warn('mothership telemetry ingest failed for a run', {
         workspaceId,
         executionId,
-        err: error instanceof Error ? error.message : String(error),
+        err: getErrorMessage(error),
       })
     }
   }

@@ -13,6 +13,7 @@ import org.jspecify.annotations.Nullable;
  * @param ask Always present; {@code null} when the server has no value for it.
  * @param checks the {@code checks} field.
  * @param disposition the {@code disposition} field.
+ * @param environments the {@code environments} field.
  * @param pullRequests the {@code pullRequests} field.
  * @param requirements the {@code requirements} field.
  * @param sources the {@code sources} field.
@@ -30,6 +31,8 @@ public record GetPublicRunOutcomeResponse(
     @JsonProperty("checks") List<GetPublicRunOutcomeResponseCheck> checks,
 
     @JsonProperty("disposition") GetPublicRunOutcomeResponseDisposition disposition,
+
+    @JsonProperty("environments") GetPublicRunOutcomeResponseEnvironments environments,
 
     @JsonProperty("pullRequests") List<GetPublicRunOutcomeResponsePullRequest> pullRequests,
 
@@ -63,6 +66,7 @@ public record GetPublicRunOutcomeResponse(
         private @Nullable String ask;
         private @Nullable List<GetPublicRunOutcomeResponseCheck> checks;
         private @Nullable GetPublicRunOutcomeResponseDisposition disposition;
+        private @Nullable GetPublicRunOutcomeResponseEnvironments environments;
         private @Nullable List<GetPublicRunOutcomeResponsePullRequest> pullRequests;
         private @Nullable GetPublicRunOutcomeResponseRequirements requirements;
         private @Nullable GetPublicRunOutcomeResponseSources sources;
@@ -87,6 +91,12 @@ public record GetPublicRunOutcomeResponse(
         /** Set {@code disposition}. */
         public Builder disposition(@Nullable GetPublicRunOutcomeResponseDisposition disposition) {
             this.disposition = disposition;
+            return this;
+        }
+
+        /** Set {@code environments}. */
+        public Builder environments(@Nullable GetPublicRunOutcomeResponseEnvironments environments) {
+            this.environments = environments;
             return this;
         }
 
@@ -140,7 +150,7 @@ public record GetPublicRunOutcomeResponse(
 
         /** Build the {@link GetPublicRunOutcomeResponse}. */
         public GetPublicRunOutcomeResponse build() {
-            return new GetPublicRunOutcomeResponse(ask, checks, disposition, pullRequests, requirements, sources, tests, title, truncations, version, visuals);
+            return new GetPublicRunOutcomeResponse(ask, checks, disposition, environments, pullRequests, requirements, sources, tests, title, truncations, version, visuals);
         }
     }
 }

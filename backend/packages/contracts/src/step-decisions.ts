@@ -28,6 +28,74 @@ export const decisionSchema = v.object({
 export type Decision = v.InferOutput<typeof decisionSchema>
 
 /**
+ * How urgently a review comment must be acted on, worst first. The three levels are the ones a
+ * reviewer already writes as prose group labels ("Must fix" / "Should fix" / "Minor"), promoted to
+ * a field so the ENGINE can act on them rather than a human having to read the summary to find out
+ * what blocks the work.
+ *
+ * `blocker` is the load-bearing member and the only one with mechanical force: while a companion's
+ * latest verdict carries one, the producer is reworked and the run does not advance past the step,
+ * whatever the overall rating says (see {@link hasBlockingReviewComments} and kernel's
+ * `disposeCompanionVerdict`). A rating is one number over a whole deliverable, so a review that
+ * found something genuinely unshippable could still average above the bar and be waved through;
+ * that is the gap this closes. `major` and `minor` differ only in how a reader (and a reworking
+ * producer) should prioritise them.
+ */
+export const reviewCommentSeveritySchema = v.picklist(['blocker', 'major', 'minor'])
+export type ReviewCommentSeverity = v.InferOutput<typeof reviewCommentSeveritySchema>
+
+/** Rank of a {@link ReviewCommentSeverity}, for worst-first ordering and "at or above" tests. */
+export const REVIEW_COMMENT_SEVERITY_RANK: Record<ReviewCommentSeverity, number> = {
+  minor: 0,
+  major: 1,
+  blocker: 2,
+}
+
+const REVIEW_COMMENT_SEVERITY_SET: ReadonlySet<string> = new Set(
+  reviewCommentSeveritySchema.options,
+)
+
+/**
+ * Whether a value is still a member of the vocabulary — DERIVED from the picklist, so it cannot
+ * drift from it the way a hand-written second list would.
+ *
+ * The vocabulary is closed but PERSISTED (a verdict's `comments`, a gate's `comments`, a step's
+ * `rework.comments`), and the schema's `severity` fallback does NOT cover those reads: a stored run
+ * row is mapped onto {@link StepReviewComment} by the facade repositories, never re-parsed, so the
+ * fallback runs on the MODEL REPLY and nowhere else. A member retired from the union therefore goes
+ * on existing in saved rows with its type claiming otherwise, and every `Record<ReviewCommentSeverity, …>`
+ * over it is total against the TYPE and partial against the DATA. Narrow with this at the read
+ * boundary and render the negative case as the unrecognised level it is.
+ *
+ * A retired member here is NAMED rather than dropped or mapped onto a current one, for the reason
+ * `isBinaryModality` names its own: nothing knows which surviving level was meant, and the reader
+ * that meets a stale value first is the panel asking a person to act on the finding. What it must
+ * never do is claim an urgency nobody graded. It carries no mechanical force either (a stale value
+ * is not a `blocker`), so retiring a member means restating the stored rows in the same change;
+ * this is what keeps the interim honest instead of invisible.
+ */
+export function isReviewCommentSeverity(value: string): value is ReviewCommentSeverity {
+  return REVIEW_COMMENT_SEVERITY_SET.has(value)
+}
+
+/** Where an ungraded comment (and an unrecognised level) sorts: below every graded one. */
+export const UNGRADED_REVIEW_COMMENT_RANK = -1
+
+/**
+ * The rank a comment's severity sorts and compares at: {@link REVIEW_COMMENT_SEVERITY_RANK} while
+ * the vocabulary holds it, and {@link UNGRADED_REVIEW_COMMENT_RANK} when the comment carries no
+ * severity (a person's) or one this build no longer knows ({@link isReviewCommentSeverity}).
+ *
+ * The ONE place that lookup happens, so an unrecognised value cannot reach the `Record` raw and
+ * come back `undefined` — which sorts by `NaN` and compares false against every floor at once.
+ */
+export function reviewCommentSeverityRank(severity: string | undefined): number {
+  return severity !== undefined && isReviewCommentSeverity(severity)
+    ? REVIEW_COMMENT_SEVERITY_RANK[severity]
+    : UNGRADED_REVIEW_COMMENT_RANK
+}
+
+/**
  * One GitHub-review-style comment left on a specific block or item of an agent's
  * proposal — either by a human reviewing an approval gate, or by a quality
  * companion (e.g. the Spec Reviewer) grading a structured output. `quotedSource`
@@ -60,10 +128,76 @@ export const stepReviewCommentSchema = v.object({
    * items rather than free prose. Absent for prose-range comments.
    */
   anchorId: v.optional(v.string()),
+  /**
+   * How urgently this point must be acted on (see {@link reviewCommentSeveritySchema}).
+   *
+   * Absent on a HUMAN's comment, which carries no such grading: a person requesting changes on an
+   * approval gate is already holding the run, so there is nothing for a severity to decide. Absent
+   * too on a comment recorded before this field existed. An absent severity is therefore read as
+   * "ungraded", NEVER as a blocker and never as a nit — the one reader that acts on the value
+   * ({@link hasBlockingReviewComments}) asks only whether a `blocker` is present.
+   *
+   * An out-of-vocabulary value from a model reads as `major`, the same "unreadable severity reads
+   * as its safe default" rule the judge and PR-review findings use. `major` rather than either
+   * extreme on purpose: a typo must not manufacture a hard stop, and it must not silently retire
+   * one either, so it lands where the point still costs a rework round without holding the run.
+   *
+   * That fallback covers the MODEL REPLY, which is the only input this schema parses. A stored row
+   * is mapped onto the type by the facade repositories rather than re-parsed, so a value this build
+   * has retired reaches a reader with the fallback never having run: narrow those reads with
+   * {@link isReviewCommentSeverity} / {@link reviewCommentSeverityRank}.
+   */
+  severity: v.optional(v.fallback(reviewCommentSeveritySchema, 'major')),
   /** The reviewer's note on this block / item. */
   body: v.string(),
 })
 export type StepReviewComment = v.InferOutput<typeof stepReviewCommentSchema>
+
+/**
+ * The comments that MUST be fixed before the work moves on, worst-first-ordered input aside.
+ *
+ * The pure rule, in contracts rather than in the engine, because both sides have to agree about
+ * it: the engine decides whether the run advances, and the SPA states on the parked step WHY it
+ * stopped and which points to look at. Restated on each side, the panel would eventually count
+ * findings the engine did not.
+ */
+export function blockingReviewComments(
+  comments: readonly StepReviewComment[] | undefined,
+): StepReviewComment[] {
+  return (comments ?? []).filter((comment) => comment.severity === 'blocker')
+}
+
+/** Whether any of `comments` is a `blocker` (see {@link blockingReviewComments}). */
+export function hasBlockingReviewComments(
+  comments: readonly StepReviewComment[] | undefined,
+): boolean {
+  return (comments ?? []).some((comment) => comment.severity === 'blocker')
+}
+
+/**
+ * Whether a review raised anything it did NOT call a nit.
+ *
+ * What separates a batch worth sending back to the producer from one that only had polish to offer:
+ * a `minor` is stated to the reviewer as "never worth holding anything for", so a rule that spent a
+ * producer re-run plus a re-grading call on one would make that instruction false (kernel's
+ * `disposeCompanionVerdict` is the reader).
+ *
+ * Everything that is not the nit level counts, which puts an UNGRADED comment and a level this build
+ * has retired on the acting side. Both are cases where the urgency is unknown rather than known to
+ * be low, and the cheap error is one wasted round against a point silently dropped.
+ */
+export function hasReviewCommentsBeyondNits(
+  comments: readonly StepReviewComment[] | undefined,
+): boolean {
+  return (comments ?? []).some((comment) => comment.severity !== 'minor')
+}
+
+/** `comments` ordered worst severity first; an ungraded comment sorts last. Stable within a level. */
+export function bySeverityWorstFirst(comments: readonly StepReviewComment[]): StepReviewComment[] {
+  return [...comments].sort(
+    (a, b) => reviewCommentSeverityRank(b.severity) - reviewCommentSeverityRank(a.severity),
+  )
+}
 
 /**
  * The standardized, stored verdict a quality companion produced for an output it
@@ -82,6 +216,22 @@ export const companionVerdictSchema = v.object({
   passed: v.boolean(),
   /** The companion's challenge / justification (its assessment summary). */
   feedback: v.string(),
+  /**
+   * The per-item challenges this round anchored (the assessment's own `comments`).
+   *
+   * Stored, rather than left to the summary alone, because the verdict list is what a LATER round
+   * is shown: a companion re-grades a document it has already reviewed, and the question worth
+   * spending a rework budget on is "was what I asked for done", which it cannot answer against a
+   * summary that named none of the specific asks. The producer is handed the same list for the
+   * mirror-image reason — so it cannot regress on a point raised two rounds ago and forgotten.
+   *
+   * Absent on a round that anchored nothing, and on every verdict written before this existed.
+   *
+   * Their SEVERITIES are what makes the verdict self-describing: `passed: false` on a round whose
+   * rating cleared `threshold` is only readable next to the `blocker` that held it (see
+   * {@link reviewCommentSeveritySchema}).
+   */
+  comments: v.optional(v.array(stepReviewCommentSchema)),
 })
 export type CompanionVerdict = v.InferOutput<typeof companionVerdictSchema>
 

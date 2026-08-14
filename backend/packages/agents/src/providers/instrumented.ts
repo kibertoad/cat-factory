@@ -13,7 +13,9 @@ import type {
 import {
   catFactoryObservability,
   describeError,
+  getErrorMessage,
   noopLogger,
+  redactImagePayloads,
   resolveInlineAttribution,
   runBestEffort,
 } from '@cat-factory/kernel'
@@ -178,12 +180,21 @@ function readRequestMaxTokens(params: unknown): number | null {
  *
  * `unified` is the one stored: it is what makes `length` comparable across providers, which
  * is the whole reason a truncated-output signal can be computed at all.
+ *
+ * `other` with NO `raw` is read as NOTHING REPORTED. The unified union is closed and has no
+ * "unknown" member, so `other` is the only thing a model can answer when its backend named no stop
+ * reason at all — which is every call a subscription CLI serves (`CliInlineLanguageModel`, whose own
+ * rows record null). Storing the placeholder here made the same absence read as two different values
+ * in two stores, the trace sink claiming a classification nobody made. A vendor string in `raw` is
+ * what distinguishes a real `other` from that, so it is kept.
  */
 function readFinishReason(result: unknown): string | null {
   const reason = (result as { finishReason?: unknown })?.finishReason
   if (typeof reason === 'string') return reason
-  const unified = (reason as { unified?: unknown } | undefined)?.unified
-  return typeof unified === 'string' ? unified : null
+  const object = reason as { unified?: unknown; raw?: unknown } | undefined
+  const unified = object?.unified
+  if (typeof unified !== 'string') return null
+  return unified === 'other' && typeof object?.raw !== 'string' ? null : unified
 }
 
 /**
@@ -305,7 +316,7 @@ export class InstrumentedModelProvider implements ModelProvider {
           this.emit(ref, params, result, startedAt, true, null)
           return result
         } catch (err) {
-          this.emit(ref, params, undefined, startedAt, false, errorMessage(err))
+          this.emit(ref, params, undefined, startedAt, false, getErrorMessage(err))
           throw err
         }
       },
@@ -478,14 +489,17 @@ export class InstrumentedModelProvider implements ModelProvider {
   }
 }
 
+/**
+ * Serialise a recorded body, with any image payload replaced by a description of itself.
+ *
+ * The redaction is not a nicety: a multimodal turn carries the picture as a `Uint8Array` in the
+ * SDK's own message shape, and a typed array JSON-stringifies to one entry per byte — several
+ * megabytes of `{"0":137,…}` per recorded call, on every turn of a run that attached a design.
+ */
 function safeJson(value: unknown): string {
   try {
-    return JSON.stringify(value ?? [])
+    return JSON.stringify(redactImagePayloads(value ?? []))
   } catch {
     return ''
   }
-}
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err)
 }

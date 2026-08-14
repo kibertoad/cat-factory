@@ -33,6 +33,15 @@ export type InfrastructureTab =
   | 'package-registries'
   | 'capability-credentials'
 
+/**
+ * A SECTION within an Infrastructure tab that a deep link can land the user on, rather than at
+ * the top of the tab with the section to hunt for. A closed union rather than a bare string, so
+ * the store's setter and the panel that honours it cannot drift apart silently: today's only
+ * member is the `kubernetes` provision-type section the `cat-factory k3s` hand-off targets, which
+ * sits below the default-provision picker in a tab long enough to need scrolling.
+ */
+export type InfrastructureScrollTarget = 'kubernetes'
+
 /** A workspace's provider binding, as exposed to clients (never secret values). */
 export interface ProviderConnection {
   /** The runner-backend kind for a runner-pool connection (`manifest` | `kubernetes`). */

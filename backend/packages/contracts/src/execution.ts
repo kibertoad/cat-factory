@@ -33,12 +33,8 @@ import {
 import { resolvedFrontendBindingSchema } from './frontend.js'
 import { agentKindSchema, agentStateSchema } from './primitives.js'
 import { stepOptionsSchema } from './entities.js'
-import {
-  companionVerdictSchema,
-  decisionSchema,
-  stepApprovalSchema,
-  stepReviewCommentSchema,
-} from './step-decisions.js'
+import { companionStateSchema } from './companion-state.js'
+import { decisionSchema, stepApprovalSchema, stepReviewCommentSchema } from './step-decisions.js'
 import { workspaceRoleSchema } from './workspace-members.js'
 
 // ---------------------------------------------------------------------------
@@ -408,8 +404,11 @@ export const deployEnvStateSchema = v.object({
   /** The provisioned URL for a `ready` env (absent for `failed`/`skipped`). */
   url: v.optional(v.nullable(v.string())),
   /**
-   * The registry id of the environment this frame got, recorded for a `ready` env at the moment
-   * the deployer resolved its handle.
+   * The registry id of the environment this frame got, recorded at the moment the deployer
+   * resolved its handle: for a `ready` env, and for a `failed` one where the provision got far
+   * enough to have a record to fail against (a `failed` env row is persisted and projected, so
+   * naming it is what lets a reader tell the environment this frame broke on from a second one
+   * nothing accounts for). It stays absent where the provision broke before any handle existed.
    *
    * This is the RUN's own record of WHICH environment it stood up, and it exists so that the
    * `disposer` at the other end of the lifecycle can reclaim exactly that one. Re-resolving the
@@ -674,47 +673,41 @@ export const pipelineStepSchema = v.object({
    * otherwise.
    */
   approval: v.optional(v.nullable(stepApprovalSchema)),
+  /** @see companionStateSchema. Absent for non-companion steps. */
+  companion: v.optional(v.nullable(companionStateSchema)),
   /**
-   * Live state of a companion step that reviews a preceding producer step. Set when
-   * this step's `agentKind` is a companion kind. `threshold` is the quality bar the
-   * companion's latest rating (the last `verdicts` entry) must reach; `attempts`
-   * counts only the AUTOMATIC reworks performed, and once it reaches `maxAttempts` the
-   * step parks on the iteration-cap gate (`exceeded`) for a human rather than failing.
-   * A human "request changes" on the companion's gate also re-runs the producer but does
-   * NOT consume `attempts` (only the automatic loop is budgeted). Absent for non-companion steps.
+   * The REVIEW-GATE sibling of `companion.capSettledByPolicy`: set on a `requirements-review` /
+   * clarity step whose iterative review spent its whole reviewer-pass budget and whose risk
+   * policy (`autonomy: 'unattended'`) then took the "proceed on the last clarified report"
+   * answer a person would have been offered.
+   *
+   * It lives on the STEP rather than on the review row for the same reason the companion's does:
+   * this is a fact about ONE run, the step is where whoever reviews the resulting pull request
+   * looks, and a review row outlives the run that settled it. Without it, a review whose findings
+   * were never answered reads exactly like one a product owner signed off.
+   *
+   * Absent on every other step and on every attended run. This records the ITERATION CAP only; its
+   * sibling {@link autoAnsweredByPolicy} records the other, narrower thing an unattended run may
+   * now do with a review that is still asking.
    */
-  companion: v.optional(
-    v.nullable(
-      v.object({
-        /** The quality bar (0..1) the latest verdict's rating must reach; seeded from the pipeline. */
-        threshold: v.number(),
-        /** The automatic rework budget: once `attempts` reaches this the gate parks for a human (`exceeded`). */
-        maxAttempts: v.number(),
-        /**
-         * How many AUTOMATIC reworks the companion has driven so far (the producer is
-         * looped back once per failed verdict). Human "request changes" cycles are not
-         * counted. Defaults to 0; once it reaches `maxAttempts` the step parks on the
-         * iteration-cap gate (`exceeded`) — an "extra round" raises `maxAttempts` by one.
-         */
-        attempts: v.optional(v.number(), 0),
-        /**
-         * One standardized {@link companionVerdictSchema} per grading cycle, in order —
-         * the full sequence of correction iterations (the producer is re-run after each
-         * rejected verdict), including any human-driven ones. Empty before the first
-         * grade; the last entry is the latest.
-         */
-        verdicts: v.array(companionVerdictSchema),
-        /**
-         * Set true when the automatic rework budget (`maxAttempts`) was spent with the
-         * rating still below the bar: instead of failing the run, the step parks on its
-         * approval gate for a human to resolve via the shared iteration-cap surface
-         * (one more round / proceed anyway / stop & reset). Cleared once the human grants
-         * an extra round (the loop resumes). Absent until/unless the cap is hit.
-         */
-        exceeded: v.optional(v.boolean()),
-      }),
-    ),
-  ),
+  reviewCapSettledByPolicy: v.optional(v.boolean()),
+  /**
+   * Set on a review-gate step where an unattended run FOLDED IN the graded answers it had rather
+   * than parking: every finding was either settled by a person, or was one the reviewer itself
+   * classified as answerable without a product owner AND carried a Requirement-Writer suggestion at
+   * or above the policy's `minAutoAnswerConfidence`.
+   *
+   * A DIFFERENT fact from {@link reviewCapSettledByPolicy}, and kept apart for the reason the merge
+   * decision keeps its four reasons apart: that one means "the loop gave up and policy took the
+   * proceed", this one means "the loop converged on answers nobody read". A reviewer of the
+   * resulting pull request needs to know which, because only the second one has answers in it to
+   * check — they are on the review, with their grade and their provenance.
+   *
+   * Absent on every attended run, and on every unattended run that parked, which stays the normal
+   * outcome: a single finding needing a product owner, or one graded below the floor, holds the
+   * whole review.
+   */
+  autoAnsweredByPolicy: v.optional(v.boolean()),
   /**
    * Live Follow-up companion state while a `coder` step runs/parks: the items the Coder
    * streamed (loose ends / side-tasks / questions), whether the companion is enabled, and
@@ -825,19 +818,30 @@ export const pipelineStepSchema = v.object({
   ),
   /**
    * Transient rework feedback carried on a PRODUCER step while it is being re-run by
-   * a downstream companion (the analogue of an approval's `changes_requested`
+   * a downstream reviewer (the analogue of an approval's `changes_requested`
    * feedback for the automatic path). Folded into the agent's revision context on the
-   * re-run, then cleared. Absent when no companion rework is in flight.
+   * re-run, then cleared. Absent when no rework is in flight.
    */
   rework: v.optional(
     v.nullable(
       v.object({
-        /** The producer's previous proposal the companion challenged. */
+        /** The producer's previous proposal the reviewer challenged. */
         previousProposal: v.string(),
-        /** The companion's prose feedback driving the rework. */
+        /** The reviewer's prose feedback driving the rework. */
         feedback: v.string(),
         /** Optional per-item / per-block challenges to address. */
         comments: v.optional(v.array(stepReviewCommentSchema)),
+        /**
+         * WHO asked. Four paths write this field and they are not all automatic: a companion's
+         * below-threshold round and a judge's bounce are (`reviewer`), and so is a human GRANTING
+         * an extra companion round (the feedback being answered is still the companion's), but a
+         * human requesting changes on a companion's gate has their OWN feedback carried here
+         * (`human`). Required so a new rework driver has to answer the question rather than
+         * inherit whichever framing the prompt happened to use: telling an agent a person is
+         * waiting on work no person has looked at is a false attribution, and hiding a real one
+         * behind "your work was reviewed" loses the fact that somebody IS waiting.
+         */
+        requestedBy: v.picklist(['human', 'reviewer']),
       }),
     ),
   ),
@@ -1216,6 +1220,13 @@ export const pipelineStepSchema = v.object({
    * a short window, unlike a crash. Absent/0 until the first transient eviction.
    */
   transientEvictionRecoveries: v.optional(v.number()),
+  /**
+   * How many times this step's push to the work branch was refused because the branch had moved
+   * under it (the harness's `branch-contended` cause) and was recovered by re-dispatching the step,
+   * which resumes the branch as it now stands. Bounded by `MAX_BRANCH_CONTENTION_RECOVERIES`; past
+   * it the run fails with the harness's rejection and its remedy. Absent/0 until the first refusal.
+   */
+  branchContentionRecoveries: v.optional(v.number()),
   /**
    * The transport's post-mortem of the FIRST container to die on this step (its exit state plus
    * a tail of its own logs). Retained across recoveries: a re-dispatch removes the dead

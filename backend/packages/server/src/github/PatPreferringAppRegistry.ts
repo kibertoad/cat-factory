@@ -1,4 +1,4 @@
-import type { InstallationPermissions, RunCredentialScope } from '@cat-factory/kernel'
+import type { InstallationPermissions, ResolveRunInitiatorToken } from '@cat-factory/kernel'
 import type { AppTokenSource } from './GitHubAppRegistry.js'
 import { currentCredentialScope } from './runInitiatorContext.js'
 
@@ -16,8 +16,15 @@ import { currentCredentialScope } from './runInitiatorContext.js'
 // with both facades' dispatch mints, so an opted-out workspace can't be honoured on one path
 // and missed on another.
 
-/** Resolves the token a run should act with, or null to use the wrapped source. */
-export type ResolveRunInitiatorToken = (scope: RunCredentialScope) => Promise<string | null>
+/**
+ * Resolves the token a run should act with, or null to use the wrapped source.
+ *
+ * Re-exported from kernel, where the type moved once the credential CHECK (the banner warning a
+ * user their personal access token cannot push) became a fourth caller and had to reach the same
+ * built instance off `CoreDependencies` — which orchestration declares, and orchestration cannot
+ * see this package.
+ */
+export type { ResolveRunInitiatorToken }
 
 export class PatPreferringAppRegistry implements AppTokenSource {
   constructor(

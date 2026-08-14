@@ -157,15 +157,15 @@ messages, code comments, UI copy.
 - **Multi-line git messages: bash heredoc in the Bash tool, NOT a PowerShell here-string.** The Bash tool
   is POSIX sh, so `@'…'@` leaks literal `@` characters into the commit subject. Use
   `git commit -F - <<'EOF'`; `git commit --amend -F -` fixes a mangled message before pushing.
-- **Worker tests fail on Windows** (`config wrangler validation failed`), a pre-existing wrangler issue.
-  Verify pure-logic changes with `--filter=@cat-factory/orchestration`.
+- **Worker tests DO run on Windows** (this note used to say they fail on `config wrangler validation
+failed`): name the spec files, and expect one `AI bindings always access remote` warning per pool.
 - **The Postgres-backed suites need a reachable server AND `--env-mode=loose`**; a bare `[ELIFECYCLE]
 Command failed` with no vitest summary is a CANCELLED sibling. Recipe, including how to start a cluster where no Docker daemon runs: [`running-tests.md`](./docs/internal/running-tests.md).
 - **ALWAYS format/lint-fix the ENTIRE tree, never a subset.** `pnpm lint:fix` from the root (or
   `pnpm exec oxfmt .`); the only correct argument to `oxfmt`/`oxlint` is `.`, for any reason. On Windows
   the whole-tree run rewrites line endings across hundreds of files: expected, and git's normalization
-  absorbs it at commit time. Run it ONCE at the end and trust the result: do not diff, stash, or
-  investigate why an untouched file was reformatted (it sweeps up pre-existing drift).
+  absorbs it at commit time. Run it ONCE at the end and trust the result: never diff or stash it, ask
+  why an untouched file changed (it sweeps up drift), or RE-RUN tests/typecheck: whitespace is inert.
 
 ## Keep the runtimes symmetric
 
@@ -240,34 +240,32 @@ patterns: [`backend/docs/logging.md`](./backend/docs/logging.md).
 - **A local `interface XLogger { warn(obj, msg?) }` is BANNED**, as is a bespoke
   `log?: (event, msg) => void` callback dependency. A package that can't see kernel is in the wrong layer.
 - **A service takes `logger?: Logger` and normalises ONCE** (`this.log = deps.logger ?? noopLogger`) so it
-  stays unit-testable standalone, but **`CoreDependencies.logger` is REQUIRED**: a facade that forgets to
-  wire it must fail to typecheck rather than silently run the whole engine on `noopLogger`.
-- **`.catch(() => {})` is BANNED; use `runBestEffort(logger, label, fn, fields)`** (kernel). It keeps the
-  swallow (a best-effort path must NEVER propagate into its caller) and adds one `warn` naming the
-  operation with the cause attached. Where a bespoke `catch` is genuinely right, still bind the cause with
-  `describeError(error)`. `scripts/check-silent-catch.mjs` enforces this (detection in
-  `scripts/silent-catch.mjs`, with fixtures; extend those when you touch it); EVERY spelling of an empty
-  handler counts, including a body holding only a comment. A drop that genuinely needs no report keeps the
-  idiom under a `// silent-catch-ok: <why>` comment. Out of scope: the executor/deploy harnesses (a source
-  change there bumps the runner image) and the SPA (no logger yet).
-- **`describeError` scrubs through `redactSecrets`**, because a `fetch`/spawn/SDK error routinely echoes
-  the request URL or an auth header. Any OTHER field carrying command output, a URL, or model text goes
-  through `redactSecrets` at the emit site. Never log an auth header or a decrypted credential, not even
-  at `debug`, which operators turn on in production.
+  stays unit-testable, but **`CoreDependencies.logger` is REQUIRED**: a facade forgetting to wire it must
+  fail to typecheck, not silently run the engine on `noopLogger`.
+- **`.catch(() => {})` is BANNED; use `runBestEffort(logger, label, fn, fields)`** (kernel): it keeps the
+  swallow (a best-effort path must NEVER propagate into its caller) and adds one `warn` naming the operation
+  with the cause attached. A bespoke `catch` still binds the cause with `describeError(error)`. Enforced by
+  `check-silent-catch.mjs`, whose header owns the scope and the `// silent-catch-ok:` escape hatch.
+- **A thrown value has exactly THREE describers, all reading the whole CAUSE CHAIN** through kernel's
+  `error-chain.logic.ts`: `getErrorMessage` (shown to a human / recorded on a row), `describeError` (log
+  fields), `describeConnectionFailure` (a probe verdict, plus a cause class and remedy). **A hand-rolled
+  `e instanceof Error ? e.message : String(e)` is BANNED**: on Node a transport failure's own message IS the
+  contentless `fetch failed`, identical for an unreachable host, a bad cert and a DNS typo. The chain is
+  scrubbed there; any OTHER field carrying command output, a URL or model text goes through `redactSecrets`
+  at the emit site, and a credential is never logged, not even at `debug`. Reader and USE also pick the
+  describer: UNAUTHENTICATED takes `publicDiagnostic`, a VERDICT `errorChainMatches` (the rendered string
+  carries a display CAP), and an error with nothing to say answers EMPTY so a `|| '<fallback>'` guard works.
 - **Correlate with `child`, not per-call spreads**: bind `{ workspaceId, executionId }` once at the top of
-  the scope. Three seams do it for you: `mountRequestLogging` (mounted FIRST by both facades; mints or
-  adopts `X-Request-Id`, binds a request-scoped child reachable as `requestLogger(c)`, and puts the id in
-  every error envelope), `containerJobLog` (the workflow↔container seam; the same ids ride the job body so
-  the harness binds them beside `jobId`), and the durable drivers. A request line logs the PATHNAME only,
-  because a query string carries the WS `?ticket=` and OAuth `?code=`.
-- **`LOG_LEVEL`** is applied FIRST in each boot path, an unrecognised value falling back to `info`; the
-  threshold is checked in the adapter, because a pino CHILD snapshots its parent's level at creation.
-- **Assert the evidence in tests** with kernel's `createRecordingLogger()`.
-- **A SECOND destination is a kernel `LogSink` installed with `setLogSink`** (today the opt-in
-  OTLP log export), never a second logger. It gets the `child`-bound fields folded in and sits
-  behind the same level gate; `record` may not throw or block and `flush` may not reject, and the
-  facade DRAINS wherever the buffer's HOLDER can vanish: Node timer + shutdown flush ⇄ Worker
-  per-invocation `waitUntil` ⇄ each isolate-ending wait in a workflow wake, a failed `step.do` too.
+  the scope. Three seams do it for you: `mountRequestLogging` (mounted FIRST, it mints or adopts
+  `X-Request-Id` and puts it in every error envelope, which is what a user quotes off a failed request),
+  `containerJobLog` (the same ids ride the job body), and the durable drivers. A request line logs the
+  PATHNAME only, because a query string carries the WS `?ticket=` and OAuth `?code=`.
+- **`LOG_LEVEL`** is applied FIRST in each boot path and gated in the ADAPTER (a pino child snapshots its
+  parent's level at creation). **Assert the evidence in tests** with kernel's `createRecordingLogger()`.
+- **A SECOND destination is a kernel `LogSink` installed with `setLogSink`**, never a second logger; it
+  sits behind the same level gate. `record` may not throw or block, `flush` may not reject, and the facade
+  DRAINS wherever the buffer's HOLDER can vanish: Node timer + shutdown flush ⇄ Worker per-invocation
+  `waitUntil` ⇄ each isolate-ending wait in a workflow wake, a failed `step.do` too.
 
 ## Operational EVENTS are counted, not just logged
 
@@ -334,11 +332,11 @@ carry `details.reason`, the machine-readable code the SPA maps to translated cop
 - **Rethrow, don't re-map.** Catching a `ConflictError` to re-emit it as `c.json({code:'conflict'})` drops
   its `reason`. The one deliberate exception is a handler that flattens distinct causes ON PURPOSE because
   the distinction is an ORACLE (password reset: "no such token" / "expired" / "used").
-- **Three surfaces keep hand-built envelopes, each documented at the site**: the LLM/web-search proxy pair
-  (each failure must be RECORDED on the call metric before responding, and they answer 402/413/502),
-  `publicApiAuth`/`PublicDecisionController` (failures are DATA, so the contract handlers stay typed
-  against their declared response schemas), and the `/internal` relay controllers (a different
-  `{ ok: false }` shape their machine clients parse).
+- **Four surfaces answer in their OWN shape, each documented at the site**: the LLM/web-search proxy pair
+  (each failure is RECORDED on the call metric before responding, and they answer 402/413/502),
+  `publicApiAuth`/`PublicDecisionController` (failures are DATA, so contract handlers stay typed against
+  their declared response schemas), the `/internal` relay controllers (a `{ ok: false }` their machine
+  clients parse), and the MCP authorization endpoints (RFC 6749's error body, which a client branches on).
 - **A test driving a controller through a bare `new Hono()` must mount `app.onError(handleError)`**, or
   every refusal reads as a 500.
 - **A user-reachable 503 `reason` owes TRANSLATED copy** (`UNAVAILABLE_REASONS`, an exhaustive `Record`
@@ -582,9 +580,9 @@ recipe, release-PR re-sync, new-published-package checklist: [`docs/internal/rel
   imported by path ([`frontend/app/README.md`](./frontend/app/README.md#always-import-a-layer-component-explicitly)).
 - `node scripts/check-reserved-env-keys.mjs`: every variable in `docs/environment-variables.md` is RESERVED, so it can never be named as a capability credential.
 - `node scripts/check-gate-approval-raise.mjs`: every human-gate raise goes through `buildStepApproval`.
-- `node scripts/check-doc-links.mjs`, `check-doc-anchors.mjs`, `check-shipped-doc-links.mjs`: an ordinary
-  markdown link, a doc URL built in CODE, and a shipped tarball's links each resolve to a file AND a heading.
+- `node scripts/check-doc-links.mjs`, `check-doc-anchors.mjs`, `check-shipped-doc-links.mjs`: an ordinary markdown link, a doc URL built in CODE, and a shipped tarball's links each resolve to a file AND a heading.
 - `node scripts/check-test-lane-parity.mjs`: `pnpm test:quick` excludes what CI's no-DB lane does.
+- `node scripts/check-conformance-group-parity.mjs`: every conformance group runs on every facade.
 - `node scripts/check-deploy-placeholders.mjs`: the `deploy/*` templates hold placeholders, never real ids.
 - `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs them all).
 - `pnpm exec changeset status --since=origin/main`: after committing locally.
@@ -733,11 +731,10 @@ Trap: it is not a cheap reviewer, so it never scores prose or infers intent and 
 names an input no model could have acted on either. Doc:
 [`pre-dispatch-input-gate.md`](./docs/initiatives/pre-dispatch-input-gate.md).
 
-**Requirements review**: the FIRST step of the default pipelines, an inline iterative loop
-(review → answer → incorporate → re-review) that settles the PRODUCT layer only. Traps: a parked run
-waits indefinitely by design (never add a timeout); the reviewer must be TOLD what system the work is
-about, and a derived subject never displaces the requester's words. Doc:
-[`requirements-review.md`](./backend/docs/requirements-review.md).
+**Requirements review**: an inline iterative loop (review → answer → incorporate → re-review) settling the
+PRODUCT layer only, its findings sorted into the two groups that decide WHO answers. Traps: a parked run
+waits indefinitely by design (never a timeout); the reviewer must be TOLD what system the work is about, and
+a derived subject never displaces it. Doc: [`requirements-review.md`](./backend/docs/requirements-review.md).
 
 **Inbound tracker webhooks**: HMAC over the RAW body before any parse, ack 202, hand off through
 `gateways.trackerWebhook`; unconfigured FAILS CLOSED. Traps: push never replaces the `bug-intake`
@@ -766,18 +763,15 @@ declaration", "empty declaration" and "unknown id" are three states needing diff
 `operationsAreIndexable` the one place the fourth (an unparseable format) lives. Doc:
 [ADR 0031](./backend/docs/adr/0031-foundational-services.md).
 
-**Binary-output steps**: a `binary-output`-trait kind generates binary artifacts and stores them through a
-foundational service its step SELECTS; what MAKES them is the separate `BinaryGeneratorRegistry`, read only
-through `BinaryGeneratorSource` (mothership rule), whose declared `capabilities` gate the per-step generation
-options and, past two producers, a human CANDIDATE park. Traps: content type is CLOSED and a modality stops
-deciding at the SECOND producer (the platform states overlaps, ranks nothing, and a capability gates an
-OPTION, never which producer to call); an UNDECLARED capability/format is unverifiable, never uncovered; an
-unreachable source is a 503 refusal; the credential VALUE never reaches a prompt. Doc: [`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
+**Binary-output steps**: a `binary-output`-trait kind generates artifacts, stored through a foundational
+service its step SELECTS; what MAKES them is `BinaryGeneratorRegistry`, read only via `BinaryGeneratorSource`
+(unreachable ⇒ 503, mothership rule), whose `capabilities` + `accepts` gate the options and, past two
+producers, a human CANDIDATE park. Deadliest trap: content type is CLOSED and stops deciding at the SECOND
+producer, so overlaps are STATED and never ranked. Doc: [`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
 
 **Compose layers**: `StackRecipe` / `SharedStack` name an ORDERED list of `ComposeFileRef` layers
 (in-repo path, `inline`, or `repo`), letting a deployment declare infra dependencies in code. Traps: the
-project directory anchors on the first `path` layer, NEVER the first layer; seeds are idempotent by
-NAME, never overwritten. Doc:
+project directory anchors on the first `path` layer, NEVER the first layer. Doc:
 [`stack-recipes-and-shared-stacks.md`](./docs/initiatives/stack-recipes-and-shared-stacks.md).
 
 **Pre-PR validation**: per-frame install/lint/test/build commands after the agent settles; only a green
@@ -808,9 +802,9 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
   pending sleeps, failure dispatches `ci-fixer` (which pushes back onto the SAME branch) up to
   `ciMaxAttempts` then raises `ci_failed`.
 - **`merger`** (last standard step) returns ONLY a JSON assessment; `resolveMergerStep` scores it against
-  the task's merge threshold preset (a per-workspace library on `Block.mergePresetId`, carrying the
-  auto-merge ceilings, `ciMaxAttempts` and the per-class `classRules`) and either merges for real or raises
-  `merge_review`. A pipeline with no merger raises `pipeline_complete`, never auto-`done`.
+  the task's risk policy (an account ⊕ workspace library of ceilings, budgets and per-class `classRules`,
+  read by editor/picker/engine alike through the ONE merged `WorkspaceRiskPolicyReader`: [ADR 0055](./backend/docs/adr/0055-account-scoped-risk-policies.md))
+  and either merges for real or raises `merge_review`. No merger ⇒ `pipeline_complete`, never auto-`done`.
 - **Who started the run is part of the merge policy**, and a bar on LANDING is refused at BOTH exits
   (auto-merge AND `mergePr`). Deadliest trap: the role and mode PIN at admission and count only if the pin
   PERSISTS through `executionToDetail` / `rowToExecution` / `buildResumedInstance`, so a dropped pin reads
@@ -820,6 +814,11 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
 - **Merge track record** persists each decision best-effort. Trap: an unreadable diff yields `unknown`,
   which never matches a rule, so a VCS outage cannot change policy.
   [ADR 0046](./backend/docs/adr/0046-merge-track-record.md).
+- **Whether a run WAITS is policy too**: `autonomy` answers the parks the engine's loops raise WHEN THEY
+  GIVE UP, on the record; a workspace holds TWO defaults for it AND for its pipeline, scoped by
+  `runDefaultScopeFor(intakeOrigin)`. Traps: never a park the PIPELINE asked for; a new give-up park picks
+  a side; a review's QUESTIONS settle only where a SECOND, independent judgement agrees.
+  [ADR 0053](./backend/docs/adr/0053-unattended-run-autonomy.md), [ADR 0054](./backend/docs/adr/0054-per-scope-pipeline-defaults.md).
 - **Notifications** (`NotificationChannel`) and run-lifecycle events (`RunLifecycleSink`) are built together
   by `buildNotificationWebhookSupport` onto ONE registered endpoint and the ONE `signedDelivery.ts`
   retry/SSRF/signature core. Traps: the started edge is exactly-once via `handOffLiveRun` (announced LAST,
@@ -835,9 +834,8 @@ regressions, coverage) lives in contracts' `run-evidence.ts`. Doc: [`pr-verifica
 
 **Environment disposal**: the `disposer` step reclaims what the run provisioned where its author placed
 it, every teardown path re-probes afterwards, and a SAVE refuses a chain that neither reclaims nor says
-the environment outlives it. Traps: a no-op `teardown:` reports `torn_down`, so only a `confirmed` probe
-is a reclaim, a missing verify row is never a pass, and a DECLARED-retained environment is not `pending`.
-Doc: [`environment-disposal-and-teardown-proof.md`](./docs/initiatives/environment-disposal-and-teardown-proof.md).
+the environment outlives it. Deadliest trap: a no-op `teardown:` reports `torn_down`, so only a
+`confirmed` probe is a reclaim and a missing verify row is never a pass. Doc: [`environment-disposal-and-teardown-proof.md`](./docs/initiatives/environment-disposal-and-teardown-proof.md).
 
 **Post-release health**, the LAST standard step: watch monitors/SLOs for a window and, on a regression,
 spawn an `on-call` agent to investigate. **It never auto-reverts.** The kernel `ReleaseHealthProvider`
@@ -1008,9 +1006,11 @@ drift guards) is
 status: [`docs/internal/localization.md`](./docs/internal/localization.md). What binds beyond the SPA:
 
 - **The backend does not localize prose.** A localizable condition emits a machine-readable
-  `error.details.reason`/`code` that the SPA maps to a frontend key (the `usePipelineErrorToast.ts`
-  pattern). The wire vocabulary lives in `@cat-factory/contracts`, so the SPA imports the SAME source of
-  truth. Raw backend prose is DETAIL behind a disclosure, never the primary description.
+  `error.details.reason`/`code` that the SPA maps to a frontend key. The wire vocabulary lives in
+  `@cat-factory/contracts`, so the SPA imports the SAME source of truth. **Every failure toast goes through
+  the ONE funnel** (`usePipelineErrorToast().present(error, titleKey)`), never a hand-built
+  `toast.add({ description: err.message })`: raw prose is DETAIL behind a disclosure, and the funnel is what
+  makes a failure translated, non-auto-dismissing, and copyable WITH the `requestId` joining it to the log.
 - **Locale parity is CI-gated per change** (`i18n-locale-parity.mjs`), and **never ship an English
   string as a non-`en` value**: the parity gate checks only that the key exists, so a verbatim English
   copy passes and is a bug. If you genuinely cannot produce a translation, say so in the PR.

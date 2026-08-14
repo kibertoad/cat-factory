@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import {
   WorkflowEntrypoint,
   type WorkflowEvent,
@@ -94,7 +95,7 @@ export class BootstrapWorkflow extends WorkflowEntrypoint<Env, BootstrapWorkflow
         pollReadFailures += 1
         log.warn(
           'bootstrap poll could not read job status; treating as still running and retrying',
-          { err: error instanceof Error ? error.message : String(error), pollReadFailures },
+          { err: getErrorMessage(error), pollReadFailures },
         )
         continue
       }

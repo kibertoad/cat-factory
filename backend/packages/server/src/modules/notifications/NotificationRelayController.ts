@@ -1,6 +1,10 @@
 import { Hono } from 'hono'
 import type { Notification } from '@cat-factory/kernel'
-import { NOTIFICATION_DELIVERY_REASONS, isNotificationDeliveryReason } from '@cat-factory/kernel'
+import {
+  getErrorMessage,
+  isNotificationDeliveryReason,
+  NOTIFICATION_DELIVERY_REASONS,
+} from '@cat-factory/kernel'
 import { verifyMachineRequest } from '../../auth/machineGate.js'
 import type { AppEnv } from '../../http/env.js'
 import type { DelegatedNotificationRequest } from '../../notifications/machineNotifications.js'
@@ -131,7 +135,7 @@ export function notificationRelayController(): Hono<AppEnv> {
       log.error('notification delegation: row read failed', {
         workspaceId: body.workspaceId,
         notificationId: body.notificationId,
-        err: error instanceof Error ? error.message : String(error),
+        err: getErrorMessage(error),
       })
       return c.json({ ok: false, error: { code: 'internal', message: 'Internal error' } }, 500)
     }
@@ -146,7 +150,7 @@ export function notificationRelayController(): Hono<AppEnv> {
       log.warn('notification delegation: delivery failed', {
         workspaceId: body.workspaceId,
         notificationId: body.notificationId,
-        err: error instanceof Error ? error.message : String(error),
+        err: getErrorMessage(error),
       })
     }
     return c.json({ ok: true })

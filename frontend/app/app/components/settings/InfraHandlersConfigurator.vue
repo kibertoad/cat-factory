@@ -12,7 +12,7 @@
 //                      per custom type (matched to a service's pinned `manifestId`).
 // In LOCAL mode each handler additionally offers a per-USER override (this-machine only),
 // written to the `/me/environment-handlers` endpoints. Drives the infraConfig store.
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import type {
   CustomManifestType,
   EnvironmentHandlerView,
@@ -28,12 +28,15 @@ import KubernetesEngineForm from '~/components/settings/KubernetesEngineForm.vue
 import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor.vue'
 import CustomManifestTypeEditor from '~/components/settings/CustomManifestTypeEditor.vue'
 import CloudflareHandlerSection from '~/components/settings/CloudflareHandlerSection.vue'
+import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
+import { consumeKubernetesScrollAnchor } from '~/components/settings/InfraHandlersConfigurator.logic'
 
 const { t } = useI18n()
 const infra = useInfraConfigStore()
 const auth = useAuthStore()
 const ui = useUiStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirmAction } = useConfirmAction()
 
 const isLocal = computed(() => auth.localMode?.enabled === true)
@@ -93,6 +96,32 @@ watch(
   },
   { immediate: true },
 )
+
+// Deep-link anchor: the `cat-factory k3s` hand-off opens this window with the ui store's scroll
+// target set to `kubernetes`, so bring that section into view once rather than dropping the
+// operator at the top of the tab to hunt for the form the CLI just described.
+//
+// Attempted from BOTH the watch and `onMounted`, and the anchor is cleared only on a real scroll:
+// the section is behind `v-if="infra.available === true"`, whose probe resolves after the deep link
+// fires, so a single attempt that finds nothing rendered would swallow the hand-off with neither
+// watched value ever changing again to re-drive it. The decision itself is in the logic module,
+// where it is tested.
+const kubeSection = ref<HTMLElement | null>(null)
+async function anchorKubernetesSection() {
+  await nextTick()
+  const outcome = consumeKubernetesScrollAnchor({
+    target: ui.infrastructureScrollTarget,
+    available: infra.available,
+    section: kubeSection.value,
+  })
+  if (outcome === 'scrolled') ui.clearInfrastructureScrollTarget()
+}
+watch([() => ui.infrastructureScrollTarget, () => infra.available], () => {
+  void anchorKubernetesSection()
+})
+onMounted(() => {
+  void anchorKubernetesSection()
+})
 
 const busy = ref(false)
 
@@ -193,7 +222,7 @@ async function saveKube(payload: { config: KubeHandlerConfig; secrets: Record<st
     })
     toastSaved()
   } catch (e) {
-    notifyError(e)
+    present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
     busy.value = false
   }
@@ -206,7 +235,7 @@ async function removeKube() {
     await infra.unregisterHandler('kubernetes')
     toastRemoved()
   } catch (e) {
-    notifyError(e)
+    present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
     busy.value = false
   }
@@ -230,7 +259,7 @@ async function saveKubeOverride(payload: {
     })
     toastSaved()
   } catch (e) {
-    notifyError(e)
+    present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
     busy.value = false
   }
@@ -244,7 +273,7 @@ async function removeKubeOverride() {
     await infra.removeUserHandler('kubernetes')
     toastRemoved()
   } catch (e) {
-    notifyError(e)
+    present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
     busy.value = false
   }
@@ -352,7 +381,7 @@ async function saveCustom(payload: {
     })
     toastSaved()
   } catch (e) {
-    notifyError(e)
+    present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
     busy.value = false
   }
@@ -366,7 +395,7 @@ async function removeCustom() {
     await infra.unregisterHandler('custom', selectedCustomId.value)
     toastRemoved()
   } catch (e) {
-    notifyError(e)
+    present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
     busy.value = false
   }
@@ -382,14 +411,6 @@ function toastSaved() {
 function toastRemoved() {
   toast.add({ title: t('settings.infrastructure.handler.removed'), icon: 'i-lucide-check' })
 }
-function notifyError(e: unknown) {
-  toast.add({
-    title: t('settings.infrastructure.handler.saveFailed'),
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
 </script>
 
 <template>
@@ -400,7 +421,11 @@ function notifyError(e: unknown) {
     <p class="text-xs text-slate-400">{{ t('settings.infrastructure.handler.intro') }}</p>
 
     <!-- kubernetes -->
-    <section class="space-y-2 rounded-lg border border-slate-700 bg-slate-900/40 p-3">
+    <section
+      ref="kubeSection"
+      class="space-y-2 rounded-lg border border-slate-700 bg-slate-900/40 p-3"
+      data-testid="infra-kubernetes-section"
+    >
       <h3 class="text-sm font-semibold text-slate-200">
         {{ t('inspector.testConfig.provisionTypes.kubernetes') }}
       </h3>
@@ -433,7 +458,7 @@ function notifyError(e: unknown) {
           {{ t('settings.infrastructure.handler.activeEngine') }}
           <span class="text-slate-200">{{ kubeHandlerEngineLabel }}</span>
         </p>
-        <div class="flex items-center gap-2 pl-7">
+        <div class="space-y-1.5 pl-7">
           <UButton
             color="neutral"
             variant="soft"
@@ -444,12 +469,7 @@ function notifyError(e: unknown) {
           >
             {{ t('settings.providerConnection.test.button') }}
           </UButton>
-          <span v-if="kubeSavedTestResult?.ok" class="text-xs text-emerald-400">
-            {{ kubeSavedTestResult.message ?? t('settings.providerConnection.test.ok') }}
-          </span>
-          <span v-else-if="kubeSavedTestResult" class="text-xs text-rose-400">
-            {{ kubeSavedTestResult.message ?? t('settings.providerConnection.test.failed') }}
-          </span>
+          <ConnectionTestVerdict :result="kubeSavedTestResult" />
         </div>
       </div>
       <p v-else class="flex items-center gap-1.5 text-[12px] text-slate-500">

@@ -298,20 +298,34 @@ describe('board store read getters', () => {
     expect(() => store.previewMove('missing', { x: 1, y: 1 })).not.toThrow()
   })
 
-  it('updateBlock restores the patched fields and toasts when the write fails', async () => {
-    // Capture the toast the store surfaces on failure. Re-stub before creating the store so it
-    // binds this spy (the store resolves `useToast()` once at setup).
+  it('updateBlock restores the patched fields and reports the failure when the write fails', async () => {
+    // Capture what the store surfaces on failure. Every rolled-back write drains into the shared
+    // failure funnel (`usePipelineErrorToast().present`) rather than building its own toast, so the
+    // assertion is on the funnel and on the TITLE KEY it was given. Re-stub before creating the
+    // store: it resolves both handles once at setup.
     const addSpy = vi.fn()
+    const presentSpy = vi.fn()
     vi.stubGlobal('useToast', () => ({ add: addSpy }))
+    vi.stubGlobal('usePipelineErrorToast', () => ({ present: presentSpy }))
     setActivePinia(createPinia())
     const s = useBoardStore()
     s.hydrate([frame('f1', { title: 'Original', description: 'orig' })])
     // With no active workspace, `requireId()` throws inside updateBlock's try — the same catch
     // that a rejected API write hits — so this exercises the optimistic-rollback + toast path.
-    await s.updateBlock('f1', { title: 'Edited', description: 'changed' })
+    // The outcome is REPORTED to the caller, not only toasted: a caller that goes on to announce
+    // what the patch achieved (the monorepo import's frontend wiring) has to see the rollback.
+    await expect(s.updateBlock('f1', { title: 'Edited', description: 'changed' })).resolves.toBe(
+      false,
+    )
     expect(s.getBlock('f1')?.title).toBe('Original')
     expect(s.getBlock('f1')?.description).toBe('orig')
-    expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ color: 'error' }))
+    expect(presentSpy).toHaveBeenCalledWith(expect.any(Error), 'board.toast.updateFailed')
+  })
+
+  it('updateBlock reports a no-op for a block that is not on the board', async () => {
+    // Nothing is patched and nothing is toasted, so the return value is the ONLY signal that the
+    // write did not happen.
+    await expect(store.updateBlock('missing', { title: 'Edited' })).resolves.toBe(false)
   })
 
   it('hydrate replaces and upsert inserts/updates cached blocks', () => {
@@ -357,9 +371,19 @@ describe('board store optimistic rollback', () => {
     }))
     const store = useBoardStore()
     store.hydrate([frame('f1'), task('t1', 'f1', { title: 'orig', description: 'keep' })])
-    await store.updateBlock('t1', { title: 'renamed' })
+    await expect(store.updateBlock('t1', { title: 'renamed' })).resolves.toBe(false)
     expect(store.getBlock('t1')?.title).toBe('orig')
     expect(store.getBlock('t1')?.description).toBe('keep')
+  })
+
+  it('updateBlock reports the patch persisted when the API accepts it', async () => {
+    vi.stubGlobal('useApi', () => ({
+      updateBlock: async () => task('t1', 'f1', { title: 'renamed' }),
+    }))
+    const store = useBoardStore()
+    store.hydrate([frame('f1'), task('t1', 'f1', { title: 'orig' })])
+    await expect(store.updateBlock('t1', { title: 'renamed' })).resolves.toBe(true)
+    expect(store.getBlock('t1')?.title).toBe('renamed')
   })
 
   it('previewResize translates the children when the drag moves the content origin', () => {
@@ -513,6 +537,7 @@ describe('board store deferred delete + undo', () => {
   function setup(removeImpl: () => Promise<void>) {
     const removeSpy = vi.fn(removeImpl)
     const addSpy = vi.fn()
+    const presentSpy = vi.fn()
     const actions: ToastAction[] = []
     vi.stubGlobal('useApi', () => ({ removeBlock: removeSpy }))
     vi.stubGlobal('useToast', () => ({
@@ -521,9 +546,10 @@ describe('board store deferred delete + undo', () => {
         if (t.actions) actions.push(...t.actions)
       },
     }))
+    vi.stubGlobal('usePipelineErrorToast', () => ({ present: presentSpy }))
     setActivePinia(createPinia())
     useWorkspaceStore().workspaceId = 'ws1'
-    return { store: useBoardStore(), removeSpy, addSpy, actions }
+    return { store: useBoardStore(), removeSpy, addSpy, presentSpy, actions }
   }
 
   beforeEach(() => {
@@ -585,14 +611,15 @@ describe('board store deferred delete + undo', () => {
     expect(removeSpy).toHaveBeenCalledWith('ws1', 'f1')
   })
 
-  it('restores the subtree and toasts an error if the deferred delete fails', async () => {
-    const { store, addSpy } = setup(() => Promise.reject(new Error('boom')))
+  it('restores the subtree and reports the failure if the deferred delete fails', async () => {
+    const { store, presentSpy } = setup(() => Promise.reject(new Error('boom')))
     store.hydrate([frame('f1'), task('t1', 'f1')])
     store.removeBlock('f1')
     await vi.runAllTimersAsync()
     expect(store.getBlock('f1')?.id).toBe('f1')
     expect(store.getBlock('t1')?.id).toBe('t1')
-    expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ color: 'error' }))
+    // Through the shared funnel, named by its title key (see `updateBlock`'s case above).
+    expect(presentSpy).toHaveBeenCalledWith(expect.any(Error), 'board.toast.deleteFailed')
   })
 
   it('does not reattach a failed deferred delete onto a different workspace', async () => {

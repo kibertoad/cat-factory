@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import {
   type PlatformObservabilityService,
@@ -59,7 +60,7 @@ export function runPlatformMetricsSweep(deps: WorkerPlatformMetricsDeps): Promis
     .catch((error) =>
       logger.error('platform metrics sweep failed', {
         cron: 'platform-metrics',
-        err: error instanceof Error ? error.message : String(error),
+        err: getErrorMessage(error),
       }),
     )
 }

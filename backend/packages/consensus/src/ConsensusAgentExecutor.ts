@@ -10,6 +10,7 @@ import {
   type ConsensusStrategy,
   describeError,
   type ExecutionEventPublisher,
+  getErrorMessage,
   inlineModelRef,
   isAsyncAgentExecutor,
   type Logger,
@@ -18,6 +19,7 @@ import {
   type ModelProviderResolver,
   type ModelRef,
 } from '@cat-factory/kernel'
+import type { DispatchToolServers } from '@cat-factory/contracts'
 import {
   type AgentKindRegistry,
   type AgentRouting,
@@ -31,6 +33,8 @@ import {
   userPromptFor,
 } from '@cat-factory/agents'
 import { decideConsensusMode } from './gating.js'
+import { panelDesignImageCeiling } from './designImages.js'
+import { panelToolServerCeiling } from './toolServers.js'
 import { isConsensusEligible } from './traits.js'
 import { runSpecialistPanel } from './strategies/specialistPanel.js'
 import { runDebate } from './strategies/debate.js'
@@ -178,6 +182,14 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
         // CONTEXT so a panel's participants run on the same providers the single-actor path
         // would have used for the same step.
         ...(context.providerPreference ? { providerPreference: context.providerPreference } : {}),
+        // The initiator's local-model declarations, threaded for consistency with the other two
+        // paths. A panel withholds design images for its OWN reason (`consensus_panel`: one
+        // composed prompt across models that need not agree), so nothing here reads the modality
+        // today, but a base ref that answered differently per executor is exactly the drift the
+        // per-dispatch resolution exists to prevent.
+        ...(context.localModelDeclarations
+          ? { localModelDeclarations: context.localModelDeclarations }
+          : {}),
       },
     )
   }
@@ -229,8 +241,33 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
     // real checkout (run `git diff`, read `.cat-context/*`, dispatch slice subagents). A panel
     // participant is a plain inline call with none of that, so the surface it is actually on is
     // stated last — after any workspace override, which must not be able to drop it.
-    const baseSystem = `${composedSystem}\n\n${INLINE_PANEL_SURFACE}`
-    const goalPrompt = userPromptFor(context, this.agentKindRegistry)
+    //
+    // The tool servers the kind declared go the same way, and are NAMED rather than covered by the
+    // paragraph above: the surface statement tells a participant it has no CLI, which does not tell
+    // it that the vendor tool its instructions send it to is one of the things it has lost.
+    // Recomputed rather than threaded from the preview the engine already asked for, the same way
+    // the model is resolved twice: a pure read of the kind's declarations, and the alternative is
+    // an executor holding per-dispatch state between two port calls.
+    const ceiling = panelToolServerCeiling(context, this.agentKindRegistry, this.deps.logger)
+    if (ceiling.record) {
+      this.deps.logger?.warn('consensus panel withholds the tool servers this kind declares', {
+        agentKind: context.agentKind,
+        strategy: cfg.strategy,
+        executionId: context.executionId,
+        stepIndex: context.stepIndex,
+        toolServerIds: ceiling.record.unavailable.map((server) => server.id),
+      })
+    }
+    const baseSystem = ceiling.section
+      ? `${composedSystem}\n\n${INLINE_PANEL_SURFACE}\n\n${ceiling.section}`
+      : `${composedSystem}\n\n${INLINE_PANEL_SURFACE}`
+    // Composed from the context PLUS what this surface cannot carry, so the one shared goal prompt
+    // states a withheld design exactly as the container dispatch of the same kind would state an
+    // undeliverable one. Absent for a task with no linked design: the prompt is then unchanged.
+    const goalPrompt = userPromptFor(
+      { ...context, ...panelDesignImageCeiling(context) },
+      this.agentKindRegistry,
+    )
 
     const participants: ResolvedParticipant[] = cfg.participants.map((p) => {
       const ref = this.refForModelId(p.modelId, base, context.providerPreference)
@@ -321,7 +358,7 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
       }
     } catch (error) {
       session.status = 'failed'
-      session.error = error instanceof Error ? error.message : String(error)
+      session.error = getErrorMessage(error)
       session.updatedAt = this.now()
       await this.emit(context, session)
       this.deps.logger?.warn('consensus session failed', {
@@ -363,6 +400,25 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
     // Consensus makes metered inline calls; only the delegated path can be quota-based.
     if (this.consensusActive(context)) return Promise.resolve(false)
     return this.deps.standard.isQuotaBased?.(context) ?? Promise.resolve(false)
+  }
+
+  /**
+   * The tool-server ceiling of a diverted step, answered at DISPATCH so the engine records it
+   * before the panel runs. A panel that throws still leaves a step saying what it could not reach,
+   * which is the state a reader most needs it in: without the record, a failed diverted step is
+   * indistinguishable from an ordinary inline step whose kind declared no servers.
+   *
+   * Reads the declarations only, which is what makes it cheap enough to sit ahead of the work: no
+   * transport, credential or harness test can change the answer on this surface, and running them
+   * would resolve credentials for a dispatch that has nowhere to send them.
+   */
+  previewToolServers(context: AgentRunContext): Promise<DispatchToolServers | undefined> {
+    if (!this.consensusActive(context)) {
+      return this.deps.standard.previewToolServers?.(context) ?? Promise.resolve(undefined)
+    }
+    return Promise.resolve(
+      panelToolServerCeiling(context, this.agentKindRegistry, this.deps.logger).record,
+    )
   }
 
   // --- Async delegation: only ever reached for non-consensus (delegated) steps, since

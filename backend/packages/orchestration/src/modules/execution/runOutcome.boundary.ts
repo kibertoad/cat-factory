@@ -1,5 +1,6 @@
 import type {
   OutcomeConcern,
+  OutcomeEnvironments,
   OutcomeRequirement,
   OutcomeRequirements,
   OutcomeSources,
@@ -54,6 +55,13 @@ const MAX_REQUIREMENT_ENTRIES = 500
 
 /** How many tester areas and concerns one response carries. Same reasoning as the rows. */
 const MAX_TESTER_LIST = 200
+
+/**
+ * How many environment rows one response carries. A run stands one up per involved service
+ * frame, so this is the same pathological ceiling as the rows above, and the run's own frame
+ * order is what a cap keeps.
+ */
+const MAX_ENVIRONMENT_ROWS = 50
 
 /**
  * How many linked-source rows one response carries. A task links a handful of pages; the cap is
@@ -168,6 +176,33 @@ function boundVisuals(visuals: OutcomeVisuals): OutcomeVisuals {
   }
 }
 
+function boundEnvironments(
+  environments: OutcomeEnvironments,
+  truncations: string[],
+): OutcomeEnvironments {
+  if (environments.status === 'absent') return environments
+  return {
+    status: 'reported',
+    entries: cap(environments.entries, 'environments', truncations, MAX_ENVIRONMENT_ROWS).map(
+      (entry) => ({
+        // The URL is supplied by the org's own provisioning API through the manifest's response
+        // mapping, and an environment handed out with a token in its query string is a shape that
+        // API is free to have. Scrubbed like any other provider-supplied string.
+        url: text(entry.url),
+        state: entry.state,
+        origin: entry.origin,
+        expiresAt: entry.expiresAt,
+        retained: entry.retained,
+        // Ids the platform minted, not authored text.
+        frameId: entry.frameId,
+        environmentId: entry.environmentId,
+        // The provider's verbatim stderr, which is where a leaked credential comes from.
+        detail: text(entry.detail),
+      }),
+    ),
+  }
+}
+
 function boundSources(sources: OutcomeSources, truncations: string[]): OutcomeSources {
   if (sources.status === 'absent') return sources
   return {
@@ -216,6 +251,7 @@ export function boundOutcomeForApi(outcome: RunOutcome): RunOutcome {
     requirements: boundRequirements(outcome.requirements, truncations),
     tests: boundTests(outcome.tests, truncations),
     visuals: boundVisuals(outcome.visuals),
+    environments: boundEnvironments(outcome.environments, truncations),
     sources: boundSources(outcome.sources, truncations),
     // A closed vocabulary of enum members and one nullable enum: nothing here is authored text.
     checks: outcome.checks.map((check) => ({

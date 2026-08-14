@@ -74,12 +74,13 @@ export class FakeGitHubClient implements GitHubClient {
     installationId: number,
     query: string,
     opts?: { owner?: string; ownerType?: 'Organization' | 'User'; limit?: number },
-  ): Promise<GitHubRepo[]> {
+  ): Promise<Paged<GitHubRepo>> {
     this.searchReposCalls.push({ installationId, query, opts })
     const q = query.trim().toLowerCase()
-    if (!q) return []
+    if (!q) return { items: [], truncated: false }
     const matched = this.repos.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
-    return matched.slice(0, Math.min(Math.max(opts?.limit ?? 50, 1), 100))
+    const cap = Math.min(Math.max(opts?.limit ?? 50, 1), 100)
+    return { items: matched.slice(0, cap), truncated: matched.length > cap }
   }
 
   async getRepo(_installationId: number, ref: GitHubRepoRef): Promise<GitHubRepo> {

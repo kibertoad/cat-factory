@@ -15,6 +15,7 @@ import {
   type Clock,
   type ExecutionEventPublisher,
   type ProvisioningSubsystem,
+  type ResolveBinaryArtifactStore,
   type RunnerPoolProvider,
   type RunnerTransport,
   type StoreAgentContextGate,
@@ -124,6 +125,12 @@ export interface WorkerExecutorDeps {
    */
   resolvePackageRegistries: ((workspaceId: string) => Promise<JobPackageRegistrySpec[]>) | undefined
   /**
+   * The account's binary-artifact store, for the design pictures an inline dispatch attaches to
+   * its model call. Absent ⇒ an inline kind's prompt states that the pictures could not be
+   * delivered rather than pretending the task holds none.
+   */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /**
    * The account-settings reader used ONLY to answer "does this run's account have web-search
    * keys of its own". A DEDICATED instance with no `settingsCache`: the `accountSettings` slice
    * is pass-through on the Worker's isolate-safe profile, so caching it here would be a no-op,
@@ -180,6 +187,17 @@ export function selectAgentExecutor(deps: WorkerExecutorDeps): AgentExecutor {
     // INLINE_WEB_SEARCH_ENABLED and an Anthropic/OpenAI model).
     webSearch: inlineWebSearchOptionsFromEnv(env),
     agentKindRegistry,
+    // The account's binary-artifact store, so an inline dispatch can attach the design pictures
+    // its container sibling gets on disk. Symmetric with the Node facade's wiring.
+    ...(deps.resolveBinaryArtifactStore
+      ? { resolveBinaryArtifactStore: deps.resolveBinaryArtifactStore }
+      : {}),
+    // The SAME recorder the container executor is given below, so an inline kind's provided
+    // context lands in `agent_context_snapshots` too. Wiring it there and not here is what left
+    // every companion and inline document kind absent from that table; the key is required (never
+    // spread conditionally) so a facade cannot repeat that omission and still compile.
+    agentContextRecorder: deps.agentContextObservability,
+    logger,
   })
 
   // The sandbox MUST build — a null here means a prerequisite (GitHub App private

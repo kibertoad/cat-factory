@@ -9,6 +9,7 @@ import {
   type ProviderCapabilities,
   SUBSCRIPTION_VENDORS,
   contextWindowFor,
+  declaredModelRouteLabels,
   effectiveCatalog,
   effectiveCatalogWith,
   getSelectableModel,
@@ -233,6 +234,32 @@ describe('isModelUsable', () => {
   })
 })
 
+describe('declaredModelRouteLabels', () => {
+  it('names every route the model declares, in the flavour order', () => {
+    // `gpt-5.6-sol` is the built-in `mdp_chatgpt` preset's base model, and its route pair is what
+    // the run-start refusal has to name: an OpenAI API key is NOT among them (no `direct` route,
+    // ADR 0056), so the generic "add an API key for the provider" remedy cannot fix this model.
+    expect(declaredModelRouteLabels('gpt-5.6-sol', caps())).toEqual([
+      'OpenRouter',
+      SUBSCRIPTION_VENDORS.codex.label,
+    ])
+  })
+
+  it('answers what the model DECLARES, not what the capabilities make usable', () => {
+    // Deliberately the declared walk: the refusal it feeds fires precisely when nothing is usable,
+    // so a usable-only answer would be empty exactly when the remedy is needed.
+    expect(declaredModelRouteLabels('gpt-5.6-sol', caps({ cloudflareEnabled: true }))).toEqual(
+      declaredModelRouteLabels('gpt-5.6-sol', caps({ subscriptionVendors: new Set(['codex']) })),
+    )
+  })
+
+  it('is empty for an id the catalog does not ship', () => {
+    expect(declaredModelRouteLabels('not-a-model', caps())).toEqual([])
+    expect(declaredModelRouteLabels('ollama:gemma3', caps())).toEqual([])
+    expect(declaredModelRouteLabels(undefined, caps())).toEqual([])
+  })
+})
+
 describe('resolveModelRef (the effective variant)', () => {
   it('is undefined for an unknown, absent or empty id', () => {
     expect(resolveModelRef('not-a-model', caps())).toBeUndefined()
@@ -296,13 +323,18 @@ describe('resolveModelRef (the effective variant)', () => {
     expect(resolveModelRef('claude-opus-4-8', caps())).toEqual({
       provider: 'bedrock',
       model: 'anthropic.claude-opus-4-8',
+      acceptsImages: true,
     })
     expect(
       resolveModelRef(
         'claude-opus-4-8',
         caps({ bedrockModels: new Set(['us.anthropic.claude-opus-4-8']) }),
       ),
-    ).toEqual({ provider: 'bedrock', model: 'us.anthropic.claude-opus-4-8' })
+    ).toEqual({
+      provider: 'bedrock',
+      model: 'us.anthropic.claude-opus-4-8',
+      acceptsImages: true,
+    })
   })
 
   it('carries the bedrock window when the catalog declares one, and omits it when it does not', () => {
@@ -320,6 +352,7 @@ describe('resolveModelRef (the effective variant)', () => {
       model: 'claude-sonnet-5',
       harness: 'claude-code',
       contextTokens: 1_000_000,
+      acceptsImages: true,
     })
   })
 
@@ -485,7 +518,7 @@ describe('effectiveCatalog', () => {
 describe('effectiveCatalogWith', () => {
   it('appends the extra models after the static catalog', () => {
     const extra = localSelectableModels([
-      { provider: 'ollama', label: 'Ollama', models: ['gemma3'] },
+      { provider: 'ollama', label: 'Ollama', models: [{ id: 'gemma3' }] },
     ])
     const options = effectiveCatalogWith(extra, caps({ localModels: new Set(['ollama:gemma3']) }))
     expect(options.at(-1)).toMatchObject({
@@ -508,8 +541,8 @@ describe('localSelectableModels', () => {
   it('builds one direct-flavour entry per enabled model, id-prefixed by its runner', () => {
     expect(
       localSelectableModels([
-        { provider: 'ollama', label: 'Ollama', models: ['gemma3', 'qwen3'] },
-        { provider: 'lmstudio', label: 'LM Studio', models: ['phi4'] },
+        { provider: 'ollama', label: 'Ollama', models: [{ id: 'gemma3' }, { id: 'qwen3' }] },
+        { provider: 'lmstudio', label: 'LM Studio', models: [{ id: 'phi4' }] },
       ]),
     ).toEqual([
       {
@@ -543,6 +576,27 @@ describe('localSelectableModels', () => {
         },
       },
     ])
+  })
+
+  it('carries a DECLARED modality onto the ref, and omits an undeclared one', () => {
+    // The picker renders off these refs, so a declared local model has to state its modality the
+    // way a catalog flavour does. Omission is the point of the third state: an entry that always
+    // carried `acceptsImages` could only ever say yes or no, and "nobody has said" is the honest
+    // answer for a model whose weights this platform has never seen.
+    const [multimodal, textOnly, undeclared] = localSelectableModels([
+      {
+        provider: 'ollama',
+        label: 'Ollama',
+        models: [
+          { id: 'muse-glimmer:30b', acceptsImages: true },
+          { id: 'qwen3', acceptsImages: false },
+          { id: 'gemma3' },
+        ],
+      },
+    ])
+    expect(multimodal?.direct?.ref.acceptsImages).toBe(true)
+    expect(textOnly?.direct?.ref.acceptsImages).toBe(false)
+    expect(undeclared?.direct?.ref).not.toHaveProperty('acceptsImages')
   })
 
   it('yields nothing for no endpoints and for an endpoint with no enabled models', () => {
@@ -875,6 +929,7 @@ describe('isModelUsableInline', () => {
           model: 'claude-sonnet-5',
           harness: 'claude-code',
           contextTokens: 1_000_000,
+          acceptsImages: true,
         },
       ])
     })

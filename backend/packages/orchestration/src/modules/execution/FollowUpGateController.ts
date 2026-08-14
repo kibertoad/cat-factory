@@ -1,4 +1,5 @@
 import type {
+  Block,
   BlockRepository,
   Clock,
   ExecutionInstance,
@@ -6,7 +7,9 @@ import type {
   FollowUpItem,
   FollowUpsStepState,
   IdGenerator,
+  Logger,
   PipelineStep,
+  RunAutonomy,
   StreamedFollowUp,
   TicketTrackerProvider,
   WorkRunner,
@@ -20,6 +23,7 @@ import {
 } from './followUp.logic.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import { resolvesOwnCaps, type RunPolicyScope } from './policy-types.js'
 import type { StepGraph } from './StepGraph.js'
 import type { AdvanceResult } from './advance.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
@@ -36,6 +40,17 @@ export interface FollowUpGateControllerDeps {
   clock: Clock
   notificationService?: NotificationService
   ticketTrackerProvider?: TicketTrackerProvider
+  /**
+   * The run's risk policy, read for ONE decision here: whether undecided follow-ups park for a
+   * person or are dismissed by policy ({@link FollowUpGateController.dismissPendingUnattended}).
+   */
+  resolveRiskPolicy: (
+    workspaceId: string,
+    block: Block,
+    run: RunPolicyScope,
+  ) => Promise<{ autonomy?: RunAutonomy }>
+  /** Facade logger; absent in tests, where the dismissal is asserted off the step instead. */
+  logger?: Logger
 }
 
 /**
@@ -59,6 +74,8 @@ export class FollowUpGateController {
   private readonly clock: Clock
   private readonly notificationService?: NotificationService
   private readonly ticketTrackerProvider?: TicketTrackerProvider
+  private readonly resolveRiskPolicy: FollowUpGateControllerDeps['resolveRiskPolicy']
+  private readonly logger?: Logger
 
   constructor(deps: FollowUpGateControllerDeps) {
     this.executionRepository = deps.executionRepository
@@ -71,6 +88,8 @@ export class FollowUpGateController {
     this.clock = deps.clock
     this.notificationService = deps.notificationService
     this.ticketTrackerProvider = deps.ticketTrackerProvider
+    this.resolveRiskPolicy = deps.resolveRiskPolicy
+    this.logger = deps.logger
   }
 
   /**
@@ -112,8 +131,10 @@ export class FollowUpGateController {
     const state = step.followUps
     if (!state?.enabled) return undefined
     if (hasPendingFollowUps(state)) {
-      await this.raiseFollowUpPending(workspaceId, instance, state)
-      return this.runStateMachine.parkStepOnDecision(workspaceId, instance, step)
+      if (!(await this.dismissPendingUnattended(workspaceId, instance, state))) {
+        await this.raiseFollowUpPending(workspaceId, instance, state)
+        return this.runStateMachine.parkStepOnDecision(workspaceId, instance, step)
+      }
     }
     if (shouldLoopCoder(state)) {
       this.loopCoderForFollowUps(instance, step)
@@ -123,6 +144,65 @@ export class FollowUpGateController {
       return { kind: 'continue' }
     }
     return undefined
+  }
+
+  /**
+   * The follow-up triage under an unattended policy: DISMISS every undecided item, so the run
+   * proceeds instead of parking on a triage nobody is going to do.
+   *
+   * `dismiss` and not `queue`, and the asymmetry is the point. A follow-up is work the Coder
+   * deliberately did NOT do, and queueing it sends the Coder back to widen a change past what the
+   * task asked for, unreviewed, on a run with no supervision. Dismissing keeps the run inside its
+   * brief; the items themselves stay on the step with their text intact, so nothing the Coder
+   * noticed is lost, it is just not acted on. A `question` is dismissed on the same terms: the
+   * only honest unattended answer to "what should I do here" is that nobody said.
+   *
+   * Returns whether it dismissed anything, so the caller falls through to the ordinary
+   * loop/advance instead of parking. `false` leaves the park exactly as it was.
+   *
+   * It reads the block to resolve the policy, which is a repository call the ATTENDED case does
+   * not need. That is affordable here and nowhere near a hot path: the caller reaches this only
+   * when a Coder completion left an item undecided, so it is at most once per Coder step, and the
+   * policy read itself is served from the `riskPolicy` cache slice. Threading the block down from
+   * `recordStepResult` (which does not carry one, on either the inline or the job-poll path)
+   * would widen a shared settle signature to save that one read.
+   */
+  private async dismissPendingUnattended(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    state: FollowUpsStepState,
+  ): Promise<boolean> {
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    if (!block) {
+      // Falling through to the park is the right disposition — with no block there is no policy
+      // to consult, and waiting for a person is what every policy did before this existed. But it
+      // must not be SILENT: the two branches below log their decision, and an unattended run that
+      // parked anyway is a support question whose answer is otherwise invisible.
+      this.logger?.warn('follow-up policy check skipped: the run’s block could not be read', {
+        workspaceId,
+        runId: instance.id,
+        blockId: instance.blockId,
+      })
+      return false
+    }
+    const policy = await this.resolveRiskPolicy(workspaceId, block, instance)
+    if (!resolvesOwnCaps(policy)) return false
+    const now = this.clock.now()
+    let dismissed = 0
+    for (const item of state.items) {
+      if (item.status !== 'pending') continue
+      item.status = 'dismissed'
+      item.dismissedByPolicy = true
+      item.updatedAt = now
+      dismissed++
+    }
+    this.logger?.info('follow-up items dismissed by policy', {
+      workspaceId,
+      runId: instance.id,
+      blockId: block.id,
+      dismissed,
+    })
+    return dismissed > 0
   }
 
   /**
@@ -143,7 +223,9 @@ export class FollowUpGateController {
     // Reset the step for a fresh dispatch; `step.followUps` is intentionally preserved
     // (resetStepForRerun doesn't touch it) so the surfaced items survive the loop.
     this.stepGraph.resetStepForRerun(step)
-    step.rework = { previousProposal: '', feedback }
+    // A person decided these: policy can only DISMISS an item, so anything queued or answered
+    // reached that state through the follow-up inbox. The feedback prose says so too.
+    step.rework = { previousProposal: '', feedback, requestedBy: 'human' }
     this.stepGraph.startStep(step)
     if (instance.status === 'blocked') instance.status = 'running'
   }

@@ -13,7 +13,11 @@ export {
 } from './validation/validateRegistrations.js'
 
 export { BoardService, type BoardServiceDependencies } from './modules/board/BoardService.js'
-export type { PublicRepoOption } from './modules/board/publicBoardReads.js'
+export type {
+  PublicRepoOption,
+  RepoUse,
+  RepoUseByRepoId,
+} from './modules/board/publicBoardReads.js'
 export * as boardLogic from './modules/board/board.logic.js'
 export { sweepBinaryArtifactRetention } from './modules/artifacts/artifactRetention.js'
 
@@ -161,6 +165,16 @@ export {
   RiskPolicyService,
   type RiskPolicyServiceDependencies,
 } from './modules/merge/RiskPolicyService.js'
+// The ACCOUNT tier of the same library, and the merged read every policy consumer holds (ADR 0055).
+export {
+  AccountRiskPolicyService,
+  type AccountRiskPolicyServiceDependencies,
+} from './modules/merge/AccountRiskPolicyService.js'
+export {
+  WorkspaceRiskPolicyLibrary,
+  createWorkspaceRiskPolicyLibrary,
+  type WorkspaceRiskPolicyLibraryDeps,
+} from './modules/merge/WorkspaceRiskPolicyLibrary.js'
 export {
   MergeTrackRecordService,
   type MergeTrackRecordServiceDependencies,

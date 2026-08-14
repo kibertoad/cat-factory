@@ -8,6 +8,7 @@ import {
   buildK3sSetupUrl,
   KUBERNETES_ENV_TOKEN_SECRET_KEY,
 } from './k3s-handler.js'
+import { createNodeTcpProbe } from './k3s-ingress.js'
 import { probeHost } from './k3s-probe.js'
 import {
   CAT_FACTORY_NAMESPACE,
@@ -70,7 +71,7 @@ function silentIo(): Io {
  * required `test-k8s` job. 120 × 500ms = 60s, comfortably inside the suite's 180s timeout.
  */
 function provisionDeps(): ProvisionDeps {
-  return { io: silentIo(), shell, tokenReadAttempts: 120 }
+  return { io: silentIo(), shell, tcp: createNodeTcpProbe(), tokenReadAttempts: 120 }
 }
 
 describe.skipIf(skip !== null)(
@@ -169,18 +170,28 @@ describe.skipIf(skip !== null)(
       const conn = await provisionCluster('use-existing', state, opts(), provisionDeps())
       const handler = buildK3sHandler(conn)
 
-      // Validate the built handler against the REAL contract schema (`@cat-factory/contracts` is a
-      // devDependency) using the token/URL a real cluster just produced — the end-to-end shape the
-      // Settings → Local k3s form's Test/Save would post.
-      const parsed = v.parse(registerEnvironmentHandlerSchema, handler)
-      expect(parsed.provisionType).toBe('kubernetes')
-      expect(parsed.config.engine).toBe('local-k3s')
-      expect(handler.secrets[KUBERNETES_ENV_TOKEN_SECRET_KEY]).toBe(conn.apiToken)
+      // A handler exists only for a cluster whose ingress path the probe ESTABLISHED, and a cf-it
+      // cluster is not guaranteed to have one, so the schema half is asserted when there is a
+      // handler and its absence is asserted to agree with the verdict when there is not.
+      if (handler === null) {
+        expect(conn.ingress.status).not.toBe('ready')
+      } else {
+        // Validate the built handler against the REAL contract schema (`@cat-factory/contracts` is a
+        // devDependency) using the token/URL a real cluster just produced: the end-to-end shape the
+        // Settings → Local k3s form's Test/Save would post.
+        const parsed = v.parse(registerEnvironmentHandlerSchema, handler)
+        expect(parsed.provisionType).toBe('kubernetes')
+        expect(parsed.config.engine).toBe('local-k3s')
+        expect(handler.secrets[KUBERNETES_ENV_TOKEN_SECRET_KEY]).toBe(conn.apiToken)
+      }
 
-      const link = buildK3sSetupUrl('http://localhost:3000', handler)
+      const link = buildK3sSetupUrl('http://localhost:3000', conn)
       const url = new URL(link)
       expect(url.searchParams.get('infraSetup')).toBe('local-k3s')
       expect(url.searchParams.get('apiServerUrl')).toBe(conn.apiServerUrl)
+      // The prefill and the handler agree about the ONE thing the probe decides, on a real cluster
+      // whichever way it answered: this is the pairing the defaulted `ingressVerified` flag broke.
+      expect(url.searchParams.has('hostTemplate')).toBe(handler !== null)
       // The minted token must never ride in the deep-link (it would leak into browser history).
       expect(link).not.toContain(conn.apiToken)
     })

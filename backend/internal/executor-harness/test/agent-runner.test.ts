@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -413,6 +413,67 @@ describe.skipIf(!unix)('runClaudeCode telemetry — subagents and the live strea
     expect(subagent[0]!.responseText).toBe('slice findings')
   })
 
+  it('reconciles the terminal total against the PARENT loop alone, never a subagent turn', async () => {
+    // Both halves of one bug, in the mode that has them: `ambientAuth` has no transcript watcher, so
+    // the CLI's tagged subagent turns are captured through the parent's own publisher. The terminal
+    // `result` cumulative covers the parent conversation ONLY — so counting a subagent's 400 output
+    // tokens as already accounted hid most of the parent's real shortfall, and what survived was
+    // pinned onto the last captured call, which by flush order IS the subagent's turn.
+    fakeCli('claude', [
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'msg_1',
+          usage: { input_tokens: 100, output_tokens: 5 },
+          content: [{ type: 'tool_use', id: 'toolu_01', name: 'Agent', input: {} }],
+        },
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        parent_tool_use_id: 'toolu_01',
+        message: {
+          id: 'msg_sub',
+          usage: { input_tokens: 19_430, output_tokens: 400 },
+          content: [{ type: 'text', text: 'slice findings' }],
+        },
+      }),
+      JSON.stringify({
+        type: 'user',
+        message: { content: [{ type: 'tool_result', content: 'the Agent result' }] },
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'msg_2',
+          usage: { input_tokens: 200, output_tokens: 5 },
+          content: [{ type: 'text', text: 'aggregated' }],
+        },
+      }),
+      // The parent loop's own cumulative: its input reconciles, its output does not.
+      JSON.stringify({
+        type: 'result',
+        result: 'done',
+        usage: { input_tokens: 300, output_tokens: 9_000 },
+      }),
+    ])
+
+    const outcome = await runClaudeCode({
+      cwd,
+      model: 'claude-opus-5',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      ambientAuth: true,
+    })
+
+    const calls = outcome.callMetrics ?? []
+    // The subagent's turn keeps its own 400: it is a measured number from its own conversation.
+    const subagent = calls.find((c) => c.responseText === 'slice findings')
+    expect(subagent?.outputTokens).toBe(400)
+    // The parent's whole shortfall (9,000 − 5 − 5) lands on the job-level row, and on nothing else.
+    const remainder = calls.filter((c) => c.standsForJob)
+    expect(remainder.map((c) => [c.inputTokens, c.outputTokens])).toEqual([[0, 8_990]])
+  })
+
   it('counts a subagent’s work in the run stats whichever channel bills it', async () => {
     // `stats` answers "did the agent ACT at all" (`agentNeverActed`), which is true of a
     // subagent's turns however their telemetry rows are attributed. Riding the ownership split
@@ -472,12 +533,10 @@ describe.skipIf(!unix)('runClaudeCode telemetry — subagents and the live strea
     expect(streamed[1]).toBe(outcome.callMetrics?.[1])
   })
 
-  it('withholds an un-costed call from the live stream until the cumulative fallback costs it', async () => {
-    // A CLI/version that reports only a cumulative total leaves every turn at zero tokens until
-    // `attributeCumulativeUsage` runs at the end. Streaming such a call early would record a
-    // zero-token row, and the backend ignores the terminal repeat (first write wins) — so the
-    // attributed numbers would never land. It is held back until it is final instead. (The
-    // withholding rule itself is unit-tested in `call-metrics.test.ts`; this is the wiring.)
+  it('files a run whose CLI costed no turn at all as one job-level row', async () => {
+    // A CLI/version that reports only a cumulative total leaves every turn at zero tokens. Those
+    // turns are streamed as the zero-token rows they honestly are, and the whole total arrives as
+    // ONE row standing for the job — which for such a run is the only spend record there is.
     fakeCli('claude', [
       JSON.stringify({
         type: 'assistant',
@@ -489,8 +548,6 @@ describe.skipIf(!unix)('runClaudeCode telemetry — subagents and the live strea
         usage: { input_tokens: 300, output_tokens: 50 },
       }),
     ])
-    // Snapshot the tokens AS PUBLISHED (the object is mutated by attribution afterwards), which
-    // is what the backend would have stored.
     const asPublished: Array<{ text: string; inputTokens: number; outputTokens: number }> = []
     const outcome = await runClaudeCode({
       cwd,
@@ -507,8 +564,74 @@ describe.skipIf(!unix)('runClaudeCode telemetry — subagents and the live strea
       },
     })
 
-    expect(asPublished).toEqual([{ text: 'uncosted', inputTokens: 300, outputTokens: 50 }])
-    expect(outcome.callMetrics?.[0]?.inputTokens).toBe(300)
+    expect(asPublished).toEqual([
+      { text: 'uncosted', inputTokens: 0, outputTokens: 0 },
+      { text: '', inputTokens: 300, outputTokens: 50 },
+    ])
+    // Every published object is on the terminal list too, so both channels mint one row id each.
+    expect(outcome.callMetrics?.map((c) => c.standsForJob)).toEqual([undefined, true])
+  })
+
+  it('recovers the OUTPUT side when the stream costed every turn at the message-start snapshot', async () => {
+    // The shape Claude Code actually emits: each `assistant` envelope carries the usage as of
+    // message_start, so the input and cache counts are final and `output_tokens` is the handful
+    // of tokens produced when the message opened. Because every turn was "costed", the old
+    // all-or-nothing fallback stood down and the run's real output was never recorded at all
+    // (measured: a `coder` step at 198 output tokens against a true 14,033). The turns must keep
+    // their own numbers and the shortfall must land, WITHOUT double-counting the input side that
+    // already added up.
+    fakeCli('claude', [
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'msg_1',
+          usage: { input_tokens: 2, cache_read_input_tokens: 998, output_tokens: 4 },
+          content: [{ type: 'text', text: 'first' }],
+        },
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'msg_2',
+          usage: { input_tokens: 2, cache_read_input_tokens: 4_998, output_tokens: 5 },
+          content: [{ type: 'text', text: 'second' }],
+        },
+      }),
+      JSON.stringify({
+        type: 'result',
+        result: 'done',
+        // Every billed input bucket summed (2+998+2+4998), and the TRUE output total.
+        usage: { input_tokens: 4, cache_read_input_tokens: 5_996, output_tokens: 9_000 },
+      }),
+    ])
+    const asPublished: Array<{ text: string; inputTokens: number; outputTokens: number }> = []
+    const outcome = await runClaudeCode({
+      cwd,
+      model: 'claude-opus-4-8',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      ambientAuth: true,
+      onCallMetric: (call) => {
+        asPublished.push({
+          text: call.responseText,
+          inputTokens: call.inputTokens,
+          outputTokens: call.outputTokens,
+        })
+      },
+    })
+
+    // Both turns keep exactly what the CLI reported them at; the input side already reconciled, so
+    // the extra row carries the 8,991 output tokens no turn accounted for and nothing else.
+    expect(asPublished).toEqual([
+      { text: 'first', inputTokens: 2, outputTokens: 4 },
+      { text: 'second', inputTokens: 2, outputTokens: 5 },
+      { text: '', inputTokens: 0, outputTokens: 8_991 },
+    ])
+    // What the live channel published IS what the terminal list holds, and the last row says it
+    // stands for the job rather than for a turn (the backend files it with a null turn index).
+    expect(outcome.callMetrics?.map((c) => c.outputTokens)).toEqual([4, 5, 8_991])
+    expect(outcome.callMetrics?.map((c) => c.standsForJob)).toEqual([undefined, undefined, true])
+    expect(outcome.callMetrics?.reduce((n, c) => n + c.outputTokens, 0)).toBe(9_000)
   })
 
   it('seeds telemetry as a single folded user turn (no phantom system) when the prompt overflows argv', async () => {
@@ -952,6 +1075,66 @@ describe.skipIf(!unix)('runClaudeCode failure reporting', () => {
     const message = await failureMessage()
     expect(message).not.toMatch(/ghp_0123456789/)
     expect(message).toMatch(/push rejected for/)
+  })
+})
+
+// An abort is not always a watchdog. `JobRegistry.abortAll` fires one at every running job when
+// something shuts the harness down, and a backend-requested stop fires one at a single job; only
+// the signal's reason tells those apart, because a watchdog kill is relabelled downstream from
+// the structured `killReason` and these two have no such label. The runner used to reject with a
+// hard-coded "agent run aborted by watchdog", so a container killed mid-job (in the incident that
+// prompted this: the agent pattern-killed the harness itself) filed its failure against a
+// watchdog that never fired.
+describe.skipIf(!unix)('what an aborted run reports', () => {
+  /**
+   * A fake CLI that never finishes on its own, so only the abort can end the run. It touches
+   * `spawnedMarker` first, which is what the test waits on: the abort has to reach a RUNNING
+   * child, and a wall-clock guess at when that happens is a race on a loaded machine.
+   */
+  function hangingCli(name: string, spawnedMarker: string): void {
+    writeFileSync(
+      join(binDir, name),
+      '#!/usr/bin/env node\n' +
+        `require('node:fs').writeFileSync(${JSON.stringify(spawnedMarker)}, 'up')\n` +
+        'process.stdin.resume()\nprocess.stdin.on("data", () => {})\n' +
+        'setInterval(() => {}, 1000)\n',
+      { mode: 0o755 },
+    )
+  }
+
+  /** Start a hanging run, abort it with `reason` once it is up, and answer how it failed. */
+  async function abortedMessage(reason?: Error): Promise<string> {
+    const spawnedMarker = join(cwd, 'cli-spawned')
+    hangingCli('claude', spawnedMarker)
+    const controller = new AbortController()
+    const run = runClaudeCode({
+      cwd,
+      model: 'claude-opus-5',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      ambientAuth: true,
+      signal: controller.signal,
+    })
+    // Wait for the child to SAY it is up, so the abort kills a running one rather than taking
+    // the already-aborted-at-entry shortcut, which is a different rejection. Gated on the
+    // child's own signal rather than a fixed sleep: the sleep passes on an idle machine and
+    // flakes on a contended one, and a flake here reads as the runner mislabelling an abort.
+    while (!existsSync(spawnedMarker)) await new Promise((resolve) => setTimeout(resolve, 5))
+    controller.abort(reason)
+    return run.then(
+      () => '(resolved)',
+      (err: Error) => err.message,
+    )
+  }
+
+  it('names the caller that aborted it', async () => {
+    expect(await abortedMessage(new Error('harness shutting down (SIGTERM)'))).toBe(
+      'harness shutting down (SIGTERM)',
+    )
+  })
+
+  it('blames no watchdog when the abort named no reason', async () => {
+    expect(await abortedMessage()).not.toMatch(/watchdog/i)
   })
 })
 

@@ -7,6 +7,8 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     include: ['test/**/*.spec.ts'],
+    // Keep a green run's transcript to its assertions, not the app's own log lines.
+    setupFiles: ['test/setup/silenceLogs.ts'],
     // File parallelism is safe: each vitest worker gets its OWN Postgres database
     // (`setupTestDb` → `deriveWorkerDatabase`), so concurrent spec files on different
     // workers never contend on shared tables. Files sharing a worker still run

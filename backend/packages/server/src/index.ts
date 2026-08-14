@@ -23,6 +23,8 @@ export {
   sweepHealth,
   type SweepFailureStreak,
   type SweepHealthTracker,
+  type SweepPassTally,
+  sweepPassRecoveredNothing,
 } from './observability/sweepHealth.js'
 export {
   type AppEnv,
@@ -160,6 +162,14 @@ export {
 // sealed per-workspace grant store to the credential chain above (which resolves the OAuth client
 // secret). Every facade builds it beside `buildToolSecretChain`, so a deployment with a grant
 // store dispatches with a live token and one without states the server as `oauth_not_connected`.
+// The SERVING side of MCP authorization: this deployment as the authorization server for its own
+// hosted MCP endpoint. Projected as a container field by both facades, present only where a
+// deployment can actually complete the flow (an ENCRYPTION_KEY to seal what it carries, and the
+// public-API key store, which is what a completed flow issues).
+export {
+  mcpAuthServerContainerFields,
+  type McpAuthServerContainerFields,
+} from './modules/mcpAuthServer/containerFields.js'
 export {
   createMcpOAuthTokenSource,
   mcpOAuthContainerFields,
@@ -211,11 +221,15 @@ export {
 export {
   buildResolveRepoTarget,
   buildResolveRepoTargets,
+  buildListWorkspaceRunRepos,
   type ResolveRepoTargetDependencies,
   type ResolveRepoTargetsDependencies,
   type ResolveRepoTargets,
   type ResolvedRepoTargets,
   type RepoCheckout,
+  type ListWorkspaceRunRepos,
+  type ListWorkspaceRunReposDependencies,
+  type WorkspaceRunRepo,
 } from './agents/resolveRepoTarget.js'
 // The checkout-free RepoFiles facade over the wired GitHubClient + the engine-facing
 // run-repo resolver each facade threads into the core for a registered kind's pre/post-ops.
@@ -325,7 +339,9 @@ export { handleError } from './http/errorHandler.js'
 export {
   CORS_ALLOWED_HEADERS,
   CORS_EXPOSED_HEADERS,
+  corsOriginFor,
   corsReflectsWhenUnset,
+  isPubliclyReadablePath,
   parseAllowedOrigins,
   resolveCorsOrigin,
 } from './http/cors.js'

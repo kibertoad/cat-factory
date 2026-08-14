@@ -756,6 +756,13 @@ export interface PipelineRow {
    * {@link readClassifier} is where that is resolved.
    */
   purpose?: string | null
+  /**
+   * Truthy (1) when this pipeline is the workspace's declared default for a run somebody started
+   * in the app / for one nothing is watching (migration 0091_pipeline_defaults). NULL on every row
+   * of a scope no operator has declared, which is a real state: the scope's own fallback answers.
+   */
+  is_default?: number | boolean | null
+  is_unattended_default?: number | boolean | null
 }
 
 // Declared once. The many nullable JSON arrays parse only when present; `archived`/`builtin`/
@@ -783,6 +790,8 @@ const pipelineReader = makeRowReader<PipelineRow, Pipeline>([
   // `purpose` is mandatory on the entity, so this read must be TOTAL: see {@link readClassifier}
   // for why an empty column resolves to `build` while an unnameable member passes through.
   readClassifier('purpose', 'build'),
+  readFlag('isDefault'),
+  readFlag('isUnattendedDefault'),
 ])
 
 export function rowToPipeline(row: PipelineRow): Pipeline {
@@ -1034,10 +1043,11 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
   // An execution with no owning block is structurally impossible — surface the corrupt
   // row loudly instead of coercing it to an empty id that callers read as "no block".
   if (!row.block_id) {
-    throw new DataIntegrityError('Execution row has no block_id', {
-      table: 'agent_runs',
-      id: row.id,
-    })
+    throw new DataIntegrityError(
+      'Execution row has no block_id',
+      { table: 'agent_runs', id: row.id },
+      'malformed',
+    )
   }
   const steps = (detail.steps ?? []).map((s) => ({ ...s, runId: row.id }))
   const currentStep = detail.currentStep ?? 0
@@ -1045,12 +1055,11 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
   // legitimate "ran off the end / complete" cursor). Anything outside that wedges the driver
   // on silent no-ops, so reject it at read.
   if (currentStep < 0 || currentStep > steps.length) {
-    throw new DataIntegrityError('Execution currentStep is out of bounds', {
-      table: 'agent_runs',
-      id: row.id,
-      currentStep,
-      steps: steps.length,
-    })
+    throw new DataIntegrityError(
+      'Execution currentStep is out of bounds',
+      { table: 'agent_runs', id: row.id, currentStep, steps: steps.length },
+      'malformed',
+    )
   }
   return {
     id: row.id,
@@ -1153,7 +1162,51 @@ export function adoptCreatedAt(instance: ExecutionInstance, now: number): number
   return (instance.createdAt ??= now)
 }
 
+/**
+ * Refuse to persist a run that {@link rowToExecution} could not read back, the WRITE-side twin of
+ * that read guard. It asserts EVERY invariant the read refuses, not just the one that motivated it:
+ * a writer may only produce rows the reader accepts, so a guard covering half the contract still
+ * lets the other half through and reports nothing at the write.
+ *
+ * An unreadable run row is unusable in both directions and, worse, un-disposable: the board load
+ * drops it, `get` throws, and so every path that could settle it (retry, stop, the stale-run
+ * sweeper's hard-stall backstop) throws on the way in. Left to the read guard alone, the write that
+ * produced it is long gone by the time anything notices, which is exactly the trail that cannot be
+ * followed backwards. Both violations are impossible per the types (`blockId` is a `string`; the
+ * engine only ever advances the cursor over its own step list), which is why they are asserted
+ * rather than handled: reaching either means an instance assembled outside `ExecutionService`, or a
+ * path that truncated `steps` while leaving the cursor where it was.
+ */
+function assertPersistableExecution(instance: ExecutionInstance): void {
+  if (!instance.blockId) {
+    throw new DataIntegrityError(
+      'Execution has no blockId and cannot be persisted',
+      { table: 'agent_runs', column: 'block_id', id: instance.id },
+      'malformed',
+    )
+  }
+  // The same window the read accepts: `[0, steps.length]`, whose upper bound is the legitimate
+  // "ran off the end" cursor. A run whose steps were replaced by a shorter list without moving the
+  // cursor composes cleanly and is then exactly as un-loadable as a blockless one.
+  if (instance.currentStep < 0 || instance.currentStep > instance.steps.length) {
+    throw new DataIntegrityError(
+      'Execution currentStep is out of bounds and cannot be persisted',
+      {
+        table: 'agent_runs',
+        column: 'detail',
+        id: instance.id,
+        currentStep: instance.currentStep,
+        steps: instance.steps.length,
+      },
+      'malformed',
+    )
+  }
+}
+
 export function executionToDetail(instance: ExecutionInstance): string {
+  // Every write path (both facades' `upsert` / `insertLive` / `compareAndSwap`) composes its
+  // detail JSON here, which is what makes this the one place a new writer cannot forget to pass.
+  assertPersistableExecution(instance)
   return JSON.stringify({
     pipelineId: instance.pipelineId,
     pipelineName: instance.pipelineName,

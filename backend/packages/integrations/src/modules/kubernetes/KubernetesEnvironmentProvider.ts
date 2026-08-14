@@ -20,6 +20,11 @@ import type {
   SecretResolver,
   TeardownProbe,
 } from '@cat-factory/kernel'
+import {
+  connectionFailureResult,
+  describeConnectionFailure,
+  getErrorMessage,
+} from '@cat-factory/kernel'
 import { KubernetesApiClient, safeText } from './KubernetesApiClient.js'
 import {
   apiBase,
@@ -260,7 +265,7 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
       return {
         state: 'unknown',
         retryable: false,
-        reason: err instanceof Error ? err.message : String(err),
+        reason: getErrorMessage(err),
       }
     }
     const client = this.makeClient(config, req.resolveSecret)
@@ -271,7 +276,10 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
       return {
         state: 'unknown',
         retryable: true,
-        reason: `Could not read namespace '${namespace}': ${err instanceof Error ? err.message : String(err)}`,
+        // The DETAIL only, deliberately without the hint: the hints are written for the connect
+        // form's Test button ("…then test again"), and this reason is read on a disposal card by
+        // someone who is not testing a connection. What they need is the exact transport failure.
+        reason: `Could not read namespace '${namespace}': ${describeConnectionFailure(err).detail}`,
       }
     }
     if (res.status === 404) return { state: 'gone' }
@@ -298,7 +306,7 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     try {
       config = this.parseConfig(req.manifest)
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      return { ok: false, message: getErrorMessage(err) }
     }
     const client = this.makeClient(config, req.resolveSecret)
     try {
@@ -316,7 +324,13 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
         }),
       }
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      // The apiserver never answered, so there is no status to map: the failure is the thrown
+      // transport error, whose real cause hangs off `.cause` and reads as a bare "fetch failed"
+      // if taken at face value.
+      return connectionFailureResult(err, {
+        subject: 'the Kubernetes apiserver',
+        target: apiBase(config),
+      })
     }
   }
 

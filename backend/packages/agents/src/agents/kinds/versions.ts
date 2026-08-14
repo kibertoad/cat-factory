@@ -15,6 +15,7 @@ import { KAIZEN_SYSTEM_PROMPT } from '../prompts/kaizen.js'
 import { FORK_PROPOSER_SYSTEM_PROMPT } from './fork-proposer.js'
 import { FORK_CHAT_SYSTEM_PROMPT } from '../prompts/fork-decision.js'
 import { JUDGE_SYSTEM_PROMPT } from '../prompts/judge.js'
+import { isCompanionKind } from './companions.js'
 import { SPEC_WRITER_SYSTEM_PROMPT } from './spec-blueprints.js'
 
 // Versioned registry of the built-in agent system prompts. The goal is simple
@@ -45,9 +46,15 @@ export const PROMPT_VERSIONS = {
   // reorders each prompt so the role text precedes the platform-enforced directives — the split a
   // per-workspace override crosses. Every prompt in the flow bumps together for the same reason
   // the scope boundary does: an agent that keeps inventing a subject undoes the two that don't.
-  'requirement-review': { id: 'requirement-review', version: 5, text: REVIEW_SYSTEM_PROMPT },
+  // v6 / v5 on the reviewer and the Writer: the two-GROUP split is now something a person sees and
+  // an unwatched run acts on, so both halves of it are stated in the prompts. The reviewer is told
+  // that `autoAnswerable` decides WHO answers (and that a false positive is the invisible mistake);
+  // the Writer additionally grades each suggestion with a `confidence` the unattended auto-answer
+  // floor compares against. The rework prompt is unchanged and keeps v4: it folds settled answers
+  // into a document and never sees either judgement.
+  'requirement-review': { id: 'requirement-review', version: 6, text: REVIEW_SYSTEM_PROMPT },
   'requirement-rework': { id: 'requirement-rework', version: 4, text: REWORK_SYSTEM_PROMPT },
-  'requirement-writer': { id: 'requirement-writer', version: 4, text: WRITER_SYSTEM_PROMPT },
+  'requirement-writer': { id: 'requirement-writer', version: 5, text: WRITER_SYSTEM_PROMPT },
   // v2 across the clarity + brainstorm prompts: same `NO_ASSUMED_PRODUCT` addition and the same
   // role/directives split.
   'clarity-review': { id: 'clarity-review', version: 2, text: CLARITY_REVIEW_SYSTEM_PROMPT },
@@ -74,7 +81,11 @@ export const PROMPT_VERSIONS = {
   },
   // v5: the build phase now distinguishes `established` (standing) from `aspirational`
   // (agreed-but-not-built) requirements in the committed `spec/`.
-  build: { id: 'build', version: 5, text: standardSystemPrompt('build') },
+  // v6: the shared delivery contract states that commits are PUBLISHED as they are made, so the
+  // agent adds commits rather than amending/resetting/rebasing ones it already made, a rule it
+  // could not infer, since the checkpoint push that publishes them is invisible from inside the
+  // container.
+  build: { id: 'build', version: 6, text: standardSystemPrompt('build') },
   // Brought under version control alongside the implementation-state axis: the spec-writer now
   // emits `requirementItem.state`, and its output is the durable behaviour contract every later
   // step reads, so a change to it needs to be attributable like the standard phases. Numbering
@@ -84,7 +95,13 @@ export const PROMPT_VERSIONS = {
   kaizen: { id: 'kaizen', version: 1, text: KAIZEN_SYSTEM_PROMPT },
   'fork-proposer': { id: 'fork-proposer', version: 1, text: FORK_PROPOSER_SYSTEM_PROMPT },
   'fork-chat': { id: 'fork-chat', version: 1, text: FORK_CHAT_SYSTEM_PROMPT },
-  judge: { id: 'judge', version: 1, text: JUDGE_SYSTEM_PROMPT },
+  // v2: the summary is now rendered as markdown beside the `findings` list, so the prompt asks for
+  // a short whole-verdict paragraph that does NOT restate the findings. Scoring is untouched.
+  //
+  // The number is the shipped prompt's IDENTITY (what a benchmark cell and the sandbox baseline
+  // label attribute an outcome to); it does not re-key a Kaizen combo, because a judge is attached
+  // to a step and is never a step's own `agentKind`, which is what `promptVersionForKind` reads.
+  judge: { id: 'judge', version: 2, text: JUDGE_SYSTEM_PROMPT },
 } as const satisfies Record<string, VersionedPrompt>
 
 /** Ids of the prompts currently under version control. */
@@ -119,10 +136,20 @@ const NON_PHASE_PROMPT_IDS: Record<string, PromptId> = {
  * supplies it — the same two-step resolution {@link promptVersionForKind} does, hoisted out so
  * a caller that wants the `id@vN` LABEL (the prompt editor, naming the shipped revision an
  * override was forked from) doesn't have to re-derive the id from a bare version number.
+ *
+ * A COMPANION resolves to no id, and that exclusion is load-bearing rather than tidy-up:
+ * `baseSystemPromptFor` gives every companion the shared COMPANION prompt, which wins over any
+ * built-in track, so the `reviewer` (the one companion that is also listed in the standard-phase
+ * map, under `review`) does not send the `review` prompt at all. Answering `review@vN` for it named
+ * a revision of TEXT IT NEVER RUNS: the editor showed that label as the baseline an override was
+ * forked from, and a Kaizen combo re-keyed on edits to a prompt the step never saw while ignoring
+ * edits to the one it did. The companion prompt is not under version control (it is composed per
+ * kind, from the pairing's own `reviews` label), so "no number" is the honest answer until it is.
  */
 export function promptIdForKind(kind: string): PromptId | undefined {
   const direct = NON_PHASE_PROMPT_IDS[kind]
   if (direct) return direct
+  if (isCompanionKind(kind)) return undefined
   const phase = phaseForKind(kind as Parameters<typeof phaseForKind>[0])
   return phase ? PHASE_PROMPT_IDS[phase] : undefined
 }

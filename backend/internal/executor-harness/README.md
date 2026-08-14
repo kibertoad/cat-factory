@@ -115,6 +115,38 @@ Bootstrap differs at the ends: it may start from an empty dir, and **resets
 history to one commit and force-pushes** the default branch instead of opening a
 PR. Blueprint **commits onto a branch** (no history reset) and returns the tree.
 
+### The work-branch push is CHECKPOINTED, so it is lease-guarded
+
+Step 8's push is not the run's first: every `JOB_CHECKPOINT_INTERVAL_MS` (60s) the harness pushes
+whatever the agent has committed and NOT yet published, so an evicted container's work survives on
+the branch and a retry resumes on top of it. The interval is a **loss window**, not a push rate:
+`unpublishedWorkBranchTip` skips a tick whose branch tip is already published, so a long run pushes
+once per commit the agent makes rather than once a minute, and nothing here needs tuning per model.
+
+That makes the harness its own competing writer. A commit is published within a minute of being
+made, the agent cannot observe that from inside the container, and amending or resetting it
+afterwards is ordinary git hygiene, so the final push used to be refused as a non-fast-forward and
+failed the whole run with its work already on the branch.
+
+Every push after the first therefore carries `--force-with-lease` against **the sha this pass
+itself published**, never a tip it merely cloned. Two rules make that bound real, and both are
+easy to get wrong:
+
+- **The published sha comes from the push itself** (`pushBranch` names an explicit
+  `<sha>:refs/heads/<branch>` source and returns it), not from `refs/remotes/origin/<branch>`. A
+  fresh coding run clones a single branch, so `git push` creates no tracking ref for the work
+  branch and a lease read back from one never arms at all.
+- **The lease is withheld unless the branch still contains the tip this pass started from**
+  (`workBranchLease`). Once a checkpoint has landed, a rewrite reaching below that tip would lease
+  successfully against our own commit and carry an earlier run's work away with it.
+
+The run's own rewrite lands; a SECOND writer's commits, and a rewrite this pass cannot claim, still
+refuse the push. A refused push is not reported as a generic `git` fault but as the
+`branch-contended` failure cause, which the engine recovers from by re-dispatching the step onto
+the branch as it now stands (bounded by `MAX_BRANCH_CONTENTION_RECOVERIES`, counted as
+`container.branch_contended` and recorded on the step for the debug API). The agents are told the
+matching half of the rule: add commits, never rewrite them (`PLATFORM_DELIVERY_CONTRACT`).
+
 ### Reference designs
 
 A job body for a kind that CAPTURES views (the UI tester, or a deployment's own browser-driven kind)
@@ -128,6 +160,14 @@ from the backend over the SAME container session token the run already holds for
 this needs no extra credential. The FILE NAMES are the backend's, never derived here: the name is
 how the agent learns the view name, and the platform pairs its capture against that name later.
 
+A job for a kind that BUILDS a screen carries the same wire shape under `designImages`, downloaded
+into `.cat-context/design-renders/` instead. Same transfer, opposite instruction: those are the
+design to build, not the views to capture, which is why they get their own directory (a tester
+reading the builder's handful would take it for the complete list of views to capture). The prompt
+naming them is composed by the BACKEND, since only it knows whether this harness/model pair can be
+shown an image at all and which views the run was not sent, so the harness speaks up only to
+CORRECT that list when a picture did not land.
+
 `omitted` carries the views the backend's cap dropped. They are stated to the agent beside the
 transfers that failed, since from where it stands both are a view to capture with nothing to compare
 against. This parser keeps a higher backstop of its own against a body claiming more files than any
@@ -139,6 +179,51 @@ The pass is IDEMPOTENT over the checkout, which matters because a coding flow re
 workspace once per repair round: a non-empty file already on disk is counted and never re-fetched,
 and only a view that MISSED is retried. The per-image ceiling is enforced against the declared
 length and against the stream as it arrives, so an oversized body is refused rather than buffered.
+
+### Uploading what a job PRODUCES
+
+The return leg of the same seam. A job body for a kind the backend gave a browser image to carries
+`artifactUpload: { url, token }`, which the harness surfaces to the agent as `ARTIFACT_UPLOAD_URL`
+/ `ARTIFACT_UPLOAD_TOKEN` — the variables the capturing prompt already names. The token is the run's
+EXISTING container session token, so this grants no reach the job did not already have, and it is
+registered for redaction before it can reach a log.
+
+Which kinds get it is the BACKEND's decision (it keys off the kind's declared `ui` image), so the
+harness passes it through for every mode rather than testing the agent kind: a container-side kind
+list would be the same decision made twice, in the half that cannot see the registry. An unusable
+spec drops the WHOLE seam — a URL with no token is an endpoint nothing can call — and the prompt
+branches on the variable being unset, which is what makes an absent capability visible as manual
+mode rather than as an upload that 401s.
+
+### Generating binaries with the CLI's own tool
+
+Codex ships an `image_gen` tool that works only on ChatGPT subscription auth (an `OPENAI_API_KEY`
+session is routed elsewhere and never offered it). A job body carrying `generateImages: true`
+enables it in the per-run `CODEX_HOME/config.toml` and redirects what it writes.
+
+The redirect is the point. Codex writes to `$CODEX_HOME/generated_images/` and tells the model no
+path for it, and `$CODEX_HOME` is where the run's decrypted subscription credential lives — so
+neither "ask the agent where it saved the file" nor "send the agent to look there" is available.
+Instead `generated_images` is created as a symlink into `.cat-context/binary-output/generated/`
+before the CLI starts, so the file is where the agent was told to look the moment the tool returns,
+with no polling and no race, and `$CODEX_HOME` stays unread. A post-run sweep moves anything a
+failed redirect left behind and NAMES it, because an image that arrived too late to be stored is a
+different fact from a run that generated none.
+
+Opt-in per job because the tool bills the leased ChatGPT plan at several times an ordinary turn.
+
+Unavailable under `ambientAuth`: there is no per-run home to configure or redirect, and
+reconfiguring the developer's own `~/.codex` is the HOME-global mutation this harness never makes.
+Unavailable is not silent — the backend has already composed a brief naming the staging directory,
+so `createCodexHome` reports the gap and one sentence is folded into the prompt saying the tool
+could not be enabled and nothing will appear there. A refused redirect gets its own wording (the
+tool IS on, its output is only unreachable until the post-run sweep), and the teardown report reads
+the same outcome, so a rescued file is never reported as a late arrival when the redirect never
+existed at all.
+
+`generateImages` is also a `/health` capability, so a runner pool on an image that predates it is
+refused rather than run blind: the brief names the staging directory whatever the image does with
+the flag.
 
 ### Skills and tool servers
 
@@ -203,6 +288,7 @@ under a per-job directory:
 | Tester secrets       | child env                                    | child env (same path: the old `process.env` set/restore is gone)         |
 | Private-registry auth | `~/.npmrc`; cleared when a job has no entries | per-job `.npmrc` + `npm_config_userconfig`, seeded from the developer's; theirs is never written or removed |
 | Repo-sourced Claude Skill | installed into the isolated `CLAUDE_CONFIG_DIR` | not installed: read from the checkout's `.cat-context/skill/`, like codex |
+| Codex image output | redirected out of the per-run `CODEX_HOME` into the checkout | not redirected: no per-run home exists, so the capability is reported unavailable rather than pointed at the developer's own `~/.codex` |
 
 Two consequences worth knowing:
 
@@ -234,7 +320,7 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 
 | File               | Responsibility                                                                                          |
 | ------------------ | ------------------------------------------------------------------------------------------------------- |
-| `src/server.ts`    | HTTP entry point; routes `/health`, `/run`, `/bootstrap`, `/blueprint`, `/jobs/{id}`.                   |
+| `src/harness-server.ts` | HTTP entry point; routes `/health`, `/run`, `/bootstrap`, `/blueprint`, `/jobs/{id}`. Its file name and the `cat-factory-harness` process title it sets are both deliberate: this process is PID 1 beside an agent that runs arbitrary shell as the same user, so it must not answer to a pattern kill aimed at the service the agent just built. |
 | `src/runner.ts`    | `JobRegistry`: async job lifecycle, idempotent on `jobId`, progress tracking, and the three per-job watchdogs (max-duration, inactivity, tool-silence).                          |
 | `src/jsonl-stream.ts` | The BOUNDS on a child CLI's streams, shared by both runners: `JsonlLineReader` frames its JSONL stdout while refusing to buffer a runaway record, `BoundedTail` keeps a capped tail of raw output for failure quoting. Both watchdog timers and the poll endpoints share one event loop with this parsing, so an unbounded buffer here is how a container stops answering polls with no watchdog having fired. |
 | `src/job.ts`       | Request types + validators for the job specs.                                                           |
@@ -242,21 +328,26 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 | `src/pi.ts`        | Pi provider config, non-interactive run, JSON-line event + todo-progress parsing, global `AGENTS.md` guidance. |
 | `src/pi-reduction.ts` | Reducing a Pi event stream to what the run PRODUCED (summary, stats, diagnostics, terminal failure), FOLDED as records stream rather than over a retained array — memory is O(largest record), not O(records). The array-taking entry points offline tooling uses are defined in terms of the same reducer. |
 | `src/tool-silence.ts` | The tool-silence watchdog (F13) and the `ToolProgressWindow` an agent stream opens, beats and closes. Separate from the phase marker on purpose: a window is only meaningful while something able to reset it is running. |
-| `src/git.ts`       | clone / branch / commit / push + GitHub PR creation; bootstrap history reset + force-push.              |
+| `src/git.ts`       | clone / branch / commit / push (lease-guarded: [The work-branch push is CHECKPOINTED, so it is lease-guarded](#the-work-branch-push-is-checkpointed-so-it-is-lease-guarded)) + GitHub PR creation; bootstrap history reset + force-push. |
 | `src/bootstrap.ts` | The `/bootstrap` handler (clone-or-empty → adapt → reinit + force-push).                                |
 | `src/blueprint.ts` | The `/blueprint` handler (decompose → render `blueprints/` → commit on branch).                         |
 | `src/embed.ts`     | Bundled assets/templates written into the workspace.                                                    |
 | `src/package-registries.ts` | Private-registry (npm) auth: renders the job's allowlisted entries into an npmrc; the user `~/.npmrc` in a container, a per-job file pointed at by `npm_config_userconfig` for a native job. |
 | `src/agent-runner.ts` | The subscription-harness runners (`runClaudeCode` / `runCodex`): talk direct to the vendor with a leased OAuth token, lift per-turn usage/telemetry off the CLI event stream. |
 | `src/claude-call-aggregator.ts` | Folds Claude Code's per-CONTENT-BLOCK `stream-json` envelopes back into the model calls they belong to (by `message.id`), reconstructs each call's request transcript, and routes subagent turns off the parent's chain. **Exported as the `./claude-call-aggregator` subpath and driven by the BACKEND too** (`runtimes/local`, for an inline step running on the developer's host `claude`), so it stays the ONE implementation: the per-envelope over-count it fixes inflated a measured 1.47M tokens to 5.53M, and both drivers have to learn that only once. That second driver is why the transcript is retained only to `MAX_TRANSCRIPT_CHARS` (stating what it stopped retaining) and why assembling bodies at all is a `bodies` switch: in a container the reconstruction is one job's memory in a box sized for it, in the backend it is per concurrent inline step in the orchestrator process. Unlike the compile-only `./embed`, this subpath is a `dist` import, which is why the package emits declarations, and why a consumer's typecheck depends on Turbo's `^build` edge having built this package first (see `tsconfig.json`'s `comment:buildOrder`). |
+| `src/usage-attribution.ts` | Reconciles a subscription CLI's TWO token channels: the per-turn usage its stream narrates and the cumulative total its terminal event reports. They disagree routinely and in one direction (Claude Code's per-turn `output_tokens` is the message-START snapshot, single digits), so whatever the turns did not account for becomes ONE extra metric standing for the job (`standsForJob`, filed with a null turn index) rather than tokens grafted onto a real turn, which would make a derived number read as a measured one. Reconciled against the PARENT loop's calls alone, since the terminal cumulative covers only that conversation. |
 | `src/transcript-retention.ts` | Lifts the CLI session transcripts (`projects/` / `sessions/`) out of the isolated, credential-bearing config home before it is deleted, and prunes them on a TTL (debugging artifact retention). |
 | `src/captured-command.ts` | The one way the harness runs a declared shell command on its own behalf: `sh -c` with a per-command watchdog, abort handling, conventional exit codes (124/127/130) and a scrub-then-bound output capture. Shared by both pre-PR verification phases so a fix to one cannot miss the other. |
 | `src/dependency-install.ts` | Dependency prepopulation: `prepopulateDependencies` is the ONE seam every checkout-having mode calls; it runs the service's install command before the agent's first turn, excludes what the install materialised from git so no `git add -A` can sweep a dependency tree into the PR, and builds the prompt note describing the outcome. Best-effort: every failure shape becomes a note, never a failed job. Generic: keyed off the job body, never the agent kind. |
 | `src/validation-checks.ts` | Pre-PR validation: runs the job's check commands in the checkout (bounded, secret-scrubbed capture, per-command watchdog) and drives the retry-until-green loop that gates the PR. Generic: keyed off the job body, never the agent kind. |
 | `src/reproduction-proof.ts` | Bugfix reproduction proof: runs the job's declared reproduction command against two symmetric fresh worktrees (the pre-fix tree and the final tree) and computes red-then-green from the exit codes, with a repair loop that never fails the run. Generic: keyed off the job body, never the agent kind. |
 | `src/agent-capabilities.ts` | The agent CAPABILITIES a job body carries: the run's `skills` (a `SKILL.md` payload + resources) and its `mcpServers` (tool servers): with their defensive parsing and the per-CLI config writers (`--mcp-config` JSON for claude-code, `[mcp_servers.*]` TOML for Codex). Backend-authored data the harness only MATERIALISES: adding a skill or a tool server is a backend registration, never a harness change. |
+| `src/context-images.ts` | The TRANSFER half of both image manifests: downloads a manifest's images into a subdirectory of `.cat-context/` on the run's own container session token, bounded per image and per pass, and reports what did not land. Best-effort, time-bounded and IDEMPOTENT over the checkout, so a repair round re-costs a stat rather than a transfer. Shared, because the transfer is identical for both; what differs is what the files MEAN, which is each caller's own module below. |
+| `src/design-images.ts` | The task's DESIGN PICTURES: downloads the manifest a building job body carries into `.cat-context/design-renders/`, for an agent CLI that can read an image into its turn. Says NOTHING on success (the backend's prompt already names every file and its view) and speaks only to correct that list when a picture is not here, because an agent told to open a file that is absent goes looking for the design rather than for the transfer. |
 | `src/reference-screenshots.ts` | The task's REFERENCE DESIGN images: downloads the manifest a capturing job body carries into `.cat-context/reference-screenshots/` (on the run's own container session token) and composes the prompt block naming each file's view. Best-effort, time-bounded and IDEMPOTENT over the checkout, so a repair round re-costs a stat rather than a transfer. A reference that is not on disk is NAMED to the agent, whether a transfer failed or the backend's cap dropped the view, because on disk an absent file and a screen the design does not have are the same thing. Backend-authored throughout, including the file names. |
 | `src/bootstrap-mode.ts` | The repo-bootstrap MODE: clone-a-reference-or-scaffold → run the agent → refuse to push an empty tree → reinit + force-push to the pre-created target repo. |
+| `src/artifact-upload.ts` | The OUTBOUND half of the artifact seam: parses the body's `artifactUpload` and projects it onto the agent's env as `ARTIFACT_UPLOAD_URL` / `ARTIFACT_UPLOAD_TOKEN`, registering the token for redaction first. Passes through what the body carries and decides nothing: which kinds get the seam is the backend's call. |
+| `src/codex-images.ts` | Codex's own `image_gen` output, staged where the agent can reach it: creates `$CODEX_HOME/generated_images` as a symlink into `.cat-context/binary-output/generated/` before the CLI starts, sweeps anything a failed redirect left behind, and unlinks (never follows) the redirect at teardown — a failed unlink is REPORTED, because that unlink is what stops the recursive delete reaching the checkout. Exists because codex exposes no path for what it generated AND `$CODEX_HOME` holds the run's decrypted credential, so neither asking the agent nor sending it there is available. |
 | `src/agent-shared.ts` | The few helpers every agent MODE shares (effort-report folding, the capability fields forwarded to `runAgentInWorkspace`). |
 | `src/logger.ts`    | Structured logging.                                                                                     |
 
@@ -296,8 +387,8 @@ self-contained.
 
 ## Published image (GHCR + Docker Hub)
 
-This package is published to npm (its zero-dependency `dist/server.js` is the
-entry `@cat-factory/local-server` spawns in local native mode). In addition, its
+This package is published to npm (its zero-dependency `dist/harness-server.js` is
+the entry `@cat-factory/local-server` spawns in local native mode). In addition, its
 **Docker image** is published publicly, multi-arch (`linux/amd64` +
 `linux/arm64`), to **both GHCR and Docker Hub** so anyone can pull it without
 building from source:

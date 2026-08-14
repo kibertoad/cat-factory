@@ -80,9 +80,11 @@ export const toolServerUnavailableReasonSchema = v.picklist([
   'transport_unsupported',
   'missing_secret',
   'reserved_secret',
+  'unusable_secret',
   'oauth_not_connected',
   'oauth_token_failed',
   'over_budget',
+  'consensus_panel',
 ])
 export type ToolServerUnavailableReason = v.InferOutput<typeof toolServerUnavailableReasonSchema>
 
@@ -100,11 +102,13 @@ export type ToolServerUnavailableReason = v.InferOutput<typeof toolServerUnavail
  * can re-derive it (see `recordDispatchAttribution`).
  *
  * ABSENT and `{ wired: [], unavailable: [] }` are different states and both are load-bearing:
- * absent means the step's CURRENT attempt holds no dispatch-recorded resolution (an inline step, a
- * run that predates the field, or a step re-armed for a re-run and not yet re-dispatched), while
- * both-empty means a dispatch ran and its kind declared no tool servers at all. The diagnostic
- * weight survives that third case: a step which lost every server it declared still never reads as
- * one that declared none.
+ * absent means the step's CURRENT attempt holds no dispatch-recorded resolution (an inline step
+ * that resolved none, a run that predates the field, or a step re-armed for a re-run and not yet
+ * re-dispatched), while both-empty means a dispatch ran and its kind declared no tool servers at
+ * all. An inline step is not automatically the first of those: a consensus panel resolves the
+ * kind's declarations and records every one of them as withheld, because it wires nothing. The
+ * diagnostic weight survives that third case: a step which lost every server it declared still
+ * never reads as one that declared none.
  *
  * What absent does NOT say is that the step never ran. `resetStepForRerun` clears this field while
  * leaving `attempts` and `dispatches` standing, and that asymmetry is deliberate: the counters are
@@ -384,6 +388,13 @@ export type ToolServersView = v.InferOutput<typeof toolServersViewSchema>
  * - `credential_refused` — a credential's LOOKUP key names a platform configuration variable, so
  *   the probe refused to resolve it (the dispatch's `reserved_secret`). Kept apart from the above
  *   because setting the variable is precisely what must not help: the DECLARATION is what changes.
+ * - `credential_unusable`, a credential that resolved and has nowhere to go: it named no header,
+ *   and an http server has no process to inject a variable into (the dispatch's
+ *   `unusable_secret`). Kept
+ *   apart from `credential_refused` because the platform refused nothing, and apart from
+ *   `http_error` because sending the request anyway would report a 401 as a WRONG value where the
+ *   value was never sent. Boot validation refuses the declaration, so a probe reaches this only
+ *   where the definition was authored by a process that did not boot this build.
  * - `unreachable` — the request never got an answer (DNS, TLS, connection refused, timeout). The
  *   endpoint or the network is the fix.
  * - `http_error` — something answered with a status that is not an MCP response. `401`/`403` is the
@@ -405,6 +416,7 @@ export const toolServerProbeStatusSchema = v.picklist([
   'ok',
   'credentials_missing',
   'credential_refused',
+  'credential_unusable',
   'oauth_not_connected',
   'oauth_token_failed',
   'unreachable',
@@ -466,6 +478,8 @@ export const toolServerProbeResultSchema = v.object({
   unresolvedCredentials: v.optional(v.array(v.string())),
   /** Which declared credential named a platform variable. Present on `credential_refused`. */
   refusedCredentials: v.optional(v.array(v.string())),
+  /** Which declared credential named no header to ride. Present on `credential_unusable`. */
+  unusableCredentials: v.optional(v.array(v.string())),
   /** The status something answered with. Present on `http_error`. */
   httpStatus: v.optional(v.number()),
   /**

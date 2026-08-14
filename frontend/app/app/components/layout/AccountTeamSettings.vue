@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { apiErrorEnvelope } from '~/composables/api/errors'
 import type { AccountRole } from '~/types/domain'
 import type { InvitationStatus } from '@cat-factory/contracts'
 import AccountAuditLog from '~/components/layout/AccountAuditLog.vue'
@@ -20,6 +19,7 @@ const accounts = useAccountsStore()
 const uiMode = useUiModeStore()
 const auth = useAuthStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t, te } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
 const busy = ref(false)
@@ -64,7 +64,7 @@ async function updateMemberRoles(userId: string, roles: AccountRole[]) {
   try {
     await accounts.setMemberRoles(props.accountId, userId, roles.length ? roles : ['developer'])
   } catch (e) {
-    notifyError(t('layout.accountTeam.errors.updateRoles'), e)
+    present(e, 'layout.accountTeam.errors.updateRoles')
   }
 }
 
@@ -78,17 +78,8 @@ async function revokeSessions(userId: string, label: string) {
     await accounts.revokeMemberSessions(props.accountId, userId)
     toast.add({ title: t('layout.accountTeam.members.sessionsRevoked'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError(t('layout.accountTeam.errors.revokeSessions'), e)
+    present(e, 'layout.accountTeam.errors.revokeSessions')
   }
-}
-
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: apiErrorEnvelope(e)?.message ?? (e instanceof Error ? e.message : String(e)),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
 }
 
 async function loadAll(accountId: string) {
@@ -98,7 +89,7 @@ async function loadAll(accountId: string) {
     if (isOrg.value) jobs.push(accounts.loadRoster(accountId))
     await Promise.all(jobs)
   } catch (e) {
-    notifyError(t('layout.accountTeam.errors.loadSettings'), e)
+    present(e, 'layout.accountTeam.errors.loadSettings')
   }
 }
 
@@ -124,7 +115,7 @@ async function createOrganization() {
     newOrgName.value = ''
     toast.add({ title: t('layout.accountTeam.org.created'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError(t('layout.accountTeam.errors.createOrg'), e)
+    present(e, 'layout.accountTeam.errors.createOrg')
   } finally {
     busy.value = false
   }
@@ -152,7 +143,7 @@ async function sendInvite() {
       icon: 'i-lucide-mail-check',
     })
   } catch (e) {
-    notifyError(t('layout.accountTeam.errors.sendInvite'), e)
+    present(e, 'layout.accountTeam.errors.sendInvite')
   } finally {
     busy.value = false
   }
@@ -164,7 +155,7 @@ async function revoke(id: string, email: string) {
     await accounts.revokeInvite(props.accountId, id)
     toastDone('revoke', email)
   } catch (e) {
-    notifyError(t('layout.accountTeam.errors.revokeInvite'), e)
+    present(e, 'layout.accountTeam.errors.revokeInvite')
   }
 }
 
@@ -185,7 +176,7 @@ async function connectEmail() {
     emailApiKey.value = ''
     toast.add({ title: t('layout.accountTeam.email.connected'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError(t('layout.accountTeam.errors.connectEmail'), e)
+    present(e, 'layout.accountTeam.errors.connectEmail')
   } finally {
     busy.value = false
   }
@@ -199,7 +190,7 @@ async function disconnectEmail() {
     await accounts.disconnectEmail(props.accountId)
     toastDone('disconnect', noun)
   } catch (e) {
-    notifyError(t('layout.accountTeam.errors.disconnectEmail'), e)
+    present(e, 'layout.accountTeam.errors.disconnectEmail')
   } finally {
     busy.value = false
   }

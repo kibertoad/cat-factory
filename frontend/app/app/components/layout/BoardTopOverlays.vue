@@ -3,6 +3,7 @@ import BoardToolbar from '~/components/layout/BoardToolbar.vue'
 import ConnectionStatusBanner from '~/components/layout/ConnectionStatusBanner.vue'
 import SpendWarningBanner from '~/components/layout/SpendWarningBanner.vue'
 import GitHubPatBanner from '~/components/layout/GitHubPatBanner.vue'
+import GitHubPatPermissionsBanner from '~/components/layout/GitHubPatPermissionsBanner.vue'
 import AiProvidersBanner from '~/components/layout/AiProvidersBanner.vue'
 import ProviderConfigBanner from '~/components/layout/ProviderConfigBanner.vue'
 import InfraSetupBanner from '~/components/layout/InfraSetupBanner.vue'
@@ -68,6 +69,10 @@ const ui = useUiStore()
          - Connection status: what is on screen right now may already be stale.
          - Spend exceeded: runs are blocked until the budget moves.
          - GitHub PAT (local mode): every repo-operating step will fail.
+         - GitHub PAT permissions: a token IS configured, but it cannot push or open pull
+           requests, so every repo-operating step will fail just as surely. Directly after its
+           missing-token sibling, which it can never appear beside (that one raises only when
+           there is no token, this one only when there is).
          - AI readiness: no usable model source, or the default preset names unavailable models.
          - Infrastructure provider: env/runner-pool wired but missing mandatory config.
          - Infra setup: an executor / test env / storage this deployment needs is undefined, so
@@ -82,6 +87,7 @@ const ui = useUiStore()
     />
     <SpendWarningBanner />
     <GitHubPatBanner />
+    <GitHubPatPermissionsBanner />
     <AiProvidersBanner />
     <ProviderConfigBanner />
     <InfraSetupBanner />

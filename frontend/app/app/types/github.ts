@@ -11,6 +11,10 @@
 export type {
   GitHubConnection,
   GitHubInstallationOption,
+  GitHubPatCapability,
+  GitHubPatCapabilityReport,
+  GitHubPatCheck,
+  GitHubPatKind,
   GitHubRepo,
   RepoTreeEntry,
   GitHubBranch,

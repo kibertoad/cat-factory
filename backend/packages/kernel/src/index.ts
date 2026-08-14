@@ -21,6 +21,14 @@ export {
   type CredentialRequiredReason,
   type ConflictReason,
 } from './domain/errors.js'
+export {
+  DataIntegrityError,
+  type DataIntegrityFault,
+  dataIntegrityFaultOf,
+  isDataIntegrityError,
+  isDataIntegrityFault,
+  type RecognisedDataIntegrityError,
+} from './domain/data-integrity.js'
 export { sameSubtasks, sameSubtaskItems, parseSubtasks } from './domain/subtasks.logic.js'
 export {
   type CachePolicy,
@@ -154,6 +162,7 @@ export {
   resolveModelRef,
   isModelUsable,
   isModelUsableInline,
+  declaredModelRouteLabels,
   nativeVendorForRef,
   runsOnSubscriptionHarness,
   subscriptionVendorForRef,
@@ -187,6 +196,8 @@ export {
   SIMPLE_PIPELINE_ID,
   ADAPTIVE_BUILD_PIPELINE_ID,
   COMPLEX_BUILD_PIPELINE_ID,
+  UNATTENDED_BUILD_PIPELINE_ID,
+  declaredDefaultPipelineId,
   defaultBuildPipelineId,
   BUG_TRIAGE_PIPELINE_ID,
   BUGFIX_PIPELINE_ID,
@@ -329,6 +340,8 @@ export {
 // half: the two halves import each other, so a value read across that cycle at module-init time
 // is a boot crash the typecheck cannot see (see `domain/binary-output-paths.ts`).
 export {
+  AGENT_CONTEXT_DIR,
+  BINARY_GENERATED_PATH,
   BINARY_GENERATOR_CONTEXT_DIR,
   BINARY_OUTPUT_BRIEF_FILE,
   BINARY_OUTPUT_CONTEXT_DIR,
@@ -388,11 +401,13 @@ export {
 export {
   type BinaryGeneratorSelectionIssue,
   type ResolvedBinaryGenerator,
+  type ResolvedBinaryGeneratorCredential,
   type ResolvedBinaryGeneratorSelection,
   binaryGeneratorSelectionIssues,
   describeCapability,
   describeBinaryGeneratorSelectionIssues,
   dispatchBinaryGenerators,
+  dispatchNeedsHarnessGeneration,
   resolveBinaryGeneratorSelection,
 } from './domain/binary-generators.js'
 
@@ -469,6 +484,16 @@ export {
   renderJudgeRework,
 } from './domain/judge-logic.js'
 
+// The COMPANION bucket's pure disposition, the judge's sibling: what a rework pair does with one
+// grading round, including the rule that a `blocker` finding holds the run whatever the rating.
+export {
+  type CompanionDispositionInput,
+  type CompanionDispositionResult,
+  type CompanionParkReason,
+  companionParkReasonFor,
+  disposeCompanionVerdict,
+} from './domain/companion-logic.js'
+
 // Typed provider registry: the deployment-supplied data sources a gate (or other
 // extension) probes, keyed by an opaque {@link ProviderToken}. Replaces the per-provider
 // module-global wire/get boilerplate. See `domain/provider-registry.ts`.
@@ -505,6 +530,8 @@ export {
   describeVcsApiError,
   VCS_DOC_URLS,
   GITHUB_SETTINGS_URLS,
+  VcsApiError,
+  isVcsRateLimited,
   VcsCapabilityUnsupportedError,
 } from './domain/vcs-errors.js'
 export {
@@ -695,6 +722,7 @@ export * from './ports/index.js'
 // Agent capabilities — the skills an agent kind applies and the tool servers (MCP) it may call.
 // See `backend/docs/custom-agents.md` → "Capabilities: skills and tools".
 export {
+  type McpCredentialChannel,
   type McpHttpTransport,
   type McpOAuthConfig,
   type McpSecretRef,
@@ -706,22 +734,46 @@ export {
   type ResolvedToolServer,
   type SkillVersionPin,
   type UnavailableToolServer,
+  BINARY_GENERATING_HARNESSES,
+  HARNESS_GENERATES_BINARIES,
   MCP_HARNESS_TRANSPORTS,
   MCP_OAUTH_DEFAULT_HEADER,
   MCP_OAUTH_DEFAULT_HEADER_TEMPLATE,
   MCP_SERVER_ID_PATTERN,
   MCP_SUPPORTED_HARNESSES,
   MCP_TOOL_NAME_PATTERN,
+  MCP_TRANSPORT_CREDENTIAL_CHANNEL,
   TOOL_SERVER_BUDGET,
   isAllowedMcpHttpUrl,
   isLoopbackMcpHttpUrl,
   isValidMcpServerId,
   isValidMcpToolName,
+  harnessServesBinaryGeneration,
+  mcpCredentialChannel,
   mcpHarnessServesTransport,
   mcpServableHarnesses,
   mcpServerSupportsHarness,
+  mcpTransportCarriesCredential,
   toolServerDeclaredBytes,
 } from './domain/agent-capabilities.js'
+
+export {
+  type DesignImageCarrier,
+  type DesignImageChannel,
+  type DesignImageDelivery,
+  type DesignImageUnavailableReason,
+  HARNESS_IMAGE_INPUT,
+  harnessAcceptsImages,
+  resolveDesignImageDelivery,
+} from './domain/design-image-delivery.js'
+
+export {
+  declaredLocalModel,
+  type LocalModelDeclarations,
+  parseLocalModelDeclarations,
+  resolveLocalModelModality,
+  withLocalModelDeclaration,
+} from './domain/local-model-declarations.js'
 
 export {
   type ServiceRegistrationDeps,
@@ -780,6 +832,7 @@ export {
   redactSecrets,
   redactSecretsDeep,
 } from './shared/redact-secrets.logic.js'
+export { redactImagePayloads } from './shared/redact-image-payloads.logic.js'
 export { describeProcessExit } from './shared/process-exit.logic.js'
 export {
   composePostMortem,
@@ -788,6 +841,21 @@ export {
 } from './shared/post-mortem.logic.js'
 export { describeError, runBestEffort } from './shared/best-effort.js'
 export {
+  errorChainMatches,
+  errorChainText,
+  publicDiagnostic,
+  MAX_ERROR_CHAIN_CHARS,
+  MAX_LOGGED_ERROR_CHAIN_CHARS,
+} from './shared/error-chain.logic.js'
+export {
+  connectionFailureHint,
+  connectionFailureResult,
+  describeConnectionFailure,
+  type ConnectionFailureCause,
+  type ConnectionFailureContext,
+  type ConnectionFailureDescription,
+} from './shared/connection-failure.logic.js'
+export {
   createStoreAgentContextGate,
   type StoreAgentContextGate,
 } from './shared/agent-context-gate.js'
@@ -795,6 +863,7 @@ export {
   createInitiatorPatGate,
   type InitiatorPatGate,
   type InitiatorPatAccountTier,
+  type ResolveRunInitiatorToken,
 } from './shared/initiator-pat-gate.js'
 export {
   type RepoScanEntry,
@@ -826,6 +895,15 @@ export {
   WORKSPACE_CASCADE_SPECIAL_TABLES,
   type WorkspaceScopedTable,
 } from './domain/workspace-cascade.js'
+
+// The account ⊕ workspace risk-policy merge (ADR 0055): the ONE precedence the editor, every
+// picker and the engine's own resolution all read. See `domain/risk-policy-tiers.ts`.
+export {
+  describeRiskPolicySuppressions,
+  mergeRiskPolicyTiers,
+  resolveRiskPolicyTier,
+  type RiskPolicyTierInput,
+} from './domain/risk-policy-tiers.js'
 
 export {
   FINAL_SPEND_FOLD_BUDGET_MS,

@@ -7,17 +7,18 @@ import {
   type EnvironmentManifest,
   type EnvironmentProvider,
   type EnvironmentRequestTemplate,
+  type EnvironmentStatus,
   type EnvironmentStatusRequest,
   type EnvironmentTeardownRequest,
-  type EnvironmentStatus,
+  getErrorMessage,
   type ProviderConfigField,
+  type ProvisionedEnvironment,
   type ProvisionEnvironmentRequest,
   type ProvisionFields,
-  type ProvisionedEnvironment,
   type SecretResolver,
+  STRICT_URL_SAFETY_POLICY,
   type TeardownProbe,
   type UrlSafetyPolicy,
-  STRICT_URL_SAFETY_POLICY,
 } from '@cat-factory/kernel'
 import * as environmentsLogic from './environments.logic.js'
 import { referencedSecretKeys } from './environments.logic.js'
@@ -165,7 +166,7 @@ export class HttpEnvironmentProvider implements EnvironmentProvider {
       return {
         state: 'unknown',
         retryable: true,
-        reason: err instanceof Error ? err.message : String(err),
+        reason: getErrorMessage(err),
       }
     }
     if (mapped.status === 'torn_down' || mapped.status === 'expired') return { state: 'gone' }
@@ -204,9 +205,11 @@ export class HttpEnvironmentProvider implements EnvironmentProvider {
     try {
       headers = await this.authHeaders(req.manifest.auth, req.resolveSecret)
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      return { ok: false, message: getErrorMessage(err) }
     }
-    return environmentsLogic.probeConnection(req.manifest.baseUrl, headers, this.urlPolicy)
+    return environmentsLogic.probeConnection(req.manifest.baseUrl, headers, this.urlPolicy, {
+      subject: 'the environment management API',
+    })
   }
 
   // --- internals ----------------------------------------------------------

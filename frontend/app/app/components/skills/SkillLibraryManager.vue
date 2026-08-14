@@ -16,6 +16,7 @@ const props = defineProps<{ accountId: string }>()
 const library = useSkillLibrary(props.accountId)
 const github = useGitHubStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t, d } = useI18n()
 const { confirm } = useConfirm()
 
@@ -24,7 +25,7 @@ watch(
   () => {
     void library.probe()
     // The GitHub pickers need the active board's installation state; probe once so they light up.
-    void github.probe()
+    void github.ensureProbed()
   },
   { immediate: true },
 )
@@ -32,15 +33,6 @@ watch(
 // The rich GitHub pickers reuse the active board's App installation. When it isn't connected (or
 // the integration is off) the form falls back to manual text entry.
 const githubReady = computed(() => github.available === true && github.connected)
-
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
 
 // Per-row in-flight tracking so only the control that triggered an action spins.
 const busyRows = reactive(new Set<string>())
@@ -102,7 +94,7 @@ async function linkSource() {
     resetSourceDraft()
     toast.add({ title: t('skills.toast.sourceLinked'), icon: 'i-lucide-git-branch' })
   } catch (e) {
-    notifyError(t('skills.toast.linkSourceFailed'), e)
+    present(e, 'skills.toast.linkSourceFailed')
   } finally {
     linkingSource.value = false
   }
@@ -121,7 +113,7 @@ async function syncSource(id: string) {
         color: 'info',
       })
     } catch (e) {
-      notifyError(t('skills.toast.syncFailed'), e)
+      present(e, 'skills.toast.syncFailed')
     }
   })
 }
@@ -135,7 +127,7 @@ async function checkSource(id: string) {
         icon: status.changed ? 'i-lucide-bell-dot' : 'i-lucide-check',
       })
     } catch (e) {
-      notifyError(t('skills.toast.checkSourceFailed'), e)
+      present(e, 'skills.toast.checkSourceFailed')
     }
   })
 }
@@ -156,7 +148,7 @@ async function unlinkSource(id: string) {
       await library.unlinkSource(id)
       toast.add({ title: t('skills.toast.sourceUnlinked'), icon: 'i-lucide-unplug' })
     } catch (e) {
-      notifyError(t('skills.toast.unlinkSourceFailed'), e)
+      present(e, 'skills.toast.unlinkSourceFailed')
     }
   })
 }

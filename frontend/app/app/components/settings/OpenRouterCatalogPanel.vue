@@ -19,6 +19,7 @@ const store = useOpenRouterStore()
 const apiKeys = useApiKeysStore()
 const models = useModelsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const open = computed({
   get: () => ui.openRouterOpen,
@@ -158,12 +159,7 @@ async function connectKey() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('settings.openRouterCatalog.toast.connectFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'settings.openRouterCatalog.toast.connectFailed')
   } finally {
     connectingKey.value = false
   }
@@ -200,12 +196,7 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('settings.openRouterCatalog.toast.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'settings.openRouterCatalog.toast.saveFailed')
   } finally {
     busy.value = false
   }

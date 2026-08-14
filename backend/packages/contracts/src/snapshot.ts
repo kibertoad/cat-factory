@@ -13,7 +13,7 @@ import { bootstrapJobSchema } from './bootstrap.js'
 import { envConfigRepairJobSchema } from './env-config-repair.js'
 import { environmentTestRunSchema } from './environment-test.js'
 import { notificationSchema } from './notifications.js'
-import { riskPolicySchema } from './merge.js'
+import { riskPolicyLibraryEntrySchema } from './merge.js'
 import { agentConfigCatalogSchema } from './agent-config.js'
 import { modelPresetSchema } from './model-presets.js'
 import { consensusGroupSchema } from './consensus.js'
@@ -136,10 +136,15 @@ export const workspaceSnapshotSchema = v.object({
    */
   notifications: v.optional(v.array(notificationSchema)),
   /**
-   * The workspace's merge threshold presets (the library a task picks its
-   * auto-merge policy from). Attached by the worker, so optional on the wire.
+   * The library a task picks its auto-merge policy from: the board's OWN policies merged with the
+   * ones it inherits from its account, each tagged with the tier that owns it. Attached by the
+   * facade, so optional on the wire.
+   *
+   * The MERGED library rather than the board's own rows, because this is what every picker offers
+   * and what the engine resolves a pin against: shipping only the local tier would let a board
+   * pick a policy the snapshot never mentioned, or (worse) render an inherited pin as unresolvable.
    */
-  riskPolicies: v.optional(v.array(riskPolicySchema)),
+  riskPolicies: v.optional(v.array(riskPolicyLibraryEntrySchema)),
   /**
    * The workspace's shared stacks (long-lived compose infra a consumer environment
    * attaches to over an external network — the acme-shared-services shape). Carried in
@@ -375,6 +380,21 @@ export const workspaceSnapshotSchema = v.object({
    * symmetric across runtimes), optional on the wire for forward-compatibility.
    */
   modelPresetCatalogVersions: v.optional(v.record(v.string(), v.number())),
+  /**
+   * The catalog's own NAME per built-in model-preset id, built from the same `seedModelPresets()`
+   * read as `modelPresetCatalogVersions`: the `pipelineCatalogNames` companion, for the same
+   * reason and with the same one moment of use.
+   *
+   * A NEW built-in has no stored row to take a name off, and that is exactly the state the startup
+   * advisory offers to fix. Without this the SPA humanised the id, which reads acceptably for the
+   * three built-ins whose ids ARE their names (`mdp_kimi` to "Kimi") and wrongly for the first one
+   * where it is not: `mdp_chatgpt` was offered as "Chatgpt" on every board seeded before it
+   * shipped, a name for the product's GPT-5.6 Sol preset that appears nowhere else in the UI.
+   *
+   * Keyed identically to the versions map rather than a superset, unlike the pipeline pair: a model
+   * preset has no INTERNAL tier to withhold, so the two maps span the same ids by construction.
+   */
+  modelPresetCatalogNames: v.optional(v.record(v.string(), v.string())),
   /**
    * The workspace's initiatives (long-running multi-task bodies of work, each
    * anchored to an `initiative`-level block). Carried in the snapshot so the

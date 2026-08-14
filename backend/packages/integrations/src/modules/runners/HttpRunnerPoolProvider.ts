@@ -24,6 +24,7 @@ import type {
 import { isToolServerObservedStatus } from '@cat-factory/contracts'
 import {
   CONTAINER_EVICTION_ERROR,
+  getErrorMessage,
   isHarnessFailureCause,
   readRunnerDispatchAck,
   STRICT_URL_SAFETY_POLICY,
@@ -149,6 +150,14 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
       // bare "container evicted or crashed" has nothing to work from — the raw status line plus
       // this provider's fix-it remedy is what names the real problem. `evicted or crashed` stays
       // a SUBSTRING, which is all `isContainerEvictionError` needs.
+      //
+      // It stays an EVICTION even where a harness shutdown is what actually happened. This
+      // backend sees a scheduler's status vocabulary and nothing underneath it: there is no exit
+      // code anywhere in a 404, and inferring "shut down" from a status word would report every
+      // reclaimed runner as one. Same rule as the Apple `container` runtime locally: an absent
+      // code is not a zero, so the deployment keeps the reading that costs a fresh pool member
+      // rather than the run. The two backends that CAN read an exit code (the local transports,
+      // Kubernetes' `state.terminated`) mint `harnessShutdown` instead.
       if (error instanceof RunnerPoolApiError && (error.status === 404 || error.status === 410)) {
         return {
           state: 'failed',
@@ -185,9 +194,11 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     try {
       headers = await this.authHeaders(req.manifest.auth, req.resolveSecret)
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      return { ok: false, message: getErrorMessage(err) }
     }
-    return environmentsLogic.probeConnection(req.manifest.baseUrl, headers, this.urlPolicy)
+    return environmentsLogic.probeConnection(req.manifest.baseUrl, headers, this.urlPolicy, {
+      subject: 'the runner pool API',
+    })
   }
 
   // --- internals ----------------------------------------------------------
@@ -816,8 +827,9 @@ function coerceRunnerResult(raw: unknown): Partial<RunnerJobResult> {
   }
   if (typeof o.pushed === 'boolean') out.pushed = o.pushed
   // Multi-repo run's peer PRs (service-connections phase 3): keep only well-formed entries
-  // (a repo + prUrl + branch string), passing the optional frameId through. Absent for a
-  // single-repo run — so a pool proxying the executor-harness verbatim carries them intact.
+  // (a repo + prUrl + branch string), passing the optional frame attribution through. Absent
+  // for a single-repo run — so a pool proxying the executor-harness verbatim carries them
+  // intact, including a monorepo peer's several frames on the ONE PR they share.
   if (Array.isArray(o.peerPullRequests)) {
     const peers = (o.peerPullRequests as unknown[])
       .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
@@ -825,12 +837,17 @@ function coerceRunnerResult(raw: unknown): Partial<RunnerJobResult> {
         (x) =>
           typeof x.repo === 'string' && typeof x.prUrl === 'string' && typeof x.branch === 'string',
       )
-      .map((x) => ({
-        repo: x.repo as string,
-        prUrl: x.prUrl as string,
-        branch: x.branch as string,
-        ...(typeof x.frameId === 'string' ? { frameId: x.frameId } : {}),
-      }))
+      .map((x) => {
+        const frameIds = Array.isArray(x.frameIds)
+          ? x.frameIds.filter((f): f is string => typeof f === 'string' && !!f)
+          : []
+        return {
+          repo: x.repo as string,
+          prUrl: x.prUrl as string,
+          branch: x.branch as string,
+          ...(frameIds.length ? { frameIds } : {}),
+        }
+      })
     if (peers.length) out.peerPullRequests = peers
   }
   // The single structured work-product channel (carried as `unknown` on the port — the

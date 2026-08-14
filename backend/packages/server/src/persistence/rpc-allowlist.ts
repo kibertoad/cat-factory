@@ -67,6 +67,11 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   blockRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
+    // The run→block REVERSE link, read when a run row cannot be decoded and so names no block of
+    // its own. Remote and workspace-scoped like `get`, and for a sharper reason than most: the
+    // engine that needs it runs on the laptop, where the row it cannot read lives on the
+    // mothership, so an un-routed method would leave a mothership node's boards wedged only.
+    getByExecution: { scope: { kind: 'workspace', arg: 0 } },
     insert: { scope: { kind: 'workspace', arg: 0 } },
     update: { scope: { kind: 'workspace', arg: 0 } },
     setService: { scope: { kind: 'workspace', arg: 0 } },
@@ -101,6 +106,11 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // Same reasoning as `executionRepository.countActiveByWorkspace` below.
     insertIfAbsent: { scope: { kind: 'workspace', arg: 0 } },
     update: { scope: { kind: 'workspace', arg: 0 } },
+    // The per-scope DEFAULT claim (ADR 0054). Remote for the reason every other write here is —
+    // the pipeline library is org state — and it earns its own entry rather than riding `update`
+    // because it touches a SECOND row (the incumbent it demotes) inside one store transaction,
+    // which is exactly the part a node with no `db` cannot do for itself.
+    setDefault: { scope: { kind: 'workspace', arg: 0 } },
     delete: { scope: { kind: 'workspace', arg: 0 } },
   },
   executionRepository: {
@@ -322,6 +332,34 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     get: { scope: { kind: 'workspace', arg: 0 } },
     remove: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // The ACCOUNT tier of that same library (ADR 0055). Org state by definition — one library shared
+  // by every board in the account — so `remote`, and the whole surface is proxied because a
+  // mothership-mode node both READS it on the run path and EDITS it: the engine resolves a task
+  // pinning an inherited policy through `get`, the board merge through `list`, and the account
+  // settings editor through the writes. Leaving the reads off would make an inherited pin resolve
+  // to nothing and fall silently back to the board default, which is a merge posture nobody chose.
+  //
+  // Account-scoped on arg 0, and member-level like the board tier: the account routes guard on
+  // MEMBERSHIP rather than admin (the same rule the account-tier fragment library uses), so the
+  // machine token's account scope is the same check the HTTP path makes, not a weaker one. There is
+  // no sealed secret on these rows, so the `accountRepository` reasoning that keeps admin writes
+  // mothership-internal does not apply.
+  accountRiskPolicyRepository: {
+    list: { scope: { kind: 'account', arg: 0 } },
+    get: { scope: { kind: 'account', arg: 0 } },
+    listByIds: { scope: { kind: 'account', arg: 0 } },
+    upsert: { scope: { kind: 'account', arg: 0 } },
+    remove: { scope: { kind: 'account', arg: 0 } },
+  },
+  // Which inherited policies a BOARD hides. Workspace-scoped and member-level like the board's own
+  // library, and `list` is on the run path for the same reason as the account reads above: it is
+  // half of the precedence, so a node that could not read it would resolve a policy its own editor
+  // says is hidden.
+  riskPolicySuppressionRepository: {
+    list: { scope: { kind: 'workspace', arg: 0 } },
+    add: { scope: { kind: 'workspace', arg: 0 } },
+    remove: { scope: { kind: 'workspace', arg: 0 } },
+  },
   // The merge TRACK RECORD is the evidence side of the same merge policy, and every one of its
   // methods takes the workspaceId as arg0 — so the whole surface is proxied, workspace-scoped and
   // member-level exactly like the preset library above. It has to be: `MergeResolver` reads the
@@ -381,6 +419,11 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // (a write the board-load read triggers), the same member-level workspace-scoped write as
     // `riskPolicyRepository.upsert` above.
     upsert: { scope: { kind: 'workspace', arg: 0 } },
+    // The batched form of that same seed: ONE call writing the whole built-in catalog. Routed
+    // beside `upsert` rather than instead of it, because the editor still writes single rows, and
+    // an unrouted method here would fail a mothership-mode node's FIRST board load rather than
+    // merely a settings screen.
+    upsertMany: { scope: { kind: 'workspace', arg: 0 } },
     // The model-preset library editor's read-one + delete, the mirror of the merge-preset
     // management pair above. Member-level, workspace-scoped.
     get: { scope: { kind: 'workspace', arg: 0 } },
@@ -516,6 +559,28 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     get: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
   },
+  // The parked-review question writeback's idempotency marker (`IssueWritebackService.
+  // postReviewQuestions`): one row per `(workspace, review, iteration, linked issue)`, claimed
+  // BEFORE the comment is posted so a replaying durable driver cannot post a review's findings onto
+  // the reporter's issue twice.
+  //
+  // The ENGINE writes it, so a mothership-mode node genuinely reaches it — and its failure mode was
+  // the quiet kind this bucket exists to prevent. `claim` answered `unknown_method`, which the
+  // caller's deliberate fallback reads as "someone else holds the claim", so every parked review on
+  // a local run silently skipped its ticket comment: the reporter is never asked the question, the
+  // run parks waiting for an answer to something nobody was told about, and the only trace is a
+  // `warn`. Its INBOUND sibling (`trackerCommentIngestRepository`) stays off for a different and
+  // permanent reason: a webhook delivery reaches the deployment holding the public URL, never a
+  // laptop, so there is nothing there to claim.
+  //
+  // All three methods take the `ReviewQuestionPostKey` as arg0, whose `workspaceId` is a FIELD →
+  // the `workspaceField` rule, exactly like the record-based `upsert`s above. The marker carries no
+  // secrets (a status, an attempt count, and a `redactSecrets`-scrubbed error string).
+  reviewQuestionPostRepository: {
+    claim: { scope: { kind: 'workspaceField', arg: 0 } },
+    settle: { scope: { kind: 'workspaceField', arg: 0 } },
+    get: { scope: { kind: 'workspaceField', arg: 0 } },
+  },
   // The agent context resolves the block's provisioned environment per step
   // (`resolveForBlock`/`get`, both workspace-keyed), and, since the secrets-delegation slice,
   // a mothership-mode node PROVISIONS for real: the access handle and the provider's
@@ -644,9 +709,12 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   },
   trackerSettingsRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
-    // The tracker-settings editor persists its config. Member-level, workspace-scoped — completes
-    // the read+write surface (`get` was exposed for the board load).
-    put: { scope: { kind: 'workspace', arg: 0 } },
+    // The tracker-settings editor persists its config, and `PATCH /api/v1/tracker/writeback`
+    // persists the writeback half of the same row. Member-level, workspace-scoped, and it completes
+    // the read+write surface (`get` was exposed for the board load). One method rather than two
+    // because the merge belongs in the store: routing a load and a replace over RPC would put a
+    // network hop inside the read-modify-write this method exists to avoid.
+    merge: { scope: { kind: 'workspace', arg: 0 } },
   },
   notificationRepository: {
     listOpen: { scope: { kind: 'workspace', arg: 0 } },
@@ -1126,14 +1194,20 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // endpoints are member-level (account-tier routes guard on `requireMember`, NOT `requireAdmin`), so
   // this follows the same member-level policy as the other settings/library panels above.
   //
-  // The `sourceId`-keyed `listBySource` stays off — it is the repo-sync fan-out read (the mothership
-  // owns GitHub sync; the source service is gated on a GitHub client absent on a mothership node), so
-  // it is not on the SPA library-management path here.
+  // `listBySource` (the repo-sync reconcile read) joins them: see the `librarySource` note on
+  // `fragmentSourceRepository` below for why the sync surface is no longer deferred.
   promptFragmentRepository: {
     listByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
     get: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
     upsert: { scope: { kind: 'ownerField', arg: 0 } },
     softDelete: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+    // The source-keyed reconcile pair, mirroring the skill and foundational-service libraries':
+    // list a source's live fragments to diff against the repo listing, and tombstone all of them
+    // in one write on unlink. Each method carries a source id and nothing else, so the
+    // `librarySource` rule resolves that source's owning tier pair server-side (`fragmentSource`
+    // names the table it lives in).
+    listBySource: { scope: { kind: 'librarySource', arg: 0, entity: 'fragmentSource' } },
+    softDeleteBySource: { scope: { kind: 'librarySource', arg: 0, entity: 'fragmentSource' } },
   },
   // Model-GENERATED condensed briefs for long standards (`FragmentBriefService`), read and
   // written on the RUN path: a mothership-mode implementer dispatch resolves them alongside the
@@ -1150,24 +1224,32 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'ownerField', arg: 0 } },
     delete: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
   },
-  // The fragment-source (repo-linkage) library the SPA lists + links (`FragmentSourceService`), owner
-  // scoped exactly like the fragments above. `listByOwner` (the sources list) is bound by the `owner`
-  // rule; the record-based `upsert(record)` by `ownerField`. The `sourceId`-keyed reads/writes
-  // (`get`/`updateSyncState`/`softDelete`) stay off — they back the repo-SYNC management the
-  // mothership owns (the source service needs a GitHub client, which a mothership node does not have),
-  // so a later GitHub-sync-in-mothership slice opens them with a source→owner resolver.
+  // The fragment-source (repo-linkage) library the SPA lists, links and SYNCS
+  // (`FragmentSourceService`), owner scoped exactly like the fragments above. `listByOwner` is bound
+  // by the `owner` rule; the sourceId-keyed sync methods by `librarySource`, which resolves a
+  // source's owning `(ownerKind, ownerId)` pair server-side.
   //
-  // KNOWN GAP, tracked in `docs/initiatives/mothership-mode.md`: `upsert` has the same id-keyed
-  // conflict shape the skills library's source upsert does (`ON CONFLICT (id) DO UPDATE`, no
-  // re-`SET` of the owner columns), so plain `ownerField` binds only the DECLARED owner and an
-  // in-scope caller naming a foreign source id can repoint another tenant's fragment source at a
-  // repo it controls. The fix is the `ownerField` analogue of `accountFieldUpsert` below — it needs
-  // a source→owner-PAIR resolver (`(ownerKind, ownerId)`, not a bare accountId) plus its own
-  // round-trip tests, which is why it is not folded in here. Do NOT copy `ownerField` onto a new
-  // id-keyed upsert in the meantime.
+  // The sync half was deferred on a premise that is no longer true: that a mothership-mode node has
+  // no GitHub client. Token delegation gave it one (`DelegatedAppTokenSource` mints the tier's App
+  // token over the same machine API), which is what already made the SKILLS library's sync surface
+  // remote — so these routes were reachable and broken, the state that is worse than either serving
+  // them or hiding them. `librarySource` is `skillSource` generalised to a tier PAIR, because a
+  // fragment source can be owned by a workspace as well as an account.
+  //
+  // `upsert(record)` takes `ownerFieldUpsert`, NOT the plain `ownerField` the fragments above use.
+  // This is the gap the skills slice named and could not close: the write conflicts on the `id`
+  // ALONE and never re-`SET`s the owner columns, so binding only the DECLARED owner would let an
+  // in-scope caller name a foreign source id and repoint another tenant's link at a repo it
+  // controls, whose Markdown bodies the victim's next sync folds into their prompts as standards.
+  // The rule binds the STORED row's owner too; a create (no such row) still passes on the declared
+  // half. `ownerFieldUpsert` is the owner-pair analogue of `accountFieldUpsert` above, and is what
+  // any new id-keyed library upsert must use.
   fragmentSourceRepository: {
     listByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-    upsert: { scope: { kind: 'ownerField', arg: 0 } },
+    upsert: { scope: { kind: 'ownerFieldUpsert', arg: 0, entity: 'fragmentSource' } },
+    get: { scope: { kind: 'librarySource', arg: 0, entity: 'fragmentSource' } },
+    updateSyncState: { scope: { kind: 'librarySource', arg: 0, entity: 'fragmentSource' } },
+    softDelete: { scope: { kind: 'librarySource', arg: 0, entity: 'fragmentSource' } },
   },
   // --- Repo-sourced Claude Skills library (ADR 0024) ------------------------------
   // Skills live in ONE tier — the ACCOUNT — so every method here binds on an accountId rather
@@ -1186,13 +1268,13 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // manifest of `{ path, sha, size }`); the resource BODIES are fetched from the repo at
   // dispatch and never stored, so nothing credential-bearing crosses the machine API.
   //
-  // UNLIKE the fragment / foundational-service libraries, the repo-SYNC surface is remote here
-  // too. Those deferred theirs because a sync needs a GitHub client — but a mothership-mode node
-  // HAS one (`DelegatedAppTokenSource` mints the account's App token over the same machine API),
-  // so its `SkillSourceService` assembles and its link/sync/unlink routes are live. Leaving the
-  // sourceId-keyed methods off would leave those routes reachable and broken, which is worse than
-  // either serving them or hiding them. `skillSource` is the rule that binds them; the sibling
-  // libraries can adopt it when their own sync surface lands.
+  // This was the FIRST library whose repo-SYNC surface went remote. A sync needs a GitHub client,
+  // and a mothership-mode node HAS one (`DelegatedAppTokenSource` mints the account's App token
+  // over the same machine API), so its `SkillSourceService` assembles and its link/sync/unlink
+  // routes are live. Leaving the sourceId-keyed methods off would leave those routes reachable and
+  // broken, which is worse than either serving them or hiding them. `skillSource` is the rule that
+  // binds them (skills live in one tier, so it resolves a bare accountId); the sibling
+  // libraries have since adopted it, in its owner-pair form (`librarySource`).
   accountSkillRepository: {
     // Catalog reads: the account library panel, the pipeline builder's skill picker, and the RUN
     // path (`SkillCatalogService.list`/`get`, behind the per-account `skillCatalog` cache slice).
@@ -1249,11 +1331,11 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // already runs. `listByServiceIds` is the hot one (once per consumer dispatch) and is already a
   // single chunked `IN` query, so it stays one round trip over the wire too.
   //
-  // The sourceId-keyed sync methods (`listBySource`, `softDeleteBySource`, the source repo's
-  // `get`/`updateSyncState`/`softDelete`/`listStale`) stay OFF, exactly as the fragment library's
-  // do: they back the repo-SYNC the mothership owns (a sync needs a GitHub client, which a
-  // mothership-mode node does not have), and none of them carries an `(ownerKind, ownerId)` pair
-  // for a rule to bind — a source→owner resolver is what a later sync-in-mothership slice owes.
+  // The sourceId-keyed sync methods now bind through `librarySource` (see the fragment library
+  // above: the same rule, the same dead premise, and the same node-side GitHub client). What stays
+  // OFF is `foundationalServiceSourceRepository.listStale` (the autorefresh sweep's global query)
+  // and `listByRepo` (the push-webhook fan-out's), both unscoped across tiers by construction and
+  // both running where a delivery ARRIVES, which is never a laptop.
   foundationalServiceRepository: {
     listByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
     get: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
@@ -1263,6 +1345,14 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // the same management surface, so it belongs on the same side of the boundary: leaving it off
     // would let a mothership-mode board opt OUT of an account service with no way back in.
     hardDelete: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+    // The source-keyed reconcile pair, mirroring `accountSkillRepository`'s: list a source's live
+    // services to diff against the repo, and tombstone all of them in one write on unlink.
+    listBySource: {
+      scope: { kind: 'librarySource', arg: 0, entity: 'foundationalServiceSource' },
+    },
+    softDeleteBySource: {
+      scope: { kind: 'librarySource', arg: 0, entity: 'foundationalServiceSource' },
+    },
   },
   apiContractRepository: {
     listManifestByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
@@ -1270,9 +1360,20 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     replaceForService: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
     deleteForService: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
   },
+  // `upsert` takes `ownerFieldUpsert` for exactly the reason `fragmentSourceRepository.upsert` does:
+  // it conflicts on the `id` alone, so the declared owner does not decide which row is written.
   foundationalServiceSourceRepository: {
     listByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-    upsert: { scope: { kind: 'ownerField', arg: 0 } },
+    upsert: {
+      scope: { kind: 'ownerFieldUpsert', arg: 0, entity: 'foundationalServiceSource' },
+    },
+    get: { scope: { kind: 'librarySource', arg: 0, entity: 'foundationalServiceSource' } },
+    updateSyncState: {
+      scope: { kind: 'librarySource', arg: 0, entity: 'foundationalServiceSource' },
+    },
+    softDelete: {
+      scope: { kind: 'librarySource', arg: 0, entity: 'foundationalServiceSource' },
+    },
   },
   // --- Account onboarding read surface --------------------------------------------
   // The two account-scoped READS a mothership-mode SPA's account/members + email-settings panels

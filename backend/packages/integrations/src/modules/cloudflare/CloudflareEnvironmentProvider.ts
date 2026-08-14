@@ -2,21 +2,23 @@ import { CLOUDFLARE_ENV_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
 import {
   type CloudflareConnectionConfig,
   type CloudflareEnvironmentConfig,
+  connectionFailureResult,
   type ConnectionTestResult,
   type EnvironmentConnectionTestRequest,
   type EnvironmentManifest,
   type EnvironmentProvider,
   type EnvironmentStatusRequest,
   type EnvironmentTeardownRequest,
+  getErrorMessage,
   type ProviderConfigField,
-  type ProvisionEnvironmentRequest,
   type ProvisionedEnvironment,
+  type ProvisionEnvironmentRequest,
   type RepoValidationRequest,
   type RepoValidationResult,
   type SecretResolver,
+  STRICT_URL_SAFETY_POLICY,
   type TeardownProbe,
   type UrlSafetyPolicy,
-  STRICT_URL_SAFETY_POLICY,
 } from '@cat-factory/kernel'
 import { type MakeHttpError, readCappedText, safeFetch } from '../shared/safe-fetch.js'
 import { assertSafeEnvironmentUrl } from '../environments/environments.logic.js'
@@ -252,7 +254,7 @@ export class CloudflareEnvironmentProvider implements EnvironmentProvider {
     try {
       config = parseCloudflareEnvConfig(req.manifest)
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      return { ok: false, message: getErrorMessage(err) }
     }
     const pinned = config.repo?.trim()
     try {
@@ -270,7 +272,13 @@ export class CloudflareEnvironmentProvider implements EnvironmentProvider {
         message: `Token authenticated against ${vcsApiBase(config)}. The repository is resolved per run from the service frame.`,
       }
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      // A `CloudflareEnvironmentApiError` (the VCS API answered with a status) carries no error
+      // `code`, so it classifies as `unknown` and is reported verbatim, exactly as before. A
+      // transport failure is the case this rescues: its cause chain, not a bare "fetch failed".
+      return connectionFailureResult(err, {
+        subject: 'the VCS API',
+        target: vcsApiBase(config),
+      })
     }
   }
 

@@ -20,6 +20,7 @@ import {
 } from '@cat-factory/contracts'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { MergeTrackRecordService } from '../merge/MergeTrackRecordService.js'
+import type { RunPolicyScope } from './policy-types.js'
 
 /** Format a 0..1 score as a rounded percentage for notification copy. */
 function pct(score: number): string {
@@ -275,7 +276,11 @@ export interface MergeResolverDeps {
   blockRepository: BlockRepository
   notificationService?: NotificationService
   /** The task's resolved merge-threshold preset (block pin → workspace default → built-in). */
-  resolveRiskPolicy: (workspaceId: string, block: Block) => Promise<MergeThresholds>
+  resolveRiskPolicy: (
+    workspaceId: string,
+    block: Block,
+    run: RunPolicyScope,
+  ) => Promise<MergeThresholds>
   /**
    * Merge the block's PR(s) for real then flip it `done` — throws on a COMPLETE failure
    * (nothing merged), returns `partial` when a multi-repo merge merged some then hit a
@@ -328,7 +333,7 @@ export class MergeResolver {
       assessment = null
     }
 
-    const preset = await this.deps.resolveRiskPolicy(workspaceId, block)
+    const preset = await this.deps.resolveRiskPolicy(workspaceId, block, instance)
 
     // Classify the PR BEFORE deciding: the preset's per-class rule can short-circuit the score
     // comparison entirely. One VCS call, swallowed on any failure into `unknown` — which no rule

@@ -1,5 +1,550 @@
 # @cat-factory/consensus
 
+## 0.16.22
+
+### Patch Changes
+
+- Updated dependencies [409238f]
+  - @cat-factory/kernel@0.301.0
+  - @cat-factory/contracts@0.313.0
+  - @cat-factory/agents@0.131.0
+
+## 0.16.21
+
+### Patch Changes
+
+- Updated dependencies [0ef48d1]
+  - @cat-factory/kernel@0.300.0
+  - @cat-factory/contracts@0.312.0
+  - @cat-factory/agents@0.130.2
+
+## 0.16.20
+
+### Patch Changes
+
+- d5c1f1c: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with (`ai@7.0.64`,
+  `@ai-sdk/openai@4.0.41`, `@ai-sdk/amazon-bedrock@5.0.55`). The Cloudflare toolchain moves
+  together again: `wrangler@4.122.0` and `@cloudflare/vitest-pool-workers@0.21.2`, whose bundled
+  wrangler tracks it. `@aws-sdk/client-s3` goes to 3.1109.0 and the SPA's store engine to
+  `pinia@4.0.3` / `@pinia/nuxt@1.0.2`.
+
+  `capnweb` moves 0.10.0 to 0.11.0 in the Gatekeeper Worker. The release is additive (stubs as
+  stream chunks, exact ArrayBuffer/DataView serialization, URL over RPC) and touches neither
+  `RpcTarget` nor `newWorkersRpcResponse`, the only two symbols we import. Its 0.11.1 patch, which
+  enforces an ASCII-only dist bundle so a consumer's `btoa()` cannot choke on the runtime, missed
+  the release-age window by two hours and is the first thing the next sweep should pick up.
+
+  Held back deliberately: `@changesets/cli` 3.0.0 and, in the frontend, `typescript` 7 (Nuxt 4.5.2
+  itself depends on `typescript@6.0.3`). No `minimumReleaseAgeExclude` entries were added: every
+  version above already satisfies the gate.
+
+- Updated dependencies [d5c1f1c]
+- Updated dependencies [c67e924]
+  - @cat-factory/agents@0.130.1
+  - @cat-factory/kernel@0.299.1
+  - @cat-factory/contracts@0.311.0
+
+## 0.16.19
+
+### Patch Changes
+
+- Updated dependencies [056e18d]
+  - @cat-factory/contracts@0.310.0
+  - @cat-factory/kernel@0.299.0
+  - @cat-factory/agents@0.130.0
+
+## 0.16.18
+
+### Patch Changes
+
+- Updated dependencies [a81879b]
+  - @cat-factory/contracts@0.309.0
+  - @cat-factory/kernel@0.298.2
+  - @cat-factory/agents@0.129.2
+
+## 0.16.17
+
+### Patch Changes
+
+- Updated dependencies [0e1e0fa]
+  - @cat-factory/contracts@0.308.1
+  - @cat-factory/agents@0.129.1
+  - @cat-factory/kernel@0.298.1
+
+## 0.16.16
+
+### Patch Changes
+
+- Updated dependencies [7312e0a]
+  - @cat-factory/kernel@0.298.0
+  - @cat-factory/contracts@0.308.0
+  - @cat-factory/agents@0.129.0
+
+## 0.16.15
+
+### Patch Changes
+
+- Updated dependencies [95408c2]
+  - @cat-factory/contracts@0.307.0
+  - @cat-factory/kernel@0.297.0
+  - @cat-factory/agents@0.128.2
+
+## 0.16.14
+
+### Patch Changes
+
+- 792ecde: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with (`ai@7.0.62`,
+  `@ai-sdk/anthropic@4.0.38` / `openai@4.0.40` / `openai-compatible@3.0.30` /
+  `amazon-bedrock@5.0.54`). The Cloudflare toolchain moves together: `wrangler@4.121.0`,
+  `@cloudflare/workers-types@5.20260812.1` and `@cloudflare/vitest-pool-workers@0.21.1`, whose only
+  change over 0.20.3 is the wrangler and miniflare it bundles, so the pool now carries the same
+  wrangler the workspace declares instead of one release behind it.
+
+  `esbuild` gains three scoped `pnpm-workspace.yaml` overrides pinning vite's, tsx's and nitropack's
+  loose ranges to the 0.28.1 that wrangler and `@cloudflare/vitest-pool-workers` pin exactly. Without
+  them a re-resolve hands vite's optional PEER slot the newer 0.28.2 and the tree gains a second
+  esbuild; because pnpm resolves an auto-installed peer without its own `optionalDependencies`, that
+  copy never gets its platform binary and esbuild's postinstall aborts the entire install. The
+  overrides are deliberately scoped rather than top-level: `drizzle-kit`, `@intlify/bundle-utils` and
+  `fontless` declare narrower ranges that a blanket pin would force them out of.
+
+  Held back deliberately: `@changesets/cli` 3.0.0 and, in the frontend, `typescript` 7 (Nuxt 4.5.2
+  itself depends on `typescript@6.0.3`). No `minimumReleaseAgeExclude` entries were added: every
+  version above already satisfies the gate.
+
+- Updated dependencies [792ecde]
+  - @cat-factory/agents@0.128.1
+  - @cat-factory/kernel@0.296.1
+
+## 0.16.13
+
+### Patch Changes
+
+- Updated dependencies [fc56d82]
+- Updated dependencies [fc9afb4]
+  - @cat-factory/contracts@0.306.0
+  - @cat-factory/kernel@0.296.0
+  - @cat-factory/agents@0.128.0
+
+## 0.16.12
+
+### Patch Changes
+
+- Updated dependencies [edd4fd0]
+  - @cat-factory/kernel@0.295.0
+  - @cat-factory/contracts@0.305.0
+  - @cat-factory/agents@0.127.3
+
+## 0.16.11
+
+### Patch Changes
+
+- Updated dependencies [36e0c9b]
+  - @cat-factory/contracts@0.304.0
+  - @cat-factory/agents@0.127.2
+  - @cat-factory/kernel@0.294.1
+
+## 0.16.10
+
+### Patch Changes
+
+- Updated dependencies [569181d]
+  - @cat-factory/contracts@0.303.0
+  - @cat-factory/kernel@0.294.0
+  - @cat-factory/agents@0.127.1
+
+## 0.16.9
+
+### Patch Changes
+
+- Updated dependencies [1a0b593]
+  - @cat-factory/contracts@0.302.0
+  - @cat-factory/kernel@0.293.0
+  - @cat-factory/agents@0.127.0
+
+## 0.16.8
+
+### Patch Changes
+
+- Updated dependencies [7d1477c]
+  - @cat-factory/kernel@0.292.2
+  - @cat-factory/agents@0.126.8
+
+## 0.16.7
+
+### Patch Changes
+
+- Updated dependencies [c09ddbe]
+  - @cat-factory/agents@0.126.7
+  - @cat-factory/kernel@0.292.1
+
+## 0.16.6
+
+### Patch Changes
+
+- Updated dependencies [fc4a1e4]
+  - @cat-factory/contracts@0.301.0
+  - @cat-factory/kernel@0.292.0
+  - @cat-factory/agents@0.126.6
+
+## 0.16.5
+
+### Patch Changes
+
+- Updated dependencies [ee733ee]
+  - @cat-factory/contracts@0.300.0
+  - @cat-factory/kernel@0.291.0
+  - @cat-factory/agents@0.126.5
+
+## 0.16.4
+
+### Patch Changes
+
+- Updated dependencies [01086d8]
+  - @cat-factory/contracts@0.299.1
+  - @cat-factory/kernel@0.290.1
+  - @cat-factory/agents@0.126.4
+
+## 0.16.3
+
+### Patch Changes
+
+- Updated dependencies [1bcdacc]
+  - @cat-factory/kernel@0.290.0
+  - @cat-factory/agents@0.126.3
+
+## 0.16.2
+
+### Patch Changes
+
+- Updated dependencies [195b248]
+  - @cat-factory/contracts@0.299.0
+  - @cat-factory/agents@0.126.2
+  - @cat-factory/kernel@0.289.1
+
+## 0.16.1
+
+### Patch Changes
+
+- Updated dependencies [bc2478d]
+  - @cat-factory/contracts@0.298.0
+  - @cat-factory/kernel@0.289.0
+  - @cat-factory/agents@0.126.1
+
+## 0.16.0
+
+### Minor Changes
+
+- a634746: A locally-run model can now be given a run's design renders. Its image support resolves in two
+  tiers: a table of recognised open-weights families (`KNOWN_LOCAL_MODELS`, so ticking Gemma 4 or Muse
+  Glimmer needs no second step), overridden by a per-model declaration on the user's own runner entry
+  for anything the table cannot know about.
+
+  The gap was structural rather than a missed case. `acceptsImages` is a per-FLAVOUR fact declared on
+  `MODEL_CATALOG`, and a local model has no catalog row: it lives on one person's machine, its id is
+  free text, and the OpenAI-compatible `/models` probe the panel discovers models with returns ids and
+  nothing else. So every local ref arrived with the modality absent and `resolveDesignImageDelivery`
+  answered `unknown_model_image_input` for all of them, forever. That reason exists precisely so this
+  would stay visible instead of reading as a text-only model, and the arrival of image-capable local
+  models is what turned it from a latent hole into a lost capability.
+
+  The declaration wins over the table on purpose: the person who pulled the weights is the one who
+  knows whether they are running a text-only quant, a fine-tune or a re-tagged copy. The table
+  therefore carries only families whose SILENCE costs a capability (every member is image-capable; a
+  text-only entry would behave identically to an absent one), and a family whose modality depends on
+  the size is left out rather than approximated, which is why Gemma 3 is absent while Gemma 4 is
+  present. It lives in `@cat-factory/contracts` because the settings panel labels its "not set" option
+  with what the table will do and the engine folds the same answer onto the dispatched ref.
+
+  The initiator's declarations are read on EVERY dispatch, because the winning model is not known
+  until the shared resolver has walked its sources, so the read goes through a new `AppCaches`
+  slice keyed on the user (the endpoint write paths invalidate it). Without that, a deployment with no
+  local runners at all still paid a query per step, and a mothership-mode node an extra
+  `/internal/persistence` round trip per step.
+
+  Delivery still joins the HARNESS's answer first, and that is what decides where this lands today: a
+  local ref names no harness, so a container dispatch runs it on Pi, whose `HARNESS_IMAGE_INPUT` entry
+  is `false` and refuses without consulting the ref. The modality is therefore acted on by the inline
+  path, and the container path becomes a reader the day an image-carrying harness serves a local model,
+  which is a one-line table edit rather than new plumbing. It is resolved for every path regardless,
+  because the winning model is not known until the shared resolver has walked its sources.
+
+  `contextTokens` is deliberately NOT declared for a local model, though the same shape could carry it.
+  The window a runner serves is a fact about its config rather than about the weights (Ollama's
+  `num_ctx` default sits far below what a 128K-window model can do), nothing enforces it for a local
+  ref, and stating a number the runner silently ignores would be worse than stating none. The
+  truncation trap that follows from that is now written down in `backend/docs/model-support.md`.
+
+  **Internal break:** the endpoint row's enabled-model list changes from `string[]` to a declaration
+  array. A row written before this loses its entries on read: bare strings are dropped rather than
+  coerced, so the break cannot arrive as a model id of `[object Object]`. The endpoint reports the
+  discard (`unreadableModels`) and the panel names it per runner, because a shortened list on its own
+  reads exactly like a runner nobody ever enabled a model on and only one of those is fixed by
+  re-ticking. The fix is to re-tick the models in "My local runners", which rewrites the whole blob.
+
+### Patch Changes
+
+- Updated dependencies [a634746]
+  - @cat-factory/contracts@0.297.0
+  - @cat-factory/kernel@0.288.0
+  - @cat-factory/agents@0.126.0
+
+## 0.15.8
+
+### Patch Changes
+
+- Updated dependencies [7893f35]
+  - @cat-factory/contracts@0.296.0
+  - @cat-factory/kernel@0.287.0
+  - @cat-factory/agents@0.125.8
+
+## 0.15.7
+
+### Patch Changes
+
+- Updated dependencies [07ff467]
+  - @cat-factory/contracts@0.295.0
+  - @cat-factory/agents@0.125.7
+  - @cat-factory/kernel@0.286.3
+
+## 0.15.6
+
+### Patch Changes
+
+- Updated dependencies [9b3473a]
+  - @cat-factory/contracts@0.294.0
+  - @cat-factory/agents@0.125.6
+  - @cat-factory/kernel@0.286.2
+
+## 0.15.5
+
+### Patch Changes
+
+- b889842: Report the actual cause of a failure everywhere, not just on a "Test connection" button.
+
+  The previous slice taught the connection PROBES to read the cause chain, because on Node a transport
+  failure is `TypeError: fetch failed` and what happened hangs off `.cause`. It turned out the repo had
+  three describers of a thrown value and the other two stopped at `error.message`: `getErrorMessage`
+  (the string a human is shown, and what a persisted failure reason or a PR comment records) and
+  `describeError` (every log line). So a probe could name `connect ECONNREFUSED 127.0.0.1:6443` while
+  the log line and the toast for the same failure still said `fetch failed`, which is what made a
+  Kubernetes connect failure unexplainable even with the probe fixed.
+
+  All three now flatten through one kernel core (`shared/error-chain.logic.ts`): `.cause` plus each
+  `AggregateError` branch (so a dual-stack `localhost` reports what happened on each address), scrubbed
+  through `redactSecrets`, capped with a marker saying what it dropped, and bounded by link identity so
+  a cause cycle terminates. Roughly 90 hand-rolled `e instanceof Error ? e.message : String(e)` copies
+  across the backend now call `getErrorMessage`, and five local `errMessage`/`messageOf` wrappers are
+  deleted.
+
+  Who may read a chain is part of the rule. An AUTHENTICATED reader gets it, because the inner link is
+  usually the only thing saying whether the fix is theirs or the deployment's; where a deployment's
+  model endpoints are platform-internal, their host and port do reach a workspace member through an
+  ordinary 4xx. An UNAUTHENTICATED surface does not: `/ready` on BOTH facades answers with kernel's
+  `publicDiagnostic` (the outermost link, scrubbed) rather than publishing the deployment's database
+  address, sharing one helper so the two runtimes cannot drift to different depths.
+
+  A VERDICT does not read the rendered string either. `errorChainMatches` tests each link uncapped, so
+  a sentinel phrase pushed past the display budget by a long wrapper cannot silently turn a recognised
+  rollout stop into a crash. Relatedly, log fields get their own, much wider cap than the 400 characters
+  a human-facing message is held to, and an error with nothing to say answers with the empty string
+  rather than the bare constructor name, so a call site's `getErrorMessage(e) || '<what to do>'` guard
+  still fires.
+
+  `redactSecrets` now spares a single-case word and an env-var-shaped identifier where a field-name rule
+  matched: it scrubs the message a person reads, and `Missing required key: OPENAI_API_KEY` must not
+  lose the name they have to go and set. Every credential shape the rules exist for still matches.
+
+  An error message may therefore now carry appended causes where it did not before. The opening phrase
+  is unchanged, which is what the downstream `/dispatch failed/i` and eviction-sentinel checks match on.
+
+  On the SPA, every failure toast goes through the one funnel that already existed for pipeline errors,
+  instead of 29 per-component copies of the same `notifyError(title, e)` and ~83 direct `toast.add`
+  calls rendering the raw message. Beyond the translated copy that funnel already resolved, a failure
+  toast now stays until dismissed instead of vanishing after about five seconds, its text is
+  selectable, and one click copies the whole report: the action that failed, the class of failure, the
+  backend's own account, and the `requestId` that is the only join between what the user saw and the
+  server log line explaining it. Conflict (409) toasts get the same treatment, which matters most on
+  the unknown-reason path, since that is where a reason an older SPA build has never heard of lands.
+
+  `@cat-factory/cli` carries its own copy of the describer rather than importing kernel. That package is
+  published and deliberately runtime-dependency-free, so a `workspace:*` import from its `bin` resolves
+  through pnpm's link locally and is simply absent off the registry; a conformity test pins the copy to
+  kernel's output byte for byte.
+
+- Updated dependencies [b889842]
+  - @cat-factory/kernel@0.286.1
+  - @cat-factory/agents@0.125.5
+
+## 0.15.4
+
+### Patch Changes
+
+- Updated dependencies [b25732f]
+  - @cat-factory/contracts@0.293.0
+  - @cat-factory/kernel@0.286.0
+  - @cat-factory/agents@0.125.4
+
+## 0.15.3
+
+### Patch Changes
+
+- Updated dependencies [7119ca7]
+  - @cat-factory/contracts@0.292.2
+  - @cat-factory/kernel@0.285.3
+  - @cat-factory/agents@0.125.3
+
+## 0.15.2
+
+### Patch Changes
+
+- Updated dependencies [57a7ecd]
+  - @cat-factory/contracts@0.292.1
+  - @cat-factory/kernel@0.285.2
+  - @cat-factory/agents@0.125.2
+
+## 0.15.1
+
+### Patch Changes
+
+- Updated dependencies [5f6699a]
+  - @cat-factory/contracts@0.292.0
+  - @cat-factory/agents@0.125.1
+  - @cat-factory/kernel@0.285.1
+
+## 0.15.0
+
+### Minor Changes
+
+- 22b2459: Make each design-picture delivery site state the channel it actually has.
+
+  The shipped delivery decision derived its channel from whether the resolved ref named a harness,
+  which is not the same question and is wrong on exactly the surfaces that cannot carry a picture at
+  all. Delivery now takes a `DesignImageCarrier` the dispatch site declares: `files` plus the harness
+  for a container dispatch, `message` for an inline call that composes its own request.
+
+  Two surfaces refuse under their own reason instead of promising something. The AMBIENT INLINE path
+  (a deployment serving a subscription ref by driving the developer's CLI as a host subprocess) named
+  a harness whose container dispatch opens image files, so it claimed `.cat-context/design-renders/`
+  on a call with no checkout and a prompt flattened to text. A CONSENSUS PANEL resolved no verdict at
+  all, so its participants heard neither that pictures existed nor that they were withheld; it now
+  states the ceiling exactly as it already does for the tool servers it cannot reach.
+
+  Three more corrections to the same slice. The runner-image capability handshake never fired for
+  `designImages`, because "the body carries this capability" was a populated-ARRAY test and the design
+  manifest is an object, so an image predating the field ignored it while the prompt named a directory
+  nothing wrote; carrying is now a per-capability predicate. The omission notice no longer attributes
+  transfer losses to a ceiling nor sizes that ceiling from the DELIVERED count. And the LLM proxy's
+  Workers AI output cap measures the payload it forwards rather than the image-redacted copy kept for
+  telemetry, which would under-reserve context-window room by the size of every attached picture.
+
+### Patch Changes
+
+- Updated dependencies [22b2459]
+- Updated dependencies [2428b6b]
+  - @cat-factory/kernel@0.285.0
+  - @cat-factory/agents@0.125.0
+  - @cat-factory/contracts@0.291.0
+
+## 0.14.81
+
+### Patch Changes
+
+- Updated dependencies [19baddf]
+  - @cat-factory/kernel@0.284.0
+  - @cat-factory/agents@0.124.0
+
+## 0.14.80
+
+### Patch Changes
+
+- Updated dependencies [31f43c1]
+  - @cat-factory/contracts@0.290.0
+  - @cat-factory/kernel@0.283.0
+  - @cat-factory/agents@0.123.6
+
+## 0.14.79
+
+### Patch Changes
+
+- 3ff215a: Slice 9 of the `mcp-maturation.md` tracker: a consensus-diverted step now states the tool servers
+  (MCP) it cannot reach, instead of losing them in silence.
+
+  A panel runs its participants as inline model calls with no checkout and no agent CLI, so there is
+  nowhere to wire an MCP server. Nothing said so. Boot validation's `tool_servers_without_container`
+  warning keys on the kind's declared surface, which is a container for nearly every consensus-eligible
+  kind (architect, analysis, the reviewers), and that is exactly the set a deployment attaches a
+  read-only research server to; the container executor, which owns the whole unavailability vocabulary,
+  is not on this path at all. So the prompt promised nothing, the step recorded nothing, and a diverted
+  step read exactly like a kind that had declared no tool servers.
+
+  The panel now reports it in both channels a container dispatch uses. The participants' system prompt
+  carries the same `toolServersSection` a container run composes, after the surface statement, so a
+  model planning around the vendor tool its instructions name learns it is absent. And the step carries
+  the resolution: `AgentExecutor.previewToolServers` is the inline counterpart of
+  `AgentJobHandle.toolServers`, answered at dispatch and stamped with the dispatched kind by the engine
+  through the same helper the container fold uses, so an executor still cannot label a resolution with
+  a kind other than the one that ran. A preview rather than a field on the result for the reason the
+  container path records off the handle: a step that later fails keeps its record, where a
+  result-carried field would be absent on exactly the runs a reader needs it for. A kind that declared
+  no servers records nothing at all, because an inline surface wires nothing by construction and an
+  all-empty record would claim a resolution where none was possible.
+
+  PUBLIC API, additive (OpenAPI `1.39.0`): the unavailable-tool-server `reason` vocabulary gains
+  `consensus_panel`, carried by the run reads that project `toolServers`. A member of its own rather
+  than `harness_unsupported` because no harness is involved: the kind's standard surface may serve the
+  server perfectly and the same step with consensus off would have got it, so a consumer acting on the
+  harness reason would go widening a list that was never the constraint. The four generated clients and
+  both projections carry the new member, so they bump with the surface.
+
+- Updated dependencies [3ff215a]
+  - @cat-factory/contracts@0.289.1
+  - @cat-factory/kernel@0.282.1
+  - @cat-factory/agents@0.123.5
+
+## 0.14.78
+
+### Patch Changes
+
+- Updated dependencies [e3cf16a]
+  - @cat-factory/contracts@0.289.0
+  - @cat-factory/kernel@0.282.0
+  - @cat-factory/agents@0.123.4
+
+## 0.14.77
+
+### Patch Changes
+
+- Updated dependencies [83764b5]
+  - @cat-factory/contracts@0.288.0
+  - @cat-factory/agents@0.123.3
+  - @cat-factory/kernel@0.281.3
+
+## 0.14.76
+
+### Patch Changes
+
+- Updated dependencies [1fbd83c]
+- Updated dependencies [00228c6]
+  - @cat-factory/contracts@0.287.1
+  - @cat-factory/kernel@0.281.2
+  - @cat-factory/agents@0.123.2
+
+## 0.14.75
+
+### Patch Changes
+
+- Updated dependencies [bf473bd]
+  - @cat-factory/contracts@0.287.0
+  - @cat-factory/agents@0.123.1
+  - @cat-factory/kernel@0.281.1
+
 ## 0.14.74
 
 ### Patch Changes

@@ -38,6 +38,13 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
   const result = ref<BugHuntResult | null>(null)
   const hunting = ref(false)
   const huntError = ref<string | null>(null)
+  /**
+   * The backend's machine-readable reason for a failed scan, kept for the same reason
+   * {@link boardsErrorReason} is: `repo_not_linked` says the service this hunt is scoped to has
+   * no repository to read issues from, which is a state the person can fix on the board and the
+   * only one the surface words itself. Every other failure stays a toast.
+   */
+  const huntErrorReason = ref<string | null>(null)
   /** The candidate currently being adopted, so only its own row shows a spinner. */
   const adopting = ref<string | null>(null)
 
@@ -62,20 +69,44 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
       boardsError.value = e instanceof Error ? e.message : String(e)
       boardsErrorReason.value = apiErrorReason(e)
     } finally {
-      boardsLoading.value = false
+      // Only the listing the picker is still showing owns the flag. A superseded one clearing it
+      // unconditionally would report the tracker now being loaded as done, which is the same
+      // mistake in the opposite direction from the one `dropBoards` avoids.
+      if (boardsSource.value === source) boardsLoading.value = false
     }
+  }
+
+  /**
+   * Forget the board listing, because the tracker now in the picker has none to offer: its board
+   * is the chosen service's repository, resolved server-side. Called INSTEAD of `loadBoards`, so a
+   * previous tracker's list (or its failure, which the surface renders as a warning) cannot sit
+   * under a tracker that has no board field at all. `boardsSource` moves with it, so a listing
+   * still in flight for that previous tracker lands on nothing rather than reviving the picker.
+   */
+  function dropBoards(source: TaskSourceKind): void {
+    boardsSource.value = source
+    boards.value = []
+    boardsError.value = null
+    boardsErrorReason.value = null
+    // The listing in flight belongs to the tracker being left, and its `finally` will not run
+    // until it settles — indefinitely, if that tracker hangs. Clearing the flag with the rest of
+    // the state is what makes "land on nothing" true of the WHOLE listing rather than of four of
+    // its five fields, so a reader gating on it cannot wait on a request nobody is waiting for.
+    boardsLoading.value = false
   }
 
   /** Run a hunt and keep its ranked result. Returns false when the scan itself failed. */
   async function hunt(source: TaskSourceKind, input: RunBugHuntInput): Promise<boolean> {
     hunting.value = true
     huntError.value = null
+    huntErrorReason.value = null
     try {
       result.value = await api.runBugHunt(workspace.requireId(), source, input)
       return true
     } catch (e) {
       result.value = null
       huntError.value = e instanceof Error ? e.message : String(e)
+      huntErrorReason.value = apiErrorReason(e)
       return false
     } finally {
       hunting.value = false
@@ -117,6 +148,7 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
   function reset(): void {
     result.value = null
     huntError.value = null
+    huntErrorReason.value = null
     adopting.value = null
   }
 
@@ -131,8 +163,10 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
     hasResult,
     hunting,
     huntError,
+    huntErrorReason,
     adopting,
     loadBoards,
+    dropBoards,
     hunt,
     adopt,
     reset,

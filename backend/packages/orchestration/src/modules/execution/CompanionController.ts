@@ -3,23 +3,35 @@ import type {
   AgentRunResult,
   AgentTokenUsage,
   Block,
+  CompanionDispositionInput,
+  CompanionDispositionResult,
+  CompanionParkReason,
   ExecutionInstance,
   IdGenerator,
+  Logger,
   PipelineStep,
 } from '@cat-factory/kernel'
 import {
+  companionParkReasonFor,
+  DEFAULT_RISK_POLICY,
+  disposeCompanionVerdict,
+} from '@cat-factory/kernel'
+import {
   type CompanionAssessment,
-  DEFAULT_COMPANION_MAX_ATTEMPTS,
+  type DispatchToolServers,
   parseCompanionAssessment,
 } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { companionFor, companionTargets } from '@cat-factory/agents'
+import { companionFor, companionTargets, deliverableIsReply } from '@cat-factory/agents'
 import type { SpendService } from '@cat-factory/spend'
 import { extractJson } from '../requirements/requirements.logic.js'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
+import { companionLoopStalled } from './companionProgress.logic.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import { resolvesOwnCaps, type ResolvedRunRiskPolicy, type RunPolicyScope } from './policy-types.js'
 import { buildStepApproval } from './stepApproval.js'
+import { recordInlineToolServers } from './step-fold.logic.js'
 import type { StepGraph } from './StepGraph.js'
 
 /** Parse a companion's JSON verdict from a model reply, or `undefined` if it won't parse. */
@@ -47,6 +59,13 @@ function parseContainerVerdict(result: AgentRunResult): CompanionAssessment | un
   }
   return parseCompanionOrUndefined(result.output)
 }
+
+/**
+ * The slice of the run's resolved risk policy this loop reads: the automatic rework budget, and
+ * whether policy answers the park that spending it raises. A `Pick` rather than a restated shape, so
+ * a field renamed on the resolved policy fails to compile here.
+ */
+type CompanionRiskPolicy = Pick<ResolvedRunRiskPolicy, 'companionMaxReworks' | 'autonomy'>
 
 /** Sum the token usage of two model calls (for the companion's repair retry). */
 function sumUsage(
@@ -78,11 +97,28 @@ export interface CompanionControllerDeps {
   spend: SpendService
   idGenerator: IdGenerator
   previewStepModel: (context: AgentRunContext) => Promise<string | undefined>
+  previewStepToolServers: (context: AgentRunContext) => Promise<DispatchToolServers | undefined>
   runAgent: (context: AgentRunContext, options: AdvanceOptions) => Promise<AgentRunResult>
   /** The async instance/block spine (persist/emit/park/finalize/progress/notify/stop). */
   stateMachine: RunStateMachine
   /** The pure step mutators (start/finish/park a step + the companion rework loop). */
   stepGraph: StepGraph
+  /**
+   * The run's risk policy, read for TWO decisions here: how many automatic rework rounds this
+   * companion may drive ({@link CompanionController.applyAssessment}), and whether exhausting them
+   * parks for a person or is answered by policy
+   * ({@link CompanionController.settlesCapUnattended}). Both are answered from ONE resolution per
+   * grading, so a cap reached on a step's first verdict does not resolve the same policy twice.
+   * Structurally typed to the fields it reads, so this collaborator stays independent of the merge
+   * module.
+   */
+  resolveRiskPolicy: (
+    workspaceId: string,
+    block: Block,
+    run: RunPolicyScope,
+  ) => Promise<CompanionRiskPolicy>
+  /** Facade logger; absent in tests, where the cap decision is asserted off the step instead. */
+  logger?: Logger
   /**
    * Infer + persist the block's `technical` label from the spec phase when the
    * spec-companion converges. Both signals are read off the persisted steps — the
@@ -103,14 +139,19 @@ export interface CompanionControllerDeps {
 
 /**
  * Drives a companion (reviewer / spec-companion / architect-companion) step: it runs the
- * companion as a normal inline LLM step, parses its rating JSON (with one repair retry), and
- * acts on the verdict —
- *   - at/above threshold → finish; a gated companion raises the human approval gate on the
- *     producer's output, else the run advances.
- *   - below, budget left → loop the producer back with the feedback folded in (the automatic
- *     analogue of "request changes").
- *   - below, budget spent → park on the iteration-cap gate for a human (one more round /
- *     proceed / stop & reset), NOT a failure.
+ * companion as a normal inline LLM step, parses its verdict JSON (with one repair retry), and acts
+ * on it. WHAT the verdict means is kernel's `disposeCompanionVerdict`; this owns the effects —
+ *   - `pass` → finish; a gated companion raises the human approval gate on the producer's
+ *     output, else the run advances.
+ *   - `rework` → loop the producer back with the feedback folded in (the automatic analogue of
+ *     "request changes"). Driven by an open `blocker` finding, by the first batch of findings, or
+ *     by a rating below the bar.
+ *   - `park` → the iteration-cap gate for a human (one more round / proceed / stop & reset), NOT
+ *     a failure. An unattended risk policy answers that park when the loop merely ran out of
+ *     rounds, never while a `blocker` is open.
+ * A `rework` the loop has stopped getting anywhere with (`companionLoopStalled`) takes that same
+ * park EARLY, on the rounds it abandoned, and is decided by the same rule so an open `blocker`
+ * still parks as one.
  * An unparseable verdict (even after the repair retry) fails the run (`companion_rejected`)
  * rather than silently passing. Extracted out of `ExecutionService`; the shared step-graph
  * primitives it calls (`loopCompanionProducer`, the parking gate, the block/instance writes)
@@ -147,6 +188,18 @@ export class CompanionController {
     )
     const previewModel = await this.deps.previewStepModel(context)
     if (previewModel && previewModel !== step.model) step.model = previewModel
+    // The same dispatch-time fold the generic agent step applies: an inline companion is
+    // consensus-eligible too, so a diverted one has a withheld tool-server list to record. Ahead of
+    // the call rather than after it, because the repair retry re-runs the SAME context and would
+    // report the identical resolution twice, and because a companion that throws must still leave a
+    // step saying what it could not reach. Persisted here for that second reason: a throw
+    // propagates past this method and the failure path re-reads the instance from storage, so an
+    // unpersisted mutation is a record that exists only on the runs that did not need it.
+    const ceiling = await this.deps.previewStepToolServers(context)
+    if (ceiling) {
+      recordInlineToolServers(step, ceiling, context.agentKind)
+      await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
+    }
     // Run the companion, parsing its JSON verdict with ONE repair retry when the first
     // reply doesn't parse (truncated / wrapped in prose). Only retried when there is a
     // producer to grade. `result` carries the LAST call's output + the summed usage.
@@ -208,10 +261,10 @@ export class CompanionController {
   /**
    * Act on a companion's parsed verdict — shared by the inline ({@link evaluate}) and
    * container ({@link resolveContainerVerdict}) paths so both behave identically:
-   *   - at/above threshold → finish; a gated companion raises the human approval gate, else
-   *     the run advances;
-   *   - below, budget left → loop the producer back with the feedback folded in;
-   *   - below, budget spent → park on the iteration-cap gate;
+   *   - `pass` → finish; a gated companion raises the human approval gate, else the run advances;
+   *   - `rework` → loop the producer back with the feedback folded in;
+   *   - `park` → the iteration-cap gate, which an unattended policy answers only when the reason
+   *     is a spent budget;
    *   - producer present but verdict unparseable → surface for a human (NOT a silent pass).
    *
    * Every instance write here goes through {@link RunStateMachine.casPersist}, not a blind
@@ -237,7 +290,10 @@ export class CompanionController {
     const { producerIndex, assessment, result } = grading
     const companion = step.companion ?? {
       threshold: companionFor(step.agentKind, this.deps.agentKindRegistry)?.defaultThreshold ?? 0.8,
-      maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,
+      // Never consulted: a step with a producer adopts the policy's budget below before any branch
+      // reads it, and one with no producer passes without a rework decision. Present because the
+      // shape requires a number, and it is the catalog's own so the two seeds cannot drift.
+      maxAttempts: DEFAULT_RISK_POLICY.companionMaxReworks,
       attempts: 0,
       verdicts: [],
     }
@@ -247,6 +303,9 @@ export class CompanionController {
     // after the repair retry): do NOT silently treat that as a perfect pass. That is the
     // bug where a truncated reviewer reply surfaced as "100% ≥ 80%" and dropped a real
     // review. Surface it for a human instead, recording the raw reply as the detail.
+    //
+    // Answered BEFORE the budget read below, because this path spends no round: resolving the
+    // task's policy to fill in a number the failure record never reads is work for nothing.
     if (producerIndex >= 0 && !assessment) {
       step.output = result.output || ''
       step.companion = companion
@@ -266,19 +325,62 @@ export class CompanionController {
       }
     }
 
-    // Compute the pass/fail verdict for this cycle and fold it (+ the reviewer/spec-companion
-    // side-signals) into the step — see {@link recordCompanionVerdict}.
-    const passed = this.recordCompanionVerdict({
+    // FIRST grading of this step: adopt the rework budget the task's resolved risk policy states.
+    // The step was seeded with the catalog default at run start, where no policy resolver is wired,
+    // and this is the same "refresh the budget from the preset once" the Tester's quality gate does
+    // on its first report.
+    //
+    // Guarded on having recorded NO verdict yet, which is the only reading of "first grading" that
+    // holds for both ways a step grades twice on an unspent budget. A human granted an extra round
+    // past the cap by RAISING this step's budget (`resolveCompanionExceeded`), and a human "request
+    // changes" on a gated companion re-runs the producer while charging no round at all
+    // (`requestStepChanges`), leaving `attempts` at 0 for the re-grade. Off `attempts` this read
+    // fired again on that second pass; off the verdict list it fires once per step, which is what
+    // every prompt and every cap check in this loop then goes on to see.
+    //
+    // The resolved value is HELD for the cap branch below, so a companion that reaches its cap on
+    // this same grading (a `0` budget does) resolves the policy once rather than twice.
+    let policy: CompanionRiskPolicy | undefined
+    if (producerIndex >= 0 && companion.verdicts.length === 0) {
+      policy = await this.deps.resolveRiskPolicy(workspaceId, block, instance)
+      companion.maxAttempts = policy.companionMaxReworks
+    }
+
+    // The score to judge: the parsed rating when there is a producer to grade, else a perfect
+    // score (no producer of this companion's target kind precedes it, so there is genuinely
+    // nothing to grade).
+    const rating = assessment && producerIndex >= 0 ? assessment.rating : 1
+    // What this round means for the run, decided in ONE place (kernel's `disposeCompanionVerdict`,
+    // the judge's sibling): a `blocker` finding holds the step whatever the rating, the first
+    // batch of findings is worth a round, and only then does the rating meet the bar or not.
+    //
+    // The input is NAMED because a stalled loop below asks the same rule the same question with
+    // one field changed, and re-listing it there would be two copies of what this round was.
+    const dispositionInput: CompanionDispositionInput = {
+      rating,
+      threshold: companion.threshold,
+      comments: assessment?.comments,
+      attempts: companion.attempts,
+      maxAttempts: companion.maxAttempts,
+      hasProducer: producerIndex >= 0,
+    }
+    const decision = disposeCompanionVerdict(dispositionInput)
+
+    // Fold this cycle's verdict (+ the reviewer/spec-companion side-signals) into the step —
+    // see {@link recordCompanionVerdict}.
+    this.recordCompanionVerdict({
       step,
       companion,
       assessment,
-      producerIndex,
+      rating,
+      passed: decision.disposition === 'pass',
       result,
       feedback,
     })
 
-    // PASS: the producer cleared the bar (and was not force-looped on its first batch).
-    if (passed) {
+    // PASS: the producer cleared the bar with nothing blocking (and was not force-looped on its
+    // first batch).
+    if (decision.disposition === 'pass') {
       return this.resolvePassedCompanion({
         workspaceId,
         instance,
@@ -290,16 +392,62 @@ export class CompanionController {
       })
     }
 
-    // BELOW THRESHOLD, automatic budget spent → DON'T get stuck. Park on a human
-    // decision (one more round / proceed anyway / stop & reset) — the same iteration-cap
-    // surface the requirements reviewer uses at its cap. Only AUTOMATIC reworks count
-    // against the budget (`attempts`); human "request changes" cycles on a gated
-    // companion re-run the producer without consuming it. `step.output` already holds the
-    // companion's latest feedback; the `exceeded` flag + the parked approval gate let the
-    // SPA render the three choices (resolved via `resolveCompanionExceeded`).
-    if (companion.attempts >= companion.maxAttempts) {
-      companion.exceeded = true
+    // NOT PASSED: the exit this round takes, which is the cap's own once the loop has stopped
+    // getting anywhere (see {@link parkForUnproductiveLoop}, which also records that on the step).
+    //
+    // A stalled loop can only ever PARK, never advance: the rounds it is giving up are rounds the
+    // budget still holds, so nothing here re-decides whether the work was good enough.
+    const stalledPark = this.parkForUnproductiveLoop({
+      workspaceId,
+      instance,
+      block,
+      step,
+      companion,
+      producerIndex,
+      decision,
+      dispositionInput,
+    })
+    const exit: CompanionDispositionResult = stalledPark
+      ? { disposition: 'park', parkReason: stalledPark }
+      : decision
+
+    // NOT PASSED with the automatic budget spent (or abandoned as above) → DON'T get stuck. Park on
+    // a human decision (one more round / proceed anyway / stop & reset) — the same iteration-cap
+    // surface the requirements reviewer uses at its cap. Only AUTOMATIC reworks count against the
+    // budget (`attempts`); human "request changes" cycles on a gated companion re-run the producer
+    // without consuming it. `step.output` already holds the companion's latest feedback; the
+    // `exceeded` flag + the parked approval gate let the SPA render the three choices (via
+    // `resolveCompanionExceeded`).
+    if (exit.disposition === 'park') {
       step.companion = companion
+      // …unless the run's policy says nobody is coming AND the automation is merely reporting that
+      // it gave up. `proceed` is one of the three choices the gate offers a person, and it is the
+      // only one an unattended policy may take on their behalf: `extra-round` spends model calls on
+      // a loop that has already failed to converge, and `stop-reset` throws away the run.
+      // Deliberately routed through the PASS branch, which is what "accept the producer's current
+      // output" means everywhere else — so a companion step the pipeline ALSO gated still raises
+      // its human approval gate here, exactly as it does when the companion clears the bar.
+      //
+      // Narrowed to `budget_spent`, which is the whole safety property of the other reason: a
+      // reviewer that named a `blocker` said this work must not go further, and overruling that is
+      // a JUDGEMENT rather than a decision to stop retrying. No policy takes it (kernel's
+      // `CompanionParkReason`), so a blocked step waits for a person under either posture — whether
+      // the budget ran out under that blocker or the loop abandoned the rest of it.
+      if (
+        exit.parkReason === 'budget_spent' &&
+        (await this.settlesCapUnattended({ workspaceId, instance, block, step, companion, policy }))
+      ) {
+        return this.resolvePassedCompanion({
+          workspaceId,
+          instance,
+          step,
+          block,
+          isFinalStep,
+          producerIndex,
+          assessment,
+        })
+      }
+      companion.exceeded = true
       await this.deps.stateMachine.raiseDecisionRequired(workspaceId, instance)
       return this.deps.stateMachine.parkStepOnDecision(
         workspaceId,
@@ -309,15 +457,16 @@ export class CompanionController {
       )
     }
 
-    // NOT PASSED, budget left → loop the producer back with the feedback folded in (the
-    // automatic analogue of a human "request changes"). Reached either below threshold or
-    // on the forced first-batch loop. `producerIndex` is guaranteed >= 0 here: a forced
-    // loop requires comments on a real producer, and a below-threshold rating requires a
-    // parsed verdict against a producer (otherwise rating defaulted to 1 and we passed).
+    // REWORK: loop the producer back with the feedback folded in (the automatic analogue of a
+    // human "request changes"). Reached on an open blocker, a forced first-batch loop, or a rating
+    // below the bar, always with a round left to spend. `producerIndex` is guaranteed >= 0 here:
+    // every one of those requires a parsed verdict against a real producer (with none, the
+    // disposition is `pass`).
     const producer = instance.steps[producerIndex]!
     this.deps.stepGraph.loopCompanionProducer(instance, instance.currentStep, {
       previousProposal: producer.output ?? '',
       feedback: assessment?.summary ?? '',
+      requestedBy: 'reviewer',
       ...(assessment?.comments?.length ? { comments: assessment.comments } : {}),
     })
     await this.deps.stateMachine.persistAndEmit(workspaceId, instance, {
@@ -327,40 +476,101 @@ export class CompanionController {
   }
 
   /**
-   * Compute the pass/fail verdict for one companion grading cycle and fold it into the step:
-   * append the standardized verdict, record the spec-companion corroboration + the reviewer's
-   * per-fragment adherence, and set `step.output`. Returns whether the producer cleared the bar.
+   * The cap park a NOT-PASSED round takes INSTEAD of its `rework` when the loop has stopped getting
+   * anywhere, recording that on the step; `undefined` when the loop is still productive and the
+   * caller's own disposition stands.
+   *
+   * NOT GETTING ANYWHERE means the producer handed back the very text it was asked to revise and
+   * the rating did not move, so every round still on the budget would buy another copy of a verdict
+   * already given (`companionLoopStalled` holds the rule and the run that motivated it). Stopping
+   * EARLY takes the same exit as spending the budget, deliberately: the question a person is asked
+   * at the cap (one more round / proceed / stop & reset) is exactly the question here, an unattended
+   * policy already has an answer for it, and inventing a second exit would mean a second set of
+   * resolutions for the SPA and the risk policy to know about.
+   *
+   * It answers a park REASON rather than a disposition, and that is the point of its shape: a
+   * `blocker` still open when the loop gave up parks as `blocking_findings`, the one reason no
+   * policy may answer, instead of as the spent budget it merely resembles — while a loop that
+   * stalled can never come back as "advance". Asking the disposition rule to re-decide against an
+   * emptied budget did exactly that: with the first-batch branch suppressed for want of budget, a
+   * rating at or above the bar answered `pass`, and the caller (which only ever branches on `park`)
+   * read it as the rework it had just declared unproductive. The reason comes from kernel's
+   * `companionParkReasonFor`, the same total rule `disposeCompanionVerdict` parks through, so the
+   * two cannot drift.
+   *
+   * `companion.stalled` is recorded beside `exceeded` rather than in place of it: the two reach the
+   * same gate for opposite reasons, and only this one says the run had rounds left and abandoned
+   * them.
+   */
+  private parkForUnproductiveLoop(args: {
+    workspaceId: string
+    instance: ExecutionInstance
+    block: Block
+    step: PipelineStep
+    companion: NonNullable<PipelineStep['companion']>
+    producerIndex: number
+    decision: CompanionDispositionResult
+    dispositionInput: CompanionDispositionInput
+  }): CompanionParkReason | undefined {
+    const { workspaceId, instance, block, step, companion, producerIndex, decision } = args
+    const producer = producerIndex >= 0 ? instance.steps[producerIndex] : undefined
+    // Only a `rework` is converted: a `pass` was not a loop failing to converge, and a `park` has
+    // already named its own reason.
+    if (decision.disposition !== 'rework' || !producer) return undefined
+    const stalled = companionLoopStalled({
+      producer,
+      verdicts: companion.verdicts,
+      // Answered from the REGISTRY, so a deployment's own producer kind is judged by its own
+      // declaration: only a kind whose deliverable is its reply can be found standing still by
+      // comparing that reply. See `deliverableIsReply`.
+      producerDeliverableIsReply: deliverableIsReply(
+        producer.agentKind,
+        this.deps.agentKindRegistry,
+      ),
+    })
+    if (!stalled) return undefined
+    companion.stalled = true
+    this.deps.logger?.warn('companion rework loop stopped early: no progress', {
+      workspaceId,
+      runId: instance.id,
+      blockId: block.id,
+      agentKind: step.agentKind,
+      attempts: companion.attempts,
+      maxAttempts: companion.maxAttempts,
+      rating: companion.verdicts[companion.verdicts.length - 1]?.rating,
+    })
+    return companionParkReasonFor(args.dispositionInput.comments)
+  }
+
+  /**
+   * Fold one companion grading cycle into the step: append the standardized verdict, record the
+   * spec-companion corroboration + the reviewer's per-fragment adherence, and set `step.output`.
    * Pure step bookkeeping split out of {@link applyAssessment} to keep it under the complexity
-   * ceiling.
+   * ceiling; the pass/fail decision it records was made by `disposeCompanionVerdict`.
    */
   private recordCompanionVerdict(args: {
     step: PipelineStep
     companion: NonNullable<PipelineStep['companion']>
     assessment: CompanionAssessment | undefined
-    producerIndex: number
+    rating: number
+    passed: boolean
     result: AgentRunResult
     feedback: string
-  }): boolean {
-    const { step, companion, assessment, producerIndex, result, feedback } = args
-    // The score to judge: the parsed rating when there is a producer to grade, else a
-    // perfect score (no producer of this companion's target kind precedes it, so there
-    // is genuinely nothing to grade and the run advances).
-    const rating = assessment && producerIndex >= 0 ? assessment.rating : 1
-    // The FIRST review batch ALWAYS loops the producer back when it raised any comments,
-    // regardless of rating; the configured threshold only governs the SECOND pass onward.
-    // `attempts` counts automatic reworks, so it is 0 on the first batch. Applies to every
-    // companion (reviewer / spec-companion / architect-companion). Gated on a real producer
-    // so the loop-back below always has a step to re-run.
-    const firstBatch = companion.attempts === 0
-    const hasComments = producerIndex >= 0 && (assessment?.comments?.length ?? 0) > 0
-    const passed = firstBatch && hasComments ? false : rating >= companion.threshold
+  }): void {
+    const { step, companion, assessment, rating, passed, result, feedback } = args
     // Append this cycle's standardized verdict (the same shape the requirements-rework
     // gate stores) so the whole correction sequence is visible, not just the latest.
+    //
+    // The anchored COMMENTS ride along, and that is what makes the list usable as MEMORY rather
+    // than only as a display record: the next round shows this back to the companion, and "was
+    // what I asked for done" is unanswerable against a summary that named none of the asks (see
+    // `companion-review-context.ts`). Empty is left absent rather than stored as `[]`.
     companion.verdicts.push({
       rating,
       threshold: companion.threshold,
       passed,
       feedback,
+      ...(assessment?.comments?.length ? { comments: assessment.comments } : {}),
     })
     step.companion = companion
     step.output = feedback || result.output || ''
@@ -378,7 +588,49 @@ export class CompanionController {
         ? assessment.fragmentAdherence
         : undefined
     }
-    return passed
+  }
+
+  /**
+   * Whether the run's policy answers this companion's rework cap for itself.
+   *
+   * Reads the policy at the moment the cap is REACHED rather than at run start, matching every
+   * other policy read in the engine: an operator who moves a task onto an attended policy while it
+   * is working gets the park, and one who moves it the other way stops waiting on it. `resolved` is
+   * the grading's own resolution when the caller already needed one (a cap reached on a first
+   * verdict), so the two decisions the policy answers cost one read rather than two.
+   *
+   * It STAMPS `capSettledByPolicy` rather than only logging, because the alternative is a run that
+   * looks like it passed a bar it never met. The last `verdicts` entry already says the producer
+   * was below the bar; without the stamp, a step that advanced anyway is indistinguishable from
+   * one whose companion simply stopped grading, and the step is where whoever reviews the
+   * resulting pull request looks. Which is also why only a verdict that FAILED reaches here: the
+   * stamp on a producer that met its bar would be the same false claim in the other direction.
+   *
+   * The caller has already narrowed to `parkReason === 'budget_spent'`. That narrowing is the
+   * other half of the same honesty: an open `blocker` is not the automation giving up, so no
+   * stamp on this step could make advancing past one a decision policy was entitled to take.
+   */
+  private async settlesCapUnattended(args: {
+    workspaceId: string
+    instance: ExecutionInstance
+    block: Block
+    step: PipelineStep
+    companion: NonNullable<PipelineStep['companion']>
+    policy: CompanionRiskPolicy | undefined
+  }): Promise<boolean> {
+    const { workspaceId, instance, block, step, companion } = args
+    const policy = args.policy ?? (await this.deps.resolveRiskPolicy(workspaceId, block, instance))
+    if (!resolvesOwnCaps(policy)) return false
+    companion.capSettledByPolicy = true
+    this.deps.logger?.info('companion rework cap settled by policy', {
+      workspaceId,
+      runId: instance.id,
+      blockId: block.id,
+      agentKind: step.agentKind,
+      attempts: companion.attempts,
+      threshold: companion.threshold,
+    })
+    return true
   }
 
   /**

@@ -20,7 +20,9 @@ transport, and Node model provisioning.
   `db/tables/vcs.ts` and the tenancy & identity ones (the `workspaces`/`users` roots, login
   identities, the account + membership graph, invitations / password resets and the per-account
   rows) in `db/tables/identity.ts`, the account audit log in its own `audit` schema in
-  `db/tables/audit.ts` (separate for RETENTION, not write profile: see the module header), and the observability group (the `telemetry` Postgres schema
+  `db/tables/audit.ts` (separate for RETENTION, not write profile: see the module header), the
+  account-tier risk policies and the per-board suppressions that hide them (ADR 0055) in
+  `db/tables/risk-policies.ts`, and the observability group (the `telemetry` Postgres schema
   with its three append-heavy sinks, plus the two main-schema projections the operator dashboard
   aggregates) in `db/tables/observability.ts`, all re-exported from it (size-budget splits, so
   drizzle-kit and every importer still see one module). `identity.ts` is also where the schema's only two FK

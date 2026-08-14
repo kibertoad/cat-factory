@@ -5,11 +5,13 @@ package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PublicApprovalGateDecision} wire model.
  * @param approvalId the {@code approvalId} field.
+ * @param blockingFindings the {@code blockingFindings} field.
  * @param exceeded the {@code exceeded} field.
  * @param feedback Always present; {@code null} when the server has no value for it.
  * @param kind the {@code kind} field.
@@ -23,6 +25,8 @@ import org.jspecify.annotations.Nullable;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicApprovalGateDecision(
     @JsonProperty("approvalId") String approvalId,
+
+    @JsonProperty("blockingFindings") List<PublicApprovalGateDecisionBlockingFinding> blockingFindings,
 
     @JsonProperty("exceeded") Boolean exceeded,
 
@@ -57,6 +61,7 @@ public record PublicApprovalGateDecision(
      */
     public static final class Builder {
         private @Nullable String approvalId;
+        private @Nullable List<PublicApprovalGateDecisionBlockingFinding> blockingFindings;
         private @Nullable Boolean exceeded;
         private @Nullable String feedback;
         private @Nullable String kind;
@@ -70,6 +75,12 @@ public record PublicApprovalGateDecision(
         /** Set {@code approvalId}. */
         public Builder approvalId(@Nullable String approvalId) {
             this.approvalId = approvalId;
+            return this;
+        }
+
+        /** Set {@code blockingFindings}. */
+        public Builder blockingFindings(@Nullable List<PublicApprovalGateDecisionBlockingFinding> blockingFindings) {
+            this.blockingFindings = blockingFindings;
             return this;
         }
 
@@ -129,7 +140,7 @@ public record PublicApprovalGateDecision(
 
         /** Build the {@link PublicApprovalGateDecision}. */
         public PublicApprovalGateDecision build() {
-            return new PublicApprovalGateDecision(approvalId, exceeded, feedback, kind, proposal, recordedApprovals, requiredApprovals, status, stepIndex, stepKind);
+            return new PublicApprovalGateDecision(approvalId, blockingFindings, exceeded, feedback, kind, proposal, recordedApprovals, requiredApprovals, status, stepIndex, stepKind);
         }
     }
 }

@@ -77,6 +77,7 @@ import {
 // executor + bootstrapper + env-config repairer, GitHub-issue filer, trace-sink builder), lifted
 // into a sibling module so this composition root stays within the file-size budget.
 import { RUNNERS_CIPHER_INFO, buildTraceSink } from './container-executor-deps.js'
+import { selectNodeLocalModelEndpointRepository } from './wireCredentialServices.js'
 
 import type { NodeAppRegistriesResult, NodeContainerFoundation } from './container-foundation.js'
 import type {
@@ -118,6 +119,8 @@ export interface NodeCoreDepsBundle {
   gateways: ReturnType<typeof createNodeGateways>
   runnerUrlPolicy: ReturnType<typeof resolveUrlSafetyPolicy>
   githubInstallationRepository: GitHubInstallationRepository
+  /** The run path's initiator-PAT decision, surfaced on Core for the credential check. */
+  resolveRunInitiatorToken: CoreDependencies['resolveRunInitiatorToken']
   environmentBackendRegistry: NodeAppRegistriesResult['environmentBackendRegistry']
   runnerBackendRegistry: NodeAppRegistriesResult['runnerBackendRegistry']
   customManifestTypeRegistry: NodeAppRegistriesResult['customManifestTypeRegistry']
@@ -416,6 +419,15 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // undefined and there is no external emission.
     llmTraceSink: buildTraceSink(config),
     modelPresetRepository: repos.modelPresetRepository,
+    // The per-USER locally-run endpoints, for the engine's per-dispatch read of what the run
+    // initiator DECLARED about a local model (does it read images). Selected through the shared
+    // rule rather than off `repos`, because in mothership mode this row lives in the laptop's own
+    // sqlite store and must not be read from the org database. Undefined ⇒ local refs stay
+    // undeclared. The Worker mirrors this in `selectPerUserDeps`.
+    localModelEndpointRepository: selectNodeLocalModelEndpointRepository(
+      db,
+      options.localModelEndpointRepository,
+    ),
     // The consensus-GROUP library: the estimate-gated panels a pipeline step escalates to. Read
     // by the settings controller AND on the run path (per-dispatch tier resolution).
     consensusGroupRepository: repos.consensusGroupRepository,
@@ -466,6 +478,11 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the
     // preset CRUD API + the merger step's threshold resolution work identically.
     riskPolicyRepository: repos.riskPolicyRepository,
+    // The ACCOUNT tier of that same library, plus which of its policies each board hides (ADR 0055).
+    // Wired unconditionally alongside the board tier, so the tier merge, the account CRUD API and a
+    // board's clone/hide behave identically on both runtimes.
+    accountRiskPolicyRepository: repos.accountRiskPolicyRepository,
+    riskPolicySuppressionRepository: repos.riskPolicySuppressionRepository,
     mergeTrackRecordRepository: repos.mergeTrackRecordRepository,
     // Shared stacks (long-lived compose infra a consumer environment attaches to). Wired
     // unconditionally like the merge presets so the CRUD API works identically on both
@@ -600,6 +617,10 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     // connection + connect option so the SPA links to the instance a workspace is bound to.
     // Derived by the shared resolver both facades call, so they cannot name different hosts.
     vcsWebUrls: resolveVcsWebUrls(config),
+    // The one "does a run use its initiator's own token?" instance, shared with the dispatch
+    // mint and the engine's GitHub client. On Core so the credential check judges the token a
+    // run would actually authenticate as instead of re-deciding the policy beside them.
+    resolveRunInitiatorToken: bundle.resolveRunInitiatorToken,
     spendPricing: config.spend,
     // Price metered dynamic OpenRouter models at their real per-model rate (not the
     // bare-`openrouter` fallback) using this workspace's enabled catalog.
@@ -762,6 +783,9 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
           cloudflareModelsEnabled,
           ...(bedrockModels ? { bedrockModels } : {}),
           baseUrlFor: (provider) => baseUrlForNode(provider, env),
+          // Local mode's ambient-CLI allow-list: a vendor it serves needs no credential, so it is
+          // usable here whether or not the initiator has one. Absent on the plain Node facade.
+          ...(config.nativeAmbientAuth ? { nativeAmbientAuth: config.nativeAmbientAuth } : {}),
           localModelEndpoints,
           openRouterCatalog,
           accountSettings,

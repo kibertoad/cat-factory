@@ -6,7 +6,12 @@ import type {
   ModelProviderResolver,
   ModelRef,
 } from '@cat-factory/kernel'
-import { ValidationError, isUsableBrief, resolveScopedModelProvider } from '@cat-factory/kernel'
+import {
+  getErrorMessage,
+  isUsableBrief,
+  resolveScopedModelProvider,
+  ValidationError,
+} from '@cat-factory/kernel'
 import { generateText } from 'ai'
 import { catFactoryObservability } from '../providers/instrumented.js'
 import {
@@ -96,9 +101,7 @@ export class LlmFragmentBriefGenerator implements FragmentBriefGenerator {
       // Transient: the provider is what failed, not the standard. Throwing keeps it out of
       // the store so the next dispatch tries again.
       throw new ValidationError(
-        `Fragment-brief generation (${model}) failed: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
+        `Fragment-brief generation (${model}) failed: ${getErrorMessage(e)}`,
       )
     }
     // A reply cut off by the output budget is a standard whose last rule trails off — and it

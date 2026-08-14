@@ -5,6 +5,8 @@ import {
   type WorkspaceSnapshot,
   offeredPipelines,
   seedPipelines,
+  SIMPLE_PIPELINE_ID,
+  UNATTENDED_BUILD_PIPELINE_ID,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
@@ -16,6 +18,7 @@ import { spawnedInitiative } from './shared.js'
 // re-opens its nested `describe` groups inside the one per-facade `[name] conformance` wrapper the
 // aggregator provides, so the reported test tree is unchanged.
 export function defineCoreWorkspacesConformance(harness: ConformanceHarness): void {
+  definePipelineDefaultConformance(harness)
   describe('infrastructure capabilities', () => {
     it('exposes execution + test-env backends on /auth/config with active ∈ available', async () => {
       const { call } = harness.makeApp()
@@ -474,6 +477,105 @@ function defineMachineApiGate(harness: ConformanceHarness): void {
       // drift guard that the endpoint exists and cannot be probed without a token.
       const res = await call('GET', '/internal/events/subscribe/ws_x')
       expect(res.status).toBe(403)
+    })
+  })
+}
+
+/**
+ * The per-scope DEFAULT pipeline, on a real store. Its own function rather than two more `it`s in
+ * the workspaces group, which the max-lines ratchet caps. Both assertions are about one invariant a
+ * sequential unit test against a fake structurally cannot see: the partial unique index and the
+ * second-row write live in the facades, so which row answers a scope, and which rows may never
+ * answer one, is only decidable here.
+ */
+function definePipelineDefaultConformance(harness: ConformanceHarness): void {
+  describe('workspaces', () => {
+    it('round-trips the per-scope default pipeline, one holder per scope', async () => {
+      // Both facades store the two claims as their own columns behind a PARTIAL unique index, and
+      // promoting touches a SECOND row. So the invariant a sequential unit test cannot see is the
+      // one asserted here: after a promotion, exactly one row carries the flag, on a real store.
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const base = `/workspaces/${workspace.id}/pipelines`
+      const seeded = await call<Pipeline[]>('GET', base)
+      const unattendedDefault = seeded.body.filter((p) => p.isUnattendedDefault)
+      // The catalog seeds the unattended rung and deliberately seeds NO interactive default: the
+      // in-app scope already resolves an answer without a flagged row.
+      expect(unattendedDefault.map((p) => p.id)).toEqual([UNATTENDED_BUILD_PIPELINE_ID])
+      expect(seeded.body.filter((p) => p.isDefault)).toHaveLength(0)
+
+      const other = seeded.body.find((p) => p.id === SIMPLE_PIPELINE_ID)!
+      const promoted = await call<Pipeline>('PATCH', `${base}/${other.id}/organize`, {
+        isUnattendedDefault: true,
+      })
+      expect(promoted.status).toBe(200)
+      expect(promoted.body.isUnattendedDefault).toBe(true)
+      const afterPromote = await call<Pipeline[]>('GET', base)
+      expect(afterPromote.body.filter((p) => p.isUnattendedDefault).map((p) => p.id)).toEqual([
+        other.id,
+      ])
+
+      // The scopes are independent: claiming the in-app one must leave the unattended holder alone.
+      await call('PATCH', `${base}/${UNATTENDED_BUILD_PIPELINE_ID}/organize`, { isDefault: true })
+      const bothScopes = await call<Pipeline[]>('GET', base)
+      expect(bothScopes.body.filter((p) => p.isDefault).map((p) => p.id)).toEqual([
+        UNATTENDED_BUILD_PIPELINE_ID,
+      ])
+      expect(bothScopes.body.filter((p) => p.isUnattendedDefault).map((p) => p.id)).toEqual([
+        other.id,
+      ])
+
+      // Releasing a flag a row does NOT hold is a no-op on that row, not a workspace-wide clear:
+      // both facades demote every holder when PROMOTING (which heals a pre-index workspace), and
+      // reusing that statement for the release turned "unset this one" into "unset whichever row
+      // actually answers every headless start".
+      const bystander = await call<Pipeline>(
+        'PATCH',
+        `${base}/${UNATTENDED_BUILD_PIPELINE_ID}/organize`,
+        { isUnattendedDefault: false },
+      )
+      expect(bystander.status).toBe(200)
+      const afterNoOp = await call<Pipeline[]>('GET', base)
+      expect(afterNoOp.body.filter((p) => p.isUnattendedDefault).map((p) => p.id)).toEqual([
+        other.id,
+      ])
+
+      // Releasing leaves the scope with NO declared default, which is a real state here (unlike on
+      // the risk-policy library, where a default always resolves).
+      const released = await call<Pipeline>('PATCH', `${base}/${other.id}/organize`, {
+        isUnattendedDefault: false,
+      })
+      expect(released.body.isUnattendedDefault).toBeFalsy()
+      const afterRelease = await call<Pipeline[]>('GET', base)
+      expect(afterRelease.body.filter((p) => p.isUnattendedDefault)).toHaveLength(0)
+    })
+
+    it('refuses to archive a pipeline that still holds a default, without applying the archive', async () => {
+      // An archived row may not hold a default (the concealed-setting failure: a default nobody can
+      // see in the library they would go to change it in). Enforced on BOTH ways in, and refused
+      // before the row write, so the refusal never leaves the archive half-applied.
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const base = `/workspaces/${workspace.id}/pipelines`
+
+      const refused = await call('PATCH', `${base}/${UNATTENDED_BUILD_PIPELINE_ID}/organize`, {
+        archived: true,
+      })
+      expect(refused.status).toBe(422)
+      const afterRefusal = await call<Pipeline[]>('GET', base)
+      const holder = afterRefusal.body.find((p) => p.id === UNATTENDED_BUILD_PIPELINE_ID)!
+      expect(holder.archived).toBeFalsy()
+      expect(holder.isUnattendedDefault).toBe(true)
+
+      // Releasing it in the SAME request is the way through, which is what the refusal names.
+      const archived = await call<Pipeline>(
+        'PATCH',
+        `${base}/${UNATTENDED_BUILD_PIPELINE_ID}/organize`,
+        { archived: true, isUnattendedDefault: false },
+      )
+      expect(archived.status).toBe(200)
+      expect(archived.body.archived).toBe(true)
+      expect(archived.body.isUnattendedDefault).toBeFalsy()
     })
   })
 }

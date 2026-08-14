@@ -146,8 +146,8 @@ function mapPushOrPrResult(result: RunnerJobResult): AgentRunResult {
 }
 
 /**
- * Map a multi-repo run's peer-PR entries (harness `{ repo, frameId?, prUrl, branch }`) into
- * the engine's `AgentRunResult.peerPullRequests` (`{ repo, frameId?, ref: PullRequestRef }`),
+ * Map a multi-repo run's peer-PR entries (harness `{ repo, frameIds?, prUrl, branch }`) into
+ * the engine's `AgentRunResult.peerPullRequests` (`{ repo, frameIds?, ref: PullRequestRef }`),
  * deriving the PR number from the URL like the own-service PR. Returns undefined when the run
  * reported none, so a single-repo run's result is byte-identical to before.
  */
@@ -157,7 +157,7 @@ function mapPeerPullRequests(
   if (!peers?.length) return undefined
   return peers.map((p) => ({
     repo: p.repo,
-    ...(p.frameId ? { frameId: p.frameId } : {}),
+    ...(p.frameIds?.length ? { frameIds: p.frameIds } : {}),
     ref: {
       url: p.prUrl,
       ...(prNumberFromUrl(p.prUrl) !== undefined ? { number: prNumberFromUrl(p.prUrl) } : {}),
@@ -256,6 +256,7 @@ export function buildFailureMeta(view: RunnerJobView): {
   detail?: string
   backend?: string
   evicted?: ContainerEvictionKind
+  harnessShutdown?: true
   validationReport?: unknown
   reproductionReport?: unknown
   toolServers?: unknown
@@ -270,6 +271,9 @@ export function buildFailureMeta(view: RunnerJobView): {
     ...(view.detail ? { detail: view.detail } : {}),
     ...(view.backend ? { backend: view.backend } : {}),
     ...(view.evicted ? { evicted: view.evicted } : {}),
+    // Forwarded beside `evicted` and never with it: the transport reports EITHER a container it
+    // lost or a harness that was shut down under the job, and the engine recovers only the first.
+    ...(view.harnessShutdown ? { harnessShutdown: view.harnessShutdown } : {}),
     ...(validationReport ? { validationReport } : {}),
     ...(reproductionReport ? { reproductionReport } : {}),
     // Read off the VIEW alone, unlike the two reports above: the observation is a fact about the

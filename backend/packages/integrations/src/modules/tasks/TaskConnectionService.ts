@@ -1,5 +1,5 @@
 import type { Clock, Logger } from '@cat-factory/kernel'
-import { describeError, noopLogger } from '@cat-factory/kernel'
+import { describeError, getErrorMessage, noopLogger } from '@cat-factory/kernel'
 import type { TaskConnectionRecord, TaskConnectionStore } from '@cat-factory/kernel'
 import type { TaskSourceSettingsRepository } from '@cat-factory/kernel'
 import type { GitHubInstallationRepository, VcsProvider } from '@cat-factory/kernel'
@@ -198,6 +198,10 @@ export class TaskConnectionService {
         // grammars share no shape to inspect. Absent ⇒ every predicate bites, which is the
         // claim a source makes by saying nothing.
         ignoredIntakePredicates: [...(provider.ignoredIntakePredicates ?? [])],
+        // Asked of the provider's declared `repoScope`, the same fact the HTTP layer routes the
+        // search scope on, so the SPA and the backend cannot disagree about which sources have
+        // a board to pick and which have a service to scope to.
+        repoBacked: provider.repoScope != null,
       })
     }
     return states
@@ -302,7 +306,7 @@ export class TaskConnectionService {
         source: provider.kind,
         ok: false,
         status: 'error',
-        message: `${label} check failed unexpectedly: ${err instanceof Error ? err.message : String(err)}`,
+        message: `${label} check failed unexpectedly: ${getErrorMessage(err)}`,
       }
     }
   }

@@ -1,4 +1,43 @@
 {
+  "mcpAuthorize": {
+    "title": "{client} verbinden?",
+    "subtitle": "Die Anwendung gibt an, {client} zu sein, und diese Installation leitet sie zurück an {origin}.",
+    "workspace": {
+      "label": "Board, auf dem sie handeln darf"
+    },
+    "scopeLabel": "Was sie tun darf",
+    "scopeHint": "Jede Stufe schließt die darüberliegenden ein.",
+    "scope": {
+      "read": {
+        "label": "Nur lesen",
+        "description": "Services, Aufgaben, Pipelines und Läufe ansehen."
+      },
+      "write": {
+        "label": "Lesen und schreiben",
+        "description": "Zusätzlich Aufgaben anlegen und starten."
+      },
+      "decide": {
+        "label": "Lesen, schreiben und entscheiden",
+        "description": "Zusätzlich die Fragen beantworten, auf die ein pausierter Lauf wartet."
+      },
+      "admin": {
+        "label": "Voller Zugriff",
+        "description": "Zusätzlich Aufgaben löschen und auf Benachrichtigungen reagieren, was einen Pull Request zusammenführen kann."
+      }
+    },
+    "requestedScope": "{client} hat {scope} angefragt. Wählen Sie das oben nur, wenn Sie es wirklich gewähren möchten.",
+    "approve": "Verbinden",
+    "deny": "Abbrechen",
+    "back": "Zurück zur App",
+    "noWorkspaces": "Sie haben noch kein Board, mit dem sich das verbinden ließe.",
+    "revokeHint": "Dabei wird ein API-Schlüssel ausgestellt, den Sie jederzeit in den Board-Einstellungen widerrufen können.",
+    "error": {
+      "title": "Diese Verbindung konnte nicht eingerichtet werden",
+      "noRequest": "Diese Seite wurde ohne Autorisierungsanfrage geöffnet. Starten Sie die Verbindung in Ihrem MCP-Host.",
+      "expired": "Diese Autorisierungsanfrage ist ungültig oder abgelaufen. Starten Sie die Verbindung in Ihrem MCP-Host erneut.",
+      "failed": "Die Entscheidung konnte nicht gespeichert werden. Starten Sie die Verbindung in Ihrem MCP-Host erneut."
+    }
+  },
   "settings": {
     "modelConfiguration": {
       "title": "Modellkonfiguration",
@@ -77,7 +116,8 @@
         "team": "Team & Zugriff",
         "fragments": "Kontextfragmente",
         "skills": "Skills",
-        "foundational": "Basisdienste"
+        "foundational": "Basisdienste",
+        "riskPolicies": "Risikorichtlinien"
       }
     },
     "infrastructure": {
@@ -136,6 +176,7 @@
         "urlHttpRouteStatus": "HTTPRoute-Status (Gateway API)",
         "hostTemplate": "Host-Vorlage",
         "hostTemplateHelp": "Die Host-Vorlage, gerendert mit den Provisioning-Variablen (z. B. branch, sha).",
+        "ingressPortHelp": "Host-Port, auf dem der Ingress-Controller antwortet; leer bedeutet den Standardport des Schemas. Er gehört hierher und nicht in die Host-Vorlage, da ein Kubernetes-Ingress-Host keinen Port enthalten darf.",
         "ingressName": "Ingress-Name",
         "serviceName": "Service-Name",
         "port": "Port",
@@ -239,6 +280,11 @@
           "blurb": "Wo die Coding-Agenten laufen, wenn keine Cloudflare Containers verwendet werden. Wähle einen selbst gehosteten Runner-Pool (deinen eigenen Scheduler) oder einen Kubernetes-Cluster und konfiguriere dann dessen Endpunkt und Zugangsdaten."
         }
       },
+      "serviceAccountToken": {
+        "whitespace": "Dieses Token enthält ein Leerzeichen oder einen Zeilenumbruch, was bei einem Bearer-Token nie vorkommt. Vermutlich wurde es über einen Zeilenumbruch im Terminal hinweg kopiert. Kopieren Sie es erneut als eine einzige ununterbrochene Zeile.",
+        "base64Encoded": "Das sieht nach dem Base64-Wert aus dem Feld .data.token des Secrets aus, nicht nach dem Token selbst. Dekodieren Sie ihn zuerst, zum Beispiel mit base64 -d.",
+        "notAJwt": "Das sieht nicht nach einem ServiceAccount-Token aus, das ein JWT aus drei durch Punkte getrennten Teilen ist. Prüfen Sie, ob der gesamte Wert kopiert wurde. Ignorieren Sie diesen Hinweis, wenn Ihr Cluster statische Bearer-Token verwendet."
+      },
       "kubernetesEnv": {
         "label": "Name",
         "labelPlaceholder": "Preview-Cluster",
@@ -261,6 +307,7 @@
         "urlServiceStatus": "Service-Status lesen",
         "hostTemplate": "Host-Vorlage",
         "hostTemplateHelp": "Host-Vorlage, gerendert mit den Provisioning-Variablen wie branch und pullNumber; der gerenderte Host wird zur Umgebungs-URL.",
+        "ingressPortHelp": "Host-Port, auf dem der Ingress-Controller antwortet; leer bedeutet den Standardport des Schemas. Er gehört hierher und nicht in die Host-Vorlage, da ein Kubernetes-Ingress-Host keinen Port enthalten darf.",
         "ingressName": "Ingress-Name",
         "ingressNameHelp": "Ingress, aus dem der Load-Balancer-Host gelesen wird. Leer verwendet den einzigen angewendeten Ingress.",
         "serviceName": "Service-Name",
@@ -325,13 +372,27 @@
         "button": "Verbindung testen",
         "ok": "Verbindung OK",
         "failed": "Verbindung fehlgeschlagen",
+        "causes": {
+          "refused": "An dieser Adresse wartet nichts: Die Verbindung wurde abgelehnt.",
+          "dns": "Dieser Hostname lässt sich von dieser Installation aus nicht auflösen.",
+          "timeout": "Es kam keine Antwort, bevor die Prüfung abgelaufen ist.",
+          "aborted": "Die Anfrage wurde abgebrochen, bevor eine Antwort ankam.",
+          "unreachable": "Von dieser Installation aus gibt es keine Netzwerkroute zu dieser Adresse.",
+          "reset": "Die Verbindung wurde geschlossen, bevor eine Antwort ankam.",
+          "tlsUntrusted": "Diese Installation vertraut dem TLS-Zertifikat nicht.",
+          "tlsExpired": "Das TLS-Zertifikat liegt außerhalb seines Gültigkeitszeitraums.",
+          "tlsHostname": "Das TLS-Zertifikat wurde nicht für diesen Hostnamen ausgestellt.",
+          "tlsProtocol": "Der TLS-Handshake ist fehlgeschlagen.",
+          "invalidHeader": "Die Anfrage ließ sich nicht erstellen: Ein Zugangsdaten-Wert enthält ein Zeichen, das ein HTTP-Header nicht übertragen kann."
+        },
         "warningsTitle": "Lücken in dieser Konfiguration",
         "warnings": {
           "runner_manifest_no_release": "Kein Release-Template: Beim Abbrechen eines Laufs kann dem Pool nicht mitgeteilt werden, dass er seinen Job stoppen soll. Ein verwaister Job belegt seinen Runner, bis der Pool ihn von selbst zurücknimmt.",
           "runner_manifest_no_status_path": "Kein Statuspfad: Jede Abfrage wird als weiterhin laufend gelesen. Ein Job kann daher nur enden, wenn das Abfragebudget des Laufs aufgebraucht ist.",
           "github_pat_classic_account_wide": "Dies ist ein klassisches Token mit dem Bereich 'repo': Es erreicht jedes Repository, in das du pushen kannst, auch solche, in denen die GitHub-App dieses Arbeitsbereichs nie installiert wurde. Ausführungen, die du startest, nutzen es bevorzugt vor der App. Ein fein abgestuftes Token, das auf die Repositories dieser Installation begrenzt ist, ist enger gefasst.",
           "github_pat_scopes_beyond_need": "Dieses Token gewährt Berechtigungen, die cat-factory nie nutzt. Sie zu entfernen kostet nichts und verkleinert das, was eine kompromittierte Ausführung erreichen könnte.",
-          "github_pat_scope_unreadable": "GitHub hat dieses Token akzeptiert, aber keine Bereiche dafür gemeldet, daher lässt sich seine Reichweite hier nicht anzeigen. Prüfe in deinen GitHub-Token-Einstellungen, was es gewährt."
+          "github_pat_scope_unreadable": "GitHub hat dieses Token akzeptiert, aber keine Bereiche dafür gemeldet, daher lässt sich seine Reichweite hier nicht anzeigen. Prüfe in deinen GitHub-Token-Einstellungen, was es gewährt.",
+          "github_pat_no_scopes": "GitHub meldet für dieses klassische Token keine Scopes, es kann also nur öffentliche Daten lesen. Läufe, die damit klonen, pushen oder einen Pull Request öffnen, schlagen fehl. Erstellen Sie ein neues Token mit ausgewähltem 'repo' und 'workflow'."
         }
       },
       "toast": {
@@ -467,6 +528,8 @@
       "default": "Standard",
       "makeDefault": "Als Standard festlegen",
       "deleteDefaultBlocked": "Die Standardrichtlinie kann nicht gelöscht werden",
+      "deleteUnattendedDefaultBlocked": "Die Standardrichtlinie für unbeaufsichtigte Läufe kann nicht gelöscht werden",
+      "deleteBothDefaultsBlocked": "Diese Richtlinie ist sowohl der In-App- als auch der unbeaufsichtigte Standard und kann daher nicht gelöscht werden",
       "deletePreset": "Richtlinie löschen",
       "field": {
         "maxComplexity": "Max. Komplexität %",
@@ -475,6 +538,7 @@
         "ciMaxAttempts": "CI-Fix-Versuche",
         "maxRequirementIterations": "Anforderungs-Iterationen",
         "maxRequirementConcernAllowed": "Auto-Pass bei Bedenken auf oder unter",
+        "companionMaxReworks": "Begleiter-Überarbeitungsrunden",
         "autoMerge": "Auto-Merge"
       },
       "autoMergeOnHint": "Automatisch mergen, wenn innerhalb der Richtliniengrenzen.",
@@ -488,6 +552,7 @@
         "impact": "Ausw.%",
         "ciFix": "CI-Fix",
         "reqIter": "Anf.-Iter.",
+        "companionRework": "Überarb.",
         "autoPass": "Auto-Pass auf oder unter"
       },
       "add": "Hinzufügen",
@@ -497,7 +562,11 @@
         "created": "Richtlinie erstellt",
         "createFailed": "Richtlinie konnte nicht erstellt werden",
         "defaultFailed": "Standard konnte nicht festgelegt werden",
-        "deleteFailed": "Richtlinie konnte nicht gelöscht werden"
+        "deleteFailed": "Richtlinie konnte nicht gelöscht werden",
+        "cloned": "Richtlinie in dieses Board geklont",
+        "cloneFailed": "Richtlinie konnte nicht geklont werden",
+        "hideFailed": "Richtlinie konnte nicht ausgeblendet werden",
+        "unhideFailed": "Richtlinie konnte nicht wiederhergestellt werden"
       },
       "forkDecision": {
         "label": "Implementierungs-Weichenentscheidung",
@@ -541,6 +610,44 @@
         "redundant": "Ohne Wirkung: Diese Richtlinie ist bereits mindestens so streng.",
         "alreadyStrictest": "Wird ohnehin immer geprüft",
         "baseHint": "Diese Richtlinie vergleicht in jeder Kategorie die Bewertungen, eine Rolle kann eine Kategorie daher nur auf \"immer Review\" verschärfen."
+      },
+      "unattendedDefault": "Standard ohne Aufsicht",
+      "makeUnattendedDefault": "Zum Standard für unbeaufsichtigte Läufe machen (API, Tracker, Zeitplan)",
+      "makeUnattendedDefaultShort": "Unbeaufsichtigter Standard",
+      "autonomy": {
+        "label": "Unbeaufsichtigte Läufe ohne Wartezeit auf eine Person abschließen",
+        "unattendedHint": "Wenn eine automatische Schleife aufgibt (ein Companion an seinem Überarbeitungslimit, eine Prüfung an ihrem Durchlauflimit, unbearbeitete Folgepunkte), läuft der Durchlauf nachvollziehbar weiter statt anzuhalten. Von der Pipeline angeforderte Gates wie manuelles Testen, Review und Freigabe halten den Durchlauf weiterhin an.",
+        "attendedHint": "Wenn eine automatische Schleife aufgibt, hält der Durchlauf an und wartet auf eine Entscheidung. Richtig für ein Board, das jemand beobachtet; ein über die API gestarteter Durchlauf wartet unbegrenzt."
+      },
+      "autoAnswer": {
+        "label": "Mindestzuversicht für Auto-Antworten (%)",
+        "hint": "Wie sicher der Requirement Writer sein muss, damit ein unbeobachteter Lauf seinen Vorschlag übernimmt statt auf eine Person zu warten. Infrage kommen nur Befunde, die der Reviewer ohne Product Owner für beantwortbar hielt."
+      },
+      "tier": {
+        "account": "Vom Konto",
+        "accountHint": "Für das gesamte Konto definiert. Jedes Board erbt sie; nur eine Kontoadministration kann sie ändern."
+      },
+      "own": {
+        "heading": "Richtlinien dieses Boards"
+      },
+      "inherited": {
+        "heading": "Vom Konto geerbt",
+        "hint": "Für alle Boards dieses Kontos gültig. Klone eine Richtlinie, um hier eine Kopie zu bearbeiten, oder blende sie aus, damit keine Aufgabe dieses Boards sie wählen kann.",
+        "clone": "Ins Board klonen",
+        "cloneHint": "Diese Richtlinie ins Board kopieren, wo du ihre Grenzwerte bearbeiten kannst.",
+        "copyName": "{name} (Kopie)",
+        "hide": "Ausblenden",
+        "hideHint": "Diese Richtlinie auf diesem Board nicht mehr anbieten. Du kannst sie später wiederherstellen."
+      },
+      "hidden": {
+        "heading": "Ausgeblendete Kontorichtlinien",
+        "restore": "Wiederherstellen",
+        "withdrawn": "Vom Konto nicht mehr definiert",
+        "loadFailed": "Diese Liste konnte nicht geladen werden, daher kann eine Richtlinie ausgeblendet sein, ohne hier zu erscheinen."
+      },
+      "confirmHide": {
+        "title": "Diese Richtlinie ausblenden?",
+        "body": "„{name}“ wird auf diesem Board nicht mehr angeboten; Aufgaben mit dieser Auswahl fallen auf die Board-Standardrichtlinie zurück. Du kannst sie später wiederherstellen."
       }
     },
     "observabilityConnection": {
@@ -656,6 +763,7 @@
         "ok": "Hat geantwortet",
         "credentialsMissing": "Keine Zugangsdaten",
         "credentialRefused": "Zugangsdaten abgelehnt",
+        "credentialUnusable": "Zugangsdaten nicht zustellbar",
         "oauthNotConnected": "Nicht verbunden",
         "oauthTokenFailed": "Verbindung funktioniert nicht mehr",
         "unreachable": "Keine Antwort",
@@ -669,6 +777,7 @@
       "allowedToolsUnchecked": "Die Werkzeugliste war zu lang, um sie vollständig zu lesen, daher konnten die eingeschränkten Namen nicht geprüft werden.",
       "unresolvedCredentials": "Für {keys} wurde nichts aufgelöst. Trage den Wert unten ein oder setze ihn in der Umgebung der Installation.",
       "refusedCredentials": "{keys} benennt eine Variable, die zur Konfiguration der Plattform selbst gehört, und wird daher nie aufgelöst. Ändere die Deklaration im Code der Installation.",
+      "unusableCredentials": "{keys} benennt keinen Header, daher erreicht der Wert einen HTTP-Server nie. Ergänze im Code der Installation den Header, mit dem sich der Server authentifiziert.",
       "httpStatus": "HTTP {status}",
       "showDetails": "Details anzeigen",
       "hideDetails": "Details verbergen",
@@ -731,7 +840,9 @@
         "createdBy": "erstellt von {user}",
         "createdByYou": "Ihnen",
         "createdByKey": "API-Schlüssel {id}",
-        "revoke": "Token widerrufen"
+        "revoke": "Token widerrufen",
+        "boundToYou": "Ihr Abonnement",
+        "boundToOther": "Abonnement von {user}"
       },
       "add": {
         "heading": "Token erstellen",
@@ -740,7 +851,12 @@
         "labelPlaceholder": "z. B. CI-Pipeline",
         "scope": "Berechtigung",
         "scopeHelp": "Was dieses Token darf: nur Lesen, Lesen und Schreiben oder Vollzugriff (der auch das Löschen erlaubt).",
-        "create": "Token erstellen"
+        "create": "Token erstellen",
+        "identity": "Läuft als",
+        "identitySystem": "Dieser Arbeitsbereich (System-Token)",
+        "identitySelf": "Ich (persönliches Token)",
+        "identitySystemHelp": "Mit diesem Token gestartete Läufe gehören dem Arbeitsbereich und werden keiner Person zugeordnet. Es kann kein persönliches Claude-/Codex-/GLM-Abonnement nutzen: Eine Aufgabe mit einem solchen Modell wird abgelehnt, statt jemandem in Abwesenheit berechnet zu werden. Für CI und gemeinsam genutzte Integrationen.",
+        "identitySelfHelp": "Mit diesem Token gestartete Läufe gelten als Ihre und können Ihr persönliches Claude-/Codex-/GLM-Abonnement nutzen. Jeder solche Aufruf muss zusätzlich Ihr persönliches Passwort im Header X-Personal-Password senden; es wird nie gespeichert. Für Ihre eigenen Headless-Läufe."
       },
       "scopes": {
         "read": "Nur Lesen",
@@ -1080,6 +1196,15 @@
       "reachable": "Erreichbar · keine Modelle | Erreichbar · {count} Modell | Erreichbar · {count} Modelle",
       "noModels": "Keine Modelle gemeldet.",
       "enableModels": "Modelle aktivieren",
+      "imageInputHint": "Manche lokalen Modelle lesen Screenshots und Design-Renderings. Bekannte Modellfamilien werden automatisch erkannt, und die Option Nicht gesetzt zeigt pro Modell, wie es behandelt wird; setzen Sie den Wert selbst für einen Build, den die Plattform nicht kennen kann, etwa eine reine Text-Quantisierung oder ein Fine-Tuning.",
+      "imageInputLabel": "Bildunterstützung für {model}",
+      "imageInput": {
+        "autoYes": "Nicht gesetzt: {family} liest Bilder",
+        "autoNo": "Nicht gesetzt: {family} ist nur Text",
+        "unknown": "Bilder: nicht gesetzt",
+        "yes": "Liest Bilder",
+        "no": "Nur Text"
+      },
       "toast": {
         "saved": "{name} gespeichert",
         "saveFailed": "Runner konnte nicht gespeichert werden",
@@ -1091,6 +1216,7 @@
         "body": "\"{name}\" wird entfernt. Dies kann nicht rückgängig gemacht werden."
       },
       "blocked": "Die URL dieses Runners ist auf dieser Installation nicht erlaubt, daher sind seine Modelle in der Auswahl ausgeblendet.",
+      "modelsDiscarded": "Einige der aktivierten Modelle dieses Runners konnten nicht gelesen werden und wurden verworfen. Wählen Sie die gewünschten erneut aus und speichern Sie.",
       "urlReason": {
         "invalid_url": "Das ist keine gültige URL.",
         "scheme_not_allowed": "Eine Runner-URL muss mit http:// oder https:// beginnen.",
@@ -1123,7 +1249,8 @@
         "qwen": "Qwen (Alibaba)",
         "kimi": "Kimi (Moonshot)",
         "deepseek": "DeepSeek",
-        "glm": "GLM (Z.ai)"
+        "glm": "GLM (Z.ai)",
+        "grok": "Grok (xAI)"
       },
       "regions": {
         "usa": "Vereinigte Staaten",
@@ -1917,6 +2044,13 @@
       "awaitingChoice": "Wartet auf eine menschliche Wahl",
       "approvalGate": "Freigabe-Gate",
       "companionReview": "Begleiter-Prüfung",
+      "findingSeverity": {
+        "blocker": "Muss behoben werden",
+        "major": "Sollte behoben werden",
+        "minor": "Geringfügig",
+        "ungraded": "Kommentar",
+        "unrecognized": "Unbekannte Stufe ({level})"
+      },
       "correctionIterations": "{count} Korrekturiteration. | {count} Korrekturiterationen.",
       "state": {
         "pending": "Ausstehend",
@@ -1953,6 +2087,10 @@
       "closeEsc": "Schließen (Esc)",
       "companionCapHeading": "{agent} hat sein Überarbeitungslimit von {attempts} Versuchen erreicht, noch unter der {threshold}-Schwelle.",
       "companionCapDetail": "Führe eine weitere automatische Überarbeitungsrunde durch, fahre mit dem nächsten Schritt fort und akzeptiere die aktuelle Ausgabe, oder stoppe und setze die Aufgabe zurück, damit du die Eingaben bearbeiten und erneut einreichen kannst.",
+      "companionCapBlockedHeading": "{agent} hat sein Überarbeitungslimit von {attempts} Versuchen erreicht, {count} zwingender Befund ist weiterhin offen. | {agent} hat sein Überarbeitungslimit von {attempts} Versuchen erreicht, {count} zwingende Befunde sind weiterhin offen.",
+      "companionCapBlockedDetail": "Fortfahren akzeptiert die Arbeit mit diesen ungelösten Befunden, deshalb trifft die Risikorichtlinie dieses Laufs diese Wahl nie für dich. Führe eine weitere automatische Überarbeitungsrunde durch, fahre trotzdem mit der aktuellen Ausgabe fort, oder stoppe und setze die Aufgabe zurück, damit du die Eingaben bearbeiten und erneut einreichen kannst.",
+      "companionStalledHeading": "{agent} hat die Überarbeitungsschleife nach {attempts} von {maxAttempts} Runden gestoppt: Die letzte Überarbeitung kam unverändert zurück und die Bewertung hat sich nicht verändert.",
+      "companionStalledDetail": "Die restlichen Runden bleiben ungenutzt, weil sie nur ein bereits abgegebenes Urteil wiederholen würden. Führe trotzdem eine weitere Runde durch, fahre mit dem nächsten Schritt fort und akzeptiere die aktuelle Ausgabe, oder stoppe und setze die Aufgabe zurück, damit du die Eingaben bearbeiten und erneut einreichen kannst.",
       "infraAttempts": "Infrastruktur-Versuche",
       "hideInfraAttempts": "Infrastruktur-Versuche ausblenden",
       "executionHistory": "Ausführungshistorie",
@@ -2001,9 +2139,11 @@
           "transportUnsupported": "war nicht verfügbar: die Agenten-CLI dieses Schritts erreicht Server dieser Art nicht.",
           "missingSecret": "war nicht verfügbar: eine benötigte Zugangsinformation ist für dieses Board nicht hinterlegt.",
           "reservedSecret": "war nicht verfügbar: er verlangt eine Variable, die zur Konfiguration der Plattform gehört; die Deklaration muss geändert werden.",
+          "unusableSecret": "war nicht verfügbar: eine seiner deklarierten Zugangsdaten erreicht ihn nicht, er wäre also ohne Authentifizierung gelaufen.",
           "oauthNotConnected": "war nicht verfügbar: dieses Board wurde noch nicht damit verbunden.",
           "oauthTokenFailed": "war nicht verfügbar: die Verbindung liefert kein Zugriffstoken mehr.",
           "overBudget": "war nicht verfügbar: dieser Agent deklariert mehr Tool-Server, als ein Lauf mitführt.",
+          "consensusPanel": "war nicht verfügbar: dieser Schritt lief als Konsens-Panel, und ein Panel hat keine Agentenlaufzeit, an die sich ein Tool-Server anschließen ließe.",
           "unknown": "war nicht verfügbar ({reason})."
         },
         "remedy": {
@@ -2011,9 +2151,11 @@
           "transportUnsupported": "Deklarieren Sie dafür einen stdio-Server, oder führen Sie den Schritt auf einer Agenten-CLI aus, die HTTP-Server erreicht.",
           "missingSecret": "Hinterlegen Sie die genannte Zugangsinformation entweder als Umgebungsvariable des Deployments oder im Infrastruktur-Fenster unter den Capability-Zugangsdaten.",
           "reservedSecret": "Ändern Sie die Deklaration auf einen anderen Schlüssel; das Setzen dieser Variablen hilft gerade nicht.",
+          "unusableSecret": "Korrigiere die Deklaration im Code der Installation: Die Zugangsdaten eines entfernten Servers reisen in einem Header, die eines lokalen werden in den Serverprozess injiziert.",
           "oauthNotConnected": "Verbinden Sie dieses Board im Infrastruktur-Fenster damit. Ein Deployment ohne ENCRYPTION_KEY hat keinen Ort für eine Berechtigung, das muss ein Betreiber also zuerst setzen.",
           "oauthTokenFailed": "Verbinden Sie es im Infrastruktur-Fenster neu, oder warten Sie die Störung des Anbieters ab.",
-          "overBudget": "Kürzen Sie, was der Agent deklariert, damit ein Lauf alles mitführen kann."
+          "overBudget": "Kürzen Sie, was der Agent deklariert, damit ein Lauf alles mitführen kann.",
+          "consensusPanel": "Schalten Sie Konsens für diesen Schritt ab, wenn er das Tool braucht, oder nehmen Sie in Kauf, dass das Panel ohne es urteilt. Am Server selbst muss sich nichts ändern."
         },
         "observed": {
           "ready": "gestartet",
@@ -2400,6 +2542,27 @@
       "createToken": "Ein GitHub-Token erstellen (Scopes vorausgewählt)",
       "thenSet": "Setzen Sie dann {envVar} und starten Sie neu."
     },
+    "githubPatPermissionsBanner": {
+      "title": "GitHub-Token kann nicht pushen oder Pull Requests öffnen",
+      "rejectedTitle": "GitHub hat das Token Ihrer Läufe abgelehnt",
+      "body": "Hier gestartete Läufe authentifizieren sich mit einem GitHub Personal Access Token, und diesem fehlen Berechtigungen, die die Pipeline braucht. Agentenschritte, die einen Branch pushen, einen Pull Request öffnen oder mergen, werden fehlschlagen.",
+      "rejectedBody": "Das GitHub Personal Access Token, mit dem sich Ihre Läufe authentifizieren, ist ungültig, abgelaufen, widerrufen oder durch eine Organisationsrichtlinie blockiert. Jeder Schritt, der klont, pusht, einen Pull Request öffnet oder merget, schlägt fehl, bis es ersetzt wird.",
+      "missing": "Fehlt:",
+      "alsoMissing": "Fehlt ebenfalls, blockiert aber nur Änderungen an Workflow-Dateien: {capabilities}.",
+      "capability": {
+        "push": "Commits pushen",
+        "pullRequests": "Pull Requests öffnen und mergen",
+        "workflows": "Workflow-Dateien bearbeiten"
+      },
+      "sourceDeployment": "Dies ist das Token, mit dem dieses Deployment konfiguriert ist; es zu ersetzen bedeutet daher, das Deployment zu aktualisieren.",
+      "sourceInitiator": "Dies ist Ihr eigenes gespeichertes Token, das Ihre Läufe bevorzugt vor den Deployment-Zugangsdaten verwenden. Ersetzen Sie es in Ihren persönlichen Einstellungen.",
+      "createClassic": "Ersatz-Token erstellen (Scopes vorausgewählt)",
+      "createFineGrained": "Fein granuliertes Ersatz-Token erstellen",
+      "classicHint": "Der Link öffnet das klassische Token-Formular mit bereits ausgewählten erforderlichen Scopes.",
+      "fineGrainedHint": "Das fein granulierte Formular von GitHub akzeptiert keine Vorauswahl; erteilen Sie diese Repository-Berechtigungen daher selbst: {permissions}.",
+      "sampled": "Gegen {checked} genutzte Repositories geprüft; {remaining} weitere wurden nicht geprüft.",
+      "deniedRepos": "Das Token erreicht diese von Ihren Services genutzten Repositories nicht: {repos}. Erstellen Sie es neu und wählen Sie diese Repositories aus."
+    },
     "providerConfigBanner": {
       "titleMany": "Anbieter benötigen Konfiguration",
       "titleOne": {
@@ -2739,6 +2902,12 @@
         "load": "Das Prüfprotokoll konnte nicht geladen werden.",
         "loadMore": "Ältere Einträge konnten nicht geladen werden"
       }
+    },
+    "accountRiskPolicies": {
+      "intro": "Merge-Haltungen für alle Boards dieses Kontos. Jedes Board erbt sie schreibgeschützt und kann eine klonen, um eine Kopie zu bearbeiten, oder sie ausblenden. Welche Richtlinie eine Aufgabe ohne Auswahl regelt, wird pro Board festgelegt.",
+      "empty": "Noch keine kontoweiten Risikorichtlinien. Boards nutzen ihre eigenen Bibliotheken, bis du eine hinzufügst.",
+      "loadFailed": "Kontorichtlinien konnten nicht geladen werden",
+      "confirmDelete": "„{name}“ wird von allen Boards dieses Kontos zurückgezogen. Aufgaben mit dieser Auswahl fallen auf den Standard ihres Boards zurück."
     }
   },
   "board": {
@@ -2758,6 +2927,7 @@
       "archiveFailed": "Dienst konnte nicht archiviert werden",
       "restoreFailed": "Dienst konnte nicht wiederhergestellt werden",
       "moveRefused": {
+        "relaxes_run_oversight": "Dort, wohin du diese Aufgabe verschiebst, beantwortet ein Lauf seine eigenen Prüfpunkte selbst, statt auf eine Person zu warten; die hier geltende Merge-Richtlinie tut das nicht. Bitte eine Administration des Arbeitsbereichs, sie zu verschieben.",
         "relaxes_role_sandbox": "Die Ausführungen dieser Aufgabe laufen an ihrem jetzigen Ort für deine Rolle isoliert, die Merge-Richtlinie am Zielort jedoch nicht. Bitte eine Workspace-Administration, sie zu verschieben.",
         "relaxes_role_submission_allowlist": "Die Merge-Richtlinie am Zielort würde dich Änderungsarten mergen lassen, die dir hier verwehrt sind. Bitte eine Workspace-Administration, sie zu verschieben.",
         "relaxes_role_class_rule": "Die Merge-Richtlinie am Zielort merged Änderungen automatisch, die du hier prüfen musst. Bitte eine Workspace-Administration, sie zu verschieben."
@@ -3300,6 +3470,11 @@
           "step1": "Öffnen Sie platform.moonshot.ai → API Keys und erstellen Sie einen Schlüssel.",
           "step2": "Kopieren Sie den Schlüssel; er authentifiziert den OpenAI-kompatiblen Moonshot-Endpunkt."
         },
+        "xai": {
+          "label": "xAI (Grok API)",
+          "step1": "Öffnen Sie console.x.ai → API Keys und erstellen Sie einen Schlüssel.",
+          "step2": "Kopieren Sie den Schlüssel; er authentifiziert den OpenAI-kompatiblen xAI-Endpunkt."
+        },
         "openrouter": {
           "label": "OpenRouter",
           "step1": "Öffnen Sie openrouter.ai → Keys und erstellen Sie einen API-Schlüssel.",
@@ -3472,6 +3647,9 @@
       "monorepoBrowseHint": "Durchsuchen Sie das Repository und wählen Sie die Verzeichnisse der Services aus, die Sie hinzufügen möchten – aus jedem beliebigen Ordner. Agents, die an einem Service arbeiten, laufen innerhalb seines Unterverzeichnisses.",
       "selectedServices": "Ausgewählte Services",
       "noServicesSelected": "Noch keine Services ausgewählt. Wählen Sie oben Verzeichnisse aus.",
+      "frontendLabel": "Frontend-App (optional)",
+      "frontendHint": "Markieren Sie eines der ausgewählten Verzeichnisse als Frontend für die übrigen. Es wird als Frontend-App angelegt, auf dieses Unterverzeichnis festgelegt und mit jedem daneben hinzugefügten Backend-Service verknüpft. Die Umgebungsvariablen für die Backend-URLs benennen Sie anschließend im Inspector des Frontends.",
+      "frontendNone": "Keines: alle Auswahlen sind Backend-Services",
       "addServices": "{count} Service hinzufügen | {count} Services hinzufügen",
       "removeService": "{directory} entfernen",
       "addedConfigure": "{title} hinzugefügt, konfigurieren Sie es",
@@ -3485,7 +3663,9 @@
         "addedDescription": "{title} ist auf dem Board, konfigurieren Sie es unten.",
         "addFailedTitle": "Service konnte nicht hinzugefügt werden",
         "servicesAddedTitle": "Services hinzugefügt",
-        "servicesAddedDescription": "{count} Service zum Board hinzugefügt. | {count} Services zum Board hinzugefügt."
+        "servicesAddedDescription": "{count} Service zum Board hinzugefügt. | {count} Services zum Board hinzugefügt.",
+        "frontendLinkedNote": "{directory} wurde als Frontend hinzugefügt und mit den übrigen verknüpft. Benennen Sie die Umgebungsvariablen für die Backend-URLs im Inspector.",
+        "frontendWiringFailedNote": "Die Frontend-Einstellungen wurden nicht gespeichert. Öffnen Sie den Inspector jeder Frontend-App, um ihr Unterverzeichnis und ihre Backend-Services zu setzen."
       }
     },
     "repoTree": {
@@ -3749,12 +3929,14 @@
       "dispatch": "Zustellung",
       "environment": "Umgebung",
       "evicted": "Verdrängt",
+      "harness_shutdown": "Harness beendet",
       "timeout": "Zeitüberschreitung",
       "agent": "Agent",
       "job_failed": "Job fehlgeschlagen",
       "rejected": "Abgelehnt",
       "companion_rejected": "Begleiter abgelehnt",
       "stalled": "Hängengeblieben",
+      "state_unreadable": "Zustand unlesbar",
       "cancelled": "Abgebrochen",
       "unknown": "Unbekannt"
     },
@@ -4196,7 +4378,9 @@
     "tracker": "Tracker",
     "board": "Board",
     "pickBoard": "Board auswählen",
-    "boardPlaceholder": "Projektschlüssel, Team-ID oder owner/repo",
+    "boardPlaceholder": "Projektschlüssel oder Team-ID",
+    "boardFromService": "Das mit diesem Service verknüpfte Repository",
+    "boardNeedsRepo": "Mit diesem Service ist kein Repository verknüpft, es gibt also keine Tickets zu durchsuchen. Verknüpfe eines im Service-Panel.",
     "boardsFailed": "Boards konnten nicht geladen werden: {reason}",
     "issueType": "Vorgangstyp",
     "issueTypeHelp": "Standard ist bug. Wird von Trackern ohne Vorgangstypen ignoriert.",
@@ -4205,6 +4389,8 @@
     "labelsHelp": "Durch Komma getrennt. Alle müssen vorhanden sein.",
     "adoptInto": "Ausgewählten Fehler hinzufügen zu",
     "adoptingInto": "Der ausgewählte Fehler landet in {container}",
+    "huntIn": "Zu durchsuchender Service",
+    "huntingIn": "Durchsucht wird das mit {container} verknüpfte Repository; dort landet auch der ausgewählte Fehler.",
     "run": "Jagen",
     "running": "Board wird gelesen und die Funde werden bewertet…",
     "huntFailed": "Die Jagd ist fehlgeschlagen",
@@ -4217,6 +4403,7 @@
     "noCandidates": "Auf diesem Board gab es keine offenen, nicht zugewiesenen Fehler.",
     "ratings": "Auswirkung {impact}/5, Aufwand {complexity}/5, Konfidenz {confidence}",
     "viaModel": "Bewertet von {model}.",
+    "scannedBoard": "{board} durchsucht.",
     "truncated": "Es wurden nur die ersten {count} passenden Fehler geprüft; dieses Board enthält mehr.",
     "comments": "{count} Kommentar | {count} Kommentare",
     "confidence": {
@@ -4230,6 +4417,10 @@
       "failed": "Die Bewertung konnte nicht abgeschlossen werden, daher sind diese unbewertet.",
       "over_budget": "Dieser Arbeitsbereich hat sein Ausgabenbudget überschritten, daher wurden diese nicht bewertet.",
       "empty": "Nichts zu bewerten."
+    },
+    "refusal": {
+      "boardFromService": "Dieser Tracker durchsucht das Repository, mit dem der gewählte Service verknüpft ist, und hat daher kein eigenes Board.",
+      "missingBoard": "Wähle das Board aus, auf dem gesucht werden soll."
     }
   },
   "pipeline": {
@@ -4300,6 +4491,7 @@
       "purposeUnrecognized": "Nicht erkannt ({purpose})",
       "purposeOption": {
         "build": "Entwicklung",
+        "bugfix": "Fehlerbehebung",
         "document": "Dokumentation",
         "review": "Review",
         "research": "Recherche",
@@ -4368,7 +4560,7 @@
       "skillNoneAvailable": "Keine Skills verfügbar. Verknüpfe eine Skill-Quelle in den Kontoeinstellungen.",
       "skillMissing": "Dieser Skill ist nicht mehr im Katalog; wähle einen anderen.",
       "skillNeedsPick": "Ein Skill-Schritt braucht einen ausgewählten Skill, bevor du speichern kannst.",
-      "purposeStepsConflict": "Dieser Zweck schreibt keinen Code und führt keine Tests aus, doch die Pipeline enthält noch Implementierungs- oder Testschritte. Entfernen Sie diese oder setzen Sie den Zweck auf Entwicklung.",
+      "purposeStepsConflict": "Dieser Zweck schreibt keinen Code und führt keine Tests aus, doch die Pipeline enthält noch Implementierungs- oder Testschritte. Entfernen Sie diese oder wählen Sie einen Zweck, der Code liefert (Entwicklung oder Fehlerbehebung).",
       "promptEditTooltip": "Systemprompt dieses Agenten bearbeiten",
       "promptEditedTooltip": "Der Systemprompt dieses Agenten ist für diesen Arbeitsbereich bearbeitet",
       "consensusGroups": "Konsensgruppen",
@@ -4407,6 +4599,8 @@
       "binaryOutputMediaTypeUnusable": "Nicht gespeichert, denn dies sind keine Medientypen: {entries}. Schreibe jeden als type/subtype.",
       "binaryOutputGeneratorMissing": "Diese Installation registriert diese generativen Integrationen nicht: {ids}. Sie werden im Code der Installation registriert, nicht in diesem Workspace.",
       "binaryOutputGeneratorOverlap": "Mehrere ausgewählte Integrationen erzeugen denselben Inhaltstyp ({overlaps}). Daran ist nichts falsch, aber der Inhaltstyp entscheidet nicht mehr, welche der Agent aufruft: Lege im Prompt dieses Schritts fest, welche wofür verwendet wird, sonst wählt er eine aus und bleibt dabei.",
+      "binaryOutputGeneratorVia": "über {harness}",
+      "binaryOutputGeneratorHarness": "Diese Integrationen werden von einer Agenten-CLI statt von einer API erzeugt ({generators}); dieser Schritt funktioniert daher nur mit einem Modell, das auf dieser CLI läuft. Ein Lauf mit einem anderen Modell wird beim Start abgelehnt.",
       "binaryOutputModalityUncovered": "Keine ausgewählte Integration erzeugt {modalities}, was dieser Schritt liefern soll.",
       "binaryOutputModalityRetired": "{modality} (nicht mehr verfügbar — wähle die Inhaltstypen dieses Schritts neu)",
       "binaryOutputModality": {
@@ -4434,6 +4628,9 @@
       "binaryCapabilityUnknown": "{capability} (eine Fähigkeit, die diese Installation nicht definiert)",
       "binaryCapabilityUnsupported": "Keine ausgewählte Integration unterstützt {capabilities}, was die Generierungsoptionen dieses Schritts verlangen. Entferne die Option oder wähle eine Integration, die die Fähigkeit deklariert.",
       "binaryCapabilityUnverifiable": "Keine ausgewählte Integration deklariert Unterstützung für {capabilities}, aber eine von ihnen deklariert überhaupt keine Fähigkeiten, daher konnte das nicht geprüft werden. Der Schritt startet trotzdem; prüfe es in der API der Integration.",
+      "binaryOptionValueUnaccepted": "Keine der ausgewählten Integrationen akzeptiert {option} von {requested}. Zusammen akzeptieren sie: {accepted}. Fordern Sie einen dieser Werte an oder wählen Sie eine Integration, die diesen Wert rendert.",
+      "binaryOptionValuePartial": "{generators} akzeptiert {option} von {requested} nicht, eine andere ausgewählte Integration jedoch schon. Der Schritt startet trotzdem: Senden Sie diese Option nur an die Integrationen, die sie akzeptieren, oder entfernen Sie die übrigen.",
+      "binaryOptionValueUnverifiable": "Eine ausgewählte Integration nennt die Werte, die sie akzeptiert, und akzeptiert nicht, was dieser Schritt verlangt ({options}); eine andere nennt gar keine, deshalb ließ sich das nicht klären. Der Schritt startet trotzdem, und nur ein Teil Ihrer Integrationen wird ihn bedienen.",
       "binaryReferenceImages": "Referenzbilder",
       "binaryReferenceImagesPlaceholder": "Rolle{'|'}Ort{'|'}Dienst, eine pro Zeile",
       "binaryReferenceImagesUnusable": "Nicht als Referenz gespeichert: {entries}. Jede Zeile muss Rolle{'|'}Ort sein, wobei die Rolle style, subject, composition oder base ist.",
@@ -4460,7 +4657,17 @@
       "binaryComparison": "Kandidaten vor der Lieferung vergleichen",
       "binaryPerGenerator": "Kandidaten pro Integration",
       "binaryMultiSelect": "Mehrere behalten erlauben",
-      "binaryComparisonUnreachable": "Dieser Schritt kann nur einen Kandidaten pro Motiv erzeugen, es gäbe also nichts zu vergleichen und der einzige würde ungefragt behalten. Wähle eine zweite Integration oder erhöhe die Anzahl der Kandidaten pro Integration."
+      "binaryComparisonUnreachable": "Dieser Schritt kann nur einen Kandidaten pro Motiv erzeugen, es gäbe also nichts zu vergleichen und der einzige würde ungefragt behalten. Wähle eine zweite Integration oder erhöhe die Anzahl der Kandidaten pro Integration.",
+      "scopeDefault": {
+        "interactive": "Standard in der App",
+        "interactiveHint": "Was eine vom Board gestartete Aufgabe ausführt, wenn sie keine eigene Pipeline festlegt.",
+        "unattended": "Standard ohne Aufsicht",
+        "unattendedHint": "Was ein Lauf ohne Beobachter ausführt (API, Ticket, Zeitplan), wenn die Aufgabe keine Pipeline festlegt.",
+        "claimInteractive": "Als Standard in der App festlegen",
+        "releaseInteractive": "Nicht mehr Standard in der App",
+        "claimUnattended": "Als Standard ohne Aufsicht festlegen",
+        "releaseUnattended": "Nicht mehr Standard ohne Aufsicht"
+      }
     },
     "progress": {
       "status": {
@@ -4745,6 +4952,17 @@
       "reReview": "Die Anforderungen konnten nicht erneut geprüft werden",
       "proceed": "Es konnte nicht fortgefahren werden",
       "resolveReview": "Die Prüfung konnte nicht abgeschlossen werden"
+    },
+    "findingClass": {
+      "judgement": "Ihre Entscheidung nötig",
+      "judgementHint": "Eine Geschäfts-, Produkt- oder Domänenentscheidung oder etwas, das dem Reviewer nicht mitgeteilt wurde. Nur Sie können das klären.",
+      "practice": "Aus der Praxis beantwortbar",
+      "practiceHint": "Durch etablierte Praxis, den bereits genutzten Stack oder den vorliegenden Kontext geklärt. Vorbefüllt zum Übernehmen oder Ändern."
+    },
+    "confidence": {
+      "high": "Hohe Zuversicht",
+      "medium": "Mittlere Zuversicht",
+      "low": "Geringe Zuversicht"
     }
   },
   "bootstrap": {
@@ -5706,7 +5924,9 @@
         "document_already_linked": "Dokument bereits angehängt",
         "dry_run_not_mergeable": "Probelauf kann nicht zusammengeführt werden",
         "submission_not_allowed": "Zusammenführen für diesen Lauf nicht erlaubt",
-        "webhook_limit_reached": "Webhook-Limit erreicht"
+        "webhook_limit_reached": "Webhook-Limit erreicht",
+        "risk_policy_inherited": "Diese Richtlinie gehört zum Konto",
+        "risk_policy_not_inherited": "Diese Richtlinie gehört zu diesem Board"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -5737,7 +5957,7 @@
         "pipeline_schedule_intake_unconfigured": "Ein Bug-Intake-Schritt bezieht seine Arbeit aus der Ticket-Erfassung des Zeitplans, und der verknüpfte Zeitplan hat keine. Konfigurieren Sie zuerst die Ticket-Erfassung im Zeitplan.",
         "foundational_service_exists": "Ein Basisdienst mit dieser ID ist in diesem Bereich bereits registriert. Öffnen Sie den vorhandenen Eintrag und bearbeiten Sie ihn — zwei Dienste können sich keine ID teilen, denn die ID ist der Name, den ein Architekt in seinem Entwurf verwendet.",
         "binary_output_service_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt einen Basisdienst aus, den der Katalog dieses Workspace nicht auflösen kann: Die ID ist unbekannt, oder der gewählte Speicherdienst trägt nicht die Fähigkeit asset-storage. Korrigieren Sie die Auswahl des Schritts oder registrieren Sie den Dienst und starten Sie erneut.",
-        "binary_output_generator_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt eine generative Integration aus, die diese Installation nicht registriert, oder keine der gewählten Integrationen erzeugt einen Inhaltstyp, den der Schritt liefern muss. Generative Integrationen werden im Code der Installation registriert, nicht in diesem Workspace: registrieren Sie sie oder korrigieren Sie die Auswahl des Schritts und starten Sie erneut.",
+        "binary_output_generator_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt eine generative Integration aus, die diese Installation nicht registriert, keine der gewählten Integrationen erzeugt einen Inhaltstyp, den der Schritt liefern muss, oder eine davon wird von einer Agenten-CLI erzeugt, auf der das Modell dieses Schritts nicht läuft. Generative Integrationen werden im Code der Installation registriert, nicht in diesem Workspace: registrieren Sie sie, korrigieren Sie die Auswahl des Schritts oder legen Sie für den Schritt ein Modell fest, das die erforderliche CLI ausführt, und starten Sie erneut.",
         "foundational_service_not_inherited": "Abwählen gilt für einen vom Konto geerbten Dienst. Diese ID ist von diesem Board registriert, es gibt also nichts abzuwählen - lösche stattdessen den eigenen Eintrag des Boards.",
         "input_gate_not_parked": "Dieser Lauf wartet nicht mehr auf seine Eingabeprüfung. Möglicherweise hat sie jemand schon beantwortet oder der Lauf ist weitergelaufen.",
         "input_gate_parked": "Dieser Lauf wartet auf seine Eingabeprüfung, die über die Freigabe nicht beantwortet werden kann. Nutzen Sie den Hinweis am Lauf: Aufgabe ergänzen und erneut prüfen, oder trotzdem ausführen.",
@@ -5745,7 +5965,9 @@
         "document_already_linked": "Dieses Dokument ist an eine andere Aufgabe angehängt. Lösen Sie es dort zuerst, oder hängen Sie eine separate Kopie an.",
         "dry_run_not_mergeable": "Dieser Pull Request stammt aus einem Probelauf und kann hier nicht zusammengeführt werden. Starte die Aufgabe erneut als echten Lauf, um einen Pull Request zu erzeugen, den dieser Arbeitsbereich zusammenführt.",
         "submission_not_allowed": "Die Merge-Richtlinie dieser Aufgabe erlaubt der Rolle, die diesen Lauf gestartet hat, diese Änderungsart nicht zusammenzuführen. Jemand mit einer passenden Rolle kann es tun, oder ein Admin erweitert die Richtlinie in der Merge-Vorlage.",
-        "webhook_limit_reached": "Für diesen Workspace ist bereits die maximale Anzahl ausgehender Webhooks registriert. Entfernen Sie einen nicht mehr benötigten und registrieren Sie diesen erneut."
+        "webhook_limit_reached": "Für diesen Workspace ist bereits die maximale Anzahl ausgehender Webhooks registriert. Entfernen Sie einen nicht mehr benötigten und registrieren Sie diesen erneut.",
+        "risk_policy_inherited": "Sie gilt für alle Boards des Kontos und kann daher nicht von hier geändert werden. Klone sie in dieses Board und bearbeite die Kopie.",
+        "risk_policy_not_inherited": "Sie ist bereits die eigene Richtlinie dieses Boards: bearbeite sie direkt oder lösche sie, wenn sie nicht mehr angeboten werden soll."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",
@@ -6485,6 +6707,31 @@
         "none_captured": "Die Oberfläche sollte aufgenommen werden, es wurde aber keine Ansicht erfasst."
       }
     },
+    "environments": {
+      "title": "Live-Umgebung",
+      "open": "Live-Umgebung öffnen",
+      "retained": "Diese Umgebung soll den Lauf überdauern.",
+      "expires": "Läuft am {date} ab",
+      "expired": "Abgelaufen am {date}",
+      "state": {
+        "live": "Live",
+        "provisioning": "Wird bereitgestellt",
+        "failed": "Kam nie hoch",
+        "reclaiming": "Wird abgebaut",
+        "reclaimed": "Abgebaut",
+        "expired": "Abgelaufen"
+      },
+      "origin": {
+        "deployer": "Von diesem Lauf bereitgestellt",
+        "human_test": "Für den manuellen Test bereitgestellt",
+        "projected": "Der Lauf arbeitet noch, das kann sich also noch ändern"
+      },
+      "gap": {
+        "no_environment_step": "In dieser Pipeline stellt nichts eine Umgebung bereit, es gibt also nichts zu öffnen.",
+        "not_provisioned": "Eine Umgebung sollte bereitgestellt werden, bisher wurde aber keine erfasst.",
+        "infraless": "Dieser Service deklariert keine eigene Umgebung, es wurde also nichts bereitgestellt."
+      }
+    },
     "checks": {
       "title": "Prüfungen",
       "row": "{kind}: {state}",
@@ -6774,6 +7021,7 @@
       "workspaceDefaultCaption": "Gilt, weil diese Aufgabe keine eigene Richtlinie wählt.",
       "noneHint": "Keine Risikorichtlinie konfiguriert. Jeder Pull Request wartet auf eine menschliche Prüfung.",
       "refused": {
+        "relaxes_run_oversight": "Für deine Rolle nicht verfügbar: Mit dieser Richtlinie beantwortet ein Lauf seine eigenen Prüfpunkte selbst, statt auf eine Person zu warten. Eine Administration des Arbeitsbereichs kann das ändern.",
         "relaxes_role_sandbox": "Für deine Rolle nicht verfügbar: Läufe dieser Aufgabe laufen in der Sandbox, und diese Richtlinie würde sie mergen lassen. Eine Workspace-Administration kann das ändern.",
         "relaxes_role_submission_allowlist": "Für deine Rolle nicht verfügbar: Diese Richtlinie würde dich Änderungsarten mergen lassen, die dir bei dieser Aufgabe verwehrt sind. Eine Workspace-Administration kann das ändern.",
         "relaxes_role_class_rule": "Für deine Rolle nicht verfügbar: Diese Richtlinie merged Änderungen automatisch, die du bei dieser Aufgabe prüfen musst. Eine Workspace-Administration kann das ändern."

@@ -5,8 +5,24 @@ import type { LanguageModel } from 'ai'
 // to a real Vercel AI SDK model (OpenAI, Anthropic, Cloudflare Workers AI, …).
 // This is the seam that keeps provider SDKs and API keys out of the core.
 
+/**
+ * Every container harness this build runs, as a value.
+ *
+ * The LIST is the source and {@link HarnessKind} derives from it, rather than the other way round:
+ * a second, hand-written array beside a union is the drift this repo has already paid for once
+ * (`HARNESS_BODY_CAPABILITIES` derives from its label `Record` for the same reason). Anything that
+ * has to CHECK a harness name off untrusted input — a deployment's own binary-generator
+ * registration, a wire value — reads this, so adding a harness cannot leave a validator behind.
+ */
+export const HARNESS_KINDS = ['pi', 'claude-code', 'codex'] as const
+
 /** Which container harness runs an agent for a model. */
-export type HarnessKind = 'pi' | 'claude-code' | 'codex'
+export type HarnessKind = (typeof HARNESS_KINDS)[number]
+
+/** Whether an untrusted value names a harness this build runs. */
+export function isHarnessKind(value: unknown): value is HarnessKind {
+  return typeof value === 'string' && (HARNESS_KINDS as readonly string[]).includes(value)
+}
 
 export interface ModelRef {
   /** Provider id, e.g. `openai`, `anthropic`, `workers-ai`, `mock`. */
@@ -33,6 +49,20 @@ export interface ModelRef {
    * user sees the window the selected flavour will really give them. Absent ⇒ unknown.
    */
   contextTokens?: number
+  /**
+   * Whether this flavour accepts IMAGE input, so a run can put a design render in front of it.
+   *
+   * Per-flavour for the same reason {@link ModelRef.contextTokens} is: what a serving provider
+   * does with a modality is a fact about where the model runs, not only about the model. A
+   * flavour is marked `true` only where the serving provider documents image input for that
+   * model id.
+   *
+   * ABSENT is a real third answer and the default: this catalog has not declared the flavour's
+   * modality either way. It is NOT "no" — `resolveDesignImageDelivery` reports it under its own
+   * reason, so an undeclared multimodal model reads as the platform's silence rather than as a
+   * text-only model, which is what stops the gap from becoming permanent.
+   */
+  acceptsImages?: boolean
 }
 
 /**

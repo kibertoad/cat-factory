@@ -79,6 +79,7 @@ a tracker document](../../CLAUDE.md).
 
 ### Spend, telemetry and operability
 
+- [Adopt the Claude Code stream's telemetry surface](./claude-code-stream-telemetry-adoption.md)
 - [Observability, logging and error-handling gaps](./observability-logging-gaps.md)
 - [Per-class token telemetry + cost surfacing](./token-telemetry-per-class-and-cost.md)
 - [Per-model Bedrock enablement + per-preset provider preference](./model-provider-preference.md)

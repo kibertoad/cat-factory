@@ -1,5 +1,1825 @@
 # @cat-factory/worker
 
+## 0.190.1
+
+### Patch Changes
+
+- 409238f: Add GLM-5.3, Gemini 3.7 Flash and Grok 4.6 to the model catalog, and re-baseline the spend
+  price table against what the providers currently charge.
+
+  New catalog entries: `glm-5.3` (subscription-only, GLM Coding Plan), `gemini-3.7-flash`
+  (OpenRouter) and `grok` (Grok 4.6, direct via a new `xai` provider or OpenRouter). GLM-4.7
+  Flash gains a Bedrock flavour (`zai.glm-4.7-flash`).
+
+  `xai` is a new direct provider: `XAI_API_KEY` joins the poolable key providers and the
+  reserved-env-key list, `XAI_BASE_URL` overrides the endpoint, and `grok` joins the model
+  family vocabulary the account model policy allows or blocks. A policy in `allowlist` mode
+  does not admit the new family until an admin adds it, which is the intended default.
+
+  Price corrections, several of which were metering runs BELOW their real cost: DeepSeek's V4
+  pair moves to the peak rates its 2026-08-16 peak/off-peak switch introduces, the OpenRouter
+  `deepseek/deepseek-v4-pro` alias nearly triples, and Cloudflare's now-published cached-input
+  rates for GLM-5.2 and the Kimi pair replace a derived floor that was ~1.9x too low. GLM-5.2
+  and Gemini 3.6 Flash on OpenRouter were overpriced and come down. Z.ai subscription refs
+  (`zai:*`) were falling through to the generic default price and now carry Z.ai's list rate.
+
+- Updated dependencies [409238f]
+  - @cat-factory/kernel@0.301.0
+  - @cat-factory/contracts@0.313.0
+  - @cat-factory/agents@0.131.0
+  - @cat-factory/spend@0.15.95
+  - @cat-factory/caching@0.20.22
+  - @cat-factory/consensus@0.16.22
+  - @cat-factory/eks@0.1.326
+  - @cat-factory/gates@0.10.53
+  - @cat-factory/gitlab@0.20.23
+  - @cat-factory/integrations@0.162.1
+  - @cat-factory/observability-langfuse@0.10.97
+  - @cat-factory/observability-otel@0.21.1
+  - @cat-factory/orchestration@0.272.1
+  - @cat-factory/prompt-fragments@1.0.77
+  - @cat-factory/provider-cloudflare@0.7.475
+  - @cat-factory/server@0.287.1
+
+## 0.190.0
+
+### Minor Changes
+
+- 0ef48d1: Stop an agent's own cleanup command from killing the harness that supervises it, and report a
+  harness that WAS stopped as what it is.
+
+  A local acceptance run failed as "the container kept vanishing, treating as deterministic" after
+  two full coder passes. Nothing evicted anything. The harness ran as PID 1 with the command line
+  `node dist/server.js`, which is also where the Fastify service the coder was scaffolding built to;
+  the agent started that service in the background to smoke-test it over a real socket, then ran
+  `pkill -f 'node dist/server.js'` to stop it again. The image ships no `pkill`, so that failed with
+  `command not found` and the next turn used something that works without procps, which matched PID 1
+  and shut the harness down. The container exited 0, the engine could only see a backend that had
+  stopped answering, so it called it an eviction, spent its crash-recovery budget re-running the same
+  agent into the same wall, and blamed infrastructure churn.
+
+  **The harness no longer answers to a pattern kill aimed at anything else.** It runs from
+  `dist/harness-server.js` and sets `process.title = 'cat-factory-harness'`, which on Linux rewrites
+  both `/proc/<pid>/cmdline` and (truncated) `/proc/<pid>/comm`, so neither `pkill -f 'node dist/…'`
+  nor a bare `pkill node` nor a hand-rolled `/proc` sweep can name it. It is not a security boundary
+  and is not claimed as one: the agent shares the harness's uid, and separating them needs a PID 1
+  running as root, which this image deliberately does not have. What it removes is the accident.
+
+  **`procps` + `psmisc` are now in the image**, which reads backwards until you look at what the
+  absence caused: `pkill`/`pgrep`/`ps` are the narrow tools an agent reaches for first, and the
+  fallback it writes when they are missing is the unbounded one that took the harness down.
+
+  **A harness that exits cleanly mid-job is no longer an eviction.** Every transport that can read an
+  exit code (the local container and native-process legs, the Cloudflare per-run container, and a
+  Kubernetes runner pod's `state.terminated`) now distinguishes a workload that exited 0 with a job
+  still in flight from one that crashed or was reclaimed, and reports `harnessShutdown` instead of
+  `evicted`. The engine fails that run immediately with a new `harness_shutdown` failure kind
+  (additive to the public failure-kind vocabulary; OpenAPI surface 1.54.0) and a hint that names the
+  causes worth checking, rather than spending an automatic retry that walks back into whatever
+  stopped it. A backend that reports no exit code (Apple `container`, a manifest-driven runner pool
+  whose scheduler exposes only status words) keeps reporting an eviction, because an absent code is
+  not a zero.
+
+  The distinction is only ever drawn where NOTHING else explains the stop. Infrastructure churn is
+  named and recovers on its own budget, and it stays named even after its attribution window passes:
+  a rollout drain the harness answered by exiting 0, discovered minutes later by a re-driven poll, is
+  still that drain rather than a shutdown. The same rule orders the engine's own reading: a killed
+  job that some branch settles WITHOUT failing the run (a parked PR review's read-only Challenge
+  Investigator) keeps that settlement, since losing a human's in-flight curation is worse than the
+  retry this failure kind exists to prevent. `container.harness_shutdown` counts the class, kept out
+  of `container.evicted` so the eviction rate an operator sizes infrastructure by is not inflated by
+  deaths no infrastructure change prevents.
+
+  **An aborted agent run says who aborted it.** The Claude Code / Codex runner rejected with a
+  hard-coded "agent run aborted by watchdog" for every abort, including the shutdown handler's, so a
+  job killed by something else filed its failure against a watchdog that never fired. It now carries
+  the abort reason the caller supplied, the way the Pi runner already did, and an abort that supplied
+  none falls back to saying so rather than quoting the platform's own contentless "This operation was
+  aborted" (a reasonless `abort()` sets an `AbortError` that IS an `Error`, so the fallback was
+  unreachable).
+
+  The image moves to `cat-factory-executor:1.121.0` across the wrangler config, the publish script and
+  `RECOMMENDED_HARNESS_IMAGE`: the entrypoint rename and `procps` are only in effect once a deployment
+  runs a tag that contains them.
+
+  **The acceptance suite stops blaming the merge threshold for a failed run.** Its "the merge was
+  HELD" hint fired on "there is a pull request and the status is not done", which is also true of a
+  run that died three phases before any merge was considered; it is now offered only where nothing
+  else explains the stop.
+
+### Patch Changes
+
+- Updated dependencies [0ef48d1]
+  - @cat-factory/kernel@0.300.0
+  - @cat-factory/contracts@0.312.0
+  - @cat-factory/orchestration@0.272.0
+  - @cat-factory/integrations@0.162.0
+  - @cat-factory/observability-otel@0.21.0
+  - @cat-factory/server@0.287.0
+  - @cat-factory/agents@0.130.2
+  - @cat-factory/caching@0.20.21
+  - @cat-factory/consensus@0.16.21
+  - @cat-factory/eks@0.1.325
+  - @cat-factory/gates@0.10.52
+  - @cat-factory/gitlab@0.20.22
+  - @cat-factory/observability-langfuse@0.10.96
+  - @cat-factory/prompt-fragments@1.0.76
+  - @cat-factory/provider-cloudflare@0.7.474
+  - @cat-factory/spend@0.15.94
+
+## 0.189.5
+
+### Patch Changes
+
+- d5c1f1c: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with (`ai@7.0.64`,
+  `@ai-sdk/openai@4.0.41`, `@ai-sdk/amazon-bedrock@5.0.55`). The Cloudflare toolchain moves
+  together again: `wrangler@4.122.0` and `@cloudflare/vitest-pool-workers@0.21.2`, whose bundled
+  wrangler tracks it. `@aws-sdk/client-s3` goes to 3.1109.0 and the SPA's store engine to
+  `pinia@4.0.3` / `@pinia/nuxt@1.0.2`.
+
+  `capnweb` moves 0.10.0 to 0.11.0 in the Gatekeeper Worker. The release is additive (stubs as
+  stream chunks, exact ArrayBuffer/DataView serialization, URL over RPC) and touches neither
+  `RpcTarget` nor `newWorkersRpcResponse`, the only two symbols we import. Its 0.11.1 patch, which
+  enforces an ASCII-only dist bundle so a consumer's `btoa()` cannot choke on the runtime, missed
+  the release-age window by two hours and is the first thing the next sweep should pick up.
+
+  Held back deliberately: `@changesets/cli` 3.0.0 and, in the frontend, `typescript` 7 (Nuxt 4.5.2
+  itself depends on `typescript@6.0.3`). No `minimumReleaseAgeExclude` entries were added: every
+  version above already satisfies the gate.
+
+- Updated dependencies [d5c1f1c]
+- Updated dependencies [c67e924]
+  - @cat-factory/agents@0.130.1
+  - @cat-factory/consensus@0.16.20
+  - @cat-factory/integrations@0.161.0
+  - @cat-factory/kernel@0.299.1
+  - @cat-factory/orchestration@0.271.1
+  - @cat-factory/provider-cloudflare@0.7.473
+  - @cat-factory/contracts@0.311.0
+  - @cat-factory/server@0.286.0
+  - @cat-factory/eks@0.1.324
+  - @cat-factory/caching@0.20.20
+  - @cat-factory/gates@0.10.51
+  - @cat-factory/gitlab@0.20.21
+  - @cat-factory/observability-langfuse@0.10.95
+  - @cat-factory/observability-otel@0.20.4
+  - @cat-factory/prompt-fragments@1.0.75
+  - @cat-factory/spend@0.15.93
+
+## 0.189.4
+
+### Patch Changes
+
+- Updated dependencies [056e18d]
+  - @cat-factory/contracts@0.310.0
+  - @cat-factory/kernel@0.299.0
+  - @cat-factory/agents@0.130.0
+  - @cat-factory/orchestration@0.271.0
+  - @cat-factory/server@0.285.0
+  - @cat-factory/consensus@0.16.19
+  - @cat-factory/eks@0.1.323
+  - @cat-factory/gates@0.10.50
+  - @cat-factory/gitlab@0.20.20
+  - @cat-factory/integrations@0.160.17
+  - @cat-factory/observability-otel@0.20.3
+  - @cat-factory/prompt-fragments@1.0.74
+  - @cat-factory/spend@0.15.92
+  - @cat-factory/caching@0.20.19
+  - @cat-factory/observability-langfuse@0.10.94
+  - @cat-factory/provider-cloudflare@0.7.472
+
+## 0.189.3
+
+### Patch Changes
+
+- Updated dependencies [a81879b]
+  - @cat-factory/contracts@0.309.0
+  - @cat-factory/kernel@0.298.2
+  - @cat-factory/agents@0.129.2
+  - @cat-factory/consensus@0.16.18
+  - @cat-factory/eks@0.1.322
+  - @cat-factory/gates@0.10.49
+  - @cat-factory/gitlab@0.20.19
+  - @cat-factory/integrations@0.160.16
+  - @cat-factory/observability-otel@0.20.2
+  - @cat-factory/orchestration@0.270.2
+  - @cat-factory/prompt-fragments@1.0.73
+  - @cat-factory/server@0.284.2
+  - @cat-factory/spend@0.15.91
+  - @cat-factory/caching@0.20.18
+  - @cat-factory/observability-langfuse@0.10.93
+  - @cat-factory/provider-cloudflare@0.7.471
+
+## 0.189.2
+
+### Patch Changes
+
+- 0e1e0fa: Record what a subscription run actually spent, snapshot an inline agent's context, and stop a
+  companion loop that has stopped converging.
+
+  Five defects a Kaizen grading surfaced, of which the grader itself correctly diagnosed one.
+
+  **Per-call output tokens were lost on every harness-served call.** Claude Code's `stream-json`
+  `assistant` envelopes carry the message-START usage snapshot: the input and cache counts are final,
+  `output_tokens` is the handful produced when the message opened, and `stop_reason` is null. The
+  reconciliation against the terminal cumulative total was the intended rescue but guarded on whether
+  ANY tokens had been reported, which the input side always satisfies, so it stood down and the output
+  side stayed at the snapshot. Measured on a real board: a `coder` step recorded 198 output tokens
+  against the 14,033 its terminal event reported, an `initiative-analyst` 531 against 30,471, with the
+  input side matching exactly (which is what hid it). The shortfall is now computed PER SIDE, and it is
+  filed as its OWN row standing for the job rather than added to the last captured turn: a turn grown
+  by thousands of tokens it did not produce is a derived number that reads as a measured one on every
+  surface showing per-call figures. It is also reconciled against the PARENT loop's calls alone, which
+  matters in `ambientAuth` mode, where the CLI streams subagent turns onto the parent's stdout with no
+  transcript watcher to own them: those turns were both hiding the shortfall and, being last,
+  attracting it. Cost accounting was never affected; per-call telemetry, the observability panel,
+  `/api/v1/debug/*` and the step rollups were.
+
+  **A finish reason nobody reported is no longer recorded as `stop`.** Both subscription CLIs expose
+  none, and three sites defaulted to `stop` anyway, which asserts the very thing a truncation check
+  tries to disprove and made `finishReason === 'length'` unfireable on that whole path. Absent is now
+  carried as absent, end to end — including through the AI SDK boundary, whose closed union has no
+  "unknown" member, so its `other` placeholder with no vendor string behind it is read back as the
+  absence it stands for rather than as a classification.
+
+  **Inline agent kinds recorded no context snapshot at all.** `agent_context_snapshots` had exactly one
+  producer, the container executor, so every companion and inline document kind was missing from it.
+  The inline executor now files one through the same recorder, on both facades, and the dependency is a
+  required key with a nullable value so a facade that forgets it fails to typecheck rather than
+  silently recording nothing. The inline SERVICES that call `generateText` directly (the judges, the
+  requirements reviewer, Kaizen's own grader) still file none; that is named in the code and the docs
+  instead of being implied closed.
+
+  **The Kaizen grader was fed two misleading figures**, and spent two of its six recommendations on
+  defects that did not exist. Its digest summed `promptTokens` alone, which is FRESH input by
+  definition, reporting 16 where the real input was 332,552; and it rendered a null finish reason as
+  `unknown` beside a flat "Truncated calls: 0". It now reports the three input classes, and a
+  truncation count carries the number of calls that actually reported a reason on the same line, so a
+  "0" measured over one call in eight cannot read as a clean step. Its "no snapshot captured" line also
+  stopped guessing a cause, having blamed a switch that was enabled.
+
+  **A companion rework loop now stops when it stops making progress.** `attempts < maxAttempts` bounds
+  how long a loop may run and says nothing about whether it is converging: a run re-graded an unchanged
+  document to the same 0.76 four times, burning its whole budget. When the producer returns the text it
+  was asked to revise AND the rating does not move, the loop stops early and takes the same
+  iteration-cap exit, so an attended run parks for a person and an unattended one settles by policy.
+  The rule reads a step's reply as its work, so it applies only to producers whose deliverable IS that
+  reply: a `coder` pushes commits and may legitimately answer with nothing, which is why its reviewer
+  reads the real diff, and a rework a human asked for is excluded too (it spends none of the automatic
+  budget). The step records `stalled` beside `exceeded`, since only one of them means the remaining
+  rounds were abandoned, and the park says which one it is instead of claiming a limit was hit.
+
+- Updated dependencies [0e1e0fa]
+  - @cat-factory/orchestration@0.270.1
+  - @cat-factory/contracts@0.308.1
+  - @cat-factory/agents@0.129.1
+  - @cat-factory/kernel@0.298.1
+  - @cat-factory/server@0.284.1
+  - @cat-factory/consensus@0.16.17
+  - @cat-factory/eks@0.1.321
+  - @cat-factory/gates@0.10.48
+  - @cat-factory/gitlab@0.20.18
+  - @cat-factory/integrations@0.160.15
+  - @cat-factory/observability-otel@0.20.1
+  - @cat-factory/prompt-fragments@1.0.72
+  - @cat-factory/spend@0.15.90
+  - @cat-factory/provider-cloudflare@0.7.470
+  - @cat-factory/caching@0.20.17
+  - @cat-factory/observability-langfuse@0.10.92
+
+## 0.189.1
+
+### Patch Changes
+
+- Updated dependencies [7312e0a]
+  - @cat-factory/kernel@0.298.0
+  - @cat-factory/contracts@0.308.0
+  - @cat-factory/orchestration@0.270.0
+  - @cat-factory/agents@0.129.0
+  - @cat-factory/server@0.284.0
+  - @cat-factory/observability-otel@0.20.0
+  - @cat-factory/caching@0.20.16
+  - @cat-factory/consensus@0.16.16
+  - @cat-factory/eks@0.1.320
+  - @cat-factory/gates@0.10.47
+  - @cat-factory/gitlab@0.20.17
+  - @cat-factory/integrations@0.160.14
+  - @cat-factory/observability-langfuse@0.10.91
+  - @cat-factory/prompt-fragments@1.0.71
+  - @cat-factory/provider-cloudflare@0.7.469
+  - @cat-factory/spend@0.15.89
+
+## 0.189.0
+
+### Minor Changes
+
+- 95408c2: A companion's automatic rework budget is now a risk-policy field instead of a constant in the engine.
+
+  Every other automatic loop reads its ceiling off the task's policy: the CI fixer (`ciMaxAttempts`),
+  the iterative requirements review (`maxRequirementIterations`), the Tester's quality gate
+  (`maxTesterQualityIterations`), a judge's bounces (`judgeMaxBounces`), the post-release-health watch.
+  The companion loop, which has the widest reach of them (every `reviewer`, `architect-companion`,
+  `spec-companion` and any pair a deployment registers) and is the one an operator actually watches
+  spend container dispatches, was pinned at 3 by `DEFAULT_COMPANION_MAX_ATTEMPTS` with no way to state
+  otherwise. `companionMaxReworks` closes that, on both policy tiers (account and workspace) and in the
+  policy editor beside the requirement-iteration budget.
+
+  `0` is a real posture rather than a disabled loop: the companion still grades and still writes its
+  verdict, and the first verdict below the bar goes straight to the iteration-cap park (or to
+  `proceed`, on a policy whose `autonomy` is `unattended`) instead of buying a round. A verdict at or
+  above the bar advances, comments and all. That last part is the one place this number changed an
+  existing rule rather than parameterising it: a companion's FIRST batch of comments loops the producer
+  back whatever it scored, and that rule now asks whether there is a round to spend before it fires.
+  Left alone, `0` would have parked every companion step, since a review with nothing at all to say is
+  the rare one.
+
+  A step is seeded with the catalog default at run start, where no policy is resolved, so the resolved
+  value is adopted onto `step.companion.maxAttempts` at the companion's first grading, the same way the
+  Tester's quality budget is adopted on its first report. That read happens once per step, keyed on the
+  step having recorded no verdict yet: a human granting an extra round at the cap does it by raising
+  that same field (and the grant charges the round immediately), so a later read would report a ceiling
+  the step no longer has. Keyed on the attempt count instead, it also fired a second time after a human
+  "request changes" on a gated companion, which re-runs the producer while deliberately charging no
+  round.
+
+  No behaviour changes by default. The column default and all three built-in seeds carry the 3 the
+  engine held, so a stored policy and a freshly seeded one are byte-for-byte identical and no seed
+  needed a version bump. The field stays off `/api/v1`, where the risk-policy projection deliberately
+  publishes only what decides whether a run can land without a person.
+
+### Patch Changes
+
+- Updated dependencies [95408c2]
+  - @cat-factory/contracts@0.307.0
+  - @cat-factory/kernel@0.297.0
+  - @cat-factory/orchestration@0.269.0
+  - @cat-factory/agents@0.128.2
+  - @cat-factory/consensus@0.16.15
+  - @cat-factory/eks@0.1.319
+  - @cat-factory/gates@0.10.46
+  - @cat-factory/gitlab@0.20.16
+  - @cat-factory/integrations@0.160.13
+  - @cat-factory/observability-otel@0.19.10
+  - @cat-factory/prompt-fragments@1.0.70
+  - @cat-factory/server@0.283.2
+  - @cat-factory/spend@0.15.88
+  - @cat-factory/caching@0.20.15
+  - @cat-factory/observability-langfuse@0.10.90
+  - @cat-factory/provider-cloudflare@0.7.468
+
+## 0.188.2
+
+### Patch Changes
+
+- 792ecde: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with (`ai@7.0.62`,
+  `@ai-sdk/anthropic@4.0.38` / `openai@4.0.40` / `openai-compatible@3.0.30` /
+  `amazon-bedrock@5.0.54`). The Cloudflare toolchain moves together: `wrangler@4.121.0`,
+  `@cloudflare/workers-types@5.20260812.1` and `@cloudflare/vitest-pool-workers@0.21.1`, whose only
+  change over 0.20.3 is the wrangler and miniflare it bundles, so the pool now carries the same
+  wrangler the workspace declares instead of one release behind it.
+
+  `esbuild` gains three scoped `pnpm-workspace.yaml` overrides pinning vite's, tsx's and nitropack's
+  loose ranges to the 0.28.1 that wrangler and `@cloudflare/vitest-pool-workers` pin exactly. Without
+  them a re-resolve hands vite's optional PEER slot the newer 0.28.2 and the tree gains a second
+  esbuild; because pnpm resolves an auto-installed peer without its own `optionalDependencies`, that
+  copy never gets its platform binary and esbuild's postinstall aborts the entire install. The
+  overrides are deliberately scoped rather than top-level: `drizzle-kit`, `@intlify/bundle-utils` and
+  `fontless` declare narrower ranges that a blanket pin would force them out of.
+
+  Held back deliberately: `@changesets/cli` 3.0.0 and, in the frontend, `typescript` 7 (Nuxt 4.5.2
+  itself depends on `typescript@6.0.3`). No `minimumReleaseAgeExclude` entries were added: every
+  version above already satisfies the gate.
+
+- Updated dependencies [792ecde]
+  - @cat-factory/agents@0.128.1
+  - @cat-factory/consensus@0.16.14
+  - @cat-factory/integrations@0.160.12
+  - @cat-factory/kernel@0.296.1
+  - @cat-factory/orchestration@0.268.1
+  - @cat-factory/provider-cloudflare@0.7.467
+  - @cat-factory/server@0.283.1
+  - @cat-factory/eks@0.1.318
+  - @cat-factory/caching@0.20.14
+  - @cat-factory/gates@0.10.45
+  - @cat-factory/gitlab@0.20.15
+  - @cat-factory/observability-langfuse@0.10.89
+  - @cat-factory/observability-otel@0.19.9
+  - @cat-factory/prompt-fragments@1.0.69
+  - @cat-factory/spend@0.15.87
+
+## 0.188.1
+
+### Patch Changes
+
+- Updated dependencies [fc56d82]
+- Updated dependencies [fc9afb4]
+  - @cat-factory/orchestration@0.268.0
+  - @cat-factory/contracts@0.306.0
+  - @cat-factory/kernel@0.296.0
+  - @cat-factory/agents@0.128.0
+  - @cat-factory/server@0.283.0
+  - @cat-factory/consensus@0.16.13
+  - @cat-factory/eks@0.1.317
+  - @cat-factory/gates@0.10.44
+  - @cat-factory/gitlab@0.20.14
+  - @cat-factory/integrations@0.160.11
+  - @cat-factory/observability-otel@0.19.8
+  - @cat-factory/prompt-fragments@1.0.68
+  - @cat-factory/spend@0.15.86
+  - @cat-factory/caching@0.20.13
+  - @cat-factory/observability-langfuse@0.10.88
+  - @cat-factory/provider-cloudflare@0.7.466
+
+## 0.188.0
+
+### Minor Changes
+
+- edd4fd0: A fourth built-in model preset, **GPT-5.6 Sol** (`mdp_chatgpt`), is seeded for every workspace
+  alongside Kimi K2.7, GLM-5.2 and Claude Opus 5, so `claude | chatgpt | kimi` is finally expressible
+  as a pin rather than as a note in a config file.
+
+  It needs no new catalog route to be usable. `gpt-5.6-sol` carries an `openrouter` route and a Codex
+  `subscription` route, which is the same pair `claude-opus` already had, so `effectiveVariant` lands
+  on whichever the workspace holds: an OpenRouter key alone makes the preset dispatchable to a SYSTEM
+  API key (a Codex subscription is per-seat and individual-only, so a system token may not spend one),
+  and a connected subscription wins where there is one. Deliberately NOT a seeded default on any
+  deployment shape: Cloudflare and Node still seed Kimi K2.7, local mode still seeds Claude Opus 5.
+  The seed id names a VENDOR rather than a generation (`mdp_chatgpt`, not `mdp_gpt56sol`) so a built-in
+  can roll its `baseModelId` forward without becoming a preset nobody selected; argued in ADR 0056.
+
+  **An OpenAI API key is not one of those routes, and the run-start refusal now says which are.**
+  `openai` is a first-class poolable provider with its own onboarding copy, so "add an API key for the
+  provider" read as a `platform.openai.com` secret key, which cannot make this preset dispatchable.
+  `providers_unconfigured` now names each unusable model's DECLARED routes, computed from the catalog by
+  the new kernel `declaredModelRouteLabels`: `gpt-5.6-sol (needs OpenRouter or ChatGPT (Codex))`. That
+  fixes the misattribution for every subscription-or-gateway-only model rather than for this one, and
+  `details.models` still carries the bare ids the SPA and the four SDK clients read.
+
+  **Model presets gained the catalog NAME channel pipelines already had.** The snapshot ships
+  `modelPresetCatalogNames` beside `modelPresetCatalogVersions`, built from one `seedModelPresets()`
+  read. A brand-new built-in has no stored row to take a name off, which is exactly the state the
+  startup advisory offers to fix: without the map the SPA humanises the id, so every board created
+  before this release would have been offered "Chatgpt" instead of GPT-5.6 Sol. A new optional field on
+  the wire, so an older SPA keeps working off the humanised fallback.
+
+  **The built-in seed is now ONE batched write.** `ModelPresetRepository.upsertMany` (mirrored D1 batch
+  and Drizzle transaction, allow-listed for mothership mode) replaces a serial `upsert` per built-in on
+  a path that runs at a workspace's first board load, where every shipped built-in used to add a
+  round-trip. The single-default invariant is read over the batch: a promoted member demotes every row
+  outside it, and each member's own flag stands as written.
+
+  `catalog.test.ts` gains the assertion nothing else could make: every built-in's base model AND every
+  per-kind override names a model `MODEL_CATALOG` actually ships. A preset's `baseModelId` is a plain
+  string matched at DISPATCH, so a built-in naming a renamed or dropped model typechecks, seeds, lists
+  and is selectable, then fails on the first agent step of whichever run picked it. The expectation is
+  derived from the catalog rather than hand-listed, so a rename breaks a test instead of a live run. The
+  conformance seeding assertion is derived the same way, and now compares the persisted rows against
+  the catalog member by member and in order instead of counting them.
+
+  The `acceptance-suite-operator-setup` initiative tracker is retired into
+  [ADR 0056](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/adr/0056-acceptance-suite-operator-setup.md),
+  its committed scope now complete.
+
+### Patch Changes
+
+- Updated dependencies [edd4fd0]
+  - @cat-factory/kernel@0.295.0
+  - @cat-factory/contracts@0.305.0
+  - @cat-factory/orchestration@0.267.0
+  - @cat-factory/server@0.282.0
+  - @cat-factory/agents@0.127.3
+  - @cat-factory/caching@0.20.12
+  - @cat-factory/consensus@0.16.12
+  - @cat-factory/eks@0.1.316
+  - @cat-factory/gates@0.10.43
+  - @cat-factory/gitlab@0.20.13
+  - @cat-factory/integrations@0.160.10
+  - @cat-factory/observability-langfuse@0.10.87
+  - @cat-factory/observability-otel@0.19.7
+  - @cat-factory/prompt-fragments@1.0.67
+  - @cat-factory/provider-cloudflare@0.7.465
+  - @cat-factory/spend@0.15.85
+
+## 0.187.1
+
+### Patch Changes
+
+- Updated dependencies [36e0c9b]
+  - @cat-factory/contracts@0.304.0
+  - @cat-factory/orchestration@0.266.0
+  - @cat-factory/server@0.281.0
+  - @cat-factory/agents@0.127.2
+  - @cat-factory/consensus@0.16.11
+  - @cat-factory/eks@0.1.315
+  - @cat-factory/gates@0.10.42
+  - @cat-factory/gitlab@0.20.12
+  - @cat-factory/integrations@0.160.9
+  - @cat-factory/kernel@0.294.1
+  - @cat-factory/observability-otel@0.19.6
+  - @cat-factory/prompt-fragments@1.0.66
+  - @cat-factory/spend@0.15.84
+  - @cat-factory/provider-cloudflare@0.7.464
+  - @cat-factory/caching@0.20.11
+  - @cat-factory/observability-langfuse@0.10.86
+
+## 0.187.0
+
+### Minor Changes
+
+- 569181d: Account-scoped risk policies, inherited by every board (ADR 0055).
+
+  A risk policy could only be authored per board, so an organisation with one merge posture had to
+  copy it onto every board and keep the copies in step by hand. There is now an ACCOUNT tier: policies
+  authored once for a whole account, which every board under it inherits read-only, may CLONE into its
+  own library to edit, and may HIDE so no task on that board can pick it. Managed from a new "Risk
+  policies" tab in Account settings; a board's own settings panel lists what it inherits above what it
+  owns, plus what it is hiding.
+
+  The board's visible library is `account ⊕ workspace` with the board's own row winning a collision,
+  and one merged reader answers for the settings editor, every picker and the ENGINE, so a task can pin
+  an inherited policy and the run is governed by the posture the picker offered.
+
+  Two internal breaks, both pre-1.0 surfaces:
+
+  - `RiskPolicyRepository` gained a read-only supertype `WorkspaceRiskPolicyReader`, and the engine,
+    the two board guards and `resolveRiskPolicy` now hold that instead of the repository
+    (`RunMergePolicyDeps` / `ExecutionServiceDependencies` renamed the field to `riskPolicyReader`).
+  - `GET /workspaces/:ws/risk-policies` and the board snapshot answer library entries carrying `tier`.
+
+  `GET /api/v1/risk-policies` now lists inherited policies too (an additive behaviour change: the
+  response shape is unchanged, and a deployment with no account policies sees exactly what it saw
+  before). Editing or deleting an inherited policy answers `409` with
+  `details.reason: 'risk_policy_inherited'`; cloning or hiding a board's own policy answers
+  `risk_policy_not_inherited`. `GET /workspaces/:ws/risk-policy-suppressions` answers `503`
+  `risk_policy_suppressions_unwired` where the store is absent, matching its write routes rather than
+  claiming the board hides nothing.
+
+  **Needs a catfactory.ai page before release.** This adds an operator-facing capability anyone can act
+  on with no checkout (author account-wide merge postures; clone or hide an inherited one from a board),
+  so per ADR 0051 it owes a website page that the repo's CI cannot see. The website PR is not open yet
+  and is NOT part of this change.
+
+### Patch Changes
+
+- Updated dependencies [569181d]
+  - @cat-factory/contracts@0.303.0
+  - @cat-factory/kernel@0.294.0
+  - @cat-factory/orchestration@0.265.0
+  - @cat-factory/server@0.280.0
+  - @cat-factory/agents@0.127.1
+  - @cat-factory/consensus@0.16.10
+  - @cat-factory/eks@0.1.314
+  - @cat-factory/gates@0.10.41
+  - @cat-factory/gitlab@0.20.11
+  - @cat-factory/integrations@0.160.8
+  - @cat-factory/observability-otel@0.19.5
+  - @cat-factory/prompt-fragments@1.0.65
+  - @cat-factory/spend@0.15.83
+  - @cat-factory/caching@0.20.10
+  - @cat-factory/observability-langfuse@0.10.85
+  - @cat-factory/provider-cloudflare@0.7.463
+
+## 0.186.1
+
+### Patch Changes
+
+- Updated dependencies [0a85a59]
+  - @cat-factory/orchestration@0.264.1
+  - @cat-factory/server@0.279.1
+
+## 0.186.0
+
+### Minor Changes
+
+- 1a0b593: A workspace now states which PIPELINE a run resolves per intake, the way it already states which risk
+  policy, and a requirements review's findings are split into the two groups that decide who answers
+  them.
+
+  Three changes, one theme: a run nobody is watching should reach a pull request without stopping for a
+  person who is not coming, and should stop for one exactly where a person is what the situation needs.
+
+  **Per-scope default pipelines.** `Pipeline.isDefault` and `Pipeline.isUnattendedDefault`, scoped by
+  the same `runDefaultScopeFor(intakeOrigin)` the risk-policy default takes, written through the
+  `organize` body — the one pipeline write a BUILT-IN accepts, which is what makes a shipped rung
+  promotable at all. Only the UNATTENDED scope is seeded: the in-app scope already resolved an answer
+  without a flagged row (the interface-mode rung, then catalog order), and seeding one would silently
+  overrule the adaptive rung an advanced-mode board runs today. An operator-declared row outranks both.
+
+  The seeded rung is a new built-in, **`pl_unattended`**. It is the adaptive shape with two deliberate
+  differences: no `requirements-review`, because the rung a headless caller lands on by default cannot
+  open a conversation nobody is there to have; and `human-test` plus `human-review` behind ESTIMATE
+  GATES after the guards, because dropping the conversation removes the platform's chance to ask about
+  scope, so the oversight is bought back where the evidence is strongest. A caller that wants the
+  conversation names `pl_complex` and answers it over `/api/v1/runs/:runId/decisions` or on the ticket.
+
+  `mp_unattended` narrows the three loop budgets its own posture makes cheap (three reviewer passes
+  rather than six, two tester-QC iterations, no judge bounce): each is a cap `autonomy: 'unattended'`
+  settles as "proceed", so spending it buys the run nothing but tokens. `ciMaxAttempts` is deliberately
+  untouched — exhausting it raises `ci_failed`, a park this policy does not answer, so cutting it would
+  produce one more stop for a person rather than one fewer. Landing authority is unchanged, and the seed
+  is NOT version-bumped: existing workspaces hold a CLONE of their own default there (ADR 0053's
+  migration), and a reseed would restore stock ceilings alongside the narrower budgets.
+
+  **The two groups, shown and graded.** The reviewer already classified each finding as answerable from
+  practice or needing a product decision; that is now the review window's primary grouping rather than a
+  badge on one edge case, with each section saying what its group is. Every Requirement-Writer
+  suggestion additionally reports a `confidence`, a different claim from `groundedIn`: that one says
+  where the answer came from, this one how sure the Writer is of it (a standard can settle a finding only
+  partly; a general practice can be near-universal). Shown as a band on every suggestion.
+
+  **And a run nobody is watching may settle the first group.** Under `autonomy: 'unattended'` the gate
+  folds the answers in and carries on when every finding was dismissed, resolved, answered by a person,
+  or auto-answered above the policy's new `minAutoAnswerConfidence` floor (default 0.8). One finding in
+  the other group, or one graded below the floor, parks the whole review exactly as before, and an
+  UNGRADED suggestion clears no floor above zero — so a garbled Writer reply parks the run rather than
+  quietly answering it. The step stamps `autoAnsweredByPolicy`, distinct from the existing
+  `reviewCapSettledByPolicy`: that one means the loop gave up, this one that it converged on answers
+  nobody read. ADR 0053 ruled this out on the grounds that inventing a product judgement is off limits;
+  the narrowing that makes it compatible rather than an exception is that TWO independent judgements
+  must agree before anything is folded.
+
+  **Under `attended`, nothing about the review changes.** A suggestion there is a draft a person is
+  about to read, so grading it changes nothing about who decides.
+
+  Two `/api/v1` additions (`pipelineId` on task creation, and on `GET /pipelines` both a per-row
+  `unattendedDefault` and the list-level `unattendedDefaultPipelineId` that is the one to read: the
+  resolution has a rung the list cannot show, so a per-row flag alone reports `false` everywhere on a
+  workspace whose empty start bodies work). OpenAPI `1.50.0`, plus one behaviour change worth reading
+  before upgrading: `POST
+/tasks/:taskId/start` with an empty body now STARTS a run for a key that satisfies `decide`, where it
+  used to answer `400 pipeline_required`. A `write` key sees no change, deliberately — the seeded rung
+  reaches a human test and a human PR review, so offering it to a caller that cannot answer a park
+  would trade an actionable "pass a pipelineId" for a 403 about a pipeline it never picked. The refusal
+  survives wherever no default resolves.
+
+### Patch Changes
+
+- Updated dependencies [1a0b593]
+  - @cat-factory/contracts@0.302.0
+  - @cat-factory/kernel@0.293.0
+  - @cat-factory/agents@0.127.0
+  - @cat-factory/orchestration@0.264.0
+  - @cat-factory/server@0.279.0
+  - @cat-factory/consensus@0.16.9
+  - @cat-factory/eks@0.1.313
+  - @cat-factory/gates@0.10.40
+  - @cat-factory/gitlab@0.20.10
+  - @cat-factory/integrations@0.160.7
+  - @cat-factory/observability-otel@0.19.4
+  - @cat-factory/prompt-fragments@1.0.64
+  - @cat-factory/spend@0.15.82
+  - @cat-factory/caching@0.20.9
+  - @cat-factory/observability-langfuse@0.10.84
+  - @cat-factory/provider-cloudflare@0.7.462
+
+## 0.185.2
+
+### Patch Changes
+
+- Updated dependencies [7d1477c]
+  - @cat-factory/kernel@0.292.2
+  - @cat-factory/agents@0.126.8
+  - @cat-factory/caching@0.20.8
+  - @cat-factory/consensus@0.16.8
+  - @cat-factory/eks@0.1.312
+  - @cat-factory/gates@0.10.39
+  - @cat-factory/gitlab@0.20.9
+  - @cat-factory/integrations@0.160.6
+  - @cat-factory/observability-langfuse@0.10.83
+  - @cat-factory/observability-otel@0.19.3
+  - @cat-factory/orchestration@0.263.2
+  - @cat-factory/prompt-fragments@1.0.63
+  - @cat-factory/provider-cloudflare@0.7.461
+  - @cat-factory/server@0.278.2
+  - @cat-factory/spend@0.15.81
+
+## 0.185.1
+
+### Patch Changes
+
+- Updated dependencies [c09ddbe]
+  - @cat-factory/agents@0.126.7
+  - @cat-factory/kernel@0.292.1
+  - @cat-factory/consensus@0.16.7
+  - @cat-factory/orchestration@0.263.1
+  - @cat-factory/provider-cloudflare@0.7.460
+  - @cat-factory/server@0.278.1
+  - @cat-factory/caching@0.20.7
+  - @cat-factory/eks@0.1.311
+  - @cat-factory/gates@0.10.38
+  - @cat-factory/gitlab@0.20.8
+  - @cat-factory/integrations@0.160.5
+  - @cat-factory/observability-langfuse@0.10.82
+  - @cat-factory/observability-otel@0.19.2
+  - @cat-factory/prompt-fragments@1.0.62
+  - @cat-factory/spend@0.15.80
+
+## 0.185.0
+
+### Minor Changes
+
+- fc4a1e4: A run nobody is watching now finishes instead of waiting on a person who is not coming, and a
+  workspace states that posture per intake rather than once for everything.
+
+  Four parks stopped an otherwise-autonomous run, and none of them is a checkpoint anybody asked for:
+  a companion at its automatic rework cap, a JUDGE at its bounce cap, an iterative review at its
+  reviewer-pass cap, and the Coder's follow-up companion holding the run while any item is undecided.
+  Each is the automation reporting that it gave up, and each already offered a person a documented
+  "proceed anyway". A run started over `/api/v1`, dispatched from a ticket or fired by a schedule had
+  nobody to offer it to, so it waited indefinitely. The headless acceptance suite found this on
+  `pl_build`, stopping on an `approval-gate` raised by `architect-companion`.
+
+  A judge's other two parks are deliberately NOT in that set — `onFail: 'park'` is a registration
+  asking for a person, and a verdict with no producing step to bounce to never got to try — so
+  `disposeJudgeVerdict` now returns a machine-readable `JudgeParkReason` instead of leaving the engine
+  to tell them apart by their prose. A review still ASKING questions parks under either posture too:
+  the answers are a product judgement, and inventing them is the one thing an unattended policy may
+  never do.
+
+  - **`RiskPolicy.autonomy`** (`attended` | `unattended`) decides which way those three go. `attended`
+    is byte-for-byte the previous behaviour and is what every existing policy, every custom one, and
+    the built-in fallback get. `unattended` takes the "proceed" answer ON THE RECORD:
+    `step.companion.capSettledByPolicy` and `followUpItem.dismissedByPolicy` say that policy decided,
+    because the last companion verdict already says the producer was below the bar and a run that
+    advanced anyway must not read like one whose companion quietly stopped grading.
+  - **It never touches a park the PIPELINE asked for.** An approval gate, a `human-test` step, visual
+    confirmation, the human/PR review gate, a brainstorm or interview, the fork choice and the input
+    gate all stop the run under either value. A companion step that is ALSO gated still raises its
+    human approval gate at the cap, because the cap settling is routed through the same pass branch a
+    converged companion takes.
+  - **A workspace now has TWO default policies.** `isDefault` governs a task somebody started in the
+    app; the new `isUnattendedDefault` governs one nothing is watching. Which applies is
+    `riskPolicyDefaultScopeFor(intakeOrigin)`, its own `Record` rather than a reuse of
+    `isHeadlessIntake` — the two disagree about `schedule`, which is not headless (its reused block
+    has no stable place to hold a clarification conversation) and is nonetheless unwatched.
+  - **A third built-in, `mp_unattended` ("Unattended delivery")**, seeded as that default. It is
+    `Balanced` with one field changed, deliberately: a seed may decide that an unwatched run should
+    not wait forever on an automation budget, and may not decide that it gets to land a change an
+    operator's own thresholds would have held.
+  - **Pinning a task to it is a permission**, not a preference. `refuseRiskPolicySelection` gained a
+    `relaxes_run_oversight` arm: `mp_unattended`'s role layer is empty, identical to `Balanced`'s, so
+    without it any member could re-point a task onto the seeded policy and remove the human
+    checkpoints their workspace's own default raises.
+  - **Every grading loop now remembers its own rounds.** `step.companion.verdicts` recorded one verdict
+    per cycle and no prompt read it, so a companion re-graded a revised document with no idea what it
+    had asked for last time — the loop resampled instead of converging, and a rework budget bought
+    nothing. Both sides of the loop now receive the rounds so far (`AgentRunContext.priorReview`,
+    folded once in `userPromptFor`, so an inline companion, a container-backed one, a
+    deployment-registered one and the producer being reworked all get it), and the 0..1 scale is
+    anchored and SHARED with the judge bucket, which had carried its previous verdict all along.
+
+  **Migration, and the one thing to check.** Both facades' migrations materialise `mp_unattended` in
+  every existing workspace as a CLONE of that workspace's own default row, with `autonomy` the only
+  field changed. Cloning, not seeding stock values: a built-in is editable in place, so a workspace
+  that tightened its `Balanced` still holds `id = 'mp_balanced'`, and writing catalog ceilings beside
+  it would hand every API-started run there a wider licence to land than its operator granted. Every
+  ceiling, budget and per-role restriction is inherited (`dryRunRoles` and `submissionClassesByRole`
+  above all). Landing authority does not move underneath anyone; what changes is that such runs stop
+  parking on the caps. A deployment that WANTS its API-started runs to keep parking re-points
+  `isUnattendedDefault` at a policy whose `autonomy` is `attended`.
+
+  `Balanced` and `Manual review only` are NOT version-bumped. Both new fields land on them as the
+  migration's column defaults, so a stored row and a freshly seeded one are identical — advising every
+  existing workspace to reseed for a zero-delta change would invite them to overwrite their own edits.
+
+  **Public API (additive, OpenAPI 1.49.0).** `GET /api/v1/risk-policies` gains `isUnattendedDefault`
+  and `autonomy`. `isDefault` keeps its exact former meaning, so nothing an existing client was told
+  becomes wrong; it was reading about the other scope. A caller predicting whether its own runs can
+  reach a terminal state unassisted should read `autonomy` on the `isUnattendedDefault` row.
+
+  **Internal break.** `RiskPolicyRepository.getDefault` takes the scope, and
+  `RunMergePolicy.resolve` / the engine's `resolveRiskPolicy` callback take the run. Both are required
+  rather than defaulted: a call site that has not decided which kind of run it is resolving for now
+  fails to compile, because the alternative reads as correct and silently hands an unwatched run the
+  in-app policy.
+
+  Design record: [ADR 0053](../backend/docs/adr/0053-unattended-run-autonomy.md).
+
+### Patch Changes
+
+- Updated dependencies [fc4a1e4]
+  - @cat-factory/contracts@0.301.0
+  - @cat-factory/kernel@0.292.0
+  - @cat-factory/orchestration@0.263.0
+  - @cat-factory/server@0.278.0
+  - @cat-factory/agents@0.126.6
+  - @cat-factory/consensus@0.16.6
+  - @cat-factory/eks@0.1.310
+  - @cat-factory/gates@0.10.37
+  - @cat-factory/gitlab@0.20.7
+  - @cat-factory/integrations@0.160.4
+  - @cat-factory/observability-otel@0.19.1
+  - @cat-factory/prompt-fragments@1.0.61
+  - @cat-factory/spend@0.15.79
+  - @cat-factory/caching@0.20.6
+  - @cat-factory/observability-langfuse@0.10.81
+  - @cat-factory/provider-cloudflare@0.7.459
+
+## 0.184.0
+
+### Minor Changes
+
+- ee733ee: A run whose stored row cannot be decoded is now closed instead of re-driven forever, and one
+  unrecoverable run no longer ends the stale-run sweep.
+
+  The two are the same incident. A `kind='execution'` row with no `block_id` fails `rowToExecution`,
+  and every path that could settle such a run begins by READING it: the re-drive throws on the load,
+  and so does the hard-stall backstop whose entire job is to settle a run recovery cannot resume. The
+  row therefore stayed `running` forever, was re-listed by every sweep (`listStale` is ordered oldest
+  first, so it sorted to the front of each one), and past the hard-stall deadline its throw escaped
+  the per-run body and ended the whole pass: no other stale run recovered, no spend-paused run
+  resumed, no batch enqueue happened, tick after tick, while the sweeper reported itself as running.
+
+  - **Disposal.** `RunStateMachine.loadOrDispose` recognises a `DataIntegrityError` by TYPE (a
+    transient database failure still propagates and leaves the run alone) and settles the run through
+    `markFailed`, the one write that decodes nothing. Both the driver entry point
+    (`ExecutionService.advanceInstance`) and the settle path (`failRun`) read through it, so such a
+    row is closed on its first re-drive rather than an hour later.
+  - **The owning block goes with it.** A settled run row with the card still `in_progress` leaves the
+    human half of the incident unresolved forever, because the run is dropped from the board snapshot
+    and there is no failure card and no Retry. The run names no block, but the block names the run:
+    the new `BlockRepository.getByExecution` reads that reverse link, and the card drops to `blocked`
+    with a pushed board event and no fabricated progress.
+  - **Only a MALFORMED row is disposed of.** A stored value this build does not RECOGNISE is a fact
+    about the reader, not the row: during a rolling deploy an unknown `ExecutionStatus` member is a
+    healthy run the newer replica wrote, and disposal is irreversible while a re-drive costs a tick.
+    `DataIntegrityError` now carries a `DataIntegrityFault`, and the reversible half is the fallback
+    wherever the fault is unknown or absent.
+  - **Isolation.** Both facades' sweeps recover one run at a time inside a per-run boundary, log the
+    run they skipped, and count it as `sweep.run_recovery_failed`. A pass that took runs on and
+    recovered NONE of them reports itself as a FAILED pass, since such a pass now completes and a
+    recorded success would reset `sweep_degraded` on precisely the wedged sweeper it watches for. A
+    run whose probe threw keeps its per-process orphan clock, so the hard-stall backstop can still
+    reach it.
+  - **A new failure kind, `state_unreadable`** (surface version 1.48.0, additive), so these runs are
+    distinguishable in the operator's failure-kind breakdown rather than filed under `stalled`, whose
+    advice is "retry" and whose retry would re-read the same row.
+  - **A write-side guard.** Composing the stored `detail` for a run that `rowToExecution` would refuse
+    now throws, for both invariants it checks (no `blockId`, a cursor outside its step list), so the
+    writer that produces one reports the fault instead of a sweeper hours later. Both facades'
+    `upsert`/`insertLive`/`compareAndSwap` compose through that one function.
+
+  `DataIntegrityError` moved to `@cat-factory/kernel` (re-exported from `@cat-factory/server`, so no
+  import breaks) because the engine has to be able to recognise it. It also survives the mothership
+  persistence RPC as its own error code rather than an opaque 500, without which the disposal would be
+  a no-op on mothership deployments.
+
+  Documented on the website in kibertoad/cat-factory-website#53.
+
+### Patch Changes
+
+- Updated dependencies [ee733ee]
+  - @cat-factory/contracts@0.300.0
+  - @cat-factory/kernel@0.291.0
+  - @cat-factory/orchestration@0.262.0
+  - @cat-factory/server@0.277.0
+  - @cat-factory/observability-otel@0.19.0
+  - @cat-factory/agents@0.126.5
+  - @cat-factory/consensus@0.16.5
+  - @cat-factory/eks@0.1.309
+  - @cat-factory/gates@0.10.36
+  - @cat-factory/gitlab@0.20.6
+  - @cat-factory/integrations@0.160.3
+  - @cat-factory/prompt-fragments@1.0.60
+  - @cat-factory/spend@0.15.78
+  - @cat-factory/caching@0.20.5
+  - @cat-factory/observability-langfuse@0.10.80
+  - @cat-factory/provider-cloudflare@0.7.458
+
+## 0.183.3
+
+### Patch Changes
+
+- Updated dependencies [01086d8]
+  - @cat-factory/contracts@0.299.1
+  - @cat-factory/integrations@0.160.2
+  - @cat-factory/kernel@0.290.1
+  - @cat-factory/server@0.276.2
+  - @cat-factory/agents@0.126.4
+  - @cat-factory/consensus@0.16.4
+  - @cat-factory/eks@0.1.308
+  - @cat-factory/gates@0.10.35
+  - @cat-factory/gitlab@0.20.5
+  - @cat-factory/observability-otel@0.18.42
+  - @cat-factory/orchestration@0.261.2
+  - @cat-factory/prompt-fragments@1.0.59
+  - @cat-factory/spend@0.15.77
+  - @cat-factory/caching@0.20.4
+  - @cat-factory/observability-langfuse@0.10.79
+  - @cat-factory/provider-cloudflare@0.7.457
+
+## 0.183.2
+
+### Patch Changes
+
+- Updated dependencies [1bcdacc]
+  - @cat-factory/kernel@0.290.0
+  - @cat-factory/agents@0.126.3
+  - @cat-factory/caching@0.20.3
+  - @cat-factory/consensus@0.16.3
+  - @cat-factory/eks@0.1.307
+  - @cat-factory/gates@0.10.34
+  - @cat-factory/gitlab@0.20.4
+  - @cat-factory/integrations@0.160.1
+  - @cat-factory/observability-langfuse@0.10.78
+  - @cat-factory/observability-otel@0.18.41
+  - @cat-factory/orchestration@0.261.1
+  - @cat-factory/prompt-fragments@1.0.58
+  - @cat-factory/provider-cloudflare@0.7.456
+  - @cat-factory/server@0.276.1
+  - @cat-factory/spend@0.15.76
+
+## 0.183.1
+
+### Patch Changes
+
+- Updated dependencies [195b248]
+  - @cat-factory/contracts@0.299.0
+  - @cat-factory/integrations@0.160.0
+  - @cat-factory/orchestration@0.261.0
+  - @cat-factory/server@0.276.0
+  - @cat-factory/agents@0.126.2
+  - @cat-factory/consensus@0.16.2
+  - @cat-factory/eks@0.1.306
+  - @cat-factory/gates@0.10.33
+  - @cat-factory/gitlab@0.20.3
+  - @cat-factory/kernel@0.289.1
+  - @cat-factory/observability-otel@0.18.40
+  - @cat-factory/prompt-fragments@1.0.57
+  - @cat-factory/spend@0.15.75
+  - @cat-factory/provider-cloudflare@0.7.455
+  - @cat-factory/caching@0.20.2
+  - @cat-factory/observability-langfuse@0.10.77
+
+## 0.183.0
+
+### Minor Changes
+
+- bc2478d: A public-API key now has an IDENTITY as well as a scope: a SYSTEM token (the default, unchanged) or
+  a PERSONAL token its minter bound to themselves, which can run their own individual-usage
+  subscription headlessly. Surface version 1.45.0, additive. Plus two bug fixes that made the old
+  behaviour unreadable rather than merely limited.
+
+  **The reported problem.** A workspace whose Claude runs come from a stored personal subscription was
+  told by `GET /api/v1/models` that `claude-opus` was `available: false`, which the acceptance suite
+  rendered as "no provider wired for it". Both statements are false, and the remedy they imply (add a
+  provider key) is for a deployment that was already correct. The model was wired — as a credential
+  belonging to a person, which a key-authenticated read is not allowed to see.
+
+  **Two things were genuinely broken, independent of the feature.**
+
+  `resolveWorkspaceCapabilities` did not know about NATIVE ambient execution. A vendor served by the
+  host's own `claude`/`codex` CLI login (`LOCAL_NATIVE_AGENTS`) has no credential in either store, and
+  the resolver consulted only those two stores, so the catalog and the pipeline-start guard called the
+  model unconfigured on the very machine that would have run it. The personal-credential gate, reading
+  the same allow-list, had already decided such a vendor needs no unlock: two halves of one decision,
+  disagreeing. They now share `isAmbientNativeVendor`, which is where the executor's half already was.
+
+  `GET /api/v1/models` could not say why a personal subscription's model was unavailable. The existing
+  `excludesUserScopedModels` flag reports what an answer OMITS, and a subscription model is not omitted
+  — it is listed, unjudged, because no user's credential store was consulted. Each row now carries
+  `userScoped`, so the distinction is stated where it applies. Widening the response flag instead was
+  tried and rejected: with no user resolved the server cannot know whether a personal subscription
+  exists, so the honest predicate is "this deployment has `ENCRYPTION_KEY`", which is true nearly
+  everywhere. A flag that is always true stops answering its question, and it would have re-pointed a
+  published field at a new predicate under the same name.
+
+  **The feature.** `POST /workspaces/:ws/public-api-keys` takes `actsAsSelf`, and the key row carries
+  `actsAsUserId`. A personal token's runs record that person as initiator, `GET /api/v1/models`
+  resolves under them, and a start/retry/decision call may unlock their subscription by sending
+  `X-Personal-Password` — the same header, the same 428, and the same per-run activation the app uses.
+  A system token behaves exactly as every key did before, including the `409
+individual_model_unsupported` refusal, which is now reserved for the case no password could fix.
+
+  Three properties bound it, and each is a shape rather than a rule to remember. The wire field is a
+  BOOLEAN and the server reads the id off the session, so minting a key onto a colleague's
+  subscription is unrepresentable rather than merely forbidden; a mint with no signed-in user is
+  refused instead of quietly producing an unbound key. Headless provisioning (`POST /api/v1/keys`)
+  can never bind, because a provisioning key holds nobody's consent to inherit. And the password is
+  stored NOWHERE — not on the row, not in a session — so the binding alone spends nothing and a
+  leaked personal token reaches that user's PAT (as a leaked session would) but not their
+  subscription.
+
+  A bound key attributes EVERY run it starts, not only the ones needing an unlock. The alternative
+  makes one key produce runs under two identities depending on which model a task happened to pin,
+  with two credential scopes and two merge-policy roles, and nothing in the request to say which.
+
+  **And a bound run is that person's run all the way through, policy included.** The two public start
+  routes resolve the bound user's workspace ROLE and pin it, so a headless start is admitted under the
+  same role-scoped merge narrowing and the same dry-run sandbox its holder gets in the app: a key
+  cannot land what the person behind it could not. An initiator with no role is not a lenient run, it
+  is a run with no policy — which is what the bug-hunt adopt route once shipped, and why
+  `runAdmission.coverage.spec.ts` makes every start route CLASSIFY itself. A retry deliberately keeps
+  the ORIGINAL run's pinned authority instead (`buildResumedInstance`), because a re-drive is the same
+  work under the authority it was first granted, and dropping it would launder a dry run into a live
+  one via restart-from-step-0.
+
+  `POST /api/v1/jobs` runs the same personal-credential gate as the board start. Being inline-only
+  settles what a public run may DO (no container, no push) and says nothing about whose credential it
+  needs: the inline harness leases a personal subscription for every individual-usage vendor, so
+  skipping the gate there traded an actionable refusal for a run that dies at its first dispatch.
+
+  Deliberately not lifted: `POST /api/v1/notifications/:id/act`. Its ci-/test-failure arm retries
+  through a shared effect that mints no activation, so admitting a bound key there would trade a
+  refusal the caller can act on for a run that dies at its first dispatch. Lifting it means threading
+  the gate through that effect for the SPA and this surface at once.
+
+  **Answering a park no longer re-derives a credential that is already fresh.** Each re-mint runs
+  210k PBKDF2 iterations per vendor, which a human clicking through a run pays once and a headless
+  driver answering eight follow-ups would pay eight times in a row — seconds of blocked event loop on
+  Node, a CPU-limit kill on workerd. The interaction path now skips the whole gate while the run holds
+  an activation with over half its life left, and both facades share one helper, so the SPA gets the
+  same. The decision surface's refusal is returned as DATA (a `428` in that surface's own envelope,
+  carrying the vendor and reason) rather than thrown, which is the invariant every other gate there
+  already keeps.
+
+  **`X-Personal-Password` is declared on the operations that read it**, so it reaches
+  `docs/openapi.json` and the four generated clients instead of being discoverable only by getting a 428. Each client also gained a post-construction setter for it, since that is when a caller learns
+  it is needed.
+
+  **The acceptance suite** now runs on the operator's own subscription. It prompts for the personal
+  password at the terminal on the first call that needs one — never at `configure` time, and never at
+  all for a workspace on a provider API key — and holds it in memory only: not the `.env`, not the
+  ledger, not the journal, because a copy beside `CAT_FACTORY_API_KEY` would put both halves of a
+  two-factor credential in one file. The header then rides every request, since answering a park
+  re-mints the run's activation server-side. `configure` and the `model-preset` gate now say "not
+  visible to this system token" and name the fix, instead of the wrong one they used to name — read
+  off the ROW, so a model that genuinely has no provider still reads as unwired, and an invisible
+  workspace default stays SELECTED rather than being quietly swapped for a model nobody chose.
+
+  The prompt opens the CONTROLLING TERMINAL rather than reading `process.stdin`. The suite runs under
+  vitest, whose workers are forked with piped stdio, so a prompt built on stdin could never have asked
+  anything: the one path this exists for would have thrown "stdin is not a terminal" on every pass. It
+  is also stricter than the check it replaces, since a controlling terminal cannot be fed from a pipe
+  or a file at all. And the entered password is no longer trimmed: a space is printable ASCII, so a
+  legal password with one at either end was being silently altered and then reported as wrong.
+
+### Patch Changes
+
+- Updated dependencies [bc2478d]
+  - @cat-factory/contracts@0.298.0
+  - @cat-factory/kernel@0.289.0
+  - @cat-factory/integrations@0.159.0
+  - @cat-factory/server@0.275.0
+  - @cat-factory/agents@0.126.1
+  - @cat-factory/consensus@0.16.1
+  - @cat-factory/eks@0.1.305
+  - @cat-factory/gates@0.10.32
+  - @cat-factory/gitlab@0.20.2
+  - @cat-factory/observability-otel@0.18.39
+  - @cat-factory/orchestration@0.260.1
+  - @cat-factory/prompt-fragments@1.0.56
+  - @cat-factory/spend@0.15.74
+  - @cat-factory/caching@0.20.1
+  - @cat-factory/observability-langfuse@0.10.76
+  - @cat-factory/provider-cloudflare@0.7.454
+
+## 0.182.0
+
+### Minor Changes
+
+- a634746: A locally-run model can now be given a run's design renders. Its image support resolves in two
+  tiers: a table of recognised open-weights families (`KNOWN_LOCAL_MODELS`, so ticking Gemma 4 or Muse
+  Glimmer needs no second step), overridden by a per-model declaration on the user's own runner entry
+  for anything the table cannot know about.
+
+  The gap was structural rather than a missed case. `acceptsImages` is a per-FLAVOUR fact declared on
+  `MODEL_CATALOG`, and a local model has no catalog row: it lives on one person's machine, its id is
+  free text, and the OpenAI-compatible `/models` probe the panel discovers models with returns ids and
+  nothing else. So every local ref arrived with the modality absent and `resolveDesignImageDelivery`
+  answered `unknown_model_image_input` for all of them, forever. That reason exists precisely so this
+  would stay visible instead of reading as a text-only model, and the arrival of image-capable local
+  models is what turned it from a latent hole into a lost capability.
+
+  The declaration wins over the table on purpose: the person who pulled the weights is the one who
+  knows whether they are running a text-only quant, a fine-tune or a re-tagged copy. The table
+  therefore carries only families whose SILENCE costs a capability (every member is image-capable; a
+  text-only entry would behave identically to an absent one), and a family whose modality depends on
+  the size is left out rather than approximated, which is why Gemma 3 is absent while Gemma 4 is
+  present. It lives in `@cat-factory/contracts` because the settings panel labels its "not set" option
+  with what the table will do and the engine folds the same answer onto the dispatched ref.
+
+  The initiator's declarations are read on EVERY dispatch, because the winning model is not known
+  until the shared resolver has walked its sources, so the read goes through a new `AppCaches`
+  slice keyed on the user (the endpoint write paths invalidate it). Without that, a deployment with no
+  local runners at all still paid a query per step, and a mothership-mode node an extra
+  `/internal/persistence` round trip per step.
+
+  Delivery still joins the HARNESS's answer first, and that is what decides where this lands today: a
+  local ref names no harness, so a container dispatch runs it on Pi, whose `HARNESS_IMAGE_INPUT` entry
+  is `false` and refuses without consulting the ref. The modality is therefore acted on by the inline
+  path, and the container path becomes a reader the day an image-carrying harness serves a local model,
+  which is a one-line table edit rather than new plumbing. It is resolved for every path regardless,
+  because the winning model is not known until the shared resolver has walked its sources.
+
+  `contextTokens` is deliberately NOT declared for a local model, though the same shape could carry it.
+  The window a runner serves is a fact about its config rather than about the weights (Ollama's
+  `num_ctx` default sits far below what a 128K-window model can do), nothing enforces it for a local
+  ref, and stating a number the runner silently ignores would be worse than stating none. The
+  truncation trap that follows from that is now written down in `backend/docs/model-support.md`.
+
+  **Internal break:** the endpoint row's enabled-model list changes from `string[]` to a declaration
+  array. A row written before this loses its entries on read: bare strings are dropped rather than
+  coerced, so the break cannot arrive as a model id of `[object Object]`. The endpoint reports the
+  discard (`unreadableModels`) and the panel names it per runner, because a shortened list on its own
+  reads exactly like a runner nobody ever enabled a model on and only one of those is fixed by
+  re-ticking. The fix is to re-tick the models in "My local runners", which rewrites the whole blob.
+
+### Patch Changes
+
+- Updated dependencies [a634746]
+  - @cat-factory/contracts@0.297.0
+  - @cat-factory/kernel@0.288.0
+  - @cat-factory/caching@0.20.0
+  - @cat-factory/integrations@0.158.0
+  - @cat-factory/agents@0.126.0
+  - @cat-factory/consensus@0.16.0
+  - @cat-factory/orchestration@0.260.0
+  - @cat-factory/server@0.274.0
+  - @cat-factory/eks@0.1.304
+  - @cat-factory/gates@0.10.31
+  - @cat-factory/gitlab@0.20.1
+  - @cat-factory/observability-otel@0.18.38
+  - @cat-factory/prompt-fragments@1.0.55
+  - @cat-factory/spend@0.15.73
+  - @cat-factory/observability-langfuse@0.10.75
+  - @cat-factory/provider-cloudflare@0.7.453
+
+## 0.181.8
+
+### Patch Changes
+
+- Updated dependencies [7893f35]
+  - @cat-factory/contracts@0.296.0
+  - @cat-factory/integrations@0.157.0
+  - @cat-factory/kernel@0.287.0
+  - @cat-factory/gitlab@0.20.0
+  - @cat-factory/caching@0.19.0
+  - @cat-factory/orchestration@0.259.0
+  - @cat-factory/server@0.273.0
+  - @cat-factory/agents@0.125.8
+  - @cat-factory/consensus@0.15.8
+  - @cat-factory/eks@0.1.303
+  - @cat-factory/gates@0.10.30
+  - @cat-factory/observability-otel@0.18.37
+  - @cat-factory/prompt-fragments@1.0.54
+  - @cat-factory/spend@0.15.72
+  - @cat-factory/observability-langfuse@0.10.74
+  - @cat-factory/provider-cloudflare@0.7.452
+
+## 0.181.7
+
+### Patch Changes
+
+- Updated dependencies [07ff467]
+  - @cat-factory/contracts@0.295.0
+  - @cat-factory/orchestration@0.258.0
+  - @cat-factory/server@0.272.0
+  - @cat-factory/agents@0.125.7
+  - @cat-factory/consensus@0.15.7
+  - @cat-factory/eks@0.1.302
+  - @cat-factory/gates@0.10.29
+  - @cat-factory/gitlab@0.19.20
+  - @cat-factory/integrations@0.156.1
+  - @cat-factory/kernel@0.286.3
+  - @cat-factory/observability-otel@0.18.36
+  - @cat-factory/prompt-fragments@1.0.53
+  - @cat-factory/spend@0.15.71
+  - @cat-factory/provider-cloudflare@0.7.451
+  - @cat-factory/caching@0.18.44
+  - @cat-factory/observability-langfuse@0.10.73
+
+## 0.181.6
+
+### Patch Changes
+
+- Updated dependencies [9b3473a]
+  - @cat-factory/contracts@0.294.0
+  - @cat-factory/integrations@0.156.0
+  - @cat-factory/server@0.271.0
+  - @cat-factory/agents@0.125.6
+  - @cat-factory/consensus@0.15.6
+  - @cat-factory/eks@0.1.301
+  - @cat-factory/gates@0.10.28
+  - @cat-factory/gitlab@0.19.19
+  - @cat-factory/kernel@0.286.2
+  - @cat-factory/observability-otel@0.18.35
+  - @cat-factory/orchestration@0.257.2
+  - @cat-factory/prompt-fragments@1.0.52
+  - @cat-factory/spend@0.15.70
+  - @cat-factory/provider-cloudflare@0.7.450
+  - @cat-factory/caching@0.18.43
+  - @cat-factory/observability-langfuse@0.10.72
+
+## 0.181.5
+
+### Patch Changes
+
+- b889842: Report the actual cause of a failure everywhere, not just on a "Test connection" button.
+
+  The previous slice taught the connection PROBES to read the cause chain, because on Node a transport
+  failure is `TypeError: fetch failed` and what happened hangs off `.cause`. It turned out the repo had
+  three describers of a thrown value and the other two stopped at `error.message`: `getErrorMessage`
+  (the string a human is shown, and what a persisted failure reason or a PR comment records) and
+  `describeError` (every log line). So a probe could name `connect ECONNREFUSED 127.0.0.1:6443` while
+  the log line and the toast for the same failure still said `fetch failed`, which is what made a
+  Kubernetes connect failure unexplainable even with the probe fixed.
+
+  All three now flatten through one kernel core (`shared/error-chain.logic.ts`): `.cause` plus each
+  `AggregateError` branch (so a dual-stack `localhost` reports what happened on each address), scrubbed
+  through `redactSecrets`, capped with a marker saying what it dropped, and bounded by link identity so
+  a cause cycle terminates. Roughly 90 hand-rolled `e instanceof Error ? e.message : String(e)` copies
+  across the backend now call `getErrorMessage`, and five local `errMessage`/`messageOf` wrappers are
+  deleted.
+
+  Who may read a chain is part of the rule. An AUTHENTICATED reader gets it, because the inner link is
+  usually the only thing saying whether the fix is theirs or the deployment's; where a deployment's
+  model endpoints are platform-internal, their host and port do reach a workspace member through an
+  ordinary 4xx. An UNAUTHENTICATED surface does not: `/ready` on BOTH facades answers with kernel's
+  `publicDiagnostic` (the outermost link, scrubbed) rather than publishing the deployment's database
+  address, sharing one helper so the two runtimes cannot drift to different depths.
+
+  A VERDICT does not read the rendered string either. `errorChainMatches` tests each link uncapped, so
+  a sentinel phrase pushed past the display budget by a long wrapper cannot silently turn a recognised
+  rollout stop into a crash. Relatedly, log fields get their own, much wider cap than the 400 characters
+  a human-facing message is held to, and an error with nothing to say answers with the empty string
+  rather than the bare constructor name, so a call site's `getErrorMessage(e) || '<what to do>'` guard
+  still fires.
+
+  `redactSecrets` now spares a single-case word and an env-var-shaped identifier where a field-name rule
+  matched: it scrubs the message a person reads, and `Missing required key: OPENAI_API_KEY` must not
+  lose the name they have to go and set. Every credential shape the rules exist for still matches.
+
+  An error message may therefore now carry appended causes where it did not before. The opening phrase
+  is unchanged, which is what the downstream `/dispatch failed/i` and eviction-sentinel checks match on.
+
+  On the SPA, every failure toast goes through the one funnel that already existed for pipeline errors,
+  instead of 29 per-component copies of the same `notifyError(title, e)` and ~83 direct `toast.add`
+  calls rendering the raw message. Beyond the translated copy that funnel already resolved, a failure
+  toast now stays until dismissed instead of vanishing after about five seconds, its text is
+  selectable, and one click copies the whole report: the action that failed, the class of failure, the
+  backend's own account, and the `requestId` that is the only join between what the user saw and the
+  server log line explaining it. Conflict (409) toasts get the same treatment, which matters most on
+  the unknown-reason path, since that is where a reason an older SPA build has never heard of lands.
+
+  `@cat-factory/cli` carries its own copy of the describer rather than importing kernel. That package is
+  published and deliberately runtime-dependency-free, so a `workspace:*` import from its `bin` resolves
+  through pnpm's link locally and is simply absent off the registry; a conformity test pins the copy to
+  kernel's output byte for byte.
+
+- Updated dependencies [b889842]
+  - @cat-factory/kernel@0.286.1
+  - @cat-factory/integrations@0.155.5
+  - @cat-factory/orchestration@0.257.1
+  - @cat-factory/server@0.270.1
+  - @cat-factory/agents@0.125.5
+  - @cat-factory/consensus@0.15.5
+  - @cat-factory/gitlab@0.19.18
+  - @cat-factory/observability-otel@0.18.34
+  - @cat-factory/observability-langfuse@0.10.71
+  - @cat-factory/caching@0.18.42
+  - @cat-factory/eks@0.1.300
+  - @cat-factory/gates@0.10.27
+  - @cat-factory/prompt-fragments@1.0.51
+  - @cat-factory/provider-cloudflare@0.7.449
+  - @cat-factory/spend@0.15.69
+
+## 0.181.4
+
+### Patch Changes
+
+- Updated dependencies [b25732f]
+  - @cat-factory/contracts@0.293.0
+  - @cat-factory/server@0.270.0
+  - @cat-factory/kernel@0.286.0
+  - @cat-factory/orchestration@0.257.0
+  - @cat-factory/agents@0.125.4
+  - @cat-factory/consensus@0.15.4
+  - @cat-factory/eks@0.1.299
+  - @cat-factory/gates@0.10.26
+  - @cat-factory/gitlab@0.19.17
+  - @cat-factory/integrations@0.155.4
+  - @cat-factory/observability-otel@0.18.33
+  - @cat-factory/prompt-fragments@1.0.50
+  - @cat-factory/spend@0.15.68
+  - @cat-factory/caching@0.18.41
+  - @cat-factory/observability-langfuse@0.10.70
+  - @cat-factory/provider-cloudflare@0.7.448
+
+## 0.181.3
+
+### Patch Changes
+
+- 7119ca7: Warn on board load when the GitHub token a run would use cannot push or open pull requests.
+
+  A personal access token is the operational credential on two deployment shapes: local mode, where
+  one token is both the sign-in identity and what every agent step clones, pushes and merges with,
+  and a hosted deployment whose run initiator stored a `github_pat`, which outranks the App
+  installation on the run path. On both, a token minted without `repo` (or a fine-grained token
+  pointed at the wrong repositories) reached its first failure several steps into a pipeline, as a
+  403 out of a container, after the run had already spent money. Local mode logged a boot warning
+  about it, which is a line in a terminal nobody is looking at; a hosted deployment said nothing at
+  all.
+
+  A new `GET /workspaces/:id/github/pat-check` answers what that token can actually do, and the SPA
+  raises a banner linking straight to GitHub's token form, pre-filled where GitHub allows it.
+
+  The parts worth reviewing:
+
+  **Which token gets judged, and whether one is judged at all.** The check resolves through the same
+  `resolveRunInitiatorToken` the dispatch mint and the engine's GitHub client already share, now
+  surfaced on `CoreDependencies`, so a workspace that turned `allowInitiatorPat` off is not nagged
+  about a credential none of its runs touch. Re-deriving the gate in the controller was the
+  alternative, and it would have been a fourth copy of a security decision that exists to be singular.
+
+  The second half of that question is answered by a new `listWorkspaceRunRepos` seam, the block-free
+  counterpart of `resolveRepoTarget`, built beside it on every facade: every repository this board's
+  mounted services target. A token is judged only where a run would present it, so a board that
+  targets no GitHub repository (bound to GitLab, or nothing linked yet) answers `not_applicable`
+  rather than rendering a scope verdict over pipelines that never reach GitHub. The same set is what
+  a fine-grained token is probed against, so the probe's cap samples the work rather than the
+  alphabet: the repository projection lists everything the connection can see and is ordered by owner
+  and name, which no run consults.
+
+  **Per capability, not a boolean.** GitHub reports a classic token's scopes in `x-oauth-scopes` and
+  reports nothing whatsoever for a fine-grained one, whose reach is knowable only by probing a
+  repository: that answers for push and answers nothing for pull requests or workflows. Each
+  capability therefore carries `granted` / `missing` / `unknown`, and only `missing` raises anything.
+  Folding `unknown` into either would have meant silencing a real gap or nagging every correctly
+  configured fine-grained deployment forever. The fine-grained probe is a capped sample of the
+  targeted repositories and says how many it did not read.
+
+  **What a repository read can and cannot establish.** GitHub's repository payload reports the
+  authenticated IDENTITY's role, not the grants of the credential presenting it, and a token's reach
+  is a subset of its owner's. So `push: false` refutes the token while `push: true` only fails to
+  refute it, and only the first is reported as a verdict. The one positive statement available about
+  the credential itself is a 404, which GitHub returns rather than a 403 for a repository a
+  credential may not see; a 404 on every targeted repository is therefore `missing`, and the report
+  names those repositories, which is the fine-grained-token-pointed-at-the-wrong-repositories case
+  this feature exists to catch. A single 404 among readable repositories stays `unknown`: it is
+  ambiguous with a projection row pointing at a renamed repository, and a stale row must not be
+  reported as a broken credential.
+
+  **A throttled token is not a rejected one.** GitHub spells an exhausted primary or secondary rate
+  limit with the same 403 it uses to refuse a credential, so the rate-limit markers are read first
+  and answer `probe_failed`. Read as a rejection, a throttled board load raises the loudest banner
+  the product has and advertises minting a replacement.
+
+  **A classic token with no scopes is a distinct fact from an unreadable one.** GitHub sends
+  `x-oauth-scopes` for every classic token, so an empty value states that this one grants nothing.
+  Treating an empty header as an absent one classified it as unreadable, which sent it down the
+  fine-grained path where a repository read its owner could satisfy reported it as fine. It now
+  classifies as a classic token missing everything, and the connect form gained a warning
+  (`github_pat_no_scopes`) saying so.
+
+  **The scope list is not on the wire.** Nothing renders it, reads pass the route's permission mount,
+  and the one source whose scopes this endpoint could expose is a shared deployment credential.
+
+  **What does not raise the banner.** An unreachable GitHub is `probe_failed`, not a verdict: the
+  remedy a permissions banner advertises is wrong and expensive during an upstream blip. A missing
+  `workflow` scope is advisory, listed inside the card but never its reason for opening, because
+  without it a run still pushes, opens its PR and merges and fails only on changes that touch
+  `.github/workflows/*`.
+
+  **Classic versus fine-grained.** The re-mint link carries over the kind of the token being
+  replaced, so a deployment that standardised on fine-grained tokens is not pushed back to a classic
+  one by a warning. Only the classic form accepts a prefill; GitHub's fine-grained form takes no
+  permission parameters at all, so that half is a bare link and the banner names the permissions to
+  grant. Saying so is deliberate: a link that silently arrived with nothing selected reads as
+  "already done for you".
+
+  **On the SPA side**, the check is single-flighted separately from the connection reads and never
+  awaited by them. It is the only one of the three that leaves the deployment, and two modals block
+  their open on `probe()`; awaited, an unreachable GitHub held those modals for the full outbound
+  timeout to settle a banner they do not render. It follows the door rather than the batch: the
+  on-board-open fan-out checks at most once per board, while the deliberate-refresh door re-checks,
+  because the surfaces that force a refresh are the ones that just changed what the answer depends
+  on. Three panels whose own comments said "probe once so the pickers light up" moved onto
+  `ensureProbed`, which is what they meant.
+
+  The required-scope list is now one constant in `@cat-factory/contracts`, read by the local
+  facade's boot warning and setup link, its scope classifier, and the SPA — it was two copies before,
+  which is two answers to "what should I tick".
+
+- Updated dependencies [7119ca7]
+  - @cat-factory/integrations@0.155.3
+  - @cat-factory/orchestration@0.256.4
+  - @cat-factory/contracts@0.292.2
+  - @cat-factory/server@0.269.3
+  - @cat-factory/kernel@0.285.3
+  - @cat-factory/eks@0.1.298
+  - @cat-factory/agents@0.125.3
+  - @cat-factory/consensus@0.15.3
+  - @cat-factory/gates@0.10.25
+  - @cat-factory/gitlab@0.19.16
+  - @cat-factory/observability-otel@0.18.32
+  - @cat-factory/prompt-fragments@1.0.49
+  - @cat-factory/spend@0.15.67
+  - @cat-factory/caching@0.18.40
+  - @cat-factory/observability-langfuse@0.10.69
+  - @cat-factory/provider-cloudflare@0.7.447
+
+## 0.181.2
+
+### Patch Changes
+
+- Updated dependencies [3dde85c]
+  - @cat-factory/integrations@0.155.2
+  - @cat-factory/eks@0.1.297
+  - @cat-factory/orchestration@0.256.3
+  - @cat-factory/server@0.269.2
+
+## 0.181.1
+
+### Patch Changes
+
+- Updated dependencies [57a7ecd]
+  - @cat-factory/integrations@0.155.1
+  - @cat-factory/contracts@0.292.1
+  - @cat-factory/kernel@0.285.2
+  - @cat-factory/eks@0.1.296
+  - @cat-factory/orchestration@0.256.2
+  - @cat-factory/server@0.269.1
+  - @cat-factory/agents@0.125.2
+  - @cat-factory/consensus@0.15.2
+  - @cat-factory/gates@0.10.24
+  - @cat-factory/gitlab@0.19.15
+  - @cat-factory/observability-otel@0.18.31
+  - @cat-factory/prompt-fragments@1.0.48
+  - @cat-factory/spend@0.15.66
+  - @cat-factory/caching@0.18.39
+  - @cat-factory/observability-langfuse@0.10.68
+  - @cat-factory/provider-cloudflare@0.7.446
+
+## 0.181.0
+
+### Minor Changes
+
+- 5f6699a: Let an MCP host connect over OAuth, instead of being handed a key to paste into a config file.
+
+  The hosted endpoint (`POST /api/v1/mcp`) has always accepted a public-API key, and a key was the only
+  way in. That rules out the hosts the endpoint exists for: claude.ai, Claude Desktop and the IDE
+  clients discover authorization from the server and have no console at someone else's deployment to
+  paste a credential into. It also puts a long-lived credential in a config file on disk, which is the
+  exact hazard this project's own docs warn about for the stdio path.
+
+  This deployment now speaks the MCP authorization spec, as its own authorization server. A host asks
+  the endpoint, is answered `401` with a `WWW-Authenticate` naming the protected-resource metadata,
+  walks that to the authorization-server metadata, registers itself dynamically, and opens a browser.
+  A signed-in person with `secrets.manage` picks the board and the rung of the scope ladder, and the
+  host is issued a credential of its own.
+
+  **What it issues is an ordinary public-API key**, and that one choice decides most of the rest.
+  Nothing downstream learns a second token format, every `/api/v1` route the tools reach authenticates
+  exactly as before, and revoking the connection is the button already in the board's key panel, where
+  it appears as `MCP: <host name>`. The honest cost is stated on the wire rather than hidden: a key
+  does not expire, so `expires_in` is OMITTED (RFC 6749 makes it optional precisely so a server can say
+  this by absence) and NO refresh grant is advertised, because a refresh could only mint duplicates. A
+  client asking for one is refused in the protocol's own vocabulary rather than by a 404 it would read
+  as a broken deployment. Giving keys a real expiry is what would make a refresh grant honest, and it
+  needs an `expiresAt` column on both runtimes.
+
+  **Nothing is persisted.** The `client_id`, the in-flight authorization request and the code are each
+  sealed into the value the other party carries, under the deployment's own key with an explicit `kind`
+  the opener pins. A table would have cost a migration on both runtimes, a repository pair, a
+  mothership routing decision, and a sweeper for the rows behind every consent screen anyone abandoned.
+  It buys two residual gaps, both recorded rather than papered over. There is no single-use enforcement
+  on the code, which PKCE makes survivable (redeeming needs the verifier, which never left the host, so
+  a code lifted from a history or a proxy log is unredeemable by whoever lifted it) and which a 60
+  second TTL bounds; and a registration cannot be revoked, which is acceptable because it confers
+  nothing at all until a human approves a specific board.
+
+  **Dynamic client registration IS performed here, the opposite of the decision on the consuming side**,
+  where this platform is the OAuth client of a vendor's MCP server and deliberately does not register
+  itself. There, a runtime-minted client is deployment state with no operator-visible identity at the
+  vendor, so nobody can find, rotate or revoke it. Here the registration is a name and a redirect list
+  that grant nothing until a `secrets.manage` holder approves a board and a scope, and what they
+  approve is a key they can see and delete.
+
+  **The consent screen is a page in the SPA, not a screen the backend renders**, which is the same
+  shape the consuming side's vendor callback settled on, reached from the opposite direction. An
+  authorization endpoint is a top-level browser navigation a third party triggers, so it carries no
+  bearer token, and a screen served there could not say who was approving; any "is this the right
+  person" check written on it is unreachable code that reads like protection. So `GET /oauth/authorize`
+  validates, seals, and redirects to `/mcp-authorize`, whose two calls are ordinary session-gated API.
+  On an SSO deployment that is also where the identity provider gets into a flow that otherwise knows
+  about nobody.
+
+  Two asymmetries in that controller are deliberate. A DENIAL takes no permission, because a person who
+  cannot approve must still be able to answer, or the host waits out its timeout and its user goes
+  looking for a fault in the deployment. And WHERE a refusal at the authorize endpoint goes turns on
+  one line: until the `redirect_uri` has been matched against the registration there is no address it
+  may be sent to, because bouncing it back would BE the open redirect that check exists to prevent, so
+  it renders as a page; once it has been matched, RFC 6749 §4.1.2.1 puts every remaining fault (a bad
+  `response_type`, missing PKCE, a `resource` naming somewhere else) on the client's own registered
+  address, because a page instead leaves a conforming host waiting on a callback that never arrives.
+  The distinction is carried by the error the service throws rather than re-derived at the route, so
+  nothing downstream re-decides it from attacker-supplied input.
+
+  **The consent screen preselects the platform's default scope, never the host's ask above it.**
+  Registration is unauthenticated, so `scope=admin` costs an attacker nothing, and an ask arriving as
+  the checked radio button would put the rung that deletes tasks and merges pull requests in front of a
+  person as though it were the shipped default. The ask is honoured only downward; above the default it
+  is REPORTED on the screen instead, so raising the grant stays something a person does.
+
+  **The 401 challenge is the piece with no second source.** Everything else in the chain was already
+  serveable and would have been unreachable, because nothing told a client to look. It is set by the
+  route on the request context and rendered by `handleError`, which stays the one producer of the error
+  envelope: the route knows its challenge before it knows whether it will refuse, and the refusal is
+  raised inside shared key-authentication code that has no business knowing which surface it protects.
+  `WWW-Authenticate` also joins `CORS_EXPOSED_HEADERS`, without which a browser-hosted client cannot
+  read the one header it cannot connect without.
+
+  **Verified against a real vendor rather than against expectations written beside the code.** The
+  serving documents are asserted by driving this repository's own CONSUMING discovery walk over them,
+  and the same test drives that walk over the documents Figma's live MCP server actually serves,
+  recorded verbatim. One client, two servers, and the second held to what the first demonstrates is
+  enough. The Figma fixture earns its place twice: it is also the only regression test the consuming
+  walk has against a shipping, OAuth-protected MCP server.
+
+  **`/.well-known/*` and `/oauth/*` answer any browser origin**, whatever `CORS_ALLOWED_ORIGINS` says,
+  through one predicate in the shared CORS layer both facades read. That is the complement of the
+  allowlist rather than a hole in it: the allowlist names the origins that may drive an existing
+  credential's surface, every route under these two prefixes is reached by a party that has no
+  credential yet, and the hosts this exists for run on origins no operator can be expected to have
+  listed. It belongs in the CORS layer rather than on a handler because a preflight is answered before
+  any route runs: covering the documents alone reads as working, since discovery is a plain GET nobody
+  preflights, and then the first call that ACTS on what was discovered is dropped by the browser.
+
+  Serving is enabled exactly when a deployment can complete the flow: an `ENCRYPTION_KEY` (everything
+  carried is sealed under it) and the public-API key store (what it issues). Absent either, NOTHING is
+  advertised: the discovery documents refuse with the same 503 as the routes they describe, and a host
+  falls back to asking for a key. A deployment that described an authorization server it cannot run
+  would send every host down a chain that fails at the last step, which reads as a broken deployment
+  rather than as one that has not enabled a capability.
+  `APP_BASE_URL` is read only for the consent redirect and falls back to the request's own origin,
+  which is right for every same-origin install; unlike the consuming side's `MCP_OAUTH_REDIRECT_URL`,
+  no third party holds this string.
+
+### Patch Changes
+
+- Updated dependencies [5f6699a]
+  - @cat-factory/contracts@0.292.0
+  - @cat-factory/integrations@0.155.0
+  - @cat-factory/server@0.269.0
+  - @cat-factory/agents@0.125.1
+  - @cat-factory/consensus@0.15.1
+  - @cat-factory/eks@0.1.295
+  - @cat-factory/gates@0.10.23
+  - @cat-factory/gitlab@0.19.14
+  - @cat-factory/kernel@0.285.1
+  - @cat-factory/observability-otel@0.18.30
+  - @cat-factory/orchestration@0.256.1
+  - @cat-factory/prompt-fragments@1.0.47
+  - @cat-factory/spend@0.15.65
+  - @cat-factory/provider-cloudflare@0.7.445
+  - @cat-factory/caching@0.18.38
+  - @cat-factory/observability-langfuse@0.10.67
+
+## 0.180.1
+
+### Patch Changes
+
+- Updated dependencies [22b2459]
+- Updated dependencies [2428b6b]
+  - @cat-factory/kernel@0.285.0
+  - @cat-factory/agents@0.125.0
+  - @cat-factory/consensus@0.15.0
+  - @cat-factory/server@0.268.0
+  - @cat-factory/integrations@0.154.0
+  - @cat-factory/orchestration@0.256.0
+  - @cat-factory/contracts@0.291.0
+  - @cat-factory/caching@0.18.37
+  - @cat-factory/eks@0.1.294
+  - @cat-factory/gates@0.10.22
+  - @cat-factory/gitlab@0.19.13
+  - @cat-factory/observability-langfuse@0.10.66
+  - @cat-factory/observability-otel@0.18.29
+  - @cat-factory/prompt-fragments@1.0.46
+  - @cat-factory/provider-cloudflare@0.7.444
+  - @cat-factory/spend@0.15.64
+
+## 0.180.0
+
+### Minor Changes
+
+- 19baddf: Show a task's design PICTURES to the agents that build the screen.
+
+  The frames an import retains for a linked design (Figma, Zeplin) already fed the
+  visual-confirmation gate and the UI tester's capture set. They now also reach the kinds that build
+  or plan a screen, on the two channels a dispatch can actually carry an image over: written into
+  `.cat-context/design-renders/` for a harness whose CLI reads image files, and attached to the model
+  request as image parts for an inline call. Which kinds get them is a declared trait
+  (`design-images`, on `coder` / `architect` / `fixer`), so a deployment's own UI kind opts in the
+  same way.
+
+  Delivery joins two DECLARED facts, and neither is inferred: `HARNESS_IMAGE_INPUT` says which agent
+  CLI can get bytes into a turn (`claude-code`; Codex and Pi are `false` with their reason stated),
+  and the new per-flavour `ModelRef.acceptsImages` says which model takes one. A dispatch that cannot
+  show the pictures TELLS the agent they exist, with which of the two is missing, so the textual
+  design description never reads as everything the platform had. An UNDECLARED model modality is its
+  own refusal reason rather than a silent "no", so an undeclared multimodal model cannot read as a
+  text-only one forever.
+
+  **Runner image bump** (`cat-factory-executor:1.107.0`): the harness gained the download for the new
+  manifest, and `designImages` joins `HARNESS_BODY_CAPABILITIES`, so a deployment running an older
+  image is told rather than leaving the backend's prompt naming a directory nothing wrote. Mirror the
+  tag into your registry and roll it out; nothing else in the change requires it.
+
+  Recorded prompt bodies now pass through `redactImagePayloads` on both the inline and proxy paths: a
+  `Uint8Array` JSON-stringifies to one entry per byte, so an attached frame would otherwise have
+  landed in telemetry as megabytes per recorded call.
+
+### Patch Changes
+
+- Updated dependencies [19baddf]
+  - @cat-factory/kernel@0.284.0
+  - @cat-factory/agents@0.124.0
+  - @cat-factory/orchestration@0.255.0
+  - @cat-factory/server@0.267.0
+  - @cat-factory/caching@0.18.36
+  - @cat-factory/consensus@0.14.81
+  - @cat-factory/eks@0.1.293
+  - @cat-factory/gates@0.10.21
+  - @cat-factory/gitlab@0.19.12
+  - @cat-factory/integrations@0.153.12
+  - @cat-factory/observability-langfuse@0.10.65
+  - @cat-factory/observability-otel@0.18.28
+  - @cat-factory/prompt-fragments@1.0.45
+  - @cat-factory/provider-cloudflare@0.7.443
+  - @cat-factory/spend@0.15.63
+
+## 0.179.14
+
+### Patch Changes
+
+- Updated dependencies [31f43c1]
+  - @cat-factory/contracts@0.290.0
+  - @cat-factory/kernel@0.283.0
+  - @cat-factory/orchestration@0.254.0
+  - @cat-factory/server@0.266.0
+  - @cat-factory/agents@0.123.6
+  - @cat-factory/consensus@0.14.80
+  - @cat-factory/eks@0.1.292
+  - @cat-factory/gates@0.10.20
+  - @cat-factory/gitlab@0.19.11
+  - @cat-factory/integrations@0.153.11
+  - @cat-factory/observability-otel@0.18.27
+  - @cat-factory/prompt-fragments@1.0.44
+  - @cat-factory/spend@0.15.62
+  - @cat-factory/caching@0.18.35
+  - @cat-factory/observability-langfuse@0.10.64
+  - @cat-factory/provider-cloudflare@0.7.442
+
+## 0.179.13
+
+### Patch Changes
+
+- Updated dependencies [3ff215a]
+  - @cat-factory/orchestration@0.253.1
+  - @cat-factory/consensus@0.14.79
+  - @cat-factory/contracts@0.289.1
+  - @cat-factory/kernel@0.282.1
+  - @cat-factory/agents@0.123.5
+  - @cat-factory/server@0.265.1
+  - @cat-factory/eks@0.1.291
+  - @cat-factory/gates@0.10.19
+  - @cat-factory/gitlab@0.19.10
+  - @cat-factory/integrations@0.153.10
+  - @cat-factory/observability-otel@0.18.26
+  - @cat-factory/prompt-fragments@1.0.43
+  - @cat-factory/spend@0.15.61
+  - @cat-factory/caching@0.18.34
+  - @cat-factory/observability-langfuse@0.10.63
+  - @cat-factory/provider-cloudflare@0.7.441
+
+## 0.179.12
+
+### Patch Changes
+
+- Updated dependencies [e3cf16a]
+  - @cat-factory/contracts@0.289.0
+  - @cat-factory/kernel@0.282.0
+  - @cat-factory/orchestration@0.253.0
+  - @cat-factory/server@0.265.0
+  - @cat-factory/agents@0.123.4
+  - @cat-factory/consensus@0.14.78
+  - @cat-factory/eks@0.1.290
+  - @cat-factory/gates@0.10.18
+  - @cat-factory/gitlab@0.19.9
+  - @cat-factory/integrations@0.153.9
+  - @cat-factory/observability-otel@0.18.25
+  - @cat-factory/prompt-fragments@1.0.42
+  - @cat-factory/spend@0.15.60
+  - @cat-factory/caching@0.18.33
+  - @cat-factory/observability-langfuse@0.10.62
+  - @cat-factory/provider-cloudflare@0.7.440
+
+## 0.179.11
+
+### Patch Changes
+
+- Updated dependencies [83764b5]
+  - @cat-factory/contracts@0.288.0
+  - @cat-factory/orchestration@0.252.0
+  - @cat-factory/server@0.264.0
+  - @cat-factory/agents@0.123.3
+  - @cat-factory/consensus@0.14.77
+  - @cat-factory/eks@0.1.289
+  - @cat-factory/gates@0.10.17
+  - @cat-factory/gitlab@0.19.8
+  - @cat-factory/integrations@0.153.8
+  - @cat-factory/kernel@0.281.3
+  - @cat-factory/observability-otel@0.18.24
+  - @cat-factory/prompt-fragments@1.0.41
+  - @cat-factory/spend@0.15.59
+  - @cat-factory/provider-cloudflare@0.7.439
+  - @cat-factory/caching@0.18.32
+  - @cat-factory/observability-langfuse@0.10.61
+
+## 0.179.10
+
+### Patch Changes
+
+- 00228c6: Mothership mode: widen the persistence RPC by thirteen methods across three surfaces that were
+  already REACHABLE from a mothership-mode node and broken, rather than merely absent.
+
+  Both owner-pair content libraries' repo-SYNC surfaces go remote (prompt fragments, foundational
+  services) on the premise the skills slice already retired: a node reaches GitHub through the
+  delegated App token, so those link / sync / unlink routes were live and failing. Introduces the
+  `librarySource` scope rule, `skillSource` generalised from an accountId to an `(ownerKind, ownerId)`
+  pair, and `ownerFieldUpsert`, which closes the id-keyed upsert gap the skills slice named: both
+  source tables conflict on `id` alone and never re-`SET` their owner columns, so binding only the
+  declared owner let an in-scope caller repoint another tenant's source at a repo it controls. That
+  rule reads an absent row as a create, so its lookup reports `found` / `absent` / `unreadable`
+  rather than a nullable owner: a source table a deployment cannot read must not be spent as the
+  admission a genuinely free id has earned.
+
+  `PromptFragmentRepository` gains `softDeleteBySource` on both runtimes, with a new
+  `defineFragmentLibrarySuite` parity assertion. Unlink retired a source's fragments with a
+  per-fragment `softDelete` loop, which going remote turns into one HTTPS round trip per fragment;
+  both sibling repo-sourced libraries already retired by source.
+
+  `reviewQuestionPostRepository` `claim`/`settle`/`get` join them. The engine writes that marker, so a
+  `claim` answering `unknown_method` was read by the caller's deliberate fallback as "someone else
+  holds the claim": every parked review on a local run skipped its ticket comment, and only a `warn`
+  said so.
+
+  Two Node routing gaps are fixed with them: the foundational-services catalog trio and the generated
+  fragment-brief store were built over the absent `db` and never re-pointed, so the allow-list named
+  them remote while only the Cloudflare facade could reach them. An un-routed repo is a `TypeError` on
+  the run path rather than a clean refusal, so a new guard asserts the relation structurally: every
+  repository a content-library helper builds and the allow-list names as remote must be re-pointed.
+
+  No public API or wire-shape change.
+
+- Updated dependencies [1fbd83c]
+- Updated dependencies [00228c6]
+  - @cat-factory/orchestration@0.251.1
+  - @cat-factory/contracts@0.287.1
+  - @cat-factory/kernel@0.281.2
+  - @cat-factory/agents@0.123.2
+  - @cat-factory/server@0.263.1
+  - @cat-factory/consensus@0.14.76
+  - @cat-factory/eks@0.1.288
+  - @cat-factory/gates@0.10.16
+  - @cat-factory/gitlab@0.19.7
+  - @cat-factory/integrations@0.153.7
+  - @cat-factory/observability-otel@0.18.23
+  - @cat-factory/prompt-fragments@1.0.40
+  - @cat-factory/spend@0.15.58
+  - @cat-factory/caching@0.18.31
+  - @cat-factory/observability-langfuse@0.10.60
+  - @cat-factory/provider-cloudflare@0.7.438
+
+## 0.179.9
+
+### Patch Changes
+
+- Updated dependencies [bf473bd]
+  - @cat-factory/contracts@0.287.0
+  - @cat-factory/orchestration@0.251.0
+  - @cat-factory/server@0.263.0
+  - @cat-factory/agents@0.123.1
+  - @cat-factory/consensus@0.14.75
+  - @cat-factory/eks@0.1.287
+  - @cat-factory/gates@0.10.15
+  - @cat-factory/gitlab@0.19.6
+  - @cat-factory/integrations@0.153.6
+  - @cat-factory/kernel@0.281.1
+  - @cat-factory/observability-otel@0.18.22
+  - @cat-factory/prompt-fragments@1.0.39
+  - @cat-factory/spend@0.15.57
+  - @cat-factory/provider-cloudflare@0.7.437
+  - @cat-factory/caching@0.18.30
+  - @cat-factory/observability-langfuse@0.10.59
+
 ## 0.179.8
 
 ### Patch Changes

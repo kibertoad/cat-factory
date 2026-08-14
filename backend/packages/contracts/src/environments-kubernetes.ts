@@ -88,6 +88,14 @@ export const kubernetesUrlSourceSchema = v.variant('source', [
     source: v.literal('ingressTemplate'),
     /** Host template, e.g. `{{branch}}.preview.example.com`; rendered with the provision vars. */
     hostTemplate: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+    /**
+     * Host port the ingress controller is reached on, when it is not the scheme's default. It has
+     * to live here rather than inside `hostTemplate`, because the rendered template is ALSO the
+     * Ingress `spec.rules[].host` the manifests declare (`provision-detect` reads one back out of
+     * a scanned Ingress), and Kubernetes rejects a `host` carrying a port. A local cluster that
+     * publishes its controller on 18080 is the case that needs it.
+     */
+    port: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65535))),
     scheme: v.optional(v.picklist(['http', 'https'])),
   }),
   v.object({

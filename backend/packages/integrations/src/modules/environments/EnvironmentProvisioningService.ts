@@ -890,7 +890,7 @@ export class EnvironmentProvisioningService {
         blockId: record.blockId,
         executionId: record.executionId,
         outcome: 'failure',
-        error: error instanceof Error ? error.message : String(error),
+        error: getErrorMessage(error),
         detail: null,
       })
       throw error
@@ -1199,9 +1199,9 @@ export class EnvironmentProvisioningService {
           blockId: args.blockId ?? null,
           executionId: args.executionId ?? null,
           outcome: 'failure',
-          error: `failed to persist the failed-environment record: ${
-            persistError instanceof Error ? persistError.message : String(persistError)
-          }`,
+          error: `failed to persist the failed-environment record: ${getErrorMessage(
+            persistError,
+          )}`,
           detail: null,
         })
         .catch(() => undefined)

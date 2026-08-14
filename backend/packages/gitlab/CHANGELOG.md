@@ -1,5 +1,444 @@
 # @cat-factory/gitlab
 
+## 0.20.23
+
+### Patch Changes
+
+- Updated dependencies [409238f]
+  - @cat-factory/kernel@0.301.0
+  - @cat-factory/contracts@0.313.0
+
+## 0.20.22
+
+### Patch Changes
+
+- Updated dependencies [0ef48d1]
+  - @cat-factory/kernel@0.300.0
+  - @cat-factory/contracts@0.312.0
+
+## 0.20.21
+
+### Patch Changes
+
+- Updated dependencies [d5c1f1c]
+- Updated dependencies [c67e924]
+  - @cat-factory/kernel@0.299.1
+  - @cat-factory/contracts@0.311.0
+
+## 0.20.20
+
+### Patch Changes
+
+- Updated dependencies [056e18d]
+  - @cat-factory/contracts@0.310.0
+  - @cat-factory/kernel@0.299.0
+
+## 0.20.19
+
+### Patch Changes
+
+- Updated dependencies [a81879b]
+  - @cat-factory/contracts@0.309.0
+  - @cat-factory/kernel@0.298.2
+
+## 0.20.18
+
+### Patch Changes
+
+- Updated dependencies [0e1e0fa]
+  - @cat-factory/contracts@0.308.1
+  - @cat-factory/kernel@0.298.1
+
+## 0.20.17
+
+### Patch Changes
+
+- Updated dependencies [7312e0a]
+  - @cat-factory/kernel@0.298.0
+  - @cat-factory/contracts@0.308.0
+
+## 0.20.16
+
+### Patch Changes
+
+- Updated dependencies [95408c2]
+  - @cat-factory/contracts@0.307.0
+  - @cat-factory/kernel@0.297.0
+
+## 0.20.15
+
+### Patch Changes
+
+- Updated dependencies [792ecde]
+  - @cat-factory/kernel@0.296.1
+
+## 0.20.14
+
+### Patch Changes
+
+- Updated dependencies [fc56d82]
+- Updated dependencies [fc9afb4]
+  - @cat-factory/contracts@0.306.0
+  - @cat-factory/kernel@0.296.0
+
+## 0.20.13
+
+### Patch Changes
+
+- Updated dependencies [edd4fd0]
+  - @cat-factory/kernel@0.295.0
+  - @cat-factory/contracts@0.305.0
+
+## 0.20.12
+
+### Patch Changes
+
+- Updated dependencies [36e0c9b]
+  - @cat-factory/contracts@0.304.0
+  - @cat-factory/kernel@0.294.1
+
+## 0.20.11
+
+### Patch Changes
+
+- Updated dependencies [569181d]
+  - @cat-factory/contracts@0.303.0
+  - @cat-factory/kernel@0.294.0
+
+## 0.20.10
+
+### Patch Changes
+
+- Updated dependencies [1a0b593]
+  - @cat-factory/contracts@0.302.0
+  - @cat-factory/kernel@0.293.0
+
+## 0.20.9
+
+### Patch Changes
+
+- Updated dependencies [7d1477c]
+  - @cat-factory/kernel@0.292.2
+
+## 0.20.8
+
+### Patch Changes
+
+- Updated dependencies [c09ddbe]
+  - @cat-factory/kernel@0.292.1
+
+## 0.20.7
+
+### Patch Changes
+
+- Updated dependencies [fc4a1e4]
+  - @cat-factory/contracts@0.301.0
+  - @cat-factory/kernel@0.292.0
+
+## 0.20.6
+
+### Patch Changes
+
+- Updated dependencies [ee733ee]
+  - @cat-factory/contracts@0.300.0
+  - @cat-factory/kernel@0.291.0
+
+## 0.20.5
+
+### Patch Changes
+
+- Updated dependencies [01086d8]
+  - @cat-factory/contracts@0.299.1
+  - @cat-factory/kernel@0.290.1
+
+## 0.20.4
+
+### Patch Changes
+
+- Updated dependencies [1bcdacc]
+  - @cat-factory/kernel@0.290.0
+
+## 0.20.3
+
+### Patch Changes
+
+- Updated dependencies [195b248]
+  - @cat-factory/contracts@0.299.0
+  - @cat-factory/kernel@0.289.1
+
+## 0.20.2
+
+### Patch Changes
+
+- Updated dependencies [bc2478d]
+  - @cat-factory/contracts@0.298.0
+  - @cat-factory/kernel@0.289.0
+
+## 0.20.1
+
+### Patch Changes
+
+- Updated dependencies [a634746]
+  - @cat-factory/contracts@0.297.0
+  - @cat-factory/kernel@0.288.0
+
+## 0.20.0
+
+### Minor Changes
+
+- 7893f35: `/api/v1` can ADOPT a repository that already exists: `GET /api/v1/repos/available` lists what a
+  workspace's connection can reach, and `POST /api/v1/repos/link` adopts one by name. Surface version
+  1.44.0, additive.
+
+  The hole they close was invisible from the surface. `GET /api/v1/repos` serves the repositories a
+  workspace has LINKED, which is a set someone assembles in the app: linking is explicit per workspace,
+  the provider webhook for an added repository does not project one, and a resync refreshes what is
+  already linked rather than rediscovering the installation. So a repository that exists and is
+  perfectly reachable is absent from every public read until a human opens the picker, and
+  `POST /api/v1/services` answers 404 for its `repoId`, which is byte-for-byte what a caller gets for a
+  repository that does not exist. A deployment could CREATE a repository through this API (1.41.0's
+  bootstrap) and could not adopt one it already had.
+
+  The two reads are a population pair rather than a duplicate, with `linked` as the join, so an absent
+  repository is now diagnosable: reachable-but-unadopted appears in `/repos/available` with
+  `linked: false`, and one that does not exist appears in neither. The adopt takes `owner`/`name`
+  because a caller setting a workspace up from configuration knows the name and cannot know a provider
+  id for a repository no public read lists; it is idempotent, answers the same row shape `/repos`
+  serves (projected from the same read, so the two cannot disagree about whether a repository is free),
+  and refuses an unreachable one with `404 repo_not_reachable`, a reason that covers "does not exist"
+  and "your credential is not granted it" together because a provider answers those identically.
+  `GitHubSyncService.linkRepoBySlug` resolves through the same path the app's own picker uses, and
+  matches the OWNER as well as the name: a slug search can surface a look-alike, and linking that one
+  would file a caller's work in someone else's account while answering 200.
+
+  The acceptance suite uses them, which is what makes a hand-written `.env` a supported way in rather
+  than a setup only `configure` could finish. Spec 01 adopts a repository the workspace does not hold
+  instead of refusing; `target-repos` gates on REACHABILITY, point-reading `/repos/available` for
+  anything unlinked and reporting "reachable but not adopted yet" as a pass; and `configure` adopts each
+  repository rather than printing instructions for doing it by hand. Every attempt states its outcome,
+  because a loop that reports only its positive answer is indistinguishable from one doing nothing, and
+  what a refusal now asks for is only what no API can do: create the repository, and grant the
+  credential access to it.
+
+  Review follow-ups on the pair, all still inside 1.44.0 and still additive:
+
+  Both rows now report whether a repository is SPOKEN FOR, from one account-scoped judgement.
+  `/repos/available` publishes `serviceId` and `linkedElsewhere` exactly as `/repos` does, because a
+  repository nobody here has linked can still back a service on another board of the account, and
+  `POST /api/v1/services` refuses it either way. A discovery read that could not say so handed a
+  caller a repository whose next call fails, and it was the acceptance gate that felt it first: it
+  green-lit a pass that then died on the adopt, after the run the gate exists to precede. The
+  judgement is now `PublicBoardReads.repoUse`, asked once of the projection (the repos list) and once
+  of a batch of ids (the available read), so there is no second derivation to drift.
+
+  The available read also publishes `truncated`. The provider legs behind it stop at a page cap and a
+  search cap, so on a wide connection the rows are a prefix and a reachable repository can be missing
+  from them, which is indistinguishable from the non-existence this read exists to diagnose. A
+  point-read (`?q=owner/name`) resolves the exact slug directly and stays authoritative either way.
+
+  A provider refusal is answered as one on BOTH operations and on either provider. The available read
+  was left unwrapped, so a revoked credential or a rate limit on it arrived as `500 internal` rather
+  than the documented 503/429; and the mapping recognised `GitHubApiError` alone, so a GitLab-connected
+  workspace got that same `500` for a revoked token on both routes. Kernel now owns a `VcsApiError`
+  base that both provider clients extend, which is the identity a consumer above the adapters branches
+  on.
+
+  The adopt is idempotent for a repository the credential can no longer reach: it resolves from what
+  the workspace LINKS before consulting the provider, so a re-run no longer answers 404 for a
+  repository `GET /api/v1/repos` still lists (a personal repository, or a narrowed App grant). And the
+  link's `owner` accepts a namespace PATH, so a GitLab project under nested groups can be adopted at
+  all: the available read published `group/subgroup` and the adopt refused it with a 422.
+
+  In the suite, "the connection cannot reach it" is now recognised by `details.reason`, not by the 404
+  alone: a deployment older than these endpoints answers an unmatched route with the same status, and
+  reading that as "create the repository" sent an operator to create one they already had.
+
+  Internal, breaking for in-repo callers only: `GitHubSyncService.listAvailableRepos` answers
+  `{ repos, truncated }` rather than an array, the kernel `GitHubClient.searchInstallationRepos` port
+  answers a `Paged` rather than an array (every adapter caps something, and a search that filters a
+  bounded listing can return two rows and still be a prefix, which no row count reveals), and the
+  `viewerRepos` / `patInstallationRepos` caches hold the whole page rather than its items (an
+  enumeration that stopped at the cap is a prefix, and caching only the rows served that prefix to
+  every later keystroke as the complete set).
+
+### Patch Changes
+
+- Updated dependencies [7893f35]
+  - @cat-factory/contracts@0.296.0
+  - @cat-factory/kernel@0.287.0
+
+## 0.19.20
+
+### Patch Changes
+
+- Updated dependencies [07ff467]
+  - @cat-factory/contracts@0.295.0
+  - @cat-factory/kernel@0.286.3
+
+## 0.19.19
+
+### Patch Changes
+
+- Updated dependencies [9b3473a]
+  - @cat-factory/contracts@0.294.0
+  - @cat-factory/kernel@0.286.2
+
+## 0.19.18
+
+### Patch Changes
+
+- b889842: Report the actual cause of a failure everywhere, not just on a "Test connection" button.
+
+  The previous slice taught the connection PROBES to read the cause chain, because on Node a transport
+  failure is `TypeError: fetch failed` and what happened hangs off `.cause`. It turned out the repo had
+  three describers of a thrown value and the other two stopped at `error.message`: `getErrorMessage`
+  (the string a human is shown, and what a persisted failure reason or a PR comment records) and
+  `describeError` (every log line). So a probe could name `connect ECONNREFUSED 127.0.0.1:6443` while
+  the log line and the toast for the same failure still said `fetch failed`, which is what made a
+  Kubernetes connect failure unexplainable even with the probe fixed.
+
+  All three now flatten through one kernel core (`shared/error-chain.logic.ts`): `.cause` plus each
+  `AggregateError` branch (so a dual-stack `localhost` reports what happened on each address), scrubbed
+  through `redactSecrets`, capped with a marker saying what it dropped, and bounded by link identity so
+  a cause cycle terminates. Roughly 90 hand-rolled `e instanceof Error ? e.message : String(e)` copies
+  across the backend now call `getErrorMessage`, and five local `errMessage`/`messageOf` wrappers are
+  deleted.
+
+  Who may read a chain is part of the rule. An AUTHENTICATED reader gets it, because the inner link is
+  usually the only thing saying whether the fix is theirs or the deployment's; where a deployment's
+  model endpoints are platform-internal, their host and port do reach a workspace member through an
+  ordinary 4xx. An UNAUTHENTICATED surface does not: `/ready` on BOTH facades answers with kernel's
+  `publicDiagnostic` (the outermost link, scrubbed) rather than publishing the deployment's database
+  address, sharing one helper so the two runtimes cannot drift to different depths.
+
+  A VERDICT does not read the rendered string either. `errorChainMatches` tests each link uncapped, so
+  a sentinel phrase pushed past the display budget by a long wrapper cannot silently turn a recognised
+  rollout stop into a crash. Relatedly, log fields get their own, much wider cap than the 400 characters
+  a human-facing message is held to, and an error with nothing to say answers with the empty string
+  rather than the bare constructor name, so a call site's `getErrorMessage(e) || '<what to do>'` guard
+  still fires.
+
+  `redactSecrets` now spares a single-case word and an env-var-shaped identifier where a field-name rule
+  matched: it scrubs the message a person reads, and `Missing required key: OPENAI_API_KEY` must not
+  lose the name they have to go and set. Every credential shape the rules exist for still matches.
+
+  An error message may therefore now carry appended causes where it did not before. The opening phrase
+  is unchanged, which is what the downstream `/dispatch failed/i` and eviction-sentinel checks match on.
+
+  On the SPA, every failure toast goes through the one funnel that already existed for pipeline errors,
+  instead of 29 per-component copies of the same `notifyError(title, e)` and ~83 direct `toast.add`
+  calls rendering the raw message. Beyond the translated copy that funnel already resolved, a failure
+  toast now stays until dismissed instead of vanishing after about five seconds, its text is
+  selectable, and one click copies the whole report: the action that failed, the class of failure, the
+  backend's own account, and the `requestId` that is the only join between what the user saw and the
+  server log line explaining it. Conflict (409) toasts get the same treatment, which matters most on
+  the unknown-reason path, since that is where a reason an older SPA build has never heard of lands.
+
+  `@cat-factory/cli` carries its own copy of the describer rather than importing kernel. That package is
+  published and deliberately runtime-dependency-free, so a `workspace:*` import from its `bin` resolves
+  through pnpm's link locally and is simply absent off the registry; a conformity test pins the copy to
+  kernel's output byte for byte.
+
+- Updated dependencies [b889842]
+  - @cat-factory/kernel@0.286.1
+
+## 0.19.17
+
+### Patch Changes
+
+- Updated dependencies [b25732f]
+  - @cat-factory/contracts@0.293.0
+  - @cat-factory/kernel@0.286.0
+
+## 0.19.16
+
+### Patch Changes
+
+- Updated dependencies [7119ca7]
+  - @cat-factory/contracts@0.292.2
+  - @cat-factory/kernel@0.285.3
+
+## 0.19.15
+
+### Patch Changes
+
+- Updated dependencies [57a7ecd]
+  - @cat-factory/contracts@0.292.1
+  - @cat-factory/kernel@0.285.2
+
+## 0.19.14
+
+### Patch Changes
+
+- Updated dependencies [5f6699a]
+  - @cat-factory/contracts@0.292.0
+  - @cat-factory/kernel@0.285.1
+
+## 0.19.13
+
+### Patch Changes
+
+- Updated dependencies [22b2459]
+- Updated dependencies [2428b6b]
+  - @cat-factory/kernel@0.285.0
+  - @cat-factory/contracts@0.291.0
+
+## 0.19.12
+
+### Patch Changes
+
+- Updated dependencies [19baddf]
+  - @cat-factory/kernel@0.284.0
+
+## 0.19.11
+
+### Patch Changes
+
+- Updated dependencies [31f43c1]
+  - @cat-factory/contracts@0.290.0
+  - @cat-factory/kernel@0.283.0
+
+## 0.19.10
+
+### Patch Changes
+
+- Updated dependencies [3ff215a]
+  - @cat-factory/contracts@0.289.1
+  - @cat-factory/kernel@0.282.1
+
+## 0.19.9
+
+### Patch Changes
+
+- Updated dependencies [e3cf16a]
+  - @cat-factory/contracts@0.289.0
+  - @cat-factory/kernel@0.282.0
+
+## 0.19.8
+
+### Patch Changes
+
+- Updated dependencies [83764b5]
+  - @cat-factory/contracts@0.288.0
+  - @cat-factory/kernel@0.281.3
+
+## 0.19.7
+
+### Patch Changes
+
+- Updated dependencies [1fbd83c]
+- Updated dependencies [00228c6]
+  - @cat-factory/contracts@0.287.1
+  - @cat-factory/kernel@0.281.2
+
+## 0.19.6
+
+### Patch Changes
+
+- Updated dependencies [bf473bd]
+  - @cat-factory/contracts@0.287.0
+  - @cat-factory/kernel@0.281.1
+
 ## 0.19.5
 
 ### Patch Changes

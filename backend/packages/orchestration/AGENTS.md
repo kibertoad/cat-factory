@@ -70,7 +70,14 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   import retained for the designs a task links, folded into its gallery beside the hand-uploaded
   references, with the collision, precedence and gap rules that fold implies),
   plus `RunStateMachine`, `StepGraph`, the companion/review
-  controllers, and `*.logic.ts` helpers (`ci.logic`, `release.logic`, `stepGating.logic`, …), and
+  controllers (`CompanionController` drives the rework loop but decides nothing: WHAT a round means
+  is kernel's `companion-logic.ts` (`disposeCompanionVerdict`), and there are THREE stop conditions
+  — an open `blocker` finding, the budget, and `companionProgress.logic.ts`, which ends a loop that
+  has stopped converging, since `attempts < maxAttempts` bounds how LONG a loop runs and says
+  nothing about whether it is getting anywhere. The last two reach the same human iteration-cap
+  gate, and which PARK REASON they reach it with (`companionParkReasonFor`) is what an unattended
+  risk policy reads), `companion-review-context.ts` (the loop's MEMORY: the prior rounds each side
+  is shown), and `*.logic.ts` helpers (`ci.logic`, `release.logic`, `stepGating.logic`, …), and
   `PrVerificationReportController` + `prReport.logic.ts` (the **PR verification report**:
   composed from the settled run's own state and published onto EACH pull request the run opened
   through the `PrVerificationReportPublisher` port; a cross-service run's peer PRs get their own
@@ -129,8 +136,12 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   `start`/`retry`/`restartFrom` differ only in the block patch they write between them, so the order
   across them is owned in one place rather than three. The run/step lifecycle
   reference is `docs/execution-state-machine.md`.
-- `merge/`: the merge policy + its evidence: `RiskPolicyService` (the per-workspace
-  merge-threshold preset library, including the per-class `classRules`), `MergeTrackRecordService`
+- `merge/`: the merge policy + its evidence: `RiskPolicyService` (the BOARD's policy library,
+  including the per-class `classRules`, plus its clone/hide of what it inherits),
+  `AccountRiskPolicyService` (the ACCOUNT tier) and `WorkspaceRiskPolicyLibrary` — the ONE merged
+  reader the editor, every picker and the engine's own resolution hold, so a policy the picker
+  offered is the policy the run is governed by (`backend/docs/adr/0055-account-scoped-risk-policies.md`);
+  `MergeTrackRecordService`
   (deterministic change classification + the persisted record of every merge decision, the
   reviewer-effort tag, and the per-class SQL rollups) and `externalMergeObserver` (attributing a
   PR merged directly on the provider). See CLAUDE.md → "Merge track record".
@@ -212,7 +223,13 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   severities are the design: an unresolvable pipeline id is an `error` because the created task
   would silently fall back to the positional default, while a task type's unresolvable
   `defaultFragmentIds` is a `warn` naming both causes, since an account/workspace-tier fragment
-  merges per workspace at run time and boot structurally cannot see one.
+  merges per workspace at run time and boot structurally cannot see one. Two sections live beside
+  it: `validateToolServers.ts` (a kind's declared MCP servers, their per-dispatch budget, and the
+  credential rules, which are the sharpest here because a tool-server declaration names both the key
+  it wants and the endpoint that key is sent to) and `validateBinaryGenerators.ts`, the one section
+  with a rule spanning DEFINITIONS: two integrations may share an injected variable only when they
+  look the value up under the same key, and different keys behind one name is refused here rather
+  than arbitrated at dispatch.
 
 Two top-level helpers sit beside `modules/` because every INLINE LLM caller shares them, and both
 are about resolving ONE thing consistently rather than about any one feature:

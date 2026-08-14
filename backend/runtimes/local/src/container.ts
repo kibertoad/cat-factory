@@ -29,8 +29,9 @@ import {
 import { startMothershipTelemetrySweeps } from './telemetrySweeps.js'
 import {
   ConflictError,
-  MODEL_PRESET_SEED_IDS,
   defaultProviderRegistry,
+  getErrorMessage,
+  MODEL_PRESET_SEED_IDS,
   runBestEffort,
 } from '@cat-factory/kernel'
 import type { ProviderRegistry } from '@cat-factory/kernel'
@@ -762,7 +763,7 @@ function buildLocalAgentTransports(params: {
     // fails loudly with a clearer message, so swallow it here.
     await transport.reapExited().catch((err) => {
       logger.warn('local mode: could not reap / pre-warm job containers at startup', {
-        err: err instanceof Error ? err.message : String(err),
+        err: getErrorMessage(err),
       })
     })
     // Also reap per-run containers left RUNNING by a crashed previous process whose run is
@@ -775,7 +776,7 @@ function buildLocalAgentTransports(params: {
       })
       .catch((err) => {
         logger.warn('local mode: could not reap orphaned run containers at startup', {
-          err: err instanceof Error ? err.message : String(err),
+          err: getErrorMessage(err),
         })
       })
     return transport

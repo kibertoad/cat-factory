@@ -69,6 +69,9 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
   const agentContextObservability = new AgentContextObservabilityService({
     agentContextSnapshotRepository: repos.agentContextSnapshotRepository,
     workspaceSettingsRepository: repos.workspaceSettingsRepository,
+    // The per-workspace gate is asked once per recorded dispatch, and an INLINE dispatch waits on it
+    // before its model call — so on this facade, where the slice is real, it rides the shared cache.
+    ...(caches ? { workspaceSettingsCache: caches.workspaceSettings } : {}),
     idGenerator,
     clock,
     recordPrompts: config.observability.recordPrompts,

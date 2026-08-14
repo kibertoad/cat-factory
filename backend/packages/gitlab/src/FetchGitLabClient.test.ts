@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { VcsConnectionRef, VcsRepoRef } from '@cat-factory/kernel'
-import { createRecordingLogger, defaultVcsRegistry, noopLogger } from '@cat-factory/kernel'
-import { FetchGitLabClient } from './FetchGitLabClient.js'
+import {
+  VcsApiError,
+  createRecordingLogger,
+  defaultVcsRegistry,
+  noopLogger,
+} from '@cat-factory/kernel'
+import { FetchGitLabClient, GitLabApiError } from './FetchGitLabClient.js'
 import { StaticGitLabTokenSource } from './tokenSource.js'
 import { registerGitLab } from './index.js'
 import { GitLabWebhookMapper, GitLabWebhookVerifier } from './webhook.js'
@@ -975,5 +980,20 @@ describe('registerGitLab', () => {
     expect(bundle.webhookMapper).toBeInstanceOf(GitLabWebhookMapper)
     expect(bundle.webhookVerifier).toBeInstanceOf(GitLabWebhookVerifier)
     expect(bundle.provisioning).toBeDefined()
+  })
+})
+
+describe('GitLabApiError', () => {
+  it('IS a VcsApiError, so a consumer above the adapters classifies it without naming GitLab', () => {
+    // The seam a public route depends on: `asVcsRefusal` re-raises a provider refusal as a 503 or a
+    // 429 by checking the shared base. Keyed on the GitHub class alone, a GitLab deployment answered
+    // a revoked token with a 500 telling the operator to file a platform bug, and nothing failed to
+    // compile to say so. This is the assertion that keeps the two providers on one identity.
+    const error = new GitLabApiError(401, '401 Unauthorized')
+    expect(error).toBeInstanceOf(VcsApiError)
+    expect(error.provider).toBe('gitlab')
+    expect(error.status).toBe(401)
+    // No flag to read: GitLab reports an exhausted quota as a plain 429, which the status carries.
+    expect(error.rateLimited).toBe(false)
   })
 })

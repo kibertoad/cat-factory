@@ -188,8 +188,8 @@ jobs:
               - '.github/workflows/ci.yml'
               - '.github/actions/**'
             # The cross-SDK smoketest (`sdk-smoketest`) boots a real backend and drives all four
-            # SDK clients plus the published MCP server against it, so it runs when EITHER side of
-            # that contract moves: the
+            # SDK clients plus both MCP access paths (the published stdio server and the hosted
+            # endpoint) against it, so it runs when EITHER side of that contract moves: the
             # SDKs themselves, the generator that writes them, the published spec, the Valibot
             # contracts the spec is generated FROM, or the controllers that serve `/api/v1`. That
             # last pair is the point — an SDK is only correct relative to the surface it talks to,
@@ -210,6 +210,9 @@ jobs:
               # changes the spec without touching any name a hand-list could hold.
               - 'backend/packages/contracts/src/routes/**'
               - 'backend/packages/server/src/modules/publicApi/**'
+              # The other half of the hosted MCP endpoint: the in-process dispatch every tool call
+              # rides. A loopback-only edit changes what the hosted phase is smoketested against.
+              - 'backend/packages/server/src/http/loopback.ts'
               - 'backend/internal/sdk-smoketest/**'
               # The harness boots the e2e test server, so a change to that wiring changes what the
               # SDKs are smoketested against.
@@ -522,6 +525,16 @@ jobs:
       # because it reports green. Its fixtures run in the `node --test` step above. Pure node.
       - name: Guard test-lane parity
         run: node scripts/check-test-lane-parity.mjs
+
+      # Requires every group of the split conformance suite to run on every facade. Wiring the
+      # suite used to be one call per facade, which nobody could half-do; it is now five group
+      # functions across fifteen spec files, and a facade missing one reports GREEN — the
+      # assertions it skips are indistinguishable from assertions that passed. That is the failure
+      # the conformance package exists to prevent, so it cannot be left to whoever wires the next
+      # group remembering all three trees. Its fixtures run in the `node --test` step above. Pure
+      # node, no install, no network.
+      - name: Guard conformance group parity
+        run: node scripts/check-conformance-group-parity.mjs
 
   # The former monolithic "Build & typecheck" job was one long SERIAL chain (build →
   # publint/attw → knip → typechecks → nuxt generate → drizzle) and, at ~3m, a co-critical
@@ -1538,10 +1551,11 @@ jobs:
       - name: Wait for Postgres
         run: .github/scripts/wait-postgres.sh
 
-      # Two phases: the four clients compared against each other, then the published MCP server
-      # spawned as a real process against the same backend. The build above is what puts
-      # `sdk/mcp/dist/bin.js` there; the harness fails naming the build command if it is absent,
-      # because nothing about that phase can be concluded without it.
+      # The four clients compared against each other, then the MCP phases: the published server
+      # spawned as a real process, and a Streamable HTTP client against the hosted endpoint, both
+      # on the same backend. The build above is what puts `sdk/mcp/dist/bin.js` there; the harness
+      # fails naming the build command if it is absent, because nothing about that phase can be
+      # concluded without it.
       - name: Run the cross-SDK smoketest
         run: pnpm --filter @cat-factory/sdk-smoketest run smoketest
 

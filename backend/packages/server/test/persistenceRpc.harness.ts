@@ -10,6 +10,7 @@
 import {
   type AccountRepository,
   ConflictError,
+  DataIntegrityError,
   type ExecutionInstance,
   type ExecutionRepository,
   type MembershipRepository,
@@ -22,6 +23,7 @@ import {
 } from '../src/persistence/remoteRepositories.js'
 import {
   type DispatchOptions,
+  type LibrarySourceEntity,
   type PersistenceRegistry,
   dispatchPersistenceCall,
 } from '../src/persistence/rpc.js'
@@ -39,6 +41,8 @@ export function inProcessClient(opts: DispatchOptions): PersistenceRpcClient {
 export const ACCOUNT = 'acc_1'
 export const OTHER_ACCOUNT = 'acc_2'
 export const USER = 'usr_1'
+/** The run id whose row the fake mothership cannot decode (see `executionRepository.get`). */
+export const UNDECODABLE_RUN_ID = 'ex_undecodable'
 
 function workspace(id: string, accountId: string): Workspace & { accountId: string } {
   return { id, name: id, accountId } as unknown as Workspace & { accountId: string }
@@ -117,7 +121,20 @@ function buildScopeAnchorRepos(fx: RegistryFixtures) {
         executions.set(execution.id, { ...execution })
         return true
       },
-      get: async (_workspaceId: string, id: string) => executions.get(id) ?? null,
+      get: async (_workspaceId: string, id: string) => {
+        // One sentinel id stands for a row the MOTHERSHIP cannot decode. It is the only throw on
+        // this hop that is neither a `DomainError` nor an opaque internal fault, and the node's
+        // engine branches on recognising it: flattened to `internal`, the disposal of a poison run
+        // silently does nothing on mothership deployments.
+        if (id === UNDECODABLE_RUN_ID) {
+          throw new DataIntegrityError(
+            'Execution row has no block_id',
+            { table: 'agent_runs', id },
+            'malformed',
+          )
+        }
+        return executions.get(id) ?? null
+      },
       // Always conflicts — to prove a DomainError survives the hop.
       markFailed: async () => {
         throw new ConflictError('already terminal', 'invalid_state' as never)
@@ -151,6 +168,9 @@ function buildScopeAnchorRepos(fx: RegistryFixtures) {
           })
           .filter(Boolean),
       listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
+      // The run→block REVERSE link, read when a run row cannot be decoded. Echoes the bound
+      // workspace like the other workspace-scoped reads (the real method returns a `Block | null`).
+      getByExecution: async (ws: string, executionId: string) => ({ ws, executionId }),
       // The public API's in-flight cap (workspace-scoped SQL COUNT → a number).
       countActiveInternal: async (_ws: string) => 3,
       // The container-resize child translation: a workspace-scoped arithmetic UPDATE returning
@@ -255,6 +275,8 @@ function buildBoardConfigRepos() {
       list: async (ws: string) => [{ ws }],
       getDefault: async (ws: string) => ({ ws }),
       upsert: async () => undefined,
+      // The batched built-in seed a workspace's FIRST board load writes through.
+      upsertMany: async () => undefined,
       get: async (ws: string) => ({ ws }),
       remove: async () => undefined,
     },
@@ -324,6 +346,23 @@ function buildBoardConfigRepos() {
       get: async (ws: string) => ({ ws }),
       upsert: async () => undefined,
     },
+    // The parked-review question writeback marker. Every method takes the marker KEY as arg0, whose
+    // `workspaceId` is a FIELD — so the reads echo the key back and `claim` echoes the bound
+    // workspace through its boolean, letting the round-trip prove which workspace was bound.
+    reviewQuestionPostRepository: {
+      claim: async (key: { workspaceId: string }) => key.workspaceId === 'ws_in',
+      settle: async () => undefined,
+      get: async (key: { workspaceId: string }) => ({ ...key }),
+    },
+    // Its INBOUND mirror image, wired here but deliberately OFF the allow-list: a tracker comment
+    // reaches the deployment holding the public webhook URL, so a laptop never receives a delivery
+    // and has nothing to claim. Wired so the refusal proves the allow-list rather than absent
+    // plumbing.
+    trackerCommentIngestRepository: {
+      claim: async () => true,
+      settle: async () => undefined,
+      get: async () => null,
+    },
     environmentRegistryRepository: {
       getByBlock: async (ws: string) => ({ ws }),
       get: async (ws: string) => ({ ws }),
@@ -380,7 +419,7 @@ function buildBoardConfigRepos() {
     },
     trackerSettingsRepository: {
       get: async (ws: string) => ({ ws }),
-      put: async () => undefined,
+      merge: async (ws: string) => ({ ws }),
     },
     notificationRepository: {
       listOpen: async (ws: string) => [{ ws }],
@@ -602,6 +641,36 @@ const SKILL_SOURCES = new Map<string, { id: string; accountId: string }>([
   ['sklsrc_out', { id: 'sklsrc_out', accountId: OTHER_ACCOUNT }],
 ])
 
+/** One owner-pair source row, as the `librarySource` / `ownerFieldUpsert` resolver projects it. */
+interface LibrarySourceRow {
+  id: string
+  ownerKind: string
+  ownerId: string
+}
+
+/**
+ * The two owner-PAIR content libraries' source tables (fragments, foundational services). Unlike
+ * skills — one tier, so a bare accountId — a source here is owned by an `(ownerKind, ownerId)` pair,
+ * so each table carries THREE rows: a workspace-tier owner in scope, an account-tier owner in scope,
+ * and one under OTHER_ACCOUNT. The `*_missing` ids are deliberately absent, which is what the
+ * fail-closed and the `ownerFieldUpsert`-create cases turn on.
+ *
+ * Keyed by `LibrarySourceEntity`, exactly as the resolver is, so a fragment-source id looked up
+ * against the foundational table resolves to nothing (the discriminator's whole job).
+ */
+const LIBRARY_SOURCES: Record<string, Map<string, LibrarySourceRow>> = {
+  fragmentSource: new Map([
+    ['fragsrc_ws_in', { id: 'fragsrc_ws_in', ownerKind: 'workspace', ownerId: 'ws_in' }],
+    ['fragsrc_acc_in', { id: 'fragsrc_acc_in', ownerKind: 'account', ownerId: ACCOUNT }],
+    ['fragsrc_out', { id: 'fragsrc_out', ownerKind: 'workspace', ownerId: 'ws_out' }],
+  ]),
+  foundationalServiceSource: new Map([
+    ['fndsrc_ws_in', { id: 'fndsrc_ws_in', ownerKind: 'workspace', ownerId: 'ws_in' }],
+    ['fndsrc_acc_in', { id: 'fndsrc_acc_in', ownerKind: 'account', ownerId: ACCOUNT }],
+    ['fndsrc_out', { id: 'fndsrc_out', ownerKind: 'account', ownerId: OTHER_ACCOUNT }],
+  ]),
+}
+
 /** The owner-scoped content library (fragments, sources) plus the invitation / Slack / telemetry reads. */
 function buildLibraryAndCommsRepos() {
   return {
@@ -617,7 +686,10 @@ function buildLibraryAndCommsRepos() {
       }),
       upsert: async () => undefined,
       softDelete: async () => undefined,
-      listBySource: async () => [],
+      // The sync reconcile pair: the read echoes the sourceId, so the round-trip can assert the
+      // bound source reached the repo rather than merely that the call was admitted.
+      listBySource: async (sourceId: string) => [{ sourceId }],
+      softDeleteBySource: async () => undefined,
     },
     // The generated-brief store: owner-keyed list + record-based upsert + owner-keyed delete.
     // Same (ownerKind, ownerId) pair as the fragments it condenses, so the same rules bind it.
@@ -626,12 +698,15 @@ function buildLibraryAndCommsRepos() {
       upsert: async () => undefined,
       delete: async () => undefined,
     },
-    // The fragment-source library: owner-keyed list + record-based upsert. `get` is wired but
-    // sourceId-keyed (absent from the allow-list — the repo-sync management the mothership owns).
+    // The fragment-source library: owner-keyed list + the id-keyed `upsert` (`ownerFieldUpsert`) +
+    // the sourceId-keyed sync trio, which binds through `librarySource` against `LIBRARY_SOURCES`.
+    // `get` answers the real fixture row so the dispatched read and the scope resolver agree.
     fragmentSourceRepository: {
       listByOwner: async (ownerKind: string, ownerId: string) => [{ ownerKind, ownerId }],
       upsert: async () => undefined,
-      get: async (id: string) => ({ id }),
+      get: async (id: string) => LIBRARY_SOURCES.fragmentSource!.get(id) ?? null,
+      updateSyncState: async () => undefined,
+      softDelete: async () => undefined,
     },
     // The repo-sourced Claude Skills library (ADR 0024). ONE tier — the account — so the reads
     // echo the accountId (arg0) and the sourceId-keyed sync methods bind through the `skillSource`
@@ -670,7 +745,8 @@ function buildLibraryAndCommsRepos() {
       upsert: async () => undefined,
       softDelete: async () => undefined,
       hardDelete: async () => undefined,
-      listBySource: async () => [],
+      // The source-keyed reconcile pair, bound by `librarySource` against `LIBRARY_SOURCES`.
+      listBySource: async (sourceId: string) => [{ sourceId }],
       softDeleteBySource: async () => undefined,
     },
     apiContractRepository: {
@@ -682,6 +758,11 @@ function buildLibraryAndCommsRepos() {
     foundationalServiceSourceRepository: {
       listByOwner: async (ownerKind: string, ownerId: string) => [{ ownerKind, ownerId }],
       upsert: async () => undefined,
+      get: async (id: string) => LIBRARY_SOURCES.foundationalServiceSource!.get(id) ?? null,
+      updateSyncState: async () => undefined,
+      softDelete: async () => undefined,
+      // Wired but deliberately OFF the allow-list: the push-webhook fan-out's global reverse
+      // lookup, unscoped across tiers by construction. Must be refused.
       listByRepo: async () => [],
     },
     // The account onboarding reads: each echoes the accountId (arg0) so the round-trip can assert
@@ -732,6 +813,7 @@ export function makeRegistry(): {
   resolveBlockAccountIds: NonNullable<DispatchOptions['resolveBlockAccountIds']>
   resolveServiceAccountIds: NonNullable<DispatchOptions['resolveServiceAccountIds']>
   resolveSkillSourceAccountId: NonNullable<DispatchOptions['resolveSkillSourceAccountId']>
+  resolveLibrarySourceOwner: NonNullable<DispatchOptions['resolveLibrarySourceOwner']>
   resolveAccountMemberIds: NonNullable<DispatchOptions['resolveAccountMemberIds']>
 } {
   const fx = makeFixtures()
@@ -786,6 +868,26 @@ export function makeRegistry(): {
         accountId?: string
       } | null
       return source?.accountId
+    },
+    // Built exactly as the controller builds it (source row → its owner PAIR), keyed by the same
+    // `LibrarySourceEntity` the rule names, so an id from one library never resolves against the
+    // other's table. A LOOKUP keyed off a total map, not a ternary: under a ternary a third library
+    // would silently resolve against the foundational-service table, so the cross-table refusal
+    // this harness is the oracle for would pass while binding the wrong rows.
+    resolveLibrarySourceOwner: async (entity, sourceId) => {
+      const repos: Record<LibrarySourceEntity, PersistenceRegistry[string] | undefined> = {
+        fragmentSource: registry.fragmentSourceRepository,
+        foundationalServiceSource: registry.foundationalServiceSourceRepository,
+      }
+      const repo = repos[entity]
+      if (typeof repo?.get !== 'function') return { status: 'unreadable' }
+      const source = (await repo.get(sourceId)) as {
+        ownerKind?: unknown
+        ownerId?: unknown
+      } | null
+      return source
+        ? { status: 'found', owner: { ownerKind: source.ownerKind, ownerId: source.ownerId } }
+        : { status: 'absent' }
     },
     // Built exactly as the controller builds it (roster → userIds), so the round-trip exercises the
     // real server-side co-membership resolution for the `user`/`userList` scope.

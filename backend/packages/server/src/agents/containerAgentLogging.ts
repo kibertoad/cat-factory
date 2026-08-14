@@ -4,6 +4,7 @@ import {
   type LogFields,
   type Logger,
   type OperationalMetrics,
+  type RunnerJobView,
   describeError,
   describeHarnessBodyCapability,
   noopLogger,
@@ -131,6 +132,23 @@ function reportCapabilityGap(
 }
 
 /**
+ * What a FAILED job's settle line and its counters are keyed on, lifted off the view here rather
+ * than spelled out at the call site: each of these fields decides a counter in
+ * {@link ContainerJobLog.settled}, so a reading added to one and forgotten in the other is a whole
+ * class of container deaths counted as nothing (which is what the harness-shutdown one was).
+ *
+ * Deliberately narrower than `buildFailureMeta`: that carries the post-mortem detail and the
+ * validation/reproduction reports, which belong on the run record rather than on a log line.
+ */
+export function settleFailureFields(view: RunnerJobView): LogFields {
+  return {
+    ...(view.failureCause ? { failureCause: view.failureCause } : {}),
+    ...(view.evicted ? { evicted: view.evicted } : {}),
+    ...(view.harnessShutdown ? { harnessShutdown: view.harnessShutdown } : {}),
+  }
+}
+
+/**
  * Bind a container job's correlation ids onto `base`. Accepts an absent logger (a facade that
  * wired none, a unit test) and degrades to `noopLogger`, so no call site has to branch; the
  * metrics sink degrades the same way.
@@ -167,6 +185,19 @@ export function containerJobLog(
       // signal this counter exists for: containers dying under the run. The dimension is the
       // EVICTION cause, named explicitly so a later `kind` field on this line cannot displace it.
       if (fields?.evicted) countFailure(metrics, 'container.evicted', fields.evicted)
+      // A harness STOPPED under the job is the other way a container dies mid-run, and the one
+      // that fails the run outright. It carries no `evicted` verdict by construction (the two are
+      // mutually exclusive readings of a backend that stopped answering), so without its own
+      // increment this whole class of deaths left the operational metrics silently: the eviction
+      // rate an operator watches would simply fall, as if containers had stopped dying.
+      if (fields?.harnessShutdown) metrics.increment('container.harness_shutdown')
+      // A REFUSED work-branch push is the other operational fault a failed job view can carry, and
+      // the only other one the engine re-dispatches rather than reports. Its cost is a doubled
+      // agent run (tokens and wall clock), which is invisible per run and only visible as a rate,
+      // and the remedy it prints tells the operator to check whether two runs are active for the
+      // same block, a recurrence nothing else here can show them.
+      if (fields?.failureCause === 'branch-contended')
+        metrics.increment('container.branch_contended')
     },
     capabilityGap: (support) => reportCapabilityGap(logger, metrics, support),
     blindJobStopped: (outcome) => {

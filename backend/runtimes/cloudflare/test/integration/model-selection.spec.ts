@@ -65,13 +65,24 @@ const bedrockOnlyModels = MODEL_CATALOG.filter(
   (m) => m.bedrock && !m.cloudflare && !m.direct && !m.openrouter && !m.subscription,
 )
 
-/** The concrete ref a bedrock flavour builds with NO allow-list: the catalog base id itself. */
+/**
+ * The concrete ref a bedrock flavour builds with NO allow-list: the catalog base id itself.
+ *
+ * This mirrors the resolver's own `bedrock` build arm, so every per-flavour fact the variant can
+ * declare has to be carried here too, each under the same conditional spread. Both of them are
+ * conditional rather than defaulted for the same reason: ABSENT is a real answer for both
+ * (an unknown Bedrock window, an undeclared modality) and a spread `undefined` is not the same
+ * object as an omitted key to `toEqual`.
+ */
 const bedrockRef = (m: (typeof MODEL_CATALOG)[number]) =>
   m.bedrock
     ? {
         provider: 'bedrock',
         model: m.bedrock.baseModelId,
         ...(m.bedrock.contextTokens ? { contextTokens: m.bedrock.contextTokens } : {}),
+        ...(m.bedrock.acceptsImages === undefined
+          ? {}
+          : { acceptsImages: m.bedrock.acceptsImages }),
       }
     : undefined
 
@@ -226,7 +237,12 @@ describe('per-block model selection', () => {
 
   describe('catalog endpoint', () => {
     it('serves the effective catalog, validating against the contract', async () => {
-      const app = makeApp()
+      // `bindCloudflareAi`: the projection this compares against is built from `noKeys`, whose
+      // `cloudflareEnabled: true` is the deployment baseline a real Worker has — and the app's own
+      // half of that fact comes from the `[ai]` binding's PRESENCE, which the pool otherwise
+      // leaves unbound so nothing can dial a model that could only reject. This test reads the
+      // catalog and never runs a step, so it is the one place that wants the binding there.
+      const app = makeApp(undefined, {}, { bindCloudflareAi: true })
       const res = await app.call<ModelOption[]>('GET', '/models')
       expect(res.status).toBe(200)
       expect(() => v.parse(modelCatalogSchema, res.body)).not.toThrow()

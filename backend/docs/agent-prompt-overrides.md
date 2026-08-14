@@ -30,6 +30,14 @@ returns an empty reply the harness fails the run on. `restoreShippedInvariants` 
 diffing against the fully composed SHIPPED prompt. **A new engine-enforced fragment belongs in
 `OVERRIDE_PRESERVED_FRAGMENTS`**, or an override can delete it.
 
+The test for membership is whether the fragment describes how the platform RUNS the kind rather
+than what it should look for, and it catches more than the obvious two. `REVIEW_FINDINGS_LAYOUT` is
+there because a companion's verdict is READ by the engine and RENDERED to a person: an override
+edited for an unrelated reason would otherwise take the severity grading with it (every finding
+then reaches the engine equally urgent, and nothing can hold a run on a must-fix) along with the
+escaping rule (a multi-line summary arrives as invalid JSON and costs a repair retry), with nothing
+in the editor saying why.
+
 ## The engine resolves the override ONCE per dispatch
 
 It lands on `AgentRunContext.systemPromptOverride`, so the container, inline and consensus paths

@@ -31,8 +31,8 @@ export const UNDO_WINDOW_MS = 6000
  * the `board` store setup and threaded into {@link createBoardMutations} / {@link createBoardRemoval}
  * so the split operations stay behaviourally identical to the original single-closure store — the
  * factories are cohesive extractions purely to keep each function within the size budget, not new
- * seams. `api`/`toast`/`tr` are the store's own resolved handles (a store runs outside a component
- * `setup`, so `tr` bridges to the Nuxt app's global i18n instance).
+ * seams. `api`/`toast`/`tr`/`present` are the store's own resolved handles (a store runs outside a
+ * component `setup`, so `tr` bridges to the Nuxt app's global i18n instance).
  */
 export interface BoardWriteContext {
   blocks: Ref<Block[]>
@@ -43,4 +43,11 @@ export interface BoardWriteContext {
   api: ReturnType<typeof useApi>
   toast: ReturnType<typeof useToast>
   tr: (key: string, params?: Record<string, unknown>) => string
+  /**
+   * The SPA's one failure-toast funnel (`usePipelineErrorToast().present`), threaded like `toast`
+   * because it is resolved in the store setup. Every rolled-back write reports through it rather
+   * than building its own `{ title, description: err.message }`, so a board failure reads the same
+   * as every other one: translated copy, and the raw detail copyable behind the disclosure.
+   */
+  present: (error: unknown, titleKey?: string) => void
 }

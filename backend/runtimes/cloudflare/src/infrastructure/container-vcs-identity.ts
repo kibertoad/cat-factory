@@ -9,7 +9,9 @@
 
 import { type Clock, createInitiatorPatGate } from '@cat-factory/kernel'
 import {
+  type ListWorkspaceRunRepos,
   type ResolveRunInitiatorToken,
+  buildListWorkspaceRunRepos as buildSharedListWorkspaceRunRepos,
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
   buildResolveRepoTargets as buildSharedResolveRepoTargets,
   createResolveRunInitiatorToken,
@@ -24,6 +26,7 @@ import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallat
 import { D1RepoProjectionRepository } from './repositories/D1RepoProjectionRepository'
 import { GitHubAppAuth } from './github/GitHubAppAuth'
 import { GitHubAppRegistry } from './github/GitHubAppRegistry'
+import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepository'
 import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
 import { D1AccountSettingsRepository } from './repositories/D1AccountSettingsRepository'
@@ -110,6 +113,24 @@ export function buildResolveRepoTargets(db: D1Database): ResolveRepoTargets {
     installationRepository: new D1GitHubInstallationRepository({ db }),
     repoProjectionRepository: new D1RepoProjectionRepository({ db }),
     blockRepository: new D1BlockRepository({ db }),
+    serviceRepository: new D1ServiceRepository({ db }),
+  })
+}
+
+/**
+ * Every repository this workspace's runs would push to: the block-free counterpart of
+ * {@link buildResolveRepoTarget}, wired from the SAME D1 repos plus the mount table (a board's
+ * mounted services are what turns the connection's whole projection into the set a run could
+ * actually target). Surfaced on the container for the board-load credential check.
+ *
+ * No `repoProjectionCache` here either, for the reason given on {@link buildResolveRepoTarget}:
+ * on the Worker the projection cache is pass-through, so reading live IS the isolate-safe
+ * behaviour.
+ */
+export function buildListWorkspaceRunRepos(db: D1Database): ListWorkspaceRunRepos {
+  return buildSharedListWorkspaceRunRepos({
+    repoProjectionRepository: new D1RepoProjectionRepository({ db }),
+    workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
     serviceRepository: new D1ServiceRepository({ db }),
   })
 }

@@ -17,7 +17,7 @@ import {
   mountRequestLogging,
   setLogLevel,
   registerCoreControllers,
-  resolveCorsOrigin,
+  corsOriginFor,
   sweepHealth,
   sweepKeyDriftAndRaise,
   WebCryptoSecretCipher,
@@ -77,6 +77,7 @@ import { DrizzleSubscriptionActivationRepository } from './repositories/personal
 import { DrizzleNotificationRepository } from './repositories/notifications.js'
 import { startArtifactRetentionSweeper, startRetentionSweeper } from './retention.js'
 import { SystemClock } from './runtime.js'
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { Logger } from '@cat-factory/kernel'
 
 // The Node facade: the SAME shared Hono app (controllers + middleware) the Cloudflare
@@ -111,8 +112,16 @@ export function createApp(
   app.use(
     '*',
     cors({
-      origin: (origin) =>
-        resolveCorsOrigin(origin, env.CORS_ALLOWED_ORIGINS, corsReflectsWhenUnset(env.ENVIRONMENT)),
+      // Shared with the Worker, including WHICH paths answer any origin: the credential-free MCP
+      // discovery and authorization routes, whose browser-hosted clients run on origins no
+      // operator lists.
+      origin: (origin, c) =>
+        corsOriginFor(
+          new URL(c.req.url).pathname,
+          origin,
+          env.CORS_ALLOWED_ORIGINS,
+          corsReflectsWhenUnset(env.ENVIRONMENT),
+        ),
       // Same shared allow-list the Worker uses, so the facades stay symmetric (Hono
       // would otherwise echo the requested headers, masking a drift like the missing
       // X-Connection-Id the Worker hit).
@@ -410,7 +419,7 @@ export interface StartOptions {
   cachesProfile?: Partial<AppCachesProfile>
   /**
    * The catalog id of the built-in model preset a fresh workspace is seeded with as its
-   * DEFAULT (`MODEL_PRESET_SEED_IDS.{kimi,glm,claude}`). A deploy-app wrapper passes this to
+   * DEFAULT (`MODEL_PRESET_SEED_IDS.{kimi,glm,claude,chatgpt}`). A deploy-app wrapper passes this to
    * change the out-of-the-box default without editing library code, e.g.
    * `start({ defaultModelPresetId: MODEL_PRESET_SEED_IDS.claude })`. Forwarded to
    * `buildNodeContainer` (and, via the local facade's builder, to `buildLocalContainer`).
@@ -746,14 +755,14 @@ export async function backfillDeclaredSeeds(
         } catch (err) {
           log.warn(`${label} seed backfill failed for workspace`, {
             workspaceId: ws.id,
-            err: err instanceof Error ? err.message : String(err),
+            err: getErrorMessage(err),
           })
         }
       }
     }
   } catch (err) {
     log.warn('declared-seed backfill could not enumerate workspaces', {
-      err: err instanceof Error ? err.message : String(err),
+      err: getErrorMessage(err),
     })
   }
 }
@@ -986,7 +995,7 @@ async function bootServer(
       await boss.stop()
       await pool.end()
     } catch (err) {
-      logger.error('shutdown error', { err: err instanceof Error ? err.message : String(err) })
+      logger.error('shutdown error', { err: getErrorMessage(err) })
     }
     try {
       // Facade-owned disposables (e.g. the local facade's native host-process harnesses) —
@@ -995,7 +1004,7 @@ async function bootServer(
       // backstop.
       await container.onShutdown?.()
     } catch (err) {
-      logger.error('onShutdown error', { err: err instanceof Error ? err.message : String(err) })
+      logger.error('onShutdown error', { err: getErrorMessage(err) })
     }
     // LAST, and after every other stop: detach the log sink and deliver what it still holds,
     // so the shutdown's own lines (including the two errors above, which are exactly the ones

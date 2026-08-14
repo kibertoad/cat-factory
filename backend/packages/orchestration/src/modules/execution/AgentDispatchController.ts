@@ -13,8 +13,9 @@ import type {
   RunInitiatorScope,
 } from '@cat-factory/kernel'
 import { getErrorMessage, isAsyncAgentExecutor, parseLocalModelId } from '@cat-factory/kernel'
+import type { DispatchToolServers } from '@cat-factory/contracts'
 import { PR_REVIEWER_KIND, resolvePrNumber } from '@cat-factory/agents'
-import { recordDispatchedJob } from './step-fold.logic.js'
+import { recordDispatchedJob, recordInlineToolServers } from './step-fold.logic.js'
 import { classifyDispatchFailure, type DispatchFailureClassification } from './job.logic.js'
 import { initialPrReviewState } from './prReview.logic.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
@@ -175,12 +176,14 @@ export class AgentDispatchController {
           // instead of the misleading container framing.
           step.container = { status: 'errored' }
           // Hand the classifier the step's run history so a container lost AFTER work began (a
-          // failed eviction-recovery re-dispatch, `evictionRecoveries > 0`) is reported as an
-          // unrecoverable eviction — with elapsed minutes + any partial slice count — rather than
-          // the misleading "container failed to start". See ADR 0026 D1.
+          // failed eviction-recovery re-dispatch, `evictionRecoveries > 0`, or the re-dispatch of a
+          // step whose work-branch push was refused) is reported as what it is (an unrecoverable
+          // eviction with elapsed minutes + any partial slice count, or a resume of already-pushed
+          // commits) rather than the misleading "container failed to start". See ADR 0026 D1.
           const classified = classifyDispatchFailure(error, {
             evictionRecoveries: step.evictionRecoveries,
             transientEvictionRecoveries: step.transientEvictionRecoveries,
+            branchContentionRecoveries: step.branchContentionRecoveries,
             startedAt: step.startedAt,
             sliceCount: step.prReview?.slices?.length,
           })
@@ -210,6 +213,13 @@ export class AgentDispatchController {
     // once the result lands. recordStepResult re-asserts it from the result.
     const previewModel = await this.previewStepModel(context)
     if (previewModel && previewModel !== step.model) step.model = previewModel
+    // What an inline executor will do with this kind's tool servers, recorded HERE rather than off
+    // the result, so it lands in the persist below and survives a call that then throws: the
+    // container path stamps at dispatch for the same reason. Today's one producer is a
+    // consensus-diverted step, which wires none and states them all as withheld; every other inline
+    // run previews nothing and the step's record stays absent, which is what absent has always
+    // meant here.
+    recordInlineToolServers(step, await this.previewStepToolServers(context), context.agentKind)
     // An inline step dispatches nowhere, which is exactly why it used to stamp nothing and
     // left a run whose last step was inline reporting whatever CONTAINER step ran before it
     // (or nothing at all, on a pure inline pipeline) as where the run was when it died. It
@@ -333,6 +343,22 @@ export class AgentDispatchController {
     if (!this.deps.agentExecutor.resolveModel) return undefined
     try {
       return await this.deps.agentExecutor.resolveModel(context)
+    } catch {
+      return undefined
+    }
+  }
+
+  /**
+   * Preview what an inline dispatch will do with the running kind's tool servers (MCP), so the
+   * step carries the record from dispatch rather than only once a result lands. Best-effort on
+   * the same terms as {@link previewStepModel}: an executor without the capability and a
+   * resolution failure both yield undefined, leaving the record absent, which is what an inline
+   * step that resolves nothing has always left.
+   */
+  async previewStepToolServers(context: AgentRunContext): Promise<DispatchToolServers | undefined> {
+    if (!this.deps.agentExecutor.previewToolServers) return undefined
+    try {
+      return await this.deps.agentExecutor.previewToolServers(context)
     } catch {
       return undefined
     }

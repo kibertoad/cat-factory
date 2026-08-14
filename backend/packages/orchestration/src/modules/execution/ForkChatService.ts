@@ -1,6 +1,6 @@
 import { generateText } from 'ai'
 import type { Block, ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
-import { resolveScopedModelProvider, ValidationError } from '@cat-factory/kernel'
+import { getErrorMessage, resolveScopedModelProvider, ValidationError } from '@cat-factory/kernel'
 import {
   catFactoryObservability,
   FORK_CHAT_AGENT_KIND,
@@ -87,9 +87,9 @@ export class ForkChatService {
       text = result.text
     } catch (e) {
       throw new ValidationError(
-        `The fork-decision chat responder (${ref.provider}:${ref.model}) failed: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
+        `The fork-decision chat responder (${ref.provider}:${ref.model}) failed: ${getErrorMessage(
+          e,
+        )}`,
       )
     }
     const reply = text.trim()

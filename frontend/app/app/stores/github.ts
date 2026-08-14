@@ -6,6 +6,7 @@ import type {
   GitHubConnection,
   GitHubInstallationOption,
   GitHubIssue,
+  GitHubPatCheck,
   GitHubPullRequest,
   GitHubRepo,
   RepoTreeEntry,
@@ -13,12 +14,12 @@ import type {
   VcsProvider,
 } from '~/types/domain'
 import { branchWebUrl, issueWebUrl, pullWebUrl, repoWebUrl } from '~/utils/vcs'
-import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
 import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useServicesStore } from '~/stores/services'
 import { pullKey, type GitHubStoreContext } from '~/stores/github/context'
 import { createGitHubConnectionActions } from '~/stores/github/connection'
+import { createGitHubProbe } from '~/stores/github/probe'
 import { createGitHubRepoActions } from '~/stores/github/repoActions'
 import { createVcsConnectActions, createVcsProviderViews } from '~/stores/github/vcsConnect'
 
@@ -41,6 +42,13 @@ export const useGitHubStore = defineStore('github', () => {
   const connection = ref<GitHubConnection | null>(null)
   /** The connect surfaces this deployment serves; resolved by the probe alongside `connection`. */
   const connectOptions = ref<VcsConnectOption[]>([])
+  /**
+   * What the personal access token this workspace's runs would use can actually do, resolved by
+   * the probe. `null` = not answered (unprobed, or the read failed); the check's own
+   * `not_applicable` state is what "there is no PAT here" looks like. The two are kept apart
+   * because only the second is a fact.
+   */
+  const patCheck = ref<GitHubPatCheck | null>(null)
   /** Discovered App installations for the connect picker; loaded on demand. */
   const installations = ref<GitHubInstallationOption[]>([])
   const loadingInstallations = ref(false)
@@ -124,37 +132,6 @@ export const useGitHubStore = defineStore('github', () => {
     return branchWebUrl(providerOfRepo(repoGithubId), repoUrl(repoGithubId), branch)
   }
 
-  /**
-   * Probe the integration: resolves `available`, the current connection, and which connect
-   * surfaces the deployment serves. The capability read rides the same round trip (it is what
-   * the not-connected UI renders from), and degrades to "no connect surface" on its own.
-   */
-  async function runProbe() {
-    if (!workspace.workspaceId) return
-    try {
-      const [{ connection: conn }, options] = await Promise.all([
-        api.getGitHubConnection(workspace.requireId()),
-        api
-          .listVcsConnectOptions(workspace.requireId())
-          .then((r) => r.options)
-          .catch(() => []),
-      ])
-      available.value = true
-      connection.value = conn
-      connectOptions.value = options
-    } catch {
-      // 503 (integration disabled) or any error → hide the UI entry points.
-      available.value = false
-      connection.value = null
-      connectOptions.value = []
-    }
-  }
-  // Single-flight the probe (app-startup initiative, item 12): `probe()` still re-reads on demand,
-  // but the on-board-open callers (the board page's onboarding gate + the SideBar) use
-  // `ensureProbed()` so their duplicate fire collapses to one request per board. A workspace switch
-  // (new id) re-probes.
-  const { probe, ensureProbed } = useSingleFlightProbe(runProbe, () => workspace.workspaceId)
-
   /** Load the cached repos, pull requests and issues for the workspace. */
   async function load() {
     if (!connected.value) return
@@ -171,16 +148,6 @@ export const useGitHubStore = defineStore('github', () => {
     } finally {
       loading.value = false
     }
-  }
-
-  /**
-   * Ensure the projection (repos/PRs/issues) is loaded at least once — for views
-   * that need it without opening the GitHub panel (e.g. the inspector's repo link).
-   * Probes the integration first if it hasn't been yet.
-   */
-  async function ensureLoaded() {
-    if (available.value === null) await probe()
-    if (connected.value && repos.value.length === 0) await load()
   }
 
   /** Full file listing per repo (recursive tree), cached by GitHub numeric id. */
@@ -211,6 +178,21 @@ export const useGitHubStore = defineStore('github', () => {
     connected,
     load,
   }
+  // The board-load probe (integration availability + the bound connection + the connect options +
+  // the credential check). Built from the context rather than inline, so this setup stays within
+  // the function-size ratchet the credential check pushed it past.
+  const { probe, ensureProbed } = createGitHubProbe(context, patCheck)
+
+  /**
+   * Ensure the projection (repos/PRs/issues) is loaded at least once — for views
+   * that need it without opening the GitHub panel (e.g. the inspector's repo link).
+   * Probes the integration first if it hasn't been yet.
+   */
+  async function ensureLoaded() {
+    if (available.value === null) await probe()
+    if (connected.value && repos.value.length === 0) await load()
+  }
+
   const connectionActions = createGitHubConnectionActions(context)
   const repoActions = createGitHubRepoActions(context)
   const vcsConnectActions = createVcsConnectActions(context)
@@ -227,6 +209,7 @@ export const useGitHubStore = defineStore('github', () => {
     available.value = null
     connection.value = null
     connectOptions.value = []
+    patCheck.value = null
     installations.value = []
     repos.value = []
     availableRepos.value = []
@@ -240,6 +223,7 @@ export const useGitHubStore = defineStore('github', () => {
     available,
     connection,
     connectOptions,
+    patCheck,
     installations,
     loadingInstallations,
     repos,

@@ -84,7 +84,7 @@ describe('parseAgentJob — repo legs', () => {
             baseBranch: 'main',
             cloneUrl: 'https://github.com/acme/email.git',
           },
-          frameId: 'frame-email',
+          frameIds: ['frame-email'],
           newBranch: 'cat-factory/blk',
           pr: { title: 'Wire email', body: 'body' },
         },
@@ -92,11 +92,56 @@ describe('parseAgentJob — repo legs', () => {
     })
     expect(job.peerRepos).toHaveLength(1)
     expect(job.peerRepos?.[0]).toMatchObject({
-      frameId: 'frame-email',
+      frameIds: ['frame-email'],
       newBranch: 'cat-factory/blk',
       repo: { owner: 'acme', name: 'email' },
       pr: { title: 'Wire email' },
     })
+  })
+
+  // A peer that is a MONOREPO hosting several of the run's involved services is still ONE
+  // checkout, one work branch and one pull request. The harness decides no frame attribution
+  // of its own: it carries the dispatch's whole set through so the backend can record that PR
+  // against every frame whose change landed in it.
+  it('carries a peer repo’s full frame set through, dropping only non-string entries', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      newBranch: 'cat-factory/blk',
+      peerRepos: [
+        {
+          repo: {
+            owner: 'acme',
+            name: 'platform',
+            baseBranch: 'main',
+            cloneUrl: 'https://github.com/acme/platform.git',
+          },
+          frameIds: ['frm_billing', 'frm_ledger', 7, ''],
+          newBranch: 'cat-factory/blk',
+        },
+      ],
+    })
+    expect(job.peerRepos?.[0]?.frameIds).toEqual(['frm_billing', 'frm_ledger'])
+  })
+
+  it('omits frameIds entirely when a peer names none (never an empty array)', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      newBranch: 'cat-factory/blk',
+      peerRepos: [
+        {
+          repo: {
+            owner: 'acme',
+            name: 'email',
+            baseBranch: 'main',
+            cloneUrl: 'https://github.com/acme/email.git',
+          },
+          newBranch: 'cat-factory/blk',
+        },
+      ],
+    })
+    expect(job.peerRepos?.[0]).not.toHaveProperty('frameIds')
   })
 
   it('rejects a peer repo whose clone URL host is not allow-listed (token-exfil guard)', () => {
@@ -147,12 +192,12 @@ describe('parseAgentJob — repo legs', () => {
             baseBranch: 'main',
             cloneUrl: 'https://github.com/acme/email.git',
           },
-          frameId: 'frame-email',
+          frameIds: ['frame-email'],
         },
       ],
     })
     expect(job.peerRepos).toHaveLength(1)
-    expect(job.peerRepos?.[0]).toMatchObject({ frameId: 'frame-email', repo: { name: 'email' } })
+    expect(job.peerRepos?.[0]).toMatchObject({ frameIds: ['frame-email'], repo: { name: 'email' } })
     // A read-only explore peer carries no work branch and no PR — it exists only to be read.
     expect(job.peerRepos?.[0]?.newBranch).toBeUndefined()
     expect(job.peerRepos?.[0]?.pr).toBeUndefined()
@@ -175,7 +220,7 @@ describe('parseAgentJob — repo legs', () => {
             baseBranch: 'develop',
             cloneUrl: 'https://github.com/acme/billing.git',
           },
-          frameId: 'frame-billing',
+          frameIds: ['frame-billing'],
           cloneBranch: 'cat-factory/blk_1',
         },
       ],

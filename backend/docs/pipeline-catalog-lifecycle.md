@@ -121,3 +121,34 @@ Three consequences worth knowing before adding a second authoring rule:
 - **The rule itself belongs in `@cat-factory/contracts`** (`pipeline-environment-lifecycle.ts`), so the
   builder's inline hints and the save refusal are the same function rather than two that drift. Tests
   that need a refused shape seed the row directly (`seedLegacyPipeline`), modelling the legacy state.
+
+## Which pipeline a run resolves when nothing named one
+
+There are two defaults, one per `runDefaultScopeFor(intakeOrigin)` (the same scope the risk-policy
+default takes: only `ui` is `interactive`), stored as `Pipeline.isDefault` /
+`Pipeline.isUnattendedDefault` and written through `organizePipelineSchema` — the one pipeline body a
+BUILT-IN accepts, which is what makes a shipped rung promotable at all.
+
+Only the UNATTENDED scope is seeded (`pl_unattended`). The interactive scope ships with NO flagged
+row and its resolution is unchanged: the SPA's interface-mode rung (`defaultBuildPipelineId`), then
+catalog order. An operator-declared row outranks both. The asymmetry is the decision, not an
+omission: the in-app scope already had a working answer, while a headless start naming no pipeline
+against a task pinning none was a `pipeline_required` refusal.
+
+Three traps:
+
+- **The resolution ladder consults the CATALOG, and only sometimes.** `defaultPipelineIdForScope`
+  reads the stored library first, and falls back to the catalog's own declaration ONLY while the
+  workspace has never adopted that rung — the same reasoning as `pipelineAdoption` for a pinned
+  pipeline (an existing board would otherwise be stuck behind a reseed advisory). Once the row is in
+  the library its flags are the operator's answer INCLUDING the absence of one, because releasing a
+  default has to mean something.
+- **`null` is a real answer and a caller states it as one.** The public start path keeps its
+  documented `pipeline_required` refusal for a workspace that declares no unattended default; nothing
+  invents a rung for a headless caller.
+- **An archived or internal pipeline may not hold a default** (`pipeline_not_defaultable`). Both are
+  withheld from the library, and a default nobody can see in the library they would go to change it in
+  is the concealed-setting failure. The check reads the row the request just WROTE, so archiving and
+  promoting in one call is refused whichever order the fields arrive in.
+
+Design record: [ADR 0054](./adr/0054-per-scope-pipeline-defaults.md).

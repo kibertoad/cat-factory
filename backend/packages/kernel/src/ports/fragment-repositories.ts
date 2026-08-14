@@ -96,6 +96,13 @@ export interface PromptFragmentRepository {
   ): Promise<void>
   /** Live fragments produced by a given source, for resync diffing/tombstoning. */
   listBySource(sourceId: string): Promise<PromptFragmentRecord[]>
+  /**
+   * Tombstone EVERY live fragment a source produced, in ONE write (used on unlink), matching the
+   * sibling repo-sourced libraries' `softDeleteBySource`. A per-fragment loop is a read of the
+   * source's fragments plus a write EACH, which in mothership mode is one HTTPS round trip per
+   * fragment against a library a repo can grow without bound.
+   */
+  softDeleteBySource(sourceId: string, at: number): Promise<void>
 }
 
 /**

@@ -92,7 +92,13 @@ const defaultPipeline = computed<{ id: string; name: string } | undefined>(() =>
       }
     )
   }
-  return pipelines.getPipeline(defaultBuildPipelineId(uiMode.isAdvanced)) ?? pipelines.pipelines[0]
+  // No pin: the workspace's own DECLARED in-app default outranks the interface-mode rung, because
+  // an operator who named one said something a tier cannot overrule.
+  const declared = pipelines.declaredDefaultId('interactive')
+  return (
+    pipelines.getPipeline(declared ?? defaultBuildPipelineId(uiMode.isAdvanced)) ??
+    pipelines.pipelines[0]
+  )
 })
 
 /** The PR the implementer agent opened for this task, if any. */

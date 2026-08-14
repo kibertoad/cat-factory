@@ -12,7 +12,15 @@
 // browses its tree and multi-selects the service directories to add — from ANY
 // parent folder, in one pass — then adds them all at once. Directories that
 // already back a service on this board are shown but not selectable.
+//
+// One of those directories may be marked the FRONTEND for the rest: it is created as a
+// `frontend` frame instead of a service, pinned to its subdirectory, and bound to every
+// backend added beside it (`frontendConfig.backendBindings`, the frontend→service board
+// link). Every frontend frame the import creates also gets its subdirectory recorded on
+// `frontendConfig`, marked or not. The rules live in `~/utils/monorepoImport`, which also
+// explains why the bindings carry no env-var names.
 import type { FrameRepoType, GitHubAvailableRepo } from '~/types/domain'
+import type { CreatedMonorepoFrame } from '~/utils/monorepoImport'
 import RepoSearchEmpty from '~/components/github/RepoSearchEmpty.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
@@ -32,6 +40,7 @@ const github = useGitHubStore()
 const board = useBoardStore()
 const services = useServicesStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { freeFramePosition, focusFrame } = useFramePlacement()
 
 const open = computed({
@@ -170,9 +179,53 @@ const addedDirectories = computed<string[]>(() => {
 })
 const addedDirSet = computed(() => new Set(addedDirectories.value))
 
+// What the next "Add N services" will actually create: the cart minus anything already backing a
+// service. THE population every frontend-mark decision reads, and the one `addServices` iterates.
+// The two can differ: a partial failure leaves the cart intact while its earlier creates stand, so
+// judging the mark by the raw cart would offer it (and count it) for frames that already exist.
+const pendingDirectories = computed(() =>
+  selectedDirectories.value.filter((d) => !addedDirSet.value.has(normalizeRepoPath(d))),
+)
+
+// The one picked directory marked as the frontend for the others, or undefined when the
+// selection is all backends. Empty string is the select's "none" option.
+const frontendDirectory = ref<string | undefined>(undefined)
+
+// Whether the mark is on offer at all (role must be `service`, at least two directories to
+// create): see `canDesignateFrontend`. The picker is hidden otherwise, so drop a mark that a role
+// change has made unofferable rather than leaving it to act unseen.
+const frontendOffered = computed(() =>
+  canDesignateFrontend(selectedType.value, pendingDirectories.value.length),
+)
+watch(frontendOffered, (offered) => {
+  if (!offered) frontendDirectory.value = undefined
+})
+// The pending set is the option list, so a directory that leaves it (removed from the cart, or
+// created by an earlier add) can no longer be the mark. The computed re-runs on the cart's
+// in-place mutations (`push`/`splice`), so no deep watch is needed on top of it.
+watch(pendingDirectories, (dirs) => {
+  if (frontendDirectory.value && !dirs.includes(frontendDirectory.value)) {
+    frontendDirectory.value = undefined
+  }
+})
+
+const frontendItems = computed(() => [
+  { label: t('github.addService.frontendNone'), value: '' },
+  ...pendingDirectories.value.map((d) => ({ label: d, value: d })),
+])
+
+// USelect needs a present value for its "none" row; the mark itself stays absent-or-a-path.
+const frontendSelection = computed({
+  get: () => frontendDirectory.value ?? '',
+  set: (value: string) => {
+    frontendDirectory.value = value || undefined
+  },
+})
+
 function toggleMonorepo(value: boolean) {
   isMonorepo.value = value
   selectedDirectories.value = []
+  frontendDirectory.value = undefined
 }
 
 // Add/remove a directory from the cart. Guards against an already-added directory (the
@@ -209,12 +262,14 @@ watch(selectedRepoId, (id) => {
   }
   isMonorepo.value = selectedRepo.value?.isMonorepo === true
   selectedDirectories.value = []
+  frontendDirectory.value = undefined
   configuredBlockId.value = undefined
 })
 
 function resetSelection() {
   selectedRepoId.value = undefined
   selectedDirectories.value = []
+  frontendDirectory.value = undefined
   isMonorepo.value = false
   configuredBlockId.value = undefined
   resetRepoSearch()
@@ -265,18 +320,13 @@ const canAddServices = computed(
     !needsConnection.value &&
     selectedRepoId.value !== undefined &&
     isMonorepo.value &&
-    selectedDirectories.value.length > 0,
+    pendingDirectories.value.length > 0,
 )
 
 // Directories the user has picked but NOT yet committed via "Add N services". Closing the
 // modal ("Done") would silently discard them — almost never what the user wants — so the
-// footer's Done is disabled while any remain (see the template). Filtered against the
-// already-added set for parity with `addServices`, so a stale cart entry can't block Done.
-const hasPendingSelection = computed(
-  () =>
-    isMonorepo.value &&
-    selectedDirectories.value.some((d) => !addedDirSet.value.has(normalizeRepoPath(d))),
-)
+// footer's Done is disabled while any remain (see the template).
+const hasPendingSelection = computed(() => isMonorepo.value && pendingDirectories.value.length > 0)
 
 async function add() {
   if (!canAdd.value || selectedRepoId.value === undefined) return
@@ -304,57 +354,80 @@ async function add() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('github.addService.toast.addFailedTitle'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'github.addService.toast.addFailedTitle')
   } finally {
     adding.value = false
   }
 }
 
-// Add every directory in the cart as its own service, in one action. Each add lays the
-// frame out in free space (seeing the ones added earlier in the loop, so they don't
-// overlap); the projection is refreshed and the camera centres on the last one. The
-// just-added directories then move to `addedDirectories`, so the cart is cleared and the
-// tree marks them "added" — ready to pick more (from any folder) or close.
+// What the success toast says about the frontend wiring, which is the half of the add that can
+// fail on its own. A landed mark names the directory and points at the inspector for the env-var
+// names the import deliberately leaves empty; a patch that did not persist says SO, because the
+// frames are on the board either way and a silent omission reads exactly like a clean import. The
+// failure note covers an undesignated frontend frame too: it lost its subdirectory, so the harness
+// would build the repo root.
+function frontendNote(designatedDirectory: string | undefined, wiringLanded: boolean): string {
+  if (!wiringLanded) return t('github.addService.toast.frontendWiringFailedNote')
+  if (!designatedDirectory) return ''
+  return t('github.addService.toast.frontendLinkedNote', { directory: designatedDirectory })
+}
+
+// Add every pending directory as its own frame, in one action. Each add lays the frame out in free
+// space (seeing the ones added earlier in the loop, so they don't overlap); the projection is
+// refreshed and the camera centres on the last one. The just-added directories then move to
+// `addedDirectories`, so the cart is cleared and the tree marks them "added", ready to pick more
+// (from any folder) or close. That is why the pending set is SNAPSHOTTED before the first await:
+// each create refreshes the projection, so the live computed shrinks under the loop.
+//
+// A created `frontend` frame is then patched with its `frontendConfig`: its subdirectory always,
+// plus a binding per sibling frame when it is the marked one. Those patches can only run after the
+// loop, because the bindings name block ids the creates mint. The frame being wired is the one the
+// PLAN designated, never whichever entry happens to carry `type: 'frontend'` (see
+// `MonorepoImportEntry.designatedFrontend`). A patch that does not land leaves its frames standing
+// and is REPORTED: `updateBlock` toasts its own failure and answers whether it persisted, so the
+// success toast claims only the links that were actually written.
 async function addServices() {
   if (!canAddServices.value || selectedRepoId.value === undefined) return
-  const dirs = selectedDirectories.value.filter((d) => !addedDirSet.value.has(normalizeRepoPath(d)))
+  const dirs = [...pendingDirectories.value]
   if (dirs.length === 0) return
+  // The mark is handed over raw: `planMonorepoImport` applies `canDesignateFrontend` itself over
+  // the very directories it is creating, so there is no second copy of that condition to drift.
+  const plan = planMonorepoImport(dirs, selectedType.value, frontendDirectory.value)
+  const designatedDirectory = plan.find((entry) => entry.designatedFrontend)?.directory
   adding.value = true
   try {
-    let lastBlock: Awaited<ReturnType<typeof board.addServiceFromRepo>> | undefined
-    for (const directory of dirs) {
-      lastBlock = await board.addServiceFromRepo(selectedRepoId.value, {
-        directory,
+    const created: CreatedMonorepoFrame[] = []
+    for (const entry of plan) {
+      const block = await board.addServiceFromRepo(selectedRepoId.value, {
+        directory: entry.directory,
         isMonorepo: true,
-        type: selectedType.value,
+        type: entry.type,
         position: freeFramePosition(),
       })
+      created.push({ blockId: block.id, entry })
+    }
+    let wiringLanded = true
+    for (const patch of planFrontendConfigPatches(created)) {
+      const persisted = await board.updateBlock(patch.blockId, { frontendConfig: patch.config })
+      if (!persisted) wiringLanded = false
     }
     await github.load()
-    if (lastBlock) await focusFrame(lastBlock.id)
+    const lastBlockId = created.at(-1)?.blockId
+    if (lastBlockId) await focusFrame(lastBlockId)
     selectedDirectories.value = []
     toast.add({
       title: t('github.addService.toast.servicesAddedTitle'),
-      description: t(
-        'github.addService.toast.servicesAddedDescription',
-        { count: dirs.length },
-        dirs.length,
-      ),
-      icon: 'i-lucide-check',
-      color: 'success',
+      description: [
+        t('github.addService.toast.servicesAddedDescription', { count: dirs.length }, dirs.length),
+        frontendNote(designatedDirectory, wiringLanded),
+      ]
+        .filter(Boolean)
+        .join(' '),
+      icon: wiringLanded ? 'i-lucide-check' : 'i-lucide-triangle-alert',
+      color: wiringLanded ? 'success' : 'warning',
     })
   } catch (e) {
-    toast.add({
-      title: t('github.addService.toast.addFailedTitle'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'github.addService.toast.addFailedTitle')
   } finally {
     adding.value = false
   }
@@ -498,6 +571,25 @@ function done() {
                 <p v-else class="text-xs text-slate-500">
                   {{ t('github.addService.noServicesSelected') }}
                 </p>
+
+                <!-- Mark one pick as the frontend for the others: it is created as a frontend
+                     app and bound to every backend added beside it. Only offered while the
+                     mark would wire something (see `canDesignateFrontend`). -->
+                <UFormField
+                  v-if="frontendOffered"
+                  :label="t('github.addService.frontendLabel')"
+                  :description="t('github.addService.frontendHint')"
+                >
+                  <USelect
+                    v-model="frontendSelection"
+                    :items="frontendItems"
+                    value-key="value"
+                    size="sm"
+                    class="w-full"
+                    data-testid="add-service-frontend-select"
+                  />
+                </UFormField>
+
                 <div class="flex justify-end">
                   <UButton
                     color="primary"
@@ -507,11 +599,13 @@ function done() {
                     :disabled="!canAddServices"
                     @click="addServices"
                   >
+                    <!-- Counts what the click will CREATE, not the raw cart: an entry whose frame
+                         already exists (a retry after a partial failure) is not added again. -->
                     {{
                       t(
                         'github.addService.addServices',
-                        { count: selectedDirectories.length },
-                        selectedDirectories.length,
+                        { count: pendingDirectories.length },
+                        pendingDirectories.length,
                       )
                     }}
                   </UButton>

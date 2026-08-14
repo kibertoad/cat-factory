@@ -1,5 +1,364 @@
 # @cat-factory/executor-harness
 
+## 1.122.0
+
+### Minor Changes
+
+- 0ef48d1: Stop an agent's own cleanup command from killing the harness that supervises it, and report a
+  harness that WAS stopped as what it is.
+
+  A local acceptance run failed as "the container kept vanishing, treating as deterministic" after
+  two full coder passes. Nothing evicted anything. The harness ran as PID 1 with the command line
+  `node dist/server.js`, which is also where the Fastify service the coder was scaffolding built to;
+  the agent started that service in the background to smoke-test it over a real socket, then ran
+  `pkill -f 'node dist/server.js'` to stop it again. The image ships no `pkill`, so that failed with
+  `command not found` and the next turn used something that works without procps, which matched PID 1
+  and shut the harness down. The container exited 0, the engine could only see a backend that had
+  stopped answering, so it called it an eviction, spent its crash-recovery budget re-running the same
+  agent into the same wall, and blamed infrastructure churn.
+
+  **The harness no longer answers to a pattern kill aimed at anything else.** It runs from
+  `dist/harness-server.js` and sets `process.title = 'cat-factory-harness'`, which on Linux rewrites
+  both `/proc/<pid>/cmdline` and (truncated) `/proc/<pid>/comm`, so neither `pkill -f 'node dist/…'`
+  nor a bare `pkill node` nor a hand-rolled `/proc` sweep can name it. It is not a security boundary
+  and is not claimed as one: the agent shares the harness's uid, and separating them needs a PID 1
+  running as root, which this image deliberately does not have. What it removes is the accident.
+
+  **`procps` + `psmisc` are now in the image**, which reads backwards until you look at what the
+  absence caused: `pkill`/`pgrep`/`ps` are the narrow tools an agent reaches for first, and the
+  fallback it writes when they are missing is the unbounded one that took the harness down.
+
+  **A harness that exits cleanly mid-job is no longer an eviction.** Every transport that can read an
+  exit code (the local container and native-process legs, the Cloudflare per-run container, and a
+  Kubernetes runner pod's `state.terminated`) now distinguishes a workload that exited 0 with a job
+  still in flight from one that crashed or was reclaimed, and reports `harnessShutdown` instead of
+  `evicted`. The engine fails that run immediately with a new `harness_shutdown` failure kind
+  (additive to the public failure-kind vocabulary; OpenAPI surface 1.54.0) and a hint that names the
+  causes worth checking, rather than spending an automatic retry that walks back into whatever
+  stopped it. A backend that reports no exit code (Apple `container`, a manifest-driven runner pool
+  whose scheduler exposes only status words) keeps reporting an eviction, because an absent code is
+  not a zero.
+
+  The distinction is only ever drawn where NOTHING else explains the stop. Infrastructure churn is
+  named and recovers on its own budget, and it stays named even after its attribution window passes:
+  a rollout drain the harness answered by exiting 0, discovered minutes later by a re-driven poll, is
+  still that drain rather than a shutdown. The same rule orders the engine's own reading: a killed
+  job that some branch settles WITHOUT failing the run (a parked PR review's read-only Challenge
+  Investigator) keeps that settlement, since losing a human's in-flight curation is worse than the
+  retry this failure kind exists to prevent. `container.harness_shutdown` counts the class, kept out
+  of `container.evicted` so the eviction rate an operator sizes infrastructure by is not inflated by
+  deaths no infrastructure change prevents.
+
+  **An aborted agent run says who aborted it.** The Claude Code / Codex runner rejected with a
+  hard-coded "agent run aborted by watchdog" for every abort, including the shutdown handler's, so a
+  job killed by something else filed its failure against a watchdog that never fired. It now carries
+  the abort reason the caller supplied, the way the Pi runner already did, and an abort that supplied
+  none falls back to saying so rather than quoting the platform's own contentless "This operation was
+  aborted" (a reasonless `abort()` sets an `AbortError` that IS an `Error`, so the fallback was
+  unreachable).
+
+  The image moves to `cat-factory-executor:1.121.0` across the wrangler config, the publish script and
+  `RECOMMENDED_HARNESS_IMAGE`: the entrypoint rename and `procps` are only in effect once a deployment
+  runs a tag that contains them.
+
+  **The acceptance suite stops blaming the merge threshold for a failed run.** Its "the merge was
+  HELD" hint fired on "there is a pull request and the status is not done", which is also true of a
+  run that died three phases before any merge was considered; it is now offered only where nothing
+  else explains the stop.
+
+## 1.120.0
+
+### Minor Changes
+
+- d5c1f1c: Rebuild the executor image on Claude Code 2.1.231. Pi (0.84.1), Codex (0.147.0) and the Pi
+  todo/web-tools extensions (2.4.0) are already on their newest release, and `node:26-trixie-slim`
+  still resolves to the digest the image is pinned to, so Claude Code is again the only moving part.
+
+  This pin is taken at Claude Code's newest release rather than the newest one 24h past publication:
+  it ships several times a week and the harness tracks it closely, so holding it a day behind
+  routinely means shipping a known-fixed bug. The exemption covers this ARG alone, is re-made
+  explicitly on each bump, and does not extend to Pi, Codex or any workspace dependency, which stay
+  under the `minimumReleaseAge` gate. The Dockerfile says so beside the pin.
+
+  The image tag moves to `cat-factory-executor:1.119.0` across the wrangler config, the publish
+  script and `RECOMMENDED_HARNESS_IMAGE`, since republishing over a live tag does not roll a
+  deployment out. The deploy image is unchanged and keeps `0.2.13`.
+
+## 1.118.0
+
+### Minor Changes
+
+- 0e1e0fa: Record what a subscription run actually spent, snapshot an inline agent's context, and stop a
+  companion loop that has stopped converging.
+
+  Five defects a Kaizen grading surfaced, of which the grader itself correctly diagnosed one.
+
+  **Per-call output tokens were lost on every harness-served call.** Claude Code's `stream-json`
+  `assistant` envelopes carry the message-START usage snapshot: the input and cache counts are final,
+  `output_tokens` is the handful produced when the message opened, and `stop_reason` is null. The
+  reconciliation against the terminal cumulative total was the intended rescue but guarded on whether
+  ANY tokens had been reported, which the input side always satisfies, so it stood down and the output
+  side stayed at the snapshot. Measured on a real board: a `coder` step recorded 198 output tokens
+  against the 14,033 its terminal event reported, an `initiative-analyst` 531 against 30,471, with the
+  input side matching exactly (which is what hid it). The shortfall is now computed PER SIDE, and it is
+  filed as its OWN row standing for the job rather than added to the last captured turn: a turn grown
+  by thousands of tokens it did not produce is a derived number that reads as a measured one on every
+  surface showing per-call figures. It is also reconciled against the PARENT loop's calls alone, which
+  matters in `ambientAuth` mode, where the CLI streams subagent turns onto the parent's stdout with no
+  transcript watcher to own them: those turns were both hiding the shortfall and, being last,
+  attracting it. Cost accounting was never affected; per-call telemetry, the observability panel,
+  `/api/v1/debug/*` and the step rollups were.
+
+  **A finish reason nobody reported is no longer recorded as `stop`.** Both subscription CLIs expose
+  none, and three sites defaulted to `stop` anyway, which asserts the very thing a truncation check
+  tries to disprove and made `finishReason === 'length'` unfireable on that whole path. Absent is now
+  carried as absent, end to end — including through the AI SDK boundary, whose closed union has no
+  "unknown" member, so its `other` placeholder with no vendor string behind it is read back as the
+  absence it stands for rather than as a classification.
+
+  **Inline agent kinds recorded no context snapshot at all.** `agent_context_snapshots` had exactly one
+  producer, the container executor, so every companion and inline document kind was missing from it.
+  The inline executor now files one through the same recorder, on both facades, and the dependency is a
+  required key with a nullable value so a facade that forgets it fails to typecheck rather than
+  silently recording nothing. The inline SERVICES that call `generateText` directly (the judges, the
+  requirements reviewer, Kaizen's own grader) still file none; that is named in the code and the docs
+  instead of being implied closed.
+
+  **The Kaizen grader was fed two misleading figures**, and spent two of its six recommendations on
+  defects that did not exist. Its digest summed `promptTokens` alone, which is FRESH input by
+  definition, reporting 16 where the real input was 332,552; and it rendered a null finish reason as
+  `unknown` beside a flat "Truncated calls: 0". It now reports the three input classes, and a
+  truncation count carries the number of calls that actually reported a reason on the same line, so a
+  "0" measured over one call in eight cannot read as a clean step. Its "no snapshot captured" line also
+  stopped guessing a cause, having blamed a switch that was enabled.
+
+  **A companion rework loop now stops when it stops making progress.** `attempts < maxAttempts` bounds
+  how long a loop may run and says nothing about whether it is converging: a run re-graded an unchanged
+  document to the same 0.76 four times, burning its whole budget. When the producer returns the text it
+  was asked to revise AND the rating does not move, the loop stops early and takes the same
+  iteration-cap exit, so an attended run parks for a person and an unattended one settles by policy.
+  The rule reads a step's reply as its work, so it applies only to producers whose deliverable IS that
+  reply: a `coder` pushes commits and may legitimately answer with nothing, which is why its reviewer
+  reads the real diff, and a rework a human asked for is excluded too (it spends none of the automatic
+  budget). The step records `stalled` beside `exceeded`, since only one of them means the remaining
+  rounds were abandoned, and the park says which one it is instead of claiming a limit was hit.
+
+## 1.116.0
+
+### Minor Changes
+
+- 7312e0a: Stop a refused work-branch push from failing a run whose work is already on the branch.
+
+  The harness checkpoint-pushes the agent's commits every 60s so an evicted container's work
+  survives, which makes it its own competing writer: a commit is published within a minute of being
+  made, the agent cannot see that from inside the container, and amending it afterwards is ordinary
+  git hygiene (the delivery contract even asks it to validate AFTER committing, which is exactly the
+  sequence that produces an amend). The final push was then refused as a non-fast-forward and the
+  whole run failed with a complete scaffold sitting on the branch.
+
+  Every push after the first now carries `--force-with-lease` against the sha THIS pass published,
+  which is the sha the push itself named: `pushBranch` pushes `<sha>:refs/heads/<branch>` and returns
+  it, rather than reading `refs/remotes/origin/<branch>` back afterwards, which a fresh coding run's
+  single-branch clone never creates. That is the whole discrimination: the run's own rewrite lands, and
+  a second writer's commits (a concurrent dispatch, a person) still refuse the push as `(stale info)`,
+  which is the "never clobber another run's work" property the resume design leans on.
+
+  The lease is withheld entirely unless the branch still contains the tip this pass started from
+  (`workBranchLease`), because the lease alone does not bound the force to this pass's own commits: a
+  resumed run that had already landed one checkpoint would otherwise force over the commits it
+  resumed from and take an earlier run's work with them.
+
+  A refused push is no longer a generic `git` fault. It reports the new `branch-contended` failure
+  cause, and the engine recovers by re-dispatching the step once (`MAX_BRANCH_CONTENTION_RECOVERIES`,
+  recorded on `PipelineStep.branchContentionRecoveries` and projected by the debug API): the fresh
+  dispatch resumes the branch as it now stands, so the agent continues on top of whatever is on it.
+  Past the budget the run fails with a remedy naming which of the two causes it was, rather than git's
+  own "use `git pull`" hint, which is advice for a person at a terminal. Each refusal also increments
+  the new `container.branch_contended` operational counter, since a re-dispatch that a run reports as
+  a clean success is invisible per run and costs a whole agent run twice.
+
+  The checkpoint also stops re-pushing an unchanged branch. Its gate was "the branch advanced past the
+  pre-run tip", which stays true forever once it has, so every tick issued a push: an hour-long run
+  that commits eight times spent ~60 authenticated round trips, ~52 of them answering "Everything
+  up-to-date" and each counting against the host's push rate limits. It now pushes only an
+  UNPUBLISHED tip, which makes the interval a loss window rather than a rate (one push per commit the
+  agent makes, whatever the model or the run's length) and leaves the durability guarantee unchanged.
+
+  The `build` prompt bumps to v6 with the matching half of the rule stated to the agent: add commits,
+  never rewrite them.
+
+  `/api/v1/debug/runs/:runId` gains `branchContentionRecoveries` per step (OpenAPI 1.52.0, additive):
+  a run that recovered reports as an ordinary success, so nothing else tells a post-mortem that one
+  agent pass was paid for twice.
+
+  Also fixes a git failure printing its stderr twice (`execFile` already folds it into the rejection
+  message), which made one refused push read as two attempts.
+
+## 1.114.0
+
+### Minor Changes
+
+- 792ecde: Rebuild the executor image on Claude Code 2.1.229. Pi (0.84.1), Codex (0.147.0) and the Pi
+  todo/web-tools extensions (2.4.0) are already on their newest release, and the shared
+  `node:26-trixie-slim` base still resolves to the digest the image is pinned to, so Claude Code is
+  the only moving part.
+
+  The image tag is bumped to `cat-factory-executor:1.113.0` across the wrangler config, the publish
+  script and `RECOMMENDED_HARNESS_IMAGE`, since republishing over a live tag does not roll a
+  deployment out. The deploy image is unchanged and keeps `0.2.13`.
+
+## 1.112.0
+
+### Minor Changes
+
+- fc9afb4: Let a binary-output step generate through the agent CLI's own tool, with no vendor API key.
+
+  `BinaryGeneratorDefinition` gains a `transport` discriminator. `api` is the existing shape (a
+  metered endpoint the agent's own code calls with an injected credential) and stays the default, so
+  every registered integration is unchanged. `harness` is new: the artifact is produced by a tool
+  built into the agent CLI the step dispatches under, which today means Codex's `image_gen` — a path
+  available ONLY on ChatGPT subscription auth, since an `OPENAI_API_KEY` session is routed to the
+  Images API and never offered the tool. A harness-transport definition may declare no `endpoint`,
+  `credentials` or `contracts`; the credential rule is the one that matters, because a declared one
+  would be an environment variable the deployment believes authenticates something and that nothing
+  ever reads.
+
+  Boot validation holds a harness transport to a CLI that actually generates, which today is codex
+  alone. "This build runs that CLI" and "that CLI has a generation tool" are different questions, and
+  admitting the first lets a definition naming `pi` or `claude-code` pass every check, dispatch with
+  the tool flag set, produce nothing, and brief the agent to collect from a directory nothing created.
+
+  Reachability becomes its own admission axis (`generator_harness_unavailable`): a step selecting a
+  harness-served integration must resolve to that CLI. The requirement is DERIVED from the step's
+  model by the same precedence dispatch uses — including the fall-through past an unresolvable block
+  pin and the "subscriptions always win" override, without which the guard refuses a codex-served
+  generator on a step that is about to run codex. An unresolved model raises nothing. Notably this is
+  NOT a capability flag on the model catalog: whether the tool is offered is decided by the vendor per
+  session and per plan tier, so a boolean on a model row would be a guarantee nothing here can verify.
+  The pipeline builder states the constraint it cannot check (which CLI serves each candidate, and
+  which the current selection needs) as advice, since a pipeline is a template and the model is chosen
+  per task.
+
+  The harness redirects codex's output into `.cat-context/binary-output/generated/` before the CLI
+  starts, because codex exposes no path for what it generated and its output directory is also where
+  the run's decrypted subscription credential lives. It is opt-in per job: the tool bills the leased
+  plan at several times an ordinary turn. `generateImages` joins the job-body capability handshake, so
+  a runner pool on an older image is refused rather than run blind against a brief that names the
+  staging directory regardless. Where the capability genuinely cannot be honoured (an `ambientAuth`
+  run has no per-run home to redirect, a filesystem refuses the link) the harness says so in the
+  prompt instead of dropping it, and the teardown report tells a late-arriving image apart from one
+  that was never reachable.
+
+  Separately, the harness now consumes the job body's `artifactUpload` and surfaces it as
+  `ARTIFACT_UPLOAD_URL` / `ARTIFACT_UPLOAD_TOKEN`. The backend has injected that field and served the
+  ingest route since the visual-confirmation work while the container parsed neither, so a UI run's
+  screenshots were dropped with no error anywhere.
+
+## 1.110.2
+
+### Patch Changes
+
+- c09ddbe: Render a review verdict as blocks a human can skim, and ask the reviewer to write it that way.
+
+  A companion's verdict (the architect/spec/code/doc reviewers) arrives as ONE string: `comments`
+  only exist where the graded output has ids to anchor to, so everything the reviewer found lands in
+  `summary`. Unshaped, a model writes that as a single dense paragraph numbering its points inline
+  ("(1) … (2) …"), and the run panel then appended it to the score inside the same line
+  (`78% < 80% — <four hundred words>`). Nothing about that is skimmable: a reader cannot tell what
+  blocks the work from what is a nit without reading all of it.
+
+  Both halves move. `REVIEW_SUMMARY_LAYOUT` (agents, `prompts/shared.ts`) asks for a fixed skeleton,
+  a one-line verdict then `**Must fix**` / `**Should fix**` / `**Minor**` bullet groups, and is
+  carried by every companion (built-in and deployment-registered, since they share one prompt). It
+  survives a per-workspace prompt override, like the other fragments that describe how the platform
+  reads a reply rather than what it should look for. A reviewer that already reports structured
+  findings beside its summary is deliberately excluded: every judge, the `pr-reviewer` and the tester
+  have that array rendered as its own list, so the layout would make them write each point twice.
+  The SPA renders those summaries through the existing `MarkdownProse` reader instead of plain-text
+  dumps, and each companion round is now its own card rather than a continuation of the score line.
+  The same render fix reaches the reviewer prose the first markdown sweep missed: judge summary and
+  findings, best-practice adherence, the PR-review summary, findings and challenge verdicts, and the
+  tester report. It stops at the fields carrying a VALUE a human copies rather than prose (a
+  suggested fix, a gate's failure summary), which stay preformatted: markdown would emphasise the
+  `__dunder__` in a path and curl the quotes in a command.
+
+  Kernel's `extractJson` now repairs raw control characters inside a JSON string literal. A
+  multi-line summary is exactly what makes a model forget the `\n` escape, and refusing that reply
+  costs the whole verdict (a companion that returns nothing parseable fails the run) over a quoting
+  slip. The repair is a SECOND pass, run only once every candidate in the reply has been read as
+  written: a repair makes text parse that was meant to be skipped, so tried inline it would let an
+  example shape or a prose aside shadow the real verdict written after it. Fence bodies are now all
+  searched, not just the first. The harness's own reader gained the same repair (hence a runner image
+  bump), because it reads the reply FIRST and each refusal there costs a billed repair completion
+  before the engine ever sees it.
+
+  The judge prompt bumps to `judge@v2`: its summary is now rendered beside its findings, so it is
+  asked for a short whole-verdict paragraph that does not restate them. Scoring is untouched. A
+  companion kind also stops resolving to the `review` phase's prompt version — a companion runs the
+  companion prompt, so both the editor's baseline label and the sandbox baseline named a revision of
+  text the kind never sends.
+
+## 1.110.0
+
+### Minor Changes
+
+- 2428b6b: Attribute a cross-service run's pull request to every involved service frame whose changes ride
+  it, not just the first.
+
+  The multi-repo fan-out checks out one repo per REPO, so several involved services living in one
+  monorepo already shared a checkout, a work branch and a single pull request. Only the RECORD was
+  singular, which left every frame but the first looking like a service the run had opened no pull
+  request for. The attribution is now a set (`frameIds`) from the dispatch through the harness echo
+  to `block.peerPullRequests`, the merge order, and the verification report. The own-service report
+  carries it too, naming the involved services co-located in the task's own repo: those open no pull
+  request of their own, so that report is the only place their change is reported. A peer checkout
+  also stops inheriting one co-located service's `serviceDirectory`: it is whole-repo, as the primary
+  already was, so the services that resolved second are reachable.
+
+  A recorded peer pull request is now ADDRESSED by its repo rather than by its frames, which is what
+  a checkout is identified by, and one the platform cannot resolve is named to the merger instead of
+  being dropped from the combined diff it scores.
+
+  Internal break: `peerPullRequestSchema.frameId`, `allPullRequests`, `MergePrEntry.frameId`,
+  `PrReportTarget.frameId` and the harness `peerRepos`/`peerPullRequests` wire fields are replaced
+  by `frameIds`. Peer PRs recorded on a block before this ship lose their frame attribution (the
+  pull requests themselves are untouched). Public `/api/v1` is additive only: `PrReportScope` gains
+  `frameIds` and keeps `frameId` as its head (surface version 1.40.0). `frameId` is no longer always
+  null on an own-service report: it names a co-located involved service when there is one.
+
+  The runner image moves to `cat-factory-executor:1.109.0`.
+
+## 1.108.0
+
+### Minor Changes
+
+- 19baddf: Show a task's design PICTURES to the agents that build the screen.
+
+  The frames an import retains for a linked design (Figma, Zeplin) already fed the
+  visual-confirmation gate and the UI tester's capture set. They now also reach the kinds that build
+  or plan a screen, on the two channels a dispatch can actually carry an image over: written into
+  `.cat-context/design-renders/` for a harness whose CLI reads image files, and attached to the model
+  request as image parts for an inline call. Which kinds get them is a declared trait
+  (`design-images`, on `coder` / `architect` / `fixer`), so a deployment's own UI kind opts in the
+  same way.
+
+  Delivery joins two DECLARED facts, and neither is inferred: `HARNESS_IMAGE_INPUT` says which agent
+  CLI can get bytes into a turn (`claude-code`; Codex and Pi are `false` with their reason stated),
+  and the new per-flavour `ModelRef.acceptsImages` says which model takes one. A dispatch that cannot
+  show the pictures TELLS the agent they exist, with which of the two is missing, so the textual
+  design description never reads as everything the platform had. An UNDECLARED model modality is its
+  own refusal reason rather than a silent "no", so an undeclared multimodal model cannot read as a
+  text-only one forever.
+
+  **Runner image bump** (`cat-factory-executor:1.107.0`): the harness gained the download for the new
+  manifest, and `designImages` joins `HARNESS_BODY_CAPABILITIES`, so a deployment running an older
+  image is told rather than leaving the backend's prompt naming a directory nothing wrote. Mirror the
+  tag into your registry and roll it out; nothing else in the change requires it.
+
+  Recorded prompt bodies now pass through `redactImagePayloads` on both the inline and proxy paths: a
+  `Uint8Array` JSON-stringifies to one entry per byte, so an attached frame would otherwise have
+  landed in telemetry as megabytes per recorded call.
+
 ## 1.106.0
 
 ### Minor Changes

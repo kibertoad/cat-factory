@@ -22,6 +22,12 @@ public abstract class Resources {
     private final PipelinesClient pipelines;
     private final TaskTypesClient taskTypes;
     private final NotificationsClient notifications;
+    private final EnvironmentsClient environments;
+    private final ModelsClient models;
+    private final VcsClient vcs;
+    private final TrackerClient tracker;
+    private final RiskPoliciesClient riskPolicies;
+    private final ModelPresetsClient modelPresets;
     private final WebhookClient webhook;
     private final UsageClient usage;
     private final MeClient me;
@@ -40,6 +46,12 @@ public abstract class Resources {
         this.pipelines = new PipelinesClient(transport);
         this.taskTypes = new TaskTypesClient(transport);
         this.notifications = new NotificationsClient(transport);
+        this.environments = new EnvironmentsClient(transport);
+        this.models = new ModelsClient(transport);
+        this.vcs = new VcsClient(transport);
+        this.tracker = new TrackerClient(transport);
+        this.riskPolicies = new RiskPoliciesClient(transport);
+        this.modelPresets = new ModelPresetsClient(transport);
         this.webhook = new WebhookClient(transport);
         this.usage = new UsageClient(transport);
         this.me = new MeClient(transport);
@@ -55,7 +67,7 @@ public abstract class Resources {
         return jobs;
     }
 
-    /** The workspace's board services, the frames tasks are created under: list them, or create one (optionally backed by a repository). */
+    /** The workspace's board services, the frames tasks are created under: list them, create one (optionally backed by a repository), patch one (including declaring where the manifests for its per-run environments are read from), or delete one with everything under it. The delete refuses a service holding unfinished tasks rather than discarding work in flight. */
     public ServicesClient services() {
         return services;
     }
@@ -65,7 +77,7 @@ public abstract class Resources {
         return spec;
     }
 
-    /** The repositories this workspace can back a service with, and which service each already backs: the discovery half of service creation. */
+    /** The repositories this workspace can back a service with, and which service each already backs (the discovery half of service creation); the ones its connection could reach but has not adopted yet, and adopting one by name; plus creating a brand-new one, where a bootstrap writes the repository with an agent and reports the board service it materialises. */
     public ReposClient repos() {
         return repos;
     }
@@ -88,6 +100,36 @@ public abstract class Resources {
     /** The workspace's human-actionable inbox: list, act on, or dismiss a run tail. */
     public NotificationsClient notifications() {
         return notifications;
+    }
+
+    /** The cluster this workspace provisions per-run environments onto: probe a candidate connection without saving it, or bind one. The credential is write-only, so a read reports which secret keys are stored and never their values. */
+    public EnvironmentsClient environments() {
+        return environments;
+    }
+
+    /** The models a run in this workspace could actually dispatch to, and why an unavailable one is unavailable: unconfigured, or refused by the account model-family policy. Those two need opposite fixes. */
+    public ModelsClient models() {
+        return models;
+    }
+
+    /** The workspace's source-control connection: which account it talks to, how it authenticates, and whether it may create repositories and write workflow files. Both permissions are enforced by the provider at push time, so reading them beats discovering one missing halfway through an automated setup. */
+    public VcsClient vcs() {
+        return vcs;
+    }
+
+    /** What this workspace does to a task's LINKED tracker issue as its pull request progresses: comment when it opens, comment and close the issue when it merges, and post a headless run's parked review findings so the reporter can answer where they filed. The write MERGES, so turning one action on leaves the other two as they were. It is the writeback half of the workspace's tracker configuration; the filing selection (which tracker a tech-debt ticket is raised on) is not published yet. */
+    public TrackerClient tracker() {
+        return tracker;
+    }
+
+    /** The risk policies a task can pin, including which is the workspace default: what decides whether a run can land its pull request without a person, and how many attempts its CI fixer, requirement rounds and release watch are given. Broader than merging, which is why it is not called a merge preset. */
+    public RiskPoliciesClient riskPolicies() {
+        return riskPolicies;
+    }
+
+    /** The model presets a task can pin, including which is the workspace default: what decides which model each agent step runs on, and so what a run costs. Availability is not repeated here; join `baseModelId` against the models group, which keeps unconfigured and policy-refused apart. */
+    public ModelPresetsClient modelPresets() {
+        return modelPresets;
     }
 
     /** The workspace's outbound endpoints: register, inspect or remove the receivers that notifications, run-lifecycle events and health alerts are pushed to. The unnamed calls address the `default` endpoint; the named ones let an integration enroll its own receiver, with its own signing secret and filters, beside whatever else is registered. */

@@ -20,9 +20,24 @@ export interface PlatformMetricsSeedRun {
   updatedAt: number
   /** When set, `failure` is `{"kind": failureKind, ...}`; when omitted, `failure` is NULL. */
   failureKind?: string
+  /**
+   * The owning block, when the case needs the row to be DECODABLE. Omitted ⇒ NULL, which is the
+   * shape `rowToExecution` refuses, and what the undecodable-run suite (which shares this seam)
+   * seeds on purpose: the write-side guard now refuses to compose such a row, so a raw insert is
+   * the only way left to produce one.
+   */
+  blockId?: string
+  /** The `detail` JSON, for a case about what it holds (the step list and its cursor). Omitted ⇒ `{}`. */
+  detail?: string
 }
 
-/** Raw seed seam a runtime implements against its real store (no domain write path needed). */
+/**
+ * Raw seed seam a runtime implements against its real store (no domain write path needed).
+ *
+ * Shared with the undecodable-run suite, which needs the same thing for the opposite reason: the
+ * rollups here aggregate rows no domain write path produces in the shapes they must cover, and that
+ * suite needs a row no domain write path may produce at all.
+ */
 export interface PlatformMetricsSeed {
   /** Insert a workspace owned by `accountId` (idempotent per id). */
   workspace(id: string, accountId: string): Promise<void>

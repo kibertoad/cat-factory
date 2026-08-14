@@ -12,6 +12,7 @@ import type {
   TeardownProbe,
 } from '@cat-factory/kernel'
 import type { PreflightRef, RecipeStepRecorder, StackRecipe } from '@cat-factory/kernel'
+import { getErrorMessage } from '@cat-factory/kernel'
 import { formatPreflightFailure, preflightBlockingFailures } from '../preflight/PreflightService.js'
 import {
   type ComposeEnvironmentConfig,
@@ -20,6 +21,7 @@ import {
   checkoutDepthFor,
   classifyComposePs,
   composeFileDir,
+  composeProbeFailure,
   countComposePs,
   parseComposeEnvConfig,
   parseHostPort,
@@ -247,19 +249,25 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
       if (version.code !== 0) {
         return {
           ok: false,
-          message: tailOutput(version.stderr || version.stdout) || 'docker compose unavailable',
+          message: composeProbeFailure(
+            `\`docker compose version\` exited ${version.code}: the Compose v2 CLI plugin could not be run at all. Check that Docker is installed and on this host's PATH.`,
+            version.stderr || version.stdout,
+          ),
         }
       }
       // `version --short` is a client-only call and succeeds even with the daemon stopped, so it
-      // can't confirm reachability on its own. `compose ls` actually contacts the daemon — only a
-      // success there means a real provision could run.
+      // can't confirm reachability on its own. `compose ls` actually contacts the daemon, and only
+      // a success there means a real provision could run.
       const ls = await this.runtime.compose(['ls', '--format', 'json'], {
         timeoutMs: SHORT_TIMEOUT_MS,
       })
       if (ls.code !== 0) {
         return {
           ok: false,
-          message: tailOutput(ls.stderr || ls.stdout) || 'Docker daemon is not reachable',
+          message: composeProbeFailure(
+            `\`docker compose ls\` exited ${ls.code}: the Compose CLI ran but could not reach the Docker daemon. Start Docker (Docker Desktop, colima, or the \`docker\` service), and check \`DOCKER_HOST\` if it points somewhere unusual.`,
+            ls.stderr || ls.stdout,
+          ),
         }
       }
       const v = version.stdout.trim()
@@ -268,7 +276,17 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
         message: v ? `Docker Compose ${v} reachable.` : 'Docker Compose reachable.',
       }
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      // A THROW here is the INVOCATION failing (no `docker` binary, the runtime adapter could not
+      // spawn it, the watchdog fired), which is a different fault from a compose command that ran
+      // and reported a problem: those are the non-zero branches above, read off stderr.
+      return {
+        ok: false,
+        message: composeProbeFailure(
+          "Could not run `docker compose` at all: check that Docker (with the Compose v2 plugin) is installed, on this host's PATH, and running.",
+          getErrorMessage(err),
+          'The invocation failed with',
+        ),
+      }
     }
   }
 
@@ -412,7 +430,7 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
       }))
     } catch (err) {
       return {
-        error: `Could not clone the repo for build: ${err instanceof Error ? err.message : String(err)}`,
+        error: `Could not clone the repo for build: ${getErrorMessage(err)}`,
       }
     }
     const composeDir = composeFileDir(config.composePath)
@@ -566,7 +584,7 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     } catch (err) {
       return this.failed(
         project,
-        `Could not clone the repo for the recipe: ${err instanceof Error ? err.message : String(err)}`,
+        `Could not clone the repo for the recipe: ${getErrorMessage(err)}`,
       )
     }
     // `--project-directory` is the layer list's project dir (the first IN-REPO layer's directory),
@@ -666,7 +684,7 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
           try {
             primary = await this.resolveComposeSource(req, config)
           } catch (err) {
-            return { error: err instanceof Error ? err.message : String(err) }
+            return { error: getErrorMessage(err) }
           }
         }
         const file = await primary.ctx.repo.getFile(layer.path, primary.ref)
@@ -694,9 +712,9 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
         await this.runtime.copyCheckoutFile!(project, envFile.template, envFile.target)
         await this.logStep(record, `env-file: ${envFile.target}`, started, { ok: true })
       } catch (err) {
-        const message = `Could not materialize env file '${envFile.target}': ${
-          err instanceof Error ? err.message : String(err)
-        }`
+        const message = `Could not materialize env file '${envFile.target}': ${getErrorMessage(
+          err,
+        )}`
         await this.logStep(record, `env-file: ${envFile.target}`, started, {
           ok: false,
           error: message,

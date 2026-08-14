@@ -12,6 +12,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { Logger, VcsIdentityRegistry, VcsProvider } from '@cat-factory/kernel'
 import { runBestEffort } from '@cat-factory/kernel'
+import { GITHUB_PAT_CLASSIC_SCOPES, githubPatCreateUrl } from '@cat-factory/contracts'
 import type { LocalVcsCredential } from './vcsCredential.js'
 import {
   type AppTokenSource,
@@ -40,23 +41,22 @@ import type { PatAccount } from './installations.js'
 // mode — those are the GitHub-App connect flow, which local mode replaces with the
 // linkRepo helper — so they throw rather than pretend to work.
 
-// The scopes a local-mode PAT needs. Agent containers clone/push branches and open PRs
-// (`repo`, which also covers reading the PR head's Actions check runs for the CI gate and
-// merging the PR), and the coder/ci-fixer may touch `.github/workflows/*` files (`workflow`).
-const LOCAL_PAT_SCOPES = ['repo', 'workflow'] as const
-
 /**
  * A GitHub "new personal access token (classic)" URL with the scopes local mode needs
  * pre-selected, so a developer without a PAT can click straight through to create one.
  * Classic tokens are used (not fine-grained) because only the classic form accepts the
  * `scopes` query param for pre-selection.
+ *
+ * The scope list and the URL shape both come from `@cat-factory/contracts`, which is also what
+ * the SPA's credential banner links to. They were separate copies while the only consumer was
+ * this boot warning; once the same advice had to be rendered in the browser, two lists would
+ * have been two answers to "what should I tick" for the same deployment.
  */
 export function githubPatCreationUrl(): string {
-  const params = new URLSearchParams({
+  return githubPatCreateUrl('classic', {
+    webUrl: 'https://github.com',
     description: 'cat-factory local mode',
-    scopes: LOCAL_PAT_SCOPES.join(','),
   })
-  return `https://github.com/settings/tokens/new?${params.toString()}`
 }
 
 /**
@@ -146,7 +146,7 @@ class PatGitHubClient extends FetchGitHubClient {
      * instead of re-walking `/user/repos` on every keystroke. Absent (mothership boot /
      * tests) ⇒ the search enumerates live per request, as before.
      */
-    private readonly repoEnumCache?: GroupCacheHandle<GitHubRepo[]>,
+    private readonly repoEnumCache?: GroupCacheHandle<Paged<GitHubRepo>>,
   ) {
     super(deps)
   }
@@ -180,19 +180,24 @@ class PatGitHubClient extends FetchGitHubClient {
     installationId: number,
     query: string,
     opts: { limit?: number } = {},
-  ): Promise<GitHubRepo[]> {
+  ): Promise<Paged<GitHubRepo>> {
     const q = query.trim().toLowerCase()
-    if (!q) return []
+    if (!q) return { items: [], truncated: false }
     const cacheKey = String(installationId)
-    const items = this.repoEnumCache
-      ? await this.repoEnumCache.get(
-          cacheKey,
-          cacheKey,
-          async () => (await this.listInstallationRepos(installationId)).items,
+    // The whole page is cached, not its rows: an enumeration that stopped at the cap is a
+    // prefix, and caching only the rows would serve that prefix to every later keystroke as
+    // though it were the complete set.
+    const page = this.repoEnumCache
+      ? await this.repoEnumCache.get(cacheKey, cacheKey, () =>
+          this.listInstallationRepos(installationId),
         )
-      : (await this.listInstallationRepos(installationId)).items
-    const matched = items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
-    return matched.slice(0, Math.min(Math.max(opts.limit ?? 50, 1), 100))
+      : await this.listInstallationRepos(installationId)
+    const matched = page.items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
+    const cap = Math.min(Math.max(opts.limit ?? 50, 1), 100)
+    return {
+      items: matched.slice(0, cap),
+      truncated: page.truncated === true || matched.length > cap,
+    }
   }
 }
 
@@ -257,12 +262,15 @@ export function classifyPatProbe(res: {
     return { ok: false, reason: 'forbidden', detail: `HTTP ${res.status} — unexpected response` }
   }
   // 2xx: the token authenticates. Verify scopes only when GitHub reports them (classic token).
+  // An ABSENT header is a fine-grained token, whose scopes cannot be verified from here; a
+  // header that is present and EMPTY is a classic token minted with nothing ticked, which is
+  // missing every scope rather than unverifiable.
   const granted = (res.scopesHeader ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
-  if (granted.length === 0) return { ok: true } // fine-grained token — scopes not reported
-  const missing = LOCAL_PAT_SCOPES.filter((s) => !granted.includes(s))
+  if (granted.length === 0 && res.scopesHeader === null) return { ok: true }
+  const missing = GITHUB_PAT_CLASSIC_SCOPES.filter((s) => !granted.includes(s))
   return missing.length === 0
     ? { ok: true }
     : { ok: false, reason: 'underscoped', missing: [...missing] }
@@ -394,7 +402,7 @@ export function buildVcsIdentityRegistry(
 export function createLocalGitHubClient(
   env: NodeJS.ProcessEnv,
   resolveToken: () => string | undefined,
-  repoEnumCache?: GroupCacheHandle<GitHubRepo[]>,
+  repoEnumCache?: GroupCacheHandle<Paged<GitHubRepo>>,
 ): GitHubClient {
   const apiBase = env.GITHUB_API_BASE?.trim() || 'https://api.github.com'
   return new PatGitHubClient(

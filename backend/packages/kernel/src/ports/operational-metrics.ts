@@ -42,12 +42,53 @@ export type OperationalCounter =
    * backstop stopped backstopping, which matters more than any single run it did not recover.
    */
   | 'sweep.run_state_unknown'
+  /**
+   * Recovering ONE stale run threw, so the sweeper skipped it and carried on with the rest of
+   * the pass. Dimensioned by `kind`, like its siblings.
+   *
+   * Counted apart from `sweep.failed` (a whole pass throwing) because the two now mean opposite
+   * things about the fleet: a pass that survives a poison run keeps recovering everything else,
+   * and this is the only number that says one run is permanently unrecoverable. A run that
+   * cannot even be read is the worked example, and it sorts to the FRONT of every future pass.
+   */
+  | 'sweep.run_recovery_failed'
   /** A sweeper pass threw. Dimensioned by `sweep`, so one sick sweeper is identifiable. */
   | 'sweep.failed'
   /** A container job dispatch threw — the job never existed, so no poll can report it. */
   | 'container.dispatch_failed'
   /** A container job settled as evicted/crashed. Dimensioned by the eviction kind. */
   | 'container.evicted'
+  /**
+   * A container job settled because the harness serving it EXITED CLEANLY while it was still in
+   * flight: something stopped the harness (an operator, a host restart, or the agent's own
+   * commands matching the harness process).
+   *
+   * Its own counter rather than a third `container.evicted` dimension, because it is not one: an
+   * eviction is a container the platform lost and recovers by dispatching a fresh one, this is a
+   * container something in the deployment deliberately stopped and the engine fails the run over
+   * on the FIRST occurrence. Folding it in would inflate the eviction rate an operator sizes
+   * their infrastructure by with deaths no infrastructure change can prevent.
+   *
+   * UNDIMENSIONED, for the reason `container.branch_contended` is: the only split worth having
+   * (which backend saw it) is free-form, and the ids ride the log line at the increment site.
+   */
+  | 'container.harness_shutdown'
+  /**
+   * A container job settled because its push to the work branch was REFUSED: the branch moved
+   * under the run (a second dispatch for the same block, or a rewrite of commits an earlier run
+   * published). The engine re-dispatches once, so the cost of each one is a whole agent run spent
+   * twice, in tokens and in wall clock, on a run that reports as a clean success.
+   *
+   * That is the reason it is counted and not only logged: per run it is invisible, and the remedy
+   * the harness prints ends "if it recurs, check whether two runs are active for the same block",
+   * which is a recurrence no per-run line can show.
+   *
+   * UNDIMENSIONED. The split worth having is which of the two rejection shapes it was, and the
+   * harness's `PushRejection` does not cross the job-view boundary (the cause does). Widening the
+   * view for a dimension would mean a runner-image bump; the shape stays in the remedy text the
+   * failed step carries, and the ids ride the log line at the increment site.
+   */
+  | 'container.branch_contended'
   /**
    * A container dispatch was REFUSED because the runner image told us it does not parse a
    * capability field the job body carried (`domain/harness-capabilities.ts`). Dimensioned by

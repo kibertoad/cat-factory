@@ -16,10 +16,14 @@ import {
   makeOnboardingProbe,
   makeToolServerDispatchProbe,
   makeReadyReviewWithOpenItem,
+  seedFrameRepoLink,
+  type FrameRepoLink,
+  type FrameRepoLinkRepositories,
 } from '@cat-factory/conformance'
 import {
   type CoreRepositories,
   type DrizzleDb,
+  DrizzleAccountRiskPolicyRepository,
   DrizzleDocInterviewRepository,
   DrizzleAccountSettingsRepository,
   DrizzleDocumentRepository,
@@ -31,6 +35,8 @@ import {
   createApp,
   createDbClient,
   createDrizzleRepositories,
+  DrizzleGitHubInstallationRepository,
+  DrizzleRepoProjectionRepository,
   migrate,
   schema,
 } from '@cat-factory/node-server'
@@ -514,6 +520,7 @@ export function makeMothershipConformanceApp(
     seedReadyClarityReview,
     seedService,
     getService,
+    linkFrameRepo,
     mothershipRepos,
   } = createMothershipSeedHelpers(db)
 
@@ -562,8 +569,10 @@ export function makeMothershipConformanceApp(
     taskRepository: () => new DrizzleTaskRepository(db),
     docInterviewRepository: () => new DrizzleDocInterviewRepository(db),
     accountSettingsRepository: () => new DrizzleAccountSettingsRepository(db),
+    accountRiskPolicyRepository: () => new DrizzleAccountRiskPolicyRepository(db),
     seedService,
     getService,
+    linkFrameRepo,
     ...containerServiceProbes(container),
   }
 }
@@ -609,6 +618,20 @@ function createMothershipSeedHelpers(db: DrizzleDb) {
   function getService(id: string) {
     return mothershipRepos().serviceRepository.get(id)
   }
+  /**
+   * Written to the MOTHERSHIP's stores like every other seeder here, so a db-less node resolves the
+   * frame's repository over the persistence RPC rather than from a local copy it does not have.
+   */
+  function linkFrameRepo(link: FrameRepoLink) {
+    return seedFrameRepoLink(
+      {
+        installations: new DrizzleGitHubInstallationRepository(db),
+        projection: new DrizzleRepoProjectionRepository(db),
+        services: mothershipRepos().serviceRepository,
+      } satisfies FrameRepoLinkRepositories,
+      link,
+    )
+  }
 
   return {
     seedPipeline,
@@ -618,6 +641,7 @@ function createMothershipSeedHelpers(db: DrizzleDb) {
     seedReadyClarityReview,
     seedService,
     getService,
+    linkFrameRepo,
     mothershipRepos,
   }
 }

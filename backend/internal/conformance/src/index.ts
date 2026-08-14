@@ -70,6 +70,7 @@ export { defineAgentSearchQuerySuite } from './agent-search-queries-suite.js'
 export { defineAgentToolCallSuite } from './agent-tool-calls-suite.js'
 export { defineCacheSuite } from './cache-suite.js'
 export { defineSkillLibrarySuite, type SkillLibraryRepos } from './skill-library-suite.js'
+export { defineFragmentLibrarySuite, type FragmentLibraryRepos } from './fragment-library-suite.js'
 export {
   defineFoundationalServicesSuite,
   type FoundationalServiceRepos,
@@ -91,6 +92,7 @@ export {
   type PlatformMetricsSeed,
   type PlatformMetricsSeedRun,
 } from './platform-metrics-suite.js'
+export { defineUndecodableRunSuite, type UndecodableRunDeps } from './undecodable-run-suite.js'
 export { defineGateOutcomeSuite, type GateOutcomeSeed } from './gate-outcome-suite.js'
 export { defineNotificationSettingsSuite } from './notification-settings-suite.js'
 export {
@@ -121,4 +123,9 @@ export { defineWorkspaceSettingsSuite } from './workspace-settings-suite.js'
 export { defineWorkspaceAccessSuite } from './workspace-access-suite.js'
 export { defineWorkspaceRbacSuite } from './workspace-rbac-suite.js'
 export { mintSession } from './session.js'
+export {
+  seedFrameRepoLink,
+  type FrameRepoLink,
+  type FrameRepoLinkRepositories,
+} from './frame-repo-link.js'
 export { CONFORMANCE_DRIVE_CONFIG, driveWorkspace } from './drive.js'

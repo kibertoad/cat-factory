@@ -8,7 +8,7 @@ import type { Recurrence } from '~/types/recurring'
 const props = defineProps<{ block: Block }>()
 const recurring = useRecurringPipelinesStore()
 const pipelines = usePipelinesStore()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t, d } = useI18n()
 
 const schedule = computed(() => recurring.byBlock(props.block.id))
@@ -72,11 +72,7 @@ async function saveEdit() {
     await recurring.update(schedule.value.id, { recurrence: draft.value })
     editing.value = false
   } catch (e) {
-    toast.add({
-      title: t('inspector.recurring.updateFailed'),
-      description: errMsg(e),
-      color: 'error',
-    })
+    present(e, 'inspector.recurring.updateFailed')
   } finally {
     busy.value = false
   }
@@ -88,11 +84,7 @@ async function toggleEnabled() {
   try {
     await recurring.update(schedule.value.id, { enabled: !schedule.value.enabled })
   } catch (e) {
-    toast.add({
-      title: t('inspector.recurring.updateFailed'),
-      description: errMsg(e),
-      color: 'error',
-    })
+    present(e, 'inspector.recurring.updateFailed')
   } finally {
     busy.value = false
   }
@@ -104,18 +96,10 @@ async function runNow() {
   try {
     await recurring.runNow(schedule.value.id)
   } catch (e) {
-    toast.add({
-      title: t('inspector.recurring.runNowFailed'),
-      description: errMsg(e),
-      color: 'error',
-    })
+    present(e, 'inspector.recurring.runNowFailed')
   } finally {
     busy.value = false
   }
-}
-
-function errMsg(e: unknown) {
-  return e instanceof Error ? e.message : String(e)
 }
 
 const RUN_COLOR: Record<string, string> = {

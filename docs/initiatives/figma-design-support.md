@@ -66,11 +66,11 @@ design under active iteration it meant the agent routinely built the previous re
 
 ### 4. Pixels exist upstream and reach nobody
 
-**Closed on the RETENTION half by Track D slice 1** (an import downloads the frames and keeps them
-as `reference` artifacts), on the GATE half by slice 2 (a linked design populates the
-actual-vs-reference gallery itself), and on the CHECKOUT half by slice 3 (a capturing run reads the
-frames off disk under `.cat-context/reference-screenshots/`). What remains is the pixels the MODEL
-sees: multimodal delivery. The survey finding is kept below because it is what those slices are
+**Closed by Track D**: retention by slice 1 (an import downloads the frames and keeps them as
+`reference` artifacts), the GATE by slice 2 (a linked design populates the actual-vs-reference
+gallery itself), the CHECKOUT by slice 3 (a capturing run reads the frames off disk under
+`.cat-context/reference-screenshots/`), and the MODEL by slice 4 (a building kind is shown them,
+or told why it is not). The survey finding is kept below because it is what those slices are
 measured against.
 
 The provider asks Figma for a rendered PNG URL, stores the URL as a `### References` line, and
@@ -113,9 +113,8 @@ high-confidence; zero frontend unit or e2e coverage of any document surface.
 
 ## Tracks and checklists
 
-Tracks A, B and C are DONE. D's later slices build on its first; E consumes D's artifact bridge. F
-is optional scope, committed only through its first (registration) slice. Ordering inside a track
-is the intended slice order.
+Tracks A, B, C and D are DONE. E consumes D's artifact bridge. F is optional scope, committed only
+through its first (registration) slice. Ordering inside a track is the intended slice order.
 
 ### Track A: designer access and the start-from-design flow (DONE)
 
@@ -352,11 +351,12 @@ omits what it lacks, and the conformity of the two is what keeps Penpot cheap la
       carries no URL, so a key falling back to the title would fold two same-titled uploads into
       one row and read their differing revisions as a page that moved mid-run.
 
-### Track D: pixels
+### Track D: pixels (DONE)
 
 The bridge is the binary-artifact store that visual confirmation already reads
 (`kind:'reference'`), so the first two slices need no harness change and close a documented
-visual-confirmation leftover. Multimodal delivery is the long pole and is deliberately LAST.
+visual-confirmation leftover. Multimodal delivery was the long pole and was deliberately LAST.
+DONE.
 
 - [x] **Download renders at import.** The kernel `DocumentSourceProvider.fetchRenders` port, called
       by the import that WRITES a body, storing `kind:'reference'` artifacts keyed to the document
@@ -492,18 +492,110 @@ visual-confirmation leftover. Multimodal delivery is the long pole and is delibe
       Image-bumping slice: `@cat-factory/executor-harness` and the pinned tags move together, and the
       directory joins `HARNESS_SENTINEL_PATHS` so the two independent copies of its name are pinned
       byte-for-byte by the harness contract suite.
-- [ ] **Multimodal delivery to agents.** Hand the stored render to image-capable harness/model
-      pairs as an image content part (job body + proxy + prompt assembly; the OpenAI-shape
-      `image_url` translation already exists on the Workers AI upstream with no producer).
-      Requires an executor-harness change, so it is an image-bumping slice; kinds/harnesses that
-      cannot take images keep the textual path and the prompt states that the render exists but
-      could not be attached.
+- [x] **Multimodal delivery to agents.** The retained renders now reach the kinds that BUILD or PLAN
+      a screen (the new `design-images` trait: `coder`, `architect`, `fixer`), on the two channels a
+      dispatch can actually carry an image over: written into `.cat-context/design-renders/` for a
+      harness whose CLI reads image files, and attached to the model request as image parts for an
+      inline call.
+      **Delivery is a PAIR fact and both halves are DECLARED, never inferred.** `HARNESS_IMAGE_INPUT`
+      says which CLI can open an image file the platform wrote (`claude-code` today; Codex and Pi are
+      `false` with their reason, flipped in the change that teaches an image to carry them, never
+      ahead of it) and `ModelRef.acceptsImages` says which flavour takes one. The harness is asked
+      FIRST, which is not stylistic: a subscription harness pins its own model, so reporting the
+      model's limitation would send someone to change a model they cannot change without also
+      changing the CLI.
+      **The CARRIER is stated by the dispatch site, never derived from "is a harness named".**
+      `DesignImageCarrier` is `{ channel: 'files', harness }` for a container dispatch and
+      `{ channel: 'message' }` for an inline call that composes its own request. Deriving it once
+      cost the AMBIENT INLINE path its honesty: it names a harness whose CONTAINER dispatch reads
+      image files, drives that CLI with one-shot text on stdin, and so claimed `channel: 'files'`
+      for a directory a call with no checkout never wrote.
+      **The refusals are six, not one**, because each names a different fix. `unknown_model_image_input`
+      is the one that keeps the feature honest: it says the CATALOG has not declared this flavour's
+      modality, kept apart from `model_no_image_input` so an undeclared multimodal model cannot read
+      as a text-only one forever with nothing saying the platform never asked. `acceptsImages: true`
+      is therefore set only where the serving provider documents it, and everything else is left
+      absent rather than guessed at. Two more name a SEAM that carries no picture at all and so come
+      from the site rather than from the join: `inline_harness_text_only` (the ambient CLI path) and
+      `consensus_panel` (participants share one composed prompt STRING across models that need not
+      agree about image input, so there is nothing to attach to; the panel states its ceiling exactly
+      as it already does for the tool servers it cannot reach).
+      **A kind that cannot be shown the pictures is TOLD they exist**, with the cause and the view
+      names, and told not to chase them. That is what stops the textual description from reading like
+      everything the platform had.
+      **The set is capped at 6 against the capture path's 24**, and the two caps are the reason
+      `capReferences` now takes its limit from the caller: they bound different currencies (input
+      tokens on every turn versus one transfer), so a shared number would have to be the smaller and
+      would silently starve the gate's gallery.
+      Two things the plan above did not anticipate. The recorded prompt bodies needed a redaction
+      pass FIRST (`redactImagePayloads`, shared by the inline recorder and the LLM proxy): a
+      `Uint8Array` JSON-stringifies to one object entry per byte, so an attached frame would have
+      landed in telemetry as megabytes of `{"0":137,…}` on every turn of the run, and the proxy's
+      `data:`-URL form has the same shape of problem for any future producer. That redaction is for
+      the RECORD only: nothing may size a request off it, because the proxy's Workers AI output cap
+      reserves context-window room from a measurement of the prompt, and measuring the described
+      copy would under-reserve by the whole size of every attached picture.
+      And the Node
+      composition root builds its artifact store AFTER the model stack that constructs the inline
+      executor, with neither ordering free to move, so the store reaches it through one documented
+      late binding that fails safe (no store ⇒ the prompt states the pictures could not be
+      delivered, exactly as for a deployment with no storage).
+      Image-bumping slice: `@cat-factory/executor-harness` and the pinned tags move together,
+      `designImages` joins `HARNESS_BODY_CAPABILITIES` (so an older image cannot leave the backend's
+      prompt naming a directory it never wrote, which is precisely why the CAPTURE manifest is not a
+      member: the harness composes that block itself), and the new directory joins
+      `HARNESS_SENTINEL_PATHS`. Joining that union is only half of joining the handshake: whether a
+      body CARRIES a capability is now a per-capability predicate, because `designImages` is a
+      manifest object and the populated-list test its list-shaped siblings share read it as absent,
+      which turned the whole refusal into a no-op for the one capability it was added for.
+      Website: [cat-factory-website#40](https://github.com/kibertoad/cat-factory-website/pull/40).
 
 ### Track E: the designer verification loop
 
-- [ ] **Live URL on the outcome card.** Surface the run's ephemeral-environment / preview URL on
-      `OutcomeSummaryWindow` (today it is buried in step detail and the test report), so "click
-      and look" is the designer's default verification, next to the captured views.
+- [x] **Live URL on the outcome card.** The run's environments are a section of the outcome
+      summary (`environments`, contracts' `run-outcome.ts`), so "click and look" sits next to the
+      captured views on the card and on `GET /api/v1/runs/:runId/outcome` (surface 1.38.0, outcome
+      `version` 3) rather than in step detail.
+      **The section reports a STATE, not a URL**, which is the decision the plan above did not
+      make. A deploy row is terminal at provision time and never moves again, so the URL alone
+      reads as a working preview for as long as the run is readable, months after the disposer
+      reclaimed it: `live` is the only state that offers a link, and every other row still shows
+      its URL as text because that is what names the environment and what an operator greps for.
+      Several producers know something about the same environment, and they are RECONCILED BY
+      IDENTITY before they are ranked: the run's step projections and the `human-test` gate's own
+      record are folded into one observation per environment id (the gate destroys the environment
+      it sent a person to and stamps its record on the way past, so kept apart it is the deploy
+      row's stale `ready` that a reader is offered). Above that observation the DISPOSE record
+      wins, being written after the run stops watching; below it the deploy row is the floor. A
+      reclaim that FAILED deliberately changes nothing here: the environment is still standing and
+      its URL still works, and that it should not be is the verification report's teardown proof,
+      not this card's question.
+      **A superseded environment is derived, not observed.** A re-deploy of a frame (a fix, or the
+      gate rebuilding what a person is testing) supersedes the frame's earlier environment, and
+      nothing ever refreshes its projection again: left underived it is the most convincing dead
+      link a run can produce, a `ready` snapshot with a URL. Every deploy the run made is folded,
+      the frame reports the environment it ended on, and the ones it replaced report `reclaimed`
+      unless their own last status already named where they went.
+      **`reclaimed` is one word for two facts on purpose** (the disposer tore it down, or went
+      looking and found nothing live): nothing records who took it, and the reader's next move is
+      the same either way. The three absences are kept apart for the opposite reason, since each
+      names a different fix: `no_environment_step`, `not_provisioned` and `infraless`.
+      **The in-flight row is reported and LABELLED** (`origin: 'projected'`), because a card that
+      goes silent until the deployer settles loses the preview URL for exactly as long as the run
+      is live, which is when a designer most wants it. `hasOutcomeToShow` counts it, so the
+      affordance appears on a run whose only product so far is something to look at.
+      The rules this shares with the verification report (which frames the run's deploys settled,
+      what the run observed of each environment, which recorded states mean one is gone, whether
+      the deployer declared retention) moved into contracts' `run-evidence.ts` beside the tester
+      rules, and the parity test asserts the two documents name the same environments, including
+      for a run that deployed twice. The disposer reclaims by the same fold, so the set of
+      environments a run stood up has ONE statement.
+      **A clock is deliberately not one of the reduction's inputs**: a lapsed TTL is reported as
+      the instant it lapses, so the SPA composing the summary live and the endpoint composing it
+      server-side cannot disagree about one run. Applying that instant is then the RENDERER's job,
+      and the card does it (`OutcomeSummaryWindow.logic.ts`): a `live` row past its expiry reads
+      `expired` and offers no link, because the alternative is a green badge and a working-looking
+      button beside a date in the past.
 - [ ] **Visual pipeline out of the attic.** Once tester-ui auto-capture is wired end to end (the
       deploy-coupled `image: 'ui'` routing + harness passthrough tracked in the
       visual-confirmation handover), drop the `experimental` label on `pl_visual` and revisit the
@@ -592,6 +684,11 @@ visual-confirmation leftover. Multimodal delivery is the long pole and is delibe
   ladder re-fetches the text whenever a version moves, which for a whole-file source is any edit
   anywhere in the file. Anything new that rides the import path has to answer the same question:
   does it belong to the BODY (refresh it only when the body changed) or to the probe.
+- **An attached picture is a PER-TURN cost, a retained one is a one-off.** That single difference is
+  why the two deliveries have separate caps, separate directories and separate prompt blocks, and it
+  is the question anything new riding this path has to answer first. It is also why the recorded
+  prompt bodies go through `redactImagePayloads`: a body carrying real bytes is serialised on every
+  recorded call, and a typed array stringifies to one entry per byte.
 - **A refusal already guards this corpus.** Linked-context delivery is load-bearing
   (`context_document_unreadable` / `context_documents_over_budget` refusals): richer Figma
   renders (Track B) enlarge bodies, so watch the ~256 KB corpus budget; the caps must state what

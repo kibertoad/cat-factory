@@ -9,7 +9,13 @@
 import { useClipboard } from '@vueuse/core'
 
 export function useCopyToClipboard() {
-  const { t } = useI18n()
+  // Resolved through the Nuxt app's global i18n instance rather than `useI18n()`, which requires an
+  // active component instance. This composable is reached from the failure-toast funnel, which is
+  // itself instantiated in STORE setup (`stores/execution.ts`, `stores/board.ts`), and a Pinia
+  // setup store runs its body on the first `useStore()` anywhere, which is not necessarily a
+  // component. `useI18n()` there throws `MUST_BE_CALL_SETUP_TOP`, and a throw in a store body takes
+  // the whole app to Nuxt's error page. Same reason, and the same fix, as `usePipelineErrorToast`.
+  const { t } = useNuxtApp().$i18n as ReturnType<typeof useI18n>
   const toast = useToast()
   const { copy: writeClipboard, isSupported } = useClipboard()
 

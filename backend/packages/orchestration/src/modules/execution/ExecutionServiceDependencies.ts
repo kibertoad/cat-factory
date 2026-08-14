@@ -25,6 +25,8 @@ import type {
   IssueWritebackProvider,
   JudgeAssessor,
   JudgeRegistry,
+  LocalModelDeclarationsCacheValue,
+  LocalModelEndpointRepository,
   Logger,
   ModelPresetCacheValue,
   ModelPresetRepository,
@@ -41,7 +43,7 @@ import type {
   ResolveBinaryArtifactStore,
   ResolveRunRepoContext,
   RiskPolicyCacheValue,
-  RiskPolicyRepository,
+  WorkspaceRiskPolicyReader,
   RunInitiatorScope,
   RunLifecycleSink,
   StepResolverRegistry,
@@ -195,6 +197,13 @@ export interface ExecutionServiceDependencies {
    * default route order (the feature is simply off).
    */
   modelPresetRepository?: ModelPresetRepository
+  /**
+   * Optional: the per-USER locally-run model endpoints, threaded into the context builder so each
+   * dispatch resolves what the RUN INITIATOR declared about the local models they enabled (today:
+   * whether one reads images) and every executor reads it off the resolved ref. Absent ⇒ a local
+   * ref stays undeclared, which reads as unknown rather than as a model refusing images.
+   */
+  localModelEndpointRepository?: LocalModelEndpointRepository
   /**
    * Optional: the workspace's consensus-GROUP library, threaded into the context builder so a
    * consensus step naming a tier set resolves the group its task's estimate earned. Absent ⇒ a
@@ -495,8 +504,12 @@ export interface ExecutionServiceDependencies {
    * Optional: resolves a task's merge threshold preset (auto-merge ceilings + the
    * CI-fixer attempt budget). Absent → the built-in `FALLBACK_RISK_POLICY`, which auto-merges
    * nothing: an engine with no preset library configured lands no pull request on its own.
+   *
+   * The board's merged LIBRARY (`WorkspaceRiskPolicyLibrary`), so a task pinning a policy its
+   * account defines resolves the posture the picker offered rather than falling silently back to
+   * the board default (ADR 0055).
    */
-  riskPolicyRepository?: RiskPolicyRepository
+  riskPolicyReader?: WorkspaceRiskPolicyReader
   /**
    * Optional: the {@link AppCaches.riskPolicy} slice — read-through for `resolveRiskPolicy`
    * so the slow-moving merge-preset row isn't re-fetched on every gate evaluation. Absent →
@@ -511,6 +524,14 @@ export interface ExecutionServiceDependencies {
    * `ModelPresetService` on every preset write.
    */
   modelPresetCache?: GroupCacheHandle<ModelPresetCacheValue>
+  /**
+   * Optional: the {@link AppCaches.localModelDeclarations} slice, read-through for what the run
+   * INITIATOR declared about the locally-run models they enabled. Same profile as the preset slice
+   * above, keyed on the user rather than the workspace, and read by every dispatch for the same
+   * reason: the winning model is not known until the shared resolver has walked its sources. Absent
+   * → every dispatch hits the repository. Invalidated by the endpoint write paths.
+   */
+  localModelDeclarationsCache?: GroupCacheHandle<LocalModelDeclarationsCacheValue>
   /**
    * Optional: the merge track record — the per-class change classification the merge policy's
    * per-class rules key off, plus the best-effort record of every merge decision (and the

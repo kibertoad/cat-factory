@@ -4,6 +4,7 @@ import {
   DEFAULT_MODEL_PRESETS,
   DEFAULT_MODEL_PRESET_ID,
   RISK_POLICY_SEEDS,
+  UNATTENDED_RISK_POLICY_ID,
   modelForKindFromPreset,
   presetOverrideForKind,
   riskPolicyFromSeed,
@@ -12,6 +13,7 @@ import {
   seedRiskPolicies,
   type ModelPresetSeed,
 } from './catalog.js'
+import { MODEL_CATALOG } from './models.js'
 
 // The catalog's DATA is data; what is worth pinning is the small amount of logic around it: the
 // seed copies two writers both depend on being identical, the `createdAt` stamping that decides
@@ -26,13 +28,88 @@ describe('seedRiskPolicies', () => {
     expect(seedRiskPolicies()[0]).not.toBe(RISK_POLICY_SEEDS[0])
   })
 
-  it('ships the whole catalog, with exactly one default', () => {
+  it('ships the whole catalog, with exactly one default PER SCOPE', () => {
     const seeds = seedRiskPolicies()
     expect(seeds).toHaveLength(RISK_POLICY_SEEDS.length)
     expect(seeds.filter((s) => s.isDefault)).toHaveLength(1)
+    // The second scope, asserted separately: a workspace resolves this one for every run nothing
+    // is watching, and a catalog that seeded none would hand those runs `FALLBACK_RISK_POLICY`,
+    // which auto-merges nothing. Two defaults with one assertion between them would let that
+    // through as long as the totals still came to one.
+    expect(seeds.filter((s) => s.isUnattendedDefault)).toHaveLength(1)
     expect(new Set(seeds.map((s) => s.id)).size).toBe(seeds.length)
   })
+
+  it('grants the unattended licence to exactly the policy that is the unattended default', () => {
+    // The relation, not the roster: the catalog is free to gain policies, and what must hold is
+    // that `autonomy: 'unattended'` and `isUnattendedDefault` name the same row. A policy that
+    // answers its own caps but is nobody's default is dead weight; one that is the default for
+    // unwatched runs and still parks on them is the bug this whole feature exists to fix.
+    for (const seed of seedRiskPolicies()) {
+      expect(seed.autonomy === 'unattended', seed.id).toBe(seed.isUnattendedDefault)
+    }
+    expect(seedRiskPolicies().find((s) => s.isUnattendedDefault)?.id).toBe(
+      UNATTENDED_RISK_POLICY_ID,
+    )
+  })
+
+  it('gives the unattended default the SAME landing authority as the in-app one', () => {
+    // The seed may decide that an unwatched run should not wait forever on an automation budget.
+    // It may NOT decide that an unwatched run gets to land what an operator's own thresholds
+    // would have held, so every field outside its own two concerns is Balanced's, and this is
+    // what stops the next edit quietly widening it.
+    const unattended = seedRiskPolicies().find((s) => s.id === UNATTENDED_RISK_POLICY_ID)!
+    const balanced = seedRiskPolicies().find((s) => s.isDefault)!
+    const {
+      autonomy: _a,
+      isDefault: _d,
+      isUnattendedDefault: _u,
+      name: _n,
+      id: _i,
+      version: _v,
+      // The posture's own knobs, asserted below for DIRECTION rather than for equality. Excluded
+      // here rather than dropped from the comparison silently: this list is the whole set of
+      // fields the unattended seed is allowed to differ on, so adding an entry is the decision.
+      ...authority
+    } = { ...unattended, ...Object.fromEntries(POSTURE_FIELDS.map((key) => [key, undefined])) }
+    for (const key of Object.keys(authority) as (keyof typeof authority)[]) {
+      if (authority[key] === undefined) continue
+      expect(unattended[key], key).toEqual(balanced[key])
+    }
+  })
+
+  it('narrows the unattended default only DOWNWARD, and only on the loops policy answers', () => {
+    // Every field here is a budget whose exhaustion `autonomy: 'unattended'` settles, so spending
+    // it buys an unwatched run nothing but tokens. What must never happen is the reverse: a budget
+    // WIDER than the in-app default would mean an unwatched run grinding longer than a watched one
+    // before reaching the same policy-given answer.
+    const unattended = seedRiskPolicies().find((s) => s.id === UNATTENDED_RISK_POLICY_ID)!
+    const balanced = seedRiskPolicies().find((s) => s.isDefault)!
+    for (const key of [
+      'maxRequirementIterations',
+      'maxTesterQualityIterations',
+      'judgeMaxBounces',
+    ] as const) {
+      expect(unattended[key], key).toBeLessThanOrEqual(balanced[key])
+    }
+    // NOT narrowed, and the exception is the point: exhausting the CI-fixer budget raises
+    // `ci_failed`, a park this policy does not answer, so cutting it would produce one more stop
+    // for a person rather than one fewer.
+    expect(unattended.ciMaxAttempts).toBe(balanced.ciMaxAttempts)
+  })
 })
+
+/**
+ * The fields the unattended seed may differ from `Balanced` on: its posture, the loop budgets that
+ * posture makes cheap, and the confidence floor only it reads. Everything else is landing
+ * authority, which it may never move.
+ */
+const POSTURE_FIELDS = [
+  'maxRequirementIterations',
+  'maxTesterQualityIterations',
+  'judgeMaxBounces',
+  'minAutoAnswerConfidence',
+] as const
 
 describe('riskPolicyFromSeed', () => {
   it('carries every field of the seed onto the row, plus the stamped createdAt', () => {
@@ -91,6 +168,25 @@ describe('seedModelPresets', () => {
   it('names a fallback default preset that is actually in the catalog', () => {
     expect(DEFAULT_MODEL_PRESET.id).toBe(DEFAULT_MODEL_PRESET_ID)
     expect(DEFAULT_MODEL_PRESETS.map((p) => p.id)).toContain(DEFAULT_MODEL_PRESET_ID)
+  })
+
+  it('pins every built-in to a model MODEL_CATALOG actually ships, base and override alike', () => {
+    // The one failure mode nothing else here can see. A preset's `baseModelId` is a plain string
+    // matched against the catalog at DISPATCH, so a built-in naming a model that was renamed or
+    // dropped typechecks, seeds, lists, and is selectable, then fails on the first agent step of
+    // whichever run picked it. Derived from MODEL_CATALOG rather than from a hand-listed set, so a
+    // catalog rename breaks this instead of a live run, and adding a built-in needs no edit here.
+    const catalogIds = new Set(MODEL_CATALOG.map((entry) => entry.id))
+    for (const preset of DEFAULT_MODEL_PRESETS) {
+      expect(catalogIds, `preset ${preset.id} pins a base model no catalog entry has`).toContain(
+        preset.baseModelId,
+      )
+      for (const [kind, modelId] of Object.entries(preset.overrides)) {
+        expect(catalogIds, `preset ${preset.id} overrides ${kind} with an unknown model`).toContain(
+          modelId,
+        )
+      }
+    }
   })
 })
 

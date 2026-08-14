@@ -1,5 +1,6 @@
 import type { ToolServerUnavailableReason } from '@cat-factory/contracts'
 import type { HarnessKind } from '../ports/model-provider.js'
+import { isHarnessKind } from '../ports/model-provider.js'
 
 // ---------------------------------------------------------------------------
 // Agent CAPABILITIES — the skills an agent applies and the tool servers (MCP) it may call.
@@ -329,6 +330,12 @@ export interface UnavailableToolServer {
    * - `reserved_secret` is kept apart from `missing_secret` because a missing secret is a variable
    *   to SET, while a reserved one is a DECLARATION to change: the server named a variable the
    *   platform's own configuration owns, and setting it is exactly what must not help.
+   * - `unusable_secret` is kept apart from both: the value RESOLVED and has nowhere to go, because
+   *   the declaration named a channel its transport does not have (see
+   *   {@link mcpTransportCarriesCredential}). Setting the variable does not help and neither does
+   *   changing the key; the channel is what changes. Boot validation refuses such a declaration, so
+   *   a dispatch reaches this only where the definition was authored by a process that is not the
+   *   one that booted (mothership mode, where a node runs one build behind).
    * - `transport_unsupported` is kept apart from `harness_unsupported` for the same reason: the
    *   harness DOES speak MCP and the definition DOES allow it, but this CLI's client cannot reach
    *   this transport (Codex is stdio-only). The fix is a second server declaration or a narrowed
@@ -344,6 +351,13 @@ export interface UnavailableToolServer {
    *   authorization server that would not answer, a rotated client secret. Apart from
    *   `oauth_not_connected` because "never connected" and "the connection stopped working" send an
    *   operator to different places, and only the second is ever transient.
+   * - `consensus_panel` is the only member decided by NO dispatch to a CLI at all: the step was
+   *   diverted to a multi-model consensus panel, whose participants are inline model calls with no
+   *   checkout, no CLI and therefore nowhere to wire an MCP server. Kept apart from
+   *   `harness_unsupported` because nothing about the harness is involved: the kind's standard
+   *   surface may serve the server perfectly, and the same step without consensus would have got
+   *   it. The fix is a step-level choice (turn consensus off for this step, or accept the panel's
+   *   ceiling), which is nobody's list to widen and no credential to set.
    *
    * ONE MEMBER IS NOT ONE CAUSE, and anyone writing operator-facing copy off this list has to
    * read the whole of a member before naming a fix for it. Three of them are reached from more
@@ -413,12 +427,101 @@ export function mcpServerSupportsHarness(
   return definition.harnesses ? definition.harnesses.includes(harness) : true
 }
 
+/**
+ * Whether each harness's CLI carries a BUILT-IN generation tool a `harness`-transport binary
+ * generator can be served by. An exhaustive `Record` over `HarnessKind` for the reason
+ * {@link MCP_HARNESS_TRANSPORTS} is one: an omitted entry would read as "cannot generate", which is
+ * the safe direction, and a harness added without an answer is a decision nobody made.
+ *
+ * Only Codex has one today (`image_gen`, available ONLY on ChatGPT subscription auth). The
+ * platform's own tool-provisioning is not a substitute: this is about a tool the VENDOR puts in
+ * the CLI, which is exactly what makes a harness-served generator need no API key.
+ */
+export const HARNESS_GENERATES_BINARIES: Record<HarnessKind, boolean> = {
+  pi: false,
+  'claude-code': false,
+  codex: true,
+}
+
+/**
+ * The harnesses a `harness`-transport generator may name. DERIVED from
+ * {@link HARNESS_GENERATES_BINARIES} rather than listed again, so the two cannot drift.
+ */
+export const BINARY_GENERATING_HARNESSES: readonly HarnessKind[] = (
+  Object.keys(HARNESS_GENERATES_BINARIES) as HarnessKind[]
+).filter((harness) => HARNESS_GENERATES_BINARIES[harness])
+
+/**
+ * Whether an untrusted harness name is a CLI that can actually serve a `harness`-transport
+ * generator.
+ *
+ * Deliberately NARROWER than {@link isHarnessKind}: a definition naming `pi` or `claude-code`
+ * passes every structural check, dispatches with the tool flag set, and produces nothing, while
+ * the agent's brief tells it to collect from a staging directory nothing created. "This build runs
+ * that CLI" and "that CLI can generate" are two questions, and only the second is the one a
+ * generative registration is asking.
+ */
+export function harnessServesBinaryGeneration(value: unknown): value is HarnessKind {
+  return isHarnessKind(value) && HARNESS_GENERATES_BINARIES[value]
+}
+
 /** Whether this harness's MCP client can reach a server over `transport`. */
 export function mcpHarnessServesTransport(
   harness: HarnessKind,
   transport: McpTransport['kind'],
 ): boolean {
   return MCP_HARNESS_TRANSPORTS[harness].includes(transport)
+}
+
+/**
+ * The two ways a resolved credential can reach a tool server: as a variable of the server's own
+ * process, or as a header on the request to it.
+ */
+export type McpCredentialChannel = 'env' | 'header'
+
+/**
+ * The ONE channel each transport can carry a credential over. An exhaustive `Record`, so a third
+ * transport cannot be added without stating its answer.
+ *
+ * A `stdio` server is a child process the harness spawns, and there is no request to put a header
+ * on. An `http` server is a URL the CLI calls, and there is no process to set a variable in. So the
+ * channel is not a preference the declaration expresses: the transport fixes it, and a credential
+ * that named the other one reaches NOTHING at all.
+ */
+export const MCP_TRANSPORT_CREDENTIAL_CHANNEL: Record<McpTransport['kind'], McpCredentialChannel> =
+  {
+    stdio: 'env',
+    http: 'header',
+  }
+
+/**
+ * Which channel a credential DECLARATION names: `header` when it named one, else the server
+ * process's environment (under {@link McpSecretRef.envName}, or the lookup key).
+ */
+export function mcpCredentialChannel(secret: Pick<McpSecretRef, 'header'>): McpCredentialChannel {
+  return secret.header ? 'header' : 'env'
+}
+
+/**
+ * Whether the transport can actually deliver this credential: the channel the declaration named,
+ * against the one the transport has.
+ *
+ * FALSE is the silent-failure case the platform must refuse rather than resolve. Both projections
+ * that build a job body select by channel (`env` keys into the child process's environment, `header`
+ * keys into the request headers), so a mismatched declaration resolves successfully, is folded into
+ * nothing, and leaves the server WIRED, advertised to the agent, and started unauthenticated. The
+ * first evidence is the agent's first tool call failing, several minutes into a run that the prompt
+ * promised the tool for.
+ *
+ * Boot validation refuses such a declaration as an error, and dispatch refuses it again for the
+ * mothership case, where the definition was authored by a process that is not this one. Both ask
+ * THIS function, so the two cannot drift into disagreeing about which declarations work.
+ */
+export function mcpTransportCarriesCredential(
+  transport: McpTransport['kind'],
+  secret: Pick<McpSecretRef, 'header'>,
+): boolean {
+  return mcpCredentialChannel(secret) === MCP_TRANSPORT_CREDENTIAL_CHANNEL[transport]
 }
 
 /**

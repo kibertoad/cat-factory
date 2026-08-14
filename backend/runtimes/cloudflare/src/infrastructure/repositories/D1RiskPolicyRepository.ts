@@ -3,6 +3,7 @@ import type {
   ClassRulesByRole,
   MergeClassRules,
   RiskPolicy,
+  RunDefaultScope,
   RequirementConcernLevel,
   StepGating,
   SubmissionClassesByRole,
@@ -20,6 +21,7 @@ interface RiskPolicyRow {
   max_requirement_iterations: number
   max_requirement_concern_allowed: string
   max_tester_quality_iterations: number
+  companion_max_reworks: number
   release_watch_window_minutes: number
   release_max_attempts: number
   human_review_grace_minutes: number
@@ -32,7 +34,10 @@ interface RiskPolicyRow {
   dry_run_roles: string | null
   submission_classes_by_role: string | null
   version: number | null
+  autonomy: string | null
+  min_auto_answer_confidence: number
   is_default: number
+  is_unattended_default: number
   created_at: number
 }
 
@@ -47,6 +52,7 @@ function rowToPreset(row: RiskPolicyRow): RiskPolicy {
     maxRequirementIterations: row.max_requirement_iterations,
     maxRequirementConcernAllowed: row.max_requirement_concern_allowed as RequirementConcernLevel,
     maxTesterQualityIterations: row.max_tester_quality_iterations,
+    companionMaxReworks: row.companion_max_reworks,
     releaseWatchWindowMinutes: row.release_watch_window_minutes,
     releaseMaxAttempts: row.release_max_attempts,
     humanReviewGraceMinutes: row.human_review_grace_minutes,
@@ -68,17 +74,31 @@ function rowToPreset(row: RiskPolicyRow): RiskPolicy {
     submissionClassesByRole: row.submission_classes_by_role
       ? (JSON.parse(row.submission_classes_by_role) as SubmissionClassesByRole)
       : {},
+    // The column is NOT NULL DEFAULT 'attended', and the value is narrowed rather than cast for
+    // the reason every closed persisted vocabulary is: a row written under a member later retired
+    // must not be read back as that member. Anything unrecognised is `attended`, which is the
+    // posture that stops for a person — never a licence this row cannot be shown to have granted.
+    autonomy: row.autonomy === 'unattended' ? 'unattended' : 'attended',
+    minAutoAnswerConfidence: row.min_auto_answer_confidence,
     isDefault: row.is_default === 1,
+    isUnattendedDefault: row.is_unattended_default === 1,
     ...(row.version != null ? { version: row.version } : {}),
     createdAt: row.created_at,
   }
 }
 
+/** The column one default scope is stored in; the ONE place that mapping lives on this facade. */
+const DEFAULT_COLUMN: Record<RunDefaultScope, 'is_default' | 'is_unattended_default'> = {
+  interactive: 'is_default',
+  unattended: 'is_unattended_default',
+}
+
 /**
  * Merge threshold presets, one row per preset in `merge_threshold_presets`
- * (migration 0024). Enforces the single-default invariant: promoting a preset to
- * default demotes every other in the workspace, in one statement before the
- * upsert. The default preset cannot be removed (the service keeps that rule).
+ * (migration 0024, the second default scope added by 0090). Enforces the single-default invariant
+ * PER SCOPE: promoting a preset to one of the two defaults demotes every other holder of THAT flag
+ * in the workspace, in one statement before the upsert, leaving the other scope alone. Neither
+ * scope's default can be removed (the service keeps that rule too).
  */
 export class D1RiskPolicyRepository implements RiskPolicyRepository {
   private readonly db: D1Database
@@ -105,11 +125,13 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
     return results.map(rowToPreset)
   }
 
-  async getDefault(workspaceId: string): Promise<RiskPolicy | null> {
+  async getDefault(workspaceId: string, scope: RunDefaultScope): Promise<RiskPolicy | null> {
+    // The column name is interpolated from a `Record` over a CLOSED picklist, never from a caller
+    // string: there is no value of `scope` the type admits that is not one of the two literals.
     const row = await this.db
       .prepare(
         `SELECT * FROM merge_threshold_presets
-           WHERE workspace_id = ? AND is_default = 1
+           WHERE workspace_id = ? AND ${DEFAULT_COLUMN[scope]} = 1
            ORDER BY created_at ASC LIMIT 1`,
       )
       .bind(workspaceId)
@@ -118,28 +140,52 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
   }
 
   async upsert(workspaceId: string, preset: RiskPolicy): Promise<void> {
-    // Promoting this preset to default demotes any other default first, so the
-    // single-default invariant holds.
-    if (preset.isDefault) {
-      await this.db
-        .prepare(
-          `UPDATE merge_threshold_presets SET is_default = 0
-             WHERE workspace_id = ? AND id <> ?`,
-        )
-        .bind(workspaceId, preset.id)
-        .run()
-    }
-    await this.db
+    // Promoting this preset to a default demotes any other holder of THAT flag first, so the
+    // single-default invariant holds per scope. Separate statements rather than one, because the
+    // flags are independent: promoting the unattended default must leave the in-app one alone.
+    //
+    // ONE `batch`, which D1 runs as a single implicit transaction, mirroring the Drizzle
+    // repository's explicit `db.transaction`. Run loose, a demote that committed before a failed
+    // INSERT (a D1 error, an isolate eviction between the two awaits) would leave the workspace
+    // with NO row holding that flag — `getDefault` then returns null and every run of that scope
+    // silently falls to `FALLBACK_RISK_POLICY`, which auto-merges nothing. The two facades claim
+    // to be behaviourally identical, and a partial-failure state only one of them can reach is
+    // exactly the drift that claim exists to prevent.
+    const demotions = [
+      ...(preset.isDefault
+        ? [
+            this.db
+              .prepare(
+                `UPDATE merge_threshold_presets SET is_default = 0
+                   WHERE workspace_id = ? AND id <> ?`,
+              )
+              .bind(workspaceId, preset.id),
+          ]
+        : []),
+      ...(preset.isUnattendedDefault
+        ? [
+            this.db
+              .prepare(
+                `UPDATE merge_threshold_presets SET is_unattended_default = 0
+                   WHERE workspace_id = ? AND id <> ?`,
+              )
+              .bind(workspaceId, preset.id),
+          ]
+        : []),
+    ]
+    const write = this.db
       .prepare(
         `INSERT INTO merge_threshold_presets
            (workspace_id, id, name, max_complexity, max_risk, max_impact, ci_max_attempts,
             max_requirement_iterations, max_requirement_concern_allowed,
-            max_tester_quality_iterations,
+            max_tester_quality_iterations, companion_max_reworks,
             release_watch_window_minutes, release_max_attempts, human_review_grace_minutes,
             judge_min_score, judge_max_bounces,
             auto_merge_enabled, fork_decision, class_rules, class_rules_by_role, dry_run_roles,
-            submission_classes_by_role, version, is_default, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            submission_classes_by_role, version, autonomy, min_auto_answer_confidence,
+            is_default, is_unattended_default,
+            created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            name = excluded.name,
            max_complexity = excluded.max_complexity,
@@ -149,6 +195,7 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
            max_requirement_iterations = excluded.max_requirement_iterations,
            max_requirement_concern_allowed = excluded.max_requirement_concern_allowed,
            max_tester_quality_iterations = excluded.max_tester_quality_iterations,
+           companion_max_reworks = excluded.companion_max_reworks,
            release_watch_window_minutes = excluded.release_watch_window_minutes,
            release_max_attempts = excluded.release_max_attempts,
            human_review_grace_minutes = excluded.human_review_grace_minutes,
@@ -161,7 +208,10 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
            dry_run_roles = excluded.dry_run_roles,
            submission_classes_by_role = excluded.submission_classes_by_role,
            version = excluded.version,
-           is_default = excluded.is_default`,
+           autonomy = excluded.autonomy,
+           min_auto_answer_confidence = excluded.min_auto_answer_confidence,
+           is_default = excluded.is_default,
+           is_unattended_default = excluded.is_unattended_default`,
       )
       .bind(
         workspaceId,
@@ -174,6 +224,7 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
         preset.maxRequirementIterations,
         preset.maxRequirementConcernAllowed,
         preset.maxTesterQualityIterations,
+        preset.companionMaxReworks,
         preset.releaseWatchWindowMinutes,
         preset.releaseMaxAttempts,
         preset.humanReviewGraceMinutes,
@@ -186,16 +237,20 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
         JSON.stringify(preset.dryRunRoles ?? []),
         JSON.stringify(preset.submissionClassesByRole ?? {}),
         preset.version ?? null,
+        preset.autonomy,
+        preset.minAutoAnswerConfidence,
         preset.isDefault ? 1 : 0,
+        preset.isUnattendedDefault ? 1 : 0,
         preset.createdAt,
       )
-      .run()
+    await this.db.batch([...demotions, write])
   }
 
   async remove(workspaceId: string, id: string): Promise<void> {
     await this.db
       .prepare(
-        `DELETE FROM merge_threshold_presets WHERE workspace_id = ? AND id = ? AND is_default = 0`,
+        `DELETE FROM merge_threshold_presets
+           WHERE workspace_id = ? AND id = ? AND is_default = 0 AND is_unattended_default = 0`,
       )
       .bind(workspaceId, id)
       .run()

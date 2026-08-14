@@ -17,6 +17,7 @@ const ui = useUiStore()
 const board = useBoardStore()
 const documents = useDocumentsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 /** Design documents are planned into an existing service; prose documents at the board root. */
 const needsTarget = computed(() => !!ui.spawnPreview && isDesignSource(ui.spawnPreview.source))
@@ -80,12 +81,7 @@ watch(
       // A superseded request's failure is not this selection's failure: toasting it would report an
       // outage against a target whose own plan may be loading fine.
       if (request !== planRequest) return
-      toast.add({
-        title: t('documents.spawn.planFailed'),
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
+      present(e, 'documents.spawn.planFailed')
     } finally {
       // Only the current request may clear the spinner; an older one settling first would report
       // "loaded" over a plan still on its way.
@@ -120,12 +116,7 @@ async function spawn() {
     ui.closeSpawnPreview()
     ui.closeDocumentImport()
   } catch (e) {
-    toast.add({
-      title: t('documents.spawn.spawnFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'documents.spawn.spawnFailed')
   } finally {
     spawning.value = false
   }

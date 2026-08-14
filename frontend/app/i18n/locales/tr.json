@@ -149,6 +149,7 @@
       "archiveFailed": "Hizmet arşivlenemedi",
       "restoreFailed": "Hizmet geri yüklenemedi",
       "moveRefused": {
+        "relaxes_run_oversight": "Bu görevi taşıdığın yerde bir çalıştırma, bir kişiyi beklemek yerine kendi inceleme kontrol noktalarını kendisi yanıtlıyor; burada geçerli olan birleştirme ilkesi ise bunu yapmıyor. Taşıması için bir çalışma alanı yöneticisine başvur.",
         "relaxes_role_sandbox": "Bu görevin çalıştırmaları şu anki yerinde rolün için yalıtılmış, taşıdığın yerde geçerli olacak birleştirme ilkesi ise değil. Taşıması için bir çalışma alanı yöneticisine başvur.",
         "relaxes_role_submission_allowlist": "Taşıdığın yerdeki birleştirme ilkesi, burada sana kapalı olan değişiklik türlerini birleştirmene izin verirdi. Taşıması için bir çalışma alanı yöneticisine başvur.",
         "relaxes_role_class_rule": "Taşıdığın yerdeki birleştirme ilkesi, burada incelemekle yükümlü olduğun değişiklikleri otomatik birleştiriyor. Taşıması için bir çalışma alanı yöneticisine başvur."
@@ -659,7 +660,9 @@
         "document_already_linked": "Belge zaten ekli",
         "dry_run_not_mergeable": "Prova çalışması birleştirilemez",
         "submission_not_allowed": "Bu çalışma için birleştirmeye izin verilmiyor",
-        "webhook_limit_reached": "Webhook sınırına ulaşıldı"
+        "webhook_limit_reached": "Webhook sınırına ulaşıldı",
+        "risk_policy_inherited": "Bu ilke hesaba ait",
+        "risk_policy_not_inherited": "Bu ilke bu panoya ait"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -690,7 +693,7 @@
         "pipeline_schedule_intake_unconfigured": "Hata alımı adımı işini zamanlamanın sorun alımı ayarlarından alır ve bağlı zamanlamada bu ayar yok. Önce zamanlamada sorun alımını yapılandırın.",
         "foundational_service_exists": "Bu kimliğe sahip bir temel hizmet bu kapsamda zaten kayıtlı. Var olan kaydı açıp düzenleyin — iki hizmet aynı kimliği paylaşamaz, çünkü kimlik bir mimarın tasarımında andığı addır.",
         "binary_output_service_invalid": "İkili çıktılar üreten bir adım, bu çalışma alanının kataloğunda çözümlenemeyen bir temel hizmet seçiyor: kimlik bilinmiyor ya da seçilen depolama hizmeti asset-storage yeteneğini taşımıyor. Adımın seçimini düzeltin veya hizmeti kaydedin, sonra yeniden başlatın.",
-        "binary_output_generator_invalid": "İkili çıktı üreten bir adım, bu dağıtımın kaydetmediği bir üretken entegrasyon seçiyor ya da seçilen entegrasyonların hiçbiri adımın teslim etmesi gereken içerik türünü üretmiyor. Üretken entegrasyonlar bu çalışma alanında değil, dağıtımın kodunda kaydedilir: entegrasyonu kaydedin veya adımın seçimini düzeltin, sonra yeniden başlatın.",
+        "binary_output_generator_invalid": "İkili çıktı üreten bir adım, bu kurulumun kaydetmediği bir üretken entegrasyon seçiyor; seçili entegrasyonlardan hiçbiri adımın teslim etmesi gereken içerik türünü üretmiyor; ya da bunlardan biri, bu adımın modelinin çalışmadığı bir aracı CLI tarafından üretiliyor. Üretken entegrasyonlar bu çalışma alanında değil, kurulumun kodunda kaydedilir: entegrasyonu kaydedin, adımın seçimini düzeltin ya da adıma gereken CLI üzerinde çalışan bir model sabitleyin, sonra yeniden başlatın.",
         "foundational_service_not_inherited": "Devre dışı bırakma, hesaptan devralınan bir hizmet için geçerlidir. Bu kimlik bu pano tarafından kaydedilmiş, dolayısıyla devre dışı bırakılacak bir şey yok - bunun yerine panonun kendi kaydını silin.",
         "input_gate_not_parked": "Bu çalışma artık giriş denetimini beklemiyor. Biri onu yanıtlamış ya da çalışma ilerlemiş olabilir.",
         "input_gate_parked": "Bu çalıştırma girdi kontrolünde bekliyor ve onay akışı bunu yanıtlayamaz. Çalıştırmadaki bildirimi kullanın: görevi düzeltip yeniden kontrol edin ya da yine de çalıştırın.",
@@ -698,7 +701,9 @@
         "document_already_linked": "Bu belge başka bir göreve ekli. Önce oradan ayırın ya da ayrı bir kopya ekleyin.",
         "dry_run_not_mergeable": "Bu pull request bir prova çalışmasından geliyor, bu yüzden buradan birleştirilemez. Bu çalışma alanının birleştireceği bir pull request üretmek için görevi gerçek çalışma olarak yeniden başlatın.",
         "submission_not_allowed": "Bu görevin birleştirme politikası, çalışmayı başlatan rolün bu tür bir değişikliği birleştirmesine izin vermiyor. Rolü buna izin veren bir takım arkadaşı birleştirebilir ya da bir yönetici birleştirme ön ayarındaki politikayı genişletebilir.",
-        "webhook_limit_reached": "Bu çalışma alanında zaten en fazla sayıda giden webhook kayıtlı. Artık ihtiyaç duymadığınız birini kaldırın ve bunu yeniden kaydedin."
+        "webhook_limit_reached": "Bu çalışma alanında zaten en fazla sayıda giden webhook kayıtlı. Artık ihtiyaç duymadığınız birini kaldırın ve bunu yeniden kaydedin.",
+        "risk_policy_inherited": "Hesaptaki tüm panolarla paylaşıldığı için buradan değiştirilemez. Bu panoya kopyalayıp kopyayı düzenleyin.",
+        "risk_policy_not_inherited": "Zaten bu panonun kendi ilkesi: doğrudan düzenleyin ya da artık sunulmasını istemiyorsanız silin."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",
@@ -1428,6 +1433,13 @@
       "awaitingChoice": "Bir kullanıcı seçimi bekleniyor",
       "approvalGate": "Onay kapısı",
       "companionReview": "Yardımcı incelemesi",
+      "findingSeverity": {
+        "blocker": "Mutlaka düzeltilmeli",
+        "major": "Düzeltilmeli",
+        "minor": "Küçük",
+        "ungraded": "Yorum",
+        "unrecognized": "Tanınmayan düzey ({level})"
+      },
       "correctionIterations": "{count} düzeltme yinelemesi. | {count} düzeltme yinelemesi.",
       "state": {
         "pending": "Beklemede",
@@ -1464,6 +1476,10 @@
       "closeEsc": "Kapat (Esc)",
       "companionCapHeading": "{agent} {attempts} deneme yeniden çalışma sınırına ulaştı, hâlâ {threshold} barının altında.",
       "companionCapDetail": "Bir otomatik yeniden çalışma turu daha yapın, mevcut çıktıyı kabul ederek sonraki adıma geçin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
+      "companionCapBlockedHeading": "{agent} {attempts} deneme yeniden çalışma sınırına ulaştı, mutlaka düzeltilmesi gereken {count} bulgu hâlâ açık. | {agent} {attempts} deneme yeniden çalışma sınırına ulaştı, mutlaka düzeltilmesi gereken {count} bulgu hâlâ açık.",
+      "companionCapBlockedDetail": "Devam etmek, bu bulgular düzeltilmeden işi kabul etmek demektir; bu yüzden bu çalışmanın risk politikası bu seçimi sizin yerinize asla yapmaz. Bir otomatik yeniden çalışma turu daha yapın, mevcut çıktıyla yine de devam edin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
+      "companionStalledHeading": "{agent}, {maxAttempts} turun {attempts} turunda yeniden çalışma döngüsünü durdurdu: son revizyon değişmeden döndü ve puan hiç değişmedi.",
+      "companionStalledDetail": "Kalan turlar kullanılmadı, çünkü yalnızca verilmiş bir kararı yineleyeceklerdi. Yine de bir tur daha yapın, mevcut çıktıyı kabul ederek sonraki adıma geçin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
       "infraAttempts": "Altyapı denemeleri",
       "hideInfraAttempts": "Altyapı denemelerini gizle",
       "executionHistory": "Yürütme geçmişi",
@@ -1512,9 +1528,11 @@
           "transportUnsupported": "kullanılamadı: bu adımın çalıştığı ajan CLI'si bu türden bir sunucuya erişemiyor.",
           "missingSecret": "kullanılamadı: ihtiyaç duyduğu kimlik bilgisi bu pano için ayarlanmamış.",
           "reservedSecret": "kullanılamadı: platformun kendi yapılandırmasına ait bir değişken istiyor, bu yüzden bildirimin değişmesi gerekiyor.",
+          "unusableSecret": "kullanılamadı: bildirdiği bir kimlik bilgisi ona ulaşamıyor, bu yüzden sunucu kimlik doğrulaması olmadan çalışacaktı.",
           "oauthNotConnected": "kullanılamadı: bu panoyu henüz kimse ona bağlamadı.",
           "oauthTokenFailed": "kullanılamadı: bağlantı artık erişim jetonu üretmiyor.",
           "overBudget": "kullanılamadı: bu ajan tek bir çalıştırmanın taşıdığından fazla araç sunucusu bildiriyor.",
+          "consensusPanel": "kullanılamadı: bu adım bir uzlaşı paneli olarak çalıştı ve panelin bir araç sunucusunu bağlayacağı ajan çalışma ortamı yok.",
           "unknown": "kullanılamadı ({reason})."
         },
         "remedy": {
@@ -1522,9 +1540,11 @@
           "transportUnsupported": "Onun için bir stdio sunucusu bildirin ya da adımı HTTP sunucularına erişen bir ajan CLI'sinde çalıştırın.",
           "missingSecret": "Adı geçen kimlik bilgisini dağıtımın ortam değişkeni olarak ya da Altyapı penceresindeki yetenek kimlik bilgilerinde ayarlayın.",
           "reservedSecret": "Bildirimi başka bir anahtar isteyecek şekilde değiştirin; o değişkeni ayarlamak tam da yardımcı olmayacak şeydir.",
+          "unusableSecret": "Kurulumun kodundaki bildirimi düzeltin: uzak bir sunucunun kimlik bilgisi bir başlıkta taşınır, yerel olanınki sunucunun sürecine enjekte edilir.",
           "oauthNotConnected": "Bu panoyu Altyapı penceresinden ona bağlayın. ENCRYPTION_KEY olmayan bir dağıtımda izni saklayacak bir yer yoktur, bu yüzden önce bir operatörün bunu ayarlaması gerekir.",
           "oauthTokenFailed": "Altyapı penceresinden yeniden bağlayın ya da sağlayıcının kesintisinin geçmesini bekleyin.",
-          "overBudget": "Tek bir çalıştırma hepsini taşıyabilsin diye ajanın bildirdiklerini kısaltın."
+          "overBudget": "Tek bir çalıştırma hepsini taşıyabilsin diye ajanın bildirdiklerini kısaltın.",
+          "consensusPanel": "Adımın bu araca ihtiyacı varsa uzlaşıyı kapatın, ya da panelin araçsız karar vermesini kabul edin. Sunucuda değiştirilecek bir şey yok."
         },
         "observed": {
           "ready": "başlatıldı",
@@ -1840,12 +1860,14 @@
       "dispatch": "Gönderim",
       "environment": "Ortam",
       "evicted": "Tahliye edildi",
+      "harness_shutdown": "Harness kapatıldı",
       "timeout": "Zaman aşımı",
       "agent": "Aracı",
       "job_failed": "İş başarısız",
       "rejected": "Reddedildi",
       "companion_rejected": "Yardımcı reddedildi",
       "stalled": "Takıldı",
+      "state_unreadable": "Durum okunamıyor",
       "cancelled": "İptal edildi",
       "unknown": "Bilinmiyor"
     },
@@ -2296,6 +2318,27 @@
       "createToken": "GitHub belirteci oluştur (kapsamlar önceden seçili)",
       "thenSet": "Ardından {envVar} ayarlayın ve yeniden başlatın."
     },
+    "githubPatPermissionsBanner": {
+      "title": "GitHub belirteci push yapamıyor veya pull request açamıyor",
+      "rejectedTitle": "GitHub, çalıştırmalarınızın kullandığı belirteci reddetti",
+      "body": "Burada başlatılan çalıştırmalar bir GitHub kişisel erişim belirteciyle kimlik doğrular ve bu belirteçte iş hattının ihtiyaç duyduğu izinler yok. Dal push eden, pull request açan veya birleştiren ajan adımları başarısız olacak.",
+      "rejectedBody": "Çalıştırmalarınızın kimlik doğruladığı GitHub kişisel erişim belirteci geçersiz, süresi dolmuş, iptal edilmiş ya da bir kuruluş politikası tarafından engellenmiş. Değiştirilene kadar klonlayan, push eden, pull request açan veya birleştiren her adım başarısız olacak.",
+      "missing": "Eksik:",
+      "alsoMissing": "Yalnızca iş akışı dosyalarındaki değişiklikleri engellese de şu da eksik: {capabilities}.",
+      "capability": {
+        "push": "commit push etme",
+        "pullRequests": "pull request açma ve birleştirme",
+        "workflows": "iş akışı dosyalarını düzenleme"
+      },
+      "sourceDeployment": "Bu, bu dağıtımın yapılandırıldığı belirteçtir; değiştirmek dağıtımı güncellemek anlamına gelir.",
+      "sourceInitiator": "Bu, çalıştırmalarınızın dağıtım kimlik bilgisi yerine tercih ettiği kendi kayıtlı belirtecinizdir. Kişisel ayarlarınızdan değiştirin.",
+      "createClassic": "Yerine belirteç oluştur (kapsamlar önceden seçili)",
+      "createFineGrained": "Yerine ayrıntılı izinli belirteç oluştur",
+      "classicHint": "Bağlantı, gerekli kapsamlar zaten seçili hâlde klasik belirteç formunu açar.",
+      "fineGrainedHint": "GitHub'ın ayrıntılı izin formu ön seçim kabul etmez; bu depo izinlerini kendiniz verin: {permissions}.",
+      "sampled": "Kullanılan {checked} depoya karşı denetlendi; {remaining} tanesi denetlenmedi.",
+      "deniedRepos": "Belirteç, hizmetlerinizin kullandığı şu depolara erişemiyor: {repos}. Bu depoları seçerek yeniden oluşturun."
+    },
     "providerConfigBanner": {
       "titleMany": "Sağlayıcıların yapılandırılması gerekiyor",
       "titleOne": {
@@ -2635,6 +2678,51 @@
         "load": "Denetim günlüğü yüklenemedi.",
         "loadMore": "Daha eski kayıtlar yüklenemedi"
       }
+    },
+    "accountRiskPolicies": {
+      "intro": "Bu hesaptaki tüm panoların paylaştığı birleştirme duruşları. Her pano bunları salt okunur devralır; birini kopyalayıp düzenleyebilir ya da gizleyebilir. Hiçbirini seçmemiş bir görevi hangi ilkenin yöneteceği pano başına belirlenir.",
+      "empty": "Henüz hesap genelinde risk ilkesi yok. Siz bir tane ekleyene kadar panolar kendi kitaplıklarını kullanır.",
+      "loadFailed": "Hesap risk ilkeleri yüklenemedi",
+      "confirmDelete": "\"{name}\" bu hesaptaki tüm panolardan geri çekilecek. Onu seçmiş görevler panolarının varsayılanına döner."
+    }
+  },
+  "mcpAuthorize": {
+    "title": "{client} bağlansın mı?",
+    "subtitle": "Kendisini {client} olarak tanıtıyor ve bu kurulum onu {origin} adresine geri gönderecek.",
+    "workspace": {
+      "label": "Üzerinde işlem yapabileceği pano"
+    },
+    "scopeLabel": "Neler yapabilecek",
+    "scopeHint": "Her düzey kendisinden öncekileri de kapsar.",
+    "scope": {
+      "read": {
+        "label": "Yalnızca okuma",
+        "description": "Servisleri, görevleri, hatları ve çalışmaları görüntüler."
+      },
+      "write": {
+        "label": "Okuma ve yazma",
+        "description": "Ayrıca görev oluşturur ve başlatır."
+      },
+      "decide": {
+        "label": "Okuma, yazma ve karar",
+        "description": "Ayrıca duraklatılmış bir çalışmanın beklediği soruları yanıtlar."
+      },
+      "admin": {
+        "label": "Tam erişim",
+        "description": "Ayrıca görev siler ve bildirimlere işlem uygular; bu bir pull request'i birleştirebilir."
+      }
+    },
+    "requestedScope": "{client} {scope} istedi. Bunu gerçekten vermek istiyorsanız yukarıdan o seçeneği seçin.",
+    "approve": "Bağla",
+    "deny": "Vazgeç",
+    "back": "Uygulamaya dön",
+    "noWorkspaces": "Bunu bağlayabileceğiniz bir pano henüz yok.",
+    "revokeHint": "Bu işlem, pano ayarlarından istediğiniz zaman iptal edebileceğiniz bir API anahtarı oluşturur.",
+    "error": {
+      "title": "Bu bağlantı kurulamadı",
+      "noRequest": "Bu sayfa bir yetkilendirme isteği olmadan açıldı. Bağlantıyı MCP istemcinizden başlatın.",
+      "expired": "Bu yetkilendirme isteği geçersiz veya süresi dolmuş. Bağlantıyı MCP istemcinizden yeniden başlatın.",
+      "failed": "Karar kaydedilemedi. Bağlantıyı MCP istemcinizden yeniden başlatın."
     }
   },
   "settings": {
@@ -2715,7 +2803,8 @@
         "team": "Ekip ve erişim",
         "fragments": "Bağlam parçaları",
         "skills": "Beceriler",
-        "foundational": "Temel hizmetler"
+        "foundational": "Temel hizmetler",
+        "riskPolicies": "Risk ilkeleri"
       }
     },
     "infrastructure": {
@@ -2774,6 +2863,7 @@
         "urlHttpRouteStatus": "HTTPRoute durumu (Gateway API)",
         "hostTemplate": "Ana bilgisayar şablonu",
         "hostTemplateHelp": "Sağlama değişkenleriyle (ör. branch, sha) işlenen ana bilgisayar şablonu.",
+        "ingressPortHelp": "Ingress denetleyicisinin yanıt verdiği ana bilgisayar portu; boş bırakılırsa şemanın varsayılan portu kullanılır. Kubernetes Ingress host değeri port içeremediği için burada, host şablonunda değil, belirtilir.",
         "ingressName": "Ingress adı",
         "serviceName": "Service adı",
         "port": "Bağlantı noktası",
@@ -2877,6 +2967,11 @@
           "blurb": "Cloudflare Containers kullanılmadığında kodlama ajanlarının çalıştığı yer. Bir self-hosted runner havuzu (kendi zamanlayıcınız) veya bir Kubernetes kümesi seçin, ardından uç noktasını ve kimlik bilgilerini yapılandırın."
         }
       },
+      "serviceAccountToken": {
+        "whitespace": "Bu belirteç bir boşluk ya da satır sonu içeriyor; taşıyıcı belirteçlerde bu asla bulunmaz. Büyük olasılıkla terminalde kaydırılmış bir satırın üzerinden kopyalanmış. Tek ve kesintisiz bir satır olarak yeniden kopyalayın.",
+        "base64Encoded": "Bu, belirtecin kendisi değil, Secret nesnesinin .data.token alanındaki base64 değeri gibi görünüyor. Önce çözün, örneğin base64 -d ile.",
+        "notAJwt": "Bu, noktayla ayrılmış üç bölümden oluşan bir JWT olan ServiceAccount belirtecine benzemiyor. Değerin tamamının kopyalandığını doğrulayın. Kümeniz statik taşıyıcı belirteç kullanıyorsa bu uyarıyı yoksayın."
+      },
       "kubernetesEnv": {
         "label": "Ad",
         "labelPlaceholder": "Önizleme kümesi",
@@ -2899,6 +2994,7 @@
         "urlServiceStatus": "Service durumunu oku",
         "hostTemplate": "Host şablonu",
         "hostTemplateHelp": "branch ve pullNumber gibi sağlama değişkenleriyle işlenen host şablonu; işlenen host, ortam URL'si olur.",
+        "ingressPortHelp": "Ingress denetleyicisinin yanıt verdiği ana bilgisayar portu; boş bırakılırsa şemanın varsayılan portu kullanılır. Kubernetes Ingress host değeri port içeremediği için burada, host şablonunda değil, belirtilir.",
         "ingressName": "Ingress adı",
         "ingressNameHelp": "Load balancer host'unun okunacağı Ingress. Boş bırakılırsa uygulanan tek Ingress kullanılır.",
         "serviceName": "Service adı",
@@ -2963,13 +3059,27 @@
         "button": "Bağlantıyı test et",
         "ok": "Bağlantı tamam",
         "failed": "Bağlantı başarısız",
+        "causes": {
+          "refused": "Bu adreste dinleyen bir şey yok: bağlantı reddedildi.",
+          "dns": "Bu ana bilgisayar adı bu kurulumdan çözümlenemiyor.",
+          "timeout": "Test zaman aşımına uğrayana kadar yanıt gelmedi.",
+          "aborted": "Yanıt gelmeden önce istek iptal edildi.",
+          "unreachable": "Bu kurulumdan bu adrese ağ yolu yok.",
+          "reset": "Yanıt gelmeden önce bağlantı kapatıldı.",
+          "tlsUntrusted": "Bu kurulum TLS sertifikasına güvenmiyor.",
+          "tlsExpired": "TLS sertifikası geçerlilik süresinin dışında.",
+          "tlsHostname": "TLS sertifikası bu ana bilgisayar adı için verilmemiş.",
+          "tlsProtocol": "TLS el sıkışması başarısız oldu.",
+          "invalidHeader": "İstek oluşturulamadı: kimlik bilgisi, bir HTTP başlığının taşıyamayacağı bir karakter içeriyor."
+        },
         "warningsTitle": "Bu yapılandırmadaki eksikler",
         "warnings": {
           "runner_manifest_no_release": "Release şablonu yok: bir çalıştırma iptal edildiğinde havuza işi durdurması söylenemez, bu yüzden sahipsiz kalan iş, havuz onu kendi kendine geri alana kadar runner'ını meşgul tutar.",
           "runner_manifest_no_status_path": "Durum yolu yok: her yoklama hâlâ çalışıyor olarak okunur, bu yüzden bir iş ancak çalıştırmanın yoklama bütçesi tükendiğinde sona erebilir.",
           "github_pat_classic_account_wide": "Bu, 'repo' kapsamına sahip klasik bir belirteç: gönderim yapabildiğiniz her depoya, bu çalışma alanının GitHub Uygulamasının hiç kurulmadığı depolar dahil, erişir. Başlattığınız çalıştırmalar bunu Uygulamaya tercih eder. Bu kurulumun depolarıyla sınırlı ince ayarlı bir belirteç daha dardır.",
           "github_pat_scopes_beyond_need": "Bu belirteç, cat-factory'nin hiç kullanmadığı izinler veriyor. Bunları kaldırmak hiçbir şeye mal olmaz ve ele geçirilmiş bir çalıştırmanın erişebileceği alanı daraltır.",
-          "github_pat_scope_unreadable": "GitHub bu belirteci kabul etti ancak kapsamlarını bildirmedi, bu yüzden erişimi burada gösterilemiyor. Neler verdiğini GitHub belirteç ayarlarınızdan kontrol edin."
+          "github_pat_scope_unreadable": "GitHub bu belirteci kabul etti ancak kapsamlarını bildirmedi, bu yüzden erişimi burada gösterilemiyor. Neler verdiğini GitHub belirteç ayarlarınızdan kontrol edin.",
+          "github_pat_no_scopes": "GitHub bu klasik belirteç için hiçbir kapsam bildirmiyor, dolayısıyla yalnızca herkese açık verileri okuyabilir. Onunla klonlayan, gönderim yapan veya pull request açan çalıştırmalar başarısız olur. 'repo' ve 'workflow' seçili yeni bir belirteç oluşturun."
         }
       },
       "toast": {
@@ -3101,6 +3211,8 @@
       "default": "Varsayılan",
       "makeDefault": "Varsayılan yap",
       "deleteDefaultBlocked": "Varsayılan ilke silinemez",
+      "deleteUnattendedDefaultBlocked": "Gözetimsiz çalıştırmaların varsayılan ilkesi silinemez",
+      "deleteBothDefaultsBlocked": "Bu ilke hem uygulama içi hem de gözetimsiz varsayılan olduğu için silinemez",
       "deletePreset": "İlkeyi sil",
       "field": {
         "maxComplexity": "Maks. karmaşıklık %",
@@ -3109,6 +3221,7 @@
         "ciMaxAttempts": "CI düzeltme denemeleri",
         "maxRequirementIterations": "Gereksinim yinelemeleri",
         "maxRequirementConcernAllowed": "Şu düzeyde veya altında otomatik geç",
+        "companionMaxReworks": "Yardımcı yeniden çalışma turları",
         "autoMerge": "Otomatik birleştirme"
       },
       "newPreset": "Yeni ilke",
@@ -3120,6 +3233,7 @@
         "impact": "Etki%",
         "ciFix": "CI düzeltme",
         "reqIter": "Grks. yin.",
+        "companionRework": "Yen. çalışma",
         "autoPass": "Şu düzeyde veya altında otomatik geç"
       },
       "add": "Ekle",
@@ -3129,7 +3243,11 @@
         "created": "İlke oluşturuldu",
         "createFailed": "İlke oluşturulamadı",
         "defaultFailed": "Varsayılan ayarlanamadı",
-        "deleteFailed": "İlke silinemedi"
+        "deleteFailed": "İlke silinemedi",
+        "cloned": "İlke bu panoya kopyalandı",
+        "cloneFailed": "İlke kopyalanamadı",
+        "hideFailed": "İlke gizlenemedi",
+        "unhideFailed": "İlke geri getirilemedi"
       },
       "autoMergeOnHint": "İlke sınırları içindeyken otomatik birleştir.",
       "autoMergeOffHint": "PR'yi her zaman insan incelemesine gönder.",
@@ -3179,6 +3297,44 @@
         "redundant": "Etkisi yok: bu ilke zaten en az bu kadar katı.",
         "alreadyStrictest": "Zaten her zaman inceleniyor",
         "baseHint": "Bu ilke her kategori için puanları karşılaştırır, bu yüzden bir rol bir kategoriyi yalnızca inceleme zorunluluğuna kadar sıkılaştırabilir."
+      },
+      "unattendedDefault": "Gözetimsiz varsayılan",
+      "makeUnattendedDefault": "Gözetimsiz çalıştırmalar için varsayılan yap (API, takip sistemi, zamanlama)",
+      "makeUnattendedDefaultShort": "Gözetimsiz varsayılan",
+      "autonomy": {
+        "label": "Gözetimsiz çalıştırmaları bir kişiyi beklemeden tamamla",
+        "unattendedHint": "Otomatik bir döngü pes ettiğinde (yeniden çalışma sınırındaki bir companion, geçiş sınırındaki bir inceleme, ayıklanmamış takip maddeleri), çalıştırma durmak yerine kayda geçirilerek devam eder. Hattın istediği kapılar, örneğin insan testi, inceleme ve onay, çalıştırmayı yine durdurur.",
+        "attendedHint": "Otomatik bir döngü pes ettiğinde çalıştırma durur ve birinin seçim yapmasını bekler. Birinin izlediği bir pano için doğrudur; API üzerinden başlatılan bir çalıştırma süresiz bekler."
+      },
+      "autoAnswer": {
+        "label": "Otomatik yanıt güven eşiği (%)",
+        "hint": "Gözetimsiz bir çalıştırmanın bir kişiyi beklemek yerine önerilen yanıtı kullanabilmesi için Requirement Writer’ın ne kadar emin olması gerektiği. Yalnızca inceleyicinin ürün sahibi olmadan yanıtlanabilir bulduğu bulgular uygundur."
+      },
+      "tier": {
+        "account": "Hesaptan",
+        "accountHint": "Tüm hesap için tanımlı. Her pano bunu devralır; yalnızca hesap yöneticisi değiştirebilir."
+      },
+      "own": {
+        "heading": "Bu panonun ilkeleri"
+      },
+      "inherited": {
+        "heading": "Hesaptan devralındı",
+        "hint": "Bu hesaptaki tüm panolarla paylaşılır. Bir ilkeyi kopyalayıp burada düzenleyebilir ya da gizleyerek bu panodaki hiçbir görevin seçememesini sağlayabilirsiniz.",
+        "clone": "Panoya kopyala",
+        "cloneHint": "Bu ilkeyi panoya kopyalayın; sınırlarını orada düzenleyebilirsiniz.",
+        "copyName": "{name} (kopya)",
+        "hide": "Gizle",
+        "hideHint": "Bu ilkeyi bu panoda artık sunma. Daha sonra geri getirebilirsiniz."
+      },
+      "hidden": {
+        "heading": "Gizlenen hesap ilkeleri",
+        "restore": "Geri getir",
+        "withdrawn": "Hesap tarafından artık tanımlanmıyor",
+        "loadFailed": "Bu liste yüklenemedi; bu nedenle burada görünmeyen gizlenmiş bir ilke olabilir."
+      },
+      "confirmHide": {
+        "title": "Bu ilke gizlensin mi?",
+        "body": "\"{name}\" bu panoda sunulmayacak ve onu seçmiş görevler panonun varsayılan ilkesine döner. Daha sonra geri getirebilirsiniz."
       }
     },
     "observabilityConnection": {
@@ -3294,6 +3450,7 @@
         "ok": "Yanıt verdi",
         "credentialsMissing": "Kimlik bilgisi yok",
         "credentialRefused": "Kimlik bilgisi reddedildi",
+        "credentialUnusable": "Kimlik bilgisi gönderilemiyor",
         "oauthNotConnected": "Bağlı değil",
         "oauthTokenFailed": "Bağlantı çalışmayı bıraktı",
         "unreachable": "Yanıt yok",
@@ -3307,6 +3464,7 @@
       "allowedToolsUnchecked": "Araç listesi tümüyle okunacak kadar kısa değildi, bu yüzden sınırlanan adlar denetlenemedi.",
       "unresolvedCredentials": "{keys} için hiçbir değer çözülmedi. Aşağıda doldurun ya da kurulumun ortamında tanımlayın.",
       "refusedCredentials": "{keys}, platformun kendi yapılandırmasına ait bir değişkeni adlandırıyor, bu yüzden asla çözülmez. Kurulumun kodundaki bildirimi değiştirin.",
+      "unusableCredentials": "{keys} hiçbir başlık adlandırmıyor, bu yüzden bir HTTP sunucusuna asla ulaşmaz. Kurulumun kodunda, sunucunun kimlik doğrulamasında kullandığı başlığı ekleyin.",
       "httpStatus": "HTTP {status}",
       "showDetails": "Ayrıntıları göster",
       "hideDetails": "Ayrıntıları gizle",
@@ -3369,7 +3527,9 @@
         "createdBy": "oluşturan: {user}",
         "createdByYou": "siz",
         "createdByKey": "{id} API anahtarı",
-        "revoke": "Belirteci iptal et"
+        "revoke": "Belirteci iptal et",
+        "boundToYou": "Aboneliğiniz",
+        "boundToOther": "{user} kullanıcısının aboneliği"
       },
       "add": {
         "heading": "Belirteç oluştur",
@@ -3378,7 +3538,12 @@
         "labelPlaceholder": "örn. CI hattı",
         "scope": "Kapsam",
         "scopeHelp": "Bu belirtecin yapabilecekleri: yalnızca okuma, okuma ve yazma ya da tam erişim (silmeye de izin verir).",
-        "create": "Belirteç oluştur"
+        "create": "Belirteç oluştur",
+        "identity": "Şu kimlikle çalışır",
+        "identitySystem": "Bu çalışma alanı (sistem belirteci)",
+        "identitySelf": "Ben (kişisel belirteç)",
+        "identitySystemHelp": "Bu belirteçle başlatılan çalıştırmalar çalışma alanına aittir ve hiçbir kişiye atfedilmez. Kimsenin kişisel Claude / Codex / GLM aboneliğini kullanamaz; bu nedenle böyle bir modele sabitlenmiş görev, orada olmayan birine fatura edilmek yerine reddedilir. CI ve paylaşılan entegrasyonlar için bunu kullanın.",
+        "identitySelfHelp": "Bu belirteçle başlatılan çalıştırmalar size ait sayılır ve kişisel Claude / Codex / GLM aboneliğinizi kullanabilir. Bu tür her çağrının ayrıca kişisel parolanızı X-Personal-Password başlığında göndermesi gerekir; parola hiçbir zaman saklanmaz. Kendi headless çalıştırmalarınız için bunu kullanın."
       },
       "scopes": {
         "read": "Yalnızca okuma",
@@ -3718,6 +3883,15 @@
       "reachable": "Ulaşılabilir · model yok | Ulaşılabilir · {count} model | Ulaşılabilir · {count} model",
       "noModels": "Model bildirilmedi.",
       "enableModels": "Modelleri etkinleştir",
+      "imageInputHint": "Bazı yerel modeller ekran görüntülerini ve tasarım render'larını okuyabilir. Bilinen model aileleri otomatik olarak tanınır ve her modeldeki Ayarlanmadı seçeneği hangi sonucu vereceğini belirtir; yalnızca metin niceleme ya da ince ayar gibi platformun bilemeyeceği bir yapı için bunu kendiniz ayarlayın.",
+      "imageInputLabel": "{model} için görsel desteği",
+      "imageInput": {
+        "autoYes": "Ayarlanmadı: {family} görsel okur",
+        "autoNo": "Ayarlanmadı: {family} yalnızca metin",
+        "unknown": "Görseller: ayarlanmadı",
+        "yes": "Görsel okur",
+        "no": "Yalnızca metin"
+      },
       "toast": {
         "saved": "{name} kaydedildi",
         "saveFailed": "Çalıştırıcı kaydedilemedi",
@@ -3729,6 +3903,7 @@
         "body": "\"{name}\" kaldırılacak. Bu işlem geri alınamaz."
       },
       "blocked": "Bu çalıştırıcının URL adresi bu kurulumda izinli değil, bu nedenle modelleri seçicide gizlendi.",
+      "modelsDiscarded": "Bu çalıştırıcının etkin modellerinin bir kısmı okunamadı ve atıldı. İstediklerinizi yeniden seçip kaydedin.",
       "urlReason": {
         "invalid_url": "Bu geçerli bir URL değil.",
         "scheme_not_allowed": "Çalıştırıcı URL adresi http:// veya https:// ile başlamalıdır.",
@@ -3761,7 +3936,8 @@
         "qwen": "Qwen (Alibaba)",
         "kimi": "Kimi (Moonshot)",
         "deepseek": "DeepSeek",
-        "glm": "GLM (Z.ai)"
+        "glm": "GLM (Z.ai)",
+        "grok": "Grok (xAI)"
       },
       "regions": {
         "usa": "Amerika Birleşik Devletleri",
@@ -4037,6 +4213,11 @@
           "step1": "platform.moonshot.ai → API Keys adresini açın ve bir anahtar oluşturun.",
           "step2": "Anahtarı kopyalayın; OpenAI uyumlu Moonshot uç noktasının kimliğini doğrular."
         },
+        "xai": {
+          "label": "xAI (Grok API)",
+          "step1": "console.x.ai → API Keys adresini açın ve bir anahtar oluşturun.",
+          "step2": "Anahtarı kopyalayın; OpenAI uyumlu xAI uç noktasının kimliğini doğrular."
+        },
         "openrouter": {
           "label": "OpenRouter",
           "step1": "openrouter.ai → Keys adresini açın ve bir API anahtarı oluşturun.",
@@ -4207,6 +4388,9 @@
       "monorepoBrowseHint": "Depoyu inceleyin ve eklemek istediğiniz servislerin dizinlerini herhangi bir klasörden seçin. Bir servis üzerinde çalışan ajanlar onun alt dizininde çalışır.",
       "selectedServices": "Seçili servisler",
       "noServicesSelected": "Henüz servis seçilmedi. Yukarıdan dizin seçin.",
+      "frontendLabel": "Frontend uygulaması (isteğe bağlı)",
+      "frontendHint": "Seçtiğiniz dizinlerden birini diğerlerinin frontend uygulaması olarak işaretleyin. O alt dizine sabitlenmiş bir frontend uygulaması olarak eklenir ve yanında eklenen her backend servisine bağlanır. Backend URL ortam değişkenlerinin adlarını sonrasında frontend’in inspector’ında girin.",
+      "frontendNone": "Yok: tüm seçimler backend servisidir",
       "addServices": "{count} servis ekle | {count} servis ekle",
       "removeService": "{directory} öğesini kaldır",
       "addedConfigure": "{title} eklendi, yapılandırın",
@@ -4220,7 +4404,9 @@
         "addedDescription": "{title} panoda, aşağıdan yapılandırın.",
         "addFailedTitle": "Servis eklenemedi",
         "servicesAddedTitle": "Servisler eklendi",
-        "servicesAddedDescription": "{count} servis panoya eklendi. | {count} servis panoya eklendi."
+        "servicesAddedDescription": "{count} servis panoya eklendi. | {count} servis panoya eklendi.",
+        "frontendLinkedNote": "{directory} frontend olarak eklendi ve diğerlerine bağlandı. Backend URL ortam değişkenlerinin adlarını inspector’ında girin.",
+        "frontendWiringFailedNote": "Frontend ayarları kaydedilmedi. Alt dizinini ve backend servislerini ayarlamak için her frontend uygulamasının inspector’ını açın."
       },
       "repoType": "Depo türü",
       "repoTypeHint": "Bu deponun türü: bir backend servisi, bir frontend uygulaması, paylaşılan bir kütüphane veya bir doküman deposu (yalnızca doküman/spike)."
@@ -4635,7 +4821,9 @@
     "tracker": "Takip aracı",
     "board": "Pano",
     "pickBoard": "Bir pano seçin",
-    "boardPlaceholder": "Proje anahtarı, takım kimliği veya owner/repo",
+    "boardPlaceholder": "Proje anahtarı veya takım kimliği",
+    "boardFromService": "Bu servise bağlı depo",
+    "boardNeedsRepo": "Bu servise bağlı bir depo yok, dolayısıyla taranacak kayıt da yok. Servis panelinden bir depo bağlayın.",
     "boardsFailed": "Panolar yüklenemedi: {reason}",
     "issueType": "Kayıt türü",
     "issueTypeHelp": "Varsayılan olarak bug. Kayıt türü olmayan araçlarda yok sayılır.",
@@ -4644,6 +4832,8 @@
     "labelsHelp": "Virgülle ayrılır. Hepsinin bulunması gerekir.",
     "adoptInto": "Seçilen hatayı şuraya ekle",
     "adoptingInto": "Seçilen hata {container} içine eklenir",
+    "huntIn": "Taranacak servis",
+    "huntingIn": "{container} servisine bağlı depo taranıyor; seçilen hata da oraya eklenir.",
     "run": "Avla",
     "running": "Pano okunuyor ve bulunanlar değerlendiriliyor…",
     "huntFailed": "Av başarısız oldu",
@@ -4656,6 +4846,7 @@
     "noCandidates": "Bu panoda eşleşen açık ve atanmamış hata yok.",
     "ratings": "Etki {impact}/5, karmaşıklık {complexity}/5, güven {confidence}",
     "viaModel": "{model} tarafından değerlendirildi.",
+    "scannedBoard": "{board} tarandı.",
     "truncated": "Yalnızca eşleşen ilk {count} hata tarandı; bu panoda daha fazlası var.",
     "comments": "{count} yorum | {count} yorum",
     "confidence": {
@@ -4669,6 +4860,10 @@
       "failed": "Değerlendirme tamamlanamadı, bu yüzden bunlar değerlendirilmedi.",
       "over_budget": "Bu çalışma alanı harcama bütçesini aştığı için bunlar değerlendirilmedi.",
       "empty": "Değerlendirilecek bir şey yok."
+    },
+    "refusal": {
+      "boardFromService": "Bu izleyici, seçilen hizmete bağlı depoyu tarar; bu yüzden kendine ait bir panosu yoktur.",
+      "missingBoard": "Aranacak panoyu seçin."
     }
   },
   "pipeline": {
@@ -4739,6 +4934,7 @@
       "purposeUnrecognized": "Tanınmayan ({purpose})",
       "purposeOption": {
         "build": "Geliştirme",
+        "bugfix": "Hata düzeltme",
         "document": "Dokümantasyon",
         "review": "İnceleme",
         "research": "Araştırma",
@@ -4807,7 +5003,7 @@
       "skillNoneAvailable": "Kullanılabilir beceri yok. Hesap ayarlarında bir beceri kaynağı bağlayın.",
       "skillMissing": "Bu beceri artık katalogda yok; başka birini seçin.",
       "skillNeedsPick": "Bir Skill adımı, kaydedebilmeniz için seçilmiş bir beceri gerektirir.",
-      "purposeStepsConflict": "Bu amaç kod yazmaz ve test çalıştırmaz, ancak işlem hattında hâlâ uygulama veya test adımları var. Bunları kaldırın veya amacı Geliştirme olarak değiştirin.",
+      "purposeStepsConflict": "Bu amaç kod yazmaz ve test çalıştırmaz, ancak işlem hattında hâlâ uygulama veya test adımları var. Bunları kaldırın veya kod teslim eden bir amaca geçin (Geliştirme ya da Hata düzeltme).",
       "promptEditTooltip": "Bu ajanın sistem istemini düzenle",
       "promptEditedTooltip": "Bu ajanın sistem istemi bu çalışma alanı için düzenlenmiş",
       "consensusGroups": "Uzlaşı grupları",
@@ -4846,6 +5042,8 @@
       "binaryOutputMediaTypeUnusable": "Kaydedilmedi, çünkü bunlar ortam türü değil: {entries}. Her birini type/subtype olarak yazın.",
       "binaryOutputGeneratorMissing": "Bu kurulum şu üretken entegrasyonları kaydetmiyor: {ids}. Bunlar bu çalışma alanında değil, kurulumun kodunda kaydedilir.",
       "binaryOutputGeneratorOverlap": "Seçili entegrasyonlardan birden fazlası aynı içerik türünü üretiyor ({overlaps}). Bunda bir sakınca yok, ancak artık hangisinin çağrılacağına içerik türü karar vermiyor: bu adımın isteminde hangisinin ne için kullanılacağını belirtin, yoksa ajan birini seçip onu kullanmayı sürdürür.",
+      "binaryOutputGeneratorVia": "{harness} üzerinden",
+      "binaryOutputGeneratorHarness": "Bu entegrasyonlar bir API yerine bir aracı CLI tarafından üretilir ({generators}); bu nedenle bu adım yalnızca o CLI üzerinde çalışan bir modelle işler. Başka bir modelle başlatılan çalıştırma başlangıçta reddedilir.",
       "binaryOutputModalityUncovered": "Seçili entegrasyonların hiçbiri, bu adımın teslim etmesi gereken {modalities} içeriğini üretmiyor.",
       "binaryOutputModalityRetired": "{modality} (artık sunulmuyor — bu adımın içerik türlerini yeniden seçin)",
       "binaryOutputModality": {
@@ -4873,6 +5071,9 @@
       "binaryCapabilityUnknown": "{capability} (bu kurulumun tanımlamadığı bir yetenek)",
       "binaryCapabilityUnsupported": "Seçili entegrasyonların hiçbiri, bu adımın üretim seçeneklerinin istediği {capabilities} desteğini sunmuyor. Seçeneği kaldırın ya da yeteneği bildiren bir entegrasyon seçin.",
       "binaryCapabilityUnverifiable": "Seçili entegrasyonların hiçbiri {capabilities} desteğini bildirmiyor, ancak biri hiç yetenek bildirmiyor, bu yüzden bu doğrulanamadı. Adım yine de başlar; entegrasyonun API’sinden teyit edin.",
+      "binaryOptionValueUnaccepted": "Seçili entegrasyonların hiçbiri {requested} değerinde {option} kabul etmiyor. Hepsi birlikte şunları kabul ediyor: {accepted}. Bunlardan birini isteyin ya da bu değeri üretebilen bir entegrasyon seçin.",
+      "binaryOptionValuePartial": "{generators} {requested} değerindeki {option} seçeneğini kabul etmiyor, ancak seçili başka bir entegrasyon kabul ediyor. Adım yine de başlar: bu seçeneği yalnızca kabul eden entegrasyonlara gönderin ya da kabul etmeyenleri seçimden çıkarın.",
+      "binaryOptionValueUnverifiable": "Seçili bir entegrasyon kabul ettiği değerleri bildiriyor ve bu adımın istediğini ({options}) kabul etmiyor; bir diğeri ise hiç değer bildirmiyor, bu yüzden kesin bir sonuca varılamadı. Adım yine de başlar ve yalnızca bazı entegrasyonlarınız onu karşılar.",
       "binaryReferenceImages": "Referans görseller",
       "binaryReferenceImagesPlaceholder": "rol{'|'}konum{'|'}servis, her satıra bir tane",
       "binaryReferenceImagesUnusable": "Referans olarak kaydedilmedi: {entries}. Her satır rol{'|'}konum biçiminde olmalı; rol style, subject, composition veya base olabilir.",
@@ -4899,7 +5100,17 @@
       "binaryComparison": "Teslimden önce adayları karşılaştır",
       "binaryPerGenerator": "Entegrasyon başına aday",
       "binaryMultiSelect": "Birden fazlasını tutmaya izin ver",
-      "binaryComparisonUnreachable": "Bu adım her konu için yalnızca bir aday üretebilir; karşılaştırılacak bir şey olmaz ve tek aday sorulmadan tutulur. İkinci bir entegrasyon seçin ya da entegrasyon başına aday sayısını artırın."
+      "binaryComparisonUnreachable": "Bu adım her konu için yalnızca bir aday üretebilir; karşılaştırılacak bir şey olmaz ve tek aday sorulmadan tutulur. İkinci bir entegrasyon seçin ya da entegrasyon başına aday sayısını artırın.",
+      "scopeDefault": {
+        "interactive": "Uygulama içi varsayılan",
+        "interactiveHint": "Panodan başlatılan bir görev kendi hattını belirtmediğinde ne çalıştırılır.",
+        "unattended": "Gözetimsiz varsayılan",
+        "unattendedHint": "Kimsenin izlemediği bir çalıştırmanın (API, kayıt, zamanlama) görev hat belirtmediğinde ne çalıştıracağı.",
+        "claimInteractive": "Uygulama içi varsayılan yap",
+        "releaseInteractive": "Uygulama içi varsayılan olmaktan çıkar",
+        "claimUnattended": "Gözetimsiz varsayılan yap",
+        "releaseUnattended": "Gözetimsiz varsayılan olmaktan çıkar"
+      }
     },
     "progress": {
       "status": {
@@ -5347,6 +5558,17 @@
       "reReview": "Gereksinimler yeniden incelenemedi",
       "proceed": "Devam edilemedi",
       "resolveReview": "İnceleme çözümlenemedi"
+    },
+    "findingClass": {
+      "judgement": "Sizin kararınız gerekiyor",
+      "judgementHint": "İş, ürün veya alan kararı ya da inceleyiciye söylenmemiş bir bilgi. Bunu yalnızca siz çözebilirsiniz.",
+      "practice": "Yerleşik uygulamayla yanıtlanabilir",
+      "practiceHint": "Yerleşik uygulama, hâlihazırda kullanılan teknoloji yığını veya verilen bağlam belirler. Önceden doldurulur; olduğu gibi bırakın ya da değiştirin."
+    },
+    "confidence": {
+      "high": "Yüksek güven",
+      "medium": "Orta güven",
+      "low": "Düşük güven"
     }
   },
   "clarity": {
@@ -5920,6 +6142,31 @@
       "gap": {
         "no_visual_step": "Bu hatta arayüzü yakalayan bir şey yok, dolayısıyla bakılacak bir şey de yok.",
         "none_captured": "Arayüzün yakalanması gerekiyordu ama hiçbir görünüm yakalanmadı."
+      }
+    },
+    "environments": {
+      "title": "Canlı ortam",
+      "open": "Canlı ortamı aç",
+      "retained": "Bu ortamın çalıştırma bittikten sonra da kalması amaçlanıyor.",
+      "expires": "{date} tarihinde sona eriyor",
+      "expired": "{date} tarihinde süresi doldu",
+      "state": {
+        "live": "Canlı",
+        "provisioning": "Ayağa kalkıyor",
+        "failed": "Hiç ayağa kalkmadı",
+        "reclaiming": "Kaldırılıyor",
+        "reclaimed": "Kaldırıldı",
+        "expired": "Süresi doldu"
+      },
+      "origin": {
+        "deployer": "Bu çalışma tarafından ayağa kaldırıldı",
+        "human_test": "Elle yapılan test için ayağa kaldırıldı",
+        "projected": "Çalışma sürüyor, bu yüzden bu durum değişebilir"
+      },
+      "gap": {
+        "no_environment_step": "Bu hatta ortam ayağa kaldıran bir adım yok, açılacak bir şey de yok.",
+        "not_provisioned": "Bir ortam ayağa kaldırılacaktı, ancak henüz hiçbiri kaydedilmedi.",
+        "infraless": "Bu servis kendine ait bir ortam tanımlamıyor, bu yüzden hiçbir şey ayağa kaldırılmadı."
       }
     },
     "checks": {
@@ -6641,6 +6888,7 @@
       "workspaceDefaultCaption": "Bu görev kendine bir ilke seçmediği için uygulanır.",
       "noneHint": "Yapılandırılmış risk ilkesi yok. Her pull request insan incelemesini bekler.",
       "refused": {
+        "relaxes_run_oversight": "Rolün için kullanılamaz: bu ilke, bir çalıştırmanın bir kişiyi beklemek yerine kendi inceleme kontrol noktalarını kendisinin yanıtlamasına izin verir. Bir çalışma alanı yöneticisi bunu değiştirebilir.",
         "relaxes_role_sandbox": "Rolün için kullanılamaz: bu görevin çalışmaları yalıtılmış çalışır ve bu ilke birleştirmelerine izin verirdi. Bir çalışma alanı yöneticisi bunu değiştirebilir.",
         "relaxes_role_submission_allowlist": "Rolün için kullanılamaz: bu ilke, bu görevde sana kapalı olan değişiklik türlerini birleştirmene izin verirdi. Bir çalışma alanı yöneticisi bunu değiştirebilir.",
         "relaxes_role_class_rule": "Rolün için kullanılamaz: bu ilke, bu görevde incelemen gereken değişiklikleri otomatik birleştirir. Bir çalışma alanı yöneticisi bunu değiştirebilir."

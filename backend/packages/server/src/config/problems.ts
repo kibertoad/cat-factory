@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { ConfigProblem } from '@cat-factory/contracts'
 import { base64urlToBytes, pkcs8PemToDer } from '../crypto/encoding.js'
 import { DOCS, ENV_VARS_ANCHORS, SITE_DOCS } from './docs.js'
@@ -56,7 +57,7 @@ export function configProblem(problem: ConfigProblem): ConfigValidationError {
  * Objects — so this lives here only to reuse the shared {@link ENV_HELP}/{@link configProblem} shape.)
  */
 export function missingIoredisProblem(purpose: string, cause: unknown): ConfigValidationError {
-  const detail = cause instanceof Error ? cause.message : String(cause)
+  const detail = getErrorMessage(cause)
   return configProblem({
     key: 'REDIS_URL',
     summary: ENV_HELP.REDIS_URL.summary,

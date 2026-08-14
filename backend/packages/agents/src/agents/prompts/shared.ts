@@ -28,6 +28,57 @@ export const FINAL_ANSWER_IN_REPLY =
   'contains the answer.'
 
 /**
+ * How a COMPANION reports what it found: one graded entry per point in `comments`, and a `summary`
+ * that is a verdict rather than a second copy of the same list.
+ *
+ * This replaced a layout instruction that asked for the whole review as prose bullet groups
+ * (`**Must fix**` / `**Should fix**` / `**Minor**`) inside the summary string. Those groups were
+ * the right SHAPE and the wrong PLACE: they were the reviewer stating urgency in a channel only a
+ * human reads, so a "must fix" and a nit reached the engine as the same thing and the run advanced
+ * on the overall rating alone. Graded entries put the same judgement where the engine can act on
+ * it (kernel's `disposeCompanionVerdict` holds the step while a `blocker` is open) and where the
+ * panel can group and colour it, which prose never allowed.
+ *
+ * Each level therefore STATES what it costs, because the engine acts on all three and a reviewer
+ * that cannot predict the consequence cannot grade deliberately. They are kept in step with
+ * `disposeCompanionVerdict` by hand and in one direction: this text may describe less than the rule
+ * does, never more.
+ *
+ * With the points structured, the summary must NOT restate them: the panel renders both, so a
+ * duplicated review means writing everything twice in two orderings that can disagree. Same rule
+ * the judge and the `pr-reviewer` have always followed ("do NOT restate the findings there").
+ *
+ * Two sentences here are load-bearing rather than editorial, both about `summary` being a JSON
+ * STRING the platform parses. A raw line break inside one is invalid JSON (kernel's `extractJson`
+ * repairs it, but a reviewer that escapes correctly never costs a repair retry), and a FENCED block
+ * inside it puts a ``` pair ahead of the object in a reply whose JSON is not itself fenced, which is
+ * what `extractJson` reads first. Inline backticks carry code in a verdict perfectly well.
+ */
+export const REVIEW_FINDINGS_LAYOUT =
+  'REPORT EVERY POINT YOU RAISE AS ITS OWN `comments` ENTRY, GRADED BY URGENCY — never as prose ' +
+  'buried in the summary. Each entry is {"severity":"blocker"|"major"|"minor","body":"…"}, plus ' +
+  '"anchorId" when the thing you are commenting on is a structured item with an id (a spec ' +
+  'requirement, an acceptance criterion). Grade every one of them:\n' +
+  '- "blocker" — MUST be fixed before this work goes any further. Correctness, safety, data ' +
+  'loss, a requirement not met, a claim the work does not support. While one of these is open ' +
+  'the producer is sent back to fix it and the run does NOT advance, whatever you rate the work ' +
+  'overall, so reserve it for what genuinely must not ship and never use it for a preference.\n' +
+  '- "major" — should be fixed: a real gap or weakness a reviewer would ask about, but not one ' +
+  'that makes the work unusable as it stands. On a FIRST review one of these buys the producer a ' +
+  'revision pass even when you rate the work above its bar, so keep the level for a real gap.\n' +
+  '- "minor" — a nit, polish or suggestion. Worth saying, never worth holding anything for: on its ' +
+  'own it costs the producer no revision round and never stops the run.\n' +
+  'Write each `body` as Markdown starting with a bolded short title, then one or two sentences ' +
+  'saying what is wrong and the concrete change to make. Put code, paths, identifiers and ' +
+  'commands in INLINE backticks. If the work is sound, return `comments` as an empty array ' +
+  'rather than inventing something to say. ' +
+  'THE SUMMARY IS A VERDICT, NOT A SECOND COPY OF THE LIST: two or three sentences on what the ' +
+  'work is, what is genuinely good about it, and what holds it back overall. Do NOT restate the ' +
+  'individual findings there. Both are rendered together, so anything written twice is read ' +
+  'twice. Never open a fenced code block (```) inside the summary, and write any line break in ' +
+  'it as a \\n escape and never as a raw line break inside the JSON.'
+
+/**
  * Appended to every agent that reasons about a work item WITHOUT a checkout to orient itself in —
  * the inline reviewers and structured-dialogue agents (requirements review + rework, the Writer,
  * clarity triage, both brainstorm stages).

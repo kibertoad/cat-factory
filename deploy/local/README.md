@@ -156,8 +156,8 @@ keys), so a new key orphans every one of them and they have to be re-entered.
 
 ## Choosing the default model preset
 
-Every workspace's model-preset library is seeded on first use with three built-ins
-(Kimi K2.7, GLM-5.2, Claude Opus 5). Local mode marks **Claude Opus 5** the default:
+Every workspace's model-preset library is seeded on first use with four built-ins
+(Kimi K2.7, GLM-5.2, Claude Opus 5, GPT-5.6 Sol). Local mode marks **Claude Opus 5** the default:
 local runs subscription-backed models (your ambient `claude` CLI for inline steps, a
 leased personal credential for container steps), so Claude is first-class even though it
 can't run on the bare Cloudflare baseline. To ship a different out-of-the-box default,
@@ -173,7 +173,8 @@ startLocal({ defaultModelPresetId: MODEL_PRESET_SEED_IDS.kimi }).catch((err: unk
 })
 ```
 
-`MODEL_PRESET_SEED_IDS` is re-exported from the library (`.kimi` / `.glm` / `.claude`), so
+`MODEL_PRESET_SEED_IDS` is re-exported from the library (`.kimi` / `.glm` / `.claude` /
+`.chatgpt`), so
 you don't need a direct `@cat-factory/kernel` import. This is a **deployment-level fact**
 resolved at composition time, not an env var: the same programmatic seam as the
 `agentKindRegistry` / `backendRegistries` options. It applies only at the **first** seed of

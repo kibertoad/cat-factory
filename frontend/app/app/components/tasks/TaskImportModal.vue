@@ -22,6 +22,7 @@ const { t } = useI18n()
 const ui = useUiStore()
 const tasks = useTasksStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const open = computed({
   get: () => ui.taskImport !== null,
@@ -112,12 +113,7 @@ async function doSpawnEpic() {
       icon: 'i-lucide-layers',
     })
   } catch (e) {
-    toast.add({
-      title: t('tasks.import.epicFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'tasks.import.epicFailed')
   } finally {
     importing.value = false
   }

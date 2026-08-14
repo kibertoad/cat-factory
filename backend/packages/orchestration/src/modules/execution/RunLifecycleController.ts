@@ -24,7 +24,7 @@ import {
 } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { companionFor } from '@cat-factory/agents'
-import { DEFAULT_COMPANION_MAX_ATTEMPTS, pipelineHasVisualStep } from '@cat-factory/contracts'
+import { pipelineHasVisualStep } from '@cat-factory/contracts'
 import type { PipelineAdoption } from '../pipelines/pipelineAdoption.js'
 import { adHocPipelineFor } from '../pipelines/adHocPipeline.js'
 import { assertPipelineLaunchable } from '../pipelines/pipelineShape.js'
@@ -38,6 +38,7 @@ import { descendantIds } from '../board/board.logic.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunAdmission } from './RunAdmission.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import type { RunPolicyScope } from './policy-types.js'
 import type { RunStartOptions } from './runStartOptions.js'
 
 /**
@@ -84,6 +85,7 @@ export interface RunLifecycleDeps {
   resolveDryRunRoles?: (
     workspaceId: string,
     block: Block,
+    run: RunPolicyScope,
   ) => Promise<readonly WorkspaceRole[] | undefined>
   requireWorkspace: (workspaceId: string) => Promise<unknown>
   requireBlock: (workspaceId: string, id: string) => Promise<Block>
@@ -133,7 +135,17 @@ export class RunLifecycleController {
       'Pipeline',
       pipelineId,
     )
-    return this.launch(workspaceId, block, pipeline, options)
+    // `return await`, NOT a bare `return`, and the same in `startAgentKind`: it is load-bearing on
+    // workerd, not the redundant await a lint rule reads it as. `launch` REFUSES synchronously (the
+    // launch-constraint gate, the gate-override arity check), so a bare `return` hands an
+    // ALREADY-REJECTED promise to this async function's adoption step, which attaches its handler
+    // one microtask later. workerd's unhandled-rejection detector runs at the end of the current
+    // microtask checkpoint and sees a rejected promise nobody is watching; V8's own detector waits
+    // a turn longer and never does. So every refusal here floated a phantom "unhandled rejection"
+    // on the Worker while the caller was awaiting it the whole time — invisible on Node, and on
+    // Cloudflare it reads in the logs like a crash rather than the 422 it is. Awaiting attaches the
+    // handler synchronously, so the rejection is never unobserved.
+    return await this.launch(workspaceId, block, pipeline, options)
   }
 
   /**
@@ -155,7 +167,8 @@ export class RunLifecycleController {
     await this.deps.requireWorkspace(workspaceId)
     const block = await this.deps.requireBlock(workspaceId, blockId)
     const pipeline = adHocPipelineFor(agentKind, this.deps.agentKindRegistry)
-    return this.launch(workspaceId, block, pipeline, options)
+    // `return await` for the reason `start` states above: `launch` can refuse synchronously.
+    return await this.launch(workspaceId, block, pipeline, options)
   }
 
   /**
@@ -284,13 +297,15 @@ export class RunLifecycleController {
           // ORIGINAL index `i`, so it stays aligned to the kind even when earlier steps are
           // disabled. Today it carries the requirements-review `autoRecommend` toggle.
           ...(pipeline.stepOptions?.[i] ? { stepOptions: pipeline.stepOptions[i] } : {}),
-          // A companion step carries its quality bar + rework budget, seeded from the
-          // pipeline's per-step threshold (else the companion's default).
+          // A companion step carries its quality bar + rework budget: the bar from the pipeline's
+          // per-step threshold (else the companion's default), the budget from the catalog default
+          // here and refreshed from the task's resolved risk policy on the first grading
+          // (`CompanionController`), exactly as the Tester's quality budget is on its first report.
           ...(companionDef
             ? {
                 companion: {
                   threshold: pipeline.thresholds?.[i] ?? companionDef.defaultThreshold,
-                  maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,
+                  maxAttempts: DEFAULT_RISK_POLICY.companionMaxReworks,
                   attempts: 0,
                   verdicts: [],
                 },
@@ -354,7 +369,11 @@ export class RunLifecycleController {
     const { mode, notes } = await settleRunModeForStart({
       requested: options.mode,
       role: options.initiatedByRole,
-      loadDryRunRoles: async () => await this.deps.resolveDryRunRoles?.(workspaceId, block),
+      // The run does not exist yet, so the scope comes from the intake this start declared —
+      // the same value the instance below is stamped with, and the reason the two cannot
+      // disagree is that they are read from one variable.
+      loadDryRunRoles: async () =>
+        await this.deps.resolveDryRunRoles?.(workspaceId, block, { intakeOrigin }),
       baseNotes: frontendRun?.notes ?? [],
       logger: this.deps.logger ?? noopLogger,
       fields: { workspaceId, executionId, blockId },
@@ -704,12 +723,24 @@ export class RunLifecycleController {
    * orphans a container or a Workflows instance. Best-effort and silent: the board
    * delete that follows emits the coarse refresh, so no per-run event is needed.
    *
-   * Returns the workspace block list it loaded so the immediately-following `removeBlock`
+   * Returns the workspace block list it used so the immediately-following `removeBlock`
    * can reuse it instead of re-listing the whole board (this teardown deletes only run
    * records, never blocks, so the list is still current) — see {@link PreloadedBlocks}.
+   *
+   * `opts.preloaded` is the same reuse in the other direction: the delete path's preflight
+   * (`BoardService.assertRemovable`, which must run BEFORE anything here is torn down) has
+   * already listed the board, so the whole sequence still costs ONE read. Reused only when it
+   * was loaded for the workspace being torn down, exactly as `removeBlock` reuses it.
    */
-  async teardownForBlockTree(workspaceId: string, rootId: string): Promise<PreloadedBlocks> {
-    const blocks = await this.deps.blockRepository.listByWorkspace(workspaceId)
+  async teardownForBlockTree(
+    workspaceId: string,
+    rootId: string,
+    opts: { preloaded?: PreloadedBlocks } = {},
+  ): Promise<PreloadedBlocks> {
+    const blocks =
+      opts.preloaded && opts.preloaded.workspaceId === workspaceId
+        ? opts.preloaded.blocks
+        : await this.deps.blockRepository.listByWorkspace(workspaceId)
     // Resolve every run in one query and index by block id, rather than a per-block
     // getByBlock (N+1) over the whole subtree.
     const runsByBlock = new Map(

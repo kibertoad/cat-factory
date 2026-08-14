@@ -1,5 +1,9 @@
 import {
+  cloneRiskPolicyContract,
   createRiskPolicyContract,
+  listRiskPolicySuppressionsContract,
+  restoreRiskPolicyContract,
+  suppressRiskPolicyContract,
   listMergeClassRollupsContract,
   tagMergeReviewEffortContract,
   createConsensusGroupContract,
@@ -16,7 +20,7 @@ import {
   updateRiskPolicyContract,
   updateModelPresetContract,
 } from '@cat-factory/contracts'
-import type { ReviewEffort, UpdateRiskPolicyInput } from '~/types/merge'
+import type { ReviewEffort, RiskPolicyTier, UpdateRiskPolicyInput } from '~/types/merge'
 import type { CreateModelPresetInput, UpdateModelPresetInput } from '~/types/model-presets'
 import type { CreateConsensusGroupInput, UpdateConsensusGroupInput } from '~/types/consensus'
 import type { SendParams } from './client'
@@ -28,29 +32,62 @@ import type { ApiContext } from './context'
 type CreateRiskPolicyBody = NonNullable<SendParams<typeof createRiskPolicyContract>['body']>
 
 /** The per-workspace preset libraries: merge-threshold policy + model->agent mapping. */
-export function presetsApi({ send, ws }: ApiContext) {
+export function presetsApi({ send, ws, scope }: ApiContext) {
   return {
-    // ---- merge threshold presets (per-task auto-merge policy library) -----
-    listRiskPolicies: (workspaceId: string) =>
-      send(listRiskPoliciesContract, { pathPrefix: ws(workspaceId) }),
+    // ---- risk policies (per-task auto-merge policy library) ---------------
+    // The four CRUD calls are TIER-scoped (`account` or `workspace`, ADR 0055): the same routes are
+    // mounted under both prefixes, so one method serves either library and the caller states which
+    // one it is managing. The workspace read answers the MERGED library (its own rows plus the
+    // account policies it inherits, each tagged with its tier).
+    listRiskPolicies: (kind: RiskPolicyTier, id: string) =>
+      send(listRiskPoliciesContract, { pathPrefix: scope(kind, id) }),
 
-    createRiskPolicy: (workspaceId: string, body: CreateRiskPolicyBody) =>
-      send(createRiskPolicyContract, { pathPrefix: ws(workspaceId), body }),
+    createRiskPolicy: (kind: RiskPolicyTier, id: string, body: CreateRiskPolicyBody) =>
+      send(createRiskPolicyContract, { pathPrefix: scope(kind, id), body }),
 
-    updateRiskPolicy: (workspaceId: string, presetId: string, body: UpdateRiskPolicyInput) =>
+    updateRiskPolicy: (
+      kind: RiskPolicyTier,
+      id: string,
+      presetId: string,
+      body: UpdateRiskPolicyInput,
+    ) =>
       send(updateRiskPolicyContract, {
+        pathPrefix: scope(kind, id),
+        pathParams: { presetId },
+        body,
+      }),
+
+    deleteRiskPolicy: (kind: RiskPolicyTier, id: string, presetId: string) =>
+      send(deleteRiskPolicyContract, { pathPrefix: scope(kind, id), pathParams: { presetId } }),
+
+    // Restore a built-in preset to its current catalog definition (adopt an update, repair a
+    // drifted one, or materialise a new built-in that appeared). Custom presets reject this.
+    // Workspace-only: the built-in catalog is copied into BOARDS, so only a board has one to restore.
+    reseedRiskPolicy: (workspaceId: string, presetId: string) =>
+      send(reseedRiskPolicyContract, { pathPrefix: ws(workspaceId), pathParams: { presetId } }),
+
+    // ---- inheritance (workspace only) -------------------------------------
+    // Copy an inherited account policy into the board's own tier, under a fresh id, so the board can
+    // edit its numbers. `name` is optional; the SPA sends the localized "copy" label.
+    cloneRiskPolicy: (workspaceId: string, presetId: string, body: { name?: string }) =>
+      send(cloneRiskPolicyContract, {
         pathPrefix: ws(workspaceId),
         pathParams: { presetId },
         body,
       }),
 
-    deleteRiskPolicy: (workspaceId: string, presetId: string) =>
-      send(deleteRiskPolicyContract, { pathPrefix: ws(workspaceId), pathParams: { presetId } }),
+    // Hide an inherited account policy from this board, and the inverse. Deliberately NOT the delete
+    // above: that removes a row the board owns, this withholds one it does not and is reversible.
+    suppressRiskPolicy: (workspaceId: string, presetId: string) =>
+      send(suppressRiskPolicyContract, { pathPrefix: ws(workspaceId), pathParams: { presetId } }),
 
-    // Restore a built-in preset to its current catalog definition (adopt an update, repair a
-    // drifted one, or materialise a new built-in that appeared). Custom presets reject this.
-    reseedRiskPolicy: (workspaceId: string, presetId: string) =>
-      send(reseedRiskPolicyContract, { pathPrefix: ws(workspaceId), pathParams: { presetId } }),
+    restoreRiskPolicy: (workspaceId: string, presetId: string) =>
+      send(restoreRiskPolicyContract, { pathPrefix: ws(workspaceId), pathParams: { presetId } }),
+
+    // What the board is hiding. Its own read because a hidden policy is by construction absent from
+    // the list above, so without it the editor could offer no way back.
+    listRiskPolicySuppressions: (workspaceId: string) =>
+      send(listRiskPolicySuppressionsContract, { pathPrefix: ws(workspaceId) }),
 
     // ---- merge track record (the per-class evidence behind the policy) -----
     // Every class in ONE request (a single SQL aggregate server-side), so the preset editor can

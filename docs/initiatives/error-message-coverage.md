@@ -18,8 +18,11 @@ one `llm-upstream` cause, image-bumped) · exhaustive execution failure-kind hin
 codified + string-fallback classifiers deleted (I7/I6/I5) · per-reason conflict-toast descriptions
 
 - jump actions across all locales (G1) · status-class-keyed generic failure copy + raw-detail
-  disclosure (G2; **sections A–G are now complete; only the H feature axis remains**) ·
-  **Owner:** core · **Started:** 2026-07-11
+  disclosure (G2) · connection-probe cause chains + per-cause remedies and ServiceAccount-token
+  paste validation (D5/D6) · ONE cause-chain core behind all three describers + the repo-wide sweep
+  of hand-rolled `error.message` reads (D7) · every failure toast through the one funnel, sticky and
+  copyable (G5; **sections A–G are complete apart from G4, now narrowed to the INLINE render sites;
+  only the H feature axis remains**) · **Owner:** core · **Started:** 2026-07-11
 
 > This is the durable source of truth for a multi-PR initiative. Read it before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -164,12 +167,15 @@ issue.
 
 ### D. Container / runner dispatch & observability
 
-| #   | Failure / misconfiguration                        | Current behaviour                                                                                                                                       | Surface | Sev | Proposed fix                                                                                                                                                                                                                                                         | Doc URL to embed                     | Status  | PR      |
-| --- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ------- | ------- |
-| D1  | `Container dispatch failed (HTTP 404)`            | Raw status (`CloudflareContainerTransport.ts:105`, `KubernetesRunnerTransport.ts:93`); the known cause is a stale harness image whose tag wasn't bumped | env     | P1  | On 404 specifically, append the stale-image explanation: the deployed container image predates this route, so republish with a fresh tag + `pnpm deploy` (per the release rules); land together with I2's `DispatchError` so the status is a field, not parsed prose | `CONTRIBUTING.md` / releases section | ✅ done | phase 8 |
-| D2  | Runner-pool HTTP / OAuth / manifest-secret errors | Raw `` `Runner pool ${method} → ${status}` ``, `Missing secret 'X'`, `OAuth token request → <status>` (`HttpRunnerPoolProvider.ts:208,248,312,326`)     | UI      | P2  | UI-first: point at Settings → Self-hosted runner pool (re-test connection there); manifest/secret naming as detail                                                                                                                                                   | `backend/docs/` runner-pool doc      | ✅ done | phase 9 |
-| D3  | `No runner backend available for workspace 'X'`   | Plain Error, terse-ish (`cloudflare container.ts:556`)                                                                                                  | UI      | P2  | UI-first: register a pool in Settings → Self-hosted runner pool, or enable Cloudflare Containers (deployment config); make it a `ConflictReason` (reuse `agent_backend_unconfigured`)                                                                                | `backend/docs/` runner-pool doc      | ✅ done | phase 9 |
-| D4  | Datadog auth failure                              | Raw `HTTP 403` (`DatadogClient.ts:193`); keys are UI-configured                                                                                         | UI      | P2  | On 401/403: "your Datadog API/Application keys were rejected; re-enter them in Integrations → Observability connection"; env vars not mentioned (they don't exist for this)                                                                                          | Datadog API-keys vendor URL          | ✅ done | phase 9 |
+| #   | Failure / misconfiguration                                                  | Current behaviour                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Surface | Sev | Proposed fix                                                                                                                                                                                                                                                         | Doc URL to embed                     | Status  | PR       |
+| --- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ------- | -------- |
+| D1  | `Container dispatch failed (HTTP 404)`                                      | Raw status (`CloudflareContainerTransport.ts:105`, `KubernetesRunnerTransport.ts:93`); the known cause is a stale harness image whose tag wasn't bumped                                                                                                                                                                                                                                                                                                                                                                         | env     | P1  | On 404 specifically, append the stale-image explanation: the deployed container image predates this route, so republish with a fresh tag + `pnpm deploy` (per the release rules); land together with I2's `DispatchError` so the status is a field, not parsed prose | `CONTRIBUTING.md` / releases section | ✅ done | phase 8  |
+| D2  | Runner-pool HTTP / OAuth / manifest-secret errors                           | Raw `` `Runner pool ${method} → ${status}` ``, `Missing secret 'X'`, `OAuth token request → <status>` (`HttpRunnerPoolProvider.ts:208,248,312,326`)                                                                                                                                                                                                                                                                                                                                                                             | UI      | P2  | UI-first: point at Settings → Self-hosted runner pool (re-test connection there); manifest/secret naming as detail                                                                                                                                                   | `backend/docs/` runner-pool doc      | ✅ done | phase 9  |
+| D3  | `No runner backend available for workspace 'X'`                             | Plain Error, terse-ish (`cloudflare container.ts:556`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | UI      | P2  | UI-first: register a pool in Settings → Self-hosted runner pool, or enable Cloudflare Containers (deployment config); make it a `ConflictReason` (reuse `agent_backend_unconfigured`)                                                                                | `backend/docs/` runner-pool doc      | ✅ done | phase 9  |
+| D4  | Datadog auth failure                                                        | Raw `HTTP 403` (`DatadogClient.ts:193`); keys are UI-configured                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | UI      | P2  | On 401/403: "your Datadog API/Application keys were rejected; re-enter them in Integrations → Observability connection"; env vars not mentioned (they don't exist for this)                                                                                          | Datadog API-keys vendor URL          | ✅ done | phase 9  |
+| D5  | Every "Test connection" button reports `fetch failed` when nothing answered | Each provider's `testConnection` catch rendered `err.message`, which on Node/undici is the wrapper `TypeError: fetch failed`; the real cause (`connect ECONNREFUSED`, `self-signed certificate`, `getaddrinfo ENOTFOUND`) hangs off `.cause` / an `AggregateError`, and a stopped cluster, an untrusted cert and a firewalled host all read identically                                                                                                                                                                         | UI      | P1  | One shared kernel helper flattening the cause chain into the exact failure plus a per-cause remedy; wired into every probe (k8s env + runner, the shared HTTP `probeConnection` behind the manifest env/pool providers, Cloudflare, Compose)                         | (none)                               | ✅ done | phase 20 |
+| D7  | Everything that is NOT a probe still reported `fetch failed`                | D5 taught the PROBES to walk the cause chain, but the repo had three describers of a thrown value and the other two stopped at `error.message`: `getErrorMessage` (68 sites: `DomainError` messages, persisted failure reasons, PR comments) and `describeError` (every log line). Plus ~90 hand-rolled `e instanceof Error ? e.message : String(e)` copies and five local `errMessage`/`messageOf` wrappers. So a probe named `connect ECONNREFUSED` while the log line and the toast for the SAME failure said `fetch failed` | UI      | P1  | Hoist the walk into ONE kernel core (`shared/error-chain.logic.ts`) read by all three describers; convert every hand-rolled copy to `getErrorMessage` and delete the local wrappers; ban the expression in CLAUDE.md                                                 | (none)                               | ✅ done | phase 21 |
+| D6  | A pasted ServiceAccount token with a hidden line break                      | undici refuses the header with `TypeError: Invalid header value` at request time; the connect form said nothing and the operator had no way to tell it from a wrong token or a stopped cluster                                                                                                                                                                                                                                                                                                                                  | UI      | P2  | Classify the paste in contracts, flag it ON THE FIELD before Test is clicked, and refuse the impossible case at the apiserver client (the one boundary every k8s call passes through)                                                                                | (none)                               | ✅ done | phase 20 |
 
 ### E. Crypto / credentials
 
@@ -192,12 +198,13 @@ that union change is itself image-affecting, so it batches into the same slice.
 
 ### G. Frontend surfacing
 
-| #   | Failure / misconfiguration                                       | Current behaviour                                                                                                                                                                                       | Surface | Sev | Proposed fix                                                                                                                                                                                                                                                                                                                                     | Doc URL to embed | Status  | PR       |
-| --- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- | ------- | -------- |
-| G1  | 14 title-only `ConflictReason`s show raw backend prose           | `CONFLICT_TITLE_KEYS` maps only titles; description = untranslated backend `message` (`usePipelineErrorToast.ts:43-58`)                                                                                 | n/a     | P2  | Add translated description/remedy keys per reason (+ jump actions where a panel exists); locale parity in ALL catalogs in the same PR                                                                                                                                                                                                            | (none)           | ✅ done | phase 18 |
-| G2  | Generic fallback toast surfaces raw backend strings              | Non-conflict errors fall to `error.message` verbatim (`usePipelineErrorToast.ts:248-253`), the funnel for every raw string above                                                                        | n/a     | P2  | Keep raw detail behind a "show detail" disclosure; show a generic translated title; shrink this funnel by moving conditions onto reason codes (the real fix)                                                                                                                                                                                     | (none)           | ✅ done | phase 19 |
-| G4  | ~78 inline `error.message` render sites outside the toast funnel | Panels/modals/stores assign the raw prose to a local `error` ref rendered inline (`ApiKeysSection.vue`, `GitHubPanel.vue`, `stores/board/*`, …), the same untranslated-English gap G2 closed for toasts | n/a     | P3  | Adopt G2's `describeGenericFailure` split per site (translated status-class line + the raw detail behind a disclosure). Deliberately NOT batched into phase 19: it is ~78 mechanical component edits with no shared render seam, so it wants its own slice (or a small shared `<ApiFailure>` component first) rather than burying the funnel fix | (none)           | ⬜ todo |          |
-| G3  | `AgentFailureCard.failure.hint` rarely populated                 | The card renders `hint` when present, but the backend `FAILURE_HINTS` maps cover few kinds                                                                                                              | n/a     | P2  | Extend the three `FAILURE_HINTS` maps to every `FailureKind`; audit which kinds reach the card hint-less                                                                                                                                                                                                                                         | (none)           | ✅ done | phase 17 |
+| #   | Failure / misconfiguration                                                         | Current behaviour                                                                                                                                                                                                                                         | Surface | Sev | Proposed fix                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Doc URL to embed | Status  | PR       |
+| --- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ------- | -------- |
+| G1  | 14 title-only `ConflictReason`s show raw backend prose                             | `CONFLICT_TITLE_KEYS` maps only titles; description = untranslated backend `message` (`usePipelineErrorToast.ts:43-58`)                                                                                                                                   | n/a     | P2  | Add translated description/remedy keys per reason (+ jump actions where a panel exists); locale parity in ALL catalogs in the same PR                                                                                                                                                                                                                                                                                                                                                          | (none)           | ✅ done | phase 18 |
+| G2  | Generic fallback toast surfaces raw backend strings                                | Non-conflict errors fall to `error.message` verbatim (`usePipelineErrorToast.ts:248-253`), the funnel for every raw string above                                                                                                                          | n/a     | P2  | Keep raw detail behind a "show detail" disclosure; show a generic translated title; shrink this funnel by moving conditions onto reason codes (the real fix)                                                                                                                                                                                                                                                                                                                                   | (none)           | ✅ done | phase 19 |
+| G5  | A failure toast auto-dismissed in ~5s, could not be copied, and showed raw English | 29 components each declared the same `notifyError(title, e)` with the raw `err.message` as its description, plus ~83 direct `toast.add` copies and four other spellings. None was translated, none carried the `requestId`, and all vanished mid-read     | n/a     | P1  | Route every failure toast through the ONE funnel (`present(error, titleKey)`); make it non-auto-dismissing, selectable, and copyable in one click (title + failure class + prose + `requestId`) through the shared clipboard seam. Covers CONFLICT toasts too, which is where it matters most: an unmapped `ConflictReason` is what a build that predates a new reason falls to. NOT a local validation refusal, which has no envelope for the funnel to classify and reads as a network fault | (none)           | ✅ done | phase 21 |
+| G4  | ~66 inline `error.message` render sites (the TOAST ones are done: G5)              | Panels/modals/stores assign the raw prose to a local `error` ref rendered inline (`ApiKeysSection.vue`, `GitHubPanel.vue`, a connect form's `testResult.message` feeding `ConnectionTestVerdict`), the same untranslated-English gap G2 closed for toasts | n/a     | P3  | Adopt G2's `describeGenericFailure` split per site (translated status-class line + the raw detail behind a disclosure). Deliberately NOT batched into phase 19: it is ~78 mechanical component edits with no shared render seam, so it wants its own slice (or a small shared `<ApiFailure>` component first) rather than burying the funnel fix                                                                                                                                               | (none)           | ⬜ todo |          |
+| G3  | `AgentFailureCard.failure.hint` rarely populated                                   | The card renders `hint` when present, but the backend `FAILURE_HINTS` maps cover few kinds                                                                                                                                                                | n/a     | P2  | Extend the three `FAILURE_HINTS` maps to every `FailureKind`; audit which kinds reach the card hint-less                                                                                                                                                                                                                                                                                                                                                                                       | (none)           | ✅ done | phase 17 |
 
 ### H. Provider UI configurability (feature work the UI-first remedies depend on)
 
@@ -591,6 +598,116 @@ DispatchError`, reading `.status`), NOT the `/dispatch failed/i` regex, which is
     toast (never a second one, which would leave two readings on screen disagreeing) and must pass
     `actions: []` explicitly, because `update` MERGES over the existing toast and would otherwise
     leave a now-dead button. No image bump, no backend behaviour change (types + SPA only).
+- **A probe that never got an ANSWER is described from the CAUSE CHAIN, not from `err.message`
+  (phase 20 reference: D5).** Every "Test connection" button ends in a `fetch` that either answered
+  (an HTTP status each provider already maps) or threw, and the threw half is now kernel's
+  `describeConnectionFailure` / `connectionFailureResult`
+  (`kernel/src/shared/connection-failure.logic.ts`), the sibling of `describeVcsApiError` and kept
+  in kernel for the same reason: the probes live in packages that share only kernel. Four things
+  about it bind anything new:
+  - **`error.message` is the WRONG field on Node.** undici wraps every transport failure in a
+    generic `TypeError: fetch failed` and puts the real failure on `.cause`, or on an
+    `AggregateError`'s `.errors` when the host resolves to several addresses (`localhost` giving
+    both `::1` and `127.0.0.1` is the local-k3s norm, and "refused on one, never attempted on the
+    other" is a different diagnosis from "refused on both"). Both are walked; the `fetch failed`
+    wrapper is dropped whenever something more specific exists.
+  - **The DETAIL and the HINT are separate, and only the detail is unconditional.** The cause is a
+    closed union (`refused` / `dns` / `timeout` / `aborted` / `unreachable` / `reset` / the four TLS
+    splits / `invalid-header` / `unknown`) matched on the transport `code`, and `unknown` is a real
+    member: an unmatched chain is reported verbatim with NO hint, because a guessed remedy for an
+    unrecognised failure sends the operator somewhere wrong. Callers pass a `subject` noun so the
+    hint names what was probed rather than "the server". A cause pair whose remedies DIVERGE is two
+    members, never one: an `AbortError` is a cancelled request, and reporting it as a `timeout` sent
+    the operator to inspect firewalls over a request that was never allowed to finish.
+  - **The CAUSE is what a localized surface renders; the prose is the detail beside it.** The union
+    lives in **contracts** (`connectionFailureCauseSchema`) and rides the wire on
+    `ConnectionTestResult.failureCause`, so the SPA states the failure class in the operator's own
+    language (`CONNECTION_FAILURE_CAUSE_KEYS` → `settings.providerConnection.test.causes.*`) and
+    keeps the English account underneath, which is where the concrete host and remedy live. Every
+    probe answers through `connectionFailureResult`, not a hand-built `{ ok: false, message }`,
+    because a literal structurally cannot carry the machine-readable half: the same argument as
+    `handleError` owning the HTTP error envelope. Absent and `unknown` are different facts (no
+    transport cause at all, i.e. the probe got an ANSWER, vs. a chain that matched nothing).
+  - **Specificity runs INNERMOST-first, and a message match never outranks a code.** undici wraps a
+    mid-handshake `DEPTH_ZERO_SELF_SIGNED_CERT` in a `SocketError` whose own `UND_ERR_SOCKET` is
+    itself a recognised cause, so taking the first match in walk order answered with the wrapper and
+    told the operator to hunt for a proxy instead of pasting a CA bundle. The one code-less cause
+    (`invalid-header`) is matched on the runtime's whole wording and only after every link failed to
+    yield a code: a bare `invalid character` also matches Go's JSON decode error, which is what a
+    kube-apiserver or an intercepting proxy answers with when something returns HTML.
+  - **Scrub before capping, and say what the cap dropped.** `redactSecrets` runs on the whole
+    rendered chain and only then is it capped, because a secret sliced in half matches none of the
+    shape rules (a JWT cut after its second segment, a `bearer` token cut under the rule's minimum
+    run). The cap appends the dropped character count, since a silent slice reads exactly like a
+    complete chain. The probed `target` needs its own scrub: it comes from the caller's config
+    rather than from the error, and a base URL may legitimately carry `user:secret@` userinfo.
+  - **The hints are written for the connect FORM.** They end in "then test again", so a caller with
+    no Test button (the teardown-verification `reason`) takes `describeConnectionFailure(...).detail`
+    and leaves the remedy behind.
+  - **Only a SCREAMING_SNAKE `code` is appended to the detail.** Our own `DomainError`s reach these
+    same catch blocks and carry a lowercase status class (`validation`), which identifies nothing
+    about a connection and rendered as a baffling `(validation)` glued onto a finished sentence.
+  - **`redactSecrets` will mangle a message ABOUT a token.** The scrub drops the run of characters
+    after a bare `token`/`bearer`, so a refusal whose own prose says "token contains …" comes out
+    with a `[REDACTED]` hole in the advice. Word around it (`token ('apiToken') contains …`) and
+    assert the real wording survives the scrub, as `connection-failure.logic.test.ts` does.
+- **A credential that cannot become a header is refused at the header boundary, and flagged on the
+  field first (phase 20 reference: D6).** The shape rule for a pasted k8s ServiceAccount token is
+  `classifyServiceAccountToken` in **contracts**, not kernel, because BOTH sides must agree about
+  the answer and the SPA cannot see kernel; the SPA owns the prose (three locale keys under
+  `settings.providerConnection.serviceAccountToken`), per the standing "backend never localizes"
+  rule. Two things generalize:
+  - **Severity is part of the verdict.** Whitespace INSIDE the token is impossible (no bearer token
+    has it, no HTTP header can carry it) so it blocks Test/Save and is refused server-side; a
+    still-base64 `.data.token` value and a non-JWT shape are only SUSPICIOUS (a `--token-auth-file`
+    apiserver accepts arbitrary static tokens) so they render as an overrulable amber hint. A check
+    that cannot be sure must never be the thing that blocks a legitimate cluster.
+  - **The enforcement point is `KubernetesApiClient.fetch`**, the single place the token becomes an
+    `authorization` header, so env + runner and probe + provision are all covered by one guard with
+    no new registry seam. It throws a `ValidationError` with a `service_account_token_whitespace`
+    reason rather than letting undici answer with an opaque `Invalid header value`.
+  - **A guard that judges a NORMALISED value must be where the normalising happens.** The classifier
+    judges the TRIMMED token, on the stated premise that surrounding padding is stripped before use,
+    so the client trims at the same line it builds the header from: reading the guard's verdict while
+    sending the raw value let a token with a trailing newline pass as fine and then die in undici
+    with the very error the guard replaces.
+- **ONE cause-chain core, THREE describers, and a ban (phase 21 reference: D7 + G5).** D5's lesson
+  generalises: the fix was not "teach the probes to read `.cause`", it was that the repo had THREE
+  answers to "what is this thrown value?" and only one of them was right. `shared/error-chain.logic.ts`
+  now owns the walk (`.cause` + `AggregateError` branches, bounded by depth AND by link identity so a
+  cycle terminates, identical links folded into `(xN)`, scrubbed, capped with a marker), and
+  `getErrorMessage` / `describeError` / `describeConnectionFailure` all read it. Four things to carry
+  forward:
+  - **A describer that stops at `error.message` is the bug, wherever it is written.** The sweep
+    converted ~90 hand-rolled `e instanceof Error ? e.message : String(e)` copies to
+    `getErrorMessage` and deleted five local `errMessage`/`messageOf`/`errorMessage` wrappers whose
+    bodies had become that call. CLAUDE.md bans the expression, so the next one is a review finding.
+  - **The outer link is KEPT here and DROPPED by the probe describer, on purpose.** A probe verdict
+    is read as a diagnosis, so it leads with the real cause; a log line and a `DispatchError` message
+    are matched downstream by their OPENING phrase (`/dispatch failed/i`, the eviction sentinels), so
+    appending causes is safe where dropping a leading link would silently re-point those matches.
+    A test pins both halves.
+  - **One site legitimately wants LESS: a PUBLIC unauthenticated surface.** `/ready`'s
+    `ReadinessCheck.error` keeps the outermost message only, because a pool failure's inner link is
+    the deployment's own database address and any caller can curl it. The operator's copy of that
+    failure is the log line, which does carry the chain. Excluded WITH the reason at the site, not
+    silently.
+  - **A thrown `null` must still report as `null`.** The walk stops at an absent `cause`, so a
+    thrown non-Error flattens to no links at all; `''` would read as a failure nobody described.
+    The existing `getErrorMessage` test caught this, which is the argument for converting the
+    canonical helper rather than adding a fourth one beside it.
+  - **The harnesses are OUT of scope** (`internal/executor-harness`, `internal/deploy-harness`): they
+    build from `src/` with no workspace deps, so they cannot import kernel, and a change there bumps
+    the image. Their copies stay, as the byte-for-byte-duplication rule already allows.
+- **A failure TOAST is a funnel, not a formatting choice (phase 21 reference: G5).** The SPA rule and
+  the four properties a hand-built toast cannot have (translated copy, no auto-dismiss, one-click
+  copy, the `requestId` travelling with it) are written up in
+  [`frontend/app/README.md`](../../frontend/app/README.md#every-failure-toast-goes-through-one-funnel).
+  Two mechanics worth knowing before the G4 sweep: `present` takes a KEY plus optional interpolation
+  params (never a resolved title), and a store reaches it through its context beside `api`/`toast`
+  (`stores/board/context.ts`) rather than instantiating the composable per write. The clipboard seam
+  had to be made store-safe (`useNuxtApp().$i18n`, not `useI18n()`) for the funnel to use it, the same
+  `MUST_BE_CALL_SETUP_TOP` trap the README's store section describes.
 - **Executor-harness changes bump the image tag** + the three hand-maintained pins
   (`deploy/backend/package.json`, `deploy/backend/wrangler.toml`,
   `RECOMMENDED_HARNESS_IMAGE`): batch all F-rows into one slice to pay that cost once.

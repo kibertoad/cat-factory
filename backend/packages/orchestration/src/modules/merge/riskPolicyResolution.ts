@@ -1,5 +1,10 @@
-import type { GroupCacheHandle, RiskPolicy, RiskPolicyCacheValue } from '@cat-factory/kernel'
-import type { RiskPolicyRepository } from '@cat-factory/kernel'
+import type {
+  GroupCacheHandle,
+  RiskPolicy,
+  RiskPolicyCacheValue,
+  RunDefaultScope,
+} from '@cat-factory/kernel'
+import type { WorkspaceRiskPolicyReader } from '@cat-factory/kernel'
 import { FALLBACK_RISK_POLICY } from '@cat-factory/kernel'
 import type { ResolvedRunRiskPolicy } from '../execution/policy-types.js'
 
@@ -27,7 +32,9 @@ import type { ResolvedRunRiskPolicy } from '../execution/policy-types.js'
  * shape that reads as correct until someone renames a prefix; a second reader that answers off a
  * preloaded library needs the id, not the key.
  */
-export type RiskPolicyTarget = { kind: 'picked'; id: string } | { kind: 'default' }
+export type RiskPolicyTarget =
+  | { kind: 'picked'; id: string }
+  | { kind: 'default'; scope: RunDefaultScope }
 
 /** Reads one preset row, possibly through a cache slice or a preloaded library. */
 export type RiskPolicyRead = (
@@ -38,9 +45,15 @@ export type RiskPolicyRead = (
 /** Read straight from the repository, for the paths with no cache slice wired to read through. */
 export const directRiskPolicyRead: RiskPolicyRead = (_target, load) => load()
 
-/** The cache key one target resolves under; the ONE place that spelling lives. */
+/**
+ * The cache key one target resolves under; the ONE place that spelling lives.
+ *
+ * The scope is part of the DEFAULT key because a workspace has two of them and they are different
+ * rows: sharing one `default` key would serve whichever scope asked first to the other, which is
+ * silent and intermittent (it depends on which kind of run reached the cache first).
+ */
 function cacheKeyOf(target: RiskPolicyTarget): string {
-  return target.kind === 'picked' ? `picked:${target.id}` : 'default'
+  return target.kind === 'picked' ? `picked:${target.id}` : `default:${target.scope}`
 }
 
 /**
@@ -74,29 +87,44 @@ export function cachedRiskPolicyRead(
  */
 export function preloadedRiskPolicyRead(library: readonly RiskPolicy[]): RiskPolicyRead {
   const byId = new Map(library.map((preset) => [preset.id, preset]))
-  const workspaceDefault = library.find((preset) => preset.isDefault) ?? null
+  const defaults: Record<RunDefaultScope, RiskPolicy | null> = {
+    interactive: library.find((preset) => preset.isDefault) ?? null,
+    unattended: library.find((preset) => preset.isUnattendedDefault) ?? null,
+  }
   return (target) =>
-    Promise.resolve(target.kind === 'picked' ? (byId.get(target.id) ?? null) : workspaceDefault)
+    Promise.resolve(
+      target.kind === 'picked' ? (byId.get(target.id) ?? null) : defaults[target.scope],
+    )
 }
 
 /**
  * Resolve the preset governing `riskPolicyId` in a workspace.
  *
- * An ABSENT repository is not a hole to guard: with no preset library there is nothing for a task
+ * An ABSENT reader is not a hole to guard: with no preset library there is nothing for a task
  * to point at, so every task in the deployment is governed by {@link FALLBACK_RISK_POLICY}, whose
  * role layer is empty and therefore holds nobody to anything, and which auto-merges nothing, so
  * the deployment that configured no policy lands no PR without a human.
  *
- * A wired repository answers from a library the board was seeded with at CREATION, so reaching
+ * A wired reader answers from a library the board was seeded with at CREATION, so reaching
  * the fallback is a deployment-level fact rather than a question of who had read what first.
+ *
+ * It is a `WorkspaceRiskPolicyReader` and not the workspace-tier repository, because a board's
+ * library includes the account policies it INHERITS (ADR 0055): a task may pin one, and the same
+ * merged view the picker offered has to be the one that governs the run.
  */
 export async function resolveRiskPolicy(input: {
-  repository: RiskPolicyRepository | undefined
+  repository: WorkspaceRiskPolicyReader | undefined
   workspaceId: string
   riskPolicyId: string | null | undefined
+  /**
+   * WHICH default a task that pinned nothing falls back to. Required, because the two scopes are
+   * different rows with different postures and a caller that has not decided which kind of run it
+   * is resolving for has not finished asking the question.
+   */
+  scope: RunDefaultScope
   read?: RiskPolicyRead
 }): Promise<ResolvedRunRiskPolicy> {
-  const { repository, workspaceId, riskPolicyId } = input
+  const { repository, workspaceId, riskPolicyId, scope } = input
   if (!repository) return FALLBACK_RISK_POLICY
   const read = input.read ?? directRiskPolicyRead
   if (riskPolicyId) {
@@ -106,7 +134,7 @@ export async function resolveRiskPolicy(input: {
     if (picked) return picked
   }
   return (
-    (await read({ kind: 'default' }, () => repository.getDefault(workspaceId))) ??
+    (await read({ kind: 'default', scope }, () => repository.getDefault(workspaceId, scope))) ??
     FALLBACK_RISK_POLICY
   )
 }

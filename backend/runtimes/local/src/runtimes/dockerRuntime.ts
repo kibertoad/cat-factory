@@ -1,6 +1,7 @@
 import {
   type ContainerEndpoint,
   type ContainerExec,
+  type ContainerExitState,
   type ContainerRuntimeAdapter,
   formatContainerLogs,
   HARNESS_PORT,
@@ -154,7 +155,10 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
     }
   }
 
-  async exitState(exec: ContainerExec, containerId: string): Promise<string | undefined> {
+  async exitState(
+    exec: ContainerExec,
+    containerId: string,
+  ): Promise<ContainerExitState | undefined> {
     // `OOMKilled` is only ever true for a CGROUP-limit kill (a `--memory` cap). A container
     // with no cap that the VM's own OOM killer reaps reports a plain non-zero exit code, so
     // read both rather than treating a false `OOMKilled` as "not a memory problem".
@@ -167,7 +171,14 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
     if (!inspected) return undefined
     const [running, exitCode, oomKilled] = inspected.stdout.trim().split(/\s+/)
     if (running !== 'false') return undefined
-    return `exit code ${exitCode ?? 'unknown'}${oomKilled === 'true' ? ', OOM-killed by the container runtime' : ''}`
+    // Parsed, not just rendered: a `0` here is what tells a harness that was SHUT DOWN mid-job
+    // apart from one that crashed. A field docker did not print stays undefined rather than
+    // becoming a number, so "unknown" can never read as "clean".
+    const code = Number(exitCode)
+    return {
+      description: `exit code ${exitCode ?? 'unknown'}${oomKilled === 'true' ? ', OOM-killed by the container runtime' : ''}`,
+      ...(exitCode !== undefined && Number.isInteger(code) ? { code } : {}),
+    }
   }
 
   async logs(exec: ContainerExec, containerId: string): Promise<string> {

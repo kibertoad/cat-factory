@@ -28,8 +28,8 @@ differently. See [its README](./mcp/README.md).
 
 Also beside them, [`sdk/gatekeeper`](./gatekeeper) (`@cat-factory/gatekeeper-bindings`) rides the
 same generator as a **policy-annotated operation table** for credential-holding front-ends (the
-Cloudflare OS Gatekeeper pattern; tracker:
-`docs/initiatives/cloudflare-os-gatekeeper.md`): per-operation key-scope floors (from the spec's
+Cloudflare OS Gatekeeper pattern; design record:
+`backend/docs/adr/0052-cloudflare-os-gatekeeper.md`): per-operation key-scope floors (from the spec's
 `x-min-scope`, ranked against the ladder it publishes as `x-public-api-scopes`), mutation and
 transport metadata, and invoke thunks over the TypeScript client using the MCP facade's argument
 convention. It emits a second file beside the table, `session-types.generated.ts`: one TypeScript
@@ -127,6 +127,16 @@ consequence for a change: each is implemented four times, so relaxing one in a s
 divergence the smoketest below is built to catch, and the Java client's JSpecify annotations are a
 `compile`-scope dependency on purpose, since a consumer without them silently falls back to Kotlin
 platform types and loses exactly the thing they exist for.
+
+**An AMBIENT request input is hand-written into each transport, not generated.** Only path, query
+and body reach a generated operation's signature, so a header every call may carry has no generated
+home: `X-Personal-Password` is declared per operation in the spec (`withPersonalUnlock` on the
+contract) and supplied through the client itself — `setPersonalPassword`, `set_personal_password`,
+`SetPersonalPassword`, one per language, plus a construction-time option. It is settable AFTER
+construction on purpose: a caller learns the header is needed from a `428 credential_required`, and
+discarding a configured client (and its connection pool) to send one header is not a workflow. Go
+holds it in an `atomic.Pointer` and Java in a `volatile` field, because both clients are documented
+as safe to share across threads and this is the one piece of their configuration that moves.
 
 ## Smoketests
 

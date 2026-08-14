@@ -443,6 +443,9 @@ export class StepDecisionController {
             this.deps.stepGraph.rerunProducerThrough(inst, producerIndex, stepIndex, {
               previousProposal,
               feedback: review.feedback ?? '',
+              // A real person's words, carried on the producer's `rework` because the companion's
+              // gate redirects here. The prompt says so: this is the one rework a human is waiting on.
+              requestedBy: 'human',
               ...(review.comments?.length ? { comments: review.comments } : {}),
             })
             if (inst.status === 'blocked') inst.status = 'running'
@@ -631,7 +634,9 @@ export class StepDecisionController {
   ): Promise<void> {
     const role = instance?.initiatedByRole
     if (!role) return
-    const preset = await this.deps.mergePolicy.resolve(workspaceId, block)
+    const preset = await this.deps.mergePolicy.resolve(workspaceId, block, {
+      intakeOrigin: instance?.intakeOrigin,
+    })
     if (!submissionAllowlistForRole(preset.submissionClassesByRole, role)) return
     const changeClass = await this.deps.mergePolicy.classifyChangeClass(workspaceId, block)
     if (submissionAllowedForRole(preset.submissionClassesByRole, role, changeClass)) return

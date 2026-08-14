@@ -1,4 +1,9 @@
-import { DEFAULT_JUDGE_MAX_BOUNCES, DEFAULT_JUDGE_MIN_SCORE } from '@cat-factory/contracts'
+import {
+  DEFAULT_COMPANION_MAX_ATTEMPTS,
+  DEFAULT_JUDGE_MAX_BOUNCES,
+  DEFAULT_JUDGE_MIN_SCORE,
+  DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE,
+} from '@cat-factory/contracts'
 import type {
   BlockType,
   ClassRulesByRole,
@@ -6,6 +11,7 @@ import type {
   ModelPreset,
   RequirementConcernLevel,
   RiskPolicy,
+  RunAutonomy,
   StepGating,
   SubmissionClassesByRole,
   WorkspaceRole,
@@ -92,6 +98,11 @@ export const DEFAULT_RISK_POLICY = {
   // Test quality-control companion: how many times it may loop the Tester for a more
   // complete report before letting the run proceed to the greenlight / fixer decision.
   maxTesterQualityIterations: 3,
+  // Companion rework loop: how many times a companion (reviewer / architect-companion /
+  // spec-companion) may send its producer back with findings before it parks for a person. The
+  // shipped value is the one the engine hard-coded before this was policy, so a workspace that
+  // never opens the field keeps exactly the behaviour it had.
+  companionMaxReworks: DEFAULT_COMPANION_MAX_ATTEMPTS,
   // Post-release-health gate: how long (minutes) the gate watches the deployed
   // release's monitors/SLOs before declaring it healthy, and how many on-call
   // investigations may be dispatched while watching (the on-call agent investigates
@@ -112,6 +123,13 @@ export const DEFAULT_RISK_POLICY = {
   autoMergeEnabled: true,
   // Implementation-fork decision gate: disabled by default (see DEFAULT_FORK_DECISION_GATING).
   forkDecision: DEFAULT_FORK_DECISION_GATING,
+  // A run under this policy parks for a person when an automatic loop exhausts its budget: the
+  // historical behaviour, and the right one for a board somebody is looking at. The unattended
+  // counterpart is `UNATTENDED_RISK_POLICY_ID` (see `RISK_POLICY_SEEDS`).
+  autonomy: 'attended',
+  // Inert here (it is read only under `unattended`), and carried anyway so the two seeds differ in
+  // the fields they MEAN to differ in rather than in which ones they mention.
+  minAutoAnswerConfidence: DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE,
 } as const
 
 /**
@@ -139,6 +157,9 @@ export const DEFAULT_RISK_POLICY = {
  * nothing to do with it. Every OTHER knob is inherited, because the rest are BUDGETS (CI-fixer
  * attempts, reviewer iterations, watch windows) rather than postures: an unconfigured deployment
  * should still run its gates the usual number of times, it just may not land the result on its own.
+ *
+ * `autonomy` is inherited at `attended` for the same reason the ceilings are pinned to 0. A licence
+ * to answer a run's own caps is a posture somebody grants, and nobody granted it here.
  */
 export const FALLBACK_RISK_POLICY = {
   ...DEFAULT_RISK_POLICY,
@@ -194,6 +215,8 @@ export interface RiskPolicySeed {
   maxRequirementIterations: number
   maxRequirementConcernAllowed: RequirementConcernLevel
   maxTesterQualityIterations: number
+  /** How many automatic rework rounds a companion may drive before it parks for a person. */
+  companionMaxReworks: number
   releaseWatchWindowMinutes: number
   releaseMaxAttempts: number
   humanReviewGraceMinutes: number
@@ -213,8 +236,14 @@ export interface RiskPolicySeed {
   dryRunRoles: WorkspaceRole[]
   /** Per-role allowlist of landable change classes; empty on the built-ins. */
   submissionClassesByRole: SubmissionClassesByRole
-  /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
+  /** Whether a run under this policy answers its own automatic-loop caps. */
+  autonomy: RunAutonomy
+  /** Confidence floor an unattended run's auto-answered review finding must clear. */
+  minAutoAnswerConfidence: number
+  /** The workspace's fallback preset for an IN-APP run. Exactly one is true. */
   isDefault: boolean
+  /** The workspace's fallback preset for a run nothing is watching. Exactly one is true. */
+  isUnattendedDefault: boolean
   /**
    * Monotonic seed version. When the current catalog version for this id exceeds a
    * workspace's persisted copy, the SPA offers to reseed it. Bump this when a built-in's
@@ -224,8 +253,16 @@ export interface RiskPolicySeed {
 }
 
 /**
+ * The id of the built-in policy that governs a run nothing is watching. Named as a constant
+ * because two things have to agree on it and neither is the seed list: the workspace-creation
+ * seed writes it as the unattended default, and the docs point an operator at it by id.
+ */
+export const UNATTENDED_RISK_POLICY_ID = 'mp_unattended'
+
+/**
  * The built-in merge threshold presets seeded for every workspace. `Balanced` is the
- * default auto-merge policy; `Manual review only` disables auto-merge entirely
+ * default for a run somebody started in the app; `Unattended delivery` is the default for a run
+ * nothing is watching; `Manual review only` disables auto-merge entirely
  * (`autoMergeEnabled: false`), so every PR on a task using it is routed to a human
  * `merge_review` notification regardless of the assessment. A workspace keeps at least
  * these until the operator edits the library. To ship a new built-in (or a new version
@@ -243,6 +280,7 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     maxRequirementIterations: DEFAULT_RISK_POLICY.maxRequirementIterations,
     maxRequirementConcernAllowed: DEFAULT_RISK_POLICY.maxRequirementConcernAllowed,
     maxTesterQualityIterations: DEFAULT_RISK_POLICY.maxTesterQualityIterations,
+    companionMaxReworks: DEFAULT_RISK_POLICY.companionMaxReworks,
     releaseWatchWindowMinutes: DEFAULT_RISK_POLICY.releaseWatchWindowMinutes,
     releaseMaxAttempts: DEFAULT_RISK_POLICY.releaseMaxAttempts,
     humanReviewGraceMinutes: DEFAULT_RISK_POLICY.humanReviewGraceMinutes,
@@ -254,8 +292,91 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     classRulesByRole: { ...DEFAULT_CLASS_RULES_BY_ROLE },
     dryRunRoles: [...DEFAULT_DRY_RUN_ROLES],
     submissionClassesByRole: { ...DEFAULT_SUBMISSION_CLASSES_BY_ROLE },
+    autonomy: DEFAULT_RISK_POLICY.autonomy,
+    minAutoAnswerConfidence: DEFAULT_RISK_POLICY.minAutoAnswerConfidence,
     isDefault: true,
+    isUnattendedDefault: false,
+    // NOT bumped for the two fields above. A version bump is an ADVISORY that a workspace should
+    // reseed, and accepting one restores this row's canonical name, ceilings, auto-merge posture
+    // and per-role rules — wiping whatever an operator had edited into a built-in they are
+    // explicitly allowed to edit. That price is only worth paying when the seed's CONTENT moved,
+    // and here it did not: the migration backfills `autonomy` and `is_unattended_default` with
+    // exactly these values as column defaults, so a stored v6 row and a freshly seeded v7 one are
+    // byte-for-byte identical. Bump this when `Balanced` itself changes, never to announce a
+    // column that arrived beside it.
     version: 6,
+  },
+  // The UNATTENDED default. A run started over the API, dispatched from a ticket or fired by a
+  // schedule has nobody in the app, so the parks an automatic loop raises when it gives up (a
+  // companion at its rework cap, an iterative review at its pass cap, untriaged Coder follow-ups)
+  // stop it for somebody who is not coming. This policy answers those itself, on the record.
+  //
+  // It changes NOTHING about what may land: the same ceilings, the same class rules, the same role
+  // scoping. That restraint is the decision, not an omission. A seed may decide that an unwatched
+  // run should not wait forever on an automation budget, because waiting was never the answer
+  // anybody wanted there; it may NOT decide that an unwatched run gets to merge a change an
+  // operator's own thresholds would have held. A deployment that wants that widens the ceilings
+  // itself, having seen its own track record.
+  //
+  // What it does narrow is the LOOP BUDGETS whose exhaustion `autonomy: 'unattended'` answers.
+  // Spending six reviewer passes to reach a verdict policy will settle as `proceed` buys the run
+  // nothing but tokens and wall-clock, and a wandering companion rating is exactly the loop ADR
+  // 0053 found does not converge. Every one of the three below is a park this policy resolves; the
+  // budgets it does NOT touch are the ones whose exhaustion is a genuine failure a person has to
+  // see (`ciMaxAttempts` above all: cutting it would raise `ci_failed` SOONER, which is one more
+  // park, not one fewer).
+  {
+    id: UNATTENDED_RISK_POLICY_ID,
+    name: 'Unattended delivery',
+    maxComplexity: DEFAULT_RISK_POLICY.maxComplexity,
+    maxRisk: DEFAULT_RISK_POLICY.maxRisk,
+    maxImpact: DEFAULT_RISK_POLICY.maxImpact,
+    ciMaxAttempts: DEFAULT_RISK_POLICY.ciMaxAttempts,
+    // Three reviewer passes rather than six: the cap is answered by policy here, so the extra
+    // passes only delay the same `proceed` on a conversation nobody is having.
+    maxRequirementIterations: 3,
+    maxRequirementConcernAllowed: DEFAULT_RISK_POLICY.maxRequirementConcernAllowed,
+    maxTesterQualityIterations: 2,
+    // NOT narrowed, unlike the three budgets around it, and the difference is what each round buys.
+    // A reviewer pass and a judge re-grade produce a JUDGEMENT nobody unwatched will read, so extra
+    // ones only delay the `proceed` this policy is going to take. A companion rework round produces
+    // WORK: the producer re-runs against the findings, and `proceed` at the cap accepts whatever it
+    // last wrote. Cutting the rounds here would not save a conversation nobody is having, it would
+    // ship a worse artifact unattended.
+    companionMaxReworks: DEFAULT_RISK_POLICY.companionMaxReworks,
+    releaseWatchWindowMinutes: DEFAULT_RISK_POLICY.releaseWatchWindowMinutes,
+    releaseMaxAttempts: DEFAULT_RISK_POLICY.releaseMaxAttempts,
+    humanReviewGraceMinutes: DEFAULT_RISK_POLICY.humanReviewGraceMinutes,
+    judgeMinScore: DEFAULT_RISK_POLICY.judgeMinScore,
+    // No bounce at all: a bounce re-arms the producer with the verdict's findings, and the round
+    // after it is graded by a judge whose cap this policy answers anyway. One unwatched pass and a
+    // recorded verdict beats two.
+    judgeMaxBounces: 0,
+    autoMergeEnabled: DEFAULT_RISK_POLICY.autoMergeEnabled,
+    // Left disabled like every other built-in, and here the reason is sharper: the fork decision
+    // exists to put a CHOICE in front of a person, so a policy for runs with no person watching
+    // is the last one that should switch it on.
+    forkDecision: { ...DEFAULT_FORK_DECISION_GATING },
+    classRules: { ...DEFAULT_MERGE_CLASS_RULES },
+    classRulesByRole: { ...DEFAULT_CLASS_RULES_BY_ROLE },
+    dryRunRoles: [...DEFAULT_DRY_RUN_ROLES],
+    submissionClassesByRole: { ...DEFAULT_SUBMISSION_CLASSES_BY_ROLE },
+    autonomy: 'unattended',
+    // The one field this policy reads that `Balanced` does not: how confident the Requirement
+    // Writer must be for this run to take its suggestion as a finding's answer instead of parking.
+    minAutoAnswerConfidence: DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE,
+    isDefault: false,
+    isUnattendedDefault: true,
+    // NOT bumped for the narrowed budgets, and this is the one seed where a bump would be actively
+    // unsafe. Existing workspaces did not get this row from the catalog: the 0090 migration
+    // materialised it as a CLONE of whatever their own `is_default` row held, precisely so a
+    // workspace that had tightened `Balanced` kept its own ceilings here. Accepting a reseed
+    // restores the CATALOG's values for every field, so announcing these three narrower budgets
+    // would hand such a workspace the stock ceilings alongside them: a widening of landing
+    // authority, delivered as an advisory to adopt a tightening. New workspaces seed the narrower
+    // budgets; an existing one adopts them by editing the row, which is the only way that stays
+    // narrow-only.
+    version: 1,
   },
   {
     id: 'mp_manual_review',
@@ -268,6 +389,11 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     maxRequirementIterations: DEFAULT_RISK_POLICY.maxRequirementIterations,
     maxRequirementConcernAllowed: 'none',
     maxTesterQualityIterations: DEFAULT_RISK_POLICY.maxTesterQualityIterations,
+    // The stock budget, NOT the 0 this preset gives judge bounces. A judge bounce buys another
+    // rubric verdict, which this preset has already decided a human will read anyway; a companion
+    // rework round buys a better spec or architecture BEFORE the pull request that human reviews
+    // exists. Routing every merge to a person is not a reason to hand them worse work.
+    companionMaxReworks: DEFAULT_RISK_POLICY.companionMaxReworks,
     releaseWatchWindowMinutes: DEFAULT_RISK_POLICY.releaseWatchWindowMinutes,
     releaseMaxAttempts: DEFAULT_RISK_POLICY.releaseMaxAttempts,
     humanReviewGraceMinutes: DEFAULT_RISK_POLICY.humanReviewGraceMinutes,
@@ -289,7 +415,14 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     // one role setting that would still bite here (it refuses the MANUAL merge too), and seeding
     // one would be this catalog deciding which tier a deployment trusts with what.
     submissionClassesByRole: { ...DEFAULT_SUBMISSION_CLASSES_BY_ROLE },
+    // A policy that routes every pull request to a human is the one place where answering a
+    // companion's rework cap on its own would be incoherent.
+    autonomy: 'attended',
+    minAutoAnswerConfidence: DEFAULT_RISK_POLICY.minAutoAnswerConfidence,
     isDefault: false,
+    isUnattendedDefault: false,
+    // Unbumped, for the reason given on `mp_balanced`: both new fields land on this row as the
+    // migration's own column defaults, so there is no content change to advise anyone to adopt.
     version: 6,
   },
 ]
@@ -317,6 +450,7 @@ export function riskPolicyFromSeed(seed: RiskPolicySeed, createdAt: number): Ris
     maxRequirementIterations: seed.maxRequirementIterations,
     maxRequirementConcernAllowed: seed.maxRequirementConcernAllowed,
     maxTesterQualityIterations: seed.maxTesterQualityIterations,
+    companionMaxReworks: seed.companionMaxReworks,
     releaseWatchWindowMinutes: seed.releaseWatchWindowMinutes,
     releaseMaxAttempts: seed.releaseMaxAttempts,
     humanReviewGraceMinutes: seed.humanReviewGraceMinutes,
@@ -328,7 +462,10 @@ export function riskPolicyFromSeed(seed: RiskPolicySeed, createdAt: number): Ris
     classRulesByRole: seed.classRulesByRole,
     dryRunRoles: seed.dryRunRoles,
     submissionClassesByRole: seed.submissionClassesByRole,
+    autonomy: seed.autonomy,
+    minAutoAnswerConfidence: seed.minAutoAnswerConfidence,
     isDefault: seed.isDefault,
+    isUnattendedDefault: seed.isUnattendedDefault,
     version: seed.version,
     createdAt,
   }
@@ -402,18 +539,25 @@ export const MODEL_PRESET_SEED_IDS = {
   kimi: 'mdp_kimi',
   glm: 'mdp_glm',
   claude: 'mdp_claude',
+  chatgpt: 'mdp_chatgpt',
 } as const
 
 /**
  * The built-in model presets seeded for every workspace, using the catalog ids from
  * {@link MODEL_CATALOG}: "Kimi K2.7" (everything `kimi-k2.7`, the Cloudflare-served
- * baseline), "GLM-5.2" (everything `glm`), and "Claude Opus 5" (everything
- * `claude-opus`, run via a Claude subscription or OpenRouter). A workspace always keeps
- * at least these until the operator edits the library. WHICH one is the workspace
- * default is chosen per deployment ({@link DEFAULT_MODEL_PRESET_ID}) at first seed —
- * Cloudflare/Node default to Kimi (Cloudflare-runnable on the bare baseline), local mode
- * to Claude. To ship a new built-in (or a new version of one), add it here / bump its
- * `version`; existing workspaces are then advised to reseed.
+ * baseline), "GLM-5.2" (everything `glm`), "Claude Opus 5" (everything `claude-opus`,
+ * run via a Claude subscription or OpenRouter) and "GPT-5.6 Sol" (everything
+ * `gpt-5.6-sol`, run via a ChatGPT subscription on Codex or OpenRouter). A workspace
+ * always keeps at least these until the operator edits the library. WHICH one is the
+ * workspace default is chosen per deployment ({@link DEFAULT_MODEL_PRESET_ID}) at first
+ * seed: Cloudflare/Node default to Kimi (Cloudflare-runnable on the bare baseline),
+ * local mode to Claude. To ship a new built-in (or a new version of one), add it here /
+ * bump its `version`; existing workspaces are then advised to reseed.
+ *
+ * An entry names a VENDOR, never a model generation (`mdp_chatgpt`, not `mdp_gpt56sol`), so a
+ * built-in rolls its `baseModelId` forward as that vendor's flagship moves and a workspace's pin
+ * survives the move: the `version` bump on `mdp_claude` below is one such roll-forward. Argued,
+ * with what the alternative would have cost, in ADR 0056.
  */
 export const DEFAULT_MODEL_PRESETS: ModelPresetSeed[] = [
   {
@@ -433,6 +577,19 @@ export const DEFAULT_MODEL_PRESETS: ModelPresetSeed[] = [
     // changed. Bumping the version surfaces the reseed advisory to workspaces still
     // holding the "Claude Opus 4.8"-named copy.
     version: 2,
+  },
+  {
+    id: MODEL_PRESET_SEED_IDS.chatgpt,
+    name: 'GPT-5.6 Sol',
+    // The OpenAI flagship tier, on a ChatGPT subscription through the Codex harness or
+    // pay-as-you-go through OpenRouter: the same route pair `mdp_claude` above already
+    // had, so `effectiveVariant` lands on whichever of the two the workspace holds. An
+    // OpenAI API key is NOT one of them (`gpt-5.6-sol` declares no `direct` route, and why
+    // not is ADR 0056's), which is the one thing a deployment holding only that key has to
+    // know before selecting this preset. `declaredModelRouteLabels` puts it in the refusal.
+    baseModelId: 'gpt-5.6-sol',
+    overrides: {},
+    version: 1,
   },
 ]
 

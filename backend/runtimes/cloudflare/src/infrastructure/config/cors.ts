@@ -2,6 +2,8 @@
 export {
   CORS_ALLOWED_HEADERS,
   CORS_EXPOSED_HEADERS,
+  corsOriginFor,
   corsReflectsWhenUnset,
+  isPubliclyReadablePath,
   resolveCorsOrigin,
 } from '@cat-factory/server'

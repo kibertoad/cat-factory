@@ -17,7 +17,7 @@ import { actorLabel, describeEvent } from './AccountAuditLog.logic'
 const props = defineProps<{ accountId: string }>()
 
 const accounts = useAccountsStore()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
 const events = computed(() => accounts.auditEvents)
@@ -43,12 +43,7 @@ async function loadMore() {
   try {
     await accounts.loadMoreAuditEvents(props.accountId)
   } catch (e) {
-    toast.add({
-      title: t('layout.auditLog.errors.loadMore'),
-      description: apiErrorEnvelope(e)?.message ?? (e instanceof Error ? e.message : String(e)),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'layout.auditLog.errors.loadMore')
   }
 }
 

@@ -22,6 +22,7 @@ import * as v from 'valibot'
  *   - `preflight`        — rejected before dispatch (repo missing/not empty, not connected). [bootstrap]
  *   - `dispatch`         — the container accept-request itself failed (HTTP / network). [bootstrap]
  *   - `evicted`          — the container vanished mid-run (eviction/crash). Retrying spins a fresh one.
+ *   - `harness_shutdown` : the harness exited cleanly mid-job. It was shut down, not lost.
  *   - `timeout`          — a container watchdog fired (inactivity or max-duration).
  *   - `agent`            — the agent / git push reported a failure.
  *   - `job_failed`       — an async container job came back failed. [execution]
@@ -37,6 +38,11 @@ export const agentFailureKindSchema = v.picklist([
   // never accepting the job). The provider's verbatim error rides the failure `detail`.
   'environment',
   'evicted',
+  // The harness serving the job EXITED CLEANLY while the job was still running: something shut
+  // it down. Split from `evicted` because the two need opposite handling and opposite advice:
+  // an eviction is worth a fresh container, and this is not (the run that reported it first had
+  // an agent pattern-kill the harness's own process, so every automatic retry reproduced it).
+  'harness_shutdown',
   'timeout',
   'agent',
   'job_failed',
@@ -51,6 +57,12 @@ export const agentFailureKindSchema = v.picklist([
   // not recover it within the hard-stall deadline — so it is failed for human attention
   // instead of spinning `running` forever with no progress. Retry spins a fresh run.
   'stalled',
+  // The run's own stored row could not be decoded (a column that must never be null, an
+  // out-of-contract enum), so no driver can resume it and no board can render it. Written
+  // by the engine straight through the SQL-only terminal write, because every richer path
+  // begins by reading the row that cannot be read. Distinct from `stalled`, whose advice is
+  // "retry": a retry re-reads the same unreadable row, so this one needs a human at the data.
+  'state_unreadable',
   'cancelled',
   'unknown',
 ])

@@ -45,7 +45,7 @@ watch(
   () => {
     void catalog.probe()
     // The repo pickers need the active board's installation state; probe once so they light up.
-    void github.probe()
+    void github.ensureProbed()
   },
   { immediate: true },
 )

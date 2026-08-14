@@ -26,8 +26,8 @@ chain reads first). The roadmap, including every limit the website page lists, i
 
 ## Which runs actually get the server
 
-**A declared server that is not wired is STATED to the agent, never silently missing**, and the
-seven reasons plus their fixes are on the site's
+**A declared server that is not wired is STATED to the agent, never silently missing**, and every
+reason plus its fix is on the site's
 [Why a run did not get the server](https://www.catfactory.ai/extend/tool-servers.html#why-a-run-did-not-get-the-server).
 Silence would let the agent plan around a tool that was never there and discover the gap mid-run.
 
@@ -35,6 +35,28 @@ The rule a change here must hold: each reason is its own member of a CLOSED voca
 through an exhaustive `Record`, so adding one fails the typecheck rather than rendering blank. They
 are not collapsible into "unavailable", because each names a different party's fix, and the reason
 is what the prompt and the step chip both carry.
+
+### The one reason no container dispatch decides: a consensus panel
+
+Every other member is chosen by the container executor while it resolves a dispatch. `consensus_panel`
+is chosen by `@cat-factory/consensus` instead, because a diverted step never reaches a container: the
+participants are inline model calls with no CLI to wire a server into. That matters for a change here
+in three ways.
+
+- **Boot cannot catch it.** `tool_servers_without_container` keys on the kind's declared surface, and
+  the default-eligible set (architect, analysis, the reviewers, the companions) is almost entirely
+  container kinds, which is exactly the set a deployment attaches a read-only research server to. The
+  same step with consensus off gets the server; there is no registration to warn about.
+- **The record arrives from the INLINE path, BEFORE the work.** `AgentExecutor.previewToolServers`
+  is the counterpart of `AgentJobHandle.toolServers`, folded by `recordInlineToolServers` at the two
+  inline dispatch sites and stamped with the dispatched kind by the ENGINE, exactly as the container
+  fold is. Both go through one `stampToolServers`, so there is one place an executor-supplied kind
+  could creep back in. It is a preview rather than a field on the result for the reason the container
+  path records off the handle at dispatch: a step that later fails keeps its record, where a
+  result-carried field is absent on exactly the runs a reader most needs it for.
+- **Nothing declared means no record.** A panel wires nothing by construction, so an all-empty
+  resolution from it would say a dispatch resolved tool servers where none could ever have been
+  wired, which is not what both-empty means below. The panel reports only what it withheld.
 
 ### What the RUN records, and where a person sees it
 
@@ -61,7 +83,8 @@ Four properties of that record are load-bearing:
   `step.dispatches`. Without it the lists would be read under the step's kind and credit one
   agent's capabilities to another. The step detail says whose they are whenever the two differ.
 - **Absent and both-empty are different states.** Absent means the step's CURRENT attempt holds no
-  resolution: an inline step, a run predating the field, or a step re-armed for a re-run whose next
+  resolution: an inline step that resolved none (every one but a consensus panel withholding what its
+  kind declared), a run predating the field, or a step re-armed for a re-run whose next
   dispatch has not answered yet (`resetStepForRerun` clears the record, because it describes one
   resolution against one harness, one secret resolver and one set of grants, and a re-run resolves
   afresh). `{ wired: [], unavailable: [] }` means a dispatch ran and its kind declared no tool
@@ -234,12 +257,28 @@ facts belong here, each because it is a place a change could quietly remove a fl
   which reads nothing of ours, so it carries the narrower `isToolchainEnvName` rule instead. Merging
   the two rules in either direction breaks something real: the strict one makes the GitHub and Slack
   servers unwireable, the loose one lets `ENCRYPTION_KEY` be read.
+- **The transport fixes a credential's CHANNEL; the declaration only states one.**
+  `mcpTransportCarriesCredential` (kernel) is the whole rule: a `stdio` server is a child process
+  with an environment and no request, an `http` server is a url with headers and no process, so a
+  header on the first and a header-less credential on the second each reach NOTHING. Both are boot
+  ERRORS, refused again at dispatch and at the probe for the mothership case, and the dispatch
+  states the drop as `unusable_secret`. That reason is deliberately neither `missing_secret` (the
+  value resolved) nor `reserved_secret` (nothing was withheld): only its own member points at the
+  declaration, which is the one thing that changes. The mismatch is silent by construction if
+  unrefused, because each projection SELECTS by channel and finds nothing to fold in, so the server
+  is wired, advertised in the prompt, and started unauthenticated.
 - **A deployment resolver REPLACES the chain, and gates every SUBJECT the port serves.** A
   `createToolSecretResolver` allow-list holding only `MCP_…` keys silently resolves nothing for a
   registered binary generator, which goes through the same `ToolSecretResolver` port. Anything new
   that resolves a capability credential joins that port rather than reading the environment.
 
 ## OAuth: the four decisions that are not obvious
+
+> This section is the CONSUMING half: this platform as a client of a vendor's OAuth-protected MCP
+> server. The mirror image, this deployment as the authorization server for its own hosted endpoint,
+> is [`mcp-authorization.md`](./mcp-authorization.md). The two share no code because they share no
+> problem, and the one thing they do share is asserted between them: the consuming discovery walk is
+> driven over the serving documents in `mcpAuthorizationInterop.test.ts`.
 
 Declaring an OAuth server, the two grants, endpoint discovery, what a deployment configures and what
 a board sees are on the site's

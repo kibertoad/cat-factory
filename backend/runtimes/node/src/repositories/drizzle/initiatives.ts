@@ -8,6 +8,7 @@ import type {
   Initiative,
   InitiativeRepository,
   RiskPolicy,
+  RunDefaultScope,
   RiskPolicyRepository,
   SharedStack,
   SharedStackRepository,
@@ -132,6 +133,7 @@ function rowToRiskPolicy(row: RiskPolicyRow): RiskPolicy {
     maxRequirementConcernAllowed:
       row.max_requirement_concern_allowed as RiskPolicy['maxRequirementConcernAllowed'],
     maxTesterQualityIterations: row.max_tester_quality_iterations,
+    companionMaxReworks: row.companion_max_reworks,
     releaseWatchWindowMinutes: row.release_watch_window_minutes,
     releaseMaxAttempts: row.release_max_attempts,
     humanReviewGraceMinutes: row.human_review_grace_minutes,
@@ -155,19 +157,32 @@ function rowToRiskPolicy(row: RiskPolicyRow): RiskPolicy {
     submissionClassesByRole: row.submission_classes_by_role
       ? (JSON.parse(row.submission_classes_by_role) as RiskPolicy['submissionClassesByRole'])
       : {},
+    // Narrowed rather than cast, byte-for-byte the D1 mirror's reading: a stored value the closed
+    // vocabulary no longer carries reads as `attended`, the posture that stops for a person, never
+    // as a licence this row cannot be shown to have granted.
+    autonomy: row.autonomy === 'unattended' ? 'unattended' : 'attended',
+    minAutoAnswerConfidence: row.min_auto_answer_confidence,
     isDefault: row.is_default === 1,
+    isUnattendedDefault: row.is_unattended_default === 1,
     ...(row.version != null ? { version: row.version } : {}),
     createdAt: row.created_at,
   }
 }
 
+/** The column one default scope is stored in; the ONE place that mapping lives on this facade. */
+const DEFAULT_COLUMN = {
+  interactive: riskPolicies.is_default,
+  unattended: riskPolicies.is_unattended_default,
+} as const satisfies Record<RunDefaultScope, unknown>
+
 /**
  * Per-workspace merge threshold presets over Postgres (the Drizzle mirror of the
  * Worker's `D1RiskPolicyRepository`, migration 0024). Enforces the single-default
- * invariant: promoting a preset to default demotes every other in the workspace
- * before the upsert. The default preset cannot be removed (the service keeps that
- * rule too; the DELETE also guards `is_default = 0`). Behaviourally identical to the
- * D1 repo so the cross-runtime conformance suite asserts the same preset resolution.
+ * invariant PER SCOPE: promoting a preset to one of the two defaults demotes every other holder of
+ * THAT flag in the workspace before the upsert, leaving the other scope alone. Neither scope's
+ * default can be removed (the service keeps that rule too; the DELETE guards both flags).
+ * Behaviourally identical to the D1 repo so the cross-runtime conformance suite asserts the same
+ * preset resolution.
  */
 
 export class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
@@ -191,11 +206,11 @@ export class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
     return rows.map(rowToRiskPolicy)
   }
 
-  async getDefault(workspaceId: string): Promise<RiskPolicy | null> {
+  async getDefault(workspaceId: string, scope: RunDefaultScope): Promise<RiskPolicy | null> {
     const rows = await this.db
       .select()
       .from(riskPolicies)
-      .where(and(eq(riskPolicies.workspace_id, workspaceId), eq(riskPolicies.is_default, 1)))
+      .where(and(eq(riskPolicies.workspace_id, workspaceId), eq(DEFAULT_COLUMN[scope], 1)))
       .orderBy(riskPolicies.created_at)
       .limit(1)
     return rows[0] ? rowToRiskPolicy(rows[0]) : null
@@ -213,6 +228,7 @@ export class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
       max_requirement_iterations: preset.maxRequirementIterations,
       max_requirement_concern_allowed: preset.maxRequirementConcernAllowed,
       max_tester_quality_iterations: preset.maxTesterQualityIterations,
+      companion_max_reworks: preset.companionMaxReworks,
       release_watch_window_minutes: preset.releaseWatchWindowMinutes,
       release_max_attempts: preset.releaseMaxAttempts,
       human_review_grace_minutes: preset.humanReviewGraceMinutes,
@@ -225,17 +241,33 @@ export class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
       dry_run_roles: JSON.stringify(preset.dryRunRoles ?? []),
       submission_classes_by_role: JSON.stringify(preset.submissionClassesByRole ?? {}),
       version: preset.version ?? null,
+      autonomy: preset.autonomy,
+      min_auto_answer_confidence: preset.minAutoAnswerConfidence,
       is_default: preset.isDefault ? 1 : 0,
+      is_unattended_default: preset.isUnattendedDefault ? 1 : 0,
       created_at: preset.createdAt,
     }
     // Demote + upsert run in one transaction so the single-default invariant can never
     // be observed broken (zero or two defaults) by a concurrent reader or a partial failure.
     await this.db.transaction(async (tx) => {
-      // Promoting this preset to default demotes any other default first.
+      // Promoting this preset to a default demotes any other holder of THAT flag first. Two
+      // statements rather than one, because the flags are independent: promoting the unattended
+      // default must leave the in-app one alone.
       if (preset.isDefault) {
         await tx
           .update(riskPolicies)
           .set({ is_default: 0 })
+          .where(
+            and(
+              eq(riskPolicies.workspace_id, workspaceId),
+              sql`${riskPolicies.id} <> ${preset.id}`,
+            ),
+          )
+      }
+      if (preset.isUnattendedDefault) {
+        await tx
+          .update(riskPolicies)
+          .set({ is_unattended_default: 0 })
           .where(
             and(
               eq(riskPolicies.workspace_id, workspaceId),
@@ -257,9 +289,17 @@ export class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
             max_requirement_iterations: values.max_requirement_iterations,
             max_requirement_concern_allowed: values.max_requirement_concern_allowed,
             max_tester_quality_iterations: values.max_tester_quality_iterations,
+            companion_max_reworks: values.companion_max_reworks,
             release_watch_window_minutes: values.release_watch_window_minutes,
             release_max_attempts: values.release_max_attempts,
             human_review_grace_minutes: values.human_review_grace_minutes,
+            // The judge pair was missing from this projection while being present on the INSERT, so
+            // an edit or a reseed left a stored row's rubric floor and bounce budget at whatever it
+            // held. Same class of gap as the `detail`-mapper allow-list: silent, and invisible to a
+            // unit test that hands the service an in-memory preset.
+            judge_min_score: values.judge_min_score,
+            judge_max_bounces: values.judge_max_bounces,
+            min_auto_answer_confidence: values.min_auto_answer_confidence,
             class_rules: values.class_rules,
             class_rules_by_role: values.class_rules_by_role,
             dry_run_roles: values.dry_run_roles,
@@ -267,7 +307,9 @@ export class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
             auto_merge_enabled: values.auto_merge_enabled,
             fork_decision: values.fork_decision,
             version: values.version,
+            autonomy: values.autonomy,
             is_default: values.is_default,
+            is_unattended_default: values.is_unattended_default,
           },
         })
     })
@@ -281,6 +323,7 @@ export class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
           eq(riskPolicies.workspace_id, workspaceId),
           eq(riskPolicies.id, id),
           eq(riskPolicies.is_default, 0),
+          eq(riskPolicies.is_unattended_default, 0),
         ),
       )
   }

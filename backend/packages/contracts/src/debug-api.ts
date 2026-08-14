@@ -289,6 +289,16 @@ export const debugRunStepSchema = v.object({
   /** How many times this step's container was evicted/crashed and automatically re-dispatched. */
   evictionRecoveries: v.number(),
   /**
+   * How many times this step's push to the work branch was refused (the branch had moved under it)
+   * and the step was automatically re-dispatched to resume the branch as it now stands.
+   *
+   * Here for the same reason `evictionRecoveries` is: the recovery is INVISIBLE in every other
+   * signal. The run reports as a clean success, and the only trace that a whole agent run was spent
+   * twice (in tokens and in wall clock) is this counter, which is exactly the question a
+   * post-mortem on "why did this step cost double" starts from.
+   */
+  branchContentionRecoveries: v.number(),
+  /**
    * The post-mortem retained from the FIRST container death on this step (exit state plus a
    * scrubbed log tail). Null when the step's containers never died. Bounded like every other
    * body on this surface.

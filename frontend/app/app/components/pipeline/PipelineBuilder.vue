@@ -279,6 +279,7 @@ function toggleSaved(id: string) {
 }
 
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 // ---- "Add agent" mini-form -------------------------------------------------
 const addAgentOpen = ref(false)
@@ -329,13 +330,9 @@ async function save() {
       toast.add({ title: t('pipeline.builder.toast.addOneFirst'), color: 'warning' })
     }
   } catch (e) {
-    // Surface the backend reason (e.g. post-release-health rejected without an
-    // observability integration) rather than a generic failure.
-    toast.add({
-      title: t('pipeline.builder.toast.saveFailed'),
-      description: e instanceof Error ? e.message : undefined,
-      color: 'error',
-    })
+    // Through the funnel, so the backend reason (e.g. post-release-health rejected without an
+    // observability integration) is reachable as copyable detail rather than raw prose up front.
+    present(e, 'pipeline.builder.toast.saveFailed')
   }
 }
 
@@ -402,45 +399,10 @@ const library = computed(() =>
   }),
 )
 const visiblePipelines = computed(() => library.value.offered)
-async function toggleArchive(p: Pipeline) {
-  try {
-    if (p.archived) await pipelines.unarchive(p.id)
-    else await pipelines.archive(p.id)
-  } catch {
-    toast.add({ title: t('pipeline.builder.toast.updateFailed'), color: 'error' })
-  }
-}
-
-/** Load a custom pipeline into the draft for in-place editing. */
-function edit(p: Pipeline) {
-  pipelines.loadForEdit(p)
-}
-
-const { confirm } = useConfirm()
-async function removePipeline(p: Pipeline) {
-  const ok = await confirm({
-    title: t('pipeline.builder.confirmDeletePipeline.title'),
-    description: t('pipeline.builder.confirmDeletePipeline.body', { name: p.name }),
-    variant: 'destructive',
-    confirmLabel: t('common.delete'),
-    icon: 'i-lucide-trash-2',
-  })
-  if (ok) void pipelines.removePipeline(p.id)
-}
-
-/** Clone any pipeline (incl. a read-only built-in) into an editable copy, then edit it. */
-async function clone(p: Pipeline) {
-  try {
-    const copy = await pipelines.clonePipeline(p.id)
-    toast.add({
-      title: t('pipeline.builder.toast.cloned', { name: p.name, copy: copy.name }),
-      color: 'success',
-      icon: 'i-lucide-copy',
-    })
-  } catch {
-    toast.add({ title: t('pipeline.builder.toast.cloneFailed'), color: 'error' })
-  }
-}
+// The library ROW's actions (archive, the two scope defaults, edit, clone, delete) — one cohesive
+// group, extracted so this component stays inside its size budget. See
+// `usePipelineLibraryActions` for why they belong together.
+const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelineLibraryActions()
 </script>
 
 <template>
@@ -1263,6 +1225,32 @@ async function clone(p: Pipeline) {
                   >
                     {{ t('pipeline.builder.defaultBadge') }}
                   </UBadge>
+                  <!-- Which scope this rung is the default for. Shown at BOTH interface tiers even
+                       though the controls below are advanced-only: the control is an override, the
+                       resulting default is a decision, and a decision nobody can see is the
+                       concealed-setting failure. -->
+                  <UBadge
+                    v-if="p.isDefault"
+                    color="primary"
+                    variant="subtle"
+                    size="xs"
+                    class="shrink-0"
+                    :title="t('pipeline.builder.scopeDefault.interactiveHint')"
+                    data-testid="pipeline-interactive-default"
+                  >
+                    {{ t('pipeline.builder.scopeDefault.interactive') }}
+                  </UBadge>
+                  <UBadge
+                    v-if="p.isUnattendedDefault"
+                    color="info"
+                    variant="subtle"
+                    size="xs"
+                    class="shrink-0"
+                    :title="t('pipeline.builder.scopeDefault.unattendedHint')"
+                    data-testid="pipeline-unattended-default"
+                  >
+                    {{ t('pipeline.builder.scopeDefault.unattended') }}
+                  </UBadge>
                   <span class="shrink-0 text-[10px] text-slate-500">
                     {{
                       t(
@@ -1276,6 +1264,38 @@ async function clone(p: Pipeline) {
                 <div
                   class="flex shrink-0 items-center opacity-0 transition group-hover:opacity-100"
                 >
+                  <!-- The two DEFAULT claims, advanced-tier (see `toggleDefault`). An archived
+                         pipeline is not offered either: the backend refuses a hidden row as a
+                         default, and a control that can only fail is worse than no control. Safe
+                         to hide rather than a way to strand a claim, because the same rule refuses
+                         ARCHIVING a row that still holds one: a hidden row never holds a default,
+                         so there is never one here to release. -->
+                  <template v-if="uiMode.isAdvanced && !p.archived && !p.internal">
+                    <UButton
+                      :icon="p.isDefault ? 'i-lucide-star' : 'i-lucide-star-off'"
+                      :color="p.isDefault ? 'primary' : 'neutral'"
+                      variant="ghost"
+                      size="xs"
+                      :title="
+                        p.isDefault
+                          ? t('pipeline.builder.scopeDefault.releaseInteractive')
+                          : t('pipeline.builder.scopeDefault.claimInteractive')
+                      "
+                      @click="toggleDefault(p, 'interactive')"
+                    />
+                    <UButton
+                      :icon="p.isUnattendedDefault ? 'i-lucide-bot' : 'i-lucide-bot-off'"
+                      :color="p.isUnattendedDefault ? 'info' : 'neutral'"
+                      variant="ghost"
+                      size="xs"
+                      :title="
+                        p.isUnattendedDefault
+                          ? t('pipeline.builder.scopeDefault.releaseUnattended')
+                          : t('pipeline.builder.scopeDefault.claimUnattended')
+                      "
+                      @click="toggleDefault(p, 'unattended')"
+                    />
+                  </template>
                   <!-- Archive/unarchive: organize the library without deleting. Works on
                          built-ins too (view metadata, not structure). -->
                   <UButton

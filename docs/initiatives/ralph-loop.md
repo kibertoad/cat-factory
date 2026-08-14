@@ -39,8 +39,8 @@ anti-runaway budget).
 - The iteration number the fake/engine keys off is `step.ralph.attempts + 1`, folded via the
   `AgentContextBuilder` per dispatch: robust to how the job is re-dispatched.
 - `stopRunContainer` clears the run's jobs before re-dispatch (step.jobId already cleared →
-  uses the run id), so a fresh iteration re-runs with the new context; `dispatchEpochFor` adds
-  `step.ralph.attempts` so each iteration gets a distinct harness job id.
+  uses the run id), so a fresh iteration re-runs with the new context; `dispatchEpochFor` counts
+  the run's prior dispatches of the kind, so each iteration gets a distinct harness job id.
 - The validation command is per-task agent config (inherently repo-specific), not a merge
   preset knob, so no schema migration. The start-time guard + the SPA both require it.
 - `ValidationError` surfaces as HTTP 422 (not 400): the start-guard conformance test asserts 422.

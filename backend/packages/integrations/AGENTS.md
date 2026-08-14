@@ -32,7 +32,10 @@ prerequisites are configured.
   `tasks/` also holds the two issue
   PULLS, structural twins differing only in who decides: `BugIntakeService.ts` (the recurring
   step claims the oldest match unattended) and `BugHuntService.ts` (a human picks from a rated
-  board scan), both over the `listBugCandidates` / `listBoards` provider capabilities.
+  board scan), both over the `listBugCandidates` provider capability. `listBoards` backs the
+  hunt's board picker and belongs ONLY to a repo-LESS source: a repo-backed one hunts the
+  repository its service frame is linked to, and offering its reachable repositories as boards
+  would aim a hunt at one no service on that board points to.
 - `environments/`: ephemeral-environment provisioning (the heaviest module) + `kubernetes/`,
   `runners/` (the self-hosted runner-pool transports).
 - `compose/`: the Docker Compose environment backend + the STACK RECIPE machinery. `compose-sources.ts`
@@ -55,6 +58,13 @@ prerequisites are configured.
   calls, hand-rolled on `fetch` so it bundles into a Worker). Separate from `capabilityCredentials/`
   on purpose: a grant expires, is rewritten by the dispatch path, and belongs to a person's vendor
   account, none of which a typed credential's shape can hold. See `backend/docs/mcp-tool-servers.md`.
+- `mcpAuthServer/`: the mirror image, this deployment as the AUTHORIZATION SERVER for its own
+  hosted MCP endpoint. `McpAuthorizationServer.ts` is the whole flow (dynamic registration, the
+  consent hand-off, the code exchange that mints a public-API key) and persists NOTHING: the client
+  id, the in-flight request and the code are each sealed into the value the other party carries.
+  `metadataDocuments.ts` holds the RFC 9728/8414 documents plus the 401 challenge, and lives here
+  rather than in the controller so `mcpAuthorizationInterop.test.ts` can drive the CONSUMING walk
+  next door over them. See `backend/docs/mcp-authorization.md`.
 - `testSecrets/`: sealed per-service test credentials; `validation/`: per-service PRE-PR
   validation checks (the commands the harness runs before a PR opens; frame-chain resolved) plus
   the DEPENDENCY PREPOPULATION install on the same row (run before the agent's first turn, and

@@ -155,9 +155,32 @@ export class PersonalSubscriptionService {
     return rows.map((r) => this.toStatus(r, now))
   }
 
+  /**
+   * Every vendor the user holds a LIVE personal credential for, in ONE read.
+   *
+   * The set rather than a per-vendor question, because both callers ask about the whole vendor
+   * vocabulary at once: the capability resolver folds it into a workspace's catalog, and the public
+   * `GET /api/v1/models` reports it per row. Asking {@link has} five times in a loop is five round
+   * trips on a hot read for an answer one `listByUser` already carries.
+   *
+   * LIVE excludes an expired credential, which is the same rule {@link unlock} refuses on. A lapsed
+   * subscription that still reported as configured made the catalog promise a dispatch the run
+   * would then be refused for, naming the model rather than the subscription as the problem.
+   */
+  async liveVendors(userId: string): Promise<Set<SubscriptionVendor>> {
+    const now = this.deps.clock.now()
+    const rows = await this.deps.personalSubscriptionRepository.listByUser(userId)
+    return new Set(
+      rows.filter((r) => r.expiresAt === null || r.expiresAt > now).map((r) => r.vendor),
+    )
+  }
+
   /** Whether the user has a live personal credential for the vendor. */
   async has(userId: string, vendor: SubscriptionVendor): Promise<boolean> {
-    return (await this.deps.personalSubscriptionRepository.getByUserVendor(userId, vendor)) !== null
+    const record = await this.deps.personalSubscriptionRepository.getByUserVendor(userId, vendor)
+    return (
+      record !== null && (record.expiresAt === null || record.expiresAt > this.deps.clock.now())
+    )
   }
 
   /** Remove the user's personal credential for a vendor. */
@@ -260,20 +283,50 @@ export class PersonalSubscriptionService {
     return { vendor, secret }
   }
 
-  /** Whether the run currently has a live activation for the user+vendor. */
+  /**
+   * Whether the run has an activation for the user+vendor that is still live `minRemainingMs`
+   * from now (default: right now, i.e. plain liveness).
+   *
+   * The horizon is what makes this answerable as "may an interaction leave this alone?" rather
+   * than only "is it live?". An activation with two minutes left is live and will not survive the
+   * step the caller is about to dispatch, so treating it as good enough would push the failure into
+   * the run, which is the opposite of what the interaction gate exists for.
+   */
   async hasActivation(
     executionId: string,
     userId: string,
     vendor: SubscriptionVendor,
+    minRemainingMs = 0,
   ): Promise<boolean> {
     return (
       (await this.deps.subscriptionActivationRepository.get(
         executionId,
         userId,
         vendor,
-        this.deps.clock.now(),
+        this.deps.clock.now() + minRemainingMs,
       )) !== null
     )
+  }
+
+  /**
+   * Whether the run's activation for this vendor is FRESH ENOUGH that an interaction need not
+   * re-mint it — more than half its lifetime still to run.
+   *
+   * The rule lives here because only this service knows the TTL it mints against, and it exists
+   * because re-minting is not cheap: {@link unlock} derives the password's key with 210k PBKDF2
+   * iterations, which the cipher's own header describes as a once-per-unlock cost. A human
+   * clicking through a parked run pays it once and nobody notices; a headless driver answering
+   * eight follow-ups in a loop pays it eight times in a row, which on a CPU-metered runtime is a
+   * killed request rather than a slow one. Halving the TTL keeps the guarantee the re-mint is for
+   * (the next dispatch has a comfortable credential) while making the cost proportional to the
+   * time the run has been tended rather than to the number of times it was poked.
+   */
+  async hasFreshActivation(
+    executionId: string,
+    userId: string,
+    vendor: SubscriptionVendor,
+  ): Promise<boolean> {
+    return this.hasActivation(executionId, userId, vendor, this.activationTtlMs / 2)
   }
 
   /** Delete every activation for a finished run (called when a run terminates). */

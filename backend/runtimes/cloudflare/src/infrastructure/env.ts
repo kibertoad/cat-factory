@@ -259,12 +259,15 @@ export interface Env {
   DEEPSEEK_API_KEY?: string
   /** Moonshot AI key (provider `moonshot`, direct Kimi; OpenAI-compatible). */
   MOONSHOT_API_KEY?: string
+  /** xAI key (provider `xai`, direct Grok; OpenAI-compatible). */
+  XAI_API_KEY?: string
 
   // Optional base-URL overrides for the OpenAI-compatible providers (self-hosted
   // gateway, regional endpoint, or a stub in tests). Default to the public APIs.
   QWEN_BASE_URL?: string
   DEEPSEEK_BASE_URL?: string
   MOONSHOT_BASE_URL?: string
+  XAI_BASE_URL?: string
   OPENAI_BASE_URL?: string
   // OpenRouter override (defaults to the public gateway). LiteLLM is operator-hosted, so
   // LITELLM_BASE_URL is REQUIRED to enable the `litellm` provider (no public default).

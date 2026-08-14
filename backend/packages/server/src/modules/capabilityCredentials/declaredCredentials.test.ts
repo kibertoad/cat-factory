@@ -57,13 +57,40 @@ describe('collectDeclaredCapabilityCredentials', () => {
     const result = await collectDeclaredCapabilityCredentials({
       agentKindRegistry: registryWithServer(),
       binaryGenerators: generators([
-        { id: 'meshy', name: 'Meshy', credential: { key: 'MESHY_API_KEY', usage: 'Bearer' } },
+        { id: 'meshy', name: 'Meshy', credentials: [{ key: 'MESHY_API_KEY', usage: 'Bearer' }] },
       ]),
     })
     expect(result.incomplete).toBe(false)
     expect(result.declared.map((entry) => entry.key).sort()).toEqual([
       'ISSUE_TOKEN',
       'MESHY_API_KEY',
+    ])
+  })
+
+  it('gives a key PAIR a row each, so the form matches the vendor console it is filled from', async () => {
+    // A vendor authenticating over HTTP Basic issues two values under two names. One row for them
+    // is a checklist that cannot be filled in correctly: whatever the operator types, half of the
+    // credential is a convention nobody stated on the surface where they are typing it.
+    const result = await collectDeclaredCapabilityCredentials({
+      agentKindRegistry: registryWithServer(),
+      binaryGenerators: generators([
+        {
+          id: 'scenario',
+          name: 'Scenario',
+          credentials: [
+            { key: 'SCENARIO_API_KEY', usage: 'the Basic-auth username half' },
+            { key: 'SCENARIO_API_SECRET', usage: 'the Basic-auth password half' },
+          ],
+        },
+      ]),
+    })
+    expect(
+      result.declared
+        .filter((entry) => entry.subject === 'binary-generator')
+        .map((entry) => [entry.key, entry.usage]),
+    ).toEqual([
+      ['SCENARIO_API_KEY', 'the Basic-auth username half'],
+      ['SCENARIO_API_SECRET', 'the Basic-auth password half'],
     ])
   })
 

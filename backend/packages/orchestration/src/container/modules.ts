@@ -76,6 +76,8 @@ import { NotificationService } from '../modules/notifications/NotificationServic
 import { NotificationSettingsService } from '../modules/notifications/NotificationSettingsService.js'
 import { MergeTrackRecordService } from '../modules/merge/MergeTrackRecordService.js'
 import { RiskPolicyService } from '../modules/merge/RiskPolicyService.js'
+import { AccountRiskPolicyService } from '../modules/merge/AccountRiskPolicyService.js'
+import { createWorkspaceRiskPolicyLibrary } from '../modules/merge/WorkspaceRiskPolicyLibrary.js'
 import { SandboxService } from '../modules/sandbox/SandboxService.js'
 import { SandboxRunService } from '../modules/sandbox/SandboxRunService.js'
 import { WorkspaceSettingsService } from '../modules/settings/WorkspaceSettingsService.js'
@@ -449,6 +451,7 @@ export function createTasksModule(
     taskSourceRegistry: registry,
     taskConnectionStore,
     taskRepository,
+    blockRepository: deps.blockRepository,
     importService,
     linkService,
     // The ranking is a billable model call that no run start gates, so it answers to the SAME
@@ -879,13 +882,22 @@ export function createSlackModule(deps: CoreDependencies): SlackModule | undefin
   }
 }
 
-/** Assemble the merge-preset module when its repository is present. */
+/**
+ * Assemble the risk-policy module when the board-tier repository is present.
+ *
+ * The merged LIBRARY is built here and handed to everything that reads a policy — this module's own
+ * service, the engine, both board guards — because it is the one place that knows both tiers are
+ * wired. The account tier is optional and its absence is a pass-through: the library then answers
+ * exactly what the board's own repository answers.
+ */
 export function createRiskPoliciesModule(
   deps: CoreDependencies,
   caches: AppCaches,
 ): RiskPoliciesModule | undefined {
-  const { riskPolicyRepository } = deps
-  if (!riskPolicyRepository) return undefined
+  const { riskPolicyRepository, accountRiskPolicyRepository, riskPolicySuppressionRepository } =
+    deps
+  const library = createWorkspaceRiskPolicyLibrary(deps)
+  if (!riskPolicyRepository || !library) return undefined
   const service = new RiskPolicyService({
     riskPolicyRepository,
     workspaceRepository: deps.workspaceRepository,
@@ -893,8 +905,23 @@ export function createRiskPoliciesModule(
     clock: deps.clock,
     // Invalidate the read-through slice the engine's `resolveRiskPolicy` uses on every write.
     riskPolicyCache: caches.riskPolicy,
+    library,
+    riskPolicySuppressionRepository,
   })
-  return { service }
+  return {
+    service,
+    library,
+    ...(accountRiskPolicyRepository
+      ? {
+          accountService: new AccountRiskPolicyService({
+            accountRiskPolicyRepository,
+            idGenerator: deps.idGenerator,
+            clock: deps.clock,
+            riskPolicyCache: caches.riskPolicy,
+          }),
+        }
+      : {}),
+  }
 }
 
 /**

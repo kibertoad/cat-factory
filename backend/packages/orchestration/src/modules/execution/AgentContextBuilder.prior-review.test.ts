@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import type { Block, ExecutionInstance, PipelineStep, PrReviewStepState } from '@cat-factory/kernel'
+import type {
+  AgentJobHandle,
+  Block,
+  ExecutionInstance,
+  PipelineStep,
+  PrReviewStepState,
+} from '@cat-factory/kernel'
 import { InitiativePresetRegistry } from '@cat-factory/kernel'
 import { defaultAgentKindRegistry, PR_PRIOR_REVIEW_CONTEXT_FILE } from '@cat-factory/agents'
 import { AgentContextBuilder } from './AgentContextBuilder.js'
+import { recordDispatchAttribution } from './step-fold.logic.js'
 
 // A RESUMED PR review is handed the previous attempt's finished slice reports as
 // `.cat-context/pr-prior-review.md`. The BUILDER emits it rather than a preOp beside the reviewer's
@@ -145,9 +152,18 @@ describe('AgentContextBuilder prior-review context', () => {
   })
 
   it('gives a resumed dispatch a non-zero epoch so it cannot re-attach to the wedged job', async () => {
-    const context = await contextFor(
-      step('pr-reviewer', review({ resumeAttempts: 2, resumePendingSlices: ['infra'] })),
+    // The whole premise of a resume is that the previous job is WEDGED, so re-attaching to it —
+    // which is what a container-reusing transport does for a known job id — would hand the
+    // "recovery" straight back to the stuck run. The epoch comes off the run's own record of what
+    // it has dispatched, so the reviewer needs no resume counter of its own for that to hold.
+    const wedged = step(
+      'pr-reviewer',
+      review({ resumeAttempts: 2, resumePendingSlices: ['infra'] }),
     )
+    for (let i = 0; i < 2; i++) {
+      recordDispatchAttribution(wedged, { jobId: 'job_1' } as AgentJobHandle, 'pr-reviewer')
+    }
+    const context = await contextFor(wedged)
     expect(context.dispatchEpoch).toBe(2)
   })
 })

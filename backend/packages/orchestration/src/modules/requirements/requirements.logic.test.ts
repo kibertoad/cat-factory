@@ -212,8 +212,14 @@ describe('coerceChunkRecommendations', () => {
       recommendation: 'for A',
       fromStandard: 'std-1',
       groundedIn: null,
+      confidence: null,
     })
-    expect(out.get('b')).toEqual({ recommendation: 'for B', fromStandard: null, groundedIn: null })
+    expect(out.get('b')).toEqual({
+      recommendation: 'for B',
+      fromStandard: null,
+      groundedIn: null,
+      confidence: null,
+    })
   })
 
   it('falls back to prompt order when the Writer omits the echoed itemIds', () => {
@@ -223,8 +229,18 @@ describe('coerceChunkRecommendations', () => {
       { recommendations: [{ recommendation: 'for A' }, { recommendation: 'for B' }] },
       findings('a', 'b'),
     )
-    expect(out.get('a')).toEqual({ recommendation: 'for A', fromStandard: null, groundedIn: null })
-    expect(out.get('b')).toEqual({ recommendation: 'for B', fromStandard: null, groundedIn: null })
+    expect(out.get('a')).toEqual({
+      recommendation: 'for A',
+      fromStandard: null,
+      groundedIn: null,
+      confidence: null,
+    })
+    expect(out.get('b')).toEqual({
+      recommendation: 'for B',
+      fromStandard: null,
+      groundedIn: null,
+      confidence: null,
+    })
   })
 
   it('mixes id-matched and positional fallback without stealing a matched entry', () => {
@@ -240,9 +256,24 @@ describe('coerceChunkRecommendations', () => {
       },
       findings('a', 'b', 'c'),
     )
-    expect(out.get('a')).toEqual({ recommendation: 'for A', fromStandard: null, groundedIn: null })
-    expect(out.get('b')).toEqual({ recommendation: 'for B', fromStandard: null, groundedIn: null })
-    expect(out.get('c')).toEqual({ recommendation: 'for C', fromStandard: null, groundedIn: null })
+    expect(out.get('a')).toEqual({
+      recommendation: 'for A',
+      fromStandard: null,
+      groundedIn: null,
+      confidence: null,
+    })
+    expect(out.get('b')).toEqual({
+      recommendation: 'for B',
+      fromStandard: null,
+      groundedIn: null,
+      confidence: null,
+    })
+    expect(out.get('c')).toEqual({
+      recommendation: 'for C',
+      fromStandard: null,
+      groundedIn: null,
+      confidence: null,
+    })
   })
 
   it('drops entries with no recommendation text and leaves unfilled findings absent', () => {
@@ -412,5 +443,32 @@ describe('coerceChunkRecommendations — reported grounding', () => {
       [finding],
     )
     expect(garbled.get(finding.id)?.groundedIn).toBeNull()
+  })
+})
+
+describe('coerceChunkRecommendations — reported confidence', () => {
+  const finding = item('high')
+  const parse = (confidence: unknown) =>
+    coerceChunkRecommendations(
+      { recommendations: [{ itemId: finding.id, recommendation: 'r', confidence }] },
+      [finding],
+    ).get(finding.id)?.confidence
+
+  it('keeps a grade inside the scale', () => {
+    expect(parse(0.9)).toBe(0.9)
+    expect(parse(0)).toBe(0)
+    expect(parse(1)).toBe(1)
+  })
+
+  // An unwatched run compares this number against its policy floor, so every unusable value has to
+  // land on the side that asks a person. A number OUTSIDE the scale is the sharp case: clamping
+  // `5` to 1 would hand the run its strongest possible signal on the strength of a model that did
+  // not understand the question.
+  it('reads anything outside the scale as ungraded rather than clamping it', () => {
+    expect(parse(5)).toBeNull()
+    expect(parse(-1)).toBeNull()
+    expect(parse(Number.NaN)).toBeNull()
+    expect(parse('0.9')).toBeNull()
+    expect(parse(undefined)).toBeNull()
   })
 })

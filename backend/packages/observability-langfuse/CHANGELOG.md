@@ -1,5 +1,327 @@
 # @cat-factory/observability-langfuse
 
+## 0.10.97
+
+### Patch Changes
+
+- Updated dependencies [409238f]
+  - @cat-factory/kernel@0.301.0
+
+## 0.10.96
+
+### Patch Changes
+
+- Updated dependencies [0ef48d1]
+  - @cat-factory/kernel@0.300.0
+
+## 0.10.95
+
+### Patch Changes
+
+- Updated dependencies [d5c1f1c]
+- Updated dependencies [c67e924]
+  - @cat-factory/kernel@0.299.1
+
+## 0.10.94
+
+### Patch Changes
+
+- Updated dependencies [056e18d]
+  - @cat-factory/kernel@0.299.0
+
+## 0.10.93
+
+### Patch Changes
+
+- Updated dependencies [a81879b]
+  - @cat-factory/kernel@0.298.2
+
+## 0.10.92
+
+### Patch Changes
+
+- Updated dependencies [0e1e0fa]
+  - @cat-factory/kernel@0.298.1
+
+## 0.10.91
+
+### Patch Changes
+
+- Updated dependencies [7312e0a]
+  - @cat-factory/kernel@0.298.0
+
+## 0.10.90
+
+### Patch Changes
+
+- Updated dependencies [95408c2]
+  - @cat-factory/kernel@0.297.0
+
+## 0.10.89
+
+### Patch Changes
+
+- Updated dependencies [792ecde]
+  - @cat-factory/kernel@0.296.1
+
+## 0.10.88
+
+### Patch Changes
+
+- Updated dependencies [fc56d82]
+- Updated dependencies [fc9afb4]
+  - @cat-factory/kernel@0.296.0
+
+## 0.10.87
+
+### Patch Changes
+
+- Updated dependencies [edd4fd0]
+  - @cat-factory/kernel@0.295.0
+
+## 0.10.86
+
+### Patch Changes
+
+- @cat-factory/kernel@0.294.1
+
+## 0.10.85
+
+### Patch Changes
+
+- Updated dependencies [569181d]
+  - @cat-factory/kernel@0.294.0
+
+## 0.10.84
+
+### Patch Changes
+
+- Updated dependencies [1a0b593]
+  - @cat-factory/kernel@0.293.0
+
+## 0.10.83
+
+### Patch Changes
+
+- Updated dependencies [7d1477c]
+  - @cat-factory/kernel@0.292.2
+
+## 0.10.82
+
+### Patch Changes
+
+- Updated dependencies [c09ddbe]
+  - @cat-factory/kernel@0.292.1
+
+## 0.10.81
+
+### Patch Changes
+
+- Updated dependencies [fc4a1e4]
+  - @cat-factory/kernel@0.292.0
+
+## 0.10.80
+
+### Patch Changes
+
+- Updated dependencies [ee733ee]
+  - @cat-factory/kernel@0.291.0
+
+## 0.10.79
+
+### Patch Changes
+
+- Updated dependencies [01086d8]
+  - @cat-factory/kernel@0.290.1
+
+## 0.10.78
+
+### Patch Changes
+
+- Updated dependencies [1bcdacc]
+  - @cat-factory/kernel@0.290.0
+
+## 0.10.77
+
+### Patch Changes
+
+- @cat-factory/kernel@0.289.1
+
+## 0.10.76
+
+### Patch Changes
+
+- Updated dependencies [bc2478d]
+  - @cat-factory/kernel@0.289.0
+
+## 0.10.75
+
+### Patch Changes
+
+- Updated dependencies [a634746]
+  - @cat-factory/kernel@0.288.0
+
+## 0.10.74
+
+### Patch Changes
+
+- Updated dependencies [7893f35]
+  - @cat-factory/kernel@0.287.0
+
+## 0.10.73
+
+### Patch Changes
+
+- @cat-factory/kernel@0.286.3
+
+## 0.10.72
+
+### Patch Changes
+
+- @cat-factory/kernel@0.286.2
+
+## 0.10.71
+
+### Patch Changes
+
+- b889842: Report the actual cause of a failure everywhere, not just on a "Test connection" button.
+
+  The previous slice taught the connection PROBES to read the cause chain, because on Node a transport
+  failure is `TypeError: fetch failed` and what happened hangs off `.cause`. It turned out the repo had
+  three describers of a thrown value and the other two stopped at `error.message`: `getErrorMessage`
+  (the string a human is shown, and what a persisted failure reason or a PR comment records) and
+  `describeError` (every log line). So a probe could name `connect ECONNREFUSED 127.0.0.1:6443` while
+  the log line and the toast for the same failure still said `fetch failed`, which is what made a
+  Kubernetes connect failure unexplainable even with the probe fixed.
+
+  All three now flatten through one kernel core (`shared/error-chain.logic.ts`): `.cause` plus each
+  `AggregateError` branch (so a dual-stack `localhost` reports what happened on each address), scrubbed
+  through `redactSecrets`, capped with a marker saying what it dropped, and bounded by link identity so
+  a cause cycle terminates. Roughly 90 hand-rolled `e instanceof Error ? e.message : String(e)` copies
+  across the backend now call `getErrorMessage`, and five local `errMessage`/`messageOf` wrappers are
+  deleted.
+
+  Who may read a chain is part of the rule. An AUTHENTICATED reader gets it, because the inner link is
+  usually the only thing saying whether the fix is theirs or the deployment's; where a deployment's
+  model endpoints are platform-internal, their host and port do reach a workspace member through an
+  ordinary 4xx. An UNAUTHENTICATED surface does not: `/ready` on BOTH facades answers with kernel's
+  `publicDiagnostic` (the outermost link, scrubbed) rather than publishing the deployment's database
+  address, sharing one helper so the two runtimes cannot drift to different depths.
+
+  A VERDICT does not read the rendered string either. `errorChainMatches` tests each link uncapped, so
+  a sentinel phrase pushed past the display budget by a long wrapper cannot silently turn a recognised
+  rollout stop into a crash. Relatedly, log fields get their own, much wider cap than the 400 characters
+  a human-facing message is held to, and an error with nothing to say answers with the empty string
+  rather than the bare constructor name, so a call site's `getErrorMessage(e) || '<what to do>'` guard
+  still fires.
+
+  `redactSecrets` now spares a single-case word and an env-var-shaped identifier where a field-name rule
+  matched: it scrubs the message a person reads, and `Missing required key: OPENAI_API_KEY` must not
+  lose the name they have to go and set. Every credential shape the rules exist for still matches.
+
+  An error message may therefore now carry appended causes where it did not before. The opening phrase
+  is unchanged, which is what the downstream `/dispatch failed/i` and eviction-sentinel checks match on.
+
+  On the SPA, every failure toast goes through the one funnel that already existed for pipeline errors,
+  instead of 29 per-component copies of the same `notifyError(title, e)` and ~83 direct `toast.add`
+  calls rendering the raw message. Beyond the translated copy that funnel already resolved, a failure
+  toast now stays until dismissed instead of vanishing after about five seconds, its text is
+  selectable, and one click copies the whole report: the action that failed, the class of failure, the
+  backend's own account, and the `requestId` that is the only join between what the user saw and the
+  server log line explaining it. Conflict (409) toasts get the same treatment, which matters most on
+  the unknown-reason path, since that is where a reason an older SPA build has never heard of lands.
+
+  `@cat-factory/cli` carries its own copy of the describer rather than importing kernel. That package is
+  published and deliberately runtime-dependency-free, so a `workspace:*` import from its `bin` resolves
+  through pnpm's link locally and is simply absent off the registry; a conformity test pins the copy to
+  kernel's output byte for byte.
+
+- Updated dependencies [b889842]
+  - @cat-factory/kernel@0.286.1
+
+## 0.10.70
+
+### Patch Changes
+
+- Updated dependencies [b25732f]
+  - @cat-factory/kernel@0.286.0
+
+## 0.10.69
+
+### Patch Changes
+
+- Updated dependencies [7119ca7]
+  - @cat-factory/kernel@0.285.3
+
+## 0.10.68
+
+### Patch Changes
+
+- Updated dependencies [57a7ecd]
+  - @cat-factory/kernel@0.285.2
+
+## 0.10.67
+
+### Patch Changes
+
+- @cat-factory/kernel@0.285.1
+
+## 0.10.66
+
+### Patch Changes
+
+- Updated dependencies [22b2459]
+- Updated dependencies [2428b6b]
+  - @cat-factory/kernel@0.285.0
+
+## 0.10.65
+
+### Patch Changes
+
+- Updated dependencies [19baddf]
+  - @cat-factory/kernel@0.284.0
+
+## 0.10.64
+
+### Patch Changes
+
+- Updated dependencies [31f43c1]
+  - @cat-factory/kernel@0.283.0
+
+## 0.10.63
+
+### Patch Changes
+
+- Updated dependencies [3ff215a]
+  - @cat-factory/kernel@0.282.1
+
+## 0.10.62
+
+### Patch Changes
+
+- Updated dependencies [e3cf16a]
+  - @cat-factory/kernel@0.282.0
+
+## 0.10.61
+
+### Patch Changes
+
+- @cat-factory/kernel@0.281.3
+
+## 0.10.60
+
+### Patch Changes
+
+- Updated dependencies [1fbd83c]
+- Updated dependencies [00228c6]
+  - @cat-factory/kernel@0.281.2
+
+## 0.10.59
+
+### Patch Changes
+
+- @cat-factory/kernel@0.281.1
+
 ## 0.10.58
 
 ### Patch Changes

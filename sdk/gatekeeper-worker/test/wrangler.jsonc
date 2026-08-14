@@ -1,0 +1,29 @@
+// The suite's Worker config, and the one every suite in this package boots from.
+//
+// NOT a deployment: `deploy/gatekeeper/wrangler.toml` is the one an operator copies. This file
+// exists so a test runtime can boot the handler this package exports with a real Durable Object
+// behind it, and it mirrors the template's bindings deliberately: the Durable Object class names
+// and the migration tags are part of what this package asks a deployment for, so a suite that
+// declared them differently would stop testing the arrangement it documents.
+//
+// JSONC rather than TOML because THREE runtimes read it: `@cloudflare/vitest-pool-workers` for the
+// hermetic and live suites, and Cloudflare OS's own integration harness for the nightly OS leg,
+// which reads a gatekeeper package's `wrangler.jsonc` by name. A second file for that reader would
+// be a second declaration of one Worker, free to drift from this one on exactly the bindings a
+// drift makes unbootable.
+{
+  "name": "cat-factory-gatekeeper-worker-test",
+  "main": "worker.ts",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat", "allow_irrevocable_stub_storage"],
+  "durable_objects": {
+    "bindings": [{ "name": "STATE", "class_name": "GatekeeperState" }],
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["GatekeeperState"] },
+    // The per-resource object the Cloudflare OS object model binds. It keeps its pending actions in
+    // memory rather than in storage (an action outlives nothing, by design), but a Durable Object
+    // class still has to be declared before it can be reached as `ctx.exports.CatFactoryResource`.
+    { "tag": "v2", "new_sqlite_classes": ["CatFactoryResource"] },
+  ],
+}

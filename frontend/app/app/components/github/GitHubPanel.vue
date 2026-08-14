@@ -17,6 +17,7 @@ const ui = useUiStore()
 const access = useWorkspaceAccess()
 const github = useGitHubStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
 const open = computed({
@@ -95,15 +96,6 @@ watch(
   { immediate: true },
 )
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 async function disconnect() {
   const ok = await confirm({
     title: t('vcs.panel.confirmDisconnect.title', {
@@ -122,7 +114,7 @@ async function disconnect() {
       icon: 'i-lucide-unplug',
     })
   } catch (e) {
-    notifyError(t('github.panel.errors.disconnect'), e)
+    present(e, 'github.panel.errors.disconnect')
   }
 }
 
@@ -135,7 +127,7 @@ async function resync(full = false) {
       color: 'info',
     })
   } catch (e) {
-    notifyError(t('github.panel.errors.resync'), e)
+    present(e, 'github.panel.errors.resync')
   }
 }
 
@@ -159,7 +151,7 @@ async function openManage() {
     await github.loadAvailableRepos()
     selected.value = new Set(github.availableRepos.filter((r) => r.linked).map((r) => r.githubId))
   } catch (e) {
-    notifyError(t('github.panel.errors.loadRepos'), e)
+    present(e, 'github.panel.errors.loadRepos')
     managing.value = false
   }
 }
@@ -181,7 +173,7 @@ async function saveRepos() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('github.panel.errors.updateRepos'), e)
+    present(e, 'github.panel.errors.updateRepos')
   }
 }
 
@@ -201,7 +193,7 @@ async function toggleRepo(repo: GitHubRepo) {
     try {
       await github.loadBranches(repo.githubId)
     } catch (e) {
-      notifyError(t('github.panel.errors.loadBranches'), e)
+      present(e, 'github.panel.errors.loadBranches')
     }
   }
 }
@@ -220,7 +212,7 @@ async function createBranch(repo: GitHubRepo) {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('github.panel.errors.createBranch'), e)
+    present(e, 'github.panel.errors.createBranch')
   } finally {
     creatingBranch.value = false
   }
@@ -268,7 +260,7 @@ async function openPr() {
     prForm.value = { repoGithubId: null, title: '', head: '', base: '' }
     toast.add({ title: t(pullTerms.value.opened), icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
-    notifyError(t(pullTerms.value.openFailed), e)
+    present(e, pullTerms.value.openFailed)
   } finally {
     openingPr.value = false
   }
@@ -296,7 +288,7 @@ async function merge(pr: GitHubPullRequest) {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('github.panel.errors.merge'), e)
+    present(e, 'github.panel.errors.merge')
   } finally {
     merging.value = null
   }

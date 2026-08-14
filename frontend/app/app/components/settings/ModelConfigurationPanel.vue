@@ -32,6 +32,7 @@ const agents = useAgentsStore()
 const agentTier = useAgentTierStore()
 const creds = useVendorCredentialsStore()
 const workspace = useWorkspaceStore()
+const { present } = usePipelineErrorToast()
 const toast = useToast()
 const { confirm } = useConfirm()
 
@@ -180,7 +181,7 @@ async function setDefault(p: ModelPreset) {
   try {
     await presets.update(p.id, { isDefault: true })
   } catch (e) {
-    fail(t('settings.modelConfiguration.toast.setDefaultFailed'), e)
+    present(e, 'settings.modelConfiguration.toast.setDefaultFailed')
   } finally {
     busy.value = false
   }
@@ -199,7 +200,7 @@ async function remove(p: ModelPreset) {
   try {
     await presets.remove(p.id)
   } catch (e) {
-    fail(t('settings.modelConfiguration.toast.deleteFailed'), e)
+    present(e, 'settings.modelConfiguration.toast.deleteFailed')
   } finally {
     busy.value = false
   }
@@ -251,10 +252,15 @@ async function save() {
   const e = editor.value
   if (!e) return
   if (!e.name.trim()) {
-    fail(
-      t('settings.modelConfiguration.toast.nameRequiredTitle'),
-      new Error(t('settings.modelConfiguration.toast.nameRequiredBody')),
-    )
+    // NOT through `present`: that funnel classifies a BACKEND failure, and a synthesized local
+    // `Error` carries no envelope and no status, so it lands on the network-fault description and
+    // tells the user the server could not be reached about a check that never left the browser.
+    toast.add({
+      title: t('settings.modelConfiguration.toast.nameRequiredTitle'),
+      description: t('settings.modelConfiguration.toast.nameRequiredBody'),
+      color: 'warning',
+      icon: 'i-lucide-triangle-alert',
+    })
     return
   }
   busy.value = true
@@ -280,19 +286,10 @@ async function save() {
     }
     editor.value = null
   } catch (err) {
-    fail(t('settings.modelConfiguration.toast.saveFailed'), err)
+    present(err, 'settings.modelConfiguration.toast.saveFailed')
   } finally {
     busy.value = false
   }
-}
-
-function fail(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
 }
 </script>
 

@@ -1,7 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Pipeline } from '~/types/domain'
-import type { GateConfigForm, PipelinePurpose, RetiredPipelineWire } from '@cat-factory/contracts'
+import type {
+  GateConfigForm,
+  PipelinePurpose,
+  RetiredPipelineWire,
+  RunDefaultScope,
+} from '@cat-factory/contracts'
+import { declaredDefaultPipelineId } from '@cat-factory/contracts'
 import { useUpsertList } from '~/composables/useUpsertList'
 import { createDraftStepState, type PipelinesContext } from '~/stores/pipelines/context'
 import { createPipelineDraftActions } from '~/stores/pipelines/draftActions'
@@ -69,10 +75,10 @@ export const usePipelinesStore = defineStore('pipelines', () => {
   /** Organizational labels for the pipeline being assembled/edited. */
   const draftLabels = ref<string[]>([])
   /**
-   * The use-case classifier of the pipeline being assembled/edited (`build` / `document` /
-   * `review` / `research` / `planning`). Drives which task pickers offer the saved pipeline, which
-   * agent kinds the builder palette shows (a non-`build` purpose hides the Implementation/Testing
-   * kinds) and which saved pipelines the library lists.
+   * The use-case classifier of the pipeline being assembled/edited (`build` / `bugfix` /
+   * `document` / `review` / `research` / `planning`). Drives which task pickers offer the saved
+   * pipeline, which agent kinds the builder palette shows (a purpose that ships no code hides the
+   * Implementation/Testing kinds) and which saved pipelines the library lists.
    *
    * Never null: `Pipeline.purpose` is mandatory, so a draft is classified from the moment it
    * exists. `build` is the default because it is what an unclassified pipeline has always behaved
@@ -124,6 +130,23 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     return pipelines.value.find((p) => p.id === id)
   }
 
+  /**
+   * The pipeline id this workspace has DECLARED as its default for a resolution scope, or undefined
+   * when no row claims it.
+   *
+   * The rule itself is `declaredDefaultPipelineId` in `@cat-factory/contracts`, shared with the
+   * engine: the SPA pre-selects on its start controls what the backend falls back to when a headless
+   * caller names none, and two readings of "the default" is how a Start button comes to run
+   * something other than what the board said it would.
+   *
+   * Undefined is a real answer, not a lookup failure, and each caller composes its own fallback with
+   * it: the start controls `defaultBuildPipelineId` (the interface-mode rung), the backend catalog
+   * order.
+   */
+  function declaredDefaultId(scope: RunDefaultScope): string | undefined {
+    return declaredDefaultPipelineId(pipelines.value, scope)
+  }
+
   // The draft manipulation + persistence operations, split into cohesive factories sharing the
   // state above (a size-only extraction — behaviour is identical to the former in-closure
   // functions). Persistence drives the draft-lifecycle helpers (`clearDraft`/`loadForEdit`).
@@ -173,6 +196,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     hydrate,
     hydrateGateConfigForms,
     getPipeline,
+    declaredDefaultId,
     ...draftActions,
     ...persistence,
   }

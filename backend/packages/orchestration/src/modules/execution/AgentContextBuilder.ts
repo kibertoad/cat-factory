@@ -21,6 +21,8 @@ import type {
   InitiativePresetRegistry,
   InitiativeRepository,
   LinkedDocumentRefresher,
+  LocalModelDeclarationsCacheValue,
+  LocalModelEndpointRepository,
   Logger,
   ModelPresetCacheValue,
   ModelPresetRepository,
@@ -65,6 +67,7 @@ import { connectionDescription } from '@cat-factory/contracts'
 import type { ResolvedValidationChecks } from '@cat-factory/contracts'
 import { reproductionFor, validationChecksFor } from './builder-validation-context.js'
 import { stepObservations, type StepObservations } from './builder-step-observations.js'
+import { dispatchEpochSlice } from './step-fold.logic.js'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import { buildImplementationChoice } from './forkDecision.logic.js'
 import { buildRalphValidation } from './ralph.logic.js'
@@ -77,9 +80,10 @@ import {
   priorOutputsFor,
   priorPrReviewContextFor,
 } from './builder-context-files.js'
+import { buildReworkContext } from './companion-review-context.js'
 import { type FoundationalServiceResolver } from './run-foundational-services.js'
 import { CatalogRunContext } from './run-catalog-context.js'
-import { resolveReferenceScreenshots } from './run-reference-screenshots.js'
+import { resolveRunImages } from './run-images.js'
 import { buildBlockPayload } from './builder-block-payload.js'
 import { getFragment, withDesignContextFragment } from '@cat-factory/prompt-fragments'
 import {
@@ -89,90 +93,6 @@ import {
   resolveLinkedContext as resolveLinkedContextFor,
 } from './linked-context.js'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
-
-/**
- * The `revision` slice of an agent context when a step is being re-run with feedback
- * — either a human's "request changes" on its approval gate, or a downstream
- * companion's automatic rework (`step.rework`). The companion path wins when both are
- * present. Empty object when neither applies (no revision context).
- */
-function buildRevisionContext(step: PipelineStep): {
-  revision?: {
-    previousProposal: string
-    feedback: string
-    comments?: { quotedSource?: string; body: string }[]
-  }
-} {
-  const source = step.rework
-    ? {
-        previousProposal: step.rework.previousProposal,
-        feedback: step.rework.feedback,
-        comments: step.rework.comments,
-      }
-    : step.approval?.status === 'changes_requested'
-      ? {
-          previousProposal: step.approval.proposal,
-          feedback: step.approval.feedback ?? '',
-          comments: step.approval.comments,
-        }
-      : undefined
-  if (!source) return {}
-  return {
-    revision: {
-      previousProposal: source.previousProposal,
-      feedback: source.feedback,
-      ...(source.comments?.length
-        ? {
-            comments: source.comments.map((c) => ({
-              ...(c.quotedSource ? { quotedSource: c.quotedSource } : {}),
-              body: c.body,
-            })),
-          }
-        : {}),
-    },
-  }
-}
-
-/**
- * The step's per-round dispatch epoch (see {@link AgentRunContext.dispatchEpoch}). A
- * looping step carries its round count on its own gate state: the Tester→Fixer loop on
- * `step.test.attempts` (incremented per fixer round) and a polling gate's helper loop on
- * `step.gate.attempts` (incremented per helper dispatch). Either uniquely tags each
- * re-dispatch, so the harness job id changes round to round and a re-test never re-attaches
- * to a prior round's completed job. A step with neither (dispatched once) is epoch 0.
- *
- * Eviction recoveries count too — the deploy path has always done this
- * (`deployEvictionEpoch`, whose comment calls itself "analogous to the agent path's
- * `dispatchEpochFor`"), and the agent path owes the same for a stronger reason. A pool is
- * told to keep routing STICKY BY JOB ID (see `backend/docs/runner-pool-integration.md` §7) so
- * a replay or sweeper re-drive reaches the same job — correct for a live job, and exactly
- * wrong after an eviction, where reusing the id routes the recovery straight back to the dead
- * job instead of onto a fresh member. That would make the whole eviction-recovery budget a
- * no-op for pool-backed runs. A fresh id is right for every other transport too: nothing can
- * re-attach to a container that no longer exists.
- *
- * Every component is monotonic per step, so the sum is monotonic and each re-dispatch after
- * any increment mints a strictly larger epoch — two different rounds can never collide on one id.
- */
-export function dispatchEpochFor(step: PipelineStep): number {
-  const evictions = (step.evictionRecoveries ?? 0) + (step.transientEvictionRecoveries ?? 0)
-  // A manually RESUMED PR review counts for the same reason an eviction recovery does, and more
-  // sharply: the whole point of the resume is that the previous job is WEDGED, so re-attaching to
-  // it (which is what a container-reusing transport does for a known job id) would replace the
-  // stuck run with itself. The review is the only step kind carrying none of the loop counters
-  // above, so without this term its epoch would stay 0 across every resume.
-  const resumes = step.prReview?.resumeAttempts ?? 0
-  const base =
-    (step.test?.attempts ?? step.gate?.attempts ?? step.ralph?.attempts ?? 0) + evictions + resumes
-  // The optional fork-decision phase dispatches the read-only proposer on the coder step
-  // BEFORE the Coder itself (Phase A then Phase B). Both dispatch on the same step, so once
-  // the phase resolves (`chosen` / `single_path`) bump the epoch by one — the Phase-B Coder
-  // then gets a distinct harness job id and never re-attaches to the proposer's completed job
-  // on a container-reusing transport (the same guarantee fixer/helper rounds get).
-  const status = step.forkDecision?.status
-  const forkResolved = status === 'chosen' || status === 'single_path'
-  return base + (forkResolved ? 1 : 0)
-}
 
 /**
  * Resolves already-selected fragment ids to their bodies against the merged
@@ -263,6 +183,20 @@ export interface AgentContextBuilderDeps {
    * slow-moving admin config that every dispatch resolves. Absent ⇒ the read runs live.
    */
   modelPresetCache?: GroupCacheHandle<ModelPresetCacheValue>
+  /**
+   * Optional: the per-USER locally-run model endpoints, read for what the RUN INITIATOR declared
+   * about the local models they enabled (today: whether one reads images). Resolved here, once per
+   * dispatch, because a local model has no catalog entry for those facts to come from and the
+   * boot-time model resolver has no user in hand. Absent ⇒ a local ref stays undeclared, which
+   * every reader reports as unknown rather than as a refusal by the model.
+   */
+  localModelEndpoints?: LocalModelEndpointRepository
+  /**
+   * Optional: the `AppCaches.localModelDeclarations` slice the endpoint read above goes through,
+   * the per-USER sibling of `modelPresetCache` and read on the same per-dispatch schedule. Absent ⇒
+   * the read runs live.
+   */
+  localModelDeclarationsCache?: GroupCacheHandle<LocalModelDeclarationsCacheValue>
   /**
    * Optional: the workspace's consensus-GROUP library. When wired, a consensus step naming a
    * tier set (`consensus.groupIds`) resolves it here — ONE batched read per dispatch — and the
@@ -425,6 +359,9 @@ export class AgentContextBuilder {
     options?: BuildContextOptions,
   ): Promise<AgentRunContext> {
     const agentKind = options?.agentKind ?? step.agentKind
+    // Read twice below (the dispatch settings key their per-user resolution on it; the context
+    // carries it for attribution), so it is named once here.
+    const initiatedBy = instance.initiatedBy
     const observations = stepObservations(step, options)
     // When a block's requirements have been reworked, that standardized document is
     // the single source of truth for every agent step: it already folds in the
@@ -489,10 +426,10 @@ export class AgentContextBuilder {
       // that picked none skip it entirely (no extra read). Throws when a REQUIRED skill can't
       // resolve — a step asked to apply a skill must never run against nothing.
       runSkills,
-      // The three per-dispatch GENERATION settings — the workspace's own system prompt for the
-      // kind, the output-token ceiling, and the ROUTE order the block's preset prefers. Resolved
-      // HERE, once per dispatch in the engine, rather than in each executor, so the container /
-      // inline / consensus paths cannot disagree about what a step ran under.
+      // The per-dispatch GENERATION settings, ALL of them (`DispatchPromptSettings` enumerates
+      // them, so a new member is added there rather than restated here). Resolved HERE, once per
+      // dispatch in the engine, rather than in each executor, so the container / inline / consensus
+      // paths cannot disagree about what a step ran under.
       dispatchSettings,
       // The consensus config this dispatch actually runs under: the step's own config when it
       // authored inline participants, the workspace group its estimate earned when it named a
@@ -504,10 +441,9 @@ export class AgentContextBuilder {
       // failure policy and (on a mothership-mode node) a transport, so the collaborator owns
       // the fan-out and the shared reads inside it; see `CatalogRunContext.sliceFor`.
       catalogSlice,
-      // The reference design images this task already holds, named as the files a CAPTURING kind
-      // reads under `.cat-context/reference-screenshots/`. A spread-ready partial, empty for every
-      // kind that captures nothing, which is what keeps the two reads off their dispatch path.
-      referenceScreenshots,
+      // The task's images, from ONE read of its reference set (see `resolveRunImages`): a
+      // spread-ready partial, empty for a kind that wants neither half.
+      runImages,
     ] = await Promise.all([
       linked.linkedContext,
       this.resolveEnvironment(workspaceId, block, serviceFrame),
@@ -531,13 +467,13 @@ export class AgentContextBuilder {
       }),
       this.resolveDocAuthoringContext(workspaceId, agentKind, block),
       this.resolveSkillsForStep(workspaceId, agentKind, step),
-      resolveDispatchSettings(this.deps, workspaceId, agentKind, step, block),
+      resolveDispatchSettings(this.deps, { workspaceId, agentKind, step, block, initiatedBy }),
       // A consensus step's TIER SET: resolve the named groups and materialise the one this
       // task's estimate earns. In the same read wave as the rest of the context, so a tiered
       // step costs one extra batched query and nothing else.
       this.resolveConsensusConfig(workspaceId, step, block),
       this.catalogContext().sliceFor(workspaceId, agentKind, step, instance),
-      resolveReferenceScreenshots(this.deps, agentKind, workspaceId, block.id),
+      resolveRunImages(this.deps, agentKind, workspaceId, block.id),
     ])
     const agentConfig = block.agentConfig
     const customTaskType = this.customTaskTypeFor(block)
@@ -550,15 +486,12 @@ export class AgentContextBuilder {
       executionId: instance.id,
       // Carry the run initiator so the container executor can lease their OWN personal
       // (individual-usage) subscription for the step. Null on system/dev runs.
-      ...(instance.initiatedBy != null ? { initiatedByUserId: instance.initiatedBy } : {}),
+      ...(initiatedBy != null ? { initiatedByUserId: initiatedBy } : {}),
       stepIndex: instance.currentStep,
-      // Per-step dispatch epoch (see AgentRunContext.dispatchEpoch): the count of fixer/helper
-      // rounds this step has been through, so a re-dispatched job (the Tester re-test after a
-      // fixer round, a gate's helper retry) gets a FRESH harness job id and runs anew rather
-      // than re-attaching to its prior round's completed job on a container-reusing transport.
-      // Both counters increment once per round, so they uniquely tag each re-dispatch; a step
-      // dispatched once has neither and stays at epoch 0 (unsuffixed id, unchanged behaviour).
-      ...(dispatchEpochFor(step) > 0 ? { dispatchEpoch: dispatchEpochFor(step) } : {}),
+      // How many jobs of THIS kind (a helper off this step resolves its OWN) the run has already
+      // dispatched, so every re-dispatch mints a fresh harness job id and runs anew instead of
+      // re-attaching to an earlier round's completed job. See {@link dispatchEpochSlice}.
+      ...dispatchEpochSlice(instance, agentKind),
       isFinalStep,
       ...dispatchSettings,
       // The future-looking Follow-up companion is enabled for this (coder) step: the
@@ -647,9 +580,7 @@ export class AgentContextBuilder {
       ...(catalogSlice.binaryGenerators.length
         ? { binaryGenerators: catalogSlice.binaryGenerators }
         : {}),
-      // The task's reference designs, as the files the container downloads them into (empty when
-      // this dispatch asked and the task holds none; absent when it never asked).
-      ...referenceScreenshots,
+      ...runImages,
       priorOutputs,
       decisions: instance.steps
         .filter((s, i) => i < instance.currentStep && s.decision?.chosen)
@@ -657,13 +588,10 @@ export class AgentContextBuilder {
       resolvedDecision: step.decision?.chosen
         ? { question: step.decision.question, chosen: step.decision.chosen }
         : null,
-      // A re-run triggered either by a human "Request changes" on this step's
-      // approval gate OR by a downstream companion looping it back for rework: hand
-      // the agent its previous proposal plus the feedback so it revises rather than
-      // starting over. The companion's automatic rework (`step.rework`) and the
-      // human's gate feedback share one revision shape; the companion path takes
-      // precedence when both are present.
-      ...buildRevisionContext(step),
+      // A re-run triggered by a human "Request changes" on this step's approval gate, by a
+      // downstream companion looping it back, or by a companion re-grading: the current round's
+      // feedback plus the rounds before it. See {@link buildReworkContext}.
+      ...buildReworkContext(instance, step, this.deps.agentKindRegistry),
     }
   }
 

@@ -19,7 +19,7 @@ import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
 // it drives, as opposed to what it needs to run one task) and they share a scope argument that is
 // worth stating once.
 //
-// **Scope.** Service creation is `admin`; the task-level writes are `write`.
+// **Scope.** Creating and deleting a service are `admin`; the task-level writes are `write`.
 //
 // The split follows what each act CHANGES rather than how destructive it feels. Creating a service
 // is board STRUCTURE, which is what `admin` already covers on this surface for keys and the
@@ -71,6 +71,38 @@ export const createPublicServiceContract = withMinScope(
     pathResolver: () => '/api/v1/services',
     requestBodySchema: createPublicServiceSchema,
     responsesByStatusCode: { 201: publicServiceSchema, ...errorResponses },
+  }),
+)
+
+/**
+ * Delete a board service, its whole subtree and the run history under it: the inverse of the
+ * create, and the act a headless deployment could not perform at all.
+ *
+ * The one board write whose absence forced a browser. Tearing a service down is ordinary
+ * housekeeping for a caller that provisions boards (an environment rebuilt per test pass, a
+ * repository retired, a frame raised against the wrong repository), and until this endpoint the
+ * only door was the app's own, which no API key can reach: a key authenticates on `/api/v1`
+ * alone. So a caller could create a service, fill it with work, and then had to ask a person to
+ * clean it up.
+ *
+ * Delegates to the SAME teardown-then-remove sequence the app's delete uses, guard included: a
+ * service holding UNFINISHED tasks is refused (422, `reason: 'service_has_unfinished_tasks'`)
+ * rather than discarding in-flight work, so a caller that means it deletes those tasks first
+ * (`DELETE /api/v1/tasks/{taskId}`, which stops a live run) and calls this again. `admin`, like
+ * every destructive operation here.
+ *
+ * The frame is resolved on exactly the population `GET /api/v1/services` reports, so an ARCHIVED
+ * one is a 404 here as it is absent there: archiving is the app's non-destructive alternative to
+ * this call, and a surface that published neither the archive nor the restore has no business
+ * deleting through one.
+ */
+export const deletePublicServiceContract = withMinScope(
+  'admin',
+  defineApiContract({
+    method: 'delete',
+    requestPathParamsSchema: singleStringParam('serviceId'),
+    pathResolver: ({ serviceId }) => `/api/v1/services/${serviceId}`,
+    responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
   }),
 )
 

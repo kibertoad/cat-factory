@@ -1,9 +1,11 @@
 import type {
   ApiContractDocument,
   ApiContractSummary,
+  BinaryGeneratorAccepts,
   BinaryGeneratorCapability,
   BinaryGeneratorCredential,
   BinaryGeneratorDefinition,
+  BinaryGeneratorTransport,
   BinaryModality,
 } from '@cat-factory/contracts'
 import { summarizeContract } from './foundational-services.js'
@@ -13,7 +15,7 @@ import { summarizeContract } from './foundational-services.js'
  * one name from the layer it is already wiring against (the same courtesy
  * `FoundationalServiceDefinition` does for the estate registry).
  */
-export type { BinaryGeneratorDefinition }
+export type { BinaryGeneratorDefinition, BinaryGeneratorTransport }
 
 // App-owned registry of the GENERATIVE BINARY INTEGRATIONS a deployment ships in code — the
 // image / music / video generation APIs a binary-generating agent kind calls to produce its
@@ -39,9 +41,9 @@ export type { BinaryGeneratorDefinition }
  * and its contracts SUMMARISED (operation names, sizes) — never the document bodies, which the
  * brief renderer fetches separately for exactly the ids a step selected.
  *
- * The credential appears here as its DECLARATION only (a key name and how to present it). The
- * value is resolved per dispatch, on the container executor's side of the seam, and travels on
- * the job body alone.
+ * Credentials appear here as their DECLARATION only (a key name and how to present it). Values are
+ * resolved per dispatch, on the container executor's side of the seam, and travel on the job body
+ * alone.
  */
 export interface BinaryGeneratorView {
   id: string
@@ -57,10 +59,36 @@ export interface BinaryGeneratorView {
    * here while the wire form omits them.
    */
   capabilities: BinaryGeneratorCapability[]
+  /**
+   * Which values it accepts for the options with a closed domain. ABSENT (not an empty object)
+   * when the definition declared none, because absent is the one spelling of "not stated": the
+   * value rule reads a missing set as "this endpoint has not been audited" and judges the option
+   * exactly as it did before the field existed, which an empty object would say just as well and
+   * an empty LIST inside one would not.
+   */
+  accepts?: BinaryGeneratorAccepts
   endpoint?: string
   guidance?: string
-  credential?: BinaryGeneratorCredential
+  /**
+   * What it authenticates with. EMPTY means the definition declared nothing, so the integration is
+   * called unauthenticated: projected as an array for the same reason {@link mediaTypes} and
+   * {@link capabilities} are, so every reader folds over one shape instead of branching on a
+   * nullable first.
+   */
+  credentials: BinaryGeneratorCredential[]
   contracts: ApiContractSummary[]
+  /**
+   * How the integration is reached. ABSENT means `api`, exactly as it does on the definition:
+   * projected as the optional it is rather than defaulted to `'api'` here, so the one place that
+   * decides what an absent value means stays `isHarnessTransport` instead of becoming this
+   * projection plus every reader that trusts it.
+   */
+  transport?: BinaryGeneratorTransport
+  /**
+   * Which agent CLI serves a `harness` transport. Absent for an `api` one, which the schema
+   * refuses to let mean anything else.
+   */
+  harness?: string
 }
 
 /**
@@ -141,10 +169,13 @@ export class BinaryGeneratorRegistry {
         modalities: [...definition.modalities],
         mediaTypes: [...(definition.mediaTypes ?? [])],
         capabilities: [...(definition.capabilities ?? [])],
+        ...(definition.accepts ? { accepts: definition.accepts } : {}),
         ...(definition.endpoint ? { endpoint: definition.endpoint } : {}),
         ...(definition.guidance ? { guidance: definition.guidance } : {}),
-        ...(definition.credential ? { credential: definition.credential } : {}),
+        credentials: [...(definition.credentials ?? [])],
         contracts: summarized.map((c) => c.summary),
+        ...(definition.transport ? { transport: definition.transport } : {}),
+        ...(definition.harness ? { harness: definition.harness } : {}),
       })
       documents.set(
         definition.id,

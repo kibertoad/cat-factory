@@ -8,7 +8,9 @@ import type {
 } from '@cat-factory/integrations'
 import {
   ALL_SUBSCRIPTION_VENDORS,
+  isAmbientNativeVendor,
   type AppCaches,
+  type HarnessKind,
   type ModelFamilyPolicy,
   type ModelFlavor,
   type ProviderCapabilities,
@@ -43,6 +45,19 @@ export interface CapabilityServices {
    * resolves, so the catalog + start guard don't offer a model that fails at dispatch.
    */
   baseUrlFor?: (provider: string) => string | null | undefined
+  /**
+   * NATIVE LOCAL EXECUTION's allow-list of subscription harnesses (`AppConfig.nativeAmbientAuth`,
+   * from `LOCAL_NATIVE_AGENTS`; absent on every other facade).
+   *
+   * A vendor this serves runs on the developer's OWN installed CLI and its ambient login, so it
+   * has no credential to find: nothing is pooled, nothing is personal, and nothing is leased at
+   * dispatch. Without it here the deployment answered its own question two different ways — the
+   * personal-credential gate correctly dropped such a vendor from the set it demands an unlock
+   * for, while the catalog and the pipeline-start guard, reading only the two credential stores,
+   * still called the model unconfigured. The visible failure was a Claude-pinned run refused with
+   * "no configured provider" on a machine whose `claude` CLI was logged in and would have run it.
+   */
+  nativeAmbientAuth?: readonly HarnessKind[]
   /** Per-user locally-run model endpoints (resolved by the requesting/initiating user). */
   localModelEndpoints?: LocalModelEndpointService
   /** Per-workspace enabled OpenRouter models (the dynamic catalog subset). */
@@ -137,23 +152,52 @@ export async function resolveWorkspaceCapabilities(
     baseUrlFor ? configured.filter((p) => BASE_URL_OPTIONAL.has(p) || !!baseUrlFor(p)) : configured,
   )
   const subscriptionVendors = new Set<SubscriptionVendor>()
+  // BOTH credential stores answered for the whole vocabulary in ONE read each, rather than a
+  // question per vendor. Each store carries the full answer in a single statement, and this path is
+  // taken by the catalog render AND every run start, so a per-vendor sweep was one round trip per
+  // member of a closed vocabulary on the hottest read the model layer has.
+  //
+  // Lazy rather than hoisted, so a deployment whose vendors are all served by an ambient host CLI
+  // still touches neither store, and an unbound resolution (no `userId`) still never touches the
+  // personal one. Memoised on the promise, so the concurrent callers of one resolution share the
+  // single in-flight read rather than racing two.
+  let pooledVendors: Promise<ReadonlySet<SubscriptionVendor>> | undefined
+  const pooledHolds = async (vendor: SubscriptionVendor): Promise<boolean> => {
+    const pool = services.subscriptions
+    if (!pool) return false
+    pooledVendors ??= pool.liveVendors(workspaceId)
+    return (await pooledVendors).has(vendor)
+  }
+  let personalVendors: Promise<ReadonlySet<SubscriptionVendor>> | undefined
+  const personalHolds = async (vendor: SubscriptionVendor): Promise<boolean> => {
+    const personal = services.personalSubscriptions
+    if (!userId || !personal) return false
+    personalVendors ??= personal.liveVendors(userId)
+    return (await personalVendors).has(vendor)
+  }
   for (const vendor of ALL_SUBSCRIPTION_VENDORS) {
-    const pooled = services.subscriptions
-      ? await services.subscriptions.hasToken(workspaceId, vendor)
-      : false
-    const personal =
-      !pooled && userId && services.personalSubscriptions
-        ? await services.personalSubscriptions.has(userId, vendor)
-        : false
-    if (pooled || personal) subscriptionVendors.add(vendor)
+    // Ambient FIRST, and it short-circuits both credential reads rather than joining them: a
+    // vendor the host CLI serves is usable for every initiator of this deployment, including one
+    // there is no user for at all, so neither store has anything to say about it. Decided by the
+    // SAME predicate the personal-credential gate and the container executor use, so the three
+    // halves of the ambient decision cannot drift.
+    if (isAmbientNativeVendor(services.nativeAmbientAuth, vendor)) {
+      subscriptionVendors.add(vendor)
+      continue
+    }
+    if ((await pooledHolds(vendor)) || (await personalHolds(vendor))) {
+      subscriptionVendors.add(vendor)
+    }
   }
   // Local runners are per-user: a model is usable when the resolving user has enabled it.
   // Keyed by the dynamic model id (`"<provider>:<model>"`) so usability is model-granular
-  // (a runner configured but with this model un-enabled must not pass).
+  // (a runner configured but with this model un-enabled must not pass). The id comes off the
+  // DECLARATION's own field: each enabled model is an object (the id plus what the user declared
+  // about it), and interpolating the object here would key every entry `[object Object]`.
   const localModels = new Set<string>()
   if (userId && services.localModelEndpoints) {
     for (const cap of await services.localModelEndpoints.capabilitiesFor(userId)) {
-      for (const model of cap.models) localModels.add(`${cap.provider}:${model}`)
+      for (const model of cap.models) localModels.add(`${cap.provider}:${model.id}`)
     }
   }
   // Dynamic OpenRouter catalog (per-workspace): the enabled slugs gate the dynamic

@@ -105,6 +105,7 @@ import type {
   KaizenVerifiedComboRepository,
   LlmCallMetricRepository,
   LlmTraceSink,
+  LocalModelEndpointRepository,
   Logger,
   MembershipRepository,
   MergeTrackRecordRepository,
@@ -138,11 +139,14 @@ import type {
   RepoBootstrapper,
   RepoProjectionRepository,
   ReportsRepository,
+  ResolveRunInitiatorToken,
   SpendRollupRepository,
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
   ResolveRunRepoContext,
+  AccountRiskPolicyRepository,
   RiskPolicyRepository,
+  RiskPolicySuppressionRepository,
   RunInitiatorScope,
   RunLifecycleSink,
   RunRepoContext,
@@ -631,6 +635,23 @@ export interface CoreDependencies {
    * host and the SPA withholds those links rather than pointing at the public instance.
    */
   vcsWebUrls?: VcsWebUrls
+  /**
+   * "Does a run in this scope authenticate as its INITIATOR's own personal access token, or as
+   * the deployment credential?" — the single built instance, shared with the engine's GitHub
+   * client and each facade's container-dispatch mint (kernel's `createInitiatorPatGate` +
+   * `@cat-factory/server`'s `createResolveRunInitiatorToken`).
+   *
+   * On the container it serves the credential CHECK: the board-load probe that warns a user
+   * their token cannot push has to judge the token a run would ACTUALLY use, which means
+   * honouring the workspace's `allowInitiatorPat` opt-out. Re-composing that gate in the
+   * controller would have made a fourth copy of a security decision whose whole point is being
+   * singular, and an opted-out workspace would then be nagged about a token no run touches.
+   *
+   * Absent ⇒ no per-user secret store is wired (no `ENCRYPTION_KEY`), which is the same
+   * condition that already makes the preference inert; the check then judges the deployment
+   * credential alone.
+   */
+  resolveRunInitiatorToken?: ResolveRunInitiatorToken
   repoProjectionRepository?: RepoProjectionRepository
   branchProjectionRepository?: BranchProjectionRepository
   pullRequestProjectionRepository?: PullRequestProjectionRepository
@@ -1247,8 +1268,21 @@ export interface CoreDependencies {
   packageRegistryConnectionRepository?: PackageRegistryConnectionRepository
   /** Seals registry tokens at rest (domain tag 'cat-factory:package-registries'). */
   packageRegistrySecretCipher?: SecretCipher
-  /** Resolves a task's merge threshold preset (auto-merge ceilings + CI attempt budget). */
+  /** A board's OWN risk policies: the built-in catalog copied in at creation, plus what it authored. */
   riskPolicyRepository?: RiskPolicyRepository
+  /**
+   * The ACCOUNT-tier risk policy library (ADR 0055): postures authored once for a whole account,
+   * which every board under it inherits read-only and may clone or hide. Absent ⇒ nothing is
+   * inherited and every board's library is exactly its own rows, which is the behaviour before the
+   * tier existed.
+   */
+  accountRiskPolicyRepository?: AccountRiskPolicyRepository
+  /**
+   * Which inherited account policies a board HIDES. Absent ⇒ a board hides nothing, which offers a
+   * posture rather than silently withdrawing one: the direction where a facade mid-migration can
+   * only show too much, never resolve a policy its own editor called hidden.
+   */
+  riskPolicySuppressionRepository?: RiskPolicySuppressionRepository
   /**
    * Optional: persistence for the merge track record (one row per merge decision — change class,
    * merger scores, reviewer-effort tag, outcome — plus the per-class SQL rollups). Absent ⇒ the
@@ -1317,6 +1351,17 @@ export interface CoreDependencies {
    * task's selected/default preset (the built-in default points everything at Kimi K2.7).
    */
   modelPresetRepository?: ModelPresetRepository
+  /**
+   * Stores each USER's locally-run model endpoints (Ollama / LM Studio / …). The engine reads it
+   * for ONE thing: what the run initiator DECLARED about the local models they enabled, which a
+   * dispatch folds onto its resolved ref (a local model has no catalog entry to carry the
+   * per-flavour facts every other model's ref does). The credential half of the same store (the
+   * base URL and sealed bearer key a run-time forward needs) is reached through
+   * `LocalModelEndpointService` in the facade instead, which is also where the runner-URL policy
+   * lives. Optional: absent → local refs stay undeclared, and a run states that rather than
+   * guessing.
+   */
+  localModelEndpointRepository?: LocalModelEndpointRepository
   /**
    * Stores a workspace's consensus-GROUP library — the reusable, estimate-gated panels a
    * pipeline step escalates to (`ConsensusStepConfig.groupIds`). Optional and default-off:

@@ -16,6 +16,19 @@ export interface ModelPresetRepository {
   getDefault(workspaceId: string): Promise<ModelPreset | null>
   /** Create or replace a preset (keyed by id). Promoting `isDefault` demotes the prior default. */
   upsert(workspaceId: string, preset: ModelPreset): Promise<void>
+  /**
+   * Create or replace SEVERAL presets in ONE round-trip: the built-in catalog seed, which is a
+   * whole library at once and grew a serial write per shipped built-in when it looped `upsert`.
+   *
+   * Same semantics as `upsert` applied to each, with the single-default invariant read over the
+   * batch as a whole: a row NOT in `presets` is demoted when any member carries `isDefault`, and a
+   * member's own flag stands as written. The caller passes AT MOST ONE default, which the seed
+   * satisfies by construction (its flag is `id === defaultPresetId`, over unique catalog ids);
+   * passing two would persist two, exactly as two sequential `upsert` calls would.
+   *
+   * An empty array is a no-op, so a caller need not guard.
+   */
+  upsertMany(workspaceId: string, presets: ModelPreset[]): Promise<void>
   /** Remove a preset by id (no-op if absent). The default preset cannot be removed. */
   remove(workspaceId: string, id: string): Promise<void>
 }

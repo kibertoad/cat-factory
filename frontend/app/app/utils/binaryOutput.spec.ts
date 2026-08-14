@@ -521,6 +521,91 @@ describe('binaryOutputPickIssues, generative half', () => {
     expect(pick.conflictingSizeOptions).toEqual(['upscale'])
   })
 
+  // The refusal a value axis adds over the capability one: every selected endpoint takes an
+  // aspect ratio and none of them takes THIS ratio. Stated here because the builder is where the
+  // fix is (pick a listed ratio, or select an integration that renders this one), and because the
+  // set it names is already on the snapshot the picker is holding.
+  it('names a value nothing selected accepts, and what they do accept', () => {
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['bucketed'], generation: { aspectRatio: '7:3' } },
+      catalog,
+      true,
+      [
+        {
+          id: 'bucketed',
+          modalities: ['image' as const],
+          capabilities: ['aspect-ratio' as const],
+          accepts: { aspectRatios: ['1:1', '16:9'] },
+        },
+      ],
+    )
+    expect(pick.issues).toContain('option_value_unaccepted')
+    expect(pick.unacceptedValues).toEqual([
+      { option: 'aspectRatio', requested: '7:3', accepted: ['1:1', '16:9'] },
+    ])
+  })
+
+  // ADVISORY, and the state that keeps the refusal above from firing on a working selection: one
+  // integration refuses the ratio and another has not said what it takes.
+  it('advises rather than refuses when a silent declarer might still serve the value', () => {
+    const pick = binaryOutputPickIssues(
+      {
+        storageServiceId: 'files',
+        generatorIds: ['bucketed', 'open'],
+        generation: { aspectRatio: '7:3' },
+      },
+      catalog,
+      true,
+      [
+        {
+          id: 'bucketed',
+          modalities: ['image' as const],
+          capabilities: ['aspect-ratio' as const],
+          accepts: { aspectRatios: ['1:1', '16:9'] },
+        },
+        { id: 'open', modalities: ['image' as const], capabilities: ['aspect-ratio' as const] },
+      ],
+    )
+    expect(pick.issues).toContain('option_value_unverifiable')
+    expect(pick.issues).not.toContain('option_value_unaccepted')
+    expect(pick.unverifiableValues).toEqual(['aspectRatio'])
+  })
+
+  // ADVISORY too, and the one the reader can act on precisely: one selected endpoint takes the
+  // ratio and another has written down that it does not. Naming the second is the whole remedy,
+  // and it is the finding a first-accepting-declarer short-circuit reported as nothing at all.
+  it('names the integrations that enumerated a value away when another accepts it', () => {
+    const pick = binaryOutputPickIssues(
+      {
+        storageServiceId: 'files',
+        generatorIds: ['wide', 'bucketed'],
+        generation: { aspectRatio: '7:3' },
+      },
+      catalog,
+      true,
+      [
+        {
+          id: 'wide',
+          modalities: ['image' as const],
+          capabilities: ['aspect-ratio' as const],
+          accepts: { aspectRatios: ['7:3', '1:1'] },
+        },
+        {
+          id: 'bucketed',
+          modalities: ['image' as const],
+          capabilities: ['aspect-ratio' as const],
+          accepts: { aspectRatios: ['1:1', '16:9'] },
+        },
+      ],
+    )
+    expect(pick.issues).toContain('option_value_partial')
+    expect(pick.issues).not.toContain('option_value_unaccepted')
+    expect(pick.issues).not.toContain('option_value_unverifiable')
+    expect(pick.partiallyAcceptedValues).toEqual([
+      { option: 'aspectRatio', requested: '7:3', refusedBy: ['bucketed'] },
+    ])
+  })
+
   it('reports BOTH faults when an unknown id was the one covering a requirement', () => {
     // One edit should clear the step. Naming only the missing id would leave the user to
     // discover the uncovered requirement on the next round trip.
@@ -624,6 +709,39 @@ describe('binaryOutputPickIssues, generative half', () => {
     )
     expect(pick.issues).toEqual(['generator_overlap'])
     expect(pick.generatorOverlaps).toEqual([{ modality: 'image', generatorIds: ['retro', 'flux'] }])
+  })
+
+  it('states a HARNESS-served integration as advice, naming the CLI the step then needs', () => {
+    // Advice and not a refusal on purpose: a pipeline is a template, and the model that decides
+    // which CLI a step runs under is chosen per task, not here. What the surface CAN say is the
+    // constraint the selection carries, which is the whole difference between this being known in
+    // advance and arriving as a refused run start against a selection this picker offered.
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['codex-images'] },
+      catalog,
+      true,
+      [
+        {
+          id: 'codex-images',
+          modalities: ['image' as const],
+          transport: 'harness',
+          harness: 'codex',
+        },
+      ],
+    )
+    expect(pick.issues).toEqual(['generator_harness_required'])
+    expect(pick.harnessServedGenerators).toEqual([{ id: 'codex-images', harness: 'codex' }])
+  })
+
+  it('says nothing about an API integration, which every CLI reaches over HTTP', () => {
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['retro'] },
+      catalog,
+      true,
+      generators,
+    )
+    expect(pick.issues).not.toContain('generator_harness_required')
+    expect(pick.harnessServedGenerators).toEqual([])
   })
 
   it('reads a repeated id as ONE integration, exactly as the backend resolves it', () => {

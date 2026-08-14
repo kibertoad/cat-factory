@@ -82,25 +82,77 @@ dependency floor.
 
 ## Companions (registering a rework pair)
 
-A companion GRADES the immediately-preceding producer's output and, below the step's threshold,
-loops THAT producer back for automatic rework on a bounded budget before any human is asked.
+A companion GRADES the immediately-preceding producer's output and, when that grading does not
+pass, loops THAT producer back for automatic rework on a bounded budget before any human is asked.
 Choose it over a [judge](../../docs/initiatives/judge-registry.md) when the remedy is the producer
 running again rather than a verdict being disposed.
 
 Register it with `AgentKindRegistry.registerCompanion`, beside the kind's own registration: a
 companion is a relationship BETWEEN kinds, so it lives on the kind registry rather than a registry
-of its own. Three things bite:
+of its own. Several things bite:
 
 - **The pairing is registered SEPARATELY from the kind**, so every read goes through the registry.
   A projection built off the kind's own definition sees no companions at all.
 - **The free lookups take the registry OPTIONALLY** and fall back to the built-ins (the shape
   `isGatableKind` uses), so a call site that omits it silently sees built-in pairs only. That is a
   wrong ANSWER rather than a missing argument, which is why it survives a typecheck.
+- **The PROMPT is the platform's**, not the registration's: every companion runs the shared
+  companion prompt (`companionSystemPrompt`), which weaves in the pairing's `reviews` label, the
+  JSON verdict shape, and `REVIEW_FINDINGS_LAYOUT` (one severity-graded `comments` entry per point,
+  and a `summary` that is a verdict rather than a second copy of the list). So a registration
+  contributes the label and the threshold, and a deployment companion's findings arrive graded like
+  every other one's, not even a per-workspace prompt override can drop that
+  (`OVERRIDE_PRESERVED_FRAGMENTS` puts the contract back over an edited prompt).
+- **A `blocker` finding holds the run, whatever the rating.** The two halves of a verdict are read
+  independently (kernel's `disposeCompanionVerdict`): a rating is one number over a whole
+  deliverable, so a review can score work above its bar and still have named something that must
+  not ship. While a blocker is open the producer is reworked; once the rounds are gone the step
+  parks, and THAT park is the one an unattended risk policy will not answer, because accepting the
+  work anyway overrules a review rather than reporting that the automation gave up (kernel's
+  `CompanionParkReason`). A loop `companionLoopStalled` stops EARLY reaches the same park on the
+  rounds it abandoned, so the reason is re-decided for that abandoned budget rather than assumed to
+  be a spent one: giving up is the automation's to report, an open blocker is not, and a stalled
+  loop can carry both. Nothing is registered for this: grading is in the shared prompt, so a
+  deployment's own pairing gets it. What a registration should not do is teach its reviewer to
+  express urgency by lowering the rating instead.
 - **Adjacency is an invariant**, enforced by `assertValidCompanionPlacement`: the engine grades the
   immediate predecessor, so a companion separated from its producer would grade whatever happens to
   sit in front of it. The same reasoning drives the cascade-skip rule in
   [`pipeline-catalog-collapse.md`](../../docs/initiatives/pipeline-catalog-collapse.md), where a
   skipped producer takes its companion with it.
+- **A rework round re-dispatches the producer for real**, and nothing has to be registered for that:
+  `dispatchEpochFor` mints the harness job id off the run's own record of what it has dispatched
+  (`recordDispatchAttribution`'s per-kind count), so every round gets an id of its own. It used to be
+  a hand-maintained sum of per-loop counters, which the companion loop was never added to (its round
+  count lives on the COMPANION step and is not readable from the producer at all), so a
+  container-backed producer re-attached to its FIRST completed job every round: the harness replays a
+  job id it already holds, and a companion then re-graded a byte-identical artifact until the budget
+  ran out. Anything new that re-runs a step inherits the fix; nothing needs a counter of its own.
+- **The BUDGET is the task's risk policy, never the registration**: `companionMaxReworks` (3 on
+  every built-in, which is the ceiling the engine used to hard-code). A step is seeded with the
+  catalog default at run start, where no policy is resolved yet, so the resolved value is adopted
+  onto `step.companion.maxAttempts` on the grading that records the step's FIRST verdict, the same
+  way the Tester's quality budget is adopted on its first report. Read ONCE, and keyed on the
+  verdict list rather than on the attempt count, because two things grade a step again on an
+  unspent budget: a human's "request changes" on a gated companion charges no round
+  (`requestStepChanges`), and a human's extra round at the cap RAISES that same field
+  (`resolveCompanionExceeded`), so a later read would report a ceiling the step no longer has.
+  `0` is a posture rather than an off switch: the companion still grades, and its first verdict
+  below the bar goes straight to the iteration-cap park (or to `proceed` under
+  `autonomy: 'unattended'`) instead of buying a round. It does not widen what counts as a pass: a
+  blocker under a `0` budget parks immediately rather than being accepted.
+- **The first-batch rule is SUBORDINATE to that budget.** A companion's first batch of comments
+  loops its producer back whatever the rating was, because that first set of findings is worth a
+  round even from work that scored well. The round is bought from `companionMaxReworks`, so with
+  none to buy the rating decides alone. Read the other way round, a `0` policy parked every
+  companion step (a review with nothing at all to say is the rare one) and, unattended, stamped
+  `capSettledByPolicy` on producers that had met their bar.
+- **The producer answers in its REPLY.** `FEEDBACK_ACCOUNTING_DIRECTIVE` makes it account for every
+  point (changed, or argued down with a reason) as a "Response to review" section in the reply, never
+  in a committed artifact, because that reply is what the next round folds in as prior work — for a
+  `container-explore` companion too, which reads it beside the checkout. The grader is told to hold
+  that accounting to the WORK, and NOT to treat a missing one as a finding: a producer whose
+  deliverable is a pushed commit legitimately answers with the change alone.
 
 ## Boot-time registration validation
 

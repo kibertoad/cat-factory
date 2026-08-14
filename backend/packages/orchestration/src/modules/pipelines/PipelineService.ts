@@ -7,6 +7,7 @@ import type {
 import type {
   ConsensusStepConfig,
   Pipeline,
+  RunDefaultScope,
   StepGating,
   StepOptions,
   TesterQualityConfig,
@@ -15,6 +16,7 @@ import type { GateRegistry, PipelineRegistry } from '@cat-factory/kernel'
 import {
   assertFound,
   ConflictError,
+  declaredDefaultPipelineId,
   noopOperationalMetrics,
   retiredPipelines,
   offeredPipelines,
@@ -32,6 +34,7 @@ import { requireWorkspace } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import {
   adoptedCatalogRow,
+  insertedCatalogRow,
   createPipelineAdoption,
   type PipelineAdoption,
 } from './pipelineAdoption.js'
@@ -217,6 +220,35 @@ export class PipelineService {
   async resolveForRun(workspaceId: string, id: string): Promise<Pipeline | null> {
     await this.requireWorkspace(workspaceId)
     return this.adoption.resolveDefinition(workspaceId, id)
+  }
+
+  /**
+   * The pipeline id a run of this RESOLUTION SCOPE falls back to when neither the caller nor the
+   * task named one, or `null` when the workspace has no answer for that scope.
+   *
+   * `null` is a real answer and the caller states it as one: the public start path keeps its
+   * `pipeline_required` refusal, because a headless caller has no run-time picker and inventing a
+   * rung for it would run work nobody chose.
+   *
+   * The ladder is stored-then-catalog, and the second rung is bounded on purpose. A workspace
+   * seeded before a rung existed holds no row for it, so reading only the library would leave every
+   * existing deployment on the old refusal until somebody opened the board and accepted a reseed
+   * advisory — the same trap `pipelineAdoption` exists to close for a PINNED pipeline. But once the
+   * row IS in the library, its flags are the operator's own answer, INCLUDING the absence of one:
+   * releasing a default has to mean something, so the catalog is consulted only while the workspace
+   * has never adopted the rung the catalog declares.
+   */
+  async defaultPipelineIdForScope(
+    workspaceId: string,
+    scope: RunDefaultScope,
+  ): Promise<string | null> {
+    await this.requireWorkspace(workspaceId)
+    const stored = await this.pipelineRepository.listByWorkspace(workspaceId)
+    const declared = declaredDefaultPipelineId(stored, scope)
+    if (declared) return declared
+    const fromCatalog = declaredDefaultPipelineId(seedPipelines(this.pipelineRegistry), scope)
+    if (!fromCatalog) return null
+    return stored.some((pipeline) => pipeline.id === fromCatalog) ? null : fromCatalog
   }
 
   async create(workspaceId: string, input: CreatePipelineInput): Promise<Pipeline> {
@@ -476,13 +508,16 @@ export class PipelineService {
     // A stored copy exists ⇒ it must be the built-in (a custom pipeline sharing a catalog id is
     // impossible — ids are minted `pl_<n>`), and its labels/archive state carry across. Absent ⇒
     // we're materialising the new built-in, so it starts with the seed's own metadata.
-    const existing = await this.pipelineRepository.get(workspaceId, id)
+    // The workspace's whole library, because materialising a NEW built-in has to know which default
+    // scopes the workspace has already answered before it may carry the catalog's own claim.
+    const stored = await this.pipelineRepository.listByWorkspace(workspaceId)
+    const existing = stored.find((pipeline) => pipeline.id === id)
     if (existing && !existing.builtin) {
       throw new ValidationError(
         'Only built-in pipelines can be reseeded. Delete a custom pipeline instead.',
       )
     }
-    const pipeline = adoptedCatalogRow(seed, existing)
+    const pipeline = existing ? adoptedCatalogRow(seed, existing) : insertedCatalogRow(seed, stored)
     // The absent branch goes through `insertIfAbsent` because it races the run path's adopt-on-
     // start (and a second reseed): both write this same catalog row, so losing is a no-op rather
     // than a duplicate-key 500 on whichever caller arrives second.
@@ -553,9 +588,69 @@ export class PipelineService {
       ...(labels && labels.length ? { labels } : { labels: undefined }),
       ...(archived ? { archived: true } : { archived: undefined }),
     }
+    // Validated BEFORE the row write, so a refused request leaves the library untouched. Judged
+    // afterwards, `{ archived: true, isDefault: true }` answered 422 with the archive already
+    // applied, which is a refusal that had done half the work it refused.
+    const claims = resolvedDefaultClaims(existing, pipeline, input)
     await this.pipelineRepository.update(workspaceId, pipeline)
-    return pipeline
+    if (!claims.length) return pipeline
+    // The default claims go through their OWN store call, because promoting touches a SECOND row
+    // (the incumbent) and `update` deliberately does not carry the flags. Re-read after, so the
+    // returned pipeline states what the store settled rather than what this request asked for.
+    for (const [scope, claimed] of claims) {
+      await this.pipelineRepository.setDefault(workspaceId, pipeline.id, scope, claimed)
+    }
+    return assertFound(
+      await this.pipelineRepository.get(workspaceId, pipeline.id),
+      'Pipeline',
+      pipeline.id,
+    )
   }
+}
+
+/**
+ * The `setDefault` writes an organize request settles, refusing it outright when the row it would
+ * leave behind is an archived or internal one still holding a scope default.
+ *
+ * An ARCHIVED or INTERNAL pipeline may not hold a default. Archiving is how a library hides a rung
+ * and `internal` is how the platform withholds one, so either row answering every headless start is
+ * the concealed-setting failure: a default nobody can see in the library they would go to change it
+ * in. Refused rather than accepted-and-hidden.
+ *
+ * TWO ways a request reaches that state, and the second is why this reads the row's CURRENT claims
+ * rather than only the request's: promoting a row that is (or is becoming) hidden, and hiding a row
+ * that already holds one. Judged against the row this request WOULD write and the claims it would
+ * leave held, so field order in the body never changes the answer, and releasing the claim in the
+ * same call is the way to archive a holder.
+ *
+ * Pure, and outside the class, because it is a rule about a request rather than a step of applying
+ * one: the decision is testable without a store, and `organize` stays a write path with no branch.
+ */
+function resolvedDefaultClaims(
+  existing: Pipeline,
+  next: Pipeline,
+  input: OrganizePipelineInput,
+): readonly (readonly [RunDefaultScope, boolean])[] {
+  const requests = [
+    ['interactive', 'isDefault'],
+    ['unattended', 'isUnattendedDefault'],
+  ] as const satisfies readonly (readonly [RunDefaultScope, 'isDefault' | 'isUnattendedDefault'])[]
+  const settled: (readonly [RunDefaultScope, boolean])[] = []
+  for (const [scope, flag] of requests) {
+    const requested = input[flag]
+    // An omitted field leaves the store's own answer standing, so THAT is what the row would hold.
+    const wouldHold = requested ?? existing[flag] === true
+    if (wouldHold && (next.archived || next.internal)) {
+      throw new ValidationError(
+        requested === true
+          ? 'An archived or internal pipeline cannot be a default'
+          : 'This pipeline is a default, so it cannot be archived. Release the default first, or release it in the same request.',
+        { reason: requested === true ? 'pipeline_not_defaultable' : 'pipeline_default_held' },
+      )
+    }
+    if (requested !== undefined) settled.push([scope, requested])
+  }
+  return settled
 }
 
 // Keep gates aligned to agentKinds; only persist when at least one step is gated so an

@@ -3,9 +3,14 @@ import { COMMAND_NOT_FOUND, type HostShell, type ShellResult } from './host-shel
 import {
   classifyHost,
   type HostDetections,
+  isRecreateOffer,
   parseKubectlClientVersion,
   probeHost,
+  RECREATE_OFFERS,
+  recreateOfferFor,
+  recreateTargetForContext,
 } from './k3s-probe.js'
+import { K3S_RUNTIMES } from './args.js'
 
 /** A HostDetections with everything absent; override the fields a case cares about. */
 function detections(overrides: Partial<HostDetections> = {}): HostDetections {
@@ -88,6 +93,53 @@ describe('classifyHost', () => {
     expect(classifyHost(d, 'kind').recommended).toBe('create-kind')
   })
 
+  it('offers a recreate only for a cluster it can NAME and build again', () => {
+    const withCluster = classifyHost(
+      detections({
+        docker: { installed: true, running: true },
+        k3d: { installed: true },
+        k3dClusters: ['mine'],
+      }),
+      'k3d',
+      'linux',
+      'mine',
+    )
+    const offer = withCluster.offers.find((o) => o.id === 'recreate-k3d')
+    expect(offer?.available).toBe(true)
+    expect(offer?.label).toContain('DESTROYS')
+    // There is no recreate for `use-existing`: that offer fires for ANY reachable kubeconfig,
+    // which can be a shared cluster, and there is no recipe for re-creating an arbitrary context.
+    expect(withCluster.offers.map((o) => o.id)).not.toContain('recreate-use-existing')
+  })
+
+  it('never RECOMMENDS a recreate, even when it is the only thing available', () => {
+    // A recommendation is what `--yes` follows unattended, so a destructive path must be picked
+    // explicitly (via --recreate or an interactive selection) and never inferred.
+    const state = classifyHost(
+      detections({
+        docker: { installed: true, running: true },
+        k3d: { installed: true },
+        k3dClusters: ['mine'],
+      }),
+      'k3d',
+      'linux',
+      'mine',
+    )
+    expect(state.offers.find((o) => o.id === 'recreate-k3d')?.available).toBe(true)
+    expect(state.recommended).not.toBe('recreate-k3d')
+    expect(state.offers.every((o) => !(o.recommended && o.id.startsWith('recreate-')))).toBe(true)
+  })
+
+  it('explains a recreate that is off, naming the cluster it looked for', () => {
+    const noSuchCluster = classifyHost(
+      detections({ docker: { installed: true, running: true }, k3d: { installed: true } }),
+      'k3d',
+      'linux',
+      'ghost',
+    )
+    expect(noSuchCluster.offers.find((o) => o.id === 'recreate-k3d')?.reason).toContain('"ghost"')
+  })
+
   it('offers create-kind with a reason when kind is missing', () => {
     const noKind = classifyHost(detections({ docker: { installed: true, running: true } }))
     const offer = noKind.offers.find((o) => o.id === 'create-kind')
@@ -116,6 +168,46 @@ describe('classifyHost', () => {
     const offer = windows.offers.find((o) => o.id === 'install-k3s')
     expect(offer?.label).toContain('k3d')
     expect(offer?.label).toContain('Linux-only')
+  })
+})
+
+describe('recreateOfferFor', () => {
+  it('answers for exactly the runtimes that HAVE a recreate, and null for the rest', () => {
+    // Derived from `K3S_RUNTIMES` rather than listed, so a fourth distribution has to make this
+    // decision explicitly instead of inheriting whichever branch a ternary happened to fall into.
+    const answered = K3S_RUNTIMES.filter((runtime) => recreateOfferFor(runtime) !== null)
+    expect(answered).toEqual(Object.keys(RECREATE_OFFERS))
+    // A `k3s` host service has no cluster to delete and build again: it is installed by a command
+    // this CLI only ever prints, so folding it onto k3d's offer destroyed an unrelated cluster.
+    expect(recreateOfferFor('k3s')).toBeNull()
+    expect(recreateOfferFor('k3d')).toBe('recreate-k3d')
+    expect(recreateOfferFor('kind')).toBe('recreate-kind')
+  })
+
+  it('recognises exactly the offers the table names as destructive', () => {
+    const offers = classifyHost(detections()).offers.map((o) => o.id)
+    expect(offers.filter(isRecreateOffer)).toEqual(Object.values(RECREATE_OFFERS))
+  })
+})
+
+describe('recreateTargetForContext', () => {
+  it('names the k3d/kind cluster a reused context resolves to', () => {
+    expect(
+      recreateTargetForContext(
+        detections({ clusterContext: 'k3d-mine', k3dClusters: ['mine', 'other'] }),
+      ),
+    ).toEqual({ runtime: 'k3d', clusterName: 'mine' })
+    expect(
+      recreateTargetForContext(detections({ clusterContext: 'kind-kd', kindClusters: ['kd'] })),
+    ).toEqual({ runtime: 'kind', clusterName: 'kd' })
+  })
+
+  it('answers null for anything the CLI could not build again', () => {
+    // A remedy has to be a command that WORKS: `--recreate` refuses a cluster it cannot name, so a
+    // context with no matching cluster must yield no recreate target rather than a plausible guess.
+    expect(recreateTargetForContext(detections({ clusterContext: 'k3d-mine' }))).toBeNull()
+    expect(recreateTargetForContext(detections({ clusterContext: 'default' }))).toBeNull()
+    expect(recreateTargetForContext(detections({ k3dClusters: ['mine'] }))).toBeNull()
   })
 })
 

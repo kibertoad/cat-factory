@@ -16,7 +16,10 @@ function fakeRepo(): RiskPolicyRepository {
   const rows = new Map<string, RiskPolicy>()
   return {
     get: async (_ws, id) => rows.get(id) ?? null,
-    getDefault: async () => [...rows.values()].find((p) => p.isDefault) ?? null,
+    getDefault: async (_ws, scope) =>
+      [...rows.values()].find((p) =>
+        scope === 'unattended' ? p.isUnattendedDefault : p.isDefault,
+      ) ?? null,
     list: async () => [...rows.values()],
     upsert: async (_ws, preset) => {
       // Single-default invariant (matches the real repo): promoting one demotes the rest.
@@ -51,9 +54,11 @@ describe('RiskPolicyService risk-policy cache coherence', () => {
 
   // Mirror the engine read: resolve the default preset through the slice, counting loads.
   function readDefault(repo: RiskPolicyRepository, loads: { n: number }) {
-    return caches.riskPolicy.get('default', WS, async () => {
+    // The key carries the SCOPE, exactly as `cacheKeyOf` spells it: a workspace has two defaults
+    // and they are different rows.
+    return caches.riskPolicy.get('default:interactive', WS, async () => {
       loads.n++
-      return { policy: await repo.getDefault(WS) }
+      return { policy: await repo.getDefault(WS, 'interactive') }
     })
   }
 
@@ -128,7 +133,7 @@ describe('RiskPolicyService risk-policy cache coherence', () => {
     // Boards are seeded at creation, so an empty library means one that predates that. A gate
     // can have resolved `default` on it and cached the null; the repair `list()` performs must
     // drop that warm null, or the next gate keeps reading the FALLBACK_RISK_POLICY fallback
-    // after the library exists. (Pins the `ensureSeeded` invalidation the other cases only
+    // after the library exists. (Pins the `seedOwnTier` invalidation the other cases only
     // cover transitively.)
     const repo = fakeRepo()
     const service = makeService(repo, caches.riskPolicy)

@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import {
   type Attributes,
   type Context,
@@ -259,7 +260,7 @@ export class NodeOtelTraceSink implements LlmTraceSink {
   private warn(err: unknown): void {
     this.logger?.warn('otel: failed to record telemetry', {
       scope: 'otel',
-      err: err instanceof Error ? err.message : String(err),
+      err: getErrorMessage(err),
     })
   }
 }

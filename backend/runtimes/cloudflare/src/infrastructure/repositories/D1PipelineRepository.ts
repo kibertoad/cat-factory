@@ -1,5 +1,5 @@
 import type { PipelineRepository } from '@cat-factory/kernel'
-import type { Pipeline } from '@cat-factory/contracts'
+import type { Pipeline, RunDefaultScope } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 import { type PipelineRow, rowToPipeline } from './mappers'
 
@@ -9,7 +9,13 @@ import { type PipelineRow, rowToPipeline } from './mappers'
  * to this SQL.
  */
 const INSERT_PIPELINE_SQL =
-  'INSERT INTO pipelines (workspace_id, id, name, description, agent_kinds, gates, thresholds, enabled, consensus, gating, follow_ups, tester_quality, step_options, labels, archived, builtin, version, public, availability, purpose) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  'INSERT INTO pipelines (workspace_id, id, name, description, agent_kinds, gates, thresholds, enabled, consensus, gating, follow_ups, tester_quality, step_options, labels, archived, builtin, version, public, availability, purpose, is_default, is_unattended_default) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+
+/** The column one default scope is stored in; the ONE place that mapping lives on this facade. */
+const PIPELINE_DEFAULT_COLUMN: Record<RunDefaultScope, 'is_default' | 'is_unattended_default'> = {
+  interactive: 'is_default',
+  unattended: 'is_unattended_default',
+}
 
 function pipelineBindings(workspaceId: string, pipeline: Pipeline): unknown[] {
   return [
@@ -33,6 +39,10 @@ function pipelineBindings(workspaceId: string, pipeline: Pipeline): unknown[] {
     pipeline.public ? 1 : null,
     pipeline.availability ?? null,
     pipeline.purpose,
+    // NULL rather than 0 when the row claims nothing, so the partial unique index that keeps one
+    // default per scope sees only the rows that DO claim it.
+    pipeline.isDefault ? 1 : null,
+    pipeline.isUnattendedDefault ? 1 : null,
   ]
 }
 
@@ -85,6 +95,8 @@ export class D1PipelineRepository implements PipelineRepository {
     // UPDATE (not delete+insert) preserves the row's rowid, so an edited pipeline keeps
     // its place in the catalog order. `builtin` is immutable, so it is not rewritten.
     // `version` IS rewritten so a reseed bumps the stored copy to the current catalog version.
+    // The two default flags are deliberately absent: `setDefault` owns them, so an edit or a
+    // reseed of a rung an operator had promoted cannot silently un-promote it.
     await this.db
       .prepare(
         'UPDATE pipelines SET name = ?, description = ?, agent_kinds = ?, gates = ?, thresholds = ?, enabled = ?, consensus = ?, gating = ?, follow_ups = ?, tester_quality = ?, step_options = ?, labels = ?, archived = ?, version = ?, public = ?, availability = ?, purpose = ? WHERE workspace_id = ? AND id = ?',
@@ -111,6 +123,38 @@ export class D1PipelineRepository implements PipelineRepository {
         pipeline.id,
       )
       .run()
+  }
+
+  async setDefault(
+    workspaceId: string,
+    id: string,
+    scope: RunDefaultScope,
+    claimed: boolean,
+  ): Promise<void> {
+    const column = PIPELINE_DEFAULT_COLUMN[scope]
+    if (!claimed) {
+      // A RELEASE names one row and clears that row only. Widening it to every holder would make
+      // releasing a flag this row does not hold clear the row that DOES — the port's "no-op" turned
+      // into a silent repoint of what every headless start resolves.
+      await this.db
+        .prepare(`UPDATE pipelines SET ${column} = NULL WHERE workspace_id = ? AND id = ?`)
+        .bind(workspaceId, id)
+        .run()
+      return
+    }
+    // ONE `batch`, which D1 runs as a single implicit transaction, mirroring the Drizzle
+    // repository's explicit `db.transaction`: a demote that committed before a failed promote would
+    // leave the scope with no holder at all, which is a state no caller asked for. The PROMOTE's
+    // demote drops EVERY holder rather than the incumbent alone, which is what heals a workspace
+    // whose rows predate the partial unique index.
+    await this.db.batch([
+      this.db
+        .prepare(`UPDATE pipelines SET ${column} = NULL WHERE workspace_id = ? AND ${column} = 1`)
+        .bind(workspaceId),
+      this.db
+        .prepare(`UPDATE pipelines SET ${column} = 1 WHERE workspace_id = ? AND id = ?`)
+        .bind(workspaceId, id),
+    ])
   }
 
   async delete(workspaceId: string, id: string): Promise<void> {

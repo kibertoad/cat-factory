@@ -30,6 +30,7 @@ import type {
   PlatformRunOutcome,
   PlatformRunTrendPoint,
   Recurrence,
+  RunDefaultScope,
   RunRef,
   ScheduleRun,
   ScheduleTemplate,
@@ -89,8 +90,22 @@ function pipelineValues(workspaceId: string, pipeline: Pipeline) {
     public: pipeline.public ? 1 : null,
     availability: pipeline.availability ?? null,
     purpose: pipeline.purpose,
+    // NULL rather than 0 when the row claims nothing, so the partial unique index that keeps one
+    // default per scope sees only the rows that DO claim it.
+    is_default: pipeline.isDefault ? 1 : null,
+    is_unattended_default: pipeline.isUnattendedDefault ? 1 : null,
   }
 }
+
+/**
+ * The column one default scope is stored in; the ONE place that mapping lives on this facade
+ * (the sibling of `DEFAULT_COLUMN` in the risk-policy repo). Held as the FIELD NAME rather than the
+ * column object so the same entry serves both the `WHERE` and the `SET`.
+ */
+const PIPELINE_DEFAULT_COLUMN = {
+  interactive: 'is_default',
+  unattended: 'is_unattended_default',
+} as const satisfies Record<RunDefaultScope, 'is_default' | 'is_unattended_default'>
 
 export class DrizzlePipelineRepository implements PipelineRepository {
   constructor(private readonly db: DrizzleDb) {}
@@ -132,7 +147,9 @@ export class DrizzlePipelineRepository implements PipelineRepository {
   async update(workspaceId: string, pipeline: Pipeline): Promise<void> {
     // UPDATE in place preserves the row's `seq`, so an edited pipeline keeps its place
     // in the catalog order. `builtin` is immutable, so it is not rewritten. `version` IS
-    // rewritten so a reseed bumps the stored copy to the current catalog version.
+    // rewritten so a reseed bumps the stored copy to the current catalog version. The two default
+    // flags are deliberately absent: `setDefault` owns them, so an edit or a reseed of a rung an
+    // operator had promoted cannot silently un-promote it.
     await this.db
       .update(pipelines)
       .set({
@@ -155,6 +172,38 @@ export class DrizzlePipelineRepository implements PipelineRepository {
         purpose: pipeline.purpose,
       })
       .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines.id, pipeline.id)))
+  }
+
+  async setDefault(
+    workspaceId: string,
+    id: string,
+    scope: RunDefaultScope,
+    claimed: boolean,
+  ): Promise<void> {
+    const field = PIPELINE_DEFAULT_COLUMN[scope]
+    if (!claimed) {
+      // A RELEASE names one row and clears that row only. Widening it to every holder would make
+      // releasing a flag this row does not hold clear the row that DOES — the port's "no-op" turned
+      // into a silent repoint of what every headless start resolves.
+      await this.db
+        .update(pipelines)
+        .set({ [field]: null })
+        .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines.id, id)))
+      return
+    }
+    // Demote + promote in one transaction, so no reader ever sees the scope with no holder (see
+    // the port's contract). The demote drops EVERY holder rather than the incumbent alone, which is
+    // what heals a workspace whose rows predate the partial unique index.
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(pipelines)
+        .set({ [field]: null })
+        .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines[field], 1)))
+      await tx
+        .update(pipelines)
+        .set({ [field]: 1 })
+        .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines.id, id)))
+    })
   }
 
   async delete(workspaceId: string, id: string): Promise<void> {

@@ -62,8 +62,64 @@ export const CORS_ALLOWED_HEADERS = [
  * `Access-Control-Expose-Headers` a browser exposes only the CORS-safelisted set, so the
  * correlation id would be present on the wire and invisible to the SPA — which is the one
  * client whose users are the people quoting an id back in a bug report.
+ *
+ * `WWW-Authenticate` is here for the other kind of client: a browser-hosted MCP host reads that
+ * header off the hosted endpoint's 401 to find this deployment's protected-resource metadata, which
+ * is the entry point to the whole authorization flow. Unexposed, the header is on the wire and
+ * invisible to exactly the client that cannot connect without it.
  */
-export const CORS_EXPOSED_HEADERS = ['X-Request-Id']
+export const CORS_EXPOSED_HEADERS = ['X-Request-Id', 'WWW-Authenticate']
+
+/**
+ * The path prefixes served to ANY browser origin, whatever `CORS_ALLOWED_ORIGINS` says.
+ *
+ * These are the routes of this deployment's own MCP authorization server, and they are the exact
+ * complement of the deployment's allowlist rather than a hole in it. The allowlist exists to name
+ * the browser origins that may drive an EXISTING credential's surface; every route under these two
+ * prefixes is reached by a party that has no credential and no relationship with this deployment
+ * yet, which is what it is here to obtain, and the hosts the flow exists for (claude.ai, the
+ * browser-side IDE clients) run on origins no operator can be expected to have listed. So a
+ * per-deployment allowlist here does not restrict an attacker, who reads these documents from a
+ * server with no browser involved: it restricts exactly the legitimate client the feature is for.
+ *
+ * The reason this is a PATH rule in the shared CORS layer rather than a header set on a handler:
+ * the browser asks first. A `POST /oauth/register` with a JSON body is preflighted, and a
+ * preflight is answered by this middleware before any route runs, so a header the handler sets is
+ * a header nobody reached. That is the shape the metadata documents alone had, and it read as
+ * working: discovery is a simple GET with no preflight, so a browser host could read the whole
+ * chain and then fail on the first call that acts on it.
+ *
+ * Nothing under them carries ambient authority. There are no cookies (auth is a bearer header and
+ * credentials mode is off), the routes sit in `PUBLIC_PREFIXES` because they authenticate nobody,
+ * and the token exchange proves itself with a PKCE verifier that never left the host. A page on
+ * another origin can already make every one of these calls from its own server.
+ */
+const PUBLICLY_READABLE_PREFIXES = ['/.well-known', '/oauth']
+
+/** Whether a path is served to any browser origin (see {@link PUBLICLY_READABLE_PREFIXES}). */
+export function isPubliclyReadablePath(pathname: string): boolean {
+  return PUBLICLY_READABLE_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  )
+}
+
+/**
+ * The `Access-Control-Allow-Origin` value for one request: the allowlist decision
+ * ({@link resolveCorsOrigin}), except on the credential-free discovery and authorization paths,
+ * which answer any origin.
+ *
+ * Both facades call THIS rather than `resolveCorsOrigin` directly, so the two cannot drift on which
+ * paths are public: a browser-hosted MCP client either connects to both facades or to neither.
+ */
+export function corsOriginFor(
+  pathname: string,
+  requestOrigin: string | undefined | null,
+  configured: string | undefined,
+  reflectWhenUnset = true,
+): string | null {
+  if (isPubliclyReadablePath(pathname)) return requestOrigin ?? null
+  return resolveCorsOrigin(requestOrigin, configured, reflectWhenUnset)
+}
 
 /** Parse a comma-separated allowed-origins string into trimmed entries. */
 export function parseAllowedOrigins(configured: string | undefined): string[] {

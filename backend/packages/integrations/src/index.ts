@@ -148,6 +148,7 @@ export {
 export {
   BugHuntService,
   BUG_HUNT_SCAN_LIMIT,
+  type BugHuntScan,
   type BugHuntServiceDependencies,
 } from './modules/tasks/BugHuntService.js'
 export {
@@ -539,6 +540,12 @@ export {
   type GitHubPatScopeReport,
 } from './modules/providers/githubPatScope.js'
 export {
+  probeGitHubPatCapability,
+  type GitHubPatCapabilityDeps,
+  type GitHubPatCapabilityRequest,
+  type GitHubPatProbeRepo,
+} from './modules/providers/githubPatCapability.js'
+export {
   OpenRouterCatalogService,
   type OpenRouterCatalogServiceDependencies,
   OPENROUTER_BASE_URL,
@@ -629,6 +636,31 @@ export {
   type McpAuthorizationRequest,
   type McpOAuthServiceDependencies,
 } from './modules/mcpOAuth/McpOAuthService.js'
+export {
+  McpAuthorizationServer,
+  McpOAuthProtocolError,
+  McpOAuthRedirectableError,
+  CONSENT_DEFAULT_SCOPE,
+  MCP_AUTH_SERVER_CIPHER_INFO,
+  isAllowedRedirectUri,
+  mcpOAuthErrorRedirect,
+  type McpAuthorizationRequestState,
+  type McpAuthorizationRequestSummary,
+  type McpAuthorizationServerDependencies,
+  type McpClientRegistration,
+  type McpIssuedToken,
+  type McpOAuthErrorCode,
+  type McpOAuthRedirectTarget,
+} from './modules/mcpAuthServer/McpAuthorizationServer.js'
+export {
+  AUTHORIZATION_SERVER_METADATA_PATH,
+  OAUTH_ENDPOINT_PATHS,
+  PROTECTED_RESOURCE_METADATA_PATH,
+  authorizationServerMetadata,
+  bearerChallenge,
+  mcpResourceIdentifier,
+  protectedResourceMetadata,
+} from './modules/mcpAuthServer/metadataDocuments.js'
 export {
   McpOAuthError,
   MCP_OAUTH_TIMEOUT_MS,

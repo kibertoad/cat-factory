@@ -121,6 +121,21 @@
             },
             "type": "object"
           },
+          "modelPresetId": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "pipelineId": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "riskPolicyId": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
           "taskType": {
             "anyOf": [
               {
@@ -2398,6 +2413,12 @@
                   }
                 ]
               },
+              "frameIds": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
               "ownPullRequest": {
                 "anyOf": [
                   {
@@ -2543,6 +2564,16 @@
           "accountId": {
             "type": "string"
           },
+          "actsAsUserId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "number"
           },
@@ -2624,6 +2655,7 @@
           "createdByUserId",
           "createdByKeyId",
           "externalIdentity",
+          "actsAsUserId",
           "createdAt",
           "lastUsedAt",
           "revokedAt"
@@ -2648,6 +2680,31 @@
         "properties": {
           "approvalId": {
             "type": "string"
+          },
+          "blockingFindings": {
+            "items": {
+              "properties": {
+                "anchorId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "body": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "body",
+                "anchorId"
+              ],
+              "type": "object"
+            },
+            "type": "array"
           },
           "exceeded": {
             "type": "boolean"
@@ -2700,7 +2757,8 @@
           "feedback",
           "requiredApprovals",
           "recordedApprovals",
-          "exceeded"
+          "exceeded",
+          "blockingFindings"
         ],
         "type": "object"
       },
@@ -3791,6 +3849,9 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "unattendedDefault": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -3798,7 +3859,8 @@
           "name",
           "steps",
           "public",
-          "headlessStartable"
+          "headlessStartable",
+          "unattendedDefault"
         ],
         "type": "object"
       },
@@ -3809,10 +3871,21 @@
               "$ref": "#/components/schemas/PublicPipeline"
             },
             "type": "array"
+          },
+          "unattendedDefaultPipelineId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
-          "pipelines"
+          "pipelines",
+          "unattendedDefaultPipelineId"
         ],
         "type": "object"
       },
@@ -4595,6 +4668,83 @@
           "description": {
             "type": "string"
           },
+          "provisioning": {
+            "oneOf": [
+              {
+                "properties": {
+                  "manifestSource": {
+                    "oneOf": [
+                      {
+                        "properties": {
+                          "path": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "renderer": {
+                            "enum": [
+                              "raw",
+                              "kustomize"
+                            ],
+                            "type": "string"
+                          },
+                          "type": {
+                            "const": "colocated"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "path"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "path": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "ref": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "renderer": {
+                            "enum": [
+                              "raw",
+                              "kustomize"
+                            ],
+                            "type": "string"
+                          },
+                          "repo": {
+                            "pattern": "^[^/\\s]+\\/[^/\\s]+$",
+                            "type": "string"
+                          },
+                          "type": {
+                            "const": "separate"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "repo",
+                          "path"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "const": "kubernetes"
+                  }
+                },
+                "required": [
+                  "type",
+                  "manifestSource"
+                ],
+                "type": "object"
+              }
+            ]
+          },
           "serviceId": {
             "type": "string"
           },
@@ -4980,10 +5130,30 @@
           "description": {
             "type": "string"
           },
+          "modelPresetId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "progress": {
             "type": "number"
           },
           "pullRequestUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "riskPolicyId": {
             "anyOf": [
               {
                 "type": "string"
@@ -5055,7 +5225,9 @@
           "runId",
           "pullRequestUrl",
           "dependsOn",
-          "autoStartDependents"
+          "autoStartDependents",
+          "modelPresetId",
+          "riskPolicyId"
         ],
         "type": "object"
       },
@@ -5689,6 +5861,16 @@
             },
             "type": "object"
           },
+          "modelPresetId": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "riskPolicyId": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
           "title": {
             "maxLength": 200,
             "minLength": 1,
@@ -5714,7 +5896,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.36.0"
+    "version": "1.54.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -6709,12 +6891,14 @@
                                       "dispatch",
                                       "environment",
                                       "evicted",
+                                      "harness_shutdown",
                                       "timeout",
                                       "agent",
                                       "job_failed",
                                       "rejected",
                                       "companion_rejected",
                                       "stalled",
+                                      "state_unreadable",
                                       "cancelled",
                                       "unknown"
                                     ],
@@ -7346,12 +7530,14 @@
                                     "dispatch",
                                     "environment",
                                     "evicted",
+                                    "harness_shutdown",
                                     "timeout",
                                     "agent",
                                     "job_failed",
                                     "rejected",
                                     "companion_rejected",
                                     "stalled",
+                                    "state_unreadable",
                                     "cancelled",
                                     "unknown"
                                   ],
@@ -7630,6 +7816,9 @@
                           "agentKind": {
                             "type": "string"
                           },
+                          "branchContentionRecoveries": {
+                            "type": "number"
+                          },
                           "evictionRecoveries": {
                             "type": "number"
                           },
@@ -7808,9 +7997,11 @@
                                         "transport_unsupported",
                                         "missing_secret",
                                         "reserved_secret",
+                                        "unusable_secret",
                                         "oauth_not_connected",
                                         "oauth_token_failed",
-                                        "over_budget"
+                                        "over_budget",
+                                        "consensus_panel"
                                       ],
                                       "type": "string"
                                     }
@@ -7879,6 +8070,7 @@
                           "outputChars",
                           "hasStructuredResult",
                           "evictionRecoveries",
+                          "branchContentionRecoveries",
                           "firstEvictionDetail"
                         ],
                         "type": "object"
@@ -10163,6 +10355,587 @@
         "x-min-scope": "read"
       }
     },
+    "/api/v1/environments/connections": {
+      "post": {
+        "description": "Bind environment provisioning to a Kubernetes cluster: the apiserver, how its TLS is verified, the namespace template, and how an environment URL is derived once manifests are applied. The secret bundle authenticating the connection is write-only; the response reports which secret KEYS were stored and never their values. Idempotent, so re-connecting replaces rather than accumulating.",
+        "operationId": "connectPublicEnvironment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "connection": {
+                    "oneOf": [
+                      {
+                        "properties": {
+                          "engine": {
+                            "const": "kubernetes"
+                          },
+                          "kubernetes": {
+                            "properties": {
+                              "annotations": {
+                                "additionalProperties": {
+                                  "type": "string"
+                                },
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "type": "object"
+                              },
+                              "apiServerUrl": {
+                                "format": "uri",
+                                "maxLength": 500,
+                                "type": "string"
+                              },
+                              "caCertPem": {
+                                "type": "string"
+                              },
+                              "defaultTtlMs": {
+                                "minimum": 60000,
+                                "type": "number"
+                              },
+                              "imageTemplate": {
+                                "maxLength": 500,
+                                "type": "string"
+                              },
+                              "insecureSkipTlsVerify": {
+                                "type": "boolean"
+                              },
+                              "label": {
+                                "maxLength": 120,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "labels": {
+                                "additionalProperties": {
+                                  "type": "string"
+                                },
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "type": "object"
+                              },
+                              "namespaceTemplate": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "url": {
+                                "oneOf": [
+                                  {
+                                    "properties": {
+                                      "hostTemplate": {
+                                        "maxLength": 500,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "port": {
+                                        "maximum": 65535,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "scheme": {
+                                        "enum": [
+                                          "http",
+                                          "https"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "const": "ingressTemplate"
+                                      }
+                                    },
+                                    "required": [
+                                      "source",
+                                      "hostTemplate"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "properties": {
+                                      "ingressName": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "scheme": {
+                                        "enum": [
+                                          "http",
+                                          "https"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "const": "ingressStatus"
+                                      }
+                                    },
+                                    "required": [
+                                      "source"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "properties": {
+                                      "port": {
+                                        "maximum": 65535,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "scheme": {
+                                        "enum": [
+                                          "http",
+                                          "https"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "serviceName": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "const": "serviceStatus"
+                                      }
+                                    },
+                                    "required": [
+                                      "source",
+                                      "serviceName"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "properties": {
+                                      "gatewayName": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "scheme": {
+                                        "enum": [
+                                          "http",
+                                          "https"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "const": "gatewayStatus"
+                                      }
+                                    },
+                                    "required": [
+                                      "source"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "properties": {
+                                      "httpRouteName": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "scheme": {
+                                        "enum": [
+                                          "http",
+                                          "https"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "const": "httpRouteStatus"
+                                      }
+                                    },
+                                    "required": [
+                                      "source"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "apiServerUrl",
+                              "url"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "engine",
+                          "kubernetes"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "secrets": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "connection",
+                  "secrets"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "apiServerUrl": {
+                      "type": "string"
+                    },
+                    "engine": {
+                      "const": "kubernetes"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "provisionType": {
+                      "type": "string"
+                    },
+                    "secretKeys": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "provisionType",
+                    "engine",
+                    "label",
+                    "apiServerUrl",
+                    "secretKeys"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Connect the workspace to the cluster its environments deploy onto",
+        "tags": [
+          "Environments"
+        ],
+        "x-min-scope": "admin"
+      }
+    },
+    "/api/v1/environments/connections/test": {
+      "post": {
+        "description": "Reach the apiserver with the supplied credentials and report what came back, persisting nothing. Worth a call of its own because the alternative is discovering an unreachable cluster or an expired token on the deploy step of a run that has already paid for a design pass and an implementation. A cluster that refuses the credential is an ANSWER, so it is a 200 carrying `ok: false` rather than an error.",
+        "operationId": "testPublicEnvironmentConnection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "connection": {
+                    "oneOf": [
+                      {
+                        "properties": {
+                          "engine": {
+                            "const": "kubernetes"
+                          },
+                          "kubernetes": {
+                            "properties": {
+                              "annotations": {
+                                "additionalProperties": {
+                                  "type": "string"
+                                },
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "type": "object"
+                              },
+                              "apiServerUrl": {
+                                "format": "uri",
+                                "maxLength": 500,
+                                "type": "string"
+                              },
+                              "caCertPem": {
+                                "type": "string"
+                              },
+                              "defaultTtlMs": {
+                                "minimum": 60000,
+                                "type": "number"
+                              },
+                              "imageTemplate": {
+                                "maxLength": 500,
+                                "type": "string"
+                              },
+                              "insecureSkipTlsVerify": {
+                                "type": "boolean"
+                              },
+                              "label": {
+                                "maxLength": 120,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "labels": {
+                                "additionalProperties": {
+                                  "type": "string"
+                                },
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "type": "object"
+                              },
+                              "namespaceTemplate": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "url": {
+                                "oneOf": [
+                                  {
+                                    "properties": {
+                                      "hostTemplate": {
+                                        "maxLength": 500,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "port": {
+                                        "maximum": 65535,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "scheme": {
+                                        "enum": [
+                                          "http",
+                                          "https"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "const": "ingressTemplate"
+                                      }
+                                    },
+                                    "required": [
+                                      "source",
+                                      "hostTemplate"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "properties": {
+                                      "ingressName": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "scheme": {
+                                        "enum": [
+                                          "http",
+                                          "https"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "const": "ingressStatus"
+                                      }
+                                    },
+                                    "required": [
+                                      "source"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "properties": {
+                                      "port": {
+                                        "maximum": 65535,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "scheme": {
+                                        "enum": [
+                                          "http",
+                                          "https"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "serviceName": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "const": "serviceStatus"
+                                      }
+                                    },
+                                    "required": [
+                                      "source",
+                                      "serviceName"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "properties": {
+                                      "gatewayName": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "scheme": {
+                                        "enum": [
+                                          "http",
+                                          "https"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "const": "gatewayStatus"
+                                      }
+                                    },
+                                    "required": [
+                                      "source"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "properties": {
+                                      "httpRouteName": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "scheme": {
+                                        "enum": [
+                                          "http",
+                                          "https"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "const": "httpRouteStatus"
+                                      }
+                                    },
+                                    "required": [
+                                      "source"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "apiServerUrl",
+                              "url"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "engine",
+                          "kubernetes"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "secrets": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "connection"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "message": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Probe a candidate cluster connection without saving it",
+        "tags": [
+          "Environments"
+        ],
+        "x-min-scope": "admin"
+      }
+    },
     "/api/v1/jobs": {
       "get": {
         "description": "List the headless runs THIS surface created, newest first and keyset-paginated. Scoped to internal-anchored runs exactly like the single-job read, so an external key can never enumerate the workspace’s ordinary board runs.",
@@ -10276,6 +11049,17 @@
       "post": {
         "description": "Start a public, inline pipeline headlessly against a supplied brief. Returns a job id to poll or stream. Nothing is pushed to GitHub.",
         "operationId": "createPublicJob",
+        "parameters": [
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -11322,6 +12106,191 @@
         "x-min-scope": "write"
       }
     },
+    "/api/v1/model-presets": {
+      "get": {
+        "description": "The preset library, including which row is the workspace default that a task pinning none resolves. `baseModelId` is the model every agent step runs on under the preset, and `overrides` names the agent kinds that run on something else, which is usually the one that matters: two presets often differ only in what the CODER gets. Whether a preset can actually be dispatched to is NOT repeated here, because the models endpoint already answers it while keeping unconfigured apart from refused-by-policy; join on `baseModelId`.",
+        "operationId": "listPublicModelPresets",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "presets": {
+                      "items": {
+                        "properties": {
+                          "baseModelId": {
+                            "type": "string"
+                          },
+                          "isDefault": {
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "overrides": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "type": "object"
+                          },
+                          "presetId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "presetId",
+                          "name",
+                          "isDefault",
+                          "baseModelId",
+                          "overrides"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "presets"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the workspace’s model presets",
+        "tags": [
+          "Model presets"
+        ],
+        "x-min-scope": "admin"
+      }
+    },
+    "/api/v1/models": {
+      "get": {
+        "description": "The workspace’s model catalog with the flags that decide whether an agent step can run at all, and which of four unrelated fixes an unrunnable one needs. `available` says a run can dispatch to it now. `policyBlocked` says it is configured and refused by the account’s model-family policy, so adding another provider key changes nothing. `personalSubscription` says it runs on a credential belonging to a PERSON (an individual-usage subscription vendor), which a key resolving no user can never see. `subscriptionConfigured` then says whether that person actually holds one: `true` means the model is wired and only the key’s identity is in the way, `false` means the owner is known and holds none, and `null` means there was nobody to ask about, so it must not be read as `false`. `userScoped` is SUPERSEDED by `personalSubscription` and still answers its original narrower question (whether a subscription is the route in force); prefer the newer field.",
+        "operationId": "listPublicWiredModels",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "excludesUserScopedModels": {
+                      "type": "boolean"
+                    },
+                    "models": {
+                      "items": {
+                        "properties": {
+                          "available": {
+                            "type": "boolean"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "modelId": {
+                            "type": "string"
+                          },
+                          "personalSubscription": {
+                            "type": "boolean"
+                          },
+                          "policyBlocked": {
+                            "type": "boolean"
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "subscriptionConfigured": {
+                            "anyOf": [
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "userScoped": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "modelId",
+                          "label",
+                          "provider",
+                          "available",
+                          "policyBlocked",
+                          "userScoped",
+                          "personalSubscription",
+                          "subscriptionConfigured"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "models",
+                    "excludesUserScopedModels"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the models a run in this workspace could dispatch to",
+        "tags": [
+          "Models"
+        ],
+        "x-min-scope": "admin"
+      }
+    },
     "/api/v1/notification-webhook": {
       "delete": {
         "description": "Deregister the endpoint; deliveries stop. Idempotent.",
@@ -11873,7 +12842,7 @@
     },
     "/api/v1/repos": {
       "get": {
-        "description": "List the repositories the key’s workspace has connected, each with the service that already backs it (null when nothing does, and always null for a monorepo, which can back several). The discovery half of service creation: the create takes a repoId, and this is where one comes from.",
+        "description": "List the repositories the key’s workspace has LINKED, each with the service that already backs it (null when nothing does, and always null for a monorepo, which can back several). The discovery half of service creation: the create takes a repoId, and this is where one comes from. A repository the connection can reach but nobody has adopted yet is NOT here; list those with the available-repos endpoint and adopt one with the link endpoint.",
         "operationId": "listPublicRepos",
         "responses": {
           "200": {
@@ -11970,6 +12939,852 @@
           "Repos"
         ],
         "x-min-scope": "read"
+      }
+    },
+    "/api/v1/repos/available": {
+      "get": {
+        "description": "The repositories the workspace’s source-control connection can REACH, whether or not this workspace links them, with `linked` as the join onto the repos list. It exists because those two populations differ and the difference is invisible otherwise: linking is explicit per workspace, so a repository that exists and is perfectly reachable is absent from the repos list in exactly the way one that was never created is, and those need opposite fixes. Pass `q` as an exact `owner/name` for an authoritative point-read, as a substring to search, or omit it to browse what is accessible. Each call reaches the provider, so it is a setup-time read rather than one to poll.",
+        "operationId": "listPublicAvailableRepos",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "repos": {
+                      "items": {
+                        "properties": {
+                          "defaultBranch": {
+                            "type": "string"
+                          },
+                          "linked": {
+                            "type": "boolean"
+                          },
+                          "linkedElsewhere": {
+                            "type": "boolean"
+                          },
+                          "monorepo": {
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "owner": {
+                            "type": "string"
+                          },
+                          "personal": {
+                            "type": "boolean"
+                          },
+                          "private": {
+                            "type": "boolean"
+                          },
+                          "provider": {
+                            "enum": [
+                              "github",
+                              "gitlab"
+                            ],
+                            "type": "string"
+                          },
+                          "repoId": {
+                            "type": "number"
+                          },
+                          "serviceId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "repoId",
+                          "provider",
+                          "owner",
+                          "name",
+                          "defaultBranch",
+                          "private",
+                          "linked",
+                          "monorepo",
+                          "serviceId",
+                          "linkedElsewhere",
+                          "personal"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "repos",
+                    "truncated"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the repositories this workspace could adopt",
+        "tags": [
+          "Repos"
+        ],
+        "x-min-scope": "admin"
+      }
+    },
+    "/api/v1/repos/bootstrap": {
+      "post": {
+        "description": "Create a brand-new repository under the account the workspace is connected to, then run the bootstrapper agent in a container to write it against the supplied brief (or to adapt a reference architecture). Answers 201 with a job to poll rather than blocking for the minutes a container takes. The job names the board service frame it materialises, so work can be filed against the service before the repository has finished being written. This is the one act of board setup with no other public counterpart: creating a service takes a repoId, and nothing else here makes one.",
+        "operationId": "startPublicRepoBootstrap",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "description": {
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  "instructions": {
+                    "maxLength": 8000,
+                    "type": "string"
+                  },
+                  "private": {
+                    "type": "boolean"
+                  },
+                  "referenceArchitectureId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "repoName": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z0-9_.-]+$",
+                    "type": "string"
+                  },
+                  "type": {
+                    "enum": [
+                      "service",
+                      "frontend",
+                      "library",
+                      "document"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repoName"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "createdAt": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "failureDetail": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "failureHint": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "failureKind": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "preflight",
+                            "dispatch",
+                            "environment",
+                            "evicted",
+                            "harness_shutdown",
+                            "timeout",
+                            "agent",
+                            "job_failed",
+                            "rejected",
+                            "companion_rejected",
+                            "stalled",
+                            "state_unreadable",
+                            "cancelled",
+                            "unknown"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "jobId": {
+                      "type": "string"
+                    },
+                    "progress": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "completed": {
+                              "type": "number"
+                            },
+                            "inProgress": {
+                              "type": "number"
+                            },
+                            "items": {
+                              "items": {
+                                "properties": {
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "enum": [
+                                      "pending",
+                                      "in_progress",
+                                      "completed"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "label",
+                                  "status"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "total": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "completed",
+                            "inProgress",
+                            "total"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "repoName": {
+                      "type": "string"
+                    },
+                    "repoOwner": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "repoUrl": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "serviceId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "enum": [
+                        "pending",
+                        "running",
+                        "succeeded",
+                        "failed"
+                      ],
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "jobId",
+                    "status",
+                    "repoName",
+                    "repoOwner",
+                    "repoUrl",
+                    "serviceId",
+                    "progress",
+                    "error",
+                    "failureKind",
+                    "failureDetail",
+                    "failureHint",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Create a repository and adapt it with the bootstrapper agent",
+        "tags": [
+          "Repos"
+        ],
+        "x-min-scope": "admin"
+      }
+    },
+    "/api/v1/repos/bootstrap/{jobId}": {
+      "get": {
+        "description": "Read a bootstrap run’s current state. `failureKind` says whether a retry could plausibly help: a `preflight` refusal (the target repository already has content, nothing is connected) cannot be retried into success, where an `evicted` container can.",
+        "operationId": "getPublicRepoBootstrap",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "jobId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "createdAt": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "failureDetail": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "failureHint": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "failureKind": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "preflight",
+                            "dispatch",
+                            "environment",
+                            "evicted",
+                            "harness_shutdown",
+                            "timeout",
+                            "agent",
+                            "job_failed",
+                            "rejected",
+                            "companion_rejected",
+                            "stalled",
+                            "state_unreadable",
+                            "cancelled",
+                            "unknown"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "jobId": {
+                      "type": "string"
+                    },
+                    "progress": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "completed": {
+                              "type": "number"
+                            },
+                            "inProgress": {
+                              "type": "number"
+                            },
+                            "items": {
+                              "items": {
+                                "properties": {
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "enum": [
+                                      "pending",
+                                      "in_progress",
+                                      "completed"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "label",
+                                  "status"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "total": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "completed",
+                            "inProgress",
+                            "total"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "repoName": {
+                      "type": "string"
+                    },
+                    "repoOwner": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "repoUrl": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "serviceId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "enum": [
+                        "pending",
+                        "running",
+                        "succeeded",
+                        "failed"
+                      ],
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "jobId",
+                    "status",
+                    "repoName",
+                    "repoOwner",
+                    "repoUrl",
+                    "serviceId",
+                    "progress",
+                    "error",
+                    "failureKind",
+                    "failureDetail",
+                    "failureHint",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Poll one repository bootstrap",
+        "tags": [
+          "Repos"
+        ],
+        "x-min-scope": "admin"
+      }
+    },
+    "/api/v1/repos/link": {
+      "post": {
+        "description": "Link a repository the connection can reach, by `owner` and `name`, so a service can be created against it. The act that had no headless counterpart: nothing links a repository for you (the provider webhook for an added repository does not project one, and a resync refreshes what is already linked), so a repository created by any means stayed invisible to the repos list and unusable by service creation until a person opened the app. Takes a NAME rather than the numeric `repoId` its sibling reads report, because a caller setting a workspace up from configuration knows the name and cannot know a provider id for a repository no public read lists; the response carries the `repoId` for the service-creation call that follows. Idempotent: a repository this workspace already links returns its row rather than refusing, so a setup script re-running itself needs no special case. A repository the connection cannot reach is a 404 with `details.reason: repo_not_reachable`, which covers both \"it does not exist\" and \"your credential is not granted it\": a provider answers those identically, and inventing a split would be a guess.",
+        "operationId": "linkPublicRepo",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "name": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z0-9_.-]+$",
+                    "type": "string"
+                  },
+                  "owner": {
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z0-9_.-]+(?:\\/[A-Za-z0-9_.-]+)*$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "owner",
+                  "name"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "defaultBranch": {
+                      "type": "string"
+                    },
+                    "linkedElsewhere": {
+                      "type": "boolean"
+                    },
+                    "monorepo": {
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "owner": {
+                      "type": "string"
+                    },
+                    "private": {
+                      "type": "boolean"
+                    },
+                    "provider": {
+                      "type": "string"
+                    },
+                    "repoId": {
+                      "type": "number"
+                    },
+                    "serviceId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "repoId",
+                    "provider",
+                    "owner",
+                    "name",
+                    "defaultBranch",
+                    "private",
+                    "monorepo",
+                    "serviceId",
+                    "linkedElsewhere"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Adopt an existing repository into this workspace",
+        "tags": [
+          "Repos"
+        ],
+        "x-min-scope": "admin"
+      }
+    },
+    "/api/v1/risk-policies": {
+      "get": {
+        "description": "The policy library, including which row is the workspace default that a task pinning none resolves. `autoMergeEnabled` is the master switch that decides whether a run can land its pull request without a person; `dryRunRoles` names the roles whose runs the policy forces into dry-run mode, which is the difference between “this policy merges” and “this policy merges for everyone except one role”. A policy also caps CI-fixer attempts, requirement and tester iteration rounds and the release-health watch, which is why it is not called a merge preset; the id is what a task pins as `riskPolicyId`.",
+        "operationId": "listPublicRiskPolicies",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "policies": {
+                      "items": {
+                        "properties": {
+                          "autoMergeEnabled": {
+                            "type": "boolean"
+                          },
+                          "autonomy": {
+                            "enum": [
+                              "attended",
+                              "unattended"
+                            ],
+                            "type": "string"
+                          },
+                          "ciMaxAttempts": {
+                            "type": "number"
+                          },
+                          "dryRunRoles": {
+                            "items": {
+                              "enum": [
+                                "admin",
+                                "member",
+                                "viewer"
+                              ],
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "isDefault": {
+                            "type": "boolean"
+                          },
+                          "isUnattendedDefault": {
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "policyId": {
+                            "type": "string"
+                          },
+                          "submissionRestrictedRoles": {
+                            "items": {
+                              "enum": [
+                                "admin",
+                                "member",
+                                "viewer"
+                              ],
+                              "type": "string"
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "policyId",
+                          "name",
+                          "isDefault",
+                          "isUnattendedDefault",
+                          "autonomy",
+                          "autoMergeEnabled",
+                          "ciMaxAttempts",
+                          "dryRunRoles",
+                          "submissionRestrictedRoles"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "policies"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the workspace’s risk policies",
+        "tags": [
+          "Risk policies"
+        ],
+        "x-min-scope": "admin"
       }
     },
     "/api/v1/runs/{runId}/artifacts": {
@@ -12098,6 +13913,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -12166,6 +13990,15 @@
             "in": "path",
             "name": "approvalId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -12240,6 +14073,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -12311,6 +14153,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -12379,6 +14230,15 @@
             "in": "path",
             "name": "stage",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -12461,6 +14321,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -12540,6 +14409,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -12611,6 +14489,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -12672,6 +14559,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -12730,6 +14626,15 @@
             "in": "path",
             "name": "stage",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -12804,6 +14709,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -12875,6 +14789,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -12935,6 +14858,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -13001,6 +14933,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -13054,6 +14995,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -13104,6 +15054,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -13178,6 +15137,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -13249,6 +15217,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -13307,6 +15284,15 @@
             "in": "path",
             "name": "itemId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -13371,6 +15357,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -13421,6 +15416,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -13487,6 +15491,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -13537,6 +15550,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -13603,6 +15625,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -13663,6 +15694,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -13729,6 +15769,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -13782,6 +15831,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -13832,6 +15890,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -13930,6 +15997,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -14001,6 +16077,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -14051,6 +16136,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -14125,6 +16219,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -14193,6 +16296,15 @@
             "in": "path",
             "name": "itemId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -14267,6 +16379,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -14327,6 +16448,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -14393,6 +16523,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -14446,6 +16585,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -14496,6 +16644,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -14562,6 +16719,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -14612,6 +16778,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -14924,7 +17099,7 @@
     },
     "/api/v1/runs/{runId}/outcome": {
       "get": {
-        "description": "What the run changed and what backs that up, in product language, for a reader who will not open the diff: the run’s disposition, the pull requests it opened, requirement coverage joined to the service’s `spec/`, the tester’s verdict and concerns, the views it captured, and the machine checks that ran. The same reduction the app’s outcome card renders, over the same evidence the verification report is built from, so the two cannot state different totals for one run. Nothing here is asserted by a model: every count is derived from recorded verdicts. Prefer the verification report when you need a reviewer’s full bundle; prefer this when you need to say what shipped. Sections state `reported` or `absent` with a machine-readable gap code, and `truncations` names any list the response had to bound.",
+        "description": "What the run changed and what backs that up, in product language, for a reader who will not open the diff: the run’s disposition, the pull requests it opened, requirement coverage joined to the service’s `spec/`, the tester’s verdict and concerns, the views it captured, the throwaway environments it stood up (`state: \"live\"` is the only one worth opening, and only while its `expiresAt` is still ahead; every other row still carries its URL), and the machine checks that ran. The same reduction the app’s outcome card renders, over the same evidence the verification report is built from, so the two cannot state different totals for one run. Nothing here is asserted by a model: every count is derived from recorded verdicts. Prefer the verification report when you need a reviewer’s full bundle; prefer this when you need to say what shipped. Sections state `reported` or `absent` with a machine-readable gap code, and `truncations` names any list the response had to bound.",
         "operationId": "getPublicRunOutcome",
         "parameters": [
           {
@@ -15007,6 +17182,133 @@
                         "unknown"
                       ],
                       "type": "string"
+                    },
+                    "environments": {
+                      "oneOf": [
+                        {
+                          "properties": {
+                            "gap": {
+                              "enum": [
+                                "run_unavailable",
+                                "no_environment_step",
+                                "not_provisioned",
+                                "infraless"
+                              ],
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": "absent"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "gap"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "entries": {
+                              "items": {
+                                "properties": {
+                                  "detail": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "environmentId": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "expiresAt": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "frameId": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "origin": {
+                                    "enum": [
+                                      "deployer",
+                                      "human_test",
+                                      "projected"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "retained": {
+                                    "type": "boolean"
+                                  },
+                                  "state": {
+                                    "enum": [
+                                      "live",
+                                      "provisioning",
+                                      "failed",
+                                      "reclaiming",
+                                      "reclaimed",
+                                      "expired"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "url": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "url",
+                                  "state",
+                                  "origin",
+                                  "expiresAt",
+                                  "retained",
+                                  "frameId",
+                                  "environmentId",
+                                  "detail"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "status": {
+                              "const": "reported"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "entries"
+                          ],
+                          "type": "object"
+                        }
+                      ]
                     },
                     "pullRequests": {
                       "items": {
@@ -15531,6 +17833,7 @@
                     "requirements",
                     "tests",
                     "visuals",
+                    "environments",
                     "sources",
                     "checks",
                     "truncations"
@@ -15802,6 +18105,202 @@
           }
         },
         "summary": "Create a service",
+        "tags": [
+          "Services"
+        ],
+        "x-min-scope": "admin"
+      }
+    },
+    "/api/v1/services/{serviceId}": {
+      "delete": {
+        "description": "Delete a board service, its modules and tasks, and the run history recorded under them. The inverse of the create, and the one board write with no headless counterpart before it: a key authenticates on `/api/v1` only, so a caller that provisions services (an environment rebuilt per test pass, a repository retired, a frame raised against the wrong repository) had to ask a person to clean them up. Any run still going under the frame is stopped and its container killed first, so nothing is left idling. A service holding UNFINISHED tasks is refused with `422 service_has_unfinished_tasks` rather than discarding work in flight: delete those tasks first (`DELETE /api/v1/tasks/{taskId}`) if that is what you mean. An ARCHIVED service is not addressable here, exactly as it is absent from `GET /api/v1/services`. Requires an `admin` key.",
+        "operationId": "deletePublicService",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "serviceId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Delete a service and everything under it",
+        "tags": [
+          "Services"
+        ],
+        "x-min-scope": "admin"
+      },
+      "patch": {
+        "description": "Change a service’s authored fields, and declare its `provisioning`: where the manifests for a per-run environment are read from. That second half is what a connected cluster alone cannot supply, because the platform keeps “which cluster” (one per workspace) apart from “which manifests” (one set per service). An omitted `provisioning` leaves the stored one alone rather than clearing it. Board coordinates are deliberately absent, as they are on service creation.",
+        "operationId": "updatePublicService",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "serviceId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "description": {
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  "provisioning": {
+                    "oneOf": [
+                      {
+                        "properties": {
+                          "manifestSource": {
+                            "oneOf": [
+                              {
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 500,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "renderer": {
+                                    "enum": [
+                                      "raw",
+                                      "kustomize"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "const": "colocated"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "path"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 500,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "ref": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "renderer": {
+                                    "enum": [
+                                      "raw",
+                                      "kustomize"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "repo": {
+                                    "pattern": "^[^/\\s]+\\/[^/\\s]+$",
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "const": "separate"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "repo",
+                                  "path"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "type": {
+                            "const": "kubernetes"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "manifestSource"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "title": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicService"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Patch a service, including where its per-run manifests live",
         "tags": [
           "Services"
         ],
@@ -16853,6 +19352,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -16959,6 +19467,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -17061,6 +19578,188 @@
           "Tasks"
         ],
         "x-min-scope": "write"
+      }
+    },
+    "/api/v1/tracker/writeback": {
+      "get": {
+        "description": "What this workspace does to a task’s LINKED tracker issue as its pull request progresses: comment when the pull request opens, comment and close the issue when it merges, and post a headless run’s parked requirements-review findings so the reporter can answer where they filed. Worth reading before filing a ticket-linked task, since it decides whether the issue the work came from ever hears the outcome. `updatedAt` is null when nobody has chosen a disposition, in which case the values are this deployment’s defaults (all three ON). Requires an `admin` key.",
+        "operationId": "getPublicTrackerWriteback",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "updatedAt": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "writeback": {
+                      "properties": {
+                        "commentOnPrOpen": {
+                          "type": "boolean"
+                        },
+                        "questionsOnPark": {
+                          "type": "boolean"
+                        },
+                        "resolveOnMerge": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "commentOnPrOpen",
+                        "resolveOnMerge",
+                        "questionsOnPark"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "writeback",
+                    "updatedAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Read the workspace’s tracker writeback disposition",
+        "tags": [
+          "Tracker"
+        ],
+        "x-min-scope": "admin"
+      },
+      "patch": {
+        "description": "Turn one or more writeback actions on or off. A MERGE: an action you omit keeps its stored value, so a caller acting on one decision cannot silently move the other two. This is workspace-wide configuration, so it changes what happens to every task’s ticket on the board; the read beside it reports `updatedAt` so a caller can see whether it is about to overwrite somebody’s choice. An empty patch is a no-op and does not stamp `updatedAt`. Requires an `admin` key.",
+        "operationId": "updatePublicTrackerWriteback",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "writeback": {
+                    "properties": {
+                      "commentOnPrOpen": {
+                        "type": "boolean"
+                      },
+                      "questionsOnPark": {
+                        "type": "boolean"
+                      },
+                      "resolveOnMerge": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [],
+                    "type": "object"
+                  }
+                },
+                "required": [],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "updatedAt": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "writeback": {
+                      "properties": {
+                        "commentOnPrOpen": {
+                          "type": "boolean"
+                        },
+                        "questionsOnPark": {
+                          "type": "boolean"
+                        },
+                        "resolveOnMerge": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "commentOnPrOpen",
+                        "resolveOnMerge",
+                        "questionsOnPark"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "writeback",
+                    "updatedAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Change the workspace’s tracker writeback disposition",
+        "tags": [
+          "Tracker"
+        ],
+        "x-min-scope": "admin"
       }
     },
     "/api/v1/usage": {
@@ -17192,6 +19891,96 @@
         ],
         "x-min-scope": "read"
       }
+    },
+    "/api/v1/vcs/connection": {
+      "get": {
+        "description": "The connected account, how the workspace authenticates to it, and the two permissions that decide whether an automated flow can complete: whether the platform may create repositories, and whether it may write workflow files. Both are enforced by the provider at push time, so a caller that cannot read them discovers a missing workflow permission as a repository that bootstrapped and then failed to gain its CI workflow. Provider-neutral: a GitLab-connected workspace answers here too. `connection` is null when nothing is connected, which is a state rather than an error.",
+        "operationId": "getPublicVcsConnection",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "connection": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "accountLogin": {
+                              "type": "string"
+                            },
+                            "canCreateRepos": {
+                              "type": "boolean"
+                            },
+                            "canManageWorkflows": {
+                              "type": "boolean"
+                            },
+                            "method": {
+                              "enum": [
+                                "app",
+                                "pat"
+                              ],
+                              "type": "string"
+                            },
+                            "provider": {
+                              "enum": [
+                                "github",
+                                "gitlab"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "accountLogin",
+                            "method",
+                            "canCreateRepos",
+                            "canManageWorkflows"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "connection"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Read the workspace’s source-control connection and what it may do",
+        "tags": [
+          "VCS"
+        ],
+        "x-min-scope": "admin"
+      }
     }
   },
   "security": [
@@ -17215,6 +20004,9 @@
       "name": "Decisions"
     },
     {
+      "name": "Environments"
+    },
+    {
       "description": "What a run PROVED: the engine’s own verification report (the same bundle it writes onto the pull request) and the binary artifacts the run captured, bytes included. The surface for a consumer that has to judge a run (accept the change, score the fleet) rather than debug one. Read-only (`read` scope).",
       "name": "Evidence"
     },
@@ -17234,6 +20026,12 @@
       "name": "Merge records"
     },
     {
+      "name": "Model presets"
+    },
+    {
+      "name": "Models"
+    },
+    {
       "description": "The workspace’s human-actionable notifications (list, act on, or dismiss the run tails).",
       "name": "Notifications"
     },
@@ -17243,6 +20041,9 @@
     },
     {
       "name": "Repos"
+    },
+    {
+      "name": "Risk policies"
     },
     {
       "description": "The workspace’s board services.",
@@ -17260,7 +20061,13 @@
       "name": "Tasks"
     },
     {
+      "name": "Tracker"
+    },
+    {
       "name": "Usage"
+    },
+    {
+      "name": "VCS"
     },
     {
       "description": "The workspace’s one outbound endpoint: register it to receive notifications, run-lifecycle events and platform-health alerts by push instead of polling. Requires an `admin`-scope key; the signing secret is write-only.",

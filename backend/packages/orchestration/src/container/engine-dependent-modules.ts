@@ -122,6 +122,9 @@ export function registerEngineDependentModules(input: EngineDependentModulesInpu
   modules.build('searchQueryObservability', () => dependencies.searchQueryObservability)
   modules.build('vcsConnectionService', () => dependencies.vcsConnectionService)
   modules.build('vcsWebUrls', () => dependencies.vcsWebUrls)
+  // The run path's "initiator PAT or deployment credential?" answer, passed through so the
+  // credential check judges the token a run would actually use rather than re-deciding it.
+  modules.build('resolveRunInitiatorToken', () => dependencies.resolveRunInitiatorToken)
   modules.build('accountSettings', () =>
     dependencies.accountSettings ? { service: dependencies.accountSettings } : undefined,
   )

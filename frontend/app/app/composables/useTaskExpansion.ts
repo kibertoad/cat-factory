@@ -1,7 +1,8 @@
 import type { Ref } from 'vue'
 import { onMounted, onBeforeUnmount } from 'vue'
-import { useRafFn } from '@vueuse/core'
 import { lodAtLeast } from '~/composables/useSemanticZoom'
+import { onBoardActivity, type BoardActivity } from '~/composables/useBoardActivity'
+import { useSettlingRaf } from '~/composables/useSettlingRaf'
 import { headerDistanceSq, type Rect } from '~/utils/taskExpansionRanking'
 
 function intersects(a: Rect, b: Rect) {
@@ -33,8 +34,12 @@ function sameSet(a: Set<string>, b: Set<string>) {
  *
  * Only tasks with a running pipeline (steps to show) are candidates for either grant — a
  * task that wouldn't expand never blocks a neighbour and never lifts an empty card.
+ *
+ * Deciding costs a rect per candidate plus an `elementFromPoint`, so it runs only while the
+ * board is moving: the canvas activity pulse wakes it and `useSettlingRaf` parks it again once
+ * the two grants stop changing.
  */
-export function useTaskExpansion(container: Ref<HTMLElement | null>) {
+export function useTaskExpansion(container: Ref<HTMLElement | null>, activity: BoardActivity) {
   const board = useBoardStore()
   const execution = useExecutionStore()
   const ui = useUiStore()
@@ -79,21 +84,29 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>) {
     return id
   }
 
-  function recompute() {
+  /** Re-decide both grants; reports whether either of them changed. */
+  function recompute(): boolean {
     // Hover expands a card at ANY zoom band, so the pointer hit is resolved BEFORE the
     // zoom gate below — resolving it after would collapse the hovered card the moment the
     // user zoomed back out past the `steps` band.
     const hovered = hoveredTaskId()
-    if (store.hoveredId !== hovered) store.setHovered(hovered)
+    let changed = false
+    if (store.hoveredId !== hovered) {
+      store.setHovered(hovered)
+      changed = true
+    }
 
     // The zoom-driven expansion (every on-screen card, overlap-resolved) is deep-band
     // only; clear its grants otherwise. The hover grant above stands on its own.
     if (!lodAtLeast(ui.lod, 'steps')) {
-      if (store.allowed.size) store.setAllowed(new Set())
-      return
+      if (store.allowed.size) {
+        store.setAllowed(new Set())
+        changed = true
+      }
+      return changed
     }
     const view = container.value?.getBoundingClientRect()
-    if (!view) return
+    if (!view) return changed
     const cx = view.left + view.width / 2
     const cy = view.top + view.height / 2
 
@@ -145,19 +158,24 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>) {
       next.add(c.id)
       claimed.push(c.rect)
     }
-    if (!sameSet(next, store.allowed)) store.setAllowed(next)
+    if (!sameSet(next, store.allowed)) {
+      store.setAllowed(next)
+      changed = true
+    }
+    return changed
   }
 
-  const { pause, resume } = useRafFn(recompute, { immediate: false })
+  const { poke } = useSettlingRaf(recompute)
+  // The pointer listeners below only record where the pointer IS; the pulse (which watches the
+  // same gestures) is what schedules the frame that acts on it.
+  onBoardActivity(activity, poke)
   onMounted(() => {
     store.setDriverActive(true)
     const el = container.value
     el?.addEventListener('pointermove', onPointerMove)
     el?.addEventListener('pointerleave', onPointerLeave)
-    resume()
   })
   onBeforeUnmount(() => {
-    pause()
     const el = container.value
     el?.removeEventListener('pointermove', onPointerMove)
     el?.removeEventListener('pointerleave', onPointerLeave)

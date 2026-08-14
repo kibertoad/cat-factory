@@ -42,248 +42,27 @@ export const SERVED_OPENAPI_PATH = resolve(
 
 const API_PREFIX = '/api/v1'
 
-// The document's `info.version` describes the PUBLIC API surface (`/api/v1`), NOT the npm
-// package release. It is deliberately DECOUPLED from any `package.json` version: those bump on
-// every changesets release with no bearing on the API contract, and baking one in would make the
-// committed `docs/openapi.json` go stale on every release — the drift guard (`check:openapi`)
-// would then fail spuriously on the next PR that merges a release, even when no contract changed.
+// The document's `info.version` describes the PUBLIC API surface (`/api/v1`), NOT the npm package
+// release: the surface's own version, and the ONE place it is set. Its history (what every number
+// added, and the collisions several of them survived) is `backend/docs/public-api-versions.md`,
+// which is where a new entry goes.
 //
-// The public API is STABLE (see CLAUDE.md "The public API is stable"): additive changes bump the
-// minor here; a breaking change is not allowed on `/api/v1` at all: it means a new `/api/v2`
-// prefix served beside v1 through a deprecation window, and a new spec version with it.
-// NOTE when rebasing/merging: this line COLLIDES silently. A branch that bumps the minor and a
+// It is deliberately DECOUPLED from any `package.json` version: those bump on every changesets
+// release with no bearing on the API contract, and baking one in would make the committed
+// `docs/openapi.json` go stale on every release, so the drift guard (`check:openapi`) would fail
+// spuriously on the next PR that merges a release even when no contract changed.
+//
+// The public API is STABLE (see CLAUDE.md "The public API does not break"): an additive change
+// bumps the minor here, and a breaking one is not allowed on `/api/v1` at all (it means a new
+// `/api/v2` prefix served beside v1 through a deprecation window, and a new spec version with it).
+//
+// NOTE when rebasing/merging: this line COLLIDES SILENTLY. A branch that bumps the minor and a
 // main that bumps it to the same number produce byte-identical text, so git auto-merges them with
 // no conflict and the branch ships a DIFFERENT surface under a version main already used. Re-check
-// this against `origin/main` after every merge rather than trusting a clean one.
-// 1.12.0: `PrReportValidation.configUnreadable`, an additive optional field on the run report,
-// so a consumer built against 1.11.0 keeps parsing.
-// 1.13.0, not 1.12.0: additive only, on the run-debugging surface (a new `ok` filter on the
-// tool-call list and a `toolCalls` rollup on the run overview), but main reached 1.12.0 with
-// `configUnreadable` while this branch was in flight. The collision note above, arriving exactly
-// as it describes: both sides wrote the same number, so the VERSION line auto-merged clean and
-// only the comment beside it conflicted. Re-checked against `origin/main` rather than trusting
-// that clean merge.
-// 1.14.0: additive only, an optional `modelPin` on the report's judge verdicts (which model the
-// rubric was authored for, and whether the run got it). Third number that change held: it was
-// written against 1.12.0, moved to 1.13.0 when the validation field took that, and again once the
-// debug surface took 1.13.0. Every one of those was found by re-reading this line after a merge,
-// which is the only thing that catches it.
-// 1.15.0, not 1.12.0: `GET /api/v1/me` and `unanswerable[]` on the decision list, both additive,
-// written against a main that was still on 1.11.0. Four numbers have gone past this branch while
-// it was in flight (`configUnreadable`, the run-debugging surface, the judge model pin, and the
-// release that published them), so it takes the next free one. Nothing about that is unusual any
-// more, which is the point of the note at the top of this block: on a repo landing this many
-// additive changes, a clean auto-merge of the VERSION line is the normal way to ship a number
-// someone else already published. Re-read it against `origin/main` every time.
-// 1.16.0, not 1.15.0: the run report gains an optional `scope`, naming WHICH of a multi-repo run's
-// pull requests a given copy is written onto. Additive: a consumer written against 1.15 reads every
-// field it knows, and an absent `scope` means what it always meant (the own-service PR). FIFTH
-// number this one addition has held (1.12 → 1.13 → 1.14 → 1.15 → 1.16), and 1.15 was taken by the
-// `/me` endpoint landing on main while this branch was in flight, caught by re-reading this line
-// after the merge rather than by trusting a clean auto-merge of the VERSION itself.
-// 1.17.0, not 1.15.0: the tool-call list's `?ok=true|false` filter is REPLACED by
-// `?outcome=ok|error`, the same param name and vocabulary the llm-call list already uses. This is
-// a MINOR for a change that is technically breaking, taken deliberately: `?ok=` existed for one
-// release, has no known consumer, and the two drill-downs answering the same question under two
-// spellings is the wart the change exists to remove. A picklist also lets the set gain a member (a
-// timeout, a refusal) where `true|false` could only be retyped. If an adopter turns up before this
-// lands, the honest shape is `?ok=` served beside `?outcome=` for a release, not a rename.
-//
-// This branch reserved 1.17.0 while 1.16.0 was still unlanded, on the reasoning that the multi-repo
-// verification-report branch held it and two branches sitting on the same number auto-merge the
-// VERSION line byte-identically, conflicting only in this comment: the silent failure the note at
-// the top of this block describes. That branch has since merged, so 1.16.0 is main's published
-// number and 1.17.0 is simply the next free one. Re-read against `origin/main` anyway.
-// 1.18.0, not 1.17.0: `GET /api/v1/task-types` plus `fields` on task creation, both additive (a new
-// endpoint and a new optional key). THIRD number this one addition has held: written against
-// 1.16.0, moved to 1.17.0 when the multi-repo report `scope` took 1.16.0 on main, and moved again
-// when the `?outcome=` rename above published 1.17.0 on main while this branch was in flight. Both
-// moves were found the same way, and it is the only way that works: by re-reading this line after
-// the merge, never by trusting that the VERSION itself auto-merged clean (it did, twice, to a
-// number main had already used).
-// 1.19.0, not 1.18.0: attaching a document by REFERENCE gains two `error.details.reason` values on
-// its 422, `document_ref_unrecognized` and `document_ref_claimed_by_other_source` (the public create
-// resolves every ref through the same service the app's attach pre-flight calls). Additive: a
-// consumer that branches on nothing still sees the same status and message, and one that does gains
-// two codes to branch on. The reason VOCABULARY is part of the stable surface, which is why a new
-// member is a version step at all, and why `public-api.md` names both codes rather than describing
-// the refusal only in prose. 1.18.0 is main's published number as of this branch's last merge.
-// 1.20.0, not 1.19.0: a descriptor field on `GET /api/v1/task-types` may carry an optional `section`,
-// the grouping caption a long operation form is rendered under. Additive, and inert for a headless
-// caller: it groups nothing the create call validates, so a client that ignores it fills exactly the
-// same bag as before, and one that renders a form gains the author's own grouping. 1.19.0 is main's
-// published number as of this branch's last merge; re-read this line after any merge rather than
-// trusting that the VERSION auto-merged clean.
-// 1.21.0, not 1.20.0: each step of `GET /api/v1/debug/runs/:runId` may carry `toolServers`, what
-// the step's dispatch wired and what it dropped with the reason. Additive, and it is the
-// REPLACEMENT half of a deprecation: the same facts sat in the agent-context snapshot's untyped
-// `extras` bag, which keeps serving them until the window in `public-api.md` closes, so no
-// consumer has to move on this version. 1.20.0 is main's published number as of this branch's last
-// merge; re-read this line after any merge rather than trusting that the VERSION auto-merged clean.
-// 1.24.0: `PATCH /api/v1/tasks/:taskId` accepts `fields`, the task's per-type bag, merged over
-// what the task already carries. Additive (a new optional request field; a caller that never sends
-// one is unaffected), and it is what makes the pre-dispatch input gate's findings FIXABLE
-// headlessly: four of its seven codes name a field of that bag, and until now the surface named a
-// remedy it did not offer.
-//
-// 1.22.0 belongs to `GET /api/v1/runs/:runId/outcome` and the verification report's new optional
-// `requirements.unmatchedVerdicts`. Two diffs claiming one number is a lie a consumer pinning
-// the version would act on, so re-read this line after any merge rather than trusting that the
-// VERSION auto-merged clean.
-// 1.24.0, not 1.23.0: `PATCH /api/v1/tasks/:taskId` accepts `fields`, the task's per-type bag,
-// merged over what the task already carries. Additive (a new optional request field; a caller that
-// never sends one is unaffected), and it is what makes the pre-dispatch input gate's findings
-// FIXABLE headlessly: four of its seven codes name a field of that bag, and until now the surface
-// named a remedy it did not offer. This branch first claimed 1.23.0, which main then published for
-// `x-min-scope` while the branch was in flight: the collision surfaced as a conflict on this
-// comment block only because each version step writes its own paragraph here, never as one on the
-// VERSION line, which auto-merges clean to a number main has already used.
-// 1.25.0, not 1.24.0: `gitlab` joins the `TaskSourceKind` enum, GitLab Issues being a fourth
-// built-in task source. Additive on a CLOSED vocabulary, which is the shape the SDKs are built to
-// tolerate: they map an unknown enum member through rather than refusing it, so a client compiled
-// against 1.24.0 keeps parsing every response it already understood and simply never asks for the
-// new source. No existing member changes meaning and no persisted `source` value moves.
-// 1.26.0, not 1.22.0: a step's `toolServers` on `GET /api/v1/debug/runs/:runId` gains an optional
-// `observed`, the agent CLI's own account of the servers it managed to load beside the `wired` /
-// `unavailable` account of what the platform decided. Additive: a consumer written against 1.21.0
-// reads both existing lists unchanged, and an ABSENT `observed` is not an empty one: it means no
-// observation was made (a harness whose CLI publishes no such report, an older runner image, an
-// unmapped runner pool), which is a distinction a consumer has to keep or it will report working
-// servers as dead.
-//
-// FIFTH number this one addition has held: written against 1.21.0 (the number the `toolServers`
-// record itself took), then displaced in turn by the run outcome endpoint, `x-min-scope`, the
-// task-`fields` patch and the GitLab source above, each published by main while this branch was in
-// flight. Not one of the five announced itself on the VERSION line, which auto-merged clean every
-// time to the number main had just used; every one surfaced as a conflict in THIS comment block,
-// only because each version step writes its own paragraph here. That is the whole reason the
-// paragraphs exist, and it is why the note at the top of the block says to re-read this line after
-// every merge rather than trust a clean one.
-//
-// 1.27.0: the verification report gains a `context` section and the run outcome summary a
-// `sources` one, both saying which linked pages a run's agents read and at which revision.
-// Additive on both surfaces (a new section object beside the existing ones, on two endpoints and
-// inside the PR body's fenced block), and inert for a consumer that ignores it: every section it
-// already reads is byte-for-byte unchanged. `PR_VERIFICATION_REPORT_VERSION` steps to 9 and
-// `RUN_OUTCOME_VERSION` to 2 with it.
-//
-// 1.28.0, not 1.26.0: the outbound webhook becomes a COLLECTION,
-// `GET /api/v1/notification-webhooks` plus `GET|PUT|DELETE /api/v1/notification-webhooks/:webhookId`,
-// beside the singular routes, which keep working and now address the `default` entry. Additive on
-// every axis: four new operations, and two new fields (`id`, `name`) on a response projection a
-// consumer already tolerates unknown members of. FOURTH number this one has held: it claimed
-// 1.25.0, then 1.26.0, then 1.27.0, each published by main while the branch was in flight, and not
-// one of them announced itself on the VERSION line, which auto-merged clean to a number main had
-// already used every time. Re-read this line here, not there, after every merge.
-//
-// 1.29.0, not 1.28.0: a run's `diagnostics.lastDispatch` gains a `failure` object, and is now
-// stamped for INLINE steps as well as container ones. Additive on the wire: the new object is
-// present only on a dispatch that never reached a running job, `executionBackend` gains one
-// further value (`inline`) in a field already documented as free-form, and every existing field
-// is byte-for-byte unchanged. What DOES change for a consumer is the population: a pure-inline run
-// used to answer `diagnostics: null` on the debug overview and now answers a block, so a client
-// treating "no diagnostics" as "no agent work happened" reads differently. That is the point of
-// the change, and it is stated here rather than left for a reader to discover.
-//
-// SEVENTH number for this one, displaced by the same five as the `observed` paragraph above plus
-// its own `toolServers` CLI record and the webhook collection. Two long-lived branches losing this
-// race independently is the case for reading the note at the top of the block rather than treating
-// it as history.
-//
-// 1.30.0, not 1.29.0: `POST /api/v1/keys` accepts an opaque `externalIdentity`, the identity a
-// provisioner is minting a key FOR, echoed on the key resource, on `GET /api/v1/me`, and on the
-// run projections as the identity the run was started for. Additive on every axis: one optional
-// request field, one nullable response field, and `null` is what every run and key that predates
-// it correctly reports. This branch first claimed 1.29.0, which main then published for the
-// dispatch-`failure` diagnostics above while the branch was in flight: the SECOND number this one
-// has held, and it surfaced here rather than on the VERSION line, which auto-merged clean to the
-// number main had just used. Re-read this line after any merge rather than trusting that.
-//
-// 1.31.0, not 1.30.0: board PROVISIONING and the relationships that outlive a create. Seven new
-// operations (`GET /api/v1/repos`, `POST /api/v1/services`, the two dependency writes, and the
-// three task-document routes), two new optional request fields (`autoStartDependents` on the task
-// patch), and three new response fields (`dependsOn` and `autoStartDependents` on the task
-// projection, `scope` on a run artifact, `output` and `data` on a run step). Additive on every
-// axis: nothing is renamed, retyped or re-scoped, and a consumer built against 1.30.0 keeps
-// parsing every response it already understood.
-//
-// One population change is worth stating rather than leaving for a reader to discover, because it
-// is the point of one of the slices: `GET /api/v1/runs/:runId/artifacts` now returns the reference
-// designs attached to the run's TASK alongside the artifacts the run captured, each row saying
-// which it is. A consumer counting rows off that list to mean "screenshots this run captured" must
-// filter on `scope: 'run'`; one comparing a screenshot against the design it was judged against
-// finally has both, which is why the list was half the truth before.
-//
-// 1.32.0: the two cost/telemetry reads that were reachable only from a browser session. Two new
-// operations (`GET /api/v1/usage/spend`, `GET /api/v1/debug/runs/{runId}/llm-export`), no change
-// to anything already served. Additive on every axis, so a consumer built against 1.31.0 keeps
-// parsing every response it already understood.
-//
-// Worth stating for a reader comparing the new spend read against `GET /api/v1/usage`: the two
-// answer different questions off the same ledger and will not tie out. `/usage` is the current
-// calendar month against the budget; `/usage/spend` is a rolling window snapped to a bucket edge,
-// and on `30d`/`90d` it is served from the durable rollup, whose attribution was frozen while the
-// money was spent. `source` and `since` on the response are what say which is talking.
-//
-// 1.33.0: the MERGE-EVIDENCE loop (ADR 0046) reaches `/api/v1`. Four new operations
-// (`GET /api/v1/runs/:runId/merge-record`, `GET /api/v1/merge-records/rollups`,
-// `GET /api/v1/merge-records/:recordId`, `POST /api/v1/merge-records/:recordId/effort`) plus an
-// all-optional body on `POST /api/v1/notifications/:id/act`. Purely additive: no existing path,
-// shape, scope floor or error vocabulary moves.
-//
-// The scope split is the part worth stating. Recording how much review a merged pull request
-// needed is `write`, not the `admin` that `act` carries: `act` MERGES a pull request, where
-// tagging one that already landed merges nothing. An integration whose job is collecting evidence
-// therefore no longer needs a key that can also delete tasks and merge.
-//
-// `act`'s new body is what gives the app's one-tap confirm-and-tag a headless equivalent, and it
-// reaches four published clients without breaking a caller because the emitters now render an
-// all-optional body as a parameter that may be OMITTED. Sending no body at all still works
-// (the route mounts `optionalJsonBody`), so an integration calling it since 1.0 is untouched.
-//
-// 1.34.0, not 1.32.0: `GET /api/v1/services/:serviceId/spec`, the service's in-repo requirement
-// tree. One new operation and its schemas; nothing existing is renamed, retyped or re-scoped, so a
-// consumer built against 1.33.0 is unaffected. This branch first claimed 1.32.0, which main then
-// published for the spend/export reads above while the branch was in flight, and then 1.33.0 went
-// to the merge-evidence loop: the THIRD number to move under a branch in flight, which is what the
-// note higher up is warning about.
-//
-// One consequence is worth stating rather than leaving for a reader to discover, because it is a
-// commitment rather than an addition: the response serves `SpecDoc` and everything under it
-// (`SpecModule`, `RequirementGroup`, `RequirementItem`, `AcceptanceCriterion`, `DomainRule`) as the
-// SAME shapes the app's requirements window consumes, deliberately, so the two surfaces cannot
-// drift about one artifact. Those schemas were internal and freely breakable until this version;
-// from here they are part of the stable `/api/v1` surface and change on its terms.
-//
-// 1.35.0: one new `teardown` value, `retained`, on the environments section of the verification
-// report (`GET /api/v1/runs/{runId}/verification-report`). It says the run's Deployer DECLARED
-// that its environments outlive the run, so no reclaim is coming and none is missing. Additive:
-// no path, shape, scope floor or error vocabulary moves, and a consumer built against 1.34.0
-// keeps parsing every response it already understood.
-//
-// It is worth naming what a consumer that does NOT recognise it will do, because this is an enum
-// on a field that already had five values and the SDKs tolerate unknown members by design: such a
-// consumer sees a value it cannot classify rather than a wrong one. That is the whole reason the
-// state is new instead of folded into `pending` — `pending` is a teardown still expected, and
-// reporting one that is never coming is the misreport the section exists to avoid.
-//
-// 1.36.0: one new endpoint, `GET /api/v1/runs/{runId}/spec`, at `read` scope. It serves the same
-// specification `GET /api/v1/services/{serviceId}/spec` does, read at the branch ONE RUN pushed its
-// work to rather than at the repository default. Purely additive: no existing path, shape, scope
-// floor or error vocabulary moves.
-//
-// It is a second endpoint rather than a `ref` parameter on the first because the two answer
-// different questions, and the run one is what makes the criterion-to-evidence join complete: while
-// a run's pull request is open, every requirement that run ADDED is missing from the default
-// branch, so a caller joining `requirements` rows from `…/report` or `…/outcome` against the
-// service read finds no criterion for exactly the rows the run is about.
-//
-// Its `anchor` carries a fourth value the service read cannot answer, `not_read`, and it is a `200`
-// rather than a refusal on purpose: the run's spec read is gated on a tester having reported, so
-// that the tree served is the one the verdicts were made against, and before that the platform has
-// consulted no tree. That is the same fact `requirements.spec: "not_read"` on the run's outcome
-// already states. `provenance` is null there, and only there.
-const API_VERSION = '1.36.0'
+// it against `origin/main` after every merge rather than trusting a clean one, and write the new
+// entry in the history doc, which is what makes the next collision arrive as a conflict.
+
+const API_VERSION = '1.54.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -490,11 +269,95 @@ const OPERATION_DOCS = {
     description:
       'Create a board service, optionally backed by a repository from `GET /api/v1/repos`. The repository link is what makes the service runnable: execution resolves a task’s repository by walking up to its enclosing service frame, so a service with none holds tasks and can start none of them. A whole-repo repository that already backs a service in this account is MOUNTED rather than duplicated; a monorepo service must name its subdirectory. The board lays the service out itself: this surface publishes no coordinates. Requires an `admin` key.',
   },
+  deletePublicService: {
+    tag: 'Services',
+    summary: 'Delete a service and everything under it',
+    description:
+      'Delete a board service, its modules and tasks, and the run history recorded under them. The inverse of the create, and the one board write with no headless counterpart before it: a key authenticates on `/api/v1` only, so a caller that provisions services (an environment rebuilt per test pass, a repository retired, a frame raised against the wrong repository) had to ask a person to clean them up. Any run still going under the frame is stopped and its container killed first, so nothing is left idling. A service holding UNFINISHED tasks is refused with `422 service_has_unfinished_tasks` rather than discarding work in flight: delete those tasks first (`DELETE /api/v1/tasks/{taskId}`) if that is what you mean. An ARCHIVED service is not addressable here, exactly as it is absent from `GET /api/v1/services`. Requires an `admin` key.',
+  },
+  startPublicRepoBootstrap: {
+    tag: 'Repos',
+    summary: 'Create a repository and adapt it with the bootstrapper agent',
+    description:
+      'Create a brand-new repository under the account the workspace is connected to, then run the bootstrapper agent in a container to write it against the supplied brief (or to adapt a reference architecture). Answers 201 with a job to poll rather than blocking for the minutes a container takes. The job names the board service frame it materialises, so work can be filed against the service before the repository has finished being written. This is the one act of board setup with no other public counterpart: creating a service takes a repoId, and nothing else here makes one.',
+  },
+  getPublicRepoBootstrap: {
+    tag: 'Repos',
+    summary: 'Poll one repository bootstrap',
+    description:
+      'Read a bootstrap run’s current state. `failureKind` says whether a retry could plausibly help: a `preflight` refusal (the target repository already has content, nothing is connected) cannot be retried into success, where an `evicted` container can.',
+  },
+  updatePublicService: {
+    tag: 'Services',
+    summary: 'Patch a service, including where its per-run manifests live',
+    description:
+      'Change a service’s authored fields, and declare its `provisioning`: where the manifests for a per-run environment are read from. That second half is what a connected cluster alone cannot supply, because the platform keeps “which cluster” (one per workspace) apart from “which manifests” (one set per service). An omitted `provisioning` leaves the stored one alone rather than clearing it. Board coordinates are deliberately absent, as they are on service creation.',
+  },
+  connectPublicEnvironment: {
+    tag: 'Environments',
+    summary: 'Connect the workspace to the cluster its environments deploy onto',
+    description:
+      'Bind environment provisioning to a Kubernetes cluster: the apiserver, how its TLS is verified, the namespace template, and how an environment URL is derived once manifests are applied. The secret bundle authenticating the connection is write-only; the response reports which secret KEYS were stored and never their values. Idempotent, so re-connecting replaces rather than accumulating.',
+  },
+  testPublicEnvironmentConnection: {
+    tag: 'Environments',
+    summary: 'Probe a candidate cluster connection without saving it',
+    description:
+      'Reach the apiserver with the supplied credentials and report what came back, persisting nothing. Worth a call of its own because the alternative is discovering an unreachable cluster or an expired token on the deploy step of a run that has already paid for a design pass and an implementation. A cluster that refuses the credential is an ANSWER, so it is a 200 carrying `ok: false` rather than an error.',
+  },
+  listPublicWiredModels: {
+    tag: 'Models',
+    summary: 'List the models a run in this workspace could dispatch to',
+    description:
+      'The workspace’s model catalog with the flags that decide whether an agent step can run at all, and which of four unrelated fixes an unrunnable one needs. `available` says a run can dispatch to it now. `policyBlocked` says it is configured and refused by the account’s model-family policy, so adding another provider key changes nothing. `personalSubscription` says it runs on a credential belonging to a PERSON (an individual-usage subscription vendor), which a key resolving no user can never see. `subscriptionConfigured` then says whether that person actually holds one: `true` means the model is wired and only the key’s identity is in the way, `false` means the owner is known and holds none, and `null` means there was nobody to ask about, so it must not be read as `false`. `userScoped` is SUPERSEDED by `personalSubscription` and still answers its original narrower question (whether a subscription is the route in force); prefer the newer field.',
+  },
+  getPublicVcsConnection: {
+    tag: 'VCS',
+    summary: 'Read the workspace’s source-control connection and what it may do',
+    description:
+      'The connected account, how the workspace authenticates to it, and the two permissions that decide whether an automated flow can complete: whether the platform may create repositories, and whether it may write workflow files. Both are enforced by the provider at push time, so a caller that cannot read them discovers a missing workflow permission as a repository that bootstrapped and then failed to gain its CI workflow. Provider-neutral: a GitLab-connected workspace answers here too. `connection` is null when nothing is connected, which is a state rather than an error.',
+  },
+  getPublicTrackerWriteback: {
+    tag: 'Tracker',
+    summary: 'Read the workspace’s tracker writeback disposition',
+    description:
+      'What this workspace does to a task’s LINKED tracker issue as its pull request progresses: comment when the pull request opens, comment and close the issue when it merges, and post a headless run’s parked requirements-review findings so the reporter can answer where they filed. Worth reading before filing a ticket-linked task, since it decides whether the issue the work came from ever hears the outcome. `updatedAt` is null when nobody has chosen a disposition, in which case the values are this deployment’s defaults (all three ON). Requires an `admin` key.',
+  },
+  updatePublicTrackerWriteback: {
+    tag: 'Tracker',
+    summary: 'Change the workspace’s tracker writeback disposition',
+    description:
+      'Turn one or more writeback actions on or off. A MERGE: an action you omit keeps its stored value, so a caller acting on one decision cannot silently move the other two. This is workspace-wide configuration, so it changes what happens to every task’s ticket on the board; the read beside it reports `updatedAt` so a caller can see whether it is about to overwrite somebody’s choice. An empty patch is a no-op and does not stamp `updatedAt`. Requires an `admin` key.',
+  },
+  listPublicRiskPolicies: {
+    tag: 'Risk policies',
+    summary: 'List the workspace’s risk policies',
+    description:
+      'The policy library, including which row is the workspace default that a task pinning none resolves. `autoMergeEnabled` is the master switch that decides whether a run can land its pull request without a person; `dryRunRoles` names the roles whose runs the policy forces into dry-run mode, which is the difference between “this policy merges” and “this policy merges for everyone except one role”. A policy also caps CI-fixer attempts, requirement and tester iteration rounds and the release-health watch, which is why it is not called a merge preset; the id is what a task pins as `riskPolicyId`.',
+  },
+  listPublicModelPresets: {
+    tag: 'Model presets',
+    summary: 'List the workspace’s model presets',
+    description:
+      'The preset library, including which row is the workspace default that a task pinning none resolves. `baseModelId` is the model every agent step runs on under the preset, and `overrides` names the agent kinds that run on something else, which is usually the one that matters: two presets often differ only in what the CODER gets. Whether a preset can actually be dispatched to is NOT repeated here, because the models endpoint already answers it while keeping unconfigured apart from refused-by-policy; join on `baseModelId`.',
+  },
   listPublicRepos: {
     tag: 'Repos',
     summary: 'List the repositories a service can be created against',
     description:
-      'List the repositories the key’s workspace has connected, each with the service that already backs it (null when nothing does, and always null for a monorepo, which can back several). The discovery half of service creation: the create takes a repoId, and this is where one comes from.',
+      'List the repositories the key’s workspace has LINKED, each with the service that already backs it (null when nothing does, and always null for a monorepo, which can back several). The discovery half of service creation: the create takes a repoId, and this is where one comes from. A repository the connection can reach but nobody has adopted yet is NOT here; list those with the available-repos endpoint and adopt one with the link endpoint.',
+  },
+  listPublicAvailableRepos: {
+    tag: 'Repos',
+    summary: 'List the repositories this workspace could adopt',
+    description:
+      'The repositories the workspace’s source-control connection can REACH, whether or not this workspace links them, with `linked` as the join onto the repos list. It exists because those two populations differ and the difference is invisible otherwise: linking is explicit per workspace, so a repository that exists and is perfectly reachable is absent from the repos list in exactly the way one that was never created is, and those need opposite fixes. Pass `q` as an exact `owner/name` for an authoritative point-read, as a substring to search, or omit it to browse what is accessible. Each call reaches the provider, so it is a setup-time read rather than one to poll.',
+  },
+  linkPublicRepo: {
+    tag: 'Repos',
+    summary: 'Adopt an existing repository into this workspace',
+    description:
+      'Link a repository the connection can reach, by `owner` and `name`, so a service can be created against it. The act that had no headless counterpart: nothing links a repository for you (the provider webhook for an added repository does not project one, and a resync refreshes what is already linked), so a repository created by any means stayed invisible to the repos list and unusable by service creation until a person opened the app. Takes a NAME rather than the numeric `repoId` its sibling reads report, because a caller setting a workspace up from configuration knows the name and cannot know a provider id for a repository no public read lists; the response carries the `repoId` for the service-creation call that follows. Idempotent: a repository this workspace already links returns its row rather than refusing, so a setup script re-running itself needs no special case. A repository the connection cannot reach is a 404 with `details.reason: repo_not_reachable`, which covers both "it does not exist" and "your credential is not granted it": a provider answers those identically, and inventing a split would be a guess.',
   },
   createPublicTask: {
     tag: 'Tasks',
@@ -996,7 +859,7 @@ const OPERATION_DOCS = {
     tag: 'Evidence',
     summary: "Get a run's outcome summary",
     description:
-      'What the run changed and what backs that up, in product language, for a reader who will not open the diff: the run’s disposition, the pull requests it opened, requirement coverage joined to the service’s `spec/`, the tester’s verdict and concerns, the views it captured, and the machine checks that ran. The same reduction the app’s outcome card renders, over the same evidence the verification report is built from, so the two cannot state different totals for one run. Nothing here is asserted by a model: every count is derived from recorded verdicts. Prefer the verification report when you need a reviewer’s full bundle; prefer this when you need to say what shipped. Sections state `reported` or `absent` with a machine-readable gap code, and `truncations` names any list the response had to bound.',
+      'What the run changed and what backs that up, in product language, for a reader who will not open the diff: the run’s disposition, the pull requests it opened, requirement coverage joined to the service’s `spec/`, the tester’s verdict and concerns, the views it captured, the throwaway environments it stood up (`state: "live"` is the only one worth opening, and only while its `expiresAt` is still ahead; every other row still carries its URL), and the machine checks that ran. The same reduction the app’s outcome card renders, over the same evidence the verification report is built from, so the two cannot state different totals for one run. Nothing here is asserted by a model: every count is derived from recorded verdicts. Prefer the verification report when you need a reviewer’s full bundle; prefer this when you need to say what shipped. Sections state `reported` or `absent` with a machine-readable gap code, and `truncations` names any list the response had to bound.',
   },
   listPublicRunArtifacts: {
     tag: 'Evidence',
@@ -1302,6 +1165,35 @@ function addHandDocumentedRoutes(paths, tags) {
   }
 }
 
+/**
+ * The personal-unlock header parameter (`withPersonalUnlock`), for the routes that start, retry or
+ * answer a run. It is a real request input, so leaving it out published an operation whose `428` no
+ * consumer could satisfy from the document alone. Optional everywhere: a poolable run needs no
+ * unlock and a key bound to nobody can use none.
+ *
+ * The header's NAME is read from the contracts rather than restated here, because a second spelling
+ * of it in this file would be one the deployment does not read.
+ */
+function personalUnlockParam(contracts) {
+  const name = contracts.PERSONAL_PASSWORD_HEADER
+  if (typeof name !== 'string') {
+    throw new Error(
+      'Contracts export no PERSONAL_PASSWORD_HEADER to publish as a header parameter.',
+    )
+  }
+  return {
+    name,
+    in: 'header',
+    required: false,
+    description:
+      "The personal password of the user this key is bound to, unlocking that user's own " +
+      'subscription for this call. Send it when a response answers `428 credential_required`; ' +
+      'a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` ' +
+      'instead).',
+    schema: { type: 'string' },
+  }
+}
+
 export async function buildOpenApiDoc() {
   const contracts = await import(pathToFileURL(CONTRACTS_DIST).href)
 
@@ -1375,6 +1267,7 @@ export async function buildOpenApiDoc() {
         params.push({ name, in: 'query', required: required.has(name), schema })
       }
     }
+    if (contract.personalUnlock === true) params.push(personalUnlockParam(contracts))
     if (params.length) operation.parameters = params
 
     if (isSchema(contract.requestBodySchema)) {

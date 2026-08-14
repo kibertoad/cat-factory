@@ -4,6 +4,7 @@ import { createServer } from 'node:net'
 import {
   composePostMortem,
   describeProcessExit,
+  HARNESS_SHUTDOWN_ERROR,
   redactSecrets,
   type RunnerDispatchAck,
   type RunnerJobStopOutcome,
@@ -94,8 +95,8 @@ const MAX_TRACKED_JOB_GENERATIONS = 1_000
 
 export interface LocalProcessRunnerTransportOptions {
   /**
-   * Path to the executor-harness HTTP server entry (its `server.js`/`server.ts`). Spawned
-   * as `node <entry>`; with a `.ts` entry, Node's type-stripping (Node 24+) runs it.
+   * Path to the executor-harness HTTP server entry (its `harness-server.js`/`harness-server.ts`).
+   * Spawned as `node <entry>`; with a `.ts` entry, Node's type-stripping (Node 24+) runs it.
    */
   harnessEntry: string
   /** Node executable to spawn the harness with. Default `process.execPath`. */
@@ -257,6 +258,18 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
     // carrying whatever the process THIS job was dispatched to left behind.
     if (!proc || proc.exited) {
       const detail = this.describeJobsProcessExit(ref.jobId)
+      // A process that exited 0 with this job still in flight was SHUT DOWN, not lost, and a
+      // retry only reproduces whatever shut it down. That reading matters more here than on the
+      // container leg: this process is the developer's own, it serves every concurrent local
+      // job, and an agent running unsandboxed on their machine can signal it directly.
+      if (this.jobsProcessExitedCleanly(ref.jobId)) {
+        return this.settled(ref.jobId, {
+          state: 'failed',
+          error: HARNESS_SHUTDOWN_ERROR,
+          harnessShutdown: true,
+          ...(detail ? { detail } : {}),
+        })
+      }
       return this.settled(ref.jobId, {
         state: 'failed',
         error: EVICTION_ERROR,
@@ -272,6 +285,7 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
       timeoutMs: this.requestTimeoutMs,
       label: 'Native harness',
       isDead: () => proc.exited,
+      exitedCleanly: () => this.jobsProcessExitedCleanly(ref.jobId),
       postMortem: (cause) => Promise.resolve(this.processPostMortem(cause, ref.jobId, proc)),
     })
     return this.settled(ref.jobId, view)
@@ -377,6 +391,22 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
         "still serving other local runs, so its output is not this run's and no stderr tail is " +
         'attached.',
     ])
+  }
+
+  /**
+   * Whether the harness process THIS job was dispatched to exited cleanly (code 0, no signal).
+   *
+   * Generation-checked for the same reason the post-mortem is: one retained exit record plus a
+   * respawning process means "the last exit" and "this job's exit" quietly stop being the same
+   * thing, and a stranger's clean exit would turn this job's crash into a shutdown. No record,
+   * a record from another generation, or a signal death all answer false, so the failure stays
+   * an eviction, the reading that costs a container rather than the run.
+   */
+  private jobsProcessExitedCleanly(jobId: string): boolean {
+    const dispatchedTo = this.jobGenerations.get(jobId)
+    const exit = this.lastExit
+    if (dispatchedTo === undefined || !exit || exit.generation !== dispatchedTo) return false
+    return exit.code === 0 && !exit.signal
   }
 
   /**
@@ -598,7 +628,8 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
  *
  * Mirrors {@link resolveHarnessImage} for the container path: an explicit `LOCAL_HARNESS_ENTRY`
  * wins (a custom build or a source checkout), else we resolve the `@cat-factory/executor-harness`
- * package that ships with this backend — its `.` export is the zero-dependency `dist/server.js`.
+ * package that ships with this backend, whose `.` export is the zero-dependency
+ * `dist/harness-server.js`.
  * So a fresh install runs native mode out of the box with no extra configuration, exactly like
  * an unset `LOCAL_HARNESS_IMAGE` falls back to the pinned recommended image.
  *
@@ -616,7 +647,7 @@ export function resolveHarnessEntry(env: NodeJS.ProcessEnv): string {
       'Native local mode (LOCAL_NATIVE_AGENTS) needs the executor-harness server entry, but ' +
         "'@cat-factory/executor-harness' could not be resolved. It ships as a dependency of " +
         '@cat-factory/local-server — reinstall dependencies, or set LOCAL_HARNESS_ENTRY to the ' +
-        'harness server entry path (its built dist/server.js) explicitly.',
+        'harness server entry path (its built dist/harness-server.js) explicitly.',
       { cause },
     )
   }

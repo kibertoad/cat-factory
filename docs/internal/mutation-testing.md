@@ -35,6 +35,15 @@ The PR trigger is scoped to the flow's own files (this workflow, the shared conf
 any package's `stryker.config.mjs`). It exists because `workflow_dispatch` only works once a workflow
 is on the default branch, so a change to the flow could otherwise be proven only after merging it.
 
+**The mutating step writes NOTHING to the job summary, and its `GITHUB_STEP_SUMMARY` is redirected to
+a throwaway file to keep it that way.** Vitest's `github-actions` reporter is a default whenever
+`GITHUB_ACTIONS` is set and it appends every failing test to the job summary, and under Stryker the
+suite runs once per mutant, where a failing run is a KILLED mutant, i.e. the outcome being hoped for.
+Kernel's ~7,200 mutants produced 1,193k of that, past GitHub's 1,024k ceiling, so the runner aborted
+the upload and annotated a green nightly with an `##[error]`: a standing red herring beside the one
+place a real below-floor failure gets read. Anything that genuinely belongs in the summary goes in a
+step of its own, which is what the score row already is.
+
 ### Do not run it locally
 
 A run is minutes of CPU per package even on a large machine, and local development is slow enough
@@ -50,9 +59,9 @@ saturate every core.
 
 | Package               | Mutated                          | Mutants | Score (total / covered) | Floor |
 | --------------------- | -------------------------------- | ------- | ----------------------- | ----- |
-| `@cat-factory/kernel` | `src/domain/**`, `src/shared/**` | 6,152   | 81.78% / 84.51%         | 79%   |
-| `@cat-factory/gates`  | all of `src/`                    | 651     | 88.17% / 91.99%         | 86%   |
-| `@cat-factory/spend`  | all of `src/`                    | 396     | 95.71% / 95.71%         | 93%   |
+| `@cat-factory/kernel` | `src/domain/**`, `src/shared/**` | 7,316   | 84.23% / 85.79%         | 82%   |
+| `@cat-factory/gates`  | all of `src/`                    | 651     | 90.78% / 92.06%         | 88%   |
+| `@cat-factory/spend`  | all of `src/`                    | 396     | 97.73% / 97.73%         | 95%   |
 
 These three are pure logic with fast, database-free unit suites, which is the only shape mutation
 testing can afford: the suite runs once per surviving mutant, so a package whose tests need
@@ -73,11 +82,18 @@ both sides agree about, e.g. `binaryFormatCoverage`), `@cat-factory/workspaces`,
 LAST: it is the only one with no `NoCoverage` left, so there is nothing in its scope a new file
 would be joining.
 
-Inside the packages already in scope, kernel's remaining `NoCoverage` is now concentrated in
-`domain/catalog.ts`'s and `domain/seed.ts`'s data (the disposition for which is nothing) and in
-`gates.ts`'s notification-card copy. The app-owned registry seams a deployment extends the platform
-through now all have a test sibling; `pipeline-registry` is the only one still carrying survivors,
-the `findIndex` bounds inside its merge helpers.
+Inside the packages already in scope, kernel's `NoCoverage` is down to 133 and its two largest
+holders are 16 mutants each, which is where the per-file read earns its keep because they want
+opposite dispositions: `domain/seed.ts` is the demo board's data (nothing to do, per the standing
+example below), while `domain/vcs-errors.ts` scores 66.30% total against 80.26% covered, and a gap
+that wide on a small file is untested code rather than weak assertions. `domain/catalog.ts` was on
+this list and is now off it at 94.12% with no `NoCoverage` left; gates' own count went 27 to 9.
+
+The app-owned registry seams a deployment extends the platform through all have a test sibling now,
+but a sibling is not a score: `binary-store-registry` is the lowest in the set at 68.97% with 9
+survivors, ahead of `pipeline-registry`'s 92.54% and the `findIndex` bounds in its merge helpers,
+and `gate-registry` and `foundational-service-registry` each carry 6 `NoCoverage` mutants behind a
+covered score of 100.00% and 95.24%.
 
 `gate-registry` and `binary-generator-registry` were the last two without one, and how they got
 counted as done is worth keeping: the claim was read off the registry seams' AGGREGATE score, which
@@ -114,6 +130,13 @@ and 174 more were killed, so the total gained 2.8 points while the covered score
 extra 29 kills are the part worth noticing: they landed in modules that ALREADY had tests, because
 exercising a seam end to end reaches code its own file's suite drives past.
 
+**A mutant is located by its COLUMN RANGE, not its line.** Stryker mutates every sub-expression, so
+one `if (a != null && (b == null || c > b))` carries a dozen mutants at the same line number and a
+per-line reading of the report mixes them up: three "survivors at line 240" in `forecast.logic.ts`
+read as an unpinned fold, and were in fact one mutant per operand of a condition whose whole-clause
+mutants were all killed. Group by `location.start.column` before concluding anything, and read the
+`replacement` against the exact slice it replaces.
+
 **Read the report's PER-FILE undetected counts, not the headline score, when deciding what to
 work on.** They rank the work differently, and they also say which disposition applies: a file
 whose count is nearly all `NoCoverage` wants a test file, while a high `Survived` count on a
@@ -127,31 +150,79 @@ holding.
 
 `Ignored`, `CompileError` and `RuntimeError` are excluded from both denominators.
 
+### Two dispositions besides "write a test"
+
+**A PROSE mutant is usually meant to survive.** Kernel's agent-facing renderers are mostly string
+literals, and Stryker mutates each one: `binary-generators.ts` alone carries ~100 undetected
+`StringLiteral` mutants inside instruction paragraphs. Killing them means asserting shipped copy
+phrase by phrase, which buys score and charges every future wording edit a test failure. What the
+tests assert instead is the DISPOSITION (does this line appear, for this input, and not for its
+neighbour), probed by one short distinctive fragment. So when triaging a renderer, filter the report
+to the mutators that state behaviour (`ConditionalExpression`, `LogicalOperator`, `EqualityOperator`,
+`OptionalChaining`, `BlockStatement`, `MethodExpression`) and read the count that remains: for that
+file it was 118, not 217.
+
+**An EQUIVALENT mutant cannot be killed, and chasing it damages the suite.** Spend is the worked
+example: at 97.73% all nine of its survivors are provably behaviour-preserving. `burnRatePerDay <= 0`
+→ `false` still returns null, because the arithmetic below it divides by zero and `Infinity < periodEnd`
+is false. `>` → `>=` assigns a value already equal to the accumulator. `windowFirstSeenAt == null`
+→ `false` leaves `Math.max(windowStart, null)`, which is `windowStart` for any real timestamp. The
+two that looked like dead code (`accountCap != null` beside a `Number.isFinite` that is false for
+anything not a number) were removed to prove it, and the TYPECHECK failed: `Number.isFinite` is not a
+narrowing guard, so the null check is load-bearing for `tsc` and inert at runtime. That comment now
+lives in `pricing.ts`, which is where the next person will look.
+
+The rule this leaves: **a floor may still rise on a package at its ceiling, but the score must not be
+the reason to write a test.** A test written to kill an equivalent mutant has to be type-hostile
+(casting `undefined` through a `number | null`) or has to pin an input the domain cannot produce, and
+both are worse than the survivor. Record the finding instead, and raise the floor to lock in what is
+real.
+
 ### The floor is a ratchet
 
 `minimumScore` in each package's config becomes Stryker's `thresholds.break`: below it, `stryker
 run` exits non-zero and the nightly job goes red.
 
-**A floor is the measured total truncated to a whole percent, less two points** (kernel 78.79 →
-78 → 76, gates 85.25 → 85 → 83, spend 95.71 → 95 → 93). The margin is not provisional slack
+**A floor is the measured total truncated to a whole percent, less two points** (kernel 84.23 →
+84 → 82, gates 90.78 → 90 → 88, spend 97.73 → 97 → 95). The margin is not provisional slack
 waiting to be reclaimed. It is sized to the one thing that moves this number without any test
 having changed: **the denominator**.
 
 The total score is `detected / (detected + survived + NoCoverage)` over the whole `mutate` scope,
 so every file the scope gains re-bases it. A new `domain/` module arriving before its tests drops
-the total by roughly `its mutants / total`, about 1.6 points for a 150-mutant one. Two points is
-therefore about one ordinary module's worth of room: enough that unrelated growth cannot turn the
-nightly red, small enough that a real regression still does.
+the total by roughly `its mutants / total`, about 1.6 points for a 150-mutant one against kernel's
+scope. Two points is therefore about one ordinary module's worth of room there: enough that
+unrelated growth cannot turn the nightly red, small enough that a real regression still does.
 
-This is not a hypothetical. Kernel went 5,805 → 5,956 → 6,034 → 6,084 → 6,115 → 6,152 mutants
-across the baselines behind this table, purely from ordinary main-branch work, and one of those
-steps landed WHILE the floor was being set: `prompt-fragment-registry.ts` arrived with no test file,
-adding 20 `NoCoverage` mutants and moving the total 66.36 → 66.29 on its own. One module, no test
-regression anywhere, and a floor pinned to the measured value would already have been that much
-closer to red. (The last step is the same story with the sign flipped: the 37 mutants between 6,115
-and 6,152 arrived on main while this table's third round was being measured, which is why the
-before-and-after above is a pair of runs on ONE scope rather than a comparison against the row the
-previous round left behind.)
+**The margin is a PERCENTAGE, so what it buys shrinks with the denominator**, and the rule reads
+very differently down the table. At the floors above, the untested growth each package absorbs
+before going red is 198 mutants on kernel, 20 on gates and 11 on spend: a module, a large function,
+a helper. So on the two small rows a dip is as likely to be scope growth as a regression, and the
+per-file `NoCoverage` count in the report is what tells them apart. The answer when it is growth is
+the missing test, never a lowered floor.
+
+This is not a hypothetical. Kernel went 5,805 → 5,956 → 6,034 → 6,084 → 6,115 → 6,152 → 7,215 →
+7,316 mutants across the baselines behind this table, purely from ordinary main-branch work, and
+one of those steps landed WHILE the floor was being set: `prompt-fragment-registry.ts` arrived with
+no test file, adding 20 `NoCoverage` mutants and moving the total 66.36 → 66.29 on its own. One
+module, no test regression anywhere, and a floor pinned to the measured value would already have
+been that much closer to red. The 37 mutants between 6,115 and 6,152 are the same story with the
+sign flipped: they arrived while the third round was being measured, which is why that round's
+before-and-after is a pair of runs on ONE scope rather than a comparison against the row the
+previous round left behind.
+
+The last step is by far the largest and it cuts the other way, which is the part to read before
+sizing a margin off any of this. It also spans TWO denominators 101 mutants apart, so keep them
+straight: main's own scope stood at **7,215** when the growth below was read, and the **7,316** in
+the table is the fourth round's own later run, which is where the 84.23% and the floor of 82 come
+from.
+
+1,063 mutants arrived on main between the third round's measurement and the fourth's, taking it
+6,152 → 7,215, and across the same interval main's total moved 81.78 → 81.51: one mutant in seven
+was new, and it cost a quarter of a point, because it arrived with its tests. The margin buys room
+for UNTESTED growth, not for growth as such. Had that same slice landed bare, the third round's
+5,031 kills over 7,215 mutants would have read 69.7%, which is 12 points, and no margin worth
+setting absorbs that.
 
 The scope can also SHRINK, and for a good reason: deleting a branch nothing could distinguish (one
 of the three dispositions below) removes its mutants from the denominator. Spend went 400 → 396

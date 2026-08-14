@@ -156,6 +156,12 @@ export const connectionWarningCodeSchema = v.picklist([
   // its reach. Reported rather than assumed: "unknown breadth" and "narrow" are not the same
   // fact, and treating them alike is exactly how an over-broad token stays silent.
   'github_pat_scope_unreadable',
+  // GitHub returned the scope header with an EMPTY value: a classic token minted with nothing
+  // ticked. Distinct from the code above because it is the opposite fact — a positively stated
+  // "this token grants no scopes at all" rather than an unreadable one — and it is the state a
+  // reader is most likely to have produced by accident, since GitHub's form ticks nothing by
+  // default and the token still authenticates.
+  'github_pat_no_scopes',
 ])
 export type ConnectionWarningCode = v.InferOutput<typeof connectionWarningCodeSchema>
 
@@ -166,11 +172,53 @@ export const connectionWarningSchema = v.object({
 })
 export type ConnectionWarning = v.InferOutput<typeof connectionWarningSchema>
 
+/**
+ * The transport-level class of a connection failure, for a probe that never got an ANSWER: each
+ * member is a different fix (a stopped host, a typo'd name, an untrusted certificate, a credential
+ * that cannot become a header). Machine-readable for the same reason {@link ConnectionWarningCode}
+ * is: the backend does not localize prose, and this is the most-read prose in the connect forms,
+ * so the SPA maps the member to translated copy and keeps the backend's English account as the
+ * technical detail beside it.
+ *
+ * It lives here rather than in kernel because BOTH sides have to agree about the answer: kernel is
+ * invisible to the SPA, so the union kept there would be restated by hand on the forms. Kernel's
+ * `describeConnectionFailure` is the one producer.
+ *
+ * `unknown` is a real member, not a placeholder: it means the thrown error was read and matched
+ * nothing, which is why such a failure is reported as itself with no remedy rather than being
+ * assigned the nearest-looking one.
+ */
+export const connectionFailureCauseSchema = v.picklist([
+  'refused',
+  'dns',
+  'timeout',
+  // Cancelled rather than timed out: a shutting-down process or a superseded request. Kept apart
+  // from `timeout` because the remedies diverge (a timeout points at a firewall or a saturated
+  // host; an abort points at nothing and simply wants re-running).
+  'aborted',
+  'unreachable',
+  'reset',
+  'tls-untrusted',
+  'tls-expired',
+  'tls-hostname',
+  'tls-protocol',
+  'invalid-header',
+  'unknown',
+])
+export type ConnectionFailureCause = v.InferOutput<typeof connectionFailureCauseSchema>
+
 /** The outcome of a provider connection test (never throws to the client). */
 export const connectionTestResultSchema = v.object({
   ok: v.boolean(),
   /** Human-readable detail — a success hint or the failure reason. */
   message: v.optional(v.string()),
+  /**
+   * What CLASS of transport failure this was, when the probe never got an answer. Present only on
+   * such a failure: a success has none, and so does a failure that IS an answer (an HTTP status
+   * the provider maps itself), because those carry no transport cause to name. The SPA renders the
+   * headline from this and keeps {@link message} as the untranslated detail underneath.
+   */
+  failureCause: v.optional(connectionFailureCauseSchema),
   /**
    * Gaps in the config being tested. Independent of `ok`: a warned config still connects, and
    * the test is the one moment the operator is looking at this backend, so it is where they

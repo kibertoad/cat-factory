@@ -84,6 +84,13 @@ RUN echo 'harness:100000:65536' > /etc/subuid \
 # vendor (no proxy). All three pinned to exact versions for reproducibility — bump
 # deliberately, and bump the image tag (see CONTRIBUTING / CLAUDE.md) when you do.
 #
+# `procps` + `psmisc` (ps, pgrep, pkill, killall, fuser) are here for the AGENT, not
+# for us: an agent that has just smoke-tested a service it built needs to stop it
+# again, and reaches for `pkill -f <pattern>` first. Without those binaries that call
+# fails with `command not found` and the agent falls back to something unbounded (a
+# `/proc/*/cmdline` sweep, `kill -TERM -1`), which is how a coder run once killed the
+# harness itself. The narrow tool is the safe one, and it is ~1.5 MB.
+#
 # Pi is pure JS, so it installs with `--ignore-scripts` (no untrusted install
 # hooks). Claude Code and Codex, however, rely on their install scripts to place
 # the right platform binary (Codex in particular ships a native binary), so they
@@ -91,10 +98,14 @@ RUN echo 'harness:100000:65536' > /etc/subuid \
 # CLI is missing or non-functional at runtime. We then assert both CLIs actually
 # run so a broken install fails the build instead of every subscription job.
 ARG PI_VERSION=0.84.1
-ARG CLAUDE_CODE_VERSION=2.1.226
+# Claude Code is deliberately taken at its newest release, ahead of the 24h
+# `minimumReleaseAge` window the workspace dependencies are held to: it moves several
+# times a week and the harness tracks it closely. That exemption is specific to this
+# pin (an explicit call, re-made each time it is bumped), not to the other two CLIs.
+ARG CLAUDE_CODE_VERSION=2.1.231
 ARG CODEX_VERSION=0.147.0
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
-    sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl && rm -rf /var/lib/apt/lists/*; \
+    sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl procps psmisc && rm -rf /var/lib/apt/lists/*; \
     if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
     npm install -g --ignore-scripts "@earendil-works/pi-coding-agent@${PI_VERSION}"; \
     npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" "@openai/codex@${CODEX_VERSION}"; \

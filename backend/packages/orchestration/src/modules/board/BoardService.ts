@@ -29,9 +29,12 @@ import type {
   InitiativeRepository,
   DocumentRepository,
   Logger,
+  ModelPresetRepository,
   RepoProjectionRepository,
   ResolveRunRepoContext,
+  AccountRiskPolicyRepository,
   RiskPolicyRepository,
+  RiskPolicySuppressionRepository,
   ServiceFragmentDefaultsRepository,
   ServiceRepository,
   TaskRepository,
@@ -44,26 +47,22 @@ import type {
 } from '@cat-factory/kernel'
 import type { IdGenerator } from '@cat-factory/kernel'
 import { noopLogger, registerServiceForFrame, requireWorkspace } from '@cat-factory/kernel'
+import { createBlockRemoval } from './blockRemoval.js'
 import { createBoardLayoutWrites } from './layoutWrites.js'
 import { createBoardReparentWrite } from './reparentWrite.js'
 import { createMountProjection } from './mountProjection.js'
-import { pruneDanglingEdges, reclaimDoomedEntities } from './removal-cascade.js'
-import {
-  canReparent,
-  descendantIds,
-  gridSlot,
-  serviceOf,
-  tasksOf,
-  unfinishedTasksUnder,
-  wouldCreateCycle,
-} from './board.logic.js'
+import { canReparent, gridSlot, serviceOf, tasksOf, wouldCreateCycle } from './board.logic.js'
 import type { ReviewFrictionNotificationReader } from './reviewFrictionGuard.js'
 import { ReviewFrictionGuard } from './reviewFrictionGuard.js'
 import type { WorkspaceSettingsReader } from './workspaceSettingsReader.js'
 import type { NewServiceFrameDefaults } from './newServiceFrameDefaults.js'
 import { nextFrameSlot, resolveNewServiceFrameDefaults } from './newServiceFrameDefaults.js'
 import { createInternalAnchors } from './internalAnchors.js'
-import { PublicBoardReads, type PublicRepoOption } from './publicBoardReads.js'
+import {
+  PublicBoardReads,
+  type PublicRepoOption,
+  type RepoUseByRepoId,
+} from './publicBoardReads.js'
 import { buildReviewDescription, resolveReviewTaskTarget } from './reviewTaskTarget.js'
 import type { BlockPatchNarrowing } from './blockPatchNarrowing.js'
 import { createBlockPatchNarrowing } from './blockPatchNarrowing.js'
@@ -71,8 +70,9 @@ import { applyTaskTypeFieldsPatch } from './taskTypeFieldsPatch.js'
 import type { TaskTypeFieldsPatchDeps } from './taskTypeFieldsPatch.js'
 import type { TaskTypeCreationDefaults } from './taskTypeCreationDefaults.js'
 import { createTaskTypeCreationDefaults } from './taskTypeCreationDefaults.js'
+import type { PresetPinGuard } from './presetPinGuard.js'
 import type { RiskPolicySelectionGuard } from './riskPolicySelectionGuard.js'
-import { createRiskPolicySelectionGuard } from './riskPolicySelectionGuard.js'
+import { createBoardPolicyGuards } from './boardPolicyGuards.js'
 import { createSharedServiceMount } from './sharedServiceMount.js'
 import type { SharedServicePolicy } from './serviceRepoLinkage.js'
 import { resolveServiceRepoLinkage } from './serviceRepoLinkage.js'
@@ -208,8 +208,25 @@ export interface BoardServiceDependencies {
    * at: every task resolves the built-in `FALLBACK_RISK_POLICY`, whose role layer is empty and
    * therefore holds nobody to anything, so the guard is VACUOUS rather than skipped: the same
    * answer it gives on a workspace whose presets treat every initiator alike.
+   *
+   * Also read by the preset-PIN guard, where absent means something else entirely (`503`): see
+   * {@link PresetPinGuard}.
    */
   riskPolicyRepository?: RiskPolicyRepository
+  /**
+   * The ACCOUNT tier of that same library (ADR 0055) and what this board hides from it, so both
+   * guards judge a task against every policy it can actually be filed against. Absent ⇒ nothing is
+   * inherited, and both read exactly the board's own rows as they did before the tier existed.
+   */
+  accountRiskPolicyRepository?: AccountRiskPolicyRepository
+  riskPolicySuppressionRepository?: RiskPolicySuppressionRepository
+  /**
+   * The workspace's model-preset library, read only by the preset-PIN guard: a task's
+   * `modelPresetId` decides which model every one of its agent steps runs on, and a dangling id
+   * resolves to the workspace default rather than failing, so an unchecked typo is a run that
+   * succeeds while being about something else ({@link PresetPinGuard}).
+   */
+  modelPresetRepository?: ModelPresetRepository
 }
 
 // The board-changed reason vocabulary lives in `board.logic.ts` (pure, and shared with the
@@ -256,6 +273,12 @@ export class BoardService {
    * (see layoutWrites.ts). Both split their write between a frame's per-board mount override and
    * the shared block row, and `resizeBlock` layers the child translation on top of that.
    */
+  /**
+   * The block DELETE sequence (see blockRemoval.ts): the unfinished-work refusal, the home
+   * resolution, the side-table cascade and the per-board fan-out, which share one board list and
+   * one ORDER.
+   */
+  private readonly removal: ReturnType<typeof createBlockRemoval>
   private readonly layout: ReturnType<typeof createBoardLayoutWrites>
   /**
    * The reparent write (see reparentWrite.ts): containment rules, the cross-home subtree
@@ -287,6 +310,12 @@ export class BoardService {
    * those a caller reaches for.
    */
   private readonly riskPolicySelection: RiskPolicySelectionGuard
+  /**
+   * Refuses a task pinning a model preset or risk policy the workspace does not hold, on the same
+   * reading as the selection guard above: both ids are writable at creation and by patch, so a
+   * check at either door alone is a check a caller reaches around by using the other.
+   */
+  private readonly presetPins: PresetPinGuard
 
   constructor({
     workspaceRepository,
@@ -310,6 +339,9 @@ export class BoardService {
     reviewFrictionNotifications,
     resolveRunRepoContext,
     riskPolicyRepository,
+    accountRiskPolicyRepository,
+    riskPolicySuppressionRepository,
+    modelPresetRepository,
     logger,
   }: BoardServiceDependencies) {
     this.workspaceRepository = workspaceRepository
@@ -355,7 +387,17 @@ export class BoardService {
       taskTypeSuppressionRepository,
       logger: this.log,
     })
-    this.riskPolicySelection = createRiskPolicySelectionGuard({ riskPolicyRepository })
+    // Both guards judge a task against the policies actually available to its board, which since
+    // ADR 0055 means the merged library (its own rows plus the account's).
+    const policyGuards = createBoardPolicyGuards({
+      riskPolicyRepository,
+      accountRiskPolicyRepository,
+      riskPolicySuppressionRepository,
+      workspaceRepository,
+      modelPresetRepository,
+    })
+    this.riskPolicySelection = policyGuards.riskPolicySelection
+    this.presetPins = policyGuards.presetPins
     // Bound callbacks rather than the service, so the narrowing depends on the two reads it
     // actually uses instead of on everything `BoardService` can do.
     this.patchNarrowing = createBlockPatchNarrowing({
@@ -384,6 +426,20 @@ export class BoardService {
           fields,
         ),
     }
+    this.removal = createBlockRemoval({
+      blockRepository,
+      executionRepository,
+      serviceRepository,
+      workspaceMountRepository,
+      initiativeRepository,
+      documentRepository,
+      taskRepository,
+      requireWorkspace: (workspaceId) => this.requireWorkspace(workspaceId),
+      resolveBlockHomeForRemoval: (workspaceId, id) =>
+        this.resolveBlockHomeForRemoval(workspaceId, id),
+      emitBoardChanged: (originWorkspaceId, change) =>
+        this.emitBoardChanged(originWorkspaceId, change),
+    })
     this.layout = createBoardLayoutWrites({
       blockRepository,
       workspaceMountRepository,
@@ -769,6 +825,14 @@ export class BoardService {
       currentId: null,
       nextId: input.riskPolicyId,
     })
+    // Two questions about the same two ids, and they are not the same question: the guard above
+    // asks whether this editor MAY point here, this one whether "here" is anywhere at all. Both
+    // resolve against the HOME library, and both land before any side effect.
+    await this.presetPins.assertPinsExist({
+      homeWorkspaceId,
+      modelPresetId: input.modelPresetId,
+      riskPolicyId: input.riskPolicyId,
+    })
     if (container.level === 'task') {
       throw new ValidationError('Tasks cannot contain other tasks')
     }
@@ -937,6 +1001,16 @@ export class BoardService {
   /** Public-API: the repositories a service can be created against, and what already backs each. */
   listRepoOptions(workspaceId: string): Promise<PublicRepoOption[]> {
     return this.publicReads.listRepoOptions(workspaceId)
+  }
+
+  /**
+   * Public-API: whether each of these repositories is already spoken for, linked here or not.
+   *
+   * The judgement {@link listRepoOptions} makes about the projection, asked of ids instead, so the
+   * adoption discovery read answers the same question the create decides on.
+   */
+  describeRepoUse(workspaceId: string, repoIds: readonly number[]): Promise<RepoUseByRepoId> {
+    return this.publicReads.describeRepoUse(workspaceId, repoIds)
   }
 
   /** Public-API: create a task under a visible service frame the workspace owns. */
@@ -1145,6 +1219,14 @@ export class BoardService {
         nextId: patch.riskPolicyId,
       })
     }
+    // Whether the ids the patch NAMES exist at all (see `presetPinGuard.ts`), on the same
+    // only-when-named rule as the selection guard: re-pointing at nothing resolves to the
+    // workspace default and reads afterwards exactly like a task that was never re-pointed.
+    await this.presetPins.assertPinsExist({
+      homeWorkspaceId,
+      modelPresetId: patch.modelPresetId,
+      riskPolicyId: patch.riskPolicyId,
+    })
     // Each patch field that belongs to a DIFFERENT kind of block than the one addressed is
     // dropped rather than persisted as dead data, and the three that name other entities are
     // validated against them. One collaborator (`blockPatchNarrowing.ts`) owns all of it.
@@ -1206,89 +1288,24 @@ export class BoardService {
   }
 
   /**
-   * Delete a block and all its descendants, dropping dangling dependencies.
-   *
-   * `opts.preloaded` lets the caller hand in a block list it already loaded (the delete
-   * path's teardown lists the board immediately before this) so a locally-owned delete
-   * doesn't re-list the whole board; it is reused ONLY when it was loaded for the same
-   * workspace this block homes to (a mounted shared service homed elsewhere re-lists).
+   * Refuse a delete that would discard work in flight, and hand back the board list the refusal
+   * was decided on, for the teardown and the remove to reuse (see blockRemoval.ts). A DELETE is
+   * three calls and the middle one is irreversible, so this is what makes a 422 change nothing.
    */
-  async removeBlock(
+  assertRemovable(workspaceId: string, id: string): Promise<PreloadedBlocks> {
+    return this.removal.assertRemovable(workspaceId, id)
+  }
+
+  /**
+   * Delete a block and all its descendants, dropping dangling dependencies. Thin delegate to the
+   * collaborator that owns the delete sequence (see blockRemoval.ts).
+   */
+  removeBlock(
     workspaceId: string,
     id: string,
     opts: { preloaded?: PreloadedBlocks } = {},
   ): Promise<void> {
-    await this.requireWorkspace(workspaceId)
-    // Resolve the block at its home so a shared service's block can be deleted from any board
-    // that mounts it (the delete then applies to the one shared copy everywhere). Deletion is
-    // best-effort and idempotent: if the block row is already GONE (e.g. a half-deleted service
-    // that left a dangling mount/repo-link/execution), we must NOT 404 — a thing not existing
-    // can't be allowed to block cleanup of the related entities that do still exist. The resolve
-    // never throws; it falls back to this workspace, and every cleanup below is scoped to that
-    // home, so we tear down whatever references the id (+ its surviving descendants) without ever
-    // touching another workspace's data.
-    const homeWorkspaceId = await this.resolveBlockHomeForRemoval(workspaceId, id)
-    // Capture the boards this removal must reach BEFORE we delete the block + drop its service's
-    // mounts (after which the block→service→mounts join can't resolve anything). The union of the
-    // acting workspace and every workspace mounting the doomed service is then notified post-delete.
-    const fanoutTargets = new Set<string>([workspaceId])
-    if (this.workspaceMountRepository) {
-      for (const ws of await this.workspaceMountRepository.listWorkspaceIdsMountingBlock(
-        homeWorkspaceId,
-        id,
-      )) {
-        fanoutTargets.add(ws)
-      }
-    }
-    // Reuse the caller's list only when it was loaded for this block's home (the common
-    // locally-owned delete); a mounted service homed elsewhere re-lists against its home.
-    const blocks =
-      opts.preloaded && opts.preloaded.workspaceId === homeWorkspaceId
-        ? opts.preloaded.blocks
-        : await this.blockRepository.listByWorkspace(homeWorkspaceId)
-    const doomed = descendantIds(blocks, id)
-
-    // A service frame that still has unfinished work must NOT be deleted (that would discard
-    // in-flight tasks + their history) — it is archived instead (hidden, restorable with no
-    // expiry). Only guard a real, still-present top-level frame: a dangling/already-gone id
-    // (idempotent re-delete, a leaf task, a module) falls through to the normal cleanup below.
-    const target = blocks.find((b) => b.id === id)
-    if (target?.level === 'frame' && target.parentId === null) {
-      const unfinished = unfinishedTasksUnder(blocks, id)
-      if (unfinished.length > 0) {
-        throw new ValidationError(
-          `This service has ${unfinished.length} unfinished task(s); archive it instead of deleting.`,
-        )
-      }
-    }
-
-    await this.executionRepository.deleteByBlock(homeWorkspaceId, id)
-    // Every SIDE-TABLE row keyed by a doomed block id — the account-owned service + its mounts,
-    // and the initiative entity. Extracted to its own module (see `removal-cascade.ts`): each is
-    // an optional, batched reclaim, and this is where the delete path grows, so a future
-    // block-keyed table gets a section there rather than another branch in this method.
-    await reclaimDoomedEntities(
-      {
-        ...(this.serviceRepository ? { serviceRepository: this.serviceRepository } : {}),
-        ...(this.workspaceMountRepository
-          ? { workspaceMountRepository: this.workspaceMountRepository }
-          : {}),
-        ...(this.initiativeRepository ? { initiativeRepository: this.initiativeRepository } : {}),
-        ...(this.documentRepository ? { documentRepository: this.documentRepository } : {}),
-        ...(this.taskRepository ? { taskRepository: this.taskRepository } : {}),
-      },
-      { homeWorkspaceId, deletedId: id, blocks, doomed },
-    )
-    await this.blockRepository.deleteMany(homeWorkspaceId, [...doomed])
-
-    await pruneDanglingEdges(this.blockRepository, homeWorkspaceId, blocks, doomed)
-
-    // The block + any shared service are now gone, so fan out per captured target (blockId is
-    // unresolvable post-delete): every board that showed the block refreshes it away. There is
-    // nothing to carry, and a delete CASCADES, so the refresh is the point.
-    for (const ws of fanoutTargets) {
-      await this.emitBoardChanged(ws, { reason: 'block-removed' })
-    }
+    return this.removal.removeBlock(workspaceId, id, opts)
   }
 
   /**

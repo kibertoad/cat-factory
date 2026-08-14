@@ -98,12 +98,18 @@ describe('BoardService — service delete cleanup, delete guard, archive/restore
     expect(servicesMap.size).toBe(0)
   })
 
-  it('refuses to delete a service that still has unfinished tasks', async () => {
+  it('refuses to delete a service that still has unfinished tasks, with a reason on the refusal', async () => {
     const { service, blocksMap } = build([
       frame('f1'),
       { ...frame('t1', { level: 'task', parentId: 'f1', status: 'in_progress' }) },
     ])
     await expect(service.removeBlock(WS, 'f1')).rejects.toThrow(/archive it instead/)
+    // The `reason` is what makes this actionable through a door with no prose to read:
+    // `DELETE /api/v1/services/:serviceId` answers it as a 422, and a headless caller decides
+    // between deleting those tasks and leaving the frame alone from the code, not the sentence.
+    await expect(service.removeBlock(WS, 'f1')).rejects.toMatchObject({
+      details: { reason: 'service_has_unfinished_tasks', unfinishedTasks: 1 },
+    })
     // Nothing was torn down.
     expect(blocksMap.has('f1')).toBe(true)
     expect(blocksMap.has('t1')).toBe(true)

@@ -6,11 +6,13 @@ package ai.catfactory.sdk.model;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PrVerificationReportScope} wire model.
  * @param frameId May be absent entirely.
+ * @param frameIds May be absent entirely.
  * @param ownPullRequest May be absent entirely.
  * @param role the {@code role} field.
  */
@@ -18,6 +20,9 @@ import org.jspecify.annotations.Nullable;
 public record PrVerificationReportScope(
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("frameId") @Nullable String frameId,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("frameIds") @Nullable List<String> frameIds,
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("ownPullRequest") @Nullable PrVerificationReportScopeOwnPullRequest ownPullRequest,
@@ -38,12 +43,19 @@ public record PrVerificationReportScope(
      */
     public static final class Builder {
         private @Nullable String frameId;
+        private @Nullable List<String> frameIds;
         private @Nullable PrVerificationReportScopeOwnPullRequest ownPullRequest;
         private @Nullable PrVerificationReportScopeRole role;
 
         /** Set {@code frameId}. */
         public Builder frameId(@Nullable String frameId) {
             this.frameId = frameId;
+            return this;
+        }
+
+        /** Set {@code frameIds}. */
+        public Builder frameIds(@Nullable List<String> frameIds) {
+            this.frameIds = frameIds;
             return this;
         }
 
@@ -61,7 +73,7 @@ public record PrVerificationReportScope(
 
         /** Build the {@link PrVerificationReportScope}. */
         public PrVerificationReportScope build() {
-            return new PrVerificationReportScope(frameId, ownPullRequest, role);
+            return new PrVerificationReportScope(frameId, frameIds, ownPullRequest, role);
         }
     }
 }

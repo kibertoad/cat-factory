@@ -2,28 +2,27 @@ import {
   addPublicTaskDependencyContract,
   attachPublicTaskDocumentContract,
   createPublicServiceContract,
+  deletePublicServiceContract,
   detachPublicTaskDocumentContract,
   listPublicReposContract,
   listPublicTaskDocumentsContract,
   type CreatePublicServiceInput,
   type PublicAttachedDocument,
-  type PublicRepo,
   removePublicTaskDependencyContract,
 } from '@cat-factory/contracts'
 import type { Block, PublicTask, SourceDocument } from '@cat-factory/contracts'
-import type { PublicRepoOption } from '@cat-factory/orchestration'
 import { NotFoundError } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv, ServerContainer } from '../../http/env.js'
 import { requireCapability } from '../../http/guards.js'
-import { toPublicService, toPublicTask } from './boardProjection.js'
+import { toPublicRepo, toPublicService, toPublicTask } from './boardProjection.js'
 import { resolveDocuments } from './documentAttachment.js'
 import { authorizeOrThrow } from './publicApiAuth.js'
 
-// Board PROVISIONING (`GET /api/v1/repos`, `POST /api/v1/services`) and the two task relationships
-// that outlive a create call: dependency edges and attached requirements documents.
+// Board PROVISIONING (`GET /api/v1/repos`, `POST`/`DELETE /api/v1/services`) and the two task
+// relationships that outlive a create call: dependency edges and attached requirements documents.
 //
 // Its own controller rather than more of `PublicApiController`, which already carries the whole
 // job + task lifecycle and sits at its size budget. The split is also the honest one: everything
@@ -42,28 +41,9 @@ import { authorizeOrThrow } from './publicApiAuth.js'
 //  3. **No board COORDINATES.** A service created here is laid out by the board itself. Positions,
 //     sizes and reparenting stay out of a surface that is frozen forever.
 //  4. **Every read is scoped to the key's workspace and to a BOARD-VISIBLE block**
-//     (`getServiceTask`, which excludes the headless job anchors), so a key can never reach a run's
-//     internal anchor or another workspace's task through these paths.
-
-/** Project one repo option onto the wire, dropping the installation/sync bookkeeping. */
-function toPublicRepo(option: PublicRepoOption): PublicRepo {
-  const { repo, serviceBlockId, linkedElsewhere } = option
-  return {
-    repoId: repo.githubId,
-    // Absent on rows written before the column existed, which the platform reads as `github`
-    // everywhere else; stating that here keeps the wire field non-null for every row.
-    provider: repo.provider ?? 'github',
-    owner: repo.owner,
-    name: repo.name,
-    // A repo whose default branch has not been projected yet answers with the empty string rather
-    // than null: a caller reads it to name a base, and there is nothing here that could invent one.
-    defaultBranch: repo.defaultBranch ?? '',
-    private: repo.private,
-    monorepo: repo.isMonorepo === true,
-    serviceId: serviceBlockId,
-    linkedElsewhere,
-  }
-}
+//     (`getServiceTask` for a task, `getService` for a frame, both excluding the headless job
+//     anchors), so a key can never reach a run's internal anchor or another workspace's block
+//     through these paths, and a delete cannot reach one either.
 
 /** Project a stored document onto the small attached-document resource. */
 function toPublicAttachedDocument(document: SourceDocument): PublicAttachedDocument {
@@ -125,6 +105,35 @@ function registerProvisioningRoutes(app: Hono<AppEnv>): void {
     const body = c.req.valid('json')
     const block = await createService(c.get('container'), auth.workspaceId, body)
     return c.json(toPublicService(block), 201)
+  })
+
+  // Delete a service, its subtree and the run history under it: the same refuse-tear-down-remove
+  // sequence the app's own delete runs (`BoardController` remove). The teardown kills every
+  // container and durable driver under the frame, so deleting a service whose task is mid-run
+  // never orphans a container that would idle until its watchdog.
+  //
+  // Resolved through `getService`, so a frame in another workspace, a task id, a headless run
+  // anchor and an ARCHIVED frame are all ABSENT rather than forbidden: the population this route
+  // addresses is exactly the one `GET /api/v1/services` reports, which is the rule every
+  // per-service endpoint here follows. An archived frame is therefore not deletable from this
+  // surface, which is honest rather than incidental (restoring one is an app act too), and it is
+  // the state a caller reaches by archiving instead of deleting.
+  //
+  // The unfinished-work refusal is not written here either: `assertRemovable` is `removeBlock`'s
+  // own guard, run FIRST because the teardown between them is irreversible, and it hands back the
+  // board list both later steps reuse. A 422 out of this route therefore means nothing happened.
+  buildHonoRoute(app, deletePublicServiceContract, async (c) => {
+    const auth = await authorizeOrThrow(c, deletePublicServiceContract.minScope)
+    const container = c.get('container')
+    const { serviceId } = c.req.valid('param')
+    const service = await container.boardService.getService(auth.workspaceId, serviceId)
+    if (!service) throw new NotFoundError('Service', serviceId, { reason: 'service_not_found' })
+    const preloaded = await container.boardService.assertRemovable(auth.workspaceId, serviceId)
+    await container.executionService.teardownForBlockTree(auth.workspaceId, serviceId, {
+      preloaded,
+    })
+    await container.boardService.removeBlock(auth.workspaceId, serviceId, { preloaded })
+    return c.body(null, 204)
   })
 }
 

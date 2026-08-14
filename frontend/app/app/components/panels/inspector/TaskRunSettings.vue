@@ -148,12 +148,21 @@ const selectedPipeline = computed(() =>
 // drops the planning presets the engine would refuse. The task-type narrowing already excludes them
 // for `feature`/`bug`, but NOT for a `spike` / `ralph` / deployment-custom type — and a planning
 // preset settable as a task's DEFAULT pipeline is a 409 on every later Start.
+// The pipeline this task is ALREADY pinned to is kept in the list even when the narrowing would
+// drop it, the same rule `showOverrideField` states for a hidden override an entity already
+// carries: every one of these gates has been tightened at least once, and a task pinned under the
+// looser one is a legal pre-existing state (a `feature` on a bugfix preset, until the purpose
+// classifier split). Without it the badge below names a pipeline the dropdown does not contain,
+// and the first change to anything else is a one-way door out of a selection the panel is still
+// showing. It is only ever the CURRENT value, so nothing new can be pinned through it.
 const taskFrame = computed(() => board.serviceOf(props.block))
-const selectablePipelines = computed(() =>
-  pipelines.pipelines.filter((p) =>
+const selectablePipelines = computed(() => {
+  const offered = pipelines.pipelines.filter((p) =>
     pipelineAllowedForManualStart(p, taskFrame.value, board.blocks, props.block.taskType, 'task'),
-  ),
-)
+  )
+  const pinned = selectedPipeline.value
+  return pinned && !offered.some((p) => p.id === pinned.id) ? [pinned, ...offered] : offered
+})
 function setPipeline(id: string) {
   board.updateBlock(props.block.id, { pipelineId: id })
 }

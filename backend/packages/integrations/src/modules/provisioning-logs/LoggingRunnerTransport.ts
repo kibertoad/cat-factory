@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type {
   ProvisioningSubsystem,
   RunnerDispatchAck,
@@ -62,7 +63,7 @@ export class LoggingRunnerTransport implements RunnerTransport {
       // The verbatim transport error ("… dispatch failed (HTTP X): body") IS the
       // diagnostic the operator needs — log it, then rethrow so the engine still
       // classifies the run failure (Part C).
-      await this.log('dispatch', ref, 'failure', messageOf(error), { kind, ...options })
+      await this.log('dispatch', ref, 'failure', getErrorMessage(error), { kind, ...options })
       throw error
     }
   }
@@ -87,7 +88,7 @@ export class LoggingRunnerTransport implements RunnerTransport {
       await this.opts.inner.release(ref)
       await this.log('release', ref, 'success', null, null)
     } catch (error) {
-      await this.log('release', ref, 'failure', messageOf(error), null)
+      await this.log('release', ref, 'failure', getErrorMessage(error), null)
       throw error
     }
   }
@@ -110,7 +111,7 @@ export class LoggingRunnerTransport implements RunnerTransport {
         await this.log('release', ref, 'success', null, { stopJob: outcome })
         return outcome
       } catch (error) {
-        await this.log('release', ref, 'failure', messageOf(error), { stopJob: 'failed' })
+        await this.log('release', ref, 'failure', getErrorMessage(error), { stopJob: 'failed' })
         throw error
       }
     }
@@ -136,8 +137,4 @@ export class LoggingRunnerTransport implements RunnerTransport {
       detail: detail && Object.keys(detail).length > 0 ? JSON.stringify(detail) : null,
     })
   }
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

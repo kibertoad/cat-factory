@@ -23,6 +23,7 @@ import {
   makePreviewJobBuilder,
   type PersistenceRegistry,
   logger,
+  mcpAuthServerContainerFields,
   mcpOAuthContainerFields,
   resolveUrlSafetyPolicy,
   WebCryptoSecretCipher,
@@ -32,7 +33,13 @@ import {
 // below, then wires each gate's provider.
 import { applyGateProviders, warnUnwiredGates } from '@cat-factory/gates'
 import { GitLabIdentityResolver } from '@cat-factory/gitlab'
-import type { VcsIdentityRegistry } from '@cat-factory/kernel'
+import type {
+  AgentContextRecorder,
+  ResolveBinaryArtifactStore,
+  ResolveRunInitiatorToken,
+  VcsIdentityRegistry,
+} from '@cat-factory/kernel'
+import type { ListWorkspaceRunRepos } from '@cat-factory/server'
 
 import { selectNodeGitHubDeps } from './container-github-deps.js'
 import { buildNodeModelDeps } from './container-model-deps.js'
@@ -244,7 +251,7 @@ function wirePreviewModule(
  * returns a clean `unknown_method`, never a `db`-undefined `TypeError`. A no-op outside mothership
  * mode (`remoteRepos` undefined). Extracted from {@link buildNodeContainer} to keep it under budget.
  */
-function applyMothershipRemoteRepos(
+export function applyMothershipRemoteRepos(
   dependencies: CoreDependencies,
   remoteRepos: Record<string, unknown> | undefined,
 ): void {
@@ -272,10 +279,11 @@ function applyMothershipRemoteRepos(
     remoteRepos.customManifestTypeRepository as CoreDependencies['customManifestTypeRepository']
   // The prompt-fragment library (`FragmentLibraryService`, built directly over the absent `db`
   // by `selectNodeFragmentLibraryDeps`) — its management surface (list/create/update/delete
-  // fragments + list/link sources) is served remotely so the library panels are functional in
+  // fragments + list/link sources) AND, since the library-sync slice, its repo-SYNC surface are
+  // served remotely, so the library panels and the link/sync/unlink routes are functional in
   // mothership mode; rows carry no secrets, and the RPC allow-list gates each method by its
-  // `(ownerKind, ownerId)` scope. Repo-SYNC (the source service's GitHub reads) stays
-  // db-direct/off — the mothership owns GitHub sync.
+  // `(ownerKind, ownerId)` scope (`librarySource` for the sourceId-keyed sync methods). The node
+  // reaches the guideline repos through the delegated App token, like the skills library below.
   //
   // Route only when the library is ALREADY configured (`config.fragmentLibrary.enabled` — else
   // these are absent). UNLIKE the document/task/env repos above (whose modules need extra deps,
@@ -291,6 +299,15 @@ function applyMothershipRemoteRepos(
   if (dependencies.fragmentSourceRepository) {
     dependencies.fragmentSourceRepository =
       remoteRepos.fragmentSourceRepository as CoreDependencies['fragmentSourceRepository']
+  }
+  // The GENERATED brief store, built over the same absent `db` by the same helper. It is read AND
+  // written on the run path (an implementer dispatch resolves a brief alongside the body it
+  // condenses), so leaving it db-direct was a `TypeError` per dispatch rather than a blank panel —
+  // the same class of gap the routing guard in `mothership-repo-source.spec.ts` now closes
+  // structurally.
+  if (dependencies.fragmentBriefRepository) {
+    dependencies.fragmentBriefRepository =
+      remoteRepos.fragmentBriefRepository as CoreDependencies['fragmentBriefRepository']
   }
   // The Claude Skills library, same shape as the fragment library above: swap the (db-less,
   // broken) Drizzle repos for the remote ones, keeping the "module only when configured" gate.
@@ -309,6 +326,21 @@ function applyMothershipRemoteRepos(
     dependencies.skillSourceRepository =
       remoteRepos.skillSourceRepository as CoreDependencies['skillSourceRepository']
   }
+  // The foundational-services catalog (ADR 0031), its API-contract documents and its repo sources.
+  // Routed UNCONDITIONALLY, unlike the two libraries above: `selectNodeFoundationalServiceDeps` is
+  // deliberately UNGATED (a service's contracts can be uploaded with no repo source at all), so
+  // these three are always present and the "setting the repo would spuriously turn the module on"
+  // hazard does not apply — what applies instead is that the module is always ON, over a Drizzle
+  // repo built from an absent `db`. That is worse than an un-allow-listed method: it is a
+  // `TypeError` on the RUN path, since an architect dispatch resolves the merged catalog and a
+  // coder dispatch resolves the declared services' contracts. The allow-list has named this
+  // surface remote since the catalog slice; it was reachable only from the Cloudflare facade.
+  dependencies.foundationalServiceRepository =
+    remoteRepos.foundationalServiceRepository as CoreDependencies['foundationalServiceRepository']
+  dependencies.apiContractRepository =
+    remoteRepos.apiContractRepository as CoreDependencies['apiContractRepository']
+  dependencies.foundationalServiceSourceRepository =
+    remoteRepos.foundationalServiceSourceRepository as CoreDependencies['foundationalServiceSourceRepository']
 }
 
 interface PostAssemblyContext extends PreviewModuleContext {
@@ -388,6 +420,8 @@ interface NodeServerContainerBundle {
   externalNotificationChannel: NodeRealtimeDepsResult['externalNotificationChannel']
   defaultWebSearchUpstream: NodeRunServicesResult['defaultWebSearchUpstream']
   resolveRepoTarget: ReturnType<typeof buildResolveRepoTarget>
+  /** The board-wide run-target set, built beside the block resolver on the run platform. */
+  listWorkspaceRunRepos: ListWorkspaceRunRepos
   repos: ReturnType<typeof createDrizzleRepositories>
   appRegistry: ReturnType<typeof buildNodeAppRegistry>
   options: NodeContainerOptions
@@ -433,6 +467,56 @@ interface NodeServerContainerBundle {
 }
 
 /**
+ * The repository registry the mothership-mode machine API (`POST /internal/persistence`) reflects
+ * over, so a Node deployment can act as a mothership for mothership-mode local nodes.
+ *
+ * Extracted from the container projection when that outgrew its function budget, and it is a
+ * cohesive concern rather than a convenient cut: everything here answers ONE question, which
+ * repositories a machine-authed node may reach over RPC, and every entry beyond the `dependencies`
+ * spread is a store that is NOT part of `CoreDependencies` and therefore has to be folded in by
+ * name. The controller gates which repo+method is callable (allow-list) and account-scopes each
+ * call, so exposing the whole `dependencies` object (which carries every repo under its canonical
+ * name) is safe. Sourced identically on both facades so they attach the same registry surface.
+ */
+function buildNodePersistenceRegistry(bundle: {
+  dependencies: CoreDependencies
+  repos: ReturnType<typeof createDrizzleRepositories>
+  repoProjectionRepository: DrizzleRepoProjectionRepository
+  githubInstallationRepository: GitHubInstallationRepository
+}): PersistenceRegistry {
+  const { dependencies, repos, repoProjectionRepository, githubInstallationRepository } = bundle
+  return {
+    ...dependencies,
+    agentRunRepository: repos.agentRunRepository,
+    // The binary-artifact METADATA store (visual-confirmation gate screenshots/references) is
+    // not part of `CoreDependencies` (it's composed into `resolveBinaryArtifactStore`, not the
+    // engine's Core), so fold it into the reflected registry explicitly — else a mothership-mode
+    // node's artifact reads/writes come back `... is not wired`. The blob BYTES stay per-account
+    // local; only the metadata is proxied.
+    binaryArtifactMetadataStore: repos.binaryArtifactMetadataStore,
+    // The sensitive per-service test-credential store is org/durable state the engine reads via
+    // the `resolveTestSecretRefs` FUNCTION (never the repo directly), so it isn't in
+    // `CoreDependencies` either — fold it in explicitly, else a mothership-mode node's tester
+    // run-path read + the inspector CRUD come back `... is not wired`. Only the SEALED blob is
+    // proxied (decrypted service-side under the LOCAL key), like the observability/runner-pool
+    // connections.
+    testSecretsRepository: repos.testSecretsRepository,
+    // GitHub projection + installation reads the mothership serves over the persistence RPC even
+    // when its OWN github service is off. A mothership-mode local node reaches GitHub by token
+    // DELEGATION (no local App), which enables `container.github`, so its board snapshot
+    // (`github.service.listRepos` → `repoProjectionRepository.list`) and run-path repo resolution
+    // (`githubInstallationRepository.getByWorkspace` + `repoProjectionRepository.list`) read the
+    // projection over RPC. Both are plain org tables the mothership owns, constructed
+    // unconditionally above — so reflect them regardless of `config.github.enabled` (they land in
+    // `dependencies` only when the github MODULE is wired), else a mothership without its own App
+    // configured 500s that board load with `... is not wired`. Allow-listed in
+    // `REMOTE_PERSISTENCE_METHODS`; folded in explicitly like the stores above.
+    repoProjectionRepository,
+    githubInstallationRepository,
+  } as unknown as PersistenceRegistry
+}
+
+/**
  * Project the assembled engine core + the Node-facade extras onto the {@link ServerContainer}
  * the HTTP layer resolves. Extracted verbatim from {@link buildNodeContainer} (a function-size
  * ratchet split — behaviour is identical); the mothership persistence-registry surface, the
@@ -445,6 +529,7 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     externalNotificationChannel,
     defaultWebSearchUpstream,
     resolveRepoTarget,
+    listWorkspaceRunRepos,
     repos,
     appRegistry,
     options,
@@ -492,17 +577,12 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     // The block→service→repo resolver, surfaced so the task-search controller can scope a
     // GitHub-issue search to the originating service's repo (and refuse it when unlinked).
     resolveRepoTarget,
+    // Its board-wide sibling, surfaced so the credential check can ask whether this
+    // workspace's runs reach GitHub at all before judging a stored GitHub token.
+    listWorkspaceRunRepos,
     agentRunRepository: repos.agentRunRepository,
     // Execution-scoped repo, surfaced for the conformance suite's compareAndSwap parity check.
     executionRepository: repos.executionRepository,
-    // The repository registry the mothership-mode machine API (`/internal/persistence`) reflects
-    // over, so a Node deployment can act as a mothership for mothership-mode local nodes. The
-    // controller gates which repo+method is callable (allow-list) and account-scopes each call;
-    // exposing the whole `dependencies` (which carries every repo under its canonical name) is
-    // safe. `agentRunRepository` is the one repo NOT part of `CoreDependencies` (the engine's
-    // Core never reads it — it's surfaced separately above for `AgentRunController`), so fold it
-    // in explicitly, else the board's retry/stop `getRef` call comes back `... is not wired`.
-    // Sourced identically on both facades so they attach the same registry surface.
     // Mothership-side GitHub token delegation (`POST /internal/github/installation-token`):
     // when this deployment's GitHub App is configured, a machine-authed mothership-mode node
     // can mint the short-lived installation tokens its agent containers/gates need — the App
@@ -528,35 +608,12 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     ...(externalNotificationChannel
       ? { machineNotificationDelivery: externalNotificationChannel }
       : {}),
-    repositories: {
-      ...dependencies,
-      agentRunRepository: repos.agentRunRepository,
-      // The binary-artifact METADATA store (visual-confirmation gate screenshots/references) is
-      // not part of `CoreDependencies` (it's composed into `resolveBinaryArtifactStore`, not the
-      // engine's Core), so fold it into the reflected registry explicitly — else a mothership-mode
-      // node's artifact reads/writes come back `... is not wired`. The blob BYTES stay per-account
-      // local; only the metadata is proxied.
-      binaryArtifactMetadataStore: repos.binaryArtifactMetadataStore,
-      // The sensitive per-service test-credential store is org/durable state the engine reads via
-      // the `resolveTestSecretRefs` FUNCTION (never the repo directly), so it isn't in
-      // `CoreDependencies` either — fold it in explicitly, else a mothership-mode node's tester
-      // run-path read + the inspector CRUD come back `... is not wired`. Only the SEALED blob is
-      // proxied (decrypted service-side under the LOCAL key), like the observability/runner-pool
-      // connections.
-      testSecretsRepository: repos.testSecretsRepository,
-      // GitHub projection + installation reads the mothership serves over the persistence RPC even
-      // when its OWN github service is off. A mothership-mode local node reaches GitHub by token
-      // DELEGATION (no local App), which enables `container.github`, so its board snapshot
-      // (`github.service.listRepos` → `repoProjectionRepository.list`) and run-path repo resolution
-      // (`githubInstallationRepository.getByWorkspace` + `repoProjectionRepository.list`) read the
-      // projection over RPC. Both are plain org tables the mothership owns, constructed
-      // unconditionally above — so reflect them regardless of `config.github.enabled` (they land in
-      // `dependencies` only when the github MODULE is wired), else a mothership without its own App
-      // configured 500s that board load with `... is not wired`. Allow-listed in
-      // `REMOTE_PERSISTENCE_METHODS`; folded in explicitly like the stores above.
+    repositories: buildNodePersistenceRegistry({
+      dependencies,
+      repos,
       repoProjectionRepository,
       githubInstallationRepository,
-    } as unknown as PersistenceRegistry,
+    }),
     // The machine-node roster + revocation tombstones (SEC-5): recorded on every machine-token
     // mint, consulted by the shared machine gate on every /internal/* call, served to the owner
     // via /auth/machine-nodes. Wired symmetrically on the Cloudflare facade.
@@ -623,6 +680,20 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
       oauth: mcpOAuthService,
       redirectUrl: env.MCP_OAUTH_REDIRECT_URL,
     }),
+    // The mirror image: this deployment as the authorization server for its OWN hosted MCP
+    // endpoint, so a host connects by approving a consent screen instead of being handed a key.
+    // Present only where both halves are (a key to seal what the flow carries, and the public-API
+    // key store it issues from); the Worker facade projects the same fields.
+    ...mcpAuthServerContainerFields({
+      encryptionKey: env.ENCRYPTION_KEY,
+      publicApiKeys,
+      clock: dependencies.clock,
+      logger: dependencies.logger,
+    }),
+    // Where the SPA is served, for the browser hand-off in that flow. Read from the same resolved
+    // value the invite and password-reset links use (`APP_BASE_URL`, falling back to
+    // `AUTH_SUCCESS_REDIRECT_URL`), so a deployment configures its app URL once.
+    ...(config.email.appBaseUrl ? { appBaseUrl: config.email.appBaseUrl } : {}),
     // The composed capability-credential chain: the resolver the tool-server probe resolves through,
     // and what sits BEHIND the store, so the credential checklist describes the real chain instead of
     // asserting the default beside it. Both arrive already projected by
@@ -682,7 +753,53 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
  * {@link buildNodeContainer} (a function-size ratchet split — behaviour AND side-effect order are
  * identical), taking every local the composition root built as a single typed bundle.
  */
+/**
+ * The slots this root publishes into for the collaborators it builds BEFORE their contents exist.
+ *
+ * Both are read by the INLINE agent executor, which the model stack constructs early, and both are
+ * produced later: the binary-artifact store by the per-account settings stack, the agent-context
+ * recorder by the run-services stack. The orderings are not negotiable in either direction (the
+ * account stack registers gate providers that must land before `applyGateProviders`; the model
+ * stack must exist before the run platform that composes the executors), so they are bound by a
+ * DEFERRED READ rather than by moving either.
+ *
+ * The same class of problem `applyNodePostAssemblyWiring` exists for, and handled the same way:
+ * explicitly, in the root, with each read failing SAFE. An inline dispatch that runs before a slot
+ * is filled (there is no such path today; nothing dispatches during assembly) resolves no store —
+ * its prompt then states that the pictures could not be delivered, the honest answer for a
+ * deployment with no storage too — and records no context snapshot, exactly as a deployment that
+ * retains no telemetry does.
+ */
+interface NodeLateBindings {
+  resolve?: ResolveBinaryArtifactStore
+  /** @see AiAgentExecutorDependencies.agentContextRecorder */
+  agentContextRecorder?: AgentContextRecorder
+}
+
+/**
+ * Every slot of {@link NodeLateBindings}, each REQUIRED as a key while its value may still be
+ * absent. That is what makes {@link publishLateBindings} total: adding a deferred slot above and
+ * forgetting to publish it stops compiling, where the same omission on a bag of optional fields
+ * compiles into a hole nothing can see — an unfilled slot reads exactly like a deployment that
+ * wired the capability off.
+ */
+type PublishedLateBindings = { [K in keyof NodeLateBindings]-?: NodeLateBindings[K] }
+
+/**
+ * Fill every slot of {@link NodeLateBindings}, once, at the point in the root where all of them
+ * exist. One call rather than an assignment per slot, and one TOTAL object rather than a positional
+ * list, so each slot is named at the call site and none can be skipped.
+ */
+function publishLateBindings(slots: NodeLateBindings, values: PublishedLateBindings): void {
+  Object.assign(slots, values)
+}
+
 interface NodeContainerFinalizeBundle {
+  /**
+   * Where this root publishes the values built AFTER the collaborators that read them.
+   * See {@link NodeLateBindings}.
+   */
+  artifactStore: NodeLateBindings
   config: AppConfig
   options: NodeContainerOptions
   env: NodeJS.ProcessEnv
@@ -701,6 +818,11 @@ interface NodeContainerFinalizeBundle {
   providerRegistry: NodeAppRegistriesResult['providerRegistry']
   packageRegistrySecretCipher: NodeRunServicesResult['packageRegistrySecretCipher']
   githubInstallationRepository: GitHubInstallationRepository
+  /**
+   * The run path's "initiator PAT or deployment credential?" answer, forwarded from the run
+   * platform so the container can surface it for the board-load credential check.
+   */
+  resolveRunInitiatorToken: ResolveRunInitiatorToken | undefined
   environmentBackendRegistry: NodeAppRegistriesResult['environmentBackendRegistry']
   runnerBackendRegistry: NodeAppRegistriesResult['runnerBackendRegistry']
   customManifestTypeRegistry: NodeAppRegistriesResult['customManifestTypeRegistry']
@@ -729,6 +851,8 @@ interface NodeContainerFinalizeBundle {
   bootstrapJobRepository: NodeBootstrapperResult['bootstrapJobRepository']
   repoBootstrapper: NodeBootstrapperResult['repoBootstrapper']
   resolveRepoTarget: ReturnType<typeof buildResolveRepoTarget>
+  /** The board-wide run-target set the credential check reads (see `ServerContainer`). */
+  listWorkspaceRunRepos: ListWorkspaceRunRepos
   baseDeployMint: NodeTransportDeployResult['baseDeployMint']
   resolveTransport: NodeTransportDeployResult['resolveTransport']
   bootstrapMintInstallationToken: NodeBootstrapperResult['bootstrapMintInstallationToken']
@@ -755,8 +879,27 @@ interface NodeContainerFinalizeBundle {
   traceSink: NodeModelDepsResult['traceSink']
 }
 
+/**
+ * Settle the gate-provider registry, once every module that contributes to it has run.
+ *
+ * The two halves belong together and in this order. Test-injected providers are applied LAST so
+ * they override the config wiring (the cross-runtime conformance suite drives the externalized CI
+ * gate over a faked verdict; in local mode a PAT-backed CI provider is wired earlier and would
+ * otherwise win) — production leaves `gateProviders` undefined, so that is a no-op outside tests.
+ * Then every gate still left as a silent pass-through is named in the logs, because the failure
+ * shape of an unwired gate is a deployment auto-merging without ever checking CI.
+ */
+function finalizeGateProviders(
+  providerRegistry: NodeAppRegistriesResult['providerRegistry'],
+  gateProviders: NodeContainerOptions['gateProviders'],
+): void {
+  applyGateProviders(providerRegistry, gateProviders)
+  warnUnwiredGates(providerRegistry, logger)
+}
+
 function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerContainer {
   const {
+    artifactStore,
     config,
     options,
     env,
@@ -773,6 +916,8 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     providerRegistry,
     packageRegistrySecretCipher,
     githubInstallationRepository,
+    resolveRunInitiatorToken,
+    listWorkspaceRunRepos,
     environmentBackendRegistry,
     runnerBackendRegistry,
     customManifestTypeRegistry,
@@ -869,19 +1014,16 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     binaryStoreRegistry: options.binaryStoreRegistry,
     caches: options.caches,
   })
+  publishLateBindings(artifactStore, {
+    resolve: resolveBinaryArtifactStore,
+    agentContextRecorder: agentContextObservability,
+  })
 
   // Runner-pool URL/host guard, scoped to its own config (independent of the environment
   // allow-list); absent => strict public-https.
   const runnerUrlPolicy = resolveUrlSafetyPolicy(config.runners)
 
-  // Apply any test-injected gate providers LAST, so they override the config wiring above (the
-  // cross-runtime conformance suite drives the externalized CI gate over a faked verdict; in
-  // local mode a PAT-backed CI provider is wired above and would otherwise win). Production
-  // leaves `gateProviders` undefined, so this is a no-op outside tests.
-  applyGateProviders(providerRegistry, options.gateProviders)
-  // Surface any gate left as a silent pass-through (no provider wired) so a misconfigured
-  // deployment is visible in the logs instead of quietly auto-merging without checking CI.
-  warnUnwiredGates(providerRegistry, logger)
+  finalizeGateProviders(providerRegistry, options.gateProviders)
 
   // pg-boss-backed async GitHub ingest (webhook/resync/backfill) when the durable engine is
   // wired; inline fallback with no boss. Built once so the engine's skill-freshness fan-out
@@ -900,6 +1042,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     gateways,
     runnerUrlPolicy,
     githubInstallationRepository,
+    resolveRunInitiatorToken,
     environmentBackendRegistry,
     runnerBackendRegistry,
     customManifestTypeRegistry,
@@ -967,6 +1110,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     externalNotificationChannel,
     defaultWebSearchUpstream,
     resolveRepoTarget,
+    listWorkspaceRunRepos,
     repos,
     appRegistry,
     options,
@@ -1038,6 +1182,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // local-model-endpoint + user-secret + OpenRouter + subscription + personal-subscription
   // stores, the trace sink, the model-provider resolver, and the inline executor), lifted into
   // `container-model-deps.ts` so this composition root stays within the file-size budget.
+  // See {@link NodeLateBindings}: the artifact store and the agent-context recorder are both
+  // built further down this function, and the inline executor below reads through each.
+  const artifactStore: NodeLateBindings = {}
   const models = buildNodeModelDeps({
     env,
     config,
@@ -1058,6 +1205,18 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     caches: options.caches,
     workspaceSettingsRepository: repos.workspaceSettingsRepository,
     llmCallMetricRepository: repos.llmCallMetricRepository,
+    // The inline executor reads the bytes of a task's design pictures through the same account
+    // store the container path serves them from, so an inline kind sees the design its container
+    // sibling does. Deferred, because that store is composed later in this function.
+    resolveBinaryArtifactStore: (workspaceId) =>
+      artifactStore.resolve?.(workspaceId) ?? Promise.resolve(null),
+    // Deferred for the same reason, and through the same slot: the run-services stack builds the
+    // recorder. Wired so an INLINE kind's provided context reaches `agent_context_snapshots` too,
+    // which is what the container executor's own wiring alone left out.
+    agentContextRecorder: {
+      record: (snapshot) =>
+        artifactStore.agentContextRecorder?.record(snapshot) ?? Promise.resolve(),
+    },
   })
 
   // Everything the engine needs to actually RUN a block: repo resolution, the runner transport +
@@ -1082,6 +1241,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   return finalizeNodeContainer({
     // The run-platform bundle, forwarded as a unit (see `platform` above).
     ...platform,
+    artifactStore,
     config,
     options,
     env,

@@ -27,13 +27,14 @@ import {
   setLogLevel,
 } from '@cat-factory/server'
 import {
-  runBestEffort,
   type BinaryStoreRegistry,
   type CreateSharedStackInput,
   type GateRegistry,
+  getErrorMessage,
   type JudgeRegistry,
   type PipelineRegistry,
   type PromptFragmentRegistry,
+  runBestEffort,
   type StepResolverRegistry,
   type ToolSecretResolver,
   type VcsProviderRegistry,
@@ -233,7 +234,7 @@ export interface StartLocalOptions {
   backendRegistries?: BackendRegistries
   /**
    * The catalog id of the built-in model preset a fresh workspace is seeded with as its
-   * DEFAULT (`MODEL_PRESET_SEED_IDS.{kimi,glm,claude}`). A local deploy-app wrapper passes this
+   * DEFAULT (`MODEL_PRESET_SEED_IDS.{kimi,glm,claude,chatgpt}`). A local deploy-app wrapper passes this
    * to change the out-of-the-box default without editing library code. Threaded into
    * `buildLocalContainer` on BOTH the Postgres and mothership paths. Applied only at FIRST seed
    * of a workspace's preset library, so a user's later manual default choice always wins.
@@ -746,7 +747,7 @@ async function preflightRuntime(localized: NodeJS.ProcessEnv): Promise<void> {
       `local mode: container CLI '${adapter.binary}' is not runnable — repo-operating agent ` +
         `steps will fail until it is installed and on PATH (or set LOCAL_DOCKER_BINARY / ` +
         `LOCAL_CONTAINER_RUNTIME).`,
-      { err: err instanceof Error ? err.message : String(err), binary: adapter.binary },
+      { err: getErrorMessage(err), binary: adapter.binary },
     )
   }
 }

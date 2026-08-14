@@ -2,9 +2,11 @@ import { allPullRequests } from '@cat-factory/contracts'
 import {
   type Block,
   type ExecutionInstance,
+  MODEL_PRESET_SEED_IDS,
   type ModelPreset,
   type Notification,
   type Pipeline,
+  seedModelPresets,
   type WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
@@ -390,6 +392,7 @@ export function defineCoreWorkspaceFeaturesConformance(harness: ConformanceHarne
 
   registerEpicDependencyTests(harness)
 
+  registerMultiRepoPullRequestTests(harness)
   registerNotificationAndPresetTests(harness)
 }
 
@@ -645,84 +648,6 @@ function registerEpicDependencyTests(harness: ConformanceHarness): void {
       expect(cleared.body.aprioriBranches).toBeUndefined()
     })
 
-    it("records a multi-repo run's peer pull requests on the block (both stores)", async () => {
-      // Service-connections phase 3: a coder run over a task with a connected involved service
-      // opens a PR in the peer's repo too. The container reports it as `peerPullRequests`
-      // beside the own-service PR; the engine records BOTH on the block. This asserts the
-      // full recording + JSON-column round-trip on D1 and Postgres (the fake stands in for
-      // the container — the resolveRepoTargets/peerRepos dispatch path is unit-tested in the
-      // server package). `allPullRequests` then sees the own PR first, then the peer.
-      const app = harness.makeApp({
-        asyncKinds: ['coder'],
-        asyncPolls: 1,
-        pullRequest: {
-          url: 'https://gh/acme/auth/pull/1',
-          number: 1,
-          branch: 'cat-factory/task_login',
-        },
-        peerPullRequests: [
-          {
-            repo: 'acme/email',
-            frameId: 'blk_email',
-            ref: {
-              url: 'https://gh/acme/email/pull/7',
-              number: 7,
-              branch: 'cat-factory/task_login',
-            },
-          },
-        ],
-      })
-      const { workspace } = await app.createWorkspace()
-      const wsId = workspace.id
-
-      // Connect blk_auth → a provider frame and mark it involved in the task (realistic setup;
-      // the recording itself is driven by what the fake reports, not the resolution).
-      const provider = await app.call<Block>('POST', `/workspaces/${wsId}/blocks`, {
-        type: 'service',
-        position: { x: 900, y: 900 },
-      })
-      await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
-        serviceConnections: [
-          { serviceBlockId: provider.body.id, description: 'sends mail via it' },
-        ],
-      })
-      await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
-        involvedServiceIds: [provider.body.id],
-      })
-
-      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
-        name: 'Implement',
-        purpose: 'build',
-        agentKinds: ['coder'],
-      })
-      const start = await app.call<ExecutionInstance>(
-        'POST',
-        `/workspaces/${wsId}/blocks/task_login/executions`,
-        { pipelineId: pipeline.body.id },
-      )
-      expect(start.status).toBe(201)
-      await app.drive(wsId)
-
-      const snap = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
-      const task = snap.body.blocks.find((b) => b.id === 'task_login')!
-      expect(task.pullRequest?.url).toBe('https://gh/acme/auth/pull/1')
-      expect(task.peerPullRequests).toEqual([
-        {
-          repo: 'acme/email',
-          frameId: 'blk_email',
-          ref: {
-            url: 'https://gh/acme/email/pull/7',
-            number: 7,
-            branch: 'cat-factory/task_login',
-          },
-        },
-      ])
-      expect(allPullRequests(task)).toEqual([
-        { ref: task.pullRequest },
-        { repo: 'acme/email', frameId: 'blk_email', ref: task.peerPullRequests![0]!.ref },
-      ])
-    })
-
     it('rejects a dependency edge that would create a cycle', async () => {
       const { call, createWorkspace } = harness.makeApp()
       const { workspace } = await createWorkspace()
@@ -776,8 +701,9 @@ function registerEpicDependencyTests(harness: ConformanceHarness): void {
  *
  * Split out of the epics/dependency suite above, whose `describe` had grown to cover three
  * unrelated concerns (epics + the dependency graph, the JSON-column round-trips, and these
- * port-level reads and writes). These are the ones with no HTTP surface of their own: a batched
- * read the engine uses internally, and a column the repository DERIVES rather than accepts.
+ * port-level reads and writes). These are the ones with no HTTP surface of their own: the batched
+ * and reverse-link reads the engine uses internally, a column the repository DERIVES rather than
+ * accepts, and a clear the repository has to normalise to one spelling.
  */
 function registerBlockRepositoryTests(harness: ConformanceHarness): void {
   describe('block repository port', () => {
@@ -864,6 +790,136 @@ function registerBlockRepositoryTests(harness: ConformanceHarness): void {
 
       await repo.update(workspace.id, id, { moduleName: '' })
       expect((await repo.get(workspace.id, id))?.moduleName ?? null).toBeNull()
+    })
+
+    it('getByExecution resolves the block a run is stamped on, and nothing otherwise', async () => {
+      // The run→block REVERSE link, read when a run row cannot be decoded and so names no block of
+      // its own: it is what stops the disposal of a poison run leaving the card wedged
+      // `in_progress` forever. Asserted per store because the column and its scoping are the only
+      // things it consists of, and a workspace-blind read here would hand one board's disposal
+      // another board's block.
+      const app = harness.makeApp()
+      const { workspace: wsA } = await app.createWorkspace()
+      const { workspace: wsB } = await app.createWorkspace()
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsA.id}/pipelines`, {
+        name: 'Code only',
+        purpose: 'build',
+        agentKinds: ['coder'],
+      })
+      const task = await app.call<Block>('POST', `/workspaces/${wsA.id}/blocks/blk_auth/tasks`, {
+        title: 'Stamped task',
+      })
+      const run = await app.call<{ id: string }>(
+        'POST',
+        `/workspaces/${wsA.id}/blocks/${task.body.id}/executions`,
+        { pipelineId: pipeline.body.id },
+      )
+      expect(run.status).toBe(201)
+      const repo = app.blockRepository()
+      const found = await repo.getByExecution(wsA.id, run.body.id)
+      expect(found?.id).toBe(task.body.id)
+      // Scoped to the workspace: the same run id asked of another board resolves to nothing
+      // rather than to the block that happens to carry it elsewhere.
+      expect(await repo.getByExecution(wsB.id, run.body.id)).toBeNull()
+      // A run id no block carries is a real state (a cancel clears the link), not an error.
+      expect(await repo.getByExecution(wsA.id, 'exec_never_started')).toBeNull()
+    })
+  })
+}
+
+/**
+ * A multi-repo run's pull requests on the block.
+ *
+ * Its own registration rather than a member of the epic/dependency group above: the subject is
+ * the peer-PR record, and the group it sat in was at the per-function line budget.
+ */
+function registerMultiRepoPullRequestTests(harness: ConformanceHarness): void {
+  describe('multi-repo pull requests', () => {
+    it("records a multi-repo run's peer pull requests on the block (both stores)", async () => {
+      // Service-connections phase 3: a coder run over a task with a connected involved service
+      // opens a PR in the peer's repo too. The container reports it as `peerPullRequests`
+      // beside the own-service PR; the engine records BOTH on the block. This asserts the
+      // full recording + JSON-column round-trip on D1 and Postgres (the fake stands in for
+      // the container — the resolveRepoTargets/peerRepos dispatch path is unit-tested in the
+      // server package). `allPullRequests` then sees the own PR first, then the peer.
+      //
+      // The peer carries TWO frames on its one PR: the shared-monorepo case, where several of
+      // the run's involved services live in one repo and therefore share a checkout, a work
+      // branch and a pull request. Both stores must round-trip the whole set, since dropping
+      // any of it would leave the other frames looking like no PR ever opened for them.
+      const app = harness.makeApp({
+        asyncKinds: ['coder'],
+        asyncPolls: 1,
+        pullRequest: {
+          url: 'https://gh/acme/auth/pull/1',
+          number: 1,
+          branch: 'cat-factory/task_login',
+        },
+        peerPullRequests: [
+          {
+            repo: 'acme/email',
+            frameIds: ['blk_email', 'blk_email_admin'],
+            ref: {
+              url: 'https://gh/acme/email/pull/7',
+              number: 7,
+              branch: 'cat-factory/task_login',
+            },
+          },
+        ],
+      })
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      // Connect blk_auth → a provider frame and mark it involved in the task (realistic setup;
+      // the recording itself is driven by what the fake reports, not the resolution).
+      const provider = await app.call<Block>('POST', `/workspaces/${wsId}/blocks`, {
+        type: 'service',
+        position: { x: 900, y: 900 },
+      })
+      await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+        serviceConnections: [
+          { serviceBlockId: provider.body.id, description: 'sends mail via it' },
+        ],
+      })
+      await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+        involvedServiceIds: [provider.body.id],
+      })
+
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Implement',
+        purpose: 'build',
+        agentKinds: ['coder'],
+      })
+      const start = await app.call<ExecutionInstance>(
+        'POST',
+        `/workspaces/${wsId}/blocks/task_login/executions`,
+        { pipelineId: pipeline.body.id },
+      )
+      expect(start.status).toBe(201)
+      await app.drive(wsId)
+
+      const snap = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      const task = snap.body.blocks.find((b) => b.id === 'task_login')!
+      expect(task.pullRequest?.url).toBe('https://gh/acme/auth/pull/1')
+      expect(task.peerPullRequests).toEqual([
+        {
+          repo: 'acme/email',
+          frameIds: ['blk_email', 'blk_email_admin'],
+          ref: {
+            url: 'https://gh/acme/email/pull/7',
+            number: 7,
+            branch: 'cat-factory/task_login',
+          },
+        },
+      ])
+      expect(allPullRequests(task)).toEqual([
+        { ref: task.pullRequest },
+        {
+          repo: 'acme/email',
+          frameIds: ['blk_email', 'blk_email_admin'],
+          ref: task.peerPullRequests![0]!.ref,
+        },
+      ])
     })
   })
 }
@@ -959,22 +1015,39 @@ function registerNotificationAndPresetTests(harness: ConformanceHarness): void {
       const { call, createWorkspace } = harness.makeApp()
       const { workspace } = await createWorkspace()
 
-      // A fresh workspace is lazily seeded with the built-in catalog: Kimi K2.7 (the
-      // Cloudflare-runnable default in the conformance harnesses, everything Kimi), GLM-5.2,
-      // and Claude Opus 5. Each built-in carries its catalog version.
+      // A fresh workspace is lazily seeded with the WHOLE built-in catalog: one row per
+      // `seedModelPresets()` entry, each carrying that entry's name, base model and catalog
+      // version, in catalog order (the seed stamps `createdAt` by that order and `list` sorts on
+      // it). Derived from the catalog rather than spot-checked member by member, because the
+      // population grows: a pinned count re-broke on every shipped built-in while naming nothing
+      // about what the seed got wrong, and the member added last was always the one with no
+      // row-level assertion. This is also what covers `upsertMany` on both facades, the one batch
+      // the whole seed is written through.
+      const catalog = seedModelPresets()
       const initial = await call<ModelPreset[]>('GET', `/workspaces/${workspace.id}/model-presets`)
       expect(initial.status).toBe(200)
       const seeded = initial.body
-      expect(seeded.length).toBeGreaterThanOrEqual(3)
-      const def = seeded.find((p) => p.isDefault)
-      expect(def?.baseModelId).toBe('kimi-k2.7')
-      expect(def?.version).toBe(1)
-      expect(seeded.some((p) => p.baseModelId === 'glm')).toBe(true)
-      // The Claude-only built-in ships in the catalog (default only in local mode; here it's
-      // present but non-default since the conformance harnesses seed with Kimi as the default).
-      const claude = seeded.find((p) => p.id === 'mdp_claude')
-      expect(claude?.baseModelId).toBe('claude-opus')
-      expect(claude?.isDefault).toBe(false)
+      expect(
+        seeded.map((p) => ({
+          id: p.id,
+          name: p.name,
+          baseModelId: p.baseModelId,
+          version: p.version,
+        })),
+      ).toEqual(
+        catalog.map((s) => ({
+          id: s.id,
+          name: s.name,
+          baseModelId: s.baseModelId,
+          version: s.version,
+        })),
+      )
+      // Exactly one default, and WHICH one is the deployment's own choice: the conformance
+      // harnesses seed Kimi, so every other built-in (Claude, which local mode defaults to, and
+      // GPT) is present and non-default.
+      expect(seeded.filter((p) => p.isDefault).map((p) => p.id)).toEqual([
+        MODEL_PRESET_SEED_IDS.kimi,
+      ])
 
       // Create a new preset with a per-agent override and promote it to default.
       const created = await call<ModelPreset>('POST', `/workspaces/${workspace.id}/model-presets`, {
@@ -1015,16 +1088,21 @@ function registerNotificationAndPresetTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const base = `/workspaces/${wsId}/model-presets`
 
-      // The snapshot ships the built-in catalog versions so the SPA can offer a reseed.
-      const snap = await call<{ modelPresetCatalogVersions?: Record<string, number> }>(
-        'GET',
-        `/workspaces/${wsId}`,
+      // The snapshot ships the built-in catalog versions so the SPA can offer a reseed, plus the
+      // companion NAME map: the advisory that offers to ADD a built-in has no stored row to take a
+      // name off, and without this channel the SPA humanises the id ("Chatgpt" for GPT-5.6 Sol).
+      // Both derived from the same `seedModelPresets()` read the facade builds them from, so
+      // shipping a built-in needs no edit here and a facade that drops either map still fails.
+      const snap = await call<{
+        modelPresetCatalogVersions?: Record<string, number>
+        modelPresetCatalogNames?: Record<string, string>
+      }>('GET', `/workspaces/${wsId}`)
+      expect(snap.body.modelPresetCatalogVersions).toMatchObject(
+        Object.fromEntries(seedModelPresets().map((p) => [p.id, p.version])),
       )
-      expect(snap.body.modelPresetCatalogVersions).toMatchObject({
-        mdp_kimi: 1,
-        mdp_glm: 1,
-        mdp_claude: 2,
-      })
+      expect(snap.body.modelPresetCatalogNames).toMatchObject(
+        Object.fromEntries(seedModelPresets().map((p) => [p.id, p.name])),
+      )
 
       // Seed, then drift a built-in (rename + change its base model). Reseed must restore the
       // canonical definition + version while preserving the user's default + ordering.

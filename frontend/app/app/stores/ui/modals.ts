@@ -1,6 +1,10 @@
 import { ref } from 'vue'
 import type { DocumentSourceKind, InfraSetupArea, TaskSourceKind } from '~/types/domain'
-import type { InfrastructureTab, ProviderConnectionKind } from '~/types/providerConnections'
+import type {
+  InfrastructureScrollTarget,
+  InfrastructureTab,
+  ProviderConnectionKind,
+} from '~/types/providerConnections'
 import type { PendingContext } from '~/composables/useContextLinking'
 import {
   infraSetupDismissalKey,
@@ -29,7 +33,21 @@ export interface K3sSetupPrefill {
   label: string
   apiServerUrl: string
   namespaceTemplate: string
+  /**
+   * Empty when the CLI could not establish that the cluster serves an ingress-derived URL, in
+   * which case it deliberately omits the param so this form does NOT prefill a host template
+   * nothing would answer. The field is required for an `ingressTemplate` source, so an empty
+   * value stops the unserved promise being saved.
+   */
   hostTemplate: string
+  /**
+   * The verified host port, as typed into the form's port field, or empty for the scheme default.
+   * Kept out of `hostTemplate` because that value is also the Ingress `host` a service's manifests
+   * declare, and Kubernetes rejects a `host` with a port in it.
+   */
+  ingressPort: string
+  /** Scheme the CLI verified. Absent ⇒ the form keeps its own default. */
+  urlScheme?: 'http' | 'https'
   // Absent when the link omitted the param, so the form keeps its engine default rather than
   // forcing verification back on (which would break a self-signed local cluster).
   insecureSkipTlsVerify?: boolean
@@ -737,6 +755,13 @@ function createInfraModals(resetHubReturn: ResetHubReturn) {
   // `local-k3s` connection from it; the ServiceAccount token is deliberately NOT in the link (a
   // secret in a URL leaks into history/logs), so the user still pastes it before Test → Save.
   const k3sSetupPrefill = ref<K3sSetupPrefill | null>(null)
+  // A one-shot deep-link anchor into a SECTION of the open tab, mirroring
+  // `accountSettingsScrollTarget`. The Test-environments tab opens on the default-provision
+  // picker and the Compose wizard, with the per-type handler sections between them, so landing an
+  // operator at the top of it after a `cat-factory k3s` hand-off leaves them scrolling to find the
+  // very form the CLI just filled in. The owning panel scrolls the section into view once and
+  // then calls `clearInfrastructureScrollTarget`, so a later plain open doesn't re-scroll.
+  const infrastructureScrollTarget = ref<InfrastructureScrollTarget | null>(null)
   // Environment setup wizard (shared-stacks slice 7): the guided detect → review → preflight →
   // trial → save flow for a service frame's `docker-compose` provisioning. `environmentWizardOpen`
   // is the modal flag; `environmentWizardFrameId` preselects the service frame the flow targets
@@ -761,8 +786,14 @@ function createInfraModals(resetHubReturn: ResetHubReturn) {
   }
   function closeProviderConnection() {
     infrastructureOpen.value = false
-    // Drop any consumed CLI prefill so re-opening the window normally doesn't re-seed the form.
+    // Drop any consumed CLI prefill so re-opening the window normally doesn't re-seed the form,
+    // and the anchor with it: an unconsumed target (the window was closed before the section
+    // rendered) would otherwise scroll the next, unrelated open.
     k3sSetupPrefill.value = null
+    infrastructureScrollTarget.value = null
+  }
+  function clearInfrastructureScrollTarget() {
+    infrastructureScrollTarget.value = null
   }
   // Capture a `cat-factory k3s` deep-link (`?infraSetup=local-k3s&…`) on app load: stash the
   // non-secret connection values, open the Infrastructure window on the Test-environments tab so
@@ -778,6 +809,14 @@ function createInfraModals(resetHubReturn: ResetHubReturn) {
       apiServerUrl: params.get('apiServerUrl') ?? '',
       namespaceTemplate: params.get('namespaceTemplate') ?? '',
       hostTemplate: params.get('hostTemplate') ?? '',
+      // The host port the controller answers on, when it is not the scheme's default. It rides its
+      // own param rather than the host template because the rendered template is also the Ingress
+      // `host` the manifests declare, and Kubernetes rejects a `host` carrying a port.
+      ingressPort: params.get('ingressPort') ?? '',
+      // A local ingress controller serves TLS with a self-signed cert, so the CLI verifies (and
+      // links) a plain-HTTP environment URL. Without this the form would keep its `https`
+      // default and save a URL that fails on the certificate rather than on the connection.
+      urlScheme: params.get('scheme') === 'http' ? 'http' : undefined,
       // Only carry the flag the link actually set — a missing param leaves the form's engine
       // default (skip-TLS on for a local self-signed cluster) untouched.
       insecureSkipTlsVerify: params.has('insecureSkipTlsVerify')
@@ -786,6 +825,10 @@ function createInfraModals(resetHubReturn: ResetHubReturn) {
     }
     resetHubReturn()
     infrastructureTab.value = 'environment'
+    // The hand-off is about ONE form, so land on it: the Kubernetes section sits below the
+    // default-provision picker, far enough down the tab that an operator arriving from the CLI
+    // would otherwise have to go looking for the fields it just told them about.
+    infrastructureScrollTarget.value = 'kubernetes'
     infrastructureOpen.value = true
     for (const key of [
       'infraSetup',
@@ -793,6 +836,8 @@ function createInfraModals(resetHubReturn: ResetHubReturn) {
       'apiServerUrl',
       'namespaceTemplate',
       'hostTemplate',
+      'ingressPort',
+      'scheme',
       'insecureSkipTlsVerify',
     ]) {
       params.delete(key)
@@ -840,6 +885,8 @@ function createInfraModals(resetHubReturn: ResetHubReturn) {
     infrastructureTab,
     openInfrastructure,
     k3sSetupPrefill,
+    infrastructureScrollTarget,
+    clearInfrastructureScrollTarget,
     consumeK3sSetupDeepLink,
     environmentWizardOpen,
     environmentWizardFrameId,

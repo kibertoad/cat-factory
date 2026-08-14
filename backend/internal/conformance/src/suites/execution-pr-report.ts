@@ -224,7 +224,9 @@ export function defineExecutionPrReportConformance(harness: ConformanceHarness):
         // sections are withheld from the peer's copy rather than copied onto it, since that
         // repo's checks were never the ones that ran.
         const publisher = new FakePrReportPublisher()
-        publisher.addPeer('task_login', 'acme/email', 12, 'frm_email')
+        // Two frames on the ONE peer PR: the shared-monorepo case (several involved services
+        // in one repo), so the report must speak for all of them, not just the first.
+        publisher.addPeer('task_login', 'acme/email', 12, 'frm_email', 'frm_email_admin')
         const app = harness.makeApp(
           {
             asyncKinds: ['coder'],
@@ -268,6 +270,8 @@ export function defineExecutionPrReportConformance(harness: ConformanceHarness):
 
         expect(own.scope?.role).toBe('own')
         expect(peer.scope?.role).toBe('peer')
+        expect(peer.scope?.frameIds).toEqual(['frm_email', 'frm_email_admin'])
+        // The published `/api/v1` singular still answers, as the first of the set.
         expect(peer.scope?.frameId).toBe('frm_email')
         // The peer's copy points back at the own-service PR — without it the withholding note
         // below would be a dead end.

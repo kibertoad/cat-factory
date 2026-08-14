@@ -6,7 +6,9 @@ import {
   type ChangeClass,
   type RuleableChangeClass,
 } from './mergeTrackRecord.js'
+import { DEFAULT_COMPANION_MAX_ATTEMPTS } from './companion.js'
 import { DEFAULT_JUDGE_MAX_BOUNCES, DEFAULT_JUDGE_MIN_SCORE } from './judge.js'
+import { DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE } from './requirements.js'
 import { WORKSPACE_ROLES, workspaceRoleSchema, type WorkspaceRole } from './workspace-members.js'
 
 // ---------------------------------------------------------------------------
@@ -364,10 +366,34 @@ export const mergeAssessmentSchema = v.object({
 export type MergeAssessment = v.InferOutput<typeof mergeAssessmentSchema>
 
 /**
+ * How a policy answers a park that one of the engine's AUTOMATIC quality loops raised.
+ *
+ * The platform stops a run on a person for two structurally different reasons, and only one of
+ * them is a judgement call somebody asked for:
+ *
+ *  - a step whose whole PURPOSE is to consult a human (a `requiresApproval` gate, `human-test`,
+ *    visual confirmation, the human/PR review gate, a brainstorm or interview, the fork choice,
+ *    the pre-dispatch input gate). Somebody put it in the pipeline, or a policy asked for it.
+ *  - a loop that ran out of BUDGET without converging (a companion at its rework cap, an
+ *    iterative review at its pass cap) or that produced items nobody triaged (the Coder's
+ *    follow-ups). Nobody asked to be interrupted here; the run stopped because the automation
+ *    gave up, and every one of these parks already offers a person a documented "proceed anyway".
+ *
+ * `attended` (every policy before this existed) parks on both. `unattended` takes the "proceed
+ * anyway" answer for the SECOND class only, records that policy took it, and never touches the
+ * first: a pipeline that asks for a human still gets one. That is the whole distinction, and it
+ * is why this is a policy field rather than a per-gate toggle — a deployment that starts its work
+ * over the API has nobody in the app to answer a cap, and a run parked there waits forever.
+ */
+export const runAutonomySchema = v.picklist(['attended', 'unattended'])
+export type RunAutonomy = v.InferOutput<typeof runAutonomySchema>
+
+/**
  * A named, per-workspace merge policy: the upper bounds (0..1) a PR's assessment
- * must stay within to auto-merge, plus the CI-fixer attempt budget. Exactly one
- * preset per workspace is the default (`isDefault`), used by any task that has not
- * picked one explicitly.
+ * must stay within to auto-merge, plus the CI-fixer attempt budget. A workspace carries TWO
+ * defaults, one per `runDefaultScopeSchema` (`run-provenance.ts`): `isDefault` governs a task somebody
+ * started in the app, `isUnattendedDefault` one nothing is watching. Either is used by any task
+ * that has not picked a policy explicitly.
  */
 export const riskPolicySchema = v.object({
   id: v.string(),
@@ -403,6 +429,29 @@ export const riskPolicySchema = v.object({
    * of the `ciMaxAttempts` fixer budget.
    */
   maxTesterQualityIterations: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  /**
+   * How many automatic REWORK rounds a companion (`reviewer`, `architect-companion`,
+   * `spec-companion`, a deployment's own) may drive before it stops grading and parks for a person
+   * to pick (one more round / proceed anyway / stop and reset). One round = the producing step
+   * re-runs with the verdict's findings folded in and the companion re-grades, so this is the
+   * number of RE-RUNS, not of gradings: the first grading is free.
+   *
+   * `0` means the loop never runs on its own: the first verdict BELOW the bar goes straight to the
+   * park (or, under `autonomy: 'unattended'`, straight to `proceed`), and one at or above it
+   * advances, comments and all. It is a real posture rather than a disabled feature, and the reason
+   * this budget has a floor of 0 where `maxRequirementIterations` has 1: an iterative review with no
+   * passes has graded nothing, while a companion with no rework rounds has still delivered its
+   * verdict.
+   *
+   * The rule that a first batch of comments always buys a round, whatever it scored, is subordinate
+   * to this number rather than beside it. Otherwise `0` parked every companion step (a review with
+   * nothing at all to say is the rare one) instead of the ones that missed their bar.
+   *
+   * A HUMAN-granted extra round is charged to nobody: `resolveCompanionExceeded` raises the step's
+   * own budget by one, so this caps what the platform spends unasked and never what a person may
+   * ask for.
+   */
+  companionMaxReworks: v.pipe(v.number(), v.integer(), v.minValue(0)),
   /**
    * How long (minutes) the post-release-health gate watches the deployed release's
    * Datadog monitors/SLOs before declaring it healthy and advancing.
@@ -477,8 +526,38 @@ export const riskPolicySchema = v.object({
    * A role with no entry is unrestricted, so `{}` is the identity. Empty on the built-ins.
    */
   submissionClassesByRole: submissionClassesByRoleSchema,
-  /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
+  /**
+   * Whether a run governed by this policy answers its own automatic-loop caps
+   * ({@link runAutonomySchema}). `attended` on every built-in but the unattended default.
+   */
+  autonomy: runAutonomySchema,
+  /**
+   * The minimum confidence (0..1) a Requirement-Writer recommendation must REPORT for an
+   * `unattended` run to take it as a review finding's answer and carry on with no person.
+   *
+   * Read ONLY on the unattended path, and inert under `attended` for the reason `dryRunRoles` is
+   * inert without a role policy: an attended run's auto-recommendations are drafts a human is
+   * about to read, so grading them changes nothing about who decides. Under `unattended` the same
+   * suggestion is the final answer, so the grade is the whole bar.
+   *
+   * It gates only the findings the REVIEWER classified `autoAnswerable` — a genuine product
+   * judgement is never eligible however confident the Writer sounds — and an UNREPORTED
+   * confidence is below every floor above 0, so a garbled Writer reply parks the run rather than
+   * quietly answering it. `0` accepts anything the Writer produces for that class of finding.
+   */
+  minAutoAnswerConfidence: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
+  /**
+   * The workspace's fallback preset for a run somebody started IN THE APP, used by tasks that
+   * pick none. Exactly one per workspace is true.
+   */
   isDefault: v.boolean(),
+  /**
+   * The workspace's fallback preset for a run nothing is watching (the public API, a tracker
+   * dispatch, a schedule fire), used by tasks that pick none. Exactly one per workspace is true,
+   * and it may be the same row as `isDefault`: a deployment that wants one posture everywhere
+   * flags one policy both ways.
+   */
+  isUnattendedDefault: v.boolean(),
   /**
    * Monotonic seed version for a BUILT-IN preset (`seedRiskPolicies()` assigns it). When the
    * current catalog version for this id exceeds the persisted copy's `version`, the SPA offers
@@ -490,9 +569,75 @@ export const riskPolicySchema = v.object({
 })
 export type RiskPolicy = v.InferOutput<typeof riskPolicySchema>
 
+/**
+ * Which tier a risk policy in a board's visible library is STORED at, and therefore who may edit
+ * it. `account` policies are authored once for the whole account and every board under it
+ * inherits them read-only; `workspace` policies belong to the board that holds them.
+ *
+ * There is deliberately no `builtin` member, unlike the fragment and foundational-service tiers.
+ * The built-in catalog (`seedRiskPolicies()`) is COPIED into each board at creation and reconciled
+ * against the catalog from there, so a built-in is a `workspace` row a board owns outright: it can
+ * be edited, deleted and reseeded. A tier that carried no rows would have to answer what a reseed
+ * means, and the answer is already "the row this board owns".
+ */
+export const riskPolicyTierSchema = v.picklist(['account', 'workspace'])
+export type RiskPolicyTier = v.InferOutput<typeof riskPolicyTierSchema>
+
+/**
+ * One entry of the library a board actually picks from: the merge of its own policies with the
+ * ones it inherits from its account, each carrying the tier that owns it.
+ *
+ * The tier is what every reader needs and none can re-derive: a board's editor renders an
+ * inherited policy read-only beside a clone action, and the engine resolves a task's pin through
+ * the same merged view, so a pinned account policy governs a run exactly as a local one does.
+ * A workspace row WINS over an account row of the same id, and a board's suppression drops an
+ * inherited id from this list outright (`riskPolicySuppressionSchema`).
+ */
+export const riskPolicyLibraryEntrySchema = v.object({
+  ...riskPolicySchema.entries,
+  tier: riskPolicyTierSchema,
+})
+export type RiskPolicyLibraryEntry = v.InferOutput<typeof riskPolicyLibraryEntrySchema>
+
+/**
+ * One policy a board is HIDING: an account policy id it has opted out of, so the policy loses the
+ * merge and no task on that board can pin it.
+ *
+ * A hidden id is by construction absent from the merged library, which is what makes this a
+ * separate read rather than a flag on the entry — without it, hiding would be a one-way door with
+ * nothing on screen to undo.
+ *
+ * `inherited` is the honest half: `false` says the suppression currently hides NOTHING, because
+ * the account has since deleted the policy it named. A reader must not conclude a posture is
+ * being withheld when there is none to withhold, and the name is then the id, which is the only
+ * thing left that identifies what was hidden.
+ */
+export const riskPolicySuppressionSchema = v.object({
+  id: v.string(),
+  name: v.string(),
+  inherited: v.boolean(),
+})
+export type RiskPolicySuppression = v.InferOutput<typeof riskPolicySuppressionSchema>
+
 // ---- Request bodies -------------------------------------------------------
 
-const presetNameSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(60))
+/**
+ * How long a risk policy's name may be.
+ *
+ * Exported because the SPA has to AGREE about it, not merely be validated against it: cloning an
+ * inherited policy composes the copy's name client-side (the label is localized copy, and the
+ * backend does not localize prose), so the composer needs the same ceiling the schema enforces.
+ * Without it a long enough source name pushed the composed `{name} (copy)` past the limit and the
+ * clone action answered a 422 the operator had no field to act on.
+ */
+export const RISK_POLICY_NAME_MAX_LENGTH = 60
+
+const presetNameSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(RISK_POLICY_NAME_MAX_LENGTH),
+)
 const scoreSchema = v.pipe(v.number(), v.minValue(0), v.maxValue(1))
 const attemptsSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(50))
 const iterationsSchema = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(20))
@@ -500,6 +645,13 @@ const releaseWindowSchema = v.pipe(v.number(), v.integer(), v.minValue(1), v.max
 const releaseAttemptsSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(10))
 const graceMinutesSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(1440))
 const bouncesSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(10))
+/**
+ * The companion rework budget. Same bounds as {@link bouncesSchema} today and deliberately its own
+ * schema, like every sibling budget above: a judge bounce buys another verdict on work that already
+ * exists, a companion round buys a container dispatch that rewrites it, so an operator who later
+ * asks for more of one is not asking for more of the other.
+ */
+const companionReworksSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(10))
 
 /** Create a new merge threshold preset in a workspace. */
 export const createRiskPolicySchema = v.object({
@@ -511,6 +663,8 @@ export const createRiskPolicySchema = v.object({
   maxRequirementIterations: iterationsSchema,
   maxRequirementConcernAllowed: requirementConcernLevelSchema,
   maxTesterQualityIterations: v.optional(iterationsSchema, 3),
+  /** Automatic companion rework rounds; absent ⇒ {@link DEFAULT_COMPANION_MAX_ATTEMPTS}. */
+  companionMaxReworks: v.optional(companionReworksSchema, DEFAULT_COMPANION_MAX_ATTEMPTS),
   releaseWatchWindowMinutes: v.optional(releaseWindowSchema, 30),
   releaseMaxAttempts: v.optional(releaseAttemptsSchema, 1),
   humanReviewGraceMinutes: v.optional(graceMinutesSchema, 10),
@@ -528,8 +682,17 @@ export const createRiskPolicySchema = v.object({
   dryRunRoles: v.optional(dryRunRolesSchema, []),
   /** Per-role allowlist of landable change classes; absent ⇒ every role is unrestricted. */
   submissionClassesByRole: v.optional(submissionClassesByRoleSchema, {}),
-  /** Make this the workspace default (demotes the previous default). */
+  /** Whether this policy answers its own automatic-loop caps; absent ⇒ it parks for a person. */
+  autonomy: v.optional(runAutonomySchema, 'attended'),
+  /**
+   * Confidence floor for an unattended run taking a Writer recommendation as a finding's answer;
+   * absent ⇒ {@link DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE}. Inert under `attended`.
+   */
+  minAutoAnswerConfidence: v.optional(scoreSchema, DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE),
+  /** Make this the workspace's in-app default (demotes the previous one). */
   isDefault: v.optional(v.boolean(), false),
+  /** Make this the workspace's unattended default (demotes the previous one). */
+  isUnattendedDefault: v.optional(v.boolean(), false),
 })
 export type CreateRiskPolicyInput = v.InferOutput<typeof createRiskPolicySchema>
 
@@ -543,6 +706,7 @@ export const updateRiskPolicySchema = v.object({
   maxRequirementIterations: v.optional(iterationsSchema),
   maxRequirementConcernAllowed: v.optional(requirementConcernLevelSchema),
   maxTesterQualityIterations: v.optional(iterationsSchema),
+  companionMaxReworks: v.optional(companionReworksSchema),
   releaseWatchWindowMinutes: v.optional(releaseWindowSchema),
   releaseMaxAttempts: v.optional(releaseAttemptsSchema),
   humanReviewGraceMinutes: v.optional(graceMinutesSchema),
@@ -558,9 +722,30 @@ export const updateRiskPolicySchema = v.object({
   dryRunRoles: v.optional(dryRunRolesSchema),
   /** Replaces the whole map, so un-scoping a role is a plain omission (never an empty array). */
   submissionClassesByRole: v.optional(submissionClassesByRoleSchema),
+  autonomy: v.optional(runAutonomySchema),
+  minAutoAnswerConfidence: v.optional(scoreSchema),
   isDefault: v.optional(v.boolean()),
+  isUnattendedDefault: v.optional(v.boolean()),
 })
 export type UpdateRiskPolicyInput = v.InferOutput<typeof updateRiskPolicySchema>
+
+/**
+ * Copy an INHERITED account policy into the board's own tier, so the board can edit its numbers
+ * without an account admin and without changing the posture of every other board.
+ *
+ * The copy gets a FRESH id rather than shadowing the account id. An override sharing the id reads
+ * as the same policy in every picker and on every task that pinned it, so a board editing its copy
+ * would silently re-point work that was filed against the account's posture; a new id moves nothing
+ * that already exists and says what it is.
+ *
+ * `name` is optional and defaults to the source policy's, because two policies may share a name
+ * (nothing keys off it) and the backend does not localize prose — a caller that wants the copy
+ * marked as one sends the marked name itself.
+ */
+export const cloneRiskPolicySchema = v.object({
+  name: v.optional(presetNameSchema),
+})
+export type CloneRiskPolicyInput = v.InferOutput<typeof cloneRiskPolicySchema>
 
 /** Parse-or-throw an assessment payload an agent returned (the engine validates it). */
 export function parseMergeAssessment(value: unknown): MergeAssessment {

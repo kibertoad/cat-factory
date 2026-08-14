@@ -17,6 +17,7 @@ const { t } = useI18n()
 const ui = useUiStore()
 const tasks = useTasksStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirmAction } = useConfirmAction()
 
 const source = computed(() => ui.taskConnect?.source ?? null)
@@ -70,12 +71,7 @@ async function submit() {
     // Re-probe so `available`/`enabled` reflect the new connection.
     await tasks.probe()
   } catch (e) {
-    toast.add({
-      title: t('tasks.connect.connectFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'tasks.connect.connectFailed')
   } finally {
     saving.value = false
   }
@@ -88,12 +84,7 @@ async function startOAuth() {
     // Only Linear wires an OAuth flow today; the browser navigates away on success.
     if (source.value === 'linear') await tasks.startLinearOAuth()
   } catch (e) {
-    toast.add({
-      title: t('tasks.connect.connectFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'tasks.connect.connectFailed')
     oauthStarting.value = false
   }
 }
@@ -117,12 +108,7 @@ async function toggleEnabled(enabled: boolean) {
   try {
     await tasks.setEnabled(source.value, enabled)
   } catch (e) {
-    toast.add({
-      title: t('tasks.connect.updateFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'tasks.connect.updateFailed')
   } finally {
     togglingEnabled.value = false
   }

@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/orchestration",
-  "version": "0.250.0",
+  "version": "0.272.1",
   "description": "Delivery-workflow engine for the Agent Architecture Board (execution, bootstrap, pipelines, board, boardScan, requirements, and composition root).",
   "repository": {
     "type": "git",
@@ -40,7 +40,7 @@
     "@cat-factory/sandbox": "workspace:*",
     "@cat-factory/spend": "workspace:*",
     "@cat-factory/workspaces": "workspace:*",
-    "ai": "^7.0.58"
+    "ai": "^7.0.64"
   },
   "devDependencies": {
     "@cat-factory/sandbox-fixtures": "workspace:*",

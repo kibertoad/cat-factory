@@ -17,6 +17,7 @@ const props = defineProps<{ accountId: string }>()
 
 const store = useAccountSettingsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
 // The family / region / mode / trusted-provider domains, pinned to the contract unions so a
@@ -30,6 +31,7 @@ const FAMILIES = [
   'kimi',
   'deepseek',
   'glm',
+  'grok',
 ] as const satisfies readonly ModelFamily[]
 const REGIONS = ['usa', 'europe', 'china', 'other'] as const satisfies readonly AccountRegion[]
 const MODES = ['off', 'blocklist', 'allowlist'] as const satisfies readonly ModelPolicyMode[]
@@ -46,6 +48,7 @@ const familyLabels = computed<Record<ModelFamily, string>>(() => ({
   kimi: t('settings.modelPolicy.families.kimi'),
   deepseek: t('settings.modelPolicy.families.deepseek'),
   glm: t('settings.modelPolicy.families.glm'),
+  grok: t('settings.modelPolicy.families.grok'),
 }))
 const regionLabels = computed<Record<AccountRegion, string>>(() => ({
   usa: t('settings.modelPolicy.regions.usa'),
@@ -135,11 +138,7 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('settings.modelPolicy.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'settings.modelPolicy.saveFailed')
   } finally {
     saving.value = false
   }

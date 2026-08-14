@@ -149,6 +149,7 @@
       "archiveFailed": "サービスをアーカイブできませんでした",
       "restoreFailed": "サービスを復元できませんでした",
       "moveRefused": {
+        "relaxes_run_oversight": "このタスクの移動先では、実行が人の判断を待たずに自身のレビュー確認を自分で処理します。現在このタスクを統制しているマージポリシーはそうではありません。ワークスペース管理者に移動を依頼してください。",
         "relaxes_role_sandbox": "このタスクの実行は現在の場所ではあなたのロールに対してサンドボックス化されていますが、移動先で適用されるマージポリシーではそうなりません。移動はワークスペース管理者に依頼してください。",
         "relaxes_role_submission_allowlist": "移動先のマージポリシーでは、ここでは許可されていない種類の変更もマージできてしまいます。移動はワークスペース管理者に依頼してください。",
         "relaxes_role_class_rule": "移動先のマージポリシーは、ここではあなたのレビューが必要な変更を自動マージします。移動はワークスペース管理者に依頼してください。"
@@ -659,7 +660,9 @@
         "document_already_linked": "ドキュメントは既に添付されています",
         "dry_run_not_mergeable": "ドライランはマージできません",
         "submission_not_allowed": "この実行ではマージできません",
-        "webhook_limit_reached": "Webhook の上限に達しました"
+        "webhook_limit_reached": "Webhook の上限に達しました",
+        "risk_policy_inherited": "このポリシーはアカウントのものです",
+        "risk_policy_not_inherited": "このポリシーはこのボードのものです"
       },
       "description": {
         "dependencies_unmet": "このタスクは、まだ完了していない他のタスクに依存しています。それらを完了または解除してから、もう一度開始してください。",
@@ -690,7 +693,7 @@
         "pipeline_schedule_intake_unconfigured": "バグ取り込みステップはスケジュールの課題取り込み設定から作業を取得しますが、関連付けられたスケジュールにその設定がありません。先にスケジュールで課題取り込みを設定してください。",
         "foundational_service_exists": "この ID の基盤サービスはこのスコープにすでに登録されています。既存のエントリを開いて編集してください。ID は設計でアーキテクトが指定する名前なので、2 つのサービスが同じ ID を共有することはできません。",
         "binary_output_service_invalid": "バイナリ出力を生成するステップが、このワークスペースのカタログでは解決できない基盤サービスを選択しています。ID が不明か、選択した保存先サービスに asset-storage ケイパビリティがありません。ステップの選択を修正するかサービスを登録して、もう一度開始してください。",
-        "binary_output_generator_invalid": "バイナリ出力を生成するステップが、このデプロイメントに登録されていない生成インテグレーションを選択しているか、選択されたインテグレーションのいずれもステップが提供すべきコンテンツタイプを生成できません。生成インテグレーションはこのワークスペースではなくデプロイメントのコードに登録します。登録するかステップの選択を修正して、もう一度開始してください。",
+        "binary_output_generator_invalid": "バイナリ出力を生成するステップが、このデプロイに登録されていない生成連携を選択しているか、選択された連携のどれもステップが提供すべきコンテンツタイプを生成しないか、あるいはそのうちの一つがこのステップのモデルでは動作しないエージェント CLI によって生成されます。生成連携はこのワークスペースではなくデプロイのコードに登録されます。連携を登録するか、ステップの選択を修正するか、必要な CLI で動作するモデルをステップに固定してから、もう一度開始してください。",
         "foundational_service_not_inherited": "除外はアカウントから継承したサービスに対する操作です。この ID はこのボード自身が登録しているため、除外するものがありません。代わりにボード自身のエントリを削除してください。",
         "input_gate_not_parked": "この実行はもう入力チェックを待っていません。すでに誰かが応答したか、実行が先に進んだ可能性があります。",
         "input_gate_parked": "この実行は入力チェックで停止しており、承認からは回答できません。実行の通知から、タスクを修正して再チェックするか、そのまま実行してください。",
@@ -698,7 +701,9 @@
         "document_already_linked": "そのドキュメントは別のタスクに添付されています。先にそちらで添付を解除するか、別のコピーを添付してください。",
         "dry_run_not_mergeable": "このプルリクエストはドライランによるものなので、ここからはマージできません。このワークスペースがマージするプルリクエストを作るには、タスクを通常の実行として開始し直してください。",
         "submission_not_allowed": "このタスクのマージポリシーでは、実行を開始したロールがこの種類の変更をマージすることを許可していません。マージできるロールのメンバーが対応するか、管理者がマージプリセットでポリシーを広げてください。",
-        "webhook_limit_reached": "このワークスペースには送信 Webhook がすでに上限数まで登録されています。不要なものを削除してから、もう一度登録してください。"
+        "webhook_limit_reached": "このワークスペースには送信 Webhook がすでに上限数まで登録されています。不要なものを削除してから、もう一度登録してください。",
+        "risk_policy_inherited": "アカウント内のすべてのボードで共有されているため、ここからは変更できません。このボードに複製してコピーを編集してください。",
+        "risk_policy_not_inherited": "すでにこのボード自身のポリシーです。直接編集するか、提示したくない場合は削除してください。"
       },
       "action": {
         "connectGitHub": "GitHub に接続",
@@ -1428,6 +1433,13 @@
       "awaitingChoice": "人による選択を待機中",
       "approvalGate": "承認ゲート",
       "companionReview": "コンパニオンレビュー",
+      "findingSeverity": {
+        "blocker": "要修正",
+        "major": "修正推奨",
+        "minor": "軽微",
+        "ungraded": "コメント",
+        "unrecognized": "未知のレベル ({level})"
+      },
       "correctionIterations": "{count} 回の修正イテレーション。 | {count} 回の修正イテレーション。",
       "state": {
         "pending": "保留中",
@@ -1464,6 +1476,10 @@
       "closeEsc": "閉じる (Esc)",
       "companionCapHeading": "{agent} は {attempts} 回の再作業上限に達しましたが、まだ {threshold} の基準を下回っています。",
       "companionCapDetail": "自動の再作業をもう1回実行するか、現在の出力を受け入れて次のステップに進むか、タスクを停止してリセットし、入力を編集して再送信してください。",
+      "companionCapBlockedHeading": "{agent} は {attempts} 回の再作業上限に達しましたが、要修正の指摘が {count} 件残っています。 | {agent} は {attempts} 回の再作業上限に達しましたが、要修正の指摘が {count} 件残っています。",
+      "companionCapBlockedDetail": "このまま進めると、これらの指摘が未修正のまま作業を受け入れることになります。そのため、この実行のリスクポリシーがこの選択を代わりに行うことはありません。自動の再作業をもう1回実行するか、現在の出力のまま進めるか、タスクを停止してリセットし、入力を編集して再送信してください。",
+      "companionStalledHeading": "{agent} は {maxAttempts} 回のうち {attempts} 回で再作業ループを停止しました。直前の修正が変更されずに返され、評価も動きませんでした。",
+      "companionStalledDetail": "残りの回数は、すでに出された判定を繰り返すだけなので使われていません。それでももう1回実行するか、現在の出力を受け入れて次のステップに進むか、タスクを停止してリセットし、入力を編集して再送信してください。",
       "infraAttempts": "インフラの試行",
       "hideInfraAttempts": "インフラの試行を非表示",
       "executionHistory": "実行履歴",
@@ -1512,9 +1528,11 @@
           "transportUnsupported": "は利用できませんでした: このステップを実行したエージェント CLI はこの種類のサーバーに接続できません。",
           "missingSecret": "は利用できませんでした: 必要な認証情報がこのボードに設定されていません。",
           "reservedSecret": "は利用できませんでした: プラットフォーム自身の設定が使う変数を要求しているため、宣言側を変更する必要があります。",
+          "unusableSecret": "は利用できませんでした: 宣言された認証情報がサーバーに届かないため、認証なしで動作することになります。",
           "oauthNotConnected": "は利用できませんでした: このボードはまだ接続されていません。",
           "oauthTokenFailed": "は利用できませんでした: 接続からアクセストークンが発行されなくなりました。",
           "overBudget": "は利用できませんでした: このエージェントは 1 回の実行が運べる数を超えるツールサーバーを宣言しています。",
+          "consensusPanel": "は利用できませんでした: このステップはコンセンサスパネルとして実行され、パネルにはツールサーバーを接続するエージェントランタイムがありません。",
           "unknown": "は利用できませんでした（{reason}）。"
         },
         "remedy": {
@@ -1522,9 +1540,11 @@
           "transportUnsupported": "このサーバー用に stdio サーバーを宣言するか、HTTP サーバーに接続できるエージェント CLI でステップを実行してください。",
           "missingSecret": "要求されている認証情報を、デプロイの環境変数として設定するか、インフラストラクチャ ウィンドウのケイパビリティ認証情報で設定してください。",
           "reservedSecret": "別のキーを要求するよう宣言を変更してください。その変数を設定しても解決しません。",
+          "unusableSecret": "デプロイのコードで宣言を修正してください。リモートサーバーの認証情報はヘッダーで送られ、ローカルサーバーのものはサーバープロセスに注入されます。",
           "oauthNotConnected": "インフラストラクチャ ウィンドウからこのボードを接続してください。ENCRYPTION_KEY のないデプロイには許可を保管する場所がないため、まず運用者がそれを設定する必要があります。",
           "oauthTokenFailed": "インフラストラクチャ ウィンドウから接続し直すか、提供元の障害が収まるのを待ってください。",
-          "overBudget": "1 回の実行ですべて運べるよう、このエージェントの宣言を減らしてください。"
+          "overBudget": "1 回の実行ですべて運べるよう、このエージェントの宣言を減らしてください。",
+          "consensusPanel": "このステップにそのツールが必要ならコンセンサスをオフにしてください。あるいはパネルがツールなしで判断することを受け入れてください。サーバー側を変更する必要はありません。"
         },
         "observed": {
           "ready": "起動済み",
@@ -1840,12 +1860,14 @@
       "dispatch": "ディスパッチ",
       "environment": "環境",
       "evicted": "退避",
+      "harness_shutdown": "Harness 停止",
       "timeout": "タイムアウト",
       "agent": "エージェント",
       "job_failed": "ジョブ失敗",
       "rejected": "却下",
       "companion_rejected": "コンパニオン却下",
       "stalled": "停滞",
+      "state_unreadable": "状態の読み取り不可",
       "cancelled": "キャンセル",
       "unknown": "不明"
     },
@@ -2296,6 +2318,27 @@
       "createToken": "GitHub トークンを作成（スコープは事前選択済み）",
       "thenSet": "その後 {envVar} を設定して再起動してください。"
     },
+    "githubPatPermissionsBanner": {
+      "title": "GitHub トークンにプッシュやプルリクエスト作成の権限がありません",
+      "rejectedTitle": "GitHub が実行で使うトークンを拒否しました",
+      "body": "ここで開始した実行は GitHub の個人アクセストークンで認証しますが、このトークンにはパイプラインに必要な権限がありません。ブランチのプッシュ、プルリクエストの作成、マージを行うエージェントステップは失敗します。",
+      "rejectedBody": "実行の認証に使う GitHub 個人アクセストークンが、無効・期限切れ・失効、または組織ポリシーによりブロックされています。置き換えるまで、クローン、プッシュ、プルリクエスト作成、マージを行うすべてのステップが失敗します。",
+      "missing": "不足:",
+      "alsoMissing": "ワークフローファイルの変更のみを妨げるものですが、次も不足しています: {capabilities}。",
+      "capability": {
+        "push": "コミットのプッシュ",
+        "pullRequests": "プルリクエストの作成とマージ",
+        "workflows": "ワークフローファイルの編集"
+      },
+      "sourceDeployment": "これはこのデプロイに設定されているトークンです。置き換えるにはデプロイの更新が必要です。",
+      "sourceInitiator": "これはあなた自身の保存済みトークンで、実行はデプロイの資格情報よりこちらを優先します。個人設定で置き換えてください。",
+      "createClassic": "置き換え用トークンを作成（スコープは事前選択済み）",
+      "createFineGrained": "置き換え用のきめ細かいトークンを作成",
+      "classicHint": "リンクを開くと、必要なスコープが選択済みのクラシックトークン作成フォームが表示されます。",
+      "fineGrainedHint": "GitHub のきめ細かいトークンのフォームは事前選択に対応していないため、次のリポジトリ権限をご自身で付与してください: {permissions}。",
+      "sampled": "使用中のリポジトリ {checked} 件を確認しました。残り {remaining} 件は未確認です。",
+      "deniedRepos": "このトークンはサービスが使用する次のリポジトリにアクセスできません: {repos}。これらのリポジトリを選択して再発行してください。"
+    },
     "providerConfigBanner": {
       "titleMany": "プロバイダーの設定が必要です",
       "titleOne": {
@@ -2635,6 +2678,51 @@
         "load": "監査ログを読み込めませんでした。",
         "loadMore": "以前の記録を読み込めませんでした"
       }
+    },
+    "accountRiskPolicies": {
+      "intro": "このアカウントのすべてのボードで共有されるマージ方針です。各ボードは読み取り専用で継承し、複製してコピーを編集するか、非表示にできます。ポリシーを選んでいないタスクにどれを適用するかはボードごとに設定します。",
+      "empty": "アカウント全体のリスクポリシーはまだありません。追加するまで各ボードは自分のライブラリで動作します。",
+      "loadFailed": "アカウントのリスクポリシーを読み込めませんでした",
+      "confirmDelete": "「{name}」はこのアカウントのすべてのボードから取り下げられます。これを選択していたタスクは各ボードの既定に戻ります。"
+    }
+  },
+  "mcpAuthorize": {
+    "title": "{client} を接続しますか？",
+    "subtitle": "{client} を名乗っており、このデプロイは接続後に {origin} へ戻します。",
+    "workspace": {
+      "label": "操作を許可するボード"
+    },
+    "scopeLabel": "許可する操作",
+    "scopeHint": "各レベルは上位のレベルを含みます。",
+    "scope": {
+      "read": {
+        "label": "読み取りのみ",
+        "description": "サービス、タスク、パイプライン、実行を閲覧します。"
+      },
+      "write": {
+        "label": "読み取りと書き込み",
+        "description": "加えて、タスクの作成と開始ができます。"
+      },
+      "decide": {
+        "label": "読み取り、書き込み、判断",
+        "description": "加えて、停止中の実行が待っている質問に回答できます。"
+      },
+      "admin": {
+        "label": "フルアクセス",
+        "description": "加えて、タスクの削除と通知への対応ができ、プルリクエストがマージされることもあります。"
+      }
+    },
+    "requestedScope": "{client} は {scope} を要求しました。本当に許可する場合のみ、上でその項目を選んでください。",
+    "approve": "接続",
+    "deny": "キャンセル",
+    "back": "アプリに戻る",
+    "noWorkspaces": "接続できるボードがまだありません。",
+    "revokeHint": "これにより API キーが発行されます。ボードの設定からいつでも無効化できます。",
+    "error": {
+      "title": "この接続を設定できませんでした",
+      "noRequest": "認可リクエストなしでこのページが開かれました。MCP ホストから接続を開始してください。",
+      "expired": "この認可リクエストは無効か、有効期限が切れています。MCP ホストから接続をやり直してください。",
+      "failed": "判断を記録できませんでした。MCP ホストから接続をやり直してください。"
     }
   },
   "settings": {
@@ -2715,7 +2803,8 @@
         "team": "チームとアクセス",
         "fragments": "コンテキストフラグメント",
         "skills": "スキル",
-        "foundational": "基盤サービス"
+        "foundational": "基盤サービス",
+        "riskPolicies": "リスクポリシー"
       }
     },
     "infrastructure": {
@@ -2774,6 +2863,7 @@
         "urlHttpRouteStatus": "HTTPRoute ステータス (Gateway API)",
         "hostTemplate": "ホストテンプレート",
         "hostTemplateHelp": "ホストテンプレート。プロビジョニング変数（例: branch、sha）で描画されます。",
+        "ingressPortHelp": "Ingress コントローラーが応答するホストポート。空の場合はスキームの既定ポートです。Kubernetes の Ingress host にはポートを含められないため、ホストテンプレートではなくここに指定します。",
         "ingressName": "Ingress 名",
         "serviceName": "Service 名",
         "port": "ポート",
@@ -2877,6 +2967,11 @@
           "blurb": "Cloudflare Containers を使用しない場合にコーディングエージェントが実行される場所。セルフホストのランナープール (自前のスケジューラー) または Kubernetes クラスターを選択し、エンドポイントと認証情報を構成します。"
         }
       },
+      "serviceAccountToken": {
+        "whitespace": "このトークンにはスペースまたは改行が含まれています。ベアラートークンには本来含まれないもので、ターミナルで折り返された行をまたいでコピーした可能性が高いです。改行のない 1 行としてコピーし直してください。",
+        "base64Encoded": "これはトークン自体ではなく、Secret の .data.token フィールドの Base64 値のように見えます。先に base64 -d などでデコードしてください。",
+        "notAJwt": "これは ServiceAccount トークン (ピリオドで区切られた 3 つの部分から成る JWT) には見えません。値全体をコピーしたか確認してください。クラスターが静的なベアラートークンを使用している場合は無視して構いません。"
+      },
       "kubernetesEnv": {
         "label": "名前",
         "labelPlaceholder": "プレビュークラスター",
@@ -2899,6 +2994,7 @@
         "urlServiceStatus": "Service ステータスを読み取る",
         "hostTemplate": "ホストテンプレート",
         "hostTemplateHelp": "branch や pullNumber などのプロビジョニング変数でレンダリングされるホストテンプレート。レンダリングされたホストが環境 URL になります。",
+        "ingressPortHelp": "Ingress コントローラーが応答するホストポート。空の場合はスキームの既定ポートです。Kubernetes の Ingress host にはポートを含められないため、ホストテンプレートではなくここに指定します。",
         "ingressName": "Ingress 名",
         "ingressNameHelp": "ロードバランサーのホストを読み取る Ingress。空の場合は適用された唯一の Ingress を使用します。",
         "serviceName": "Service 名",
@@ -2963,13 +3059,27 @@
         "button": "接続をテスト",
         "ok": "接続 OK",
         "failed": "接続に失敗しました",
+        "causes": {
+          "refused": "そのアドレスでは何も待ち受けていません。接続が拒否されました。",
+          "dns": "そのホスト名はこのデプロイからは解決できません。",
+          "timeout": "テストがタイムアウトするまでに応答がありませんでした。",
+          "aborted": "応答が届く前にリクエストがキャンセルされました。",
+          "unreachable": "このデプロイからそのアドレスへのネットワーク経路がありません。",
+          "reset": "応答が届く前に接続が閉じられました。",
+          "tlsUntrusted": "このデプロイは TLS 証明書を信頼していません。",
+          "tlsExpired": "TLS 証明書は有効期間を外れています。",
+          "tlsHostname": "TLS 証明書はそのホスト名向けに発行されていません。",
+          "tlsProtocol": "TLS ハンドシェイクに失敗しました。",
+          "invalidHeader": "リクエストを組み立てられませんでした。認証情報に HTTP ヘッダーが扱えない文字が含まれています。"
+        },
         "warningsTitle": "この設定の不足点",
         "warnings": {
           "runner_manifest_no_release": "release テンプレートがありません。実行をキャンセルしてもプールにジョブの停止を伝えられないため、取り残されたジョブはプールが自分で回収するまでランナーを占有し続けます。",
           "runner_manifest_no_status_path": "ステータスパスがありません。ポーリングは常に実行中と解釈されるため、ジョブは実行のポーリング上限を使い切ることでしか終了できません。",
           "github_pat_classic_account_wide": "これは 'repo' スコープを持つクラシックトークンです。あなたがプッシュできるすべてのリポジトリ（このワークスペースの GitHub App が一度もインストールされていないものを含む）に到達します。あなたが開始する実行は App よりこれを優先して使います。このインストールのリポジトリに限定したファイングレインドトークンのほうが範囲は狭くなります。",
           "github_pat_scopes_beyond_need": "このトークンは cat-factory が使わない権限を含んでいます。外しても支障はなく、侵害された実行が到達できる範囲を狭められます。",
-          "github_pat_scope_unreadable": "GitHub はこのトークンを受け入れましたが、スコープを報告しなかったため、ここでは到達範囲を表示できません。GitHub のトークン設定で何が付与されているか確認してください。"
+          "github_pat_scope_unreadable": "GitHub はこのトークンを受け入れましたが、スコープを報告しなかったため、ここでは到達範囲を表示できません。GitHub のトークン設定で何が付与されているか確認してください。",
+          "github_pat_no_scopes": "GitHub はこのクラシックトークンのスコープを報告していないため、公開データの読み取りしかできません。これを使ってクローン、プッシュ、プルリクエストの作成を行う実行は失敗します。'repo' と 'workflow' を選択して新しいトークンを発行してください。"
         }
       },
       "toast": {
@@ -3101,6 +3211,8 @@
       "default": "デフォルト",
       "makeDefault": "デフォルトにする",
       "deleteDefaultBlocked": "デフォルトポリシーは削除できません",
+      "deleteUnattendedDefaultBlocked": "無人実行の既定ポリシーは削除できません",
+      "deleteBothDefaultsBlocked": "このポリシーはアプリ内の既定と無人実行の既定を兼ねているため、削除できません",
       "deletePreset": "ポリシーを削除",
       "field": {
         "maxComplexity": "最大複雑度 %",
@@ -3109,6 +3221,7 @@
         "ciMaxAttempts": "CI 修正の試行回数",
         "maxRequirementIterations": "要件のイテレーション回数",
         "maxRequirementConcernAllowed": "この水準以下の懸念を自動承認",
+        "companionMaxReworks": "コンパニオンの再作業回数",
         "autoMerge": "自動マージ"
       },
       "newPreset": "新しいポリシー",
@@ -3120,6 +3233,7 @@
         "impact": "影響度%",
         "ciFix": "CI 修正",
         "reqIter": "要件イテレ",
+        "companionRework": "再作業",
         "autoPass": "この水準以下を自動承認"
       },
       "add": "追加",
@@ -3129,7 +3243,11 @@
         "created": "ポリシーを作成しました",
         "createFailed": "ポリシーを作成できませんでした",
         "defaultFailed": "デフォルトを設定できませんでした",
-        "deleteFailed": "ポリシーを削除できませんでした"
+        "deleteFailed": "ポリシーを削除できませんでした",
+        "cloned": "ポリシーをこのボードに複製しました",
+        "cloneFailed": "ポリシーを複製できませんでした",
+        "hideFailed": "ポリシーを非表示にできませんでした",
+        "unhideFailed": "ポリシーを元に戻せませんでした"
       },
       "autoMergeOnHint": "ポリシーの範囲内なら自動的にマージします。",
       "autoMergeOffHint": "常にPRを人間のレビューに回します。",
@@ -3179,6 +3297,44 @@
         "redundant": "効果はありません。このポリシーはすでに同等以上に厳しい設定です。",
         "alreadyStrictest": "すでに常にレビュー必須",
         "baseHint": "このポリシーはすべてのカテゴリでスコアを比較するため、ロールはカテゴリを「常にレビュー必須」にすることしかできません。"
+      },
+      "unattendedDefault": "無人実行の既定",
+      "makeUnattendedDefault": "無人実行（API・トラッカー・スケジュール）の既定にする",
+      "makeUnattendedDefaultShort": "無人実行の既定",
+      "autonomy": {
+        "label": "無人実行を人の判断を待たずに完了させる",
+        "unattendedHint": "自動ループが打ち切られたとき（コンパニオンの手戻り上限、レビューのパス上限、未仕分けのフォローアップ）、実行は停止せず記録を残して先に進みます。パイプラインが要求したゲート、たとえば人手テスト・レビュー・承認は、これまでどおり実行を止めます。",
+        "attendedHint": "自動ループが打ち切られると、実行は停止して人の判断を待ちます。誰かが見ているボードには適していますが、API から開始した実行は無期限に待ち続けます。"
+      },
+      "autoAnswer": {
+        "label": "自動回答の確信度しきい値 (%)",
+        "hint": "無人の実行が人を待たずに提案された回答を採用するために、Requirement Writer に必要な確信度です。対象はレビュアーがプロダクトオーナー不要と判断した指摘のみです。"
+      },
+      "tier": {
+        "account": "アカウント由来",
+        "accountHint": "アカウント全体に定義されています。すべてのボードが継承し、変更できるのはアカウント管理者のみです。"
+      },
+      "own": {
+        "heading": "このボードのポリシー"
+      },
+      "inherited": {
+        "heading": "アカウントから継承",
+        "hint": "このアカウントのすべてのボードで共有されます。複製すればここでコピーを編集でき、非表示にすればこのボードのタスクは選択できなくなります。",
+        "clone": "ボードに複製",
+        "cloneHint": "このポリシーをボードにコピーし、上限値を編集できるようにします。",
+        "copyName": "{name}（コピー）",
+        "hide": "非表示",
+        "hideHint": "このボードでこのポリシーを提示しなくなります。後で戻せます。"
+      },
+      "hidden": {
+        "heading": "非表示のアカウントポリシー",
+        "restore": "元に戻す",
+        "withdrawn": "アカウントで定義されていません",
+        "loadFailed": "この一覧を読み込めませんでした。ここに表示されないまま非表示になっているポリシーがある可能性があります。"
+      },
+      "confirmHide": {
+        "title": "このポリシーを非表示にしますか？",
+        "body": "「{name}」はこのボードで提示されなくなり、これを選択していたタスクはボードの既定ポリシーに戻ります。後で元に戻せます。"
       }
     },
     "observabilityConnection": {
@@ -3294,6 +3450,7 @@
         "ok": "応答あり",
         "credentialsMissing": "認証情報なし",
         "credentialRefused": "認証情報を拒否",
+        "credentialUnusable": "認証情報を送信できません",
         "oauthNotConnected": "未接続",
         "oauthTokenFailed": "接続が機能しなくなりました",
         "unreachable": "応答なし",
@@ -3307,6 +3464,7 @@
       "allowedToolsUnchecked": "ツール一覧が長すぎて全部を読み取れなかったため、絞り込んだ名前は確認できませんでした。",
       "unresolvedCredentials": "{keys} の値が解決できませんでした。下で入力するか、デプロイの環境変数に設定してください。",
       "refusedCredentials": "{keys} はプラットフォーム自身の設定に属する変数名なので、決して解決されません。デプロイのコード側の宣言を変更してください。",
+      "unusableCredentials": "{keys} はヘッダーを指定していないため、HTTP サーバーには決して届きません。デプロイのコードで、サーバーが認証に使うヘッダーを指定してください。",
       "httpStatus": "HTTP {status}",
       "showDetails": "詳細を表示",
       "hideDetails": "詳細を隠す",
@@ -3369,7 +3527,9 @@
         "createdBy": "作成者: {user}",
         "createdByYou": "あなた",
         "createdByKey": "APIキー {id}",
-        "revoke": "トークンを取り消す"
+        "revoke": "トークンを取り消す",
+        "boundToYou": "あなたのサブスクリプション",
+        "boundToOther": "{user} のサブスクリプション"
       },
       "add": {
         "heading": "トークンを作成",
@@ -3378,7 +3538,12 @@
         "labelPlaceholder": "例: CI パイプライン",
         "scope": "権限範囲",
         "scopeHelp": "このトークンでできること: 読み取り専用、読み取りと書き込み、またはフルアクセス（削除も可能）。",
-        "create": "トークンを作成"
+        "create": "トークンを作成",
+        "identity": "実行者",
+        "identitySystem": "このワークスペース（システムトークン）",
+        "identitySelf": "自分（個人トークン）",
+        "identitySystemHelp": "このトークンで開始した実行はワークスペースに属し、個人には紐づきません。誰の個人 Claude / Codex / GLM サブスクリプションも利用できないため、それらのモデルを指定したタスクは、不在の相手に課金される代わりに拒否されます。CI や共有連携にはこちらを使ってください。",
+        "identitySelfHelp": "このトークンで開始した実行はあなたのものとして扱われ、あなたの個人 Claude / Codex / GLM サブスクリプションを利用できます。その際は毎回のリクエストで X-Personal-Password ヘッダーに個人パスワードを送る必要があります。パスワードは保存されません。自分のヘッドレス実行にはこちらを使ってください。"
       },
       "scopes": {
         "read": "読み取り専用",
@@ -3718,6 +3883,15 @@
       "reachable": "接続可能 · モデルなし | 接続可能 · {count} 個のモデル | 接続可能 · {count} 個のモデル",
       "noModels": "報告されたモデルがありません。",
       "enableModels": "モデルを有効化",
+      "imageInputHint": "一部のローカルモデルはスクリーンショットやデザインのレンダー画像を読み取れます。よく使われるモデルファミリーは自動的に判別され、各モデルの未設定の選択肢にどちらとして扱われるかが表示されます。テキスト専用の量子化版やファインチューンなど、プラットフォームでは判断できないビルドの場合にご自身で設定してください。",
+      "imageInputLabel": "{model} の画像対応",
+      "imageInput": {
+        "autoYes": "未設定: {family} は画像を読み取る",
+        "autoNo": "未設定: {family} はテキストのみ",
+        "unknown": "画像: 未設定",
+        "yes": "画像を読み取る",
+        "no": "テキストのみ"
+      },
       "toast": {
         "saved": "{name} を保存しました",
         "saveFailed": "ランナーを保存できませんでした",
@@ -3729,6 +3903,7 @@
         "body": "「{name}」が削除されます。 この操作は取り消せません。"
       },
       "blocked": "このランナーの URL はこのデプロイでは許可されていないため、モデルはピッカーに表示されません。",
+      "modelsDiscarded": "このランナーで有効になっていたモデルの一部を読み取れず、破棄しました。必要なものを選び直して保存してください。",
       "urlReason": {
         "invalid_url": "有効な URL ではありません。",
         "scheme_not_allowed": "ランナーの URL は http:// または https:// で始める必要があります。",
@@ -3761,7 +3936,8 @@
         "qwen": "Qwen (Alibaba)",
         "kimi": "Kimi (Moonshot)",
         "deepseek": "DeepSeek",
-        "glm": "GLM (Z.ai)"
+        "glm": "GLM (Z.ai)",
+        "grok": "Grok (xAI)"
       },
       "regions": {
         "usa": "アメリカ合衆国",
@@ -4037,6 +4213,11 @@
           "step1": "platform.moonshot.ai → API Keys を開き、キーを作成します。",
           "step2": "キーをコピーします。OpenAI 互換の Moonshot エンドポイントを認証します。"
         },
+        "xai": {
+          "label": "xAI (Grok API)",
+          "step1": "console.x.ai → API Keys を開き、キーを作成します。",
+          "step2": "キーをコピーします。OpenAI 互換の xAI エンドポイントを認証します。"
+        },
         "openrouter": {
           "label": "OpenRouter",
           "step1": "openrouter.ai → Keys を開き、API キーを作成します。",
@@ -4207,6 +4388,9 @@
       "monorepoBrowseHint": "リポジトリを参照し、追加したいサービスのディレクトリを任意のフォルダから選択してください。サービスで作業するエージェントは、そのサブディレクトリ内で実行されます。",
       "selectedServices": "選択したサービス",
       "noServicesSelected": "サービスがまだ選択されていません。上でディレクトリを選択してください。",
+      "frontendLabel": "フロントエンドアプリ（任意）",
+      "frontendHint": "選択したディレクトリのいずれか1つを、残りのフロントエンドとして指定します。そのサブディレクトリに固定されたフロントエンドアプリとして追加され、一緒に追加される各バックエンドサービスにリンクされます。バックエンドURLの環境変数名は、あとでフロントエンドのインスペクターで設定してください。",
+      "frontendNone": "なし: 選択はすべてバックエンドサービス",
       "addServices": "{count}件のサービスを追加 | {count}件のサービスを追加",
       "removeService": "{directory} を削除",
       "addedConfigure": "{title}を追加しました。設定してください",
@@ -4220,7 +4404,9 @@
         "addedDescription": "{title}がボードに追加されました。以下で設定してください。",
         "addFailedTitle": "サービスを追加できませんでした",
         "servicesAddedTitle": "サービスを追加しました",
-        "servicesAddedDescription": "{count}件のサービスをボードに追加しました。 | {count}件のサービスをボードに追加しました。"
+        "servicesAddedDescription": "{count}件のサービスをボードに追加しました。 | {count}件のサービスをボードに追加しました。",
+        "frontendLinkedNote": "{directory} をフロントエンドとして追加し、ほかのサービスにリンクしました。バックエンドURLの環境変数名はインスペクターで設定してください。",
+        "frontendWiringFailedNote": "フロントエンドの設定を保存できませんでした。各フロントエンドアプリのインスペクターを開き、サブディレクトリとバックエンドサービスを設定してください。"
       },
       "repoType": "リポジトリの種類",
       "repoTypeHint": "このリポジトリの種類: バックエンドサービス、フロントエンドアプリ、共有ライブラリ、またはドキュメントリポジトリ（ドキュメント/スパイクのみ）。"
@@ -4635,7 +4821,9 @@
     "tracker": "トラッカー",
     "board": "ボード",
     "pickBoard": "ボードを選択",
-    "boardPlaceholder": "プロジェクトキー、チーム ID または owner/repo",
+    "boardPlaceholder": "プロジェクトキーまたはチーム ID",
+    "boardFromService": "このサービスにリンクされたリポジトリ",
+    "boardNeedsRepo": "このサービスにはリポジトリがリンクされていないため、探索できる課題がありません。サービスパネルからリンクしてください。",
     "boardsFailed": "ボードを読み込めませんでした: {reason}",
     "issueType": "課題タイプ",
     "issueTypeHelp": "既定は bug です。課題タイプを持たないトラッカーでは無視されます。",
@@ -4644,6 +4832,8 @@
     "labelsHelp": "カンマ区切り。すべて付いている必要があります。",
     "adoptInto": "選んだバグの追加先",
     "adoptingInto": "選んだバグは {container} に追加されます",
+    "huntIn": "探索するサービス",
+    "huntingIn": "{container} にリンクされたリポジトリを探索します。選んだバグもそこに追加されます。",
     "run": "ハント",
     "running": "ボードを読み取り、見つかったものを評価しています…",
     "huntFailed": "ハントに失敗しました",
@@ -4656,6 +4846,7 @@
     "noCandidates": "このボードには条件に合う未割り当ての未解決バグがありません。",
     "ratings": "影響度 {impact}/5、複雑さ {complexity}/5、確信度 {confidence}",
     "viaModel": "{model} による評価です。",
+    "scannedBoard": "{board} を走査しました。",
     "truncated": "一致したバグのうち最初の {count} 件のみを走査しました。このボードにはさらにあります。",
     "comments": "コメント {count} 件 | コメント {count} 件",
     "confidence": {
@@ -4669,6 +4860,10 @@
       "failed": "評価を完了できなかったため、未評価のまま表示しています。",
       "over_budget": "このワークスペースは利用予算を超えているため、評価は行われませんでした。",
       "empty": "評価する対象がありません。"
+    },
+    "refusal": {
+      "boardFromService": "このトラッカーは選択したサービスにリンクされたリポジトリを走査するため、独自のボードはありません。",
+      "missingBoard": "調査するボードを選択してください。"
     }
   },
   "pipeline": {
@@ -4739,6 +4934,7 @@
       "purposeUnrecognized": "認識できません ({purpose})",
       "purposeOption": {
         "build": "開発",
+        "bugfix": "バグ修正",
         "document": "ドキュメント",
         "review": "レビュー",
         "research": "調査",
@@ -4807,7 +5003,7 @@
       "skillNoneAvailable": "利用できるスキルがありません。アカウント設定でスキルソースをリンクしてください。",
       "skillMissing": "このスキルはカタログに存在しません。別のスキルを選んでください。",
       "skillNeedsPick": "Skill ステップを保存するにはスキルの選択が必要です。",
-      "purposeStepsConflict": "この目的はコードを書かず、テストも実行しませんが、パイプラインには実装またはテストのステップが残っています。それらを削除するか、目的を「開発」に切り替えてください。",
+      "purposeStepsConflict": "この目的はコードを書かず、テストも実行しませんが、パイプラインには実装またはテストのステップが残っています。それらを削除するか、コードを提供する目的（「開発」または「バグ修正」）に切り替えてください。",
       "promptEditTooltip": "このエージェントのシステムプロンプトを編集",
       "promptEditedTooltip": "このエージェントのシステムプロンプトは、このワークスペース用に編集されています",
       "consensusGroups": "コンセンサスグループ",
@@ -4846,6 +5042,8 @@
       "binaryOutputMediaTypeUnusable": "メディアタイプではないため保存されませんでした: {entries}。それぞれ type/subtype の形で入力してください。",
       "binaryOutputGeneratorMissing": "このデプロイメントは次の生成統合を登録していません: {ids}。これらはこのワークスペースではなくデプロイメントのコードで登録します。",
       "binaryOutputGeneratorOverlap": "選択された統合のうち複数が同じコンテンツタイプを生成します（{overlaps}）。それ自体は問題ありませんが、どれを呼び出すかをコンテンツタイプが決められなくなります。このステップのプロンプトで、どれを何に使うかを指定してください。指定がなければエージェントは一つを選び、そのまま使い続けます。",
+      "binaryOutputGeneratorVia": "{harness} 経由",
+      "binaryOutputGeneratorHarness": "これらの連携は API ではなくエージェント CLI が生成します（{generators}）。そのため、このステップはその CLI で動作するモデルでのみ機能します。別のモデルで実行しようとすると、開始時に拒否されます。",
       "binaryOutputModalityUncovered": "このステップが提供することになっている {modalities} を、選択されたどの統合も生成できません。",
       "binaryOutputModalityRetired": "{modality}（現在は提供されていません。このステップのコンテンツ種別を選び直してください）",
       "binaryOutputModality": {
@@ -4873,6 +5071,9 @@
       "binaryCapabilityUnknown": "{capability}（このデプロイでは定義されていない機能）",
       "binaryCapabilityUnsupported": "このステップの生成オプションが要求する {capabilities} に対応した連携が選択されていません。オプションを外すか、その機能を宣言している連携を選択してください。",
       "binaryCapabilityUnverifiable": "選択された連携のどれも {capabilities} への対応を宣言していませんが、そのうち一つは機能を一切宣言していないため確認できませんでした。ステップは開始されます。連携の API で確認してください。",
+      "binaryOptionValueUnaccepted": "選択したどの連携先も {requested} という{option}を受け付けません。全体で受け付けられるのは {accepted} です。これらのいずれかを指定するか、この値を生成できる連携先を選択してください。",
+      "binaryOptionValuePartial": "{generators} は {option} の {requested} を受け付けませんが、選択済みの別の連携先は受け付けます。ステップは開始します。このオプションは受け付ける連携先にのみ送るか、受け付けない連携先を選択から外してください。",
+      "binaryOptionValueUnverifiable": "選択した連携先の一つは受け付ける値を明示しており、このステップが求める値（{options}）を受け付けません。一方で値を明示していない連携先もあるため、判定できませんでした。ステップは開始しますが、対応できるのは一部の連携先だけです。",
       "binaryReferenceImages": "参照画像",
       "binaryReferenceImagesPlaceholder": "役割{'|'}場所{'|'}サービス（1行に1件）",
       "binaryReferenceImagesUnusable": "参照として保存されませんでした: {entries}。各行は 役割{'|'}場所 の形式で、役割は style / subject / composition / base のいずれかです。",
@@ -4899,7 +5100,17 @@
       "binaryComparison": "納品前に候補を比較する",
       "binaryPerGenerator": "連携ごとの候補数",
       "binaryMultiSelect": "複数を残せるようにする",
-      "binaryComparisonUnreachable": "このステップは対象ごとに候補を1つしか作れないため、比較するものがなく、その1つが確認なしで採用されます。2つ目の連携を選ぶか、連携ごとの候補数を増やしてください。"
+      "binaryComparisonUnreachable": "このステップは対象ごとに候補を1つしか作れないため、比較するものがなく、その1つが確認なしで採用されます。2つ目の連携を選ぶか、連携ごとの候補数を増やしてください。",
+      "scopeDefault": {
+        "interactive": "アプリ内の既定",
+        "interactiveHint": "ボードから開始したタスクが自身のパイプラインを指定していないときに実行するもの。",
+        "unattended": "無人実行の既定",
+        "unattendedHint": "誰も見ていない実行（API・チケット・スケジュール）でタスクがパイプラインを指定していないときに実行するもの。",
+        "claimInteractive": "アプリ内の既定にする",
+        "releaseInteractive": "アプリ内の既定を解除",
+        "claimUnattended": "無人実行の既定にする",
+        "releaseUnattended": "無人実行の既定を解除"
+      }
     },
     "progress": {
       "status": {
@@ -5347,6 +5558,17 @@
       "reReview": "要件を再レビューできませんでした",
       "proceed": "続行できませんでした",
       "resolveReview": "レビューを解決できませんでした"
+    },
+    "findingClass": {
+      "judgement": "あなたの判断が必要",
+      "judgementHint": "ビジネス・プロダクト・ドメインの判断、またはレビュアーが知らされていない情報です。あなたしか決められません。",
+      "practice": "一般的な実践で回答可能",
+      "practiceHint": "確立された実践、すでに使っている技術スタック、提供済みの文脈で決まります。あらかじめ入力済みで、そのままでも変更しても構いません。"
+    },
+    "confidence": {
+      "high": "確信度: 高",
+      "medium": "確信度: 中",
+      "low": "確信度: 低"
     }
   },
   "clarity": {
@@ -5920,6 +6142,31 @@
       "gap": {
         "no_visual_step": "このパイプラインには画面を取得する工程がないため、見るものはありません。",
         "none_captured": "画面を取得する予定でしたが、ビューは取得されませんでした。"
+      }
+    },
+    "environments": {
+      "title": "稼働中の環境",
+      "open": "稼働中の環境を開く",
+      "retained": "この環境は実行の終了後も残るように設定されています。",
+      "expires": "{date} に期限切れ",
+      "expired": "{date} に期限切れ",
+      "state": {
+        "live": "稼働中",
+        "provisioning": "起動中",
+        "failed": "起動できませんでした",
+        "reclaiming": "破棄中",
+        "reclaimed": "破棄済み",
+        "expired": "期限切れ"
+      },
+      "origin": {
+        "deployer": "この実行が用意した環境",
+        "human_test": "手動テスト用に用意した環境",
+        "projected": "実行がまだ続いているため、この内容は変わる可能性があります"
+      },
+      "gap": {
+        "no_environment_step": "このパイプラインには環境を用意する処理がないため、開けるものはありません。",
+        "not_provisioned": "環境が用意されるはずですが、まだ何も記録されていません。",
+        "infraless": "このサービスは独自の環境を宣言していないため、何も用意されていません。"
       }
     },
     "checks": {
@@ -6641,6 +6888,7 @@
       "workspaceDefaultCaption": "このタスクが独自のポリシーを選んでいないため、これが適用されます。",
       "noneHint": "リスクポリシーが設定されていません。すべてのプルリクエストは人のレビューを待ちます。",
       "refused": {
+        "relaxes_run_oversight": "あなたのロールでは選択できません: このポリシーでは、実行が人の判断を待たずに自身のレビュー確認を自分で処理します。ワークスペース管理者が変更できます。",
         "relaxes_role_sandbox": "あなたのロールでは選べません。このタスクの実行はサンドボックスで動作しますが、このポリシーではマージが許可されます。ワークスペース管理者が変更できます。",
         "relaxes_role_submission_allowlist": "あなたのロールでは選べません。このポリシーでは、このタスクで許可されていない種類の変更もマージできてしまいます。ワークスペース管理者が変更できます。",
         "relaxes_role_class_rule": "あなたのロールでは選べません。このポリシーは、このタスクであなたのレビューが必要な変更を自動マージします。ワークスペース管理者が変更できます。"

@@ -1,5 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { type OtelConfig, createPinoLogger, getLogSink, setLogSink } from '@cat-factory/server'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import {
+  type OtelConfig,
+  createPinoLogger,
+  getLogSink,
+  setLogLevel,
+  setLogSink,
+} from '@cat-factory/server'
 import {
   flushOtelLogsForIsolate,
   installOtelLogSink,
@@ -33,7 +39,16 @@ function capturingFetch(): { urls: string[]; bodies: string[]; fetchImpl: typeof
   return { urls, bodies, fetchImpl }
 }
 
-afterEach(() => setLogSink(null))
+// This file is the exception to the suite-wide `setLogLevel('silent')` in `test/setup/silenceLogs.ts`:
+// the sink sits BEHIND the same level gate the console destination does (one dial, not two), so a
+// silenced suite would have this assert on a line that was never emitted — and it would have passed
+// vacuously if it asserted the absence of anything instead. Raise the gate for the duration, and put
+// it back so no later file inherits a chatty logger from this one.
+beforeEach(() => setLogLevel('info'))
+afterEach(() => {
+  setLogSink(null)
+  setLogLevel('silent')
+})
 
 describe('Worker facade: OTLP log export wiring', () => {
   it('installs the sink for the isolate and flushes what it accumulated', async () => {

@@ -22,7 +22,7 @@ import type {
   PlatformAlertSink,
   PlatformFailedRunRef,
 } from '@cat-factory/kernel'
-import { describeError, noopLogger, runBestEffort } from '@cat-factory/kernel'
+import { describeError, getErrorMessage, noopLogger, runBestEffort } from '@cat-factory/kernel'
 import { sweepHealth } from '../observability/sweepHealth.js'
 
 // Runtime-neutral platform-health ALERT sweep — the push counterpart to the operator dashboard
@@ -229,7 +229,7 @@ export async function sweepPlatformHealth(
       logger?.warn('platform-health: failed to evaluate account', {
         scope: 'platform-health',
         accountId,
-        err: err instanceof Error ? err.message : String(err),
+        err: getErrorMessage(err),
       })
     }
   }

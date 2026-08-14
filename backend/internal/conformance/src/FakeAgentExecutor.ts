@@ -51,6 +51,20 @@ export interface FakeAgentOptions {
   pollFailCause?: HarnessFailureCause
   /** The extended `detail` a {@link pollFailKinds} poll reports. Default a phase-timing breadcrumb. */
   pollFailDetail?: string
+  /**
+   * Fail only the FIRST job of each {@link pollFailKinds} kind IN EACH RUN; a later job of that
+   * kind runs normally, and a re-poll of the job that failed keeps failing (a failed job in
+   * production does not heal). What a RECOVERABLE failure cause needs in order to be asserted at
+   * all: with the default (fail forever) a recovery loop is indistinguishable from no recovery,
+   * since both end in a failed run.
+   *
+   * It only measures the recovery when the re-dispatch mints a NEW job id, which is why the
+   * recovery suites pair it with {@link pooledContainer}: that is the mode whose ids come off the
+   * run's dispatch epoch, exactly as the container executor's do. Under the default per-(run, step)
+   * id a re-dispatch re-attaches to the same job, so the assertion would pass just as well against
+   * an engine re-dispatching under a stale id, which is a bug this repo has shipped before.
+   */
+  pollFailOnce?: boolean
   /** Token usage reported per call, so the spend safeguard can be exercised. */
   usage?: { inputTokens: number; outputTokens: number }
   /**
@@ -154,6 +168,13 @@ export interface FakeAgentOptions {
    * silently treated as a perfect pass — the bug where a truncated reviewer showed 100%.
    */
   companionMalformed?: boolean
+  /**
+   * When true, the point every companion raises is graded `blocker` (a must-fix) rather than the
+   * ordinary `major`. Combined with a PASSING `companionRating` it produces the verdict a rating
+   * alone cannot express — work that scored above its bar and still contains something the
+   * reviewer says must not ship — which is what the engine's blocking-findings rule exists for.
+   */
+  companionBlockingFinding?: boolean
   /**
    * The assessment the `merger` step reports. When omitted, the fake derives one
    * from `confidence` so existing tests keep their semantics: high confidence
@@ -428,21 +449,52 @@ export class FakeAgentExecutor implements AgentExecutor {
         ? (seq[Math.min(this.companionCalls, seq.length - 1)] ?? 1)
         : (this.options.companionRating ?? 1)
       this.companionCalls += 1
-      // A downrating critic also returns anchor-based per-item comments (the shape the
-      // real Spec Reviewer emits: `{anchorId, body}`, with NO `quotedSource`). Emitting
-      // them here exercises the actual `companionAssessmentSchema`/`stepReviewCommentSchema`
-      // parse the engine runs — guarding the regression where an anchor-only comment made
-      // the verdict unparseable and the rating silently defaulted to a passing 1.
+      // A critic with something to say returns anchor-based per-item comments (the shape the real
+      // Spec Reviewer emits: `{anchorId, severity, body}`, with NO `quotedSource`). Emitting them
+      // here exercises the actual `companionAssessmentSchema`/`stepReviewCommentSchema` parse the
+      // engine runs — guarding the regression where an anchor-only comment made the verdict
+      // unparseable and the rating silently defaulted to a passing 1.
+      //
+      // A BLOCKING finding is emitted on demand rather than derived from the rating, because the
+      // pair the engine has to tell apart is exactly "cleared the bar with a must-fix open" vs
+      // "cleared the bar with a nit": tying severity to the rating would make that unreachable.
+      const blocking = this.options.companionBlockingFinding
       const comments =
-        rating < 1 ? [{ anchorId: `${context.agentKind}-1`, body: 'address this gap' }] : undefined
+        rating < 1 || blocking
+          ? [
+              {
+                anchorId: `${context.agentKind}-1`,
+                severity: blocking ? 'blocker' : 'major',
+                // Markdown, with the bolded short title the shipped prompt asks each finding to
+                // open with: the panel renders a finding through the same reader as the summary,
+                // and a fake writing flat text cannot tell a panel that renders it from one that
+                // dumps it (the e2e rework-loop spec asserts the rendered `<strong>`).
+                body: '**The gap**: address this gap in the next pass.',
+              },
+            ]
+          : undefined
       // The spec-companion corroborates the writer's business-vs-technical determination
       // when configured, so the engine's `technical`-label inference can be exercised.
       const corroborated =
         context.agentKind === 'spec-companion' ? this.options.technicalCorroborated : undefined
+      // The summary is a VERDICT and never a restatement of the findings, which is what the
+      // shipped companion prompt asks for (see `REVIEW_FINDINGS_LAYOUT`): the points live in
+      // `comments`, and the panel renders both. A fake that answered in one flat paragraph
+      // carrying its own points could not tell those two renderings apart.
+      //
+      // It carries the INLINE MARKDOWN that prompt asks a verdict to use for identifiers, because
+      // the summary goes through the same reader the findings do and nothing else asserts that it
+      // does (the e2e rework-loop spec asserts the rendered `<code>`). Its own markdown used to be
+      // the `**Must fix**` group headings, and dropping those left the summary rendering untested.
+      const summary =
+        `[${context.agentKind}] rated ${(rating * 100).toFixed(0)}%` +
+        (comments
+          ? '\n\nThe work is broadly sound; one point in `handler.ts` is worth taking further.'
+          : '')
       return {
         output: JSON.stringify({
           rating,
-          summary: `[${context.agentKind}] rated ${(rating * 100).toFixed(0)}%`,
+          summary: summary.trimEnd(),
           ...(comments ? { comments } : {}),
           ...(corroborated !== undefined ? { technicalCorroborated: corroborated } : {}),
         }),
@@ -765,6 +817,14 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
   private readonly pollFailKinds: ReadonlySet<AgentKind>
   private readonly pollFailCause: HarnessFailureCause
   private readonly pollFailDetail: string
+  private readonly pollFailOnce: boolean
+  /**
+   * Which JOB owns the one scripted {@link pollFailOnce} failure, per (execution, kind). Keyed on
+   * the run rather than the kind alone because one executor serves every execution in a suite, so a
+   * kind-keyed set would silently let a second run's step of the same kind sail through; keyed on
+   * the job so a re-poll of the job that failed stays failed while a NEW job of that kind runs.
+   */
+  private readonly pollFailedJobs = new Map<string, string>()
   protected readonly followUpItems: FakeAgentOptions['followUps']
   /** The tool-server record every dispatch's handle carries, if the suite set one. */
   protected readonly toolServers: FakeAgentOptions['toolServers']
@@ -782,6 +842,7 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     this.pollFailDetail =
       options.pollFailDetail ??
       'Phase timings: clone=2s, agent=600s. last completed tool bash 600s ago.'
+    this.pollFailOnce = options.pollFailOnce ?? false
     this.followUpItems = options.followUps
     this.toolServers = options.toolServers
   }
@@ -842,6 +903,23 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     for (const id of this.jobs.keys()) if (id.startsWith(prefix)) this.jobs.delete(id)
   }
 
+  /**
+   * Whether THIS poll reports the scripted failure for a {@link FakeAgentOptions.pollFailKinds}
+   * kind. Without `pollFailOnce` every poll does. With it, the failure belongs to ONE job per
+   * (execution, kind): that job keeps reporting it however often the driver re-polls, and any later
+   * job of the same kind (the recovery's re-dispatch, under a fresh id) runs normally.
+   */
+  private failsThisPoll(context: AgentRunContext, handle: AgentJobHandle): boolean {
+    if (!this.pollFailOnce) return true
+    const key = `${context.executionId ?? 'noexec'}:${context.agentKind}`
+    const owner = this.pollFailedJobs.get(key)
+    if (owner === undefined) {
+      this.pollFailedJobs.set(key, handle.jobId)
+      return true
+    }
+    return owner === handle.jobId
+  }
+
   async pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate> {
     const job = this.jobs.get(handle.jobId)
     // An unknown job id (e.g. polled after a result was already recorded) is treated as
@@ -849,7 +927,7 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     if (!job) return { state: 'done', result: { output: '[async] done', model: 'fake' } }
     // Report a structured-cause failure (the deterministic analogue of the harness's failed
     // job view) so the engine's cause → AgentFailureKind mapping is exercised on both runtimes.
-    if (this.pollFailKinds.has(job.context.agentKind)) {
+    if (this.pollFailKinds.has(job.context.agentKind) && this.failsThisPoll(job.context, handle)) {
       return {
         state: 'failed',
         error: 'Aborted: no agent activity for 600s (likely hung in agent phase)',

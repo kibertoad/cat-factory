@@ -98,7 +98,12 @@ export type {
   ModelRef,
   ModelScope,
 } from './model-provider.js'
-export { inlineModelRef, resolveScopedModelProvider } from './model-provider.js'
+export {
+  HARNESS_KINDS,
+  inlineModelRef,
+  isHarnessKind,
+  resolveScopedModelProvider,
+} from './model-provider.js'
 export type {
   TokenUsageRecord,
   ScopedSpendWindow,
@@ -212,6 +217,7 @@ export type {
   AgentRunResult,
   AgentTokenUsage,
   AsyncAgentExecutor,
+  ReviewedPoint,
 } from './agent-executor.js'
 export { isAsyncAgentExecutor } from './agent-executor.js'
 export type {
@@ -447,6 +453,7 @@ export type {
   BudgetLimitCacheValue,
   CachedRepoRead,
   GroupCacheHandle,
+  LocalModelDeclarationsCacheValue,
   ModelPresetCacheValue,
   ResolvedFoundationalService,
   RiskPolicyCacheValue,
@@ -454,7 +461,11 @@ export type {
   WorkspaceAccessCacheValue,
   WorkspaceSettingsCacheValue,
 } from './caching.js'
-export { readCachedWorkspaceSettings, repoFilesCacheGroup } from './caching.js'
+export {
+  readCachedLocalModelDeclarations,
+  readCachedWorkspaceSettings,
+  repoFilesCacheGroup,
+} from './caching.js'
 export type {
   SelectableFragment,
   FragmentSelectionContext,
@@ -594,7 +605,7 @@ export type {
   RunnerTransport,
   RunnerValidationReport,
 } from './runner-transport.js'
-export { CONTAINER_EVICTION_ERROR } from './runner-transport.js'
+export { CONTAINER_EVICTION_ERROR, HARNESS_SHUTDOWN_ERROR } from './runner-transport.js'
 export type { PreviewRef, PreviewTransport, PreviewView } from './preview-transport.js'
 export { PREVIEW_HARNESS_JOB_ID, PREVIEW_PROVISION_TYPE } from './preview-transport.js'
 export type {
@@ -774,7 +785,13 @@ export type {
   SlackSettingsRepository,
   SlackMemberMappingRepository,
 } from './slack-repositories.js'
-export type { RiskPolicyRepository } from './risk-policy-repositories.js'
+export type {
+  AccountRiskPolicy,
+  AccountRiskPolicyRepository,
+  RiskPolicyRepository,
+  RiskPolicySuppressionRepository,
+  WorkspaceRiskPolicyReader,
+} from './risk-policy-repositories.js'
 export type {
   MergeTrackRecordRepository,
   MergeTrackRecordPatch,
@@ -796,7 +813,10 @@ export type { WorkspaceAgentSettingsRepository } from './agent-settings-reposito
 export type { TaskTypeSuppressionRepository } from './task-type-repositories.js'
 export type { ServiceFragmentDefaultsRepository } from './service-fragment-default-repositories.js'
 export type { DueSchedule, PipelineScheduleRepository } from './recurring-repositories.js'
-export type { TrackerSettingsRepository } from './tracker-settings-repositories.js'
+export type {
+  TrackerSettingsPatch,
+  TrackerSettingsRepository,
+} from './tracker-settings-repositories.js'
 export type { CreateTicketRequest, CreatedTicket, TicketTrackerProvider } from './ticket-tracker.js'
 export type {
   IssueWritebackProvider,

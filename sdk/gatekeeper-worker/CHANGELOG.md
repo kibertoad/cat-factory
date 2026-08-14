@@ -1,5 +1,255 @@
 # @cat-factory/gatekeeper-worker
 
+## 0.6.18
+
+### Patch Changes
+
+- Updated dependencies [0ef48d1]
+  - @cat-factory/sdk@0.42.0
+  - @cat-factory/gatekeeper-bindings@0.24.0
+
+## 0.6.17
+
+### Patch Changes
+
+- d5c1f1c: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with (`ai@7.0.64`,
+  `@ai-sdk/openai@4.0.41`, `@ai-sdk/amazon-bedrock@5.0.55`). The Cloudflare toolchain moves
+  together again: `wrangler@4.122.0` and `@cloudflare/vitest-pool-workers@0.21.2`, whose bundled
+  wrangler tracks it. `@aws-sdk/client-s3` goes to 3.1109.0 and the SPA's store engine to
+  `pinia@4.0.3` / `@pinia/nuxt@1.0.2`.
+
+  `capnweb` moves 0.10.0 to 0.11.0 in the Gatekeeper Worker. The release is additive (stubs as
+  stream chunks, exact ArrayBuffer/DataView serialization, URL over RPC) and touches neither
+  `RpcTarget` nor `newWorkersRpcResponse`, the only two symbols we import. Its 0.11.1 patch, which
+  enforces an ASCII-only dist bundle so a consumer's `btoa()` cannot choke on the runtime, missed
+  the release-age window by two hours and is the first thing the next sweep should pick up.
+
+  Held back deliberately: `@changesets/cli` 3.0.0 and, in the frontend, `typescript` 7 (Nuxt 4.5.2
+  itself depends on `typescript@6.0.3`). No `minimumReleaseAgeExclude` entries were added: every
+  version above already satisfies the gate.
+
+  - @cat-factory/sdk@0.41.0
+
+## 0.6.16
+
+### Patch Changes
+
+- Updated dependencies [7312e0a]
+  - @cat-factory/sdk@0.41.0
+  - @cat-factory/gatekeeper-bindings@0.23.0
+
+## 0.6.15
+
+### Patch Changes
+
+- 792ecde: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with (`ai@7.0.62`,
+  `@ai-sdk/anthropic@4.0.38` / `openai@4.0.40` / `openai-compatible@3.0.30` /
+  `amazon-bedrock@5.0.54`). The Cloudflare toolchain moves together: `wrangler@4.121.0`,
+  `@cloudflare/workers-types@5.20260812.1` and `@cloudflare/vitest-pool-workers@0.21.1`, whose only
+  change over 0.20.3 is the wrangler and miniflare it bundles, so the pool now carries the same
+  wrangler the workspace declares instead of one release behind it.
+
+  `esbuild` gains three scoped `pnpm-workspace.yaml` overrides pinning vite's, tsx's and nitropack's
+  loose ranges to the 0.28.1 that wrangler and `@cloudflare/vitest-pool-workers` pin exactly. Without
+  them a re-resolve hands vite's optional PEER slot the newer 0.28.2 and the tree gains a second
+  esbuild; because pnpm resolves an auto-installed peer without its own `optionalDependencies`, that
+  copy never gets its platform binary and esbuild's postinstall aborts the entire install. The
+  overrides are deliberately scoped rather than top-level: `drizzle-kit`, `@intlify/bundle-utils` and
+  `fontless` declare narrower ranges that a blanket pin would force them out of.
+
+  Held back deliberately: `@changesets/cli` 3.0.0 and, in the frontend, `typescript` 7 (Nuxt 4.5.2
+  itself depends on `typescript@6.0.3`). No `minimumReleaseAgeExclude` entries were added: every
+  version above already satisfies the gate.
+
+## 0.6.14
+
+### Patch Changes
+
+- Updated dependencies [36e0c9b]
+  - @cat-factory/sdk@0.40.0
+  - @cat-factory/gatekeeper-bindings@0.22.0
+
+## 0.6.13
+
+### Patch Changes
+
+- Updated dependencies [1a0b593]
+  - @cat-factory/sdk@0.39.0
+  - @cat-factory/gatekeeper-bindings@0.21.0
+
+## 0.6.12
+
+### Patch Changes
+
+- Updated dependencies [fc4a1e4]
+  - @cat-factory/sdk@0.38.0
+  - @cat-factory/gatekeeper-bindings@0.20.0
+
+## 0.6.11
+
+### Patch Changes
+
+- Updated dependencies [ee733ee]
+  - @cat-factory/sdk@0.37.0
+  - @cat-factory/gatekeeper-bindings@0.19.0
+
+## 0.6.10
+
+### Patch Changes
+
+- Updated dependencies [01086d8]
+  - @cat-factory/sdk@0.36.1
+  - @cat-factory/gatekeeper-bindings@0.18.1
+
+## 0.6.9
+
+### Patch Changes
+
+- Updated dependencies [195b248]
+  - @cat-factory/sdk@0.36.0
+  - @cat-factory/gatekeeper-bindings@0.18.0
+
+## 0.6.8
+
+### Patch Changes
+
+- Updated dependencies [bc2478d]
+  - @cat-factory/sdk@0.35.0
+  - @cat-factory/gatekeeper-bindings@0.17.0
+
+## 0.6.7
+
+### Patch Changes
+
+- Updated dependencies [7893f35]
+  - @cat-factory/sdk@0.34.0
+  - @cat-factory/gatekeeper-bindings@0.16.0
+
+## 0.6.6
+
+### Patch Changes
+
+- Updated dependencies [07ff467]
+  - @cat-factory/sdk@0.33.0
+  - @cat-factory/gatekeeper-bindings@0.15.0
+
+## 0.6.5
+
+### Patch Changes
+
+- Updated dependencies [b25732f]
+  - @cat-factory/sdk@0.32.0
+  - @cat-factory/gatekeeper-bindings@0.14.0
+
+## 0.6.4
+
+### Patch Changes
+
+- Updated dependencies [2428b6b]
+  - @cat-factory/gatekeeper-bindings@0.13.0
+  - @cat-factory/sdk@0.31.0
+
+## 0.6.3
+
+### Patch Changes
+
+- Updated dependencies [3ff215a]
+  - @cat-factory/sdk@0.30.1
+  - @cat-factory/gatekeeper-bindings@0.12.1
+
+## 0.6.2
+
+### Patch Changes
+
+- 6fcd58e: Drive this Worker's object model with a real Cloudflare OS, and fix what that found.
+
+  **A deployment must set the `allow_irrevocable_stub_storage` compatibility flag.** `createAccount()`
+  hands the workspace a stub it PERSISTS, and workerd refuses to store a stub whose target Worker has
+  not opted in, so without the flag a perfectly bound, perfectly configured Gatekeeper is discovered
+  and then fails on the first account anyone connects. `deploy/gatekeeper/wrangler.toml` now carries
+  it, and a deployment that copied the template earlier has to add it by hand. It is not something
+  `GET /health` can report, because a Worker cannot read its own compatibility flags; every gatekeeper
+  in the Cloudflare OS repository carries it for the same reason, and a `/rpc`-only deployment pays
+  nothing for it.
+
+  The leg that found it is `test/os-live/`, run nightly against a pinned partner commit
+  (`GATEKEEPER_OS_REF`) in a workflow of its own, so a change on their side can never block a merge
+  here. Cloudflare OS's own integration toolkit boots the real `workshop-backend` beside this Worker
+  under wrangler's test harness, which is the only thing that can exercise the three seams a hermetic
+  suite structurally cannot: the entrypoint NAMES the workspace resolves and never asks this package
+  about, the stubs handed over (the persisted account, and a Durable Object class only the workspace's
+  machinery can instantiate), and the transcribed protocol in `src/os/protocol.ts`, where a shape that
+  has fallen behind still compiles here and fails there. Nothing about the Worker is re-composed for
+  it: the harness boots `test/wrangler.jsonc`, the same file the other two suites use, which is why
+  that file is now JSONC rather than TOML.
+
+  No behaviour change in the package itself. The transcribed protocol was diffed against the published
+  source and is accurate; the three places it is narrower than the contract are now named at the top of
+  the file, so the next reader making that comparison does not re-derive it.
+
+## 0.6.1
+
+### Patch Changes
+
+- Updated dependencies [83764b5]
+  - @cat-factory/sdk@0.30.0
+  - @cat-factory/gatekeeper-bindings@0.12.0
+
+## 0.6.0
+
+### Minor Changes
+
+- 131474a: Push approval cards and run events to a Cloudflare OS workspace through the contract's hook
+  lifecycle, verify a share instead of refusing it, and check a call's arguments against what the
+  operation declares.
+
+  Sessions gain `approvals_subscribe(callback)`, `runs_subscribe(callback)` and `hooks_bound()`. A
+  bind hands the workspace a `CatFactoryHookController` (a fifth named export the deployment's entry
+  module must carry) and stores nothing until the workspace enables it; each delivery then asks for a
+  fresh callback and is authorized as an observation before it is pushed. A hook is an accelerator
+  over `approvals_list()` and `runs_watched()`, which stay the truth: the live half of a registration
+  is a stub and cannot be stored, so a push that finds none counts a `missed` on the record rather
+  than passing over it, and `hooks_bound()` publishes that beside `live`.
+
+  A registration is identified by WHERE its deliveries land rather than by the id one bind minted, so
+  re-binding after an eviction (the documented remedy for a hook gone quiet) re-arms the same hook
+  and carries its counters over instead of leaving a dead row behind for good. The fan-out runs
+  behind the delivery's acknowledgement with a deadline per push, so a workspace that hangs cannot
+  spend the platform's retry budget on a write that already committed. Each push reports an outcome
+  that is folded onto the record as it stands afterwards, because a push awaits a call into another
+  Worker and the durable object's input gate is open across it. And a terminal run event pushes the
+  cards it SETTLED alongside the run itself, so a card-subscribed gadget stops showing decisions
+  nobody can answer.
+
+  `addObserver` now admits a share when the observer's own account tier reaches everything the bound
+  tier reaches and masks no more, and refuses while the bound tier can read a telemetry sink. The
+  observer must hold an account this deployment minted, checked before any tier is resolved: an
+  unknown id resolves to the auto-provisioned tier, which is the tier nearly every account here
+  holds, so a viewer connected to another vendor would otherwise measure up as identical to the
+  owner. The `/rpc` door serves no hooks (it has no approval queue to register one with) and says so.
+
+  Three behaviour changes to know about. `GET /health` answers a new `os.limitations` array beside
+  `os.blockers`, carrying what a workspace could install and would find missing: a deployment that
+  does not export `CatFactoryHookController` stays discoverable and refuses hooks. An argument an
+  operation does not declare is now a refusal on both doors rather than a value dropped on the way
+  through, which is a break for any caller that was sending one; the refusal names what the operation
+  does take. And the `/webhook` 202 reports what it DISPATCHED (`hooks: { pushes, topics }`) rather
+  than what it delivered, because the fan-out no longer runs in front of the acknowledgement and a
+  count of pushes nobody has made yet is indistinguishable from a push every hook refused; the
+  per-hook counts are on `hooks_bound()`, where they always were.
+
+### Patch Changes
+
+- Updated dependencies [bf473bd]
+  - @cat-factory/sdk@0.29.0
+  - @cat-factory/gatekeeper-bindings@0.11.0
+
 ## 0.5.0
 
 ### Minor Changes

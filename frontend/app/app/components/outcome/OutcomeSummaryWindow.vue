@@ -16,9 +16,12 @@
 // judged against, which turns the tester's requirement IDS into the TITLES a reader came for.
 import { computed, onUnmounted, ref, watch } from 'vue'
 import type {
+  EnvironmentsGap,
   OutcomeCheckKind,
   OutcomeCheckState,
   OutcomeDisposition,
+  OutcomeEnvironmentOrigin,
+  OutcomeEnvironmentState,
   OutcomeSource,
   OutcomeSpecJoin,
   OutcomeVisual,
@@ -35,6 +38,8 @@ import { REPRODUCTION_STATUS_KEYS } from '~/utils/reproduction'
 import type { RequirementVerdictStatus, TestConcernSeverity } from '~/types/domain'
 import type { TestEnvironment } from '@cat-factory/contracts'
 import { useArtifactBlobs } from '~/composables/useArtifactBlobs'
+import { useNowTick } from '~/composables/useStepTimer'
+import { readEnvironmentAgainstClock } from '~/components/outcome/OutcomeSummaryWindow.logic'
 import ArtifactLightbox from '~/components/media/ArtifactLightbox.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
@@ -46,7 +51,12 @@ const documents = useDocumentsStore()
 const execution = useExecutionStore()
 const serviceSpec = useServiceSpecStore()
 const ui = useUiStore()
-const { t } = useI18n()
+const { t, d } = useI18n()
+
+// The wall clock this card reads a TTL against. Coarse on purpose: an environment's expiry is
+// the only thing here that moves with time, and a per-second tick would re-render the whole card
+// for a boundary that matters at minute granularity.
+const nowTick = useNowTick(30_000)
 
 // Per-window blob cache for the captured views; revoked on unmount so the (large) image bytes
 // don't outlive the card.
@@ -135,6 +145,38 @@ const TESTS_GAP_KEYS: Record<TestsGap, string> = {
 const SOURCES_GAP_KEYS: Record<SourcesGap, string> = {
   run_unavailable: RUN_UNAVAILABLE_KEY,
   none_linked: 'outcome.sources.gap.none_linked',
+}
+const ENVIRONMENTS_GAP_KEYS: Record<EnvironmentsGap, string> = {
+  run_unavailable: RUN_UNAVAILABLE_KEY,
+  no_environment_step: 'outcome.environments.gap.no_environment_step',
+  not_provisioned: 'outcome.environments.gap.not_provisioned',
+  infraless: 'outcome.environments.gap.infraless',
+}
+const ENVIRONMENT_STATE_KEYS: Record<OutcomeEnvironmentState, string> = {
+  live: 'outcome.environments.state.live',
+  provisioning: 'outcome.environments.state.provisioning',
+  failed: 'outcome.environments.state.failed',
+  reclaiming: 'outcome.environments.state.reclaiming',
+  reclaimed: 'outcome.environments.state.reclaimed',
+  expired: 'outcome.environments.state.expired',
+}
+const ENVIRONMENT_STATE_COLOR: Record<OutcomeEnvironmentState, BadgeColor> = {
+  live: 'success',
+  provisioning: 'info',
+  failed: 'error',
+  reclaiming: 'neutral',
+  reclaimed: 'neutral',
+  expired: 'neutral',
+}
+/**
+ * Where the row came from, said out loud. `projected` is the one that changes what a reader
+ * should conclude (nothing has settled yet, so this row can still move), and the three are
+ * mapped exhaustively so a new producer cannot ship as a blank line.
+ */
+const ENVIRONMENT_ORIGIN_KEYS: Record<OutcomeEnvironmentOrigin, string> = {
+  deployer: 'outcome.environments.origin.deployer',
+  human_test: 'outcome.environments.origin.human_test',
+  projected: 'outcome.environments.origin.projected',
 }
 const VISUALS_GAP_KEYS: Record<VisualsGap, string> = {
   run_unavailable: RUN_UNAVAILABLE_KEY,
@@ -334,6 +376,28 @@ const sourceRows = computed(() => {
     ...source,
     icon: documents.descriptorForOrigin(source.origin)?.icon ?? 'i-lucide-file-text',
     revision: revisionLabel(source.freshness),
+  }))
+})
+
+/**
+ * The environments the run stood up, with everything the row needs resolved once.
+ *
+ * The TTL is applied HERE rather than in the reduction, and that division is deliberate: the
+ * payload is clock-free so the endpoint's answer and this card's live composition cannot
+ * disagree about one run, and this surface is the one with a clock to say what the instant it
+ * carries means now. The rule itself lives in `OutcomeSummaryWindow.logic.ts`, where it is
+ * asserted without mounting the card.
+ *
+ * The frame is named by its BLOCK title where the board has it. A frame id says nothing to the
+ * person this card is for, so an unresolvable one renders as no label rather than as an id.
+ */
+const environmentRows = computed(() => {
+  const environments = outcome.value?.environments
+  if (!environments || environments.status !== 'reported') return []
+  return environments.entries.map((entry, index) => ({
+    ...readEnvironmentAgainstClock(entry, nowTick.value),
+    key: `${index}:${entry.environmentId ?? entry.url ?? entry.frameId ?? 'env'}`,
+    service: entry.frameId ? (board.getBlock(entry.frameId)?.title ?? null) : null,
   }))
 })
 
@@ -679,6 +743,78 @@ function openTestReport() {
             {{ outcome.visuals.detail }}
           </p>
         </template>
+      </section>
+
+      <!-- Where to go and look: the running preview, which is the verification a person who does
+           not read diffs starts from. Beside the captured views on purpose: the shots are what
+           this run saw, this is the thing itself. -->
+      <section class="mb-5" data-testid="outcome-environments">
+        <h3 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          {{ t('outcome.environments.title') }}
+        </h3>
+        <template v-if="outcome.environments.status === 'reported'">
+          <div
+            v-for="row in environmentRows"
+            :key="row.key"
+            class="mb-2 rounded-md border border-slate-800 bg-slate-950/40 px-2.5 py-2 last:mb-0"
+            data-testid="outcome-environment"
+            :data-state="row.state"
+          >
+            <div class="flex flex-wrap items-center gap-2">
+              <UBadge :color="ENVIRONMENT_STATE_COLOR[row.state]" variant="subtle" size="sm">
+                {{ t(ENVIRONMENT_STATE_KEYS[row.state]) }}
+              </UBadge>
+              <span v-if="row.service" class="truncate text-[12px] text-slate-300">
+                {{ row.service }}
+              </span>
+              <span class="text-[11px] text-slate-500">
+                {{ t(ENVIRONMENT_ORIGIN_KEYS[row.origin]) }}
+              </span>
+            </div>
+            <UButton
+              v-if="row.openable"
+              :to="row.url ?? undefined"
+              target="_blank"
+              rel="noopener"
+              external
+              color="primary"
+              variant="soft"
+              size="xs"
+              class="mt-1.5"
+              icon="i-lucide-external-link"
+              data-testid="outcome-environment-open"
+            >
+              {{ t('outcome.environments.open') }}
+            </UButton>
+            <p
+              v-else-if="row.url"
+              class="mt-1.5 break-all text-[12px] text-slate-500"
+              data-testid="outcome-environment-url"
+            >
+              {{ row.url }}
+            </p>
+            <p v-if="row.retained" class="mt-1 text-[11px] text-slate-400">
+              {{ t('outcome.environments.retained') }}
+            </p>
+            <p v-if="row.expiresAt" class="mt-1 text-[11px] text-slate-500">
+              {{
+                row.lapsed
+                  ? t('outcome.environments.expired', { date: d(new Date(row.expiresAt), 'long') })
+                  : t('outcome.environments.expires', { date: d(new Date(row.expiresAt), 'long') })
+              }}
+            </p>
+            <p
+              v-if="row.detail"
+              class="mt-1 break-words text-[12px] leading-relaxed text-slate-500"
+              data-testid="outcome-environment-detail"
+            >
+              {{ row.detail }}
+            </p>
+          </div>
+        </template>
+        <p v-else class="text-[13px] italic leading-relaxed text-slate-500">
+          {{ t(ENVIRONMENTS_GAP_KEYS[outcome.environments.gap]) }}
+        </p>
       </section>
 
       <!-- The machine checks, listed only where one actually recorded a verdict. -->

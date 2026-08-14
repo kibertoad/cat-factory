@@ -177,6 +177,7 @@ export function toDebugRunStep(step: PipelineStep, index: number): DebugRunStep 
     outputChars: (step.output ?? '').length,
     hasStructuredResult: step.custom != null,
     evictionRecoveries: step.evictionRecoveries ?? 0,
+    branchContentionRecoveries: step.branchContentionRecoveries ?? 0,
     firstEvictionDetail: detail ? sliceText(detail, MAX_EVICTION_DETAIL_CHARS) : null,
     // Carried through on PRESENCE, never normalised to an empty record: absent means the step's
     // current attempt holds no resolution (never container-dispatched, or re-armed for a re-run and

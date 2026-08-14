@@ -12,6 +12,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { KUBERNETES_ENV_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
 import type { ConnectionTestResult } from '@cat-factory/contracts'
 import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
+import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import type { ProviderConnection } from '~/types/providerConnections'
 
@@ -45,6 +46,9 @@ const form = reactive({
   // url derivation
   urlSource: 'ingressTemplate' as 'ingressTemplate' | 'ingressStatus' | 'serviceStatus',
   hostTemplate: '',
+  // The ingress-template port, its own field because the rendered template is also the Ingress
+  // `host` a service's manifests declare, and Kubernetes rejects a `host` carrying a port.
+  ingressPort: '',
   ingressName: '',
   serviceName: '',
   servicePort: '',
@@ -54,6 +58,10 @@ const form = reactive({
   urlScheme: 'default' as 'default' | 'http' | 'https',
 })
 const apiToken = ref('')
+// Flag a bad paste on the field itself rather than leaving it to surface as an opaque probe
+// failure. Destructured at the top level so the template auto-unwraps the refs. Same rule and
+// same copy as the per-type engine form, via the shared composable.
+const { blocking: tokenBlocking, message: tokenProblem } = useServiceAccountTokenProblem(apiToken)
 
 const manifestSourceItems = computed(() => [
   { label: t('settings.providerConnection.kubernetesEnv.sourceColocated'), value: 'colocated' },
@@ -106,6 +114,7 @@ function applyUrl(k: Record<string, unknown>): void {
   if (url?.source === 'ingressTemplate') {
     form.urlSource = 'ingressTemplate'
     form.hostTemplate = readString(url.hostTemplate)
+    form.ingressPort = typeof url.port === 'number' ? String(url.port) : ''
   } else if (url?.source === 'ingressStatus') {
     form.urlSource = 'ingressStatus'
     form.ingressName = readString(url.ingressName)
@@ -149,16 +158,20 @@ const manifestSourceValid = computed(() =>
     ? repoShapeValid.value && !!form.manifestPath.trim()
     : !!form.manifestPath.trim(),
 )
-// serviceStatus.port is an optional integer 1..65535 (kubernetesUrlSourceSchema). Validate
-// it here so a decimal isn't silently dropped and an out-of-range value isn't sent then 422'd.
-const servicePortValid = computed(() => {
-  const raw = form.servicePort.trim()
-  if (!raw) return true
-  const port = Number(raw)
+// Both `ingressTemplate.port` and `serviceStatus.port` are optional integers 1..65535
+// (kubernetesUrlSourceSchema). Validate here so a decimal isn't silently dropped and an
+// out-of-range value isn't sent then 422'd.
+function portValid(raw: string): boolean {
+  const trimmed = raw.trim()
+  if (!trimmed) return true
+  const port = Number(trimmed)
   return Number.isInteger(port) && port >= 1 && port <= 65535
-})
+}
+const servicePortValid = computed(() => portValid(form.servicePort))
+const ingressPortValid = computed(() => portValid(form.ingressPort))
 const urlValid = computed(() => {
-  if (form.urlSource === 'ingressTemplate') return !!form.hostTemplate.trim()
+  if (form.urlSource === 'ingressTemplate')
+    return !!form.hostTemplate.trim() && ingressPortValid.value
   if (form.urlSource === 'serviceStatus') return !!form.serviceName.trim() && servicePortValid.value
   return true // ingressStatus has no required field
 })
@@ -168,6 +181,7 @@ const canSave = computed(
     !!form.label.trim() &&
     !!form.apiServerUrl.trim() &&
     !!apiToken.value.trim() &&
+    !tokenBlocking.value &&
     manifestSourceValid.value &&
     urlValid.value,
 )
@@ -191,6 +205,8 @@ const connectBlockedReason = computed(() => {
     missing.push(t('settings.providerConnection.kubernetesEnv.serviceName'))
   if (missing.length)
     return t('settings.providerConnection.form.missingFields', { fields: missing.join(', ') })
+  // Repeated from under the token field, so the disabled button is never left unexplained.
+  if (tokenBlocking.value) return tokenProblem.value
   return t('settings.providerConnection.kubernetesEnv.invalidFields')
 })
 
@@ -211,6 +227,8 @@ function buildUrl(): Record<string, unknown> {
   const url: Record<string, unknown> = { source: form.urlSource }
   if (form.urlSource === 'ingressTemplate') {
     url.hostTemplate = form.hostTemplate.trim()
+    const port = Number(form.ingressPort)
+    if (form.ingressPort.trim() && Number.isInteger(port)) url.port = port
   } else if (form.urlSource === 'ingressStatus') {
     if (form.ingressName.trim()) url.ingressName = form.ingressName.trim()
   } else {
@@ -273,6 +291,16 @@ function optional(label: string): string {
       :help="t('settings.providerConnection.kubernetesEnv.apiTokenHelp')"
     >
       <SecretInput v-model="apiToken" class="w-full font-mono" />
+      <!-- Rose when the paste is impossible (blocks Test/Save), amber when it is only suspicious
+           and the operator may legitimately overrule it. -->
+      <p
+        v-if="tokenProblem"
+        class="mt-1 text-[11px]"
+        :class="tokenBlocking ? 'text-rose-400' : 'text-amber-400'"
+        data-testid="service-account-token-problem"
+      >
+        {{ tokenProblem }}
+      </p>
     </UFormField>
 
     <!-- Manifest source: where the per-PR resources are read from. -->
@@ -317,6 +345,23 @@ function optional(label: string): string {
         v-model="form.hostTemplate"
         class="font-mono"
         placeholder="{{branch}}.preview.example.com"
+      />
+    </UFormField>
+
+    <!-- The host port the controller answers on, when it is not the scheme's default. Kept out of
+         the template because that value is also the Ingress `host` the manifests declare. -->
+    <UFormField
+      v-if="form.urlSource === 'ingressTemplate'"
+      :label="optional(t('settings.providerConnection.kubernetesEnv.port'))"
+      :help="t('settings.providerConnection.kubernetesEnv.ingressPortHelp')"
+    >
+      <UInput
+        v-model="form.ingressPort"
+        type="number"
+        :min="1"
+        :max="65535"
+        class="font-mono"
+        placeholder="80"
       />
     </UFormField>
 
@@ -391,7 +436,7 @@ function optional(label: string): string {
       />
     </UFormField>
 
-    <div v-if="supportsTest" class="flex items-center gap-2">
+    <div v-if="supportsTest" class="space-y-1.5">
       <UButton
         color="neutral"
         variant="soft"
@@ -403,12 +448,7 @@ function optional(label: string): string {
       >
         {{ t('settings.providerConnection.test.button') }}
       </UButton>
-      <span v-if="testResult && testResult.ok" class="text-xs text-emerald-400">
-        {{ testResult.message ?? t('settings.providerConnection.test.ok') }}
-      </span>
-      <span v-else-if="testResult" class="text-xs text-rose-400">
-        {{ testResult.message ?? t('settings.providerConnection.test.failed') }}
-      </span>
+      <ConnectionTestVerdict :result="testResult" />
     </div>
 
     <ConnectionWarnings :warnings="testResult?.warnings" />

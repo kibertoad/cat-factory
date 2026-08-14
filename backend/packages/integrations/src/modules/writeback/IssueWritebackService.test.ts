@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_TRACKER_WRITEBACK } from '@cat-factory/contracts'
 import { REVIEW_QUESTION_POST_CLAIM_TTL_MS } from '@cat-factory/kernel'
 import type {
   Block,
@@ -49,7 +50,7 @@ function settings(overrides: Partial<TrackerSettings> = {}): TrackerSettings {
 function fakeTrackerSettings(value: TrackerSettings): TrackerSettingsRepository {
   return {
     get: async () => value,
-    put: async () => {},
+    merge: async () => value,
   }
 }
 
@@ -294,6 +295,43 @@ describe('IssueWritebackService: dispatch through the source registry', () => {
 })
 
 describe('IssueWritebackService: merge writeback', () => {
+  it('comments + resolves for a workspace with NO settings row, which is the default stance', async () => {
+    // The absent row is the common case, not an edge one: nothing writes `tracker_settings` until
+    // somebody opens the panel or calls `PATCH /api/v1/tracker/writeback`, so this is what happens
+    // to every issue on a board that has configured nothing. It used to be nothing at all, and the
+    // symptom was a merged pull request beside an issue still sitting open with no explanation on
+    // it. Read from the shared constant, so a change of stance moves this test rather than being
+    // silently contradicted by it.
+    const absent: TrackerSettingsRepository = {
+      get: async () => null,
+      merge: async () => settings(),
+    }
+    const { svc, recorded } = serviceWith({
+      trackerSettingsRepository: absent,
+      taskRepository: fakeTasks([githubIssue('acme/web#3')]),
+    })
+    await svc.onPullRequestMerged('ws', block(), PR)
+    expect(DEFAULT_TRACKER_WRITEBACK.writebackResolveOnMerge).toBe(true)
+    expect(recorded.resolved).toEqual(['acme/web#3'])
+    expect(recorded.comments).toHaveLength(1)
+  })
+
+  it('still honours a per-task override that turns the default OFF', async () => {
+    // The override is the escape hatch the flipped default makes matter: a task whose ticket must
+    // stay open says so on the block, and the workspace default no longer answers for it.
+    const absent: TrackerSettingsRepository = {
+      get: async () => null,
+      merge: async () => settings(),
+    }
+    const { svc, recorded } = serviceWith({
+      trackerSettingsRepository: absent,
+      taskRepository: fakeTasks([githubIssue('acme/web#3')]),
+    })
+    await svc.onPullRequestMerged('ws', block({ trackerResolveOnMerge: 'off' }), PR)
+    expect(recorded.resolved).toEqual([])
+    expect(recorded.comments).toHaveLength(0)
+  })
+
   it('comments + resolves the issue on merge when resolveOnMerge is on', async () => {
     const { svc, recorded } = serviceWith({
       trackerSettingsRepository: fakeTrackerSettings(settings({ writebackResolveOnMerge: true })),

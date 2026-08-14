@@ -1,4 +1,5 @@
 import { sameSubtasks, type AgentJobHandle, type PipelineStep } from '@cat-factory/kernel'
+import type { DispatchToolServers } from '@cat-factory/contracts'
 import { shouldPersistActivity } from './job.logic.js'
 
 // The "fold one job update onto the step" family: the small, pure-ish mutators the poll paths
@@ -86,7 +87,7 @@ export function recordDispatchAttribution(
   // reporting. Guarded on presence rather than on content, like every other field here, so a
   // re-dispatch by an executor that wires no tool servers (the inline path picking up a step a
   // container path started) never erases the container round's record.
-  if (handle.toolServers) step.toolServers = { ...handle.toolServers, agentKind: dispatchedKind }
+  if (handle.toolServers) stampToolServers(step, handle.toolServers, dispatchedKind)
   // Order-preserving by FIRST dispatch, counting every one after it: the count is what makes a
   // gate's fourth fixer round visible, so a re-dispatch increments rather than deduplicating.
   const dispatches = step.dispatches ?? []
@@ -94,6 +95,106 @@ export function recordDispatchAttribution(
   step.dispatches = existing
     ? dispatches.map((d) => (d === existing ? { ...d, count: d.count + 1 } : d))
     : [...dispatches, { agentKind: dispatchedKind, count: 1 }]
+}
+
+/**
+ * The dispatch epoch for the NEXT job of `dispatchedKind` in this run: how many jobs of that kind
+ * the run has already dispatched (see `AgentRunContext.dispatchEpoch`). The container
+ * executor suffixes its harness job id with it, so `<runId>-<agentKind>[-epoch]` names the n-th
+ * job of that kind in the run and every dispatch gets an id of its own.
+ *
+ * That matters because the harness re-attaches to an EXISTING job id rather than re-running
+ * (replay idempotency), and a container-reusing transport — a warm local pool, a self-hosted
+ * runner pool — keeps its `JobRegistry` alive across rounds, since reclaiming a pooled member does
+ * NOT destroy it. A pool is also asked to route STICKY BY JOB ID (`runner-pool-integration.md` §7),
+ * which is right for a live job and exactly wrong afterwards. So a re-dispatch under a used id
+ * REPLAYS the earlier job's completed result: same output, same recorded usage, no model call.
+ * Every loop in the engine that re-dispatches is exposed to that, and each one it reached read
+ * either as work that "passed regardless" (the Tester re-test that never re-tested) or as a loop
+ * that could not converge (a companion re-grading a byte-identical artifact and never moving 0.76).
+ *
+ * Read off {@link recordDispatchAttribution}'s counter, which is the whole design: that is the one
+ * funnel EVERY dispatch site already calls, it counts the same `dispatchedKind` string the job id
+ * is built from, and `resetStepForRerun` deliberately never clears it. So the epoch is monotonic by
+ * construction and total over the loops: a new re-dispatching mechanism (a companion rework round,
+ * a tester quality re-run, a human's second fix request, whatever comes next) needs no counter of
+ * its own and no registration anywhere.
+ *
+ * It replaced a hand-summed list of six per-loop counters (`test.attempts`, `gate.attempts`,
+ * `ralph.attempts`, eviction recoveries, PR-review resumes, a fork-phase bump), which was wrong in
+ * both directions: a loop nobody added left the epoch pinned at 0, and `ralph.attempts` is ZEROED
+ * by `restartRalphState` on a loop-back, so a summed epoch could go DOWN onto an id the harness
+ * already held. Counting across EVERY step, not just the dispatching one, is what makes the id
+ * unique within the RUN rather than within the step: `fixer` is dispatched as a helper off four
+ * different steps, and two of them requesting one fix each would otherwise both mint `<run>-fixer`.
+ */
+export function dispatchEpochFor(
+  instance: { steps: readonly PipelineStep[] },
+  dispatchedKind: string,
+): number {
+  let dispatched = 0
+  for (const step of instance.steps) {
+    for (const entry of step.dispatches ?? []) {
+      if (entry.agentKind === dispatchedKind) dispatched += entry.count
+    }
+  }
+  return dispatched
+}
+
+/**
+ * The `dispatchEpoch` slice of an agent context: {@link dispatchEpochFor}'s count, and nothing at
+ * all for the run's FIRST job of a kind. Absent and 0 mean the same thing to the container executor
+ * (the job id keeps its unsuffixed shape), and a spread-ready partial keeps that equivalence here,
+ * beside the counter, rather than as a conditional at the one call site that builds the context.
+ */
+export function dispatchEpochSlice(
+  instance: { steps: readonly PipelineStep[] },
+  dispatchedKind: string,
+): { dispatchEpoch?: number } {
+  const dispatchEpoch = dispatchEpochFor(instance, dispatchedKind)
+  return dispatchEpoch > 0 ? { dispatchEpoch } : {}
+}
+
+/**
+ * Record what an INLINE dispatch will do with the running kind's tool servers (MCP).
+ *
+ * The counterpart of the `handle.toolServers` fold above on the path that returns a RESULT instead
+ * of a job handle. Its one producer today is a consensus-diverted step: the panel runs as inline
+ * model calls with no agent CLI, so every server the kind declared is withheld, and without this
+ * the step would carry no record at all and read exactly like a kind that declared none.
+ *
+ * Called BEFORE the inline call, off `AgentExecutor.previewToolServers`, so the two paths record on
+ * the same terms: the container path stamps off the handle at dispatch, and a job that later fails
+ * keeps its record. Folding an inline resolution off the RESULT instead would drop it on exactly
+ * the runs a reader most needs it for, since a failed step returns no result to carry it.
+ *
+ * `dispatchedKind` is a parameter here for the same reason it is there, and it is what keeps the
+ * stamp out of the executor's hands: the engine names the kind it dispatched, so a resolution can
+ * never be labelled with another one. Guarded on presence, so an inline executor with nothing to
+ * report never erases a record an earlier container round on this step wrote.
+ */
+export function recordInlineToolServers(
+  step: PipelineStep,
+  resolved: DispatchToolServers | undefined,
+  dispatchedKind: string,
+): void {
+  if (resolved) stampToolServers(step, resolved, dispatchedKind)
+}
+
+/**
+ * Put one dispatch's tool-server resolution on the step under the kind that ran.
+ *
+ * Shared by the container and inline folds rather than spelled out at each, because the STAMP is
+ * the invariant: the executor reports two lists and the engine alone says whose they are (see
+ * `DispatchToolServers`). Two spellings of it is two places for an executor-supplied kind to creep
+ * back in.
+ */
+function stampToolServers(
+  step: PipelineStep,
+  resolved: DispatchToolServers,
+  dispatchedKind: string,
+): void {
+  step.toolServers = { ...resolved, agentKind: dispatchedKind }
 }
 
 /**

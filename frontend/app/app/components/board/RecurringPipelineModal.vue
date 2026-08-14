@@ -20,6 +20,7 @@ const recurring = useRecurringPipelinesStore()
 const tracker = useTrackerStore()
 const tasks = useTasksStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const access = useWorkspaceAccess()
 const { t, te } = useI18n()
 
@@ -130,7 +131,8 @@ function defaultRecurrence(): Recurrence {
   }
 }
 
-// Hide UI-testing pipelines when the frame has no UI to exercise — they'd be refused at run start.
+// Hide a pipeline whose UI-testing step would REACH a frame with no UI (one scoped to a frontend
+// service excuses itself) — it would be refused at run start.
 // Also hide `'one-off'`-only pipelines: attaching one to a schedule is refused server-side.
 const selectablePipelines = computed(() =>
   pipelines.pipelines.filter((p) => pipelineAllowedForSchedule(p, frame.value, board.blocks)),
@@ -354,7 +356,8 @@ async function add() {
   saving.value = true
   try {
     // Persist the tracker selection first when the tech-debt pipeline needs it, so
-    // the very first run can file its ticket.
+    // the very first run can file its ticket. This dialog decides WHERE a ticket is filed and
+    // nothing about the writeback, so it names no writeback action and the stored ones stand.
     if (filesTicket.value && trackerKind.value) {
       await tracker.save({
         tracker: trackerKind.value,
@@ -375,12 +378,15 @@ async function add() {
     })
     ui.closeAddRecurring()
   } catch (e) {
-    toast.add({
-      title: t('board.recurring.addFailedTitle'),
-      description: intakeRefusalCopy(e) ?? (e instanceof Error ? e.message : String(e)),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    const refusal = intakeRefusalCopy(e)
+    if (refusal) {
+      toast.add({
+        title: t('board.recurring.addFailedTitle'),
+        description: refusal,
+        icon: 'i-lucide-triangle-alert',
+        color: 'error',
+      })
+    } else present(e, 'board.recurring.addFailedTitle')
   } finally {
     saving.value = false
   }

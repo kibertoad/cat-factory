@@ -12,6 +12,7 @@ import type {
 import {
   DOC_INTERVIEWER_AGENT_KIND,
   extractJson,
+  getErrorMessage,
   resolveScopedModelProvider,
   ValidationError,
 } from '@cat-factory/kernel'
@@ -145,9 +146,7 @@ export class DocInterviewService {
       text = result.text
     } catch (e) {
       throw new ValidationError(
-        `The document interviewer (${ref.provider}:${ref.model}) failed: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
+        `The document interviewer (${ref.provider}:${ref.model}) failed: ${getErrorMessage(e)}`,
       )
     }
     const output = coerceDocInterviewOutput(extractJson(text), { finalize: opts.finalize })

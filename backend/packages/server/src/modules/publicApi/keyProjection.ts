@@ -24,6 +24,7 @@ export function publicApiKeyToWire(record: PublicApiKeyRecord): PublicApiKey {
     createdByUserId: record.createdByUserId,
     createdByKeyId: record.createdByKeyId,
     externalIdentity: record.externalIdentity,
+    actsAsUserId: record.actsAsUserId,
     createdAt: record.createdAt,
     lastUsedAt: record.lastUsedAt,
     revokedAt: record.revokedAt,

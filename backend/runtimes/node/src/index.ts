@@ -245,6 +245,7 @@ export {
   SIMPLE_PIPELINE_ID,
   ADAPTIVE_BUILD_PIPELINE_ID,
   COMPLEX_BUILD_PIPELINE_ID,
+  UNATTENDED_BUILD_PIPELINE_ID,
   defaultBuildPipelineId,
   BUG_TRIAGE_PIPELINE_ID,
   BUGFIX_PIPELINE_ID,
@@ -278,6 +279,9 @@ export {
   createDrizzleRepositories,
   type CoreRepositories,
   DrizzleAccountSettingsRepository,
+  // The account tier of the risk-policy library (ADR 0055), so the local facade's conformance
+  // harness can author an account policy against the real store.
+  DrizzleAccountRiskPolicyRepository,
   DrizzleLocalSettingsRepository,
   DrizzleWorkspaceSettingsRepository,
   DrizzleWorkspaceRepository,

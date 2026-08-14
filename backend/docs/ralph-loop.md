@@ -57,7 +57,8 @@ validationOutputTail }` on `RunnerJobResult.ralphVerdict` → `AgentRunResult.ra
      through the pipeline's ship tail).
    - **stalled** → the loop has stopped making progress; give up early (see below).
    - **fail + budget left** → re-dispatch a fresh iteration (`dispatchIteration`), threading the
-     failure output forward; the bumped `attempts` gives the new job a distinct dispatch epoch.
+     failure output forward; the iteration just recorded gives the new job a distinct dispatch
+     epoch, so it cannot re-attach to the one that finished.
    - **budget spent** → raise a `decision_required` notification, leave the block `blocked`,
      fail the run for a human.
 

@@ -32,6 +32,9 @@ This is the **how-to and reference**. Its siblings each own a different slice:
 - [`docs/openapi.json`](../../docs/openapi.json): the generated OpenAPI 3.1 spec (schema-exact,
   suitable for client codegen). See [Extending the surface](#extending-the-surface) for how it is kept
   current.
+- [`public-api-versions.md`](./public-api-versions.md): what every step of the spec's
+  `info.version` added, and what a consumer built against the number before it notices. A change
+  that moves the version writes its entry there.
 - [`debug-api.md`](./debug-api.md): the read-only `/api/v1/debug/*` diagnostic surface (same keys,
   `read` scope), for walking a run's telemetry from outside the browser.
 - [ADR 0043](./adr/0043-public-decision-surface.md): why the decision surface answers what it
@@ -66,8 +69,41 @@ Over REST (session-authed, workspace-scoped; this is the one management surface 
 
 Create body: `{ "label": "CI pipeline", "scope": "read" }`. `label` is 1–120 chars; `scope` is
 optional and **defaults to `write`**. A workspace holds at most **50** keys (409 past that; revoke
-one first). Key metadata carries `createdByUserId`, `createdByKeyId`, `createdAt`, `lastUsedAt`
-(updated at most once a minute) and `revokedAt`.
+one first). Key metadata carries `createdByUserId`, `createdByKeyId`, `actsAsUserId`, `createdAt`,
+`lastUsedAt` (updated at most once a minute) and `revokedAt`.
+
+The create body also takes `actsAsSelf` (optional, default `false`), which picks between the two
+IDENTITIES a key can have. This is a different question from `scope`: scope is what the key may DO,
+identity is WHOSE credentials, spend and merge-policy role its runs answer to.
+
+|                                                            | **System token** (`actsAsSelf: false`, the default)                                                                         | **Personal token** (`actsAsSelf: true`) |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `actsAsUserId`                                             | `null`                                                                                                                      | the minter's own `usr_*`                |
+| Runs it starts are attributed to                           | nobody                                                                                                                      | the person who minted it                |
+| Its runs are admitted under the merge policy of            | no role (the preset's base rules)                                                                                           | that person's workspace role            |
+| A task on an individual-usage model (Claude / Codex / GLM) | refused, `409 individual_model_unsupported`                                                                                 | runs, once unlocked per call            |
+| `GET /api/v1/models`                                       | cannot RUN a `personalSubscription` row (but reports whether the minter's subscription exists); omits locally-run endpoints | resolves under that user                |
+
+**Prefer a system token**: it is the narrower credential, and a leak cannot spend one person's
+subscription because no person is attached. Mint a personal token only where the runs genuinely are
+that person's. Such a token must send the operator's personal password in the `X-Personal-Password`
+header on **every** call that advances a run on an individual-usage model (start, retry, and each
+answered decision, since answering wakes the run's next dispatch); the server never stores it, and a
+call missing it gets `428 credential_required` carrying `{ vendor, reason }`. The header is declared
+on each of those operations in [the spec](../../docs/openapi.json), and every official client sends
+it: `setPersonalPassword` / `set_personal_password` / `SetPersonalPassword` on the client (the
+TypeScript client also takes it per call, as `{ headers: … }`). Full model:
+[`individual-subscription-usage.md` §7](./individual-subscription-usage.md).
+
+A run started by a personal token is admitted under the ROLE its owner holds on that workspace, so
+it merges exactly what they could merge from the app: a `dryRunRoles` member's headless runs open
+pull requests and never land them, and a `classRulesByRole` narrowing applies unchanged. A system
+token pins no role and stays on the preset's base rules, which is what every run did before role
+scoping existed.
+
+A key can only ever be bound to the person minting it — the field is a boolean, and the server reads
+the id from the session — so there is no way to mint a key onto someone else's subscription. A mint
+with no signed-in user is refused, and headless provisioning (`POST /api/v1/keys`) never binds.
 
 An operator with no browser can do the same over `/api/v1` itself: see
 [Key provisioning](#key-provisioning-apiv1keys). The two surfaces share one store, so a key minted
@@ -159,20 +195,20 @@ machine-readable; `message` is operator prose. Codes fall in two families:
   validation failure carries `issues: [{ path, message }]`.
 - **Surface-specific codes**, unique to `/api/v1` (branch on these, not on the message):
 
-  | Code                             | Status  | Where                                                                                                         |
-  | -------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------- |
-  | `insufficient_scope`             | 403     | any route, when the key's scope is below the minimum                                                          |
-  | `invalid_cursor`                 | 400     | any paginated list, on a malformed `cursor`                                                                   |
-  | `pipeline_not_public`            | 400     | `POST /jobs`: unknown or non-public pipeline                                                                  |
-  | `pipeline_not_inline`            | 400     | `POST /jobs`: pipeline has container/GitHub steps                                                             |
-  | `pipeline_requires_decide_scope` | 403     | `POST /jobs` and `POST /tasks/:id/start`: pipeline can park on a human, key is below `decide`                 |
-  | `too_many_active_runs`           | 429     | `POST /jobs`: the workspace already has 5 headless jobs in flight                                             |
-  | `pipeline_required`              | 400     | `POST /tasks/:id/start`: no pinned pipeline and no `pipelineId` passed                                        |
-  | `service_archived`               | 409     | `POST /tasks/:id/start`: the enclosing service is archived                                                    |
-  | `individual_model_unsupported`   | 409     | start / retry / notification `act` that would run an individual-usage (personal-credential) model headlessly  |
-  | `no_run`                         | 404/409 | task run reads (404: never started) and stop/retry (409: nothing to act on)                                   |
-  | `no_review`                      | 404     | an iterative-review decision route (requirements / clarity / brainstorm): the run carries no such live entity |
-  | `notification_not_actionable`    | 409     | `POST /notifications/:id/act`: `details.reason` is `no_automated_action` or `review_effort_required`          |
+  | Code                             | Status  | Where                                                                                                                                                                                          |
+  | -------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `insufficient_scope`             | 403     | any route, when the key's scope is below the minimum                                                                                                                                           |
+  | `invalid_cursor`                 | 400     | any paginated list, on a malformed `cursor`                                                                                                                                                    |
+  | `pipeline_not_public`            | 400     | `POST /jobs`: unknown or non-public pipeline                                                                                                                                                   |
+  | `pipeline_not_inline`            | 400     | `POST /jobs`: pipeline has container/GitHub steps                                                                                                                                              |
+  | `pipeline_requires_decide_scope` | 403     | `POST /jobs` and `POST /tasks/:id/start`: pipeline can park on a human, key is below `decide`                                                                                                  |
+  | `too_many_active_runs`           | 429     | `POST /jobs`: the workspace already has 5 headless jobs in flight                                                                                                                              |
+  | `pipeline_required`              | 400     | `POST /tasks/:id/start`: no `pipelineId`, no pinned pipeline, and no usable unattended default (a `write` key is never offered one)                                                            |
+  | `service_archived`               | 409     | `POST /tasks/:id/start`: the enclosing service is archived                                                                                                                                     |
+  | `individual_model_unsupported`   | 409     | a SYSTEM token starting / retrying / `act`ing on a run that would use an individual-usage model. A [personal token](#1-mint-a-key) gets `428 credential_required` instead, which it can answer |
+  | `no_run`                         | 404/409 | task run reads (404: never started) and stop/retry (409: nothing to act on)                                                                                                                    |
+  | `no_review`                      | 404     | an iterative-review decision route (requirements / clarity / brainstorm): the run carries no such live entity                                                                                  |
+  | `notification_not_actionable`    | 409     | `POST /notifications/:id/act`: `details.reason` is `no_automated_action` or `review_effort_required`                                                                                           |
 
 ### Pagination
 
@@ -351,11 +387,21 @@ What to know about it:
 - **Stateless, and it answers JSON.** No session to establish or tear down, so `GET` (the
   server-to-client event stream) and `DELETE` (end a session) are answered `405`. Watching a run
   means polling `tasks_get_run` / `jobs_get`, the same as on the stdio path.
-- **A JSON-RPC batch is one request that fans out.** The protocol permits an array of calls in one
-  `POST`, and each becomes its own `/api/v1` request, so a batch costs the deployment in proportion
-  to its length rather than to the one HTTP call it arrived as. Sized like any other public-API
-  usage: the per-tool result ceiling still applies to each entry, and the key's scope still gates
-  each one.
+- **A JSON-RPC batch still fans out, and is compatibility rather than contract.** The 2025-06-18
+  protocol revision, the one this server negotiates, REMOVED batching, so a current client never
+  sends an array. The transport still accepts one from a client on an older revision, and each
+  entry then becomes its own `/api/v1` request, so such a request costs the deployment in
+  proportion to its length rather than to the one HTTP call it arrived as; the per-tool result
+  ceiling and the key's scope still apply to each entry. Send one call per `POST`: the acceptance
+  is the transport's backwards compatibility, not a promise this section makes.
+- **A host can also connect over OAUTH, and get a key it never had to be given.** The endpoint
+  answers an unauthenticated call with a `WWW-Authenticate` challenge naming its protected-resource
+  metadata, and this deployment is its own authorization server: a host registers itself, a person
+  approves a board and a scope on a consent screen, and the host is issued an ordinary public-API
+  key it can be revoked from the same panel as any other. Everything above applies unchanged, since
+  what it holds afterwards is a key. Connecting one is the website's
+  [Connecting a host over OAuth](https://www.catfactory.ai/extend/mcp-server.html#connecting-a-host-over-oauth);
+  the design and its traps are [`mcp-authorization.md`](./mcp-authorization.md).
 - **The endpoint is public surface** under the stability contract above, from its first release. It
   is deliberately NOT in [`docs/openapi.json`](../../docs/openapi.json): a JSON-RPC endpoint has no
   operation shape to describe, and describing it would mint an SDK method in four languages for a
@@ -395,9 +441,11 @@ path adds per-host filters on top (`CAT_FACTORY_MCP_GROUPS`, `CAT_FACTORY_MCP_TO
 are a convenience rather than a boundary, since the key still carries whatever scope it was minted
 with.
 
-The two SSE endpoints are deliberately not tools on either path (a tool call has no streaming
-channel), so watching a run from a host means polling `tasks_get_run` / `jobs_get`, which the server's
-instructions say in so many words. The env-var table and a worked flow (create, start, poll, decide):
+Three operations are deliberately not tools on either path, and the server's instructions say so in
+so many words: the two SSE endpoints (a tool call has no streaming channel, so watching a run from a
+host means polling `tasks_get_run` / `jobs_get`) and the artifact byte download (a tool result is
+text or a declared content block, so list with `evidence_list_artifacts` and fetch the bytes over
+HTTP or an SDK). The env-var table and a worked flow (create, start, poll, decide):
 [`sdk/mcp/README.md`](../../sdk/mcp/README.md).
 
 Everything below still applies: the SDKs are a typed skin over exactly these endpoints, and the
@@ -406,6 +454,8 @@ error codes, scopes and paging rules are the same whichever you use.
 ## Reference
 
 Scope column = the minimum rung. Refusal codes are in the [conventions table](#the-error-envelope).
+One route is deliberately in no table below and not in the spec: `POST /api/v1/mcp`, the JSON-RPC
+endpoint with no operation shape to describe; [From an MCP host](#from-an-mcp-host) carries it.
 
 **Read this beside the generated
 [API Endpoint Reference](https://www.catfactory.ai/extend/api-reference.html), which owns the
@@ -446,25 +496,27 @@ mapping, so it always agrees with the field it filters on.
 
 ### Services & tasks
 
-| Method / path                                    | Scope    | Behaviour                                                                                                                                                                                                                                                                                                               |
-| ------------------------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/services`                           | `read`   | The board's service frames: the service projection.                                                                                                                                                                                                                                                                     |
-| `POST /api/v1/services/:serviceId/tasks`         | `write`  | Create a task. Create a task. `taskType` defaults to `feature`; `recurring` is not creatable here. See [Filling a task type's form](#filling-a-task-types-form), [Filing a task from a tracker ticket](#filing-a-task-from-a-tracker-ticket) and [Attaching requirements documents](#attaching-requirements-documents). |
-| `GET /api/v1/services/:serviceId/tasks`          | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                                                                                                                                                                                       |
-| `GET /api/v1/tasks/:taskId`                      | `read`   | One task: the task projection.                                                                                                                                                                                                                                                                                          |
-| `PATCH /api/v1/tasks/:taskId`                    | `write`  | Edit the task's authored input; an empty patch is a no-op. `fields` is MERGED over what the task already carries, so a caller sends only what it decides; see [Repairing a refused input](#repairing-a-refused-input).                                                                                                  |
-| `POST /api/v1/tasks/:taskId/start`               | `write`¹ | Run it. Start the task's run, falling back to its pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.                                                                                                                                                                               |
-| `POST /api/v1/tasks/:taskId/stop`                | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                                                                                                                                                                                           |
-| `POST /api/v1/tasks/:taskId/retry`               | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                                                                                                        |
-| `DELETE /api/v1/tasks/:taskId`                   | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                                                                                                            |
-| `POST /api/v1/services`                          | `admin`  | Create a service, optionally backed by a repository. See [Provisioning the board](#provisioning-the-board).                                                                                                                                                                                                             |
-| `GET /api/v1/repos`                              | `read`   | The repositories a service can be created against, and which service each already backs.                                                                                                                                                                                                                                |
-| `GET /api/v1/services/:serviceId/spec`           | `read`   | The service's in-repo **specification**: the requirement tree, the Gherkin rendered from it, and the commit both were read at. See [Service specification](#service-specification).                                                                                                                                     |
-| `POST /api/v1/tasks/:taskId/dependencies`        | `write`  | Declare that this task waits for another. Declare a dependency. Idempotent. See [Ordering a batch of tasks](#ordering-a-batch-of-tasks).                                                                                                                                                                                |
-| `POST /api/v1/tasks/:taskId/dependencies/remove` | `write`  | Drop the edge. Idempotent.                                                                                                                                                                                                                                                                                              |
-| `GET /api/v1/tasks/:taskId/documents`            | `read`   | The requirements documents attached to the task, in reading order.                                                                                                                                                                                                                                                      |
-| `POST /api/v1/tasks/:taskId/documents`           | `write`  | Attach one, in either form creation takes. See [Attaching requirements documents](#attaching-requirements-documents).                                                                                                                                                                                                   |
-| `POST /api/v1/tasks/:taskId/documents/detach`    | `write`  | Detach one by its `(source, externalId)` pair. Idempotent; `204`. The document itself stays in the workspace.                                                                                                                                                                                                           |
+| Method / path                                    | Scope    | Behaviour                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------------------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/services`                           | `read`   | The board's service frames: the service projection.                                                                                                                                                                                                                                                                                                                   |
+| `POST /api/v1/services/:serviceId/tasks`         | `write`  | Create a task. `taskType` defaults to `feature`; `recurring` is not creatable here. See [Filling a task type's form](#filling-a-task-types-form), [Filing a task from a tracker ticket](#filing-a-task-from-a-tracker-ticket), [Attaching requirements documents](#attaching-requirements-documents) and [Pinning what a task runs on](#pinning-what-a-task-runs-on). |
+| `GET /api/v1/services/:serviceId/tasks`          | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                                                                                                                                                                                                                                     |
+| `GET /api/v1/tasks/:taskId`                      | `read`   | One task: the task projection.                                                                                                                                                                                                                                                                                                                                        |
+| `PATCH /api/v1/tasks/:taskId`                    | `write`  | Edit the task's authored input and its two pins; an empty patch is a no-op. `fields` is MERGED over what the task already carries, so a caller sends only what it decides; see [Repairing a refused input](#repairing-a-refused-input).                                                                                                                               |
+| `POST /api/v1/tasks/:taskId/start`               | `write`¹ | Run it. Start the task's run, falling back to its pinned pipeline, then — for a `decide` key only — to the workspace's default pipeline for a run nothing is watching (`400 pipeline_required` with none of those). `202` with the task projection.                                                                                                                   |
+| `POST /api/v1/tasks/:taskId/stop`                | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                                                                                                                                                                                                                                         |
+| `POST /api/v1/tasks/:taskId/retry`               | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                                                                                                                                                      |
+| `DELETE /api/v1/tasks/:taskId`                   | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                                                                                                                                                          |
+| `POST /api/v1/services`                          | `admin`  | Create a service, optionally backed by a repository. See [Provisioning the board](#provisioning-the-board).                                                                                                                                                                                                                                                           |
+| `PATCH /api/v1/services/:serviceId`              | `admin`  | Patch a service's authored fields, and declare its `provisioning`: where a per-run environment's manifests are read from. See [Deployment provisioning](#deployment-provisioning).                                                                                                                                                                                    |
+| `DELETE /api/v1/services/:serviceId`             | `admin`  | Delete the service, its subtree **and the run history under it**; a live run is stopped first. Destructive; `204`. Refuses `422 service_has_unfinished_tasks` rather than discarding work in flight; `404`s an archived frame.                                                                                                                                        |
+| `GET /api/v1/repos`                              | `read`   | The repositories a service can be created against, and which service each already backs.                                                                                                                                                                                                                                                                              |
+| `GET /api/v1/services/:serviceId/spec`           | `read`   | The service's in-repo **specification**: the requirement tree, the Gherkin rendered from it, and the commit both were read at. See [Service specification](#service-specification).                                                                                                                                                                                   |
+| `POST /api/v1/tasks/:taskId/dependencies`        | `write`  | Declare that this task waits for another. Declare a dependency. Idempotent. See [Ordering a batch of tasks](#ordering-a-batch-of-tasks).                                                                                                                                                                                                                              |
+| `POST /api/v1/tasks/:taskId/dependencies/remove` | `write`  | Drop the edge. Idempotent.                                                                                                                                                                                                                                                                                                                                            |
+| `GET /api/v1/tasks/:taskId/documents`            | `read`   | The requirements documents attached to the task, in reading order.                                                                                                                                                                                                                                                                                                    |
+| `POST /api/v1/tasks/:taskId/documents`           | `write`  | Attach one, in either form creation takes. See [Attaching requirements documents](#attaching-requirements-documents).                                                                                                                                                                                                                                                 |
+| `POST /api/v1/tasks/:taskId/documents/detach`    | `write`  | Detach one by its `(source, externalId)` pair. Idempotent; `204`. The document itself stays in the workspace.                                                                                                                                                                                                                                                         |
 
 ¹ Starting a pipeline that can park on a human requires `decide`, exactly as on `POST /jobs`. See
 the paragraph below for what counts as a park.
@@ -528,6 +580,15 @@ service that repository already backs **on this board**, so a caller re-running 
 finds what it created last time rather than discovering it through a `409`. A monorepo answers
 `null` there even when its subdirectories back services, since it can back more.
 
+**It lists what your workspace has LINKED, which is not everything your account owns.** Linking is a
+per-workspace act, so a repository that exists and is perfectly reachable does not appear here until
+someone adopts it, and `POST /api/v1/services` answers `404` for its `repoId` exactly as it would for
+a repository that does not exist. The pair under
+[Deployment provisioning](#deployment-provisioning) closes that: `GET /api/v1/repos/available` lists
+what your connection can REACH (with `linked` as the join onto this list) and
+`POST /api/v1/repos/link` adopts one by name. A setup script that owns its repository names needs
+only the second.
+
 `linkedElsewhere` is the third state the pair cannot express: the repository already backs a service
 homed on ANOTHER board of the account, so the choice is spent and there is no id here that would
 address it (every read on this API is scoped to your key's workspace, so a frame homed elsewhere
@@ -560,6 +621,31 @@ archive/restore and the module/epic vocabulary stay out for the same reason.
 
 Service creation is `admin`, which is board STRUCTURE and the rung a provisioning integration holds
 anyway.
+
+**Taking one down is the same rung, and it is the other half of provisioning your own board.**
+Whoever raises a service is whoever has to reclaim it: an environment rebuilt per test pass, a
+repository retired, a frame raised against the wrong repository.
+
+```http
+GET    /api/v1/services/blk_api/tasks     # what is under it
+DELETE /api/v1/tasks/blk_task             # each unfinished task, if you mean it
+DELETE /api/v1/services/blk_api           # 204: the frame, its subtree, its run history
+```
+
+The delete takes the frame, its modules, its tasks and the run history recorded under them. Any run
+still going underneath is stopped and its container killed first, so nothing is left idling. Two
+answers to branch on rather than retry:
+
+- **`422`, `reason: service_has_unfinished_tasks`.** A frame holding a task that has not finished is
+  refused, because deleting one discards work in flight along with its history. `details` carries
+  `unfinishedTasks`, the count. The refusal is decided BEFORE anything is torn down, so a `422`
+  leaves the frame, its tasks and their runs exactly as they were: retrying it changes nothing, and
+  the runs still going are still yours to stop or resume. Deleting those tasks first is the caller
+  saying it means it; the app's other option is archiving, which this surface does not publish, so a
+  service you want to keep and hide is one to handle in the app.
+- **`404` for an ARCHIVED service.** Every per-service endpoint here addresses exactly the population
+  `GET /api/v1/services` reports, and an archived frame is absent from it. Restore it in the app if
+  you meant to delete it after all.
 
 #### Ordering a batch of tasks
 
@@ -813,6 +899,50 @@ returns the ticket to the recurring intake sweep's candidate pool.
 The linkage is not projected onto the task resource: a `201` already means the ticket is attached,
 and `409` already names the task for one that was.
 
+#### Closing the ticket when the work lands
+
+A ticket-linked task writes back to its issue, and `GET /api/v1/tracker/writeback` is that
+disposition:
+
+```http
+GET /api/v1/tracker/writeback
+{ "writeback": { "commentOnPrOpen": true, "resolveOnMerge": true, "questionsOnPark": true },
+  "updatedAt": null }
+```
+
+Three independent actions, because they are answerable separately:
+
+- `commentOnPrOpen` comments on the issue when the task's pull request opens.
+- `resolveOnMerge` comments and CLOSES the issue when that pull request merges (GitHub and GitLab
+  close natively; Jira transitions to its Done category).
+- `questionsOnPark` posts a headless run's parked requirements-review findings on the issue, each
+  with its finding id, so the reporter can answer from where they filed. Only consulted for runs
+  started through this API or dispatched from a ticket.
+
+**All three are ON for a workspace that has never chosen**, and `updatedAt: null` is how you tell:
+the values you are reading are this deployment's defaults rather than anyone's decision. They default
+on because the actions only ever touch an issue a task is LINKED to, and nothing links one by
+accident: a link arrives because somebody imported the issue, the intake sweep picked it up, or a
+caller filed with `ticket`. Every one of those is a request to work the issue where it was filed, and
+the half-closed loop is what nobody wants: a merged pull request beside an issue still open with
+nothing on it saying so.
+
+Changing it is a MERGE, so one decision moves one action:
+
+```http
+PATCH /api/v1/tracker/writeback
+{ "writeback": { "resolveOnMerge": false } }
+```
+
+Two things to know before calling it. It is workspace-WIDE, so it changes what happens to every other
+task's ticket on that board too, which is why the read reports `updatedAt`: a non-null value means you
+are about to overwrite somebody's choice. And an empty patch is a no-op that deliberately does not
+stamp `updatedAt`, so probing with one cannot make the defaults look chosen.
+
+Per-TASK exceptions are not on this surface. A task that must leave its ticket open carries an
+override on the board (set in the app) and it wins over whatever is here; this endpoint is the default
+that override departs from.
+
 #### Attaching requirements documents
 
 A task's `description` is capped at 2,000 characters because it is the task's own framing, echoed
@@ -923,6 +1053,319 @@ The inline-only rule stays jobs-only: a `decide` key may start container pipelin
 Parks raised dynamically mid-run (an agent-raised decision, a judge park) are not statically
 knowable, so they do not gate the start; see
 [ADR 0043](./adr/0043-public-decision-surface.md) for which parks the decision surface can answer.
+
+### Deployment provisioning
+
+Everything above assumes a workspace that already has a repository, a cluster and a wired model. This
+group is how a caller gets there without a browser: create the repository or ADOPT one that already
+exists, connect the cluster, tell a service where its manifests live, and read back what the
+deployment actually has.
+
+| Method / path                                | Scope   | Behaviour                                                                                                                    |
+| -------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/repos/bootstrap`               | `admin` | Create a repository and adapt it with the bootstrapper agent. `201` with a job to poll.                                      |
+| `GET /api/v1/repos/bootstrap/:jobId`         | `admin` | Poll one bootstrap. `404 bootstrap_job_not_found` for a job outside your workspace.                                          |
+| `GET /api/v1/repos/available`                | `admin` | The repositories your connection can REACH, linked or not. `?q=owner/name` point-reads one; `truncated` marks a capped list. |
+| `POST /api/v1/repos/link`                    | `admin` | Adopt a reachable repository by `owner`/`name`. Idempotent `200`; `404 repo_not_reachable` otherwise.                        |
+| `POST /api/v1/environments/connections/test` | `admin` | Probe a candidate cluster connection, persisting nothing. A refusal by the cluster is a `200` with `ok: false`.              |
+| `POST /api/v1/environments/connections`      | `admin` | Bind environment provisioning to a cluster. Idempotent: re-connecting replaces.                                              |
+| `GET /api/v1/models`                         | `admin` | The models a run here could dispatch to, with `available` and `policyBlocked`.                                               |
+| `GET /api/v1/vcs/connection`                 | `admin` | The source-control connection and what it may do. `connection: null` when nothing is connected.                              |
+| `GET /api/v1/risk-policies`                  | `admin` | The risk policies, including which is the default for runs nothing is watching (yours). Pin one as `riskPolicyId`.           |
+| `GET /api/v1/model-presets`                  | `admin` | The model presets, including which is the workspace default. Pin one as `modelPresetId`.                                     |
+| `GET /api/v1/tracker/writeback`              | `admin` | What a task's linked tracker issue hears as its pull request opens, merges, or parks a review.                               |
+| `PATCH /api/v1/tracker/writeback`            | `admin` | Turn those actions on or off. MERGES: an action you omit keeps its stored value.                                             |
+
+**The reads here are `admin` rather than `read`, unlike `/repos` and `/pipelines`.** The difference
+is what they name: those name board CONTENT, where these name what the DEPLOYMENT has wired,
+including the permissions its source-control credential holds. A caller that can read them is
+already at the rung that could change them. (A scope can be relaxed later and never tightened, so
+where the reading was close the reversible one wins.)
+
+That does leave the two preset reads at a higher rung than the `write` needed to PIN one, which is
+the gap the public pipeline list was added to close, so relaxing them to `read` is the likely next
+step. Until then a refused pin names the id that MISSED and never what the workspace holds: a `422`
+listing the library would hand a `write` key, by typo, exactly what `admin` gates.
+
+#### Adopting a repository that already exists
+
+```http
+GET /api/v1/repos/available?q=acme/payments-api
+{ "repos": [ { "repoId": 40123, "provider": "github", "owner": "acme", "name": "payments-api",
+               "defaultBranch": "main", "private": true, "linked": false,
+               "monorepo": false, "serviceId": null, "linkedElsewhere": false,
+               "personal": false } ],
+  "truncated": false }
+
+POST /api/v1/repos/link
+{ "owner": "acme", "name": "payments-api" }
+
+200 { "repoId": 40123, "provider": "github", "owner": "acme", "name": "payments-api",
+      "defaultBranch": "main", "private": true, "monorepo": false,
+      "serviceId": null, "linkedElsewhere": false }
+```
+
+**Why this exists at all**, given `GET /api/v1/repos`: that read lists what your workspace has
+LINKED, and linking is an explicit per-workspace act that nothing performs on your behalf (the
+provider webhook for an added repository does not project one, and a resync refreshes what is already
+linked). So a repository you have just created, or one that has always been reachable, is absent from
+every other read on this surface until it is adopted, and `POST /api/v1/services` answers `404` for
+its `repoId`. The two populations differ, `linked` is the join between them, and an absent repository
+is now diagnosable: reachable-but-unadopted appears in `/repos/available` with `linked: false`, and
+one that does not exist appears in neither.
+
+**The link takes a NAME, unlike everything else here, which takes a `repoId`.** A caller setting a
+workspace up from configuration knows `owner/name` (a person typed it, a template holds it) and cannot
+know a provider's numeric id for a repository no public read lists. So this one call is sufficient, no
+search is needed first, and the response carries the `repoId` for the `POST /api/v1/services` that
+follows. The owner is required rather than defaulted to the connected account: an installation can
+reach several owners, and a request that guessed would silently adopt a look-alike.
+
+**Idempotent, answering `200` either way.** Adopting a repository your workspace already links returns
+the same row rather than refusing, because the caller that needs this most is a setup script re-running
+itself. That holds even for a repository your connection can no longer reach (a personal repository
+adopted through someone's own token, or an App grant since narrowed): it is resolved from what your
+workspace links before the provider is consulted at all, so a re-run never answers `404` for a
+repository `GET /api/v1/repos` still lists.
+
+**Both rows answer whether the repository is SPOKEN FOR**, from one account-scoped judgement:
+`serviceId` names the service holding it on your board, and `linkedElsewhere` says a service on
+another board of the account holds it, in which case `POST /api/v1/services` refuses it. The
+available read publishes both for the same reason the repos list does, and a repository you have not
+linked is not free by construction: read the pair before adopting, not after.
+
+**`truncated` on the available read says the list is a PREFIX.** A wide connection exceeds the page
+and search caps behind it, so a reachable repository can be missing from `repos` simply because the
+walk stopped. Without that flag it would be indistinguishable from a repository that does not exist,
+which is the very confusion this read exists to remove. A point-read (`?q=owner/name`) resolves the
+exact slug directly and is therefore authoritative about that one repository either way: it is the
+right follow-up to a truncated browse.
+
+**The owner may be a namespace PATH.** GitLab projects live under nested groups, so a row's `owner`
+can read `group/subgroup`, and the link accepts exactly what the available read published.
+
+`404` with `details.reason: repo_not_reachable` covers two causes deliberately: a repository that does
+not exist under that owner, and one your credential is not granted (an app installation must include
+it; a token must carry the scope that reads a private one). A provider answers those identically, so a
+split here would be a guess in the one place a caller acts on it. Neither is fixed by retrying.
+
+`?q` on the read is matched server-side, as the app's own picker does, because a wide installation can
+reach thousands of repositories: pass `owner/name` for an exact point-read (authoritative for
+reachability, where a name search can miss an exact slug), a substring to search, or nothing to browse.
+Each call reaches the provider, so it is a setup-time read rather than one to poll. `personal` is
+always `false` here: a key authenticates as the WORKSPACE, so a repository only somebody's personal
+token reaches is not reachable by a key at all.
+
+**These two are the only operations on this surface that reach the provider while you wait**, so they
+are the only ones that can fail for a reason that is neither yours nor the platform's, and each has its
+own answer rather than a `500`:
+
+- `503` `details.reason: vcs_credential_rejected` — the provider refused the workspace's credential
+  (an installation removed, a token revoked or expired). Re-connect the workspace; retrying will not
+  help, and it is emphatically not "your repository does not exist".
+- `429` `details.reason: vcs_rate_limited` — the provider is rate-limiting the credential. This is the
+  one failure here worth retrying. It is read off the rate-limit flag rather than the status, because
+  GitHub reports a primary limit as a `403`, which is also what a permission denial looks like.
+
+A provider outage, or a fault in the platform, stays a `500`: dressing either as a connection problem
+would send an operator to replace a credential that is working.
+
+#### Bootstrapping a repository
+
+```http
+POST /api/v1/repos/bootstrap
+{ "repoName": "payments-api", "type": "service",
+  "instructions": "A Fastify service exposing a paginated catalog over Postgres." }
+
+201 { "jobId": "bsj_...", "status": "running", "repoName": "payments-api",
+      "repoOwner": null, "repoUrl": null, "serviceId": "blk_...", "progress": null,
+      "error": null, "failureKind": null, "failureDetail": null, "failureHint": null,
+      "createdAt": 1760000000000, "updatedAt": 1760000000000 }
+```
+
+Either `instructions` or a `referenceArchitectureId` is required: a request with neither describes no
+work. `serviceId` is the board frame the run materialises, and it exists from the first response, so
+work can be filed against the service before the repository has finished being written.
+
+A creation answers `running` or, when the pre-flight refuses it outright (nothing connected, the
+target repository already has content), `failed` with the reason already filled in. So the terminal
+state can arrive in the 201 itself, and a caller that treats a `failed` creation as impossible skips
+the branch it will actually hit first.
+
+**Poll until `status` is `succeeded` or `failed`.** On a failure, read `failureKind` before deciding
+to retry: a `preflight` refusal (the target repository already has content, nothing is connected)
+cannot be retried into success, where an `evicted` container can. `harness_shutdown` sits with the
+first group rather than the second: the container's harness exited cleanly with the job still
+running, so something stopped it and a retry meets that same something. `failureDetail` and
+`failureHint` carry the platform's own diagnosis verbatim, so prefer relaying them over paraphrasing
+them.
+
+#### Connecting a cluster, and pointing a service at its manifests
+
+The platform keeps these two deliberately apart: the ENGINE (one cluster per workspace, and how a URL
+is derived) and the SOURCE (one set of manifests per service). **A cluster alone provisions nothing.**
+Connecting one and skipping the per-service half leaves every deploy step reading an empty manifest
+source, which surfaces as an empty environment that looks like a cluster fault.
+
+```http
+POST /api/v1/environments/connections/test
+{ "connection": { "engine": "kubernetes",
+    "kubernetes": { "label": "Staging", "apiServerUrl": "https://cluster.example:6443",
+      "namespaceTemplate": "env-{{pullNumber}}",
+      "url": { "source": "ingressTemplate", "hostTemplate": "{{namespace}}.preview.example.com" } } },
+  "secrets": { "apiToken": "..." } }
+
+200 { "ok": true, "message": "Reached the apiserver" }
+```
+
+Send the same body to `POST /api/v1/environments/connections` to persist it. The response reports
+which secret KEYS were stored and never their values, and no read returns them: a credential goes in
+and does not come back out. Probe first, because the alternative is discovering an unreachable cluster
+on the deploy step of a run that has already paid for an implementation.
+
+```http
+PATCH /api/v1/services/blk_...
+{ "provisioning": { "type": "kubernetes",
+    "manifestSource": { "type": "colocated", "path": "deploy/k8s", "renderer": "raw" } } }
+```
+
+`provisioning` is a discriminated union whose non-matching branches are IGNORED, so read it back off
+the response rather than trusting the `200`: a wrong-shaped patch is accepted and stored as something
+the deploy step later reads as "no manifests". An omitted `provisioning` leaves the stored one alone,
+so patching a title cannot silently un-deploy a service.
+
+A supplied `provisioning` OVERLAYS the stored one rather than replacing it, as long as the provision
+type is the same. A service configured in the app can carry more than this surface publishes (image
+overrides, Secret injections, helm releases), and a caller correcting a manifest path has no way to
+restate what it never saw; a wholesale write would drop it and the next deploy would come up with no
+images and no Secrets. Changing the provision type does replace, because the remainder describes the
+type being left behind. The patch must name at least one field: an empty body is refused rather than
+spent on a write whose only outcome is the state it started in.
+
+The public engine is `kubernetes`, singular. The platform's internal vocabulary splits it in two, and
+that split is not published because one backend serves both and they lower to the same config: it was
+never observable in anything a run does.
+
+#### Reading what is wired
+
+`GET /api/v1/models` separates two states that need OPPOSITE fixes. `available: false` with
+`policyBlocked: false` means nothing is configured for that model, so add a provider key.
+`policyBlocked: true` means it IS configured and the account's model-family policy refuses it, so
+adding a key changes nothing and the fix is the policy. Collapsing the two is why "no model
+available" so often sends someone to change a setting that was already correct.
+
+There is a third state, and it comes in two halves because a model belonging to a PERSON can be
+missing from this answer in two different ways.
+
+`personalSubscription: true` on a ROW says that model runs on a credential belonging to a PERSON: it
+declares a subscription route whose vendor is licensed for individual use only (Claude, Codex, GLM),
+so the credential is stored per user. A token bound to nobody consults nobody's personal store, so
+`available: false` on such a row is never "no provider is wired".
+
+Two things it deliberately does NOT do, each of which was a real misreport. It is true wherever the
+model DECLARES that route, not merely where the route is the one in force: a model reachable both by
+subscription and by a metered gateway resolves to the gateway with nothing configured, so reading the
+route in force reported the commonest personal credential of all (`claude-opus` on a Claude
+subscription) as plainly unwired. And it is FALSE for a poolable vendor (Kimi, DeepSeek), whose token
+belongs to the workspace and which every key can therefore already see: flagging one sends an
+operator to re-mint a token when the fix is a pooled token or a provider key.
+
+`userScoped` is the superseded predecessor of this field and still answers its original, narrower
+question (whether a subscription route is the one in force), so it is wrong in both of the directions
+above. It stays on the wire for callers already built against it and will be removed in a future
+major version. Prefer `personalSubscription`.
+
+`subscriptionConfigured` then says whether the credential is actually THERE, for the person the key
+belongs to: its `actsAsUserId` when bound, else its minter. `true` is the case worth acting on: the
+subscription is connected and this token simply may not spend it, so the remedy is a
+[personal token](#1-mint-a-key) and nothing about the deployment needs changing. `false` means that
+person holds none, and a bound token would fare no better. `null` means the question was not answered
+at all: no such person (a key provisioned headlessly through `POST /api/v1/keys`), no personal-
+subscription store on the deployment, or a row with no vendor to ask about. Read `null` as `false`
+and you are back to telling an operator to configure something that may already be correct.
+
+Existence is a row lookup, which is why the answer costs nothing: the credential is sealed under its
+owner's personal password, that password opens it, and this read neither holds nor wants one. So a
+system token can be told the truth about a model it cannot run, and `available` stays resolved under
+`actsAsUserId` alone: the two facts are reported separately because they are separate.
+
+It does disclose one bit about a named person, and that is a deliberate trade rather than an
+oversight. On an unbound key the person asked about is its MINTER, who need not be whoever holds the
+key, and provenance is never re-validated against current membership, so a key handed to CI or a
+contractor learns whether a specific colleague (including a departed one) holds a live subscription
+for that vendor. What contains it: the bit is EXISTENCE only, never the person, the vendor account or
+the credential, and the route floors at `admin` scope. Reporting for the workspace's members at large
+would be strictly more leakage for the same remedy.
+
+`excludesUserScopedModels: true` on the RESPONSE says this answer OMITTED models it could not
+enumerate at all: per-user locally-run endpoints, which live on one developer's machine. Those never
+appear as rows, so on a deployment wired that way alone the catalog looks empty rather than
+unavailable, and no token can reach them: the fix is a run started by that user in the app.
+
+The split is deliberate: a listed-but-unrunnable model is named by its own row, while a model that is
+not there at all can only be reported once for the whole answer. Reading either as "no provider is
+wired" is what sends an operator to configure a model their workspace already runs every day; reading
+the response flag as if it applied to every unavailable row is the same mistake with the sign
+flipped, and sends them to re-mint a token for a model that genuinely has no provider.
+
+`GET /api/v1/vcs/connection` exists for `canCreateRepos` and `canManageWorkflows`. Both are enforced
+by the provider at PUSH time, so a caller that does not check them discovers a missing workflow
+permission as a repository that bootstrapped and then failed to gain its CI workflow, which reads as
+a broken bootstrap.
+
+`GET /api/v1/risk-policies`: a workspace carries TWO defaults, and the one that governs YOUR runs is
+`isUnattendedDefault`, not `isDefault`. `isDefault` is the policy a task resolves when a person starts
+it in the app; every run this API starts (and every tracker dispatch and schedule fire) resolves the
+unattended one, because nothing is watching it. A task that pins `riskPolicyId` overrides both.
+
+The list is the workspace's whole visible library, which since
+[ADR 0055](./adr/0055-account-scoped-risk-policies.md) includes the policies its ACCOUNT defines and
+the board has not hidden. Those are pinnable exactly like the board's own, and neither carries a
+default claim (an account row cannot hold one), so a caller reading `isUnattendedDefault` to find what
+an unpinned start resolves is unaffected.
+
+On that row, `autoMergeEnabled` decides whether a run can land its pull request without a person, and
+`autonomy` decides whether it can REACH that point without one. Under `attended` a run can stop on a
+judgement call this API will list under `GET /runs/{runId}/decisions` and that only a human can
+settle: a companion at its rework cap, an iterative review at its pass cap, follow-up items nobody
+triaged. A caller with nobody to escalate to waits indefinitely. Under `unattended` the platform
+takes the documented "proceed" answer to each of those and records on the step that it did. Neither
+value covers a gate the PIPELINE asks for: a human-test step, a review gate or an approval gate stops
+the run either way, which is the distinction to keep when reporting what a policy will do.
+
+`dryRunRoles` and `submissionRestrictedRoles` are the two caveats this API cannot resolve for you,
+since it does not report which workspace role your key's runs are admitted under: the first names
+roles whose runs open a pull request and never merge it, the second names roles that may land only
+certain change classes. Either being non-empty means the policy merges for some roles and not others,
+so report the caveat rather than concluding "this policy merges".
+
+`GET /api/v1/model-presets`: `baseModelId` is the model every agent step runs on under that preset,
+and `overrides` names the kinds that run on something else, which is usually what separates two
+presets: they often differ only in what the CODER gets. Whether a preset can actually be dispatched
+to is NOT repeated here, because `/models` already answers it while keeping unconfigured apart from
+refused-by-policy; join on `baseModelId`.
+
+#### Pinning what a task runs on
+
+`POST /api/v1/services/:serviceId/tasks` and `PATCH /api/v1/tasks/:taskId` both accept
+`modelPresetId` and `riskPolicyId`, and {@link PublicTask} reads both back (null ⇒ the task follows
+the workspace default rather than holding a copy of its id). Pinning is what makes a pass
+reproducible: without it the only way to run one task on another model is to move the workspace
+default, which changes every other caller's runs to settle one task.
+
+**An id no library carries is refused, never resolved to the default.** `422` with
+`details.reason: 'model_preset_not_found'` / `'risk_policy_not_found'`, because the two outcomes are
+indistinguishable afterwards from anything a caller can read, and a run that quietly used another
+model succeeds while being about something else. A deployment with the library unwired answers `503`
+(`'model_presets_unwired'` / `'risk_policies_unwired'`) instead: a different fact, needing a
+different fix. The same refusals apply to every other door into the board, so an id the SPA or a
+tracker import supplies is checked identically.
+
+Pinning a preset does NOT widen what the account allows: the base model still resolves through the
+account's model-family policy, so a preset naming a blocked model fails at dispatch exactly as it
+would have on the workspace default. And pinning a risk policy is a real authority question, tracked
+in `docs/initiatives/role-scoped-risk-policy-admission.md`: an API key is `UNATTRIBUTED` at the merge
+exits (ADR 0037), so no role-scoped bar narrows what it may select today.
 
 ### Task runs & streaming
 
@@ -1059,8 +1502,16 @@ Thirteen decision kinds appear in `decisions[]`, discriminated by `kind`:
   up for a person — the simplest park, and the one any pipeline can carry. Carries the
   `approvalId` every action addresses, the `stepKind` and `stepIndex` whose output is being judged,
   the `proposal` itself, and the last `feedback`. **`exceeded: true` changes the verb**: the gate is
-  a quality companion at its automatic-rework cap, the plain approve is refused (`409`), and
-  `resolve-exceeded` is what settles it.
+  a quality companion whose automatic rework loop stopped without the work being accepted, the plain
+  approve is refused (`409`), and `resolve-exceeded` is what settles it.
+
+  **`blockingFindings` is what a `proceed` would overrule.** Non-empty, it means the reviewer named
+  points it says must be fixed before the work goes further, and answering `proceed` accepts the work
+  with them open. That is the one park the platform's own unattended risk policies never answer for a
+  person, so an integration that resolves it is taking a decision no automation here will take. Empty
+  (with `exceeded: true`) means the loop merely ran out of rounds under the quality bar. Read them
+  rather than the `proposal`: a companion's summary is a verdict and does not restate its own
+  findings.
 
   **`requiredApprovals` / `recordedApprovals` are why an `approve` may legitimately not advance the
   run.**
@@ -1388,10 +1839,38 @@ unaffected.
 reader: the report is a reviewer's bundle (every failing check by name, every captured log tail, the
 merge assessment), and the outcome is the product-language answer for someone reporting what shipped:
 `disposition`, the requester's own `ask`, every pull request the run opened, requirement coverage,
-the tester's verdict and concerns, the views it captured, the linked pages its agents built from,
-and the machine checks that recorded a verdict. It is the reduction the app's outcome card renders,
+the tester's verdict and concerns, the views it captured, the environments it stood up, the linked
+pages its agents built from, and the machine checks that recorded a verdict. It is the reduction the app's outcome card renders,
 served verbatim for the same reason the report is: one deployment answering a question two ways is
 how the app and an integration come to disagree about what a run did.
+
+`environments` is where the summary answers the one question the pull request cannot: is there
+something RUNNING to look at. One row per throwaway environment the run stood up, each carrying its
+`url`, an `expiresAt` when the platform recorded a TTL, the service `frameId` it belongs to, the
+`environmentId` an operator greps the logs for, the producer's verbatim `detail` where there is one,
+and `retained`, which says the run's deployer DECLARED that this environment outlives the run (so a
+link that keeps working is the design rather than a leak). Its `gap` when absent is
+`no_environment_step` (nothing in the pipeline provisions one), `not_provisioned` (something was
+meant to and nothing has been recorded yet), `infraless` (every frame declares no environment of its
+own) or `run_unavailable`. Added in 1.38.0 (outcome `version` 3).
+
+**`state` is the field to read, and `live` is the only one that means the URL is worth opening.**
+The other five (`provisioning`, `failed`, `reclaiming`, `reclaimed`, `expired`) still carry whatever
+URL the row had, because it is what names the environment and what an operator greps for, so a
+client that renders the URL without the state beside it offers a link to something that is no longer
+there. `reclaimed` is deliberately one word for both "the run's disposer tore it down" and "the
+disposer went looking and found nothing live": who took it is recorded nowhere the reduction can
+read, and the reader's next move is the same either way. A reclaim that FAILED is not one of them:
+the environment is still standing and its URL still works, which is why that case stays `live` with
+the provider's cause in `detail` and is reported as a teardown gap by the verification report
+instead. `origin` says which producer the row came from (`deployer`, `human_test`, or `projected`,
+the in-flight row read off the run's own step projection because no terminal outcome exists yet).
+A lapsed `expiresAt` is NOT folded into `state`: the reduction is clock-free so that the app
+composing it live and this endpoint cannot disagree about one run, and the instant itself says the
+same thing. **A client with a clock owes the other half of that**, and it is the same rule the app
+applies: a `live` row whose `expiresAt` has passed is one the TTL sweep has reclaimed or is about
+to, so it is not a URL to hand anyone, whatever the row still claims. `retained` does not exempt a
+row from it, since retention is a statement about outliving the RUN, not about outliving the TTL.
 
 `sources` is the outcome's half of the report's `context`, reduced from the same per-dispatch
 records by the same code, so the card, this endpoint and the pull request cannot disagree about
@@ -1421,8 +1900,8 @@ so a cut can never leave half a credential in the payload.
 
 Every outcome section is `{ status: "reported" } | { status: "absent", gap }` where
 `gap` is a machine-readable CODE (`no_tester_step`, `tester_not_reported`, `no_verdicts`,
-`no_requirements`, `none_linked`, `run_unavailable`) rather than prose, since the platform does not
-localize:
+`no_requirements`, `none_linked`, `no_environment_step`, `not_provisioned`, `infraless`,
+`run_unavailable`) rather than prose, since the platform does not localize:
 `requirements.spec` says whether coverage was counted against the service's `spec/` (`joined`) or
 only against the ids the tester reported (`not_read`, a narrower denominator), and
 `unmatchedVerdicts` counts rulings the spec could not place, on both endpoints. A spec that
@@ -1526,7 +2005,7 @@ A **rollup** carries `total`, `merged` (the landed denominator: auto + through t
 the provider), each decision's own count, and the distribution of effort tags including `untagged`.
 Every class is present, as zeros when it holds nothing, so "no data yet" never reads as a class the
 response left out. This is the number that justifies **widening** a per-class rule, and nothing
-widens one automatically: the rules live on the workspace's merge presets and a human edits them.
+widens one automatically: the rules live on the workspace's risk policies and a human edits them.
 
 Refusals carry `error.details.reason`: `run_not_found` (the id names no run this key may read),
 `no_merge_record` (the run is readable and simply made no merge decision, because its pipeline has no
@@ -2100,8 +2579,9 @@ For contributors adding or changing `/api/v1` endpoints, the short version, with
   [`docs/openapi.json`](../../docs/openapi.json) and the module the deployment serves at
   `GET /api/v1/openapi.json`, and `check:openapi` diffs both — a served spec that lags the
   contracts is worse than an absent one.
-- Bump the spec's `info.version` MINOR for an addition (the normal case). Re-check the number
-  against `origin/main` after every merge: two branches bumping to the same value produce
-  byte-identical text, so git auto-merges them and one surface ships under a number the other
-  already used.
+- Bump the spec's `info.version` MINOR for an addition (the normal case) and write its entry in
+  [`public-api-versions.md`](./public-api-versions.md). The entry is not bookkeeping: it is what
+  makes the next collision arrive as a conflict. Re-check the number against `origin/main` after
+  every merge, because two branches bumping to the same value produce byte-identical text, so git
+  auto-merges them and one surface ships under a number the other already used.
 - **Update this document**: the reference tables above are hand-maintained.

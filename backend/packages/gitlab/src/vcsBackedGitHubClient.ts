@@ -72,10 +72,14 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
     // scope opts are moot (the token already scopes the listing).
     searchInstallationRepos: async (installationId, query, opts) => {
       const q = query.trim().toLowerCase()
-      if (!q) return []
-      const { items } = await vcs.listRepos(conn(installationId))
+      if (!q) return { items: [], truncated: false }
+      const { items, truncated } = await vcs.listRepos(conn(installationId))
       const matched = items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
-      return matched.slice(0, Math.min(Math.max(opts?.limit ?? 50, 1), 100))
+      const cap = Math.min(Math.max(opts?.limit ?? 50, 1), 100)
+      // Truncated by EITHER cap, and the listing's is the one a result count cannot show: a
+      // project beyond the page cap was never filtered, so a search matching three of four
+      // hundred looks complete while a fourth match sits past the window.
+      return { items: matched.slice(0, cap), truncated: truncated === true || matched.length > cap }
     },
 
     // ---- reads ------------------------------------------------------------

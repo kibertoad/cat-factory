@@ -19,6 +19,7 @@ function outcome(partial: Partial<RunOutcome> = {}): RunOutcome {
     requirements: { status: 'absent', gap: 'no_tester_step' },
     tests: { status: 'absent', gap: 'no_tester_step' },
     visuals: { status: 'absent', gap: 'no_visual_step', detail: null },
+    environments: { status: 'absent', gap: 'no_environment_step' },
     sources: { status: 'absent', gap: 'none_linked' },
     checks: [],
     truncations: [],
@@ -81,6 +82,34 @@ describe('boundOutcomeForApi', () => {
     if (bounded.tests.status !== 'reported') throw new Error('expected a report')
     expect(bounded.tests.summary).not.toContain(SECRET)
     expect(bounded.tests.abortReason).not.toContain(SECRET)
+  })
+
+  // The environment URL comes from the org's own provisioning API through the manifest's
+  // response mapping, so it is provider-supplied text like any other, and the detail beside it is
+  // a provider's verbatim stderr.
+  it('scrubs the environment URL and the provider’s cause', () => {
+    const bounded = boundOutcomeForApi(
+      outcome({
+        environments: {
+          status: 'reported',
+          entries: [
+            {
+              url: `https://preview.test/?token=${SECRET}`,
+              state: 'failed',
+              origin: 'deployer',
+              expiresAt: null,
+              retained: false,
+              frameId: 'frm_own',
+              environmentId: 'env_1',
+              detail: `provision refused: ${SECRET}`,
+            },
+          ],
+        },
+      }),
+    )
+    if (bounded.environments.status !== 'reported') throw new Error('expected environments')
+    expect(bounded.environments.entries[0]!.url).not.toContain(SECRET)
+    expect(bounded.environments.entries[0]!.detail).not.toContain(SECRET)
   })
 
   it('leaves an ordinary payload byte-for-byte alone', () => {

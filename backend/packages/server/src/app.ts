@@ -40,6 +40,8 @@ import { mothershipConnectController } from './modules/localSettings/MothershipC
 import { releaseHealthController } from './modules/releaseHealth/ReleaseHealthController.js'
 import { testSecretsController } from './modules/testSecrets/TestSecretsController.js'
 import { capabilityCredentialsController } from './modules/capabilityCredentials/CapabilityCredentialsController.js'
+import { mcpAuthorizationConsentController } from './modules/mcpAuthServer/McpAuthorizationConsentController.js'
+import { mcpAuthorizationController } from './modules/mcpAuthServer/McpAuthorizationController.js'
 import { mcpOAuthCompletionController } from './modules/toolServers/McpOAuthCompletionController.js'
 import { toolServerController } from './modules/toolServers/ToolServerController.js'
 import { validationConfigController } from './modules/validation/ValidationConfigController.js'
@@ -110,6 +112,8 @@ import { binaryGeneratorsController } from './modules/binaryGenerators/BinaryGen
 import { promptFragmentsInternalController } from './modules/promptFragments/PromptFragmentsInternalController.js'
 import { publicApiController } from './modules/publicApi/PublicApiController.js'
 import { publicBoardController } from './modules/publicApi/PublicBoardController.js'
+import { publicProvisioningController } from './modules/publicApi/PublicProvisioningController.js'
+import { publicTrackerController } from './modules/publicApi/PublicTrackerController.js'
 import { publicApiKeyController } from './modules/publicApi/PublicApiKeyController.js'
 import { publicDecisionController } from './modules/publicApi/PublicDecisionController.js'
 import { publicDebugController } from './modules/publicApi/PublicDebugController.js'
@@ -135,6 +139,89 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   registerRootControllers(app)
   registerControllers(app, WORKSPACE_CONTROLLERS)
   registerWebhookControllers(app)
+}
+
+/**
+ * The PUBLIC external API (`/api/v1/*`) and the OAuth server its MCP endpoint needs.
+ *
+ * Its own function rather than more of {@link registerRootControllers}, and the family is a real one:
+ * every controller here is key-authenticated INSIDE the controller (the `/api` prefix bypasses the
+ * session gate the root controllers sit behind), every one of them is a surface
+ * `backend/docs/public-api.md` freezes, and they carry an ordering rule none of the others do, stated
+ * at the MCP mount below.
+ */
+function registerPublicApiControllers<E extends AppEnv>(app: Hono<E>): void {
+  // The PUBLIC external API (`/api/v1/*`): key-authenticated in-controller (its `/api` prefix
+  // bypasses the session gate), for external systems to run a public inline pipeline headlessly.
+  app.route('/', publicApiController())
+  // Board PROVISIONING (`/api/v1/repos`, `/api/v1/services`) plus the two task relationships that
+  // outlive a create call (dependency edges, attached requirements documents). The same
+  // in-controller key auth; service creation is `admin` (board structure), the task-level writes
+  // `write`. See backend/docs/public-api.md.
+  app.route('/', publicBoardController())
+  // DEPLOYMENT PROVISIONING (`/api/v1/repos/bootstrap`, `/api/v1/environments/connections`,
+  // `PATCH /api/v1/services/:serviceId`, and the reads naming what this deployment has WIRED).
+  // What a caller does BEFORE there is a board to shape, which is why it is not part of the board
+  // controller above. Same in-controller key auth, `admin` throughout: it creates repositories and
+  // accepts an infrastructure credential. See backend/docs/public-api.md.
+  app.route('/', publicProvisioningController())
+  // The workspace's tracker WRITEBACK disposition (`/api/v1/tracker/writeback`): what a merged pull
+  // request does to the issue its task was filed from. Beside the provisioning surface rather than
+  // part of it, because it is standing run behaviour rather than setup, and it is the one public
+  // setting whose effect lands OUTSIDE this platform. Same in-controller key auth, `admin`.
+  app.route('/', publicTrackerController())
+  // The public PARKED-DECISION surface (`/api/v1/runs/:runId/decisions/*`): the answerer that lets
+  // a headless run include the clarification loop at all. Same in-controller key auth, gated on
+  // the `decide` rung of the scope ladder. See backend/docs/adr/0047-headless-clarification-loop.md.
+  app.route('/', publicDecisionController())
+  // The public REMOTE DEBUGGING surface (`/api/v1/debug/*`): read-scoped, keyset-paginated reads
+  // over a run's telemetry + provisioning log, sized so an LLM can walk them within a context
+  // budget. See backend/docs/debug-api.md.
+  app.route('/', publicDebugController())
+  // The public run-EVIDENCE surface (`/api/v1/runs/:runId/report`, `…/artifacts`, and the bytes
+  // at `/api/v1/artifacts/:id/blob`): read-scoped access to the engine's own verification report
+  // and the artifacts a run captured, for a consumer whose job is to JUDGE the run rather than
+  // debug it. See backend/docs/public-api.md.
+  app.route('/', publicEvidenceController())
+  // The public MERGE-EVIDENCE surface (`/api/v1/runs/:runId/merge-record`,
+  // `/api/v1/merge-records/*`): the change class and merger scores behind a merge decision, the
+  // workspace's per-class rollups, and the reviewer-effort tag. Reads are `read`; the tag is
+  // `write`, since recording how much review a landed PR took merges nothing. See
+  // backend/docs/adr/0046-merge-track-record.md.
+  app.route('/', publicMergeEvidenceController())
+  // The public SPEND-ANALYTICS read (`/api/v1/usage/spend`): the workspace's money over a window
+  // sliced by repository, ticket, run or step kind: the TCO question the period breakdown on
+  // `/api/v1/usage` carries no axis for. `read` scope. See backend/docs/public-api.md.
+  app.route('/', publicSpendController())
+  // The public SPEC read (`/api/v1/services/:serviceId/spec`): the service's in-repo requirement
+  // tree and the Gherkin rendered from it, read-scoped, so an integrator judging a run's outcome
+  // can fetch the criteria it was scored against without a repository clone. Read-only by design:
+  // the spec's write path is a reviewed commit. See backend/docs/public-api.md.
+  app.route('/', publicSpecController())
+  // HEADLESS key provisioning (`/api/v1/keys`): the external counterpart of the session-authed
+  // key panel, `admin` scope, bounded so a minted key can never mint another and revoking a key
+  // revokes what it minted.
+  app.route('/', publicKeyController())
+  // The public OUTBOUND-WEBHOOK management surface (`/api/v1/notification-webhook`): the enrolment
+  // half of the push channel, so a deployment with no browser session can register the receiver
+  // its notifications, run-lifecycle edges and health alerts are delivered to. `admin` scope; same
+  // service the session-authed `/workspaces/:ws/notification-webhook` routes call.
+  app.route('/', publicNotificationWebhookController())
+  // DISCOVERY (`/api/v1/me`, `/api/v1/openapi.json`): what the calling key may do, and this
+  // deployment's own copy of the spec — the two reads an integration makes before anything else,
+  // each of which used to be answerable only by guessing. `read` scope, the floor of the ladder.
+  app.route('/', publicDiscoveryController())
+  // The public API spoken as MCP (`POST /api/v1/mcp`), so a host drives this deployment with no npm
+  // install and no local process. Mounted LAST of the `/api/v1` surface it re-enters: same key auth,
+  // and the tools reach those routes back through this app's own loopback under the caller's key, so
+  // nothing here can drift from the surface above it.
+  app.route('/', publicMcpController(appLoopback(app)))
+  // This deployment's own OAuth authorization server for that endpoint (`/.well-known/*`,
+  // `/oauth/*`): the discovery documents, dynamic client registration, and the token exchange that
+  // mints a public-API key from an approved consent. Unauthenticated by construction, which is what
+  // lets a host that has never heard of this deployment connect to it; the one step needing a
+  // signed-in human is the consent screen, mounted with the session-gated controllers below.
+  app.route('/', mcpAuthorizationController())
 }
 
 /**
@@ -231,60 +318,7 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // 503 unless the facade attached its repository registry. Mounted on both facades so either
   // can be a mothership. See docs/initiatives/mothership-mode.md.
   app.route('/', telemetryReadController())
-  // The PUBLIC external API (`/api/v1/*`): key-authenticated in-controller (its `/api` prefix
-  // bypasses the session gate), for external systems to run a public inline pipeline headlessly.
-  app.route('/', publicApiController())
-  // Board PROVISIONING (`/api/v1/repos`, `/api/v1/services`) plus the two task relationships that
-  // outlive a create call (dependency edges, attached requirements documents). The same
-  // in-controller key auth; service creation is `admin` (board structure), the task-level writes
-  // `write`. See backend/docs/public-api.md.
-  app.route('/', publicBoardController())
-  // The public PARKED-DECISION surface (`/api/v1/runs/:runId/decisions/*`): the answerer that lets
-  // a headless run include the clarification loop at all. Same in-controller key auth, gated on
-  // the `decide` rung of the scope ladder. See backend/docs/adr/0047-headless-clarification-loop.md.
-  app.route('/', publicDecisionController())
-  // The public REMOTE DEBUGGING surface (`/api/v1/debug/*`): read-scoped, keyset-paginated reads
-  // over a run's telemetry + provisioning log, sized so an LLM can walk them within a context
-  // budget. See backend/docs/debug-api.md.
-  app.route('/', publicDebugController())
-  // The public run-EVIDENCE surface (`/api/v1/runs/:runId/report`, `…/artifacts`, and the bytes
-  // at `/api/v1/artifacts/:id/blob`): read-scoped access to the engine's own verification report
-  // and the artifacts a run captured, for a consumer whose job is to JUDGE the run rather than
-  // debug it. See backend/docs/public-api.md.
-  app.route('/', publicEvidenceController())
-  // The public MERGE-EVIDENCE surface (`/api/v1/runs/:runId/merge-record`,
-  // `/api/v1/merge-records/*`): the change class and merger scores behind a merge decision, the
-  // workspace's per-class rollups, and the reviewer-effort tag. Reads are `read`; the tag is
-  // `write`, since recording how much review a landed PR took merges nothing. See
-  // backend/docs/adr/0046-merge-track-record.md.
-  app.route('/', publicMergeEvidenceController())
-  // The public SPEND-ANALYTICS read (`/api/v1/usage/spend`): the workspace's money over a window
-  // sliced by repository, ticket, run or step kind: the TCO question the period breakdown on
-  // `/api/v1/usage` carries no axis for. `read` scope. See backend/docs/public-api.md.
-  app.route('/', publicSpendController())
-  // The public SPEC read (`/api/v1/services/:serviceId/spec`): the service's in-repo requirement
-  // tree and the Gherkin rendered from it, read-scoped, so an integrator judging a run's outcome
-  // can fetch the criteria it was scored against without a repository clone. Read-only by design:
-  // the spec's write path is a reviewed commit. See backend/docs/public-api.md.
-  app.route('/', publicSpecController())
-  // HEADLESS key provisioning (`/api/v1/keys`): the external counterpart of the session-authed
-  // key panel, `admin` scope, bounded so a minted key can never mint another and revoking a key
-  // revokes what it minted.
-  app.route('/', publicKeyController())
-  // The public OUTBOUND-WEBHOOK management surface (`/api/v1/notification-webhook`): the enrolment
-  // half of the push channel, so a deployment with no browser session can register the receiver
-  // its notifications, run-lifecycle edges and health alerts are delivered to. `admin` scope; same
-  // service the session-authed `/workspaces/:ws/notification-webhook` routes call.
-  app.route('/', publicNotificationWebhookController())
-  // DISCOVERY (`/api/v1/me`, `/api/v1/openapi.json`): what the calling key may do, and this
-  // deployment's own copy of the spec — the two reads an integration makes before anything else,
-  // each of which used to be answerable only by guessing. `read` scope, the floor of the ladder.
-  app.route('/', publicDiscoveryController())
-  // The public API spoken as MCP (`POST /api/v1/mcp`), so a host drives this deployment with no npm
-  // install and no local process. Mounted LAST of the `/api/v1` surface it re-enters: same key auth,
-  // and the tools reach those routes back through this app's own loopback under the caller's key, so
-  // nothing here can drift from the surface above it.
-  app.route('/', publicMcpController(appLoopback(app)))
+  registerPublicApiControllers(app)
   // Read-only catalogs + account/workspace roots (gated by the facade's auth middleware).
   app.route('/', promptFragmentController())
   app.route('/', modelController())
@@ -310,6 +344,10 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // the path, and session-gated by the shared default-deny gate like everything else here, which
   // is what makes its user binding and `secrets.manage` re-check enforceable at all.
   app.route('/', mcpOAuthCompletionController())
+  // The consent screen's own two calls (describe + decide). Root-mounted for the same reason the
+  // completion above is: the board is not in the path, because choosing it is what the screen is
+  // for, so `secrets.manage` is re-resolved on the picked workspace inside the handler.
+  app.route('/', mcpAuthorizationConsentController())
   app.route('/', openRouterCatalogController())
   app.route('/', userApiKeyController())
   // Local-mode operational settings (warm pool + checkout reuse); 503 on non-local facades.
@@ -413,7 +451,7 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
     mount: WORKSPACE_MOUNT,
     build: () => notificationSettingsController(),
   },
-  { name: 'riskPolicy', mount: WORKSPACE_MOUNT, build: () => riskPolicyController() },
+  { name: 'riskPolicy', mount: WORKSPACE_MOUNT, build: () => riskPolicyController('workspace') },
   { name: 'mergeTrackRecord', mount: WORKSPACE_MOUNT, build: () => mergeTrackRecordController() },
   { name: 'sharedStack', mount: WORKSPACE_MOUNT, build: () => sharedStackController() },
   { name: 'preflight', mount: WORKSPACE_MOUNT, build: () => preflightController() },
@@ -473,13 +511,14 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
   { name: 'slack', mount: WORKSPACE_MOUNT, build: () => slackController() },
 ]
 
-/** The per-account API, in registration order (the account tiers of the two library surfaces). */
+/** The per-account API, in registration order (the account tiers of the shared library surfaces). */
 export const ACCOUNT_CONTROLLERS: readonly ControllerEntry[] = [
   {
     name: 'fragmentLibrary',
     mount: ACCOUNT_MOUNT,
     build: () => fragmentLibraryController('account'),
   },
+  { name: 'riskPolicy', mount: ACCOUNT_MOUNT, build: () => riskPolicyController('account') },
   { name: 'skillLibrary', mount: ACCOUNT_MOUNT, build: () => skillLibraryController() },
   {
     name: 'foundationalService',

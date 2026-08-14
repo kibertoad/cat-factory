@@ -19,6 +19,12 @@ import { resolveTicket } from './ticketLinkage.js'
 // The failure it exists to prevent is not a lost write, it is a QUIET one: a `201` for a task the
 // caller believes carries its ticket and its spec, running on its title alone, with an agent
 // building against requirements nobody notices it never received.
+//
+// Refusals that need a REPOSITORY read are not restated here. A pinned `modelPresetId` /
+// `riskPolicyId` naming nothing is refused inside `addServiceTask`, on the service every other
+// door reaches too (`presetPinGuard.ts`), which costs a bad pin one wasted ticket/document fetch
+// and buys the same refusal for the SPA, tracker intake, an initiative spawn and blueprint
+// reconciliation. Only the free, deterministic checks are hoisted in front of the outbound work.
 
 /** What creating a public task needs from the container. */
 export interface PublicTaskCreationDeps {
@@ -60,6 +66,10 @@ export async function createTaskWithAttachments(
   // is a pure, deterministic refusal, so it must land ahead of the outbound ticket/document
   // fetches, exactly like the container check below.
   const taskTypeFields = resolveTaskTypeFields(body, deps.taskTypeRegistry)
+  // `modelPresetId` and `riskPolicyId` ride the spread because the public surface spells them
+  // exactly as `AddTaskInput` does, which is the ONE reason a spread is safe here and is pinned by
+  // `blockEditAuthority.coverage.spec.ts`. Whether either id names a real row is `addServiceTask`'s
+  // to refuse, on the service where every other door reaches it too (`presetPinGuard.ts`).
   const input = { ...rest, ...(taskTypeFields ? { taskTypeFields } : {}) }
   if (ticket || documents?.length) {
     // The container is checked FIRST because resolving a ticket or a source document is an

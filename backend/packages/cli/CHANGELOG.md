@@ -1,5 +1,186 @@
 # @cat-factory/cli
 
+## 0.12.0
+
+### Minor Changes
+
+- c0412e9: The acceptance suite now ADOPTS two repositories the operator created instead of bootstrapping
+  them, and ships a `configure` command that assembles its `.env`.
+
+  Bootstrapping was the one prerequisite no configuration could satisfy: a PAT connection reports
+  `canCreateRepos: false` for every workspace and the App creation path is org-scoped, so on the
+  deployment shape the suite's own README offers first, spec 01 could not run at all. It now backs a
+  board service with each named repository (`POST /api/v1/services` already takes a `repoId`) and
+  scaffolds both through `pl_build` from the same briefs, which also makes an interrupted scaffold
+  resume the way an interrupted feature run does. `vcs-connection` stops asking for repository
+  creation, `target-repos` gates on both repositories being visible AND adoptable, and a new
+  `model-preset` check joins the pinned preset against the model catalog so an undispatchable preset
+  is named as one rather than found at the first dispatch. Every task the suite files pins
+  `ACCEPTANCE_MODEL_PRESET`, so a pass runs on the model it says it ran on.
+
+  Adoptable is the stricter half of that gate, and it reads `linkedElsewhere` rather than only
+  `serviceId`: a whole-repo service homed on another board of the account has no id a
+  workspace-scoped surface can return, so the repository row answers `serviceId: null` with the flag
+  set, and `POST /api/v1/services` refuses it. An existing link on this board is compared against the
+  LEDGER's own service ids, so a resumed pass holding one of the two services cannot silently adopt a
+  colleague's other one. The two repository blockers, a monorepo and a foreign home, are refused
+  identically by the gate and by the adopt itself.
+
+  `pnpm --filter @cat-factory/acceptance run configure` resolves what the deployment and the
+  kubeconfig already know (workspace, connected account, preset library, apiserver, ServiceAccount
+  token), asks for the API token and the two repository names, and opens each repository's creation
+  page prefilled. It never overwrites a value without naming it and prints neither token.
+
+  `@cat-factory/cli` gains four exports (`readApiServerCommand`, `readTokenCommand`, `decodeToken`,
+  `normalizeApiServerUrl`) so the new command asks a kubeconfig the same questions `cat-factory k3s`
+  does, and normalises the answer the same way: k3d writes the undialable wildcard bind address
+  `https://0.0.0.0:6443` into a kubeconfig, so the read and its rewrite travel together.
+
+  Internal break, as pre-1.0 internals may: a ledger from an earlier pass is not read for its
+  `bootstrapJobs`, so a pass interrupted mid-bootstrap under the old shape starts fresh rather than
+  re-attaching to a job.
+
+## 0.11.0
+
+### Minor Changes
+
+- 9b3473a: `cat-factory k3s` no longer promises an ingress-derived environment URL it has not established, and
+  can recreate a local cluster.
+
+  An ingress-template URL needs two things: an ingress controller inside the cluster, and a host port
+  published into it. The command assumed both. It published no host port when creating a k3d cluster
+  (k3d forwards only the ports asked for at create time), created kind clusters with neither the port
+  mapping nor an ingress controller, and checked nothing at all when reusing an existing cluster. The
+  printed summary and the SPA connect-form deep link then named `{{branch}}.127.0.0.1.nip.io` as
+  wired. Provisioning still succeeded, because environment readiness is workload readiness, so the
+  failure surfaced later at the `tester` step against a URL that answered nothing.
+
+  Now: a create publishes the port (`--ingress-port`, default 80), and every path probes both halves
+  and reports one of three outcomes (verified, verified-missing with the fix, or could-not-tell). An
+  unestablished ingress withholds the host-template prefill rather than filling the form with a
+  promise, and the summary says what is missing and how to get it. Where the cluster is one the CLI
+  can name, the port half is settled against the container runtime's own port table, so a host port
+  answered by something other than the cluster is reported as the gap it is instead of as ready.
+
+  New `--recreate`: destroy a named k3d/kind cluster and build it again from the current flags, which
+  is the only way to change a published host port. It names what is on the cluster before deleting it,
+  only ever targets a k3d/kind cluster the CLI can name, and is never selected for you (`--yes` alone
+  cannot pick it). `--recreate --runtime k3s` is refused: k3s is a host service, not a cluster this
+  command can delete and build again.
+
+  The `ingressTemplate` environment URL source gains an optional `port`, on `/api/v1` (OpenAPI
+  `info.version` 1.42.0, so the four SDK clients gain the field) and on the internal handler config
+  alike. Additive, and existing configs are unaffected. A non-default host port needs its own carrier
+  because the rendered `hostTemplate` is also the Ingress `spec.rules[].host` a service's manifests
+  declare, and Kubernetes rejects a `host` with a port in it: folding the port into the template gave
+  the right URL and an invalid manifest. Both connect forms gain the field beside the host template.
+
+  Breaking for anyone scripting the CLI hand-off: the deep link now carries `scheme=http` (a local
+  ingress controller's TLS is self-signed) plus `ingressPort` for a non-default port, and omits
+  `hostTemplate` when the ingress was not verified. `buildK3sHandler` now returns `null` for a
+  connection whose ingress was not established (there is no honest `url` block to register), and
+  `buildK3sSetupUrl` takes the resolved connection rather than a built handler plus a verification
+  flag.
+
+## 0.10.5
+
+### Patch Changes
+
+- b889842: Report the actual cause of a failure everywhere, not just on a "Test connection" button.
+
+  The previous slice taught the connection PROBES to read the cause chain, because on Node a transport
+  failure is `TypeError: fetch failed` and what happened hangs off `.cause`. It turned out the repo had
+  three describers of a thrown value and the other two stopped at `error.message`: `getErrorMessage`
+  (the string a human is shown, and what a persisted failure reason or a PR comment records) and
+  `describeError` (every log line). So a probe could name `connect ECONNREFUSED 127.0.0.1:6443` while
+  the log line and the toast for the same failure still said `fetch failed`, which is what made a
+  Kubernetes connect failure unexplainable even with the probe fixed.
+
+  All three now flatten through one kernel core (`shared/error-chain.logic.ts`): `.cause` plus each
+  `AggregateError` branch (so a dual-stack `localhost` reports what happened on each address), scrubbed
+  through `redactSecrets`, capped with a marker saying what it dropped, and bounded by link identity so
+  a cause cycle terminates. Roughly 90 hand-rolled `e instanceof Error ? e.message : String(e)` copies
+  across the backend now call `getErrorMessage`, and five local `errMessage`/`messageOf` wrappers are
+  deleted.
+
+  Who may read a chain is part of the rule. An AUTHENTICATED reader gets it, because the inner link is
+  usually the only thing saying whether the fix is theirs or the deployment's; where a deployment's
+  model endpoints are platform-internal, their host and port do reach a workspace member through an
+  ordinary 4xx. An UNAUTHENTICATED surface does not: `/ready` on BOTH facades answers with kernel's
+  `publicDiagnostic` (the outermost link, scrubbed) rather than publishing the deployment's database
+  address, sharing one helper so the two runtimes cannot drift to different depths.
+
+  A VERDICT does not read the rendered string either. `errorChainMatches` tests each link uncapped, so
+  a sentinel phrase pushed past the display budget by a long wrapper cannot silently turn a recognised
+  rollout stop into a crash. Relatedly, log fields get their own, much wider cap than the 400 characters
+  a human-facing message is held to, and an error with nothing to say answers with the empty string
+  rather than the bare constructor name, so a call site's `getErrorMessage(e) || '<what to do>'` guard
+  still fires.
+
+  `redactSecrets` now spares a single-case word and an env-var-shaped identifier where a field-name rule
+  matched: it scrubs the message a person reads, and `Missing required key: OPENAI_API_KEY` must not
+  lose the name they have to go and set. Every credential shape the rules exist for still matches.
+
+  An error message may therefore now carry appended causes where it did not before. The opening phrase
+  is unchanged, which is what the downstream `/dispatch failed/i` and eviction-sentinel checks match on.
+
+  On the SPA, every failure toast goes through the one funnel that already existed for pipeline errors,
+  instead of 29 per-component copies of the same `notifyError(title, e)` and ~83 direct `toast.add`
+  calls rendering the raw message. Beyond the translated copy that funnel already resolved, a failure
+  toast now stays until dismissed instead of vanishing after about five seconds, its text is
+  selectable, and one click copies the whole report: the action that failed, the class of failure, the
+  backend's own account, and the `requestId` that is the only join between what the user saw and the
+  server log line explaining it. Conflict (409) toasts get the same treatment, which matters most on
+  the unknown-reason path, since that is where a reason an older SPA build has never heard of lands.
+
+  `@cat-factory/cli` carries its own copy of the describer rather than importing kernel. That package is
+  published and deliberately runtime-dependency-free, so a `workspace:*` import from its `bin` resolves
+  through pnpm's link locally and is simply absent off the registry; a conformity test pins the copy to
+  kernel's output byte for byte.
+
+## 0.10.4
+
+### Patch Changes
+
+- 25c66fe: Open the full URL in the browser on Windows.
+
+  Every link the CLI opens for you carries more than one query parameter, and on Windows all of them
+  went through `cmd /c start` with the URL unquoted. cmd splits an unquoted command line on `&`, so
+  the browser received only the parameters before the first one and cmd tried to run each remaining
+  parameter as a command. `cat-factory k3s` therefore landed on a bare `?infraSetup=local-k3s`: the
+  Local k3s connect form opened empty, with none of the apiserver URL, namespace template or ingress
+  host template the deep link exists to prefill. The pre-scoped PAT creation links lost their scopes
+  the same way.
+
+## 0.10.3
+
+### Patch Changes
+
+- 57a7ecd: Report what actually went wrong when a connection test fails.
+
+  Every "Test connection" button rendered the thrown error's `message`, which on Node is undici's
+  generic `fetch failed` wrapper; the real failure hangs off the cause chain. A stopped k3s cluster,
+  an untrusted certificate, an unresolvable host and a firewalled port all read identically. A new
+  kernel helper flattens the chain into the exact failure and adds a remedy for each cause it
+  recognises, wired into the Kubernetes environment + runner probes, the shared HTTP probe behind the
+  manifest environment/runner-pool providers, the Cloudflare preview probe, and the Compose probe. An
+  unrecognised failure is still reported verbatim, with no hint.
+
+  The failure CLASS also rides the wire as `ConnectionTestResult.failureCause` (a new optional field,
+  with the vocabulary in `@cat-factory/contracts`), so the connect forms state what failed in the
+  operator's own language and keep the backend's English account, which names the concrete host and
+  the remedy, as the detail beneath it.
+
+  A pasted ServiceAccount token is also checked on the field now: a token copied across a wrapped
+  terminal line carries a newline that no HTTP header can hold, and it previously surfaced as an
+  opaque request failure minutes later. The impossible case blocks Test and Save and is refused by
+  the apiserver client; a still-base64 `.data.token` value or a non-JWT shape is an overrulable
+  warning, since an apiserver using static bearer tokens accepts arbitrary strings.
+
+  The `cat-factory k3s` deep link now scrolls the Infrastructure window to the Kubernetes section
+  instead of opening at the top of the tab, and the CLI no longer lists the ServiceAccount among the
+  values to type into a form that has no such field.
+
 ## 0.10.2
 
 ### Patch Changes

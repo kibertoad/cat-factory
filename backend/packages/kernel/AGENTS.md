@@ -14,7 +14,9 @@ else imports its **ports** and domain types from here.
   `RepoFiles`, so a caller that resolved a run's repo can RECORD which repo it was and later
   correlate an inbound webhook, which names a repository by exactly that id.
 - `domain/`: domain types (`types.ts`, re-exporting contracts), pure logic + constants
-  (`seed.ts`, `catalog.ts`, `models.ts`, `subtasks.logic.ts`, `change-class.ts`, the
+  (`seed.ts`, `catalog.ts`, `models.ts` + its data half `model-catalog.ts` — the
+  `MODEL_CATALOG` entries live there and are re-exported from `models.ts`, so add a model in
+  the first and a resolution RULE in the second, `subtasks.logic.ts`, `change-class.ts`, the
   deterministic changed-file → change-class classifier + its risk ranking; what a preset then DOES
   with a class lives in `@cat-factory/contracts` beside the rule maps, because the SPA has to
   reach the same verdict), and the **public extension
@@ -38,7 +40,11 @@ else imports its **ports** and domain types from here.
   `judge-registry.ts` is the FOURTH step-taxonomy bucket (an LLM verdict against a rubric vs a
   per-task threshold → advance / park / bounce / fail); its pure disposition rules are
   `judge-logic.ts` (`disposeJudgeVerdict` / `renderJudgeRework`). See CLAUDE.md → "Gates vs
-  agents" and `docs/initiatives/judge-registry.md`.
+  agents" and `docs/initiatives/judge-registry.md`. Its COMPANION sibling is
+  `companion-logic.ts` (`disposeCompanionVerdict`, `companionParkReasonFor`, `CompanionParkReason`):
+  the same shape of decision from a rework pair's inputs, where a `blocker` finding holds the step
+  whatever the rating, and where the park REASON is what decides whether an unattended policy may
+  answer it.
 - `ports/tracker-webhook.ts` is the INBOUND tracker seam: the neutral `TrackerWebhookEvent`
   (`issue` | `comment`, keyed `(source, externalId)`) plus the optional
   `TaskSourceProvider.webhook` capability a provider implements to verify + parse its vendor's
@@ -176,6 +182,37 @@ else imports its **ports** and domain types from here.
   `shared/best-effort.ts` (`runBestEffort` / `describeError`), the convention that replaces
   `.catch(() => {})`: keep the swallow, add one scrubbed `warn`. See
   [`backend/docs/logging.md`](../../docs/logging.md).
+- `shared/error-chain.logic.ts`: **`errorChainText` / `flattenErrorChain`**, how a THROWN VALUE
+  becomes text for every reader in the repo. It walks `.cause` and each `AggregateError` branch
+  (bounded by depth and by link IDENTITY, so a cause cycle terminates), folds links that render
+  identically into an `(xN)` count rather than dropping one, scrubs through `redactSecrets` and caps
+  the result SAYING what it dropped. The three describers that read it are `getErrorMessage`
+  (`domain/errors.ts`, what a human is shown), `describeError` (`shared/best-effort.ts`, log fields)
+  and `describeConnectionFailure` (below, which adds a cause class and remedy). They were three
+  answers to one question before this existed, two of them stopping at `error.message`: that is why
+  a probe named `connect ECONNREFUSED` while the log line for the SAME failure said `fetch failed`.
+  The one asymmetry that stays: this KEEPS undici's contentless outer link, because a log line and a
+  `DispatchError` message are matched downstream by their opening phrase, while a probe's verdict
+  drops it to lead with the real cause. Full model: [`backend/docs/logging.md`](../../docs/logging.md).
+- `shared/connection-failure.logic.ts`: **`describeConnectionFailure` / `connectionFailureResult`**,
+  what every "Test connection" button reports when the probe got no ANSWER at all. On Node/undici a
+  transport failure arrives as a generic `TypeError: fetch failed` with the real cause on `.cause`
+  (or on an `AggregateError`'s `.errors`, one per resolved address), so reading `error.message`
+  renders the single least informative string in the chain: a stopped cluster, an untrusted
+  certificate and a firewalled host all read as `fetch failed`. This flattens the chain and adds a
+  remedy per recognised cause. It lives in kernel for the same reason `domain/vcs-errors.ts` does:
+  the probes are spread across integrations and each facade, which share only kernel; the cause
+  UNION lives in contracts, because the SPA owns the translated copy per member. A probe returns
+  `connectionFailureResult`, which carries that cause on the wire beside the English prose, rather
+  than a hand-built `{ ok: false, message }` a localized surface cannot render. `unknown` is a real
+  member, and it yields NO hint: a guessed remedy for an unrecognised failure sends the operator
+  somewhere wrong. Classification walks the chain INNERMOST-first, because the outer links are
+  generic wrappers whose own codes would mask the specific cause underneath. **`connectionFailureHint`**
+  is the same per-cause remedy for a cause the CALLER classified, and it exists for the one thing the
+  walk cannot see: a client that already converted its own deadline into a typed error whose abort
+  marker is NAMED `AbortError` (the SDK's `CatFactoryTimeoutError`), which the walk therefore reads as
+  a cancelled request. The caller supplies the class; the sentence stays this module's, because a copy
+  written at that call site is one release behind by construction.
 - `shared/initiator-pat-gate.ts`: **`createInitiatorPatGate`**, the two-tier `allowInitiatorPat`
   policy: may a RUN authenticate as its initiator's own personal access token instead of the
   deployment credential? Effective = the ACCOUNT permits AND the WORKSPACE permits, and the tiers

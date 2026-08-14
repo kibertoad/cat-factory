@@ -11,7 +11,7 @@ import type {
   OperationalGauge,
   OperationalGaugeSample,
 } from '@cat-factory/kernel'
-import { SPAN_ID_FIELD, TRACE_ID_FIELD } from '@cat-factory/kernel'
+import { getErrorMessage, SPAN_ID_FIELD, TRACE_ID_FIELD } from '@cat-factory/kernel'
 import type { PlatformObservability } from '@cat-factory/contracts'
 
 // The SINGLE source of truth for how a cat-factory observability event becomes
@@ -728,9 +728,12 @@ export const OPERATIONAL_METRIC: Record<OperationalCounter, string> = {
   'sweep.run_finalized': 'cat_factory.platform.sweep_runs_finalized',
   'sweep.run_stalled': 'cat_factory.platform.sweep_runs_stalled',
   'sweep.run_state_unknown': 'cat_factory.platform.sweep_runs_state_unknown',
+  'sweep.run_recovery_failed': 'cat_factory.platform.sweep_run_recovery_failures',
   'sweep.failed': 'cat_factory.platform.sweep_failures',
   'container.dispatch_failed': 'cat_factory.platform.container_dispatch_failures',
   'container.evicted': 'cat_factory.platform.container_evictions',
+  'container.harness_shutdown': 'cat_factory.platform.container_harness_shutdowns',
+  'container.branch_contended': 'cat_factory.platform.container_branch_contentions',
   'container.capability_unsupported': 'cat_factory.platform.container_capability_unsupported',
   'container.capability_unknown': 'cat_factory.platform.container_capability_unknown',
   'container.blind_job_not_stopped': 'cat_factory.platform.container_blind_job_not_stopped',
@@ -768,9 +771,18 @@ const OPERATIONAL_UNIT: Record<OperationalCounter, string> = {
   'sweep.run_finalized': RUN_UNIT,
   'sweep.run_stalled': RUN_UNIT,
   'sweep.run_state_unknown': RUN_UNIT,
+  // One RUN the pass could not recover, not one failed pass: the pass itself survived, which is
+  // the whole difference between this and `sweep.failed` below.
+  'sweep.run_recovery_failed': RUN_UNIT,
   'sweep.failed': '{failure}',
   'container.dispatch_failed': '{failure}',
   'container.evicted': '{eviction}',
+  // One harness STOPPED under a job, which is one whole run ended: unlike an eviction beside it,
+  // nothing retries, so the unit is the shutdown itself rather than a recovery attempt.
+  'container.harness_shutdown': '{shutdown}',
+  // One REFUSED push, which is one whole agent run about to be spent again: the unit a reader
+  // multiplies by an agent run's cost, not a failure the run itself reports.
+  'container.branch_contended': '{refusal}',
   // One DISPATCH refused / unverifiable, not one run: a step re-dispatched by a gate helper
   // contributes several, which is exactly what the rate should show.
   'container.capability_unsupported': '{dispatch}',
@@ -946,13 +958,13 @@ export function logAttributeValue(value: unknown): AttributeValue | undefined {
     // A cycle, a BigInt inside an object, a throwing `toJSON`: the same class the pino
     // browser writer guards against, for the same reason: a field bag we cannot render must
     // not remove the line, which is the only evidence that the code path ran at all.
-    return `[unserializable: ${error instanceof Error ? error.message : String(error)}]`
+    return `[unserializable: ${getErrorMessage(error)}]`
   }
 }
 
 /** Render a value this mapping could not read at all, in the `logAttributeValue` vocabulary. */
 function unreadable(error: unknown): string {
-  return `[unreadable: ${error instanceof Error ? error.message : String(error)}]`
+  return `[unreadable: ${getErrorMessage(error)}]`
 }
 
 /**

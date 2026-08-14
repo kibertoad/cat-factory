@@ -1,5 +1,355 @@
 # @cat-factory/provider-bedrock
 
+## 0.7.474
+
+### Patch Changes
+
+- Updated dependencies [409238f]
+  - @cat-factory/kernel@0.301.0
+  - @cat-factory/agents@0.131.0
+
+## 0.7.473
+
+### Patch Changes
+
+- Updated dependencies [0ef48d1]
+  - @cat-factory/kernel@0.300.0
+  - @cat-factory/agents@0.130.2
+
+## 0.7.472
+
+### Patch Changes
+
+- d5c1f1c: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with (`ai@7.0.64`,
+  `@ai-sdk/openai@4.0.41`, `@ai-sdk/amazon-bedrock@5.0.55`). The Cloudflare toolchain moves
+  together again: `wrangler@4.122.0` and `@cloudflare/vitest-pool-workers@0.21.2`, whose bundled
+  wrangler tracks it. `@aws-sdk/client-s3` goes to 3.1109.0 and the SPA's store engine to
+  `pinia@4.0.3` / `@pinia/nuxt@1.0.2`.
+
+  `capnweb` moves 0.10.0 to 0.11.0 in the Gatekeeper Worker. The release is additive (stubs as
+  stream chunks, exact ArrayBuffer/DataView serialization, URL over RPC) and touches neither
+  `RpcTarget` nor `newWorkersRpcResponse`, the only two symbols we import. Its 0.11.1 patch, which
+  enforces an ASCII-only dist bundle so a consumer's `btoa()` cannot choke on the runtime, missed
+  the release-age window by two hours and is the first thing the next sweep should pick up.
+
+  Held back deliberately: `@changesets/cli` 3.0.0 and, in the frontend, `typescript` 7 (Nuxt 4.5.2
+  itself depends on `typescript@6.0.3`). No `minimumReleaseAgeExclude` entries were added: every
+  version above already satisfies the gate.
+
+- Updated dependencies [d5c1f1c]
+- Updated dependencies [c67e924]
+  - @cat-factory/agents@0.130.1
+  - @cat-factory/kernel@0.299.1
+
+## 0.7.471
+
+### Patch Changes
+
+- Updated dependencies [056e18d]
+  - @cat-factory/kernel@0.299.0
+  - @cat-factory/agents@0.130.0
+
+## 0.7.470
+
+### Patch Changes
+
+- Updated dependencies [a81879b]
+  - @cat-factory/kernel@0.298.2
+  - @cat-factory/agents@0.129.2
+
+## 0.7.469
+
+### Patch Changes
+
+- Updated dependencies [0e1e0fa]
+  - @cat-factory/agents@0.129.1
+  - @cat-factory/kernel@0.298.1
+
+## 0.7.468
+
+### Patch Changes
+
+- Updated dependencies [7312e0a]
+  - @cat-factory/kernel@0.298.0
+  - @cat-factory/agents@0.129.0
+
+## 0.7.467
+
+### Patch Changes
+
+- Updated dependencies [95408c2]
+  - @cat-factory/kernel@0.297.0
+  - @cat-factory/agents@0.128.2
+
+## 0.7.466
+
+### Patch Changes
+
+- 792ecde: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with (`ai@7.0.62`,
+  `@ai-sdk/anthropic@4.0.38` / `openai@4.0.40` / `openai-compatible@3.0.30` /
+  `amazon-bedrock@5.0.54`). The Cloudflare toolchain moves together: `wrangler@4.121.0`,
+  `@cloudflare/workers-types@5.20260812.1` and `@cloudflare/vitest-pool-workers@0.21.1`, whose only
+  change over 0.20.3 is the wrangler and miniflare it bundles, so the pool now carries the same
+  wrangler the workspace declares instead of one release behind it.
+
+  `esbuild` gains three scoped `pnpm-workspace.yaml` overrides pinning vite's, tsx's and nitropack's
+  loose ranges to the 0.28.1 that wrangler and `@cloudflare/vitest-pool-workers` pin exactly. Without
+  them a re-resolve hands vite's optional PEER slot the newer 0.28.2 and the tree gains a second
+  esbuild; because pnpm resolves an auto-installed peer without its own `optionalDependencies`, that
+  copy never gets its platform binary and esbuild's postinstall aborts the entire install. The
+  overrides are deliberately scoped rather than top-level: `drizzle-kit`, `@intlify/bundle-utils` and
+  `fontless` declare narrower ranges that a blanket pin would force them out of.
+
+  Held back deliberately: `@changesets/cli` 3.0.0 and, in the frontend, `typescript` 7 (Nuxt 4.5.2
+  itself depends on `typescript@6.0.3`). No `minimumReleaseAgeExclude` entries were added: every
+  version above already satisfies the gate.
+
+- Updated dependencies [792ecde]
+  - @cat-factory/agents@0.128.1
+  - @cat-factory/kernel@0.296.1
+
+## 0.7.465
+
+### Patch Changes
+
+- Updated dependencies [fc56d82]
+- Updated dependencies [fc9afb4]
+  - @cat-factory/kernel@0.296.0
+  - @cat-factory/agents@0.128.0
+
+## 0.7.464
+
+### Patch Changes
+
+- Updated dependencies [edd4fd0]
+  - @cat-factory/kernel@0.295.0
+  - @cat-factory/agents@0.127.3
+
+## 0.7.463
+
+### Patch Changes
+
+- @cat-factory/agents@0.127.2
+- @cat-factory/kernel@0.294.1
+
+## 0.7.462
+
+### Patch Changes
+
+- Updated dependencies [569181d]
+  - @cat-factory/kernel@0.294.0
+  - @cat-factory/agents@0.127.1
+
+## 0.7.461
+
+### Patch Changes
+
+- Updated dependencies [1a0b593]
+  - @cat-factory/kernel@0.293.0
+  - @cat-factory/agents@0.127.0
+
+## 0.7.460
+
+### Patch Changes
+
+- Updated dependencies [7d1477c]
+  - @cat-factory/kernel@0.292.2
+  - @cat-factory/agents@0.126.8
+
+## 0.7.459
+
+### Patch Changes
+
+- Updated dependencies [c09ddbe]
+  - @cat-factory/agents@0.126.7
+  - @cat-factory/kernel@0.292.1
+
+## 0.7.458
+
+### Patch Changes
+
+- Updated dependencies [fc4a1e4]
+  - @cat-factory/kernel@0.292.0
+  - @cat-factory/agents@0.126.6
+
+## 0.7.457
+
+### Patch Changes
+
+- Updated dependencies [ee733ee]
+  - @cat-factory/kernel@0.291.0
+  - @cat-factory/agents@0.126.5
+
+## 0.7.456
+
+### Patch Changes
+
+- Updated dependencies [01086d8]
+  - @cat-factory/kernel@0.290.1
+  - @cat-factory/agents@0.126.4
+
+## 0.7.455
+
+### Patch Changes
+
+- Updated dependencies [1bcdacc]
+  - @cat-factory/kernel@0.290.0
+  - @cat-factory/agents@0.126.3
+
+## 0.7.454
+
+### Patch Changes
+
+- @cat-factory/agents@0.126.2
+- @cat-factory/kernel@0.289.1
+
+## 0.7.453
+
+### Patch Changes
+
+- Updated dependencies [bc2478d]
+  - @cat-factory/kernel@0.289.0
+  - @cat-factory/agents@0.126.1
+
+## 0.7.452
+
+### Patch Changes
+
+- Updated dependencies [a634746]
+  - @cat-factory/kernel@0.288.0
+  - @cat-factory/agents@0.126.0
+
+## 0.7.451
+
+### Patch Changes
+
+- Updated dependencies [7893f35]
+  - @cat-factory/kernel@0.287.0
+  - @cat-factory/agents@0.125.8
+
+## 0.7.450
+
+### Patch Changes
+
+- @cat-factory/agents@0.125.7
+- @cat-factory/kernel@0.286.3
+
+## 0.7.449
+
+### Patch Changes
+
+- @cat-factory/agents@0.125.6
+- @cat-factory/kernel@0.286.2
+
+## 0.7.448
+
+### Patch Changes
+
+- Updated dependencies [b889842]
+  - @cat-factory/kernel@0.286.1
+  - @cat-factory/agents@0.125.5
+
+## 0.7.447
+
+### Patch Changes
+
+- Updated dependencies [b25732f]
+  - @cat-factory/kernel@0.286.0
+  - @cat-factory/agents@0.125.4
+
+## 0.7.446
+
+### Patch Changes
+
+- Updated dependencies [7119ca7]
+  - @cat-factory/kernel@0.285.3
+  - @cat-factory/agents@0.125.3
+
+## 0.7.445
+
+### Patch Changes
+
+- Updated dependencies [57a7ecd]
+  - @cat-factory/kernel@0.285.2
+  - @cat-factory/agents@0.125.2
+
+## 0.7.444
+
+### Patch Changes
+
+- @cat-factory/agents@0.125.1
+- @cat-factory/kernel@0.285.1
+
+## 0.7.443
+
+### Patch Changes
+
+- Updated dependencies [22b2459]
+- Updated dependencies [2428b6b]
+  - @cat-factory/kernel@0.285.0
+  - @cat-factory/agents@0.125.0
+
+## 0.7.442
+
+### Patch Changes
+
+- Updated dependencies [19baddf]
+  - @cat-factory/kernel@0.284.0
+  - @cat-factory/agents@0.124.0
+
+## 0.7.441
+
+### Patch Changes
+
+- Updated dependencies [31f43c1]
+  - @cat-factory/kernel@0.283.0
+  - @cat-factory/agents@0.123.6
+
+## 0.7.440
+
+### Patch Changes
+
+- Updated dependencies [3ff215a]
+  - @cat-factory/kernel@0.282.1
+  - @cat-factory/agents@0.123.5
+
+## 0.7.439
+
+### Patch Changes
+
+- Updated dependencies [e3cf16a]
+  - @cat-factory/kernel@0.282.0
+  - @cat-factory/agents@0.123.4
+
+## 0.7.438
+
+### Patch Changes
+
+- @cat-factory/agents@0.123.3
+- @cat-factory/kernel@0.281.3
+
+## 0.7.437
+
+### Patch Changes
+
+- Updated dependencies [1fbd83c]
+- Updated dependencies [00228c6]
+  - @cat-factory/kernel@0.281.2
+  - @cat-factory/agents@0.123.2
+
+## 0.7.436
+
+### Patch Changes
+
+- @cat-factory/agents@0.123.1
+- @cat-factory/kernel@0.281.1
+
 ## 0.7.435
 
 ### Patch Changes

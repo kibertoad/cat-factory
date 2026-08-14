@@ -13,6 +13,8 @@ import type {
   ActPublicNotificationRequest,
   AddPublicTaskDependencyRequest,
   AttachPublicTaskDocumentRequest,
+  ConnectPublicEnvironmentRequest,
+  ConnectPublicEnvironmentResponse,
   CreateHeadlessPublicApiKey,
   CreatePublicJob,
   CreatePublicServiceRequest,
@@ -26,6 +28,9 @@ import type {
   GetDebugLlmExportResponse,
   GetPublicMergeRecordResponse,
   GetPublicRunOutcomeResponse,
+  GetPublicTrackerWritebackResponse,
+  GetPublicVcsConnectionResponse,
+  LinkPublicRepoRequest,
   ListDebugAgentContextResponse,
   ListDebugLlmCallsOrder,
   ListDebugLlmCallsResponse,
@@ -35,12 +40,17 @@ import type {
   ListDebugToolCallsOrder,
   ListDebugToolCallsOutcome,
   ListDebugToolCallsResponse,
+  ListPublicAvailableReposResponse,
   ListPublicJobsResponse,
   ListPublicMergeClassRollupsResponse,
+  ListPublicModelPresetsResponse,
   ListPublicReposResponse,
+  ListPublicReposResponseRepo,
+  ListPublicRiskPoliciesResponse,
   ListPublicTaskDocumentsResponse,
   ListPublicTaskDocumentsResponseDocument,
   ListPublicTaskTypesResponse,
+  ListPublicWiredModelsResponse,
   LlmCallOutcome,
   Notification,
   NotificationWebhook,
@@ -85,10 +95,16 @@ import type {
   PublicUsage,
   PutNotificationWebhook,
   RunStatus,
+  StartPublicRepoBootstrapRequest,
+  StartPublicRepoBootstrapResponse,
   StartPublicTask,
   TagPublicMergeReviewEffortRequest,
   TaskStatus,
+  TestPublicEnvironmentConnectionRequest,
+  TestPublicEnvironmentConnectionResponse,
+  UpdatePublicServiceRequest,
   UpdatePublicTask,
+  UpdatePublicTrackerWritebackRequest,
 } from './models.generated.ts'
 
 /** Query parameters for `client.debug.getAgentContext()`. */
@@ -164,6 +180,11 @@ export type DebugListToolCallsQuery = {
   jobId?: string
   order?: ListDebugToolCallsOrder
   outcome?: ListDebugToolCallsOutcome
+}
+
+/** Query parameters for `client.repos.listAvailable()`. */
+export type ReposListAvailableQuery = {
+  q?: string
 }
 
 /** Query parameters for `client.jobs.list()`. */
@@ -273,7 +294,7 @@ export class JobsResource {
   }
 }
 
-/** The workspace's board services, the frames tasks are created under: list them, or create one (optionally backed by a repository). */
+/** The workspace's board services, the frames tasks are created under: list them, create one (optionally backed by a repository), patch one (including declaring where the manifests for its per-run environments are read from), or delete one with everything under it. The delete refuses a service holding unfinished tasks rather than discarding work in flight. */
 export class ServicesResource {
   readonly #transport: Transport
 
@@ -296,6 +317,19 @@ export class ServicesResource {
   }
 
   /**
+   * Delete a service and everything under it
+   * Delete a board service, its modules and tasks, and the run history recorded under them. The inverse of the create, and the one board write with no headless counterpart before it: a key authenticates on `/api/v1` only, so a caller that provisions services (an environment rebuilt per test pass, a repository retired, a frame raised against the wrong repository) had to ask a person to clean them up. Any run still going under the frame is stopped and its container killed first, so nothing is left idling. A service holding UNFINISHED tasks is refused with `422 service_has_unfinished_tasks` rather than discarding work in flight: delete those tasks first (`DELETE /api/v1/tasks/{taskId}`) if that is what you mean. An ARCHIVED service is not addressable here, exactly as it is absent from `GET /api/v1/services`. Requires an `admin` key.
+   * `DELETE /api/v1/services/{serviceId}` — operation `deletePublicService`.
+   */
+  delete(serviceId: string, options: RequestOptions = {}): Promise<void> {
+    return this.#transport.requestNoContent({
+      method: 'DELETE',
+      path: `/api/v1/services/${encodePathSegment(serviceId)}`,
+      options,
+    })
+  }
+
+  /**
    * List the workspace's services
    * List the board service frames in the key’s workspace, so a caller can discover the serviceId to create/list tasks under.
    * `GET /api/v1/services` — operation `listPublicServices`.
@@ -304,6 +338,20 @@ export class ServicesResource {
     return this.#transport.request<PublicServiceList>({
       method: 'GET',
       path: `/api/v1/services`,
+      options,
+    })
+  }
+
+  /**
+   * Patch a service, including where its per-run manifests live
+   * Change a service’s authored fields, and declare its `provisioning`: where the manifests for a per-run environment are read from. That second half is what a connected cluster alone cannot supply, because the platform keeps “which cluster” (one per workspace) apart from “which manifests” (one set per service). An omitted `provisioning` leaves the stored one alone rather than clearing it. Board coordinates are deliberately absent, as they are on service creation.
+   * `PATCH /api/v1/services/{serviceId}` — operation `updatePublicService`.
+   */
+  update(serviceId: string, body: UpdatePublicServiceRequest = {}, options: RequestOptions = {}): Promise<PublicService> {
+    return this.#transport.request<PublicService>({
+      method: 'PATCH',
+      path: `/api/v1/services/${encodePathSegment(serviceId)}`,
+      body,
       options,
     })
   }
@@ -344,7 +392,7 @@ export class SpecResource {
   }
 }
 
-/** The repositories this workspace can back a service with, and which service each already backs: the discovery half of service creation. */
+/** The repositories this workspace can back a service with, and which service each already backs (the discovery half of service creation); the ones its connection could reach but has not adopted yet, and adopting one by name; plus creating a brand-new one, where a bootstrap writes the repository with an agent and reports the board service it materialises. */
 export class ReposResource {
   readonly #transport: Transport
 
@@ -353,14 +401,69 @@ export class ReposResource {
   }
 
   /**
+   * Create a repository and adapt it with the bootstrapper agent
+   * Create a brand-new repository under the account the workspace is connected to, then run the bootstrapper agent in a container to write it against the supplied brief (or to adapt a reference architecture). Answers 201 with a job to poll rather than blocking for the minutes a container takes. The job names the board service frame it materialises, so work can be filed against the service before the repository has finished being written. This is the one act of board setup with no other public counterpart: creating a service takes a repoId, and nothing else here makes one.
+   * `POST /api/v1/repos/bootstrap` — operation `startPublicRepoBootstrap`.
+   */
+  bootstrap(body: StartPublicRepoBootstrapRequest, options: RequestOptions = {}): Promise<StartPublicRepoBootstrapResponse> {
+    return this.#transport.request<StartPublicRepoBootstrapResponse>({
+      method: 'POST',
+      path: `/api/v1/repos/bootstrap`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Poll one repository bootstrap
+   * Read a bootstrap run’s current state. `failureKind` says whether a retry could plausibly help: a `preflight` refusal (the target repository already has content, nothing is connected) cannot be retried into success, where an `evicted` container can.
+   * `GET /api/v1/repos/bootstrap/{jobId}` — operation `getPublicRepoBootstrap`.
+   */
+  getBootstrap(jobId: string, options: RequestOptions = {}): Promise<StartPublicRepoBootstrapResponse> {
+    return this.#transport.request<StartPublicRepoBootstrapResponse>({
+      method: 'GET',
+      path: `/api/v1/repos/bootstrap/${encodePathSegment(jobId)}`,
+      options,
+    })
+  }
+
+  /**
+   * Adopt an existing repository into this workspace
+   * Link a repository the connection can reach, by `owner` and `name`, so a service can be created against it. The act that had no headless counterpart: nothing links a repository for you (the provider webhook for an added repository does not project one, and a resync refreshes what is already linked), so a repository created by any means stayed invisible to the repos list and unusable by service creation until a person opened the app. Takes a NAME rather than the numeric `repoId` its sibling reads report, because a caller setting a workspace up from configuration knows the name and cannot know a provider id for a repository no public read lists; the response carries the `repoId` for the service-creation call that follows. Idempotent: a repository this workspace already links returns its row rather than refusing, so a setup script re-running itself needs no special case. A repository the connection cannot reach is a 404 with `details.reason: repo_not_reachable`, which covers both "it does not exist" and "your credential is not granted it": a provider answers those identically, and inventing a split would be a guess.
+   * `POST /api/v1/repos/link` — operation `linkPublicRepo`.
+   */
+  link(body: LinkPublicRepoRequest, options: RequestOptions = {}): Promise<ListPublicReposResponseRepo> {
+    return this.#transport.request<ListPublicReposResponseRepo>({
+      method: 'POST',
+      path: `/api/v1/repos/link`,
+      body,
+      options,
+    })
+  }
+
+  /**
    * List the repositories a service can be created against
-   * List the repositories the key’s workspace has connected, each with the service that already backs it (null when nothing does, and always null for a monorepo, which can back several). The discovery half of service creation: the create takes a repoId, and this is where one comes from.
+   * List the repositories the key’s workspace has LINKED, each with the service that already backs it (null when nothing does, and always null for a monorepo, which can back several). The discovery half of service creation: the create takes a repoId, and this is where one comes from. A repository the connection can reach but nobody has adopted yet is NOT here; list those with the available-repos endpoint and adopt one with the link endpoint.
    * `GET /api/v1/repos` — operation `listPublicRepos`.
    */
   list(options: RequestOptions = {}): Promise<ListPublicReposResponse> {
     return this.#transport.request<ListPublicReposResponse>({
       method: 'GET',
       path: `/api/v1/repos`,
+      options,
+    })
+  }
+
+  /**
+   * List the repositories this workspace could adopt
+   * The repositories the workspace’s source-control connection can REACH, whether or not this workspace links them, with `linked` as the join onto the repos list. It exists because those two populations differ and the difference is invisible otherwise: linking is explicit per workspace, so a repository that exists and is perfectly reachable is absent from the repos list in exactly the way one that was never created is, and those need opposite fixes. Pass `q` as an exact `owner/name` for an authoritative point-read, as a substring to search, or omit it to browse what is accessible. Each call reaches the provider, so it is a setup-time read rather than one to poll.
+   * `GET /api/v1/repos/available` — operation `listPublicAvailableRepos`.
+   */
+  listAvailable(query: ReposListAvailableQuery = {}, options: RequestOptions = {}): Promise<ListPublicAvailableReposResponse> {
+    return this.#transport.request<ListPublicAvailableReposResponse>({
+      method: 'GET',
+      path: `/api/v1/repos/available`,
+      query,
       options,
     })
   }
@@ -682,6 +785,167 @@ export class NotificationsResource {
     return this.#transport.request<PublicNotificationList>({
       method: 'GET',
       path: `/api/v1/notifications`,
+      options,
+    })
+  }
+}
+
+/** The cluster this workspace provisions per-run environments onto: probe a candidate connection without saving it, or bind one. The credential is write-only, so a read reports which secret keys are stored and never their values. */
+export class EnvironmentsResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Connect the workspace to the cluster its environments deploy onto
+   * Bind environment provisioning to a Kubernetes cluster: the apiserver, how its TLS is verified, the namespace template, and how an environment URL is derived once manifests are applied. The secret bundle authenticating the connection is write-only; the response reports which secret KEYS were stored and never their values. Idempotent, so re-connecting replaces rather than accumulating.
+   * `POST /api/v1/environments/connections` — operation `connectPublicEnvironment`.
+   */
+  connect(body: ConnectPublicEnvironmentRequest, options: RequestOptions = {}): Promise<ConnectPublicEnvironmentResponse> {
+    return this.#transport.request<ConnectPublicEnvironmentResponse>({
+      method: 'POST',
+      path: `/api/v1/environments/connections`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Probe a candidate cluster connection without saving it
+   * Reach the apiserver with the supplied credentials and report what came back, persisting nothing. Worth a call of its own because the alternative is discovering an unreachable cluster or an expired token on the deploy step of a run that has already paid for a design pass and an implementation. A cluster that refuses the credential is an ANSWER, so it is a 200 carrying `ok: false` rather than an error.
+   * `POST /api/v1/environments/connections/test` — operation `testPublicEnvironmentConnection`.
+   */
+  testConnection(body: TestPublicEnvironmentConnectionRequest, options: RequestOptions = {}): Promise<TestPublicEnvironmentConnectionResponse> {
+    return this.#transport.request<TestPublicEnvironmentConnectionResponse>({
+      method: 'POST',
+      path: `/api/v1/environments/connections/test`,
+      body,
+      options,
+    })
+  }
+}
+
+/** The models a run in this workspace could actually dispatch to, and why an unavailable one is unavailable: unconfigured, or refused by the account model-family policy. Those two need opposite fixes. */
+export class ModelsResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * List the models a run in this workspace could dispatch to
+   * The workspace’s model catalog with the flags that decide whether an agent step can run at all, and which of four unrelated fixes an unrunnable one needs. `available` says a run can dispatch to it now. `policyBlocked` says it is configured and refused by the account’s model-family policy, so adding another provider key changes nothing. `personalSubscription` says it runs on a credential belonging to a PERSON (an individual-usage subscription vendor), which a key resolving no user can never see. `subscriptionConfigured` then says whether that person actually holds one: `true` means the model is wired and only the key’s identity is in the way, `false` means the owner is known and holds none, and `null` means there was nobody to ask about, so it must not be read as `false`. `userScoped` is SUPERSEDED by `personalSubscription` and still answers its original narrower question (whether a subscription is the route in force); prefer the newer field.
+   * `GET /api/v1/models` — operation `listPublicWiredModels`.
+   */
+  list(options: RequestOptions = {}): Promise<ListPublicWiredModelsResponse> {
+    return this.#transport.request<ListPublicWiredModelsResponse>({
+      method: 'GET',
+      path: `/api/v1/models`,
+      options,
+    })
+  }
+}
+
+/** The workspace's source-control connection: which account it talks to, how it authenticates, and whether it may create repositories and write workflow files. Both permissions are enforced by the provider at push time, so reading them beats discovering one missing halfway through an automated setup. */
+export class VcsResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Read the workspace’s source-control connection and what it may do
+   * The connected account, how the workspace authenticates to it, and the two permissions that decide whether an automated flow can complete: whether the platform may create repositories, and whether it may write workflow files. Both are enforced by the provider at push time, so a caller that cannot read them discovers a missing workflow permission as a repository that bootstrapped and then failed to gain its CI workflow. Provider-neutral: a GitLab-connected workspace answers here too. `connection` is null when nothing is connected, which is a state rather than an error.
+   * `GET /api/v1/vcs/connection` — operation `getPublicVcsConnection`.
+   */
+  getConnection(options: RequestOptions = {}): Promise<GetPublicVcsConnectionResponse> {
+    return this.#transport.request<GetPublicVcsConnectionResponse>({
+      method: 'GET',
+      path: `/api/v1/vcs/connection`,
+      options,
+    })
+  }
+}
+
+/** What this workspace does to a task's LINKED tracker issue as its pull request progresses: comment when it opens, comment and close the issue when it merges, and post a headless run's parked review findings so the reporter can answer where they filed. The write MERGES, so turning one action on leaves the other two as they were. It is the writeback half of the workspace's tracker configuration; the filing selection (which tracker a tech-debt ticket is raised on) is not published yet. */
+export class TrackerResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Read the workspace’s tracker writeback disposition
+   * What this workspace does to a task’s LINKED tracker issue as its pull request progresses: comment when the pull request opens, comment and close the issue when it merges, and post a headless run’s parked requirements-review findings so the reporter can answer where they filed. Worth reading before filing a ticket-linked task, since it decides whether the issue the work came from ever hears the outcome. `updatedAt` is null when nobody has chosen a disposition, in which case the values are this deployment’s defaults (all three ON). Requires an `admin` key.
+   * `GET /api/v1/tracker/writeback` — operation `getPublicTrackerWriteback`.
+   */
+  getWriteback(options: RequestOptions = {}): Promise<GetPublicTrackerWritebackResponse> {
+    return this.#transport.request<GetPublicTrackerWritebackResponse>({
+      method: 'GET',
+      path: `/api/v1/tracker/writeback`,
+      options,
+    })
+  }
+
+  /**
+   * Change the workspace’s tracker writeback disposition
+   * Turn one or more writeback actions on or off. A MERGE: an action you omit keeps its stored value, so a caller acting on one decision cannot silently move the other two. This is workspace-wide configuration, so it changes what happens to every task’s ticket on the board; the read beside it reports `updatedAt` so a caller can see whether it is about to overwrite somebody’s choice. An empty patch is a no-op and does not stamp `updatedAt`. Requires an `admin` key.
+   * `PATCH /api/v1/tracker/writeback` — operation `updatePublicTrackerWriteback`.
+   */
+  updateWriteback(body: UpdatePublicTrackerWritebackRequest = {}, options: RequestOptions = {}): Promise<GetPublicTrackerWritebackResponse> {
+    return this.#transport.request<GetPublicTrackerWritebackResponse>({
+      method: 'PATCH',
+      path: `/api/v1/tracker/writeback`,
+      body,
+      options,
+    })
+  }
+}
+
+/** The risk policies a task can pin, including which is the workspace default: what decides whether a run can land its pull request without a person, and how many attempts its CI fixer, requirement rounds and release watch are given. Broader than merging, which is why it is not called a merge preset. */
+export class RiskPoliciesResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * List the workspace’s risk policies
+   * The policy library, including which row is the workspace default that a task pinning none resolves. `autoMergeEnabled` is the master switch that decides whether a run can land its pull request without a person; `dryRunRoles` names the roles whose runs the policy forces into dry-run mode, which is the difference between “this policy merges” and “this policy merges for everyone except one role”. A policy also caps CI-fixer attempts, requirement and tester iteration rounds and the release-health watch, which is why it is not called a merge preset; the id is what a task pins as `riskPolicyId`.
+   * `GET /api/v1/risk-policies` — operation `listPublicRiskPolicies`.
+   */
+  list(options: RequestOptions = {}): Promise<ListPublicRiskPoliciesResponse> {
+    return this.#transport.request<ListPublicRiskPoliciesResponse>({
+      method: 'GET',
+      path: `/api/v1/risk-policies`,
+      options,
+    })
+  }
+}
+
+/** The model presets a task can pin, including which is the workspace default: what decides which model each agent step runs on, and so what a run costs. Availability is not repeated here; join `baseModelId` against the models group, which keeps unconfigured and policy-refused apart. */
+export class ModelPresetsResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * List the workspace’s model presets
+   * The preset library, including which row is the workspace default that a task pinning none resolves. `baseModelId` is the model every agent step runs on under the preset, and `overrides` names the agent kinds that run on something else, which is usually the one that matters: two presets often differ only in what the CODER gets. Whether a preset can actually be dispatched to is NOT repeated here, because the models endpoint already answers it while keeping unconfigured apart from refused-by-policy; join on `baseModelId`.
+   * `GET /api/v1/model-presets` — operation `listPublicModelPresets`.
+   */
+  list(options: RequestOptions = {}): Promise<ListPublicModelPresetsResponse> {
+    return this.#transport.request<ListPublicModelPresetsResponse>({
+      method: 'GET',
+      path: `/api/v1/model-presets`,
       options,
     })
   }
@@ -1682,7 +1946,7 @@ export class EvidenceResource {
 
   /**
    * Get a run's outcome summary
-   * What the run changed and what backs that up, in product language, for a reader who will not open the diff: the run’s disposition, the pull requests it opened, requirement coverage joined to the service’s `spec/`, the tester’s verdict and concerns, the views it captured, and the machine checks that ran. The same reduction the app’s outcome card renders, over the same evidence the verification report is built from, so the two cannot state different totals for one run. Nothing here is asserted by a model: every count is derived from recorded verdicts. Prefer the verification report when you need a reviewer’s full bundle; prefer this when you need to say what shipped. Sections state `reported` or `absent` with a machine-readable gap code, and `truncations` names any list the response had to bound.
+   * What the run changed and what backs that up, in product language, for a reader who will not open the diff: the run’s disposition, the pull requests it opened, requirement coverage joined to the service’s `spec/`, the tester’s verdict and concerns, the views it captured, the throwaway environments it stood up (`state: "live"` is the only one worth opening, and only while its `expiresAt` is still ahead; every other row still carries its URL), and the machine checks that ran. The same reduction the app’s outcome card renders, over the same evidence the verification report is built from, so the two cannot state different totals for one run. Nothing here is asserted by a model: every count is derived from recorded verdicts. Prefer the verification report when you need a reviewer’s full bundle; prefer this when you need to say what shipped. Sections state `reported` or `absent` with a machine-readable gap code, and `truncations` names any list the response had to bound.
    * `GET /api/v1/runs/{runId}/outcome` — operation `getPublicRunOutcome`.
    */
   getOutcome(runId: string, options: RequestOptions = {}): Promise<GetPublicRunOutcomeResponse> {
@@ -1842,11 +2106,11 @@ export class KeysResource {
 export abstract class CatFactoryResources {
   /** Headless jobs (a public, inline pipeline run against a brief): start, poll or stream one. */
   readonly jobs: JobsResource
-  /** The workspace's board services, the frames tasks are created under: list them, or create one (optionally backed by a repository). */
+  /** The workspace's board services, the frames tasks are created under: list them, create one (optionally backed by a repository), patch one (including declaring where the manifests for its per-run environments are read from), or delete one with everything under it. The delete refuses a service holding unfinished tasks rather than discarding work in flight. */
   readonly services: ServicesResource
   /** A service's in-repo specification: the structured requirement tree (modules → feature groups → requirements, with their acceptance criteria and domain rules), the Gherkin rendered from it, and the branch and commit the read describes. Read-only; the requirement ids are the join key onto a run's report and outcome. */
   readonly spec: SpecResource
-  /** The repositories this workspace can back a service with, and which service each already backs: the discovery half of service creation. */
+  /** The repositories this workspace can back a service with, and which service each already backs (the discovery half of service creation); the ones its connection could reach but has not adopted yet, and adopting one by name; plus creating a brand-new one, where a bootstrap writes the repository with an agent and reports the board service it materialises. */
   readonly repos: ReposResource
   /** A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete, plus the two relationships that outlive a create: the tasks it waits for, and the requirements documents it is built against. */
   readonly tasks: TasksResource
@@ -1856,6 +2120,18 @@ export abstract class CatFactoryResources {
   readonly taskTypes: TaskTypesResource
   /** The workspace's human-actionable inbox: list, act on, or dismiss a run tail. */
   readonly notifications: NotificationsResource
+  /** The cluster this workspace provisions per-run environments onto: probe a candidate connection without saving it, or bind one. The credential is write-only, so a read reports which secret keys are stored and never their values. */
+  readonly environments: EnvironmentsResource
+  /** The models a run in this workspace could actually dispatch to, and why an unavailable one is unavailable: unconfigured, or refused by the account model-family policy. Those two need opposite fixes. */
+  readonly models: ModelsResource
+  /** The workspace's source-control connection: which account it talks to, how it authenticates, and whether it may create repositories and write workflow files. Both permissions are enforced by the provider at push time, so reading them beats discovering one missing halfway through an automated setup. */
+  readonly vcs: VcsResource
+  /** What this workspace does to a task's LINKED tracker issue as its pull request progresses: comment when it opens, comment and close the issue when it merges, and post a headless run's parked review findings so the reporter can answer where they filed. The write MERGES, so turning one action on leaves the other two as they were. It is the writeback half of the workspace's tracker configuration; the filing selection (which tracker a tech-debt ticket is raised on) is not published yet. */
+  readonly tracker: TrackerResource
+  /** The risk policies a task can pin, including which is the workspace default: what decides whether a run can land its pull request without a person, and how many attempts its CI fixer, requirement rounds and release watch are given. Broader than merging, which is why it is not called a merge preset. */
+  readonly riskPolicies: RiskPoliciesResource
+  /** The model presets a task can pin, including which is the workspace default: what decides which model each agent step runs on, and so what a run costs. Availability is not repeated here; join `baseModelId` against the models group, which keeps unconfigured and policy-refused apart. */
+  readonly modelPresets: ModelPresetsResource
   /** The workspace's outbound endpoints: register, inspect or remove the receivers that notifications, run-lifecycle events and health alerts are pushed to. The unnamed calls address the `default` endpoint; the named ones let an integration enroll its own receiver, with its own signing secret and filters, beside whatever else is registered. */
   readonly webhook: WebhookResource
   /** The workspace's money, two ways: the billing period's metered budget position with the per-model breakdown behind it, and spend over a window sliced by the dimension a budget is kept against (a repository, a tracker ticket, one run). */
@@ -1882,6 +2158,12 @@ export abstract class CatFactoryResources {
     this.pipelines = new PipelinesResource(transport)
     this.taskTypes = new TaskTypesResource(transport)
     this.notifications = new NotificationsResource(transport)
+    this.environments = new EnvironmentsResource(transport)
+    this.models = new ModelsResource(transport)
+    this.vcs = new VcsResource(transport)
+    this.tracker = new TrackerResource(transport)
+    this.riskPolicies = new RiskPoliciesResource(transport)
+    this.modelPresets = new ModelPresetsResource(transport)
     this.webhook = new WebhookResource(transport)
     this.usage = new UsageResource(transport)
     this.me = new MeResource(transport)

@@ -71,6 +71,63 @@ export function isHeadlessIntake(origin: IntakeOrigin | undefined): boolean {
 }
 
 /**
+ * WHICH of a workspace's two defaults a run resolves when its task pinned none.
+ *
+ * `interactive` is a run somebody started in the app and is watching; `unattended` is one nothing
+ * is watching, whatever surface dispatched it. TWO libraries are scoped by it and both read the
+ * one {@link runDefaultScopeFor} below: the risk policies (`isDefault` / `isUnattendedDefault`,
+ * ADR 0053) and the pipelines. Named for the RUN rather than for either of them, because a second
+ * consumer arriving is what proved the question is about the run: "is anyone watching this" is not
+ * a fact about a policy row.
+ */
+export const runDefaultScopeSchema = v.picklist(['interactive', 'unattended'])
+export type RunDefaultScope = v.InferOutput<typeof runDefaultScopeSchema>
+
+/**
+ * Every scope, for the readers that must answer about ALL of them (the board's policy-selection
+ * guard judges a move against each, because a task can be started either way).
+ *
+ * Read off the picklist's OWN options rather than restated, so a third scope cannot appear in one
+ * place and be missed in the other.
+ */
+export const RUN_DEFAULT_SCOPES: readonly RunDefaultScope[] = runDefaultScopeSchema.options
+
+/**
+ * Which of the workspace's two defaults a run of this intake resolves when its task
+ * pinned none (see {@link runDefaultScopeSchema}).
+ *
+ * A SECOND `Record` over the same picklist, deliberately not derived from {@link HEADLESS_INTAKE},
+ * because the two answer different questions and disagree on `schedule`. That one is not headless
+ * (its reused block has no stable place to hold a clarification conversation) and yet nobody is
+ * watching it run, so it takes the unattended policy: a cadence fire that parks on a companion cap
+ * waits until somebody happens to open the board, which is the failure this scope exists to stop.
+ *
+ * Only `ui` is `interactive`, and it is the same positive claim the default `ui` intake makes: a
+ * human is in the app. A new intake surface fails to compile until it says which it is.
+ */
+const DEFAULT_POLICY_SCOPE: Record<IntakeOrigin, RunDefaultScope> = {
+  ui: 'interactive',
+  'public-api': 'unattended',
+  tracker: 'unattended',
+  schedule: 'unattended',
+}
+
+/**
+ * The default-resolution scope for a run's intake. `undefined` is every run persisted before
+ * `intakeOrigin` existed and degrades to `interactive`, matching how such a run already degrades
+ * to `ui` everywhere else: a run that cannot be PROVEN unattended is not granted the unattended
+ * policy's licence to answer its own caps.
+ *
+ * The lookup is guarded rather than bare for the reason {@link isHeadlessIntake}'s is: the
+ * picklist is a CLOSED vocabulary whose members outlive their retirement in stored rows, and a
+ * run written under a member later dropped indexes to `undefined` at runtime while the declared
+ * type says otherwise.
+ */
+export function runDefaultScopeFor(origin: IntakeOrigin | undefined): RunDefaultScope {
+  return (origin != null ? DEFAULT_POLICY_SCOPE[origin] : undefined) ?? 'interactive'
+}
+
+/**
  * Whether a run may LAND its work. `live` (the default, and every run before this existed) is the
  * historical behaviour. `dry_run` is the sandboxed mode: the pipeline runs in full and opens its
  * pull request, so the human sees a real diff on a real branch, but nothing merges: neither the

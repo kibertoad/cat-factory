@@ -48,17 +48,28 @@ const ATTRIBUTED = [
 ]
 
 /**
- * Routes that deliberately pin NO role, with the reason. These are not oversights and must not
- * "fix" themselves into a tier: an API key is not a workspace member, so scoping its runs to one
- * would invent an authority nobody granted. Such runs stay on the preset's base rules, which is
- * the policy that governed every run before role scoping existed.
+ * Routes that start a run for whoever a public-API KEY is BOUND to. They pin a role too, but they
+ * cannot read it the way {@link ATTRIBUTED} does: `/api/v1` has no `mountAuthGate` (a key is
+ * admitted by scope, not by membership), so there is no published access object on the context and
+ * the one identity a key can name has to be resolved through `keyInitiatorRole`.
+ *
+ * This bucket did not exist while a key could only be a machine. It does now because a key may be
+ * bound to its minter, and a bound key's run IS that person's run: leaving it unattributed would
+ * let a headless start land what its own holder could not land from the board. An UNBOUND key still
+ * resolves `null` inside that accessor, which is the same base-rules policy every run had before
+ * role scoping existed — so the old reason survives as the accessor's `null` branch rather than as
+ * a whole route's exemption.
  */
-const UNATTRIBUTED: Record<string, string> = {
-  'server:modules/publicApi/PublicApiController.ts':
-    'a headless `/api/v1` start authenticates as an API KEY, not as a workspace member: it holds ' +
-    'scopes rather than a tier, so there is no role to pin and guessing one would either hand it ' +
-    'the widest rules in the preset or sandbox every integration in the deployment.',
-}
+const KEY_BOUND = ['server:modules/publicApi/PublicApiController.ts']
+
+/**
+ * Routes that deliberately pin NO role, with the reason. These are not oversights and must not
+ * "fix" themselves into a tier. Empty today: the one member was the public-API start, which now
+ * resolves the binding instead (see {@link KEY_BOUND}). Kept, with its assertions, because the
+ * NEXT such route is what this guard exists to make someone think about — a schedule fire or a
+ * sweeper-driven start has no person behind it at all.
+ */
+const UNATTRIBUTED: Record<string, string> = {}
 
 describe('run-start routes classify their initiator role', () => {
   const code = loadCode(ROOTS)
@@ -71,9 +82,9 @@ describe('run-start routes classify their initiator role', () => {
     expect(starters.length).toBeGreaterThanOrEqual(3)
   })
 
-  it('classifies every start route as attributed or deliberately unattributed', () => {
+  it('classifies every start route as attributed, key-bound, or deliberately unattributed', () => {
     const unclassified = starters.filter(
-      (key) => !ATTRIBUTED.includes(key) && !(key in UNATTRIBUTED),
+      (key) => !ATTRIBUTED.includes(key) && !KEY_BOUND.includes(key) && !(key in UNATTRIBUTED),
     )
     expect(unclassified).toEqual([])
   })
@@ -89,6 +100,27 @@ describe('run-start routes classify their initiator role', () => {
       // A hand-rolled read is the drift this guards: it compiles, it works, and it is a second
       // place to get the dev-open `null` fallback wrong.
       expect(source, `${key} must not re-derive the role`).not.toContain("c.get('workspaceAccess')")
+    }
+  })
+
+  it('makes every key-bound route resolve the role through the one accessor', () => {
+    for (const key of KEY_BOUND) {
+      const source = code.get(key)!
+      expect(starters, `${key} no longer starts a run`).toContain(key)
+      expect(source, `${key} must pass initiatedByRole`).toContain('initiatedByRole:')
+      expect(source, `${key} must resolve it via keyInitiatorRole`).toContain('keyInitiatorRole(')
+      // Same drift as above, one layer out: `loadWorkspaceAccess` is reachable from here, and
+      // calling it directly would be a second membership resolution to keep in step with ADR 0025.
+      expect(source, `${key} must not re-derive membership`).not.toContain('loadWorkspaceAccess(')
+    }
+  })
+
+  it('makes EVERY start route pin a role in some classified way', () => {
+    // The bucket lists are hand-maintained, so this is the assertion that stops one going stale in
+    // the lenient direction: a route named as attributed or key-bound but no longer passing the
+    // field would satisfy its own bucket's membership check and nothing else.
+    for (const key of [...ATTRIBUTED, ...KEY_BOUND]) {
+      expect(code.get(key), `${key} must still pin a role`).toContain('initiatedByRole:')
     }
   })
 

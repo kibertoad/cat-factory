@@ -723,7 +723,7 @@ export class SharedStackService {
         await runtime.writeCheckoutFile(project, layer.path, layer.content)
         await this.logStep(record, label, started, { ok: true })
       } catch (err) {
-        const message = `Could not write compose layer '${layer.path}': ${err instanceof Error ? err.message : String(err)}`
+        const message = `Could not write compose layer '${layer.path}': ${getErrorMessage(err)}`
         await this.logStep(record, label, started, { ok: false, error: message })
         return message
       }
@@ -747,7 +747,7 @@ export class SharedStackService {
         await runtime.copyCheckoutFile!(project, envFile.template, envFile.target)
         await this.logStep(record, `env-file: ${envFile.target}`, started, { ok: true })
       } catch (err) {
-        const message = `Could not materialize env file '${envFile.target}': ${err instanceof Error ? err.message : String(err)}`
+        const message = `Could not materialize env file '${envFile.target}': ${getErrorMessage(err)}`
         await this.logStep(record, `env-file: ${envFile.target}`, started, {
           ok: false,
           error: message,

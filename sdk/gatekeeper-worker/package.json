@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/gatekeeper-worker",
-  "version": "0.5.0",
+  "version": "0.6.18",
   "description": "The Cloudflare OS Gatekeeper machinery for cat-factory as an installable library: policy-compiled Cap'n Web capabilities over the /api/v1 operation table, per-actor API-key minting, a verified outbound-webhook receiver and the approval inbox that answers every park a run stops on. A deployment supplies only its policy; deploy/gatekeeper is the template it copies.",
   "keywords": [
     "capnweb",
@@ -41,16 +41,17 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.dev.json --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:live": "vitest run --config vitest.live.config.ts"
+    "test:live": "vitest run --config vitest.live.config.ts",
+    "test:os": "vitest run --config vitest.os.config.ts"
   },
   "dependencies": {
     "@cat-factory/gatekeeper-bindings": "workspace:*",
     "@cat-factory/sdk": "workspace:*",
-    "capnweb": "^0.10.0"
+    "capnweb": "^0.11.0"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.20.3",
-    "@cloudflare/workers-types": "^5.20260808.1",
+    "@cloudflare/vitest-pool-workers": "^0.21.2",
+    "@cloudflare/workers-types": "^5.20260812.1",
     "typescript": "7.0.2",
     "vitest": "^4.1.10"
   },

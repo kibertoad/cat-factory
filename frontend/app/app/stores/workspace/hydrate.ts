@@ -87,7 +87,11 @@ export function applySnapshotToStores(snapshot: WorkspaceSnapshot, baselines?: L
   useSharedStacksStore().hydrate(snapshot.sharedStacks ?? [])
   useWorkspaceSettingsStore().hydrate(snapshot.settings)
   useAgentConfigStore().hydrate(snapshot.agentConfigCatalog ?? [])
-  useModelPresetsStore().hydrate(snapshot.modelPresets ?? [], snapshot.modelPresetCatalogVersions)
+  useModelPresetsStore().hydrate(
+    snapshot.modelPresets ?? [],
+    snapshot.modelPresetCatalogVersions,
+    snapshot.modelPresetCatalogNames,
+  )
   useConsensusGroupsStore().hydrate(snapshot.consensusGroups ?? [])
   useServiceFragmentDefaultsStore().hydrate(snapshot.serviceFragmentDefaults?.fragmentIds)
   useRecurringPipelinesStore().hydrate(snapshot.recurringPipelines ?? [])

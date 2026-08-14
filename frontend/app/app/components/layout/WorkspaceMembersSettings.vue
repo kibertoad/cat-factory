@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { apiErrorEnvelope } from '~/composables/api/errors'
 import type { WorkspaceAccessMode, WorkspaceRole } from '~/types/domain'
 
 // Workspace-membership management (workspace-rbac initiative, slice 9). The tier BELOW
@@ -18,6 +17,7 @@ const members = useWorkspaceMembersStore()
 const accounts = useAccountsStore()
 const auth = useAuthStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
 
@@ -57,15 +57,6 @@ const candidates = computed(() => {
 const addUserId = ref<string | undefined>(undefined)
 const addRole = ref<WorkspaceRole>('member')
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: apiErrorEnvelope(e)?.message ?? (e instanceof Error ? e.message : String(e)),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 async function loadAll(workspaceId: string) {
   try {
     const jobs: Promise<unknown>[] = [members.load(workspaceId)]
@@ -74,7 +65,7 @@ async function loadAll(workspaceId: string) {
     if (accountId.value) jobs.push(accounts.loadRoster(accountId.value))
     await Promise.all(jobs)
   } catch (e) {
-    notifyError(t('layout.workspaceMembers.errors.load'), e)
+    present(e, 'layout.workspaceMembers.errors.load')
   }
 }
 
@@ -92,7 +83,7 @@ async function setAccessMode(next: boolean) {
   try {
     await members.setAccessMode(props.workspaceId, mode)
   } catch (e) {
-    notifyError(t('layout.workspaceMembers.errors.accessMode'), e)
+    present(e, 'layout.workspaceMembers.errors.accessMode')
   } finally {
     busy.value = false
   }
@@ -103,7 +94,7 @@ async function updateRole(userId: string, role: WorkspaceRole) {
   try {
     await members.setRole(props.workspaceId, userId, role)
   } catch (e) {
-    notifyError(t('layout.workspaceMembers.errors.setRole'), e)
+    present(e, 'layout.workspaceMembers.errors.setRole')
   } finally {
     busy.value = false
   }
@@ -119,7 +110,7 @@ async function addMember() {
     addRole.value = 'member'
     toast.add({ title: t('layout.workspaceMembers.add.added'), icon: 'i-lucide-user-plus' })
   } catch (e) {
-    notifyError(t('layout.workspaceMembers.errors.add'), e)
+    present(e, 'layout.workspaceMembers.errors.add')
   } finally {
     busy.value = false
   }
@@ -132,7 +123,7 @@ async function removeMember(userId: string, name: string) {
     await members.remove(props.workspaceId, userId)
     toastDone('remove', name)
   } catch (e) {
-    notifyError(t('layout.workspaceMembers.errors.remove'), e)
+    present(e, 'layout.workspaceMembers.errors.remove')
   } finally {
     busy.value = false
   }

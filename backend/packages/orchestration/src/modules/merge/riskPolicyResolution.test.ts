@@ -23,6 +23,7 @@ function policy(over: Partial<RiskPolicy> = {}): RiskPolicy {
     maxRequirementIterations: 4,
     maxRequirementConcernAllowed: 'none',
     maxTesterQualityIterations: 3,
+    companionMaxReworks: 3,
     releaseWatchWindowMinutes: 30,
     releaseMaxAttempts: 1,
     humanReviewGraceMinutes: 10,
@@ -33,7 +34,10 @@ function policy(over: Partial<RiskPolicy> = {}): RiskPolicy {
     classRulesByRole: {},
     dryRunRoles: [],
     submissionClassesByRole: {},
+    autonomy: 'attended',
+    minAutoAnswerConfidence: 0.8,
     isDefault: false,
+    isUnattendedDefault: false,
     createdAt: 0,
     ...over,
   }
@@ -43,7 +47,8 @@ function fakeRepo(rows: RiskPolicy[]): RiskPolicyRepository {
   return {
     get: async (_ws, id) => rows.find((r) => r.id === id) ?? null,
     list: async () => rows,
-    getDefault: async () => rows.find((r) => r.isDefault) ?? null,
+    getDefault: async (_ws, scope) =>
+      rows.find((r) => (scope === 'unattended' ? r.isUnattendedDefault : r.isDefault)) ?? null,
     upsert: async () => {},
     remove: async () => {},
   }
@@ -55,6 +60,7 @@ describe('resolveRiskPolicy: the unresolved fallback', () => {
       repository: undefined,
       workspaceId: WS,
       riskPolicyId: 'mp_balanced',
+      scope: 'interactive',
     })
     expect(resolved.autoMergeEnabled).toBe(false)
     // No id: the fallback is a constant, not a row somebody could go and edit.
@@ -67,6 +73,7 @@ describe('resolveRiskPolicy: the unresolved fallback', () => {
       repository: fakeRepo([]),
       workspaceId: WS,
       riskPolicyId: null,
+      scope: 'interactive',
     })
     expect(resolved.autoMergeEnabled).toBe(false)
   })
@@ -80,6 +87,7 @@ describe('resolveRiskPolicy: the unresolved fallback', () => {
       repository: fakeRepo([]),
       workspaceId: WS,
       riskPolicyId: 'mp_deleted',
+      scope: 'interactive',
     })
     expect(resolved.autoMergeEnabled).toBe(false)
     expect(resolved.id).toBeUndefined()
@@ -90,6 +98,7 @@ describe('resolveRiskPolicy: the unresolved fallback', () => {
       repository: undefined,
       workspaceId: WS,
       riskPolicyId: null,
+      scope: 'interactive',
     })
     expect([resolved.maxComplexity, resolved.maxRisk, resolved.maxImpact]).toEqual([0, 0, 0])
   })
@@ -99,6 +108,7 @@ describe('resolveRiskPolicy: the unresolved fallback', () => {
       repository: undefined,
       workspaceId: WS,
       riskPolicyId: null,
+      scope: 'interactive',
     })
     expect(resolved.ciMaxAttempts).toBe(DEFAULT_RISK_POLICY.ciMaxAttempts)
     expect(resolved.maxRequirementIterations).toBe(DEFAULT_RISK_POLICY.maxRequirementIterations)
@@ -112,6 +122,7 @@ describe('resolveRiskPolicy: the unresolved fallback', () => {
       repository: undefined,
       workspaceId: WS,
       riskPolicyId: null,
+      scope: 'interactive',
     })
     expect(resolved.classRules).toBeUndefined()
     expect(resolved.classRulesByRole).toBeUndefined()
@@ -128,6 +139,7 @@ describe('resolveRiskPolicy: a resolved preset still governs', () => {
       repository: fakeRepo([pinned, dflt]),
       workspaceId: WS,
       riskPolicyId: 'mp_pinned',
+      scope: 'interactive',
     })
     expect(resolved.id).toBe('mp_pinned')
   })
@@ -138,6 +150,7 @@ describe('resolveRiskPolicy: a resolved preset still governs', () => {
       repository: fakeRepo([dflt]),
       workspaceId: WS,
       riskPolicyId: null,
+      scope: 'interactive',
     })
     expect(resolved.id).toBe('mp_default')
     expect(resolved.autoMergeEnabled).toBe(true)
@@ -153,9 +166,65 @@ describe('resolveRiskPolicy: a resolved preset still governs', () => {
       repository: fakeRepo([dflt]),
       workspaceId: WS,
       riskPolicyId: 'mp_deleted',
+      scope: 'interactive',
     })
     expect(resolved.id).toBe('mp_default')
     expect(resolved.name).not.toBe(FALLBACK_RISK_POLICY.name)
+  })
+})
+
+describe('resolveRiskPolicy: which DEFAULT a run falls back to', () => {
+  const inApp = policy({ id: 'mp_in_app', name: 'In app', isDefault: true })
+  const unwatched = policy({
+    id: 'mp_unwatched',
+    name: 'Unwatched',
+    isUnattendedDefault: true,
+    autonomy: 'unattended',
+  })
+
+  it('resolves a DIFFERENT row per scope for a task that pinned nothing', async () => {
+    // The whole point of the second flag: one board, one unpinned task, two answers depending on
+    // whether anybody is watching the run. Asserted as a pair rather than one scope at a time,
+    // because a resolution that ignored the argument would pass either half alone.
+    const repo = fakeRepo([inApp, unwatched])
+    const base = { repository: repo, workspaceId: WS, riskPolicyId: null }
+    expect((await resolveRiskPolicy({ ...base, scope: 'interactive' })).id).toBe('mp_in_app')
+    expect((await resolveRiskPolicy({ ...base, scope: 'unattended' })).id).toBe('mp_unwatched')
+  })
+
+  it('lets a task PIN past both defaults, whichever scope asked', async () => {
+    // The pin is the task's own statement and outranks either default. Both scopes are asserted
+    // because the scope must only ever decide the FALLBACK, and a resolution that consulted it
+    // first would silently override an operator's per-task choice on every API-started run.
+    const pinned = policy({ id: 'mp_pinned', name: 'Pinned' })
+    const repo = fakeRepo([inApp, unwatched, pinned])
+    for (const scope of ['interactive', 'unattended'] as const) {
+      const resolved = await resolveRiskPolicy({
+        repository: repo,
+        workspaceId: WS,
+        riskPolicyId: 'mp_pinned',
+        scope,
+      })
+      expect(resolved.id, scope).toBe('mp_pinned')
+    }
+  })
+
+  it('REFUSES rather than borrowing the other scope when a workspace names only one default', async () => {
+    // A library seeded before the unattended scope existed has an in-app default and no
+    // unattended one. Falling back to the in-app row would look like a kindness and would be a
+    // lie: it would hand every unwatched run a policy nobody chose for it. `FALLBACK_RISK_POLICY`
+    // auto-merges nothing, which is the honest reading of "no policy stated for this scope" and
+    // the same one an unwired repository gets.
+    const resolved = await resolveRiskPolicy({
+      repository: fakeRepo([inApp]),
+      workspaceId: WS,
+      riskPolicyId: null,
+      scope: 'unattended',
+    })
+    expect(resolved.id).toBeUndefined()
+    expect(resolved.autoMergeEnabled).toBe(false)
+    // And it does NOT inherit the licence to answer its own caps either.
+    expect(resolved.autonomy).toBe('attended')
   })
 })
 

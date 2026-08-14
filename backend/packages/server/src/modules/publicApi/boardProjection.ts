@@ -1,4 +1,13 @@
-import type { Block, PublicService, PublicTask } from '@cat-factory/contracts'
+import {
+  publicKubernetesRendererSchema,
+  type Block,
+  type KubernetesManifestSource,
+  type PublicKubernetesManifestSource,
+  type PublicRepo,
+  type PublicService,
+  type PublicTask,
+} from '@cat-factory/contracts'
+import type { PublicRepoOption } from '@cat-factory/orchestration'
 
 // The `Block` → public-resource projections, shared by every controller that answers with one.
 //
@@ -27,16 +36,98 @@ export function toPublicTask(block: Block, serviceId: string): PublicTask {
     // Absent is OFF, which is what the engine's post-merge hook reads it as: a task nobody has
     // toggled leaves its dependents to be started deliberately.
     autoStartDependents: block.autoStartDependents === true,
+    // Null, never the default's id: a task pinning nothing FOLLOWS the workspace default, so
+    // resolving one in here would report a task as pinned that moves the day the default does.
+    // The row spells "unpinned" as absent OR as the empty string (`addTask` treats both alike).
+    modelPresetId: block.modelPresetId || null,
+    riskPolicyId: block.riskPolicyId || null,
   }
 }
 
-/** Project a service frame block onto the external service resource. */
+/**
+ * Project a service frame block onto the external service resource.
+ *
+ * `provisioning` is projected only for the shapes this surface publishes (today `kubernetes`). A
+ * service provisioned through another engine reports NOTHING here rather than a coerced value: the
+ * public union cannot describe it, and answering with the nearest member would tell a caller its
+ * service deploys from manifests it never declared.
+ */
 export function toPublicService(frame: Block): PublicService {
+  const provisioning = frame.provisioning
+  const manifestSource =
+    provisioning?.type === 'kubernetes' && provisioning.manifestSource
+      ? toPublicManifestSource(provisioning.manifestSource)
+      : null
   return {
     serviceId: frame.id,
     title: frame.title,
     description: frame.description,
     type: frame.type,
     status: frame.status,
+    ...(manifestSource ? { provisioning: { type: 'kubernetes' as const, manifestSource } } : {}),
+  }
+}
+
+/**
+ * Lift a stored manifest source onto the published one, or null when this surface cannot describe
+ * it.
+ *
+ * The public shape is a PROJECTION of the internal one rather than the internal one (see the
+ * contracts header), so the lift is explicit in both directions. Null is the same disposition the
+ * caller above already takes for a non-Kubernetes engine, and it is what makes a stored value this
+ * build cannot express (a source kind or a renderer added by a deployment ahead of this one)
+ * report as "nothing published" rather than as a manifest source with a member silently dropped.
+ */
+function toPublicManifestSource(
+  source: KubernetesManifestSource,
+): PublicKubernetesManifestSource | null {
+  if (source.renderer !== undefined && !PUBLIC_RENDERERS.has(source.renderer)) return null
+  const renderer = source.renderer === undefined ? {} : { renderer: source.renderer }
+  if (source.type === 'colocated') return { type: 'colocated', path: source.path, ...renderer }
+  if (source.type === 'separate') {
+    return {
+      type: 'separate',
+      repo: source.repo,
+      ...(source.ref === undefined ? {} : { ref: source.ref }),
+      path: source.path,
+      ...renderer,
+    }
+  }
+  return null
+}
+
+/**
+ * The renderers this surface publishes, DERIVED from the public picklist rather than restated, so
+ * adding one there is all it takes for a stored value to start being reported.
+ */
+const PUBLIC_RENDERERS: ReadonlySet<string> = new Set(publicKubernetesRendererSchema.options)
+
+/**
+ * Project one repo option onto the wire, dropping the installation/sync bookkeeping.
+ *
+ * Here rather than beside `GET /api/v1/repos` because two routes now answer with this shape: that
+ * list, and `POST /api/v1/repos/link`, which reports the row it adopted so a caller can chain
+ * straight into service creation. The link route re-reads the same `listRepoOptions` to build it
+ * instead of deriving `serviceId` / `linkedElsewhere` for itself: those two are one judgement about
+ * where a service is homed (account-scoped, and deliberately withholding an id this key could not
+ * address), and a second derivation is how the adopt call and the list come to disagree about
+ * whether a repository is free.
+ */
+export function toPublicRepo(option: PublicRepoOption): PublicRepo {
+  const { repo, serviceBlockId, linkedElsewhere } = option
+  return {
+    repoId: repo.githubId,
+    // Absent on rows written before the column existed, which the platform reads as `github`
+    // everywhere else; stating that here keeps the wire field non-null for every row.
+    provider: repo.provider ?? 'github',
+    owner: repo.owner,
+    name: repo.name,
+    // A repo whose default branch has not been projected yet answers with the empty string rather
+    // than null: a caller reads it to name a base, and there is nothing here that could invent one.
+    defaultBranch: repo.defaultBranch ?? '',
+    private: repo.private,
+    monorepo: repo.isMonorepo === true,
+    serviceId: serviceBlockId,
+    linkedElsewhere,
   }
 }

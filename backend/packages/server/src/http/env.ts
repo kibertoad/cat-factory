@@ -30,6 +30,7 @@ import type {
   PersonalSubscriptionService,
   ProviderSubscriptionService,
   NotificationWebhookService,
+  McpAuthorizationServer,
   PublicApiKeyService,
   RunnerBackendRegistry,
   TestSecretsService,
@@ -42,6 +43,7 @@ import type { Core } from '@cat-factory/orchestration'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { InitiativePresetRegistry } from '@cat-factory/kernel'
 import type { ResolveRepoTarget } from '../agents/ContainerAgentExecutor.js'
+import type { ListWorkspaceRunRepos } from '../agents/resolveRepoTarget.js'
 import type { SessionPayload, SessionUser } from '../auth/signing.js'
 import type { AppConfig } from '../config/types.js'
 import type { MachineEventRelay } from '../events/machineEvents.js'
@@ -128,6 +130,19 @@ export interface ServerContainer extends Core {
    */
   resolveRepoTarget?: ResolveRepoTarget
   /**
+   * Every repository this workspace's runs would push to (its mounted services' repo links),
+   * the block-free counterpart of {@link resolveRepoTarget}. Present whenever GitHub is wired,
+   * built from the same repositories beside it on each facade.
+   *
+   * The credential check reads it for both of its questions. WHETHER to judge a stored token
+   * at all: a board whose services target no GitHub repository runs nothing that would
+   * authenticate with one, so a GitLab-bound or not-yet-linked workspace is told nothing about
+   * a member's GitHub token rather than warned about a credential its runs never touch. And
+   * WHICH repositories a fine-grained token is probed against, since only a repository a run
+   * targets makes a per-repository answer worth acting on.
+   */
+  listWorkspaceRunRepos?: ListWorkspaceRunRepos
+  /**
    * The workspace subscription-token pool (Claude Code / Codex credentials).
    * Present only when the facade wired the provider-subscription repository.
    */
@@ -202,6 +217,26 @@ export interface ServerContainer extends Core {
    * needs no redirect and works without it.
    */
   mcpOAuthRedirectUrl?: string
+  /**
+   * This deployment acting as the AUTHORIZATION SERVER for its own hosted MCP endpoint: dynamic
+   * client registration, the consent hand-off, and the token exchange that mints a public-API key.
+   *
+   * The mirror image of {@link mcpOAuth} above, which is this deployment as a CLIENT of someone
+   * else's MCP server. Present only when the facade has both an `ENCRYPTION_KEY` (the flow seals
+   * every value it carries between requests) and the public-API key store (what it issues), so a
+   * deployment missing either refuses with a 503 naming both rather than serving metadata that
+   * advertises endpoints nothing can complete.
+   */
+  mcpAuthServer?: McpAuthorizationServer
+  /**
+   * The SPA's own base URL (`APP_BASE_URL`), where the deployment serves it somewhere other than
+   * this backend's origin. The MCP consent hand-off sends a browser here.
+   *
+   * Absent ⇒ the request's own origin is used, which is right for every same-origin install and is
+   * why this is not required: unlike {@link mcpOAuthRedirectUrl}, no third party holds this string,
+   * so a value that differs between deployments breaks nothing.
+   */
+  appBaseUrl?: string
   /**
    * The per-service PRE-PR VALIDATION CHECK store: the commands the harness runs against the
    * checkout before opening a PR. Present only when the facade wired the validation-config
@@ -507,6 +542,17 @@ export type AppEnv = {
     user?: SessionPayload
     /** The caller's resolved workspace access, set by the gate — see {@link WorkspaceAccessContext}. */
     workspaceAccess?: WorkspaceAccessContext
+    /**
+     * The `WWW-Authenticate` challenge this route answers a 401 with, set by a route serving a
+     * spec whose clients DISCOVER their authorization server from the refusal itself: today the
+     * hosted MCP endpoint.
+     *
+     * Set on the CONTEXT rather than carried on the thrown error, because the route knows what its
+     * challenge is before it knows whether it will refuse, and the refusal is raised deep inside
+     * shared authentication code that has no business knowing which surface it is protecting. It
+     * is read by `handleError`, which stays the one producer of the response either way.
+     */
+    bearerChallenge?: string
     /**
      * The request's correlation id, minted or adopted by `mountRequestLogging` and echoed on
      * the response + in every error envelope. Optional because a unit test may build a bare

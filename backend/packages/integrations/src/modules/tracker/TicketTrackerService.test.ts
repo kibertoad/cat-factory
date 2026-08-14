@@ -16,7 +16,11 @@ const request: CreateTicketRequest = {
 function settingsRepo(
   settings: TrackerSettings | null,
 ): TicketTrackerServiceDependencies['trackerSettingsRepository'] {
-  return { get: async () => settings, put: async () => {} }
+  return {
+    get: async () => settings,
+    merge: async (_workspaceId, _patch, defaults, updatedAt) =>
+      settings ?? { ...defaults, updatedAt },
+  }
 }
 
 function makeSettings(over: Partial<TrackerSettings>): TrackerSettings {

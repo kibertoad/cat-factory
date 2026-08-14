@@ -2,19 +2,20 @@ import type { CreateWorkspaceInput } from '@cat-factory/contracts'
 import {
   applyMountLayout,
   describeError,
-  finalSpendFoldPlan,
-  noopLogger,
   FINAL_SPEND_FOLD_BUDGET_MS,
+  finalSpendFoldPlan,
+  getErrorMessage,
+  noopLogger,
+  offeredPipelines,
   registerServiceForFrame,
   requireWorkspace,
-  offeredPipelines,
   retiredPipelines,
+  riskPolicySeedRows,
   runBestEffort,
   seedBlocks,
-  seedRiskPolicies,
-  riskPolicySeedRows,
   seedModelPresets,
   seedPipelines,
+  seedRiskPolicies,
 } from '@cat-factory/kernel'
 import type {
   Block,
@@ -496,10 +497,18 @@ export class WorkspaceService {
     )
     // The current built-in model-preset catalog versions, so the SPA can flag a workspace's
     // stale built-in copies AND surface a brand-new built-in it doesn't have yet (see
-    // WorkspaceSnapshot.modelPresetCatalogVersions). Built here so it stays symmetric across
-    // runtimes; the actual preset rows are attached by the facade's WorkspaceController.
+    // WorkspaceSnapshot.modelPresetCatalogVersions), plus the companion NAME map: a built-in the
+    // board holds no row for has no name anywhere else, and the advisory that offers to add it is
+    // reached by every board that predates it. ONE read for the pair, as with the pipeline maps
+    // above, so neither can be built from a catalog the other did not see. Built here so both stay
+    // symmetric across runtimes; the actual preset rows are attached by the facade's
+    // WorkspaceController.
+    const modelPresetCatalog = seedModelPresets()
     const modelPresetCatalogVersions = Object.fromEntries(
-      seedModelPresets().map((p) => [p.id, p.version]),
+      modelPresetCatalog.map((p) => [p.id, p.version]),
+    )
+    const modelPresetCatalogNames = Object.fromEntries(
+      modelPresetCatalog.map((p) => [p.id, p.name]),
     )
     return {
       workspace,
@@ -511,6 +520,7 @@ export class WorkspaceService {
       ...(retired.length ? { retiredPipelines: retired } : {}),
       riskPolicyCatalogVersions,
       modelPresetCatalogVersions,
+      modelPresetCatalogNames,
       ...(archivedFrames.length ? { archivedServices: archivedFrames } : {}),
     }
   }
@@ -623,7 +633,7 @@ export class WorkspaceService {
       // the residual leak (bytes + rows) so it's visible for an out-of-band reclaim, not silent.
       this.logger?.info(
         'workspace-delete binary-artifact purge failed; artifacts retained for out-of-band reclaim',
-        { workspaceId: id, err: error instanceof Error ? error.message : String(error) },
+        { workspaceId: id, err: getErrorMessage(error) },
       )
     }
   }

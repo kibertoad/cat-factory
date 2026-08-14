@@ -32,7 +32,26 @@ import { CatFactoryResources } from './operations.generated.ts'
 // the merge reads more cleanly, but TypeScript cannot see that such properties are ever
 // initialised, so it silently gives up checking them (`no-unsafe-declaration-merging`).
 export class CatFactoryClient extends CatFactoryResources {
+  private readonly transport: Transport
+
   constructor(options: ClientOptions) {
-    super(new Transport(options))
+    const transport = new Transport(options)
+    super(transport)
+    this.transport = transport
+  }
+
+  /**
+   * Supply the personal password for a key BOUND to a user, so subsequent calls can unlock that
+   * user's own model subscription (see `personalPassword` on `ClientOptions`).
+   *
+   * Settable after construction because that is when a caller learns it is needed: an operation
+   * answers `428 credential_required`, the caller prompts (or reads its secret store), and retries.
+   * Passing it at construction would mean discarding a configured client to send one header.
+   *
+   * A single call can still override it with `{ headers: { 'X-Personal-Password': … } }`, which is
+   * what to reach for when one process drives runs for more than one person.
+   */
+  setPersonalPassword(password: string | undefined): void {
+    this.transport.personalPassword = password
   }
 }

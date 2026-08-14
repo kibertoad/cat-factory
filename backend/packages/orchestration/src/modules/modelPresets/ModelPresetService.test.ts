@@ -7,8 +7,18 @@ import type {
   Workspace,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { DEFAULT_MODEL_PRESET_ID, MODEL_PRESET_SEED_IDS } from '@cat-factory/kernel'
+import {
+  DEFAULT_MODEL_PRESET_ID,
+  MODEL_PRESET_SEED_IDS,
+  seedModelPresets,
+} from '@cat-factory/kernel'
 import { ModelPresetService } from './ModelPresetService.js'
+
+// How many built-ins a first seed must produce, read from the SAME catalog the service seeds from.
+// A literal here broke the moment a fourth built-in shipped, and the failure named a number rather
+// than the behaviour: what these tests own is the DEFAULT resolution, not the size of a catalog they
+// do not control.
+const BUILTIN_COUNT = seedModelPresets().length
 
 // A faithful in-memory model-preset repository: enforces the single-default invariant on
 // upsert (promoting a default demotes the prior one), so the service's seeding/reseed logic
@@ -29,11 +39,20 @@ class InMemoryModelPresetRepository implements ModelPresetRepository {
   }
 
   async upsert(workspaceId: string, preset: ModelPreset): Promise<void> {
+    await this.upsertMany(workspaceId, [preset])
+  }
+
+  async upsertMany(workspaceId: string, presets: ModelPreset[]): Promise<void> {
+    const ids = new Set(presets.map((p) => p.id))
+    const demote = presets.some((p) => p.isDefault)
     const list = this.byWorkspace.get(workspaceId) ?? []
-    const next = preset.isDefault ? list.map((p) => ({ ...p, isDefault: false })) : [...list]
-    const idx = next.findIndex((p) => p.id === preset.id)
-    if (idx >= 0) next[idx] = { ...preset }
-    else next.push({ ...preset })
+    // A promoted member demotes every row OUTSIDE the batch; a member's own flag is written below.
+    const next = list.map((p) => (demote && !ids.has(p.id) ? { ...p, isDefault: false } : { ...p }))
+    for (const preset of presets) {
+      const idx = next.findIndex((p) => p.id === preset.id)
+      if (idx >= 0) next[idx] = { ...preset }
+      else next.push({ ...preset })
+    }
     this.byWorkspace.set(workspaceId, next)
   }
 
@@ -67,7 +86,7 @@ function makeService(defaultPresetId?: string): ModelPresetService {
 describe('ModelPresetService seeding default resolution', () => {
   it('seeds the catalog with the facade default (Kimi) when no default id is configured', async () => {
     const seeded = await makeService().list('ws1')
-    expect(seeded).toHaveLength(3)
+    expect(seeded).toHaveLength(BUILTIN_COUNT)
     expect(seeded.filter((p) => p.isDefault)).toHaveLength(1)
     expect(seeded.find((p) => p.isDefault)?.id).toBe(MODEL_PRESET_SEED_IDS.kimi)
   })
@@ -82,7 +101,7 @@ describe('ModelPresetService seeding default resolution', () => {
     // A deploy-app wrapper passing a stale/mistyped id must never seed a workspace with NO
     // default (which would break the single-default invariant and leave the UI unselected).
     const seeded = await makeService('mdp_does_not_exist').list('ws1')
-    expect(seeded).toHaveLength(3)
+    expect(seeded).toHaveLength(BUILTIN_COUNT)
     const defaults = seeded.filter((p) => p.isDefault)
     expect(defaults).toHaveLength(1)
     expect(defaults[0]?.id).toBe(DEFAULT_MODEL_PRESET_ID)

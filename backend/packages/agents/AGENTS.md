@@ -9,8 +9,16 @@
   (`systemPromptFor`/`userPromptFor`; the shared fragments in `prompts/shared.ts`, incl.
   `FINAL_ANSWER_IN_REPLY` and the sentinel-file guidances `EFFORT_REPORT_GUIDANCE`,
   `FOLLOW_UP_GUIDANCE`, and `PR_DESCRIPTION_GUIDANCE` (the reviewer briefing a PR-opening coding
-  agent writes to `.cat-pr-description.md`, which the harness lifts onto the PR it opens)),
-  `runtime/` (`runRepoOps`, the custom-agent pre/post-op runner).
+  agent writes to `.cat-pr-description.md`, which the harness lifts onto the PR it opens), plus
+  `REVIEW_FINDINGS_LAYOUT`, carried by the COMPANIONS, which asks each point for its own
+  severity-graded `comments` entry (a `blocker` holds the run) and keeps the `summary` a verdict
+  rather than a second copy of the list; preserved across a workspace override. A reviewer that
+  already reports graded findings of its own (every judge, `pr-reviewer`, the tester) is
+  deliberately excluded),
+  `runtime/` (`AiAgentExecutor`, the INLINE dispatch path; `runRepoOps`, the custom-agent
+  pre/post-op runner; `inline-context-record.ts`, which projects an inline dispatch into the
+  `agent_context_snapshots` telemetry row its container sibling has always filed, and whose header
+  names the inline SERVICE calls still absent from that table).
   `kinds/built-in-container.ts` registers every BUILT-IN CONTAINER kind (`coder`, the testers,
   the in-place fixers, the conflict-resolver, `merger`, `on-call`, the read-only explorers) as an
   ordinary `AgentKindDefinition` declaring its `AgentStepSpec`, which is what let the server's

@@ -40,12 +40,11 @@ import {
   agentTuningFor,
   withComplexityAllowance,
   defaultAgentKindRegistry,
-  isProxyableProvider,
   isReadOnlyAgentKind,
   webResearchGuidanceFor,
 } from '@cat-factory/agents'
 import { ModelRouter } from './ModelRouter.js'
-import { buildContextFiles, renderSkillsForHarness } from './contextFiles.js'
+import { buildDispatchContextFiles, renderSkillsForHarness } from './contextFiles.js'
 import {
   dispatchToolServerDeps,
   resolveDispatchToolServers,
@@ -60,7 +59,7 @@ import {
   toRunResult,
 } from './containerAgentResult.js'
 import { buildKindBody } from './jobBody.js'
-import { containerJobLog } from './containerAgentLogging.js'
+import { containerJobLog, settleFailureFields } from './containerAgentLogging.js'
 import { acceptContainerJob } from './containerAgentDispatch.js'
 import { recordAgentContextSnapshot } from './agentContextRecord.js'
 import { type RecordToolCalls, drainToolCalls } from './toolTrajectory.js'
@@ -70,6 +69,7 @@ import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.
 import type { ResolveRepoTargets } from './resolveRepoTarget.js'
 import {
   buildCommonBody,
+  dispatchDesignImageDelivery,
   buildRepoSpec,
   githubRepoOrigin,
   resolveAuxiliaryRepos,
@@ -160,23 +160,23 @@ type RecordHarnessCalls = (input: HarnessCallsRecordInput) => Promise<void>
  * forward.
  */
 /**
- * The harness job id for one pipeline step: the run (execution) id plus the agent
- * kind. A run executes a sequence of steps that all share the one per-run container,
- * so each needs an id that is UNIQUE WITHIN THE RUN — the harness keys its per-kind
- * job registries by it, and two steps sharing an id alias there (the bug where an
- * `architect` /explore poll read back the `spec-writer`'s /spec result). The run is
+ * The harness job id for one dispatch: the run (execution) id, the agent kind, and — past the
+ * first job of that kind in the run — the `dispatchEpoch`. A run executes a sequence of steps that
+ * all share the one per-run container, so each job needs an id that is UNIQUE WITHIN THE RUN: the
+ * harness keys its per-kind job registries by it, and two jobs sharing an id alias there (the bug
+ * where an `architect` /explore poll read back the `spec-writer`'s /spec result). The run itself is
  * addressed separately by the execution id (the {@link RunnerJobRef.runId}).
  *
- * A step RE-dispatched within the run (the Tester→Fixer loop's re-test, a fixer round, a
- * polling gate's helper retry, a container-eviction recovery) carries a non-zero
- * `dispatchEpoch` so each round gets a distinct id. The harness re-attaches to an EXISTING job
- * id rather than re-running (replay idempotency), and a container-reusing transport (a warm
- * local pool / a self-hosted runner pool) keeps that registry alive across rounds — reclaiming
- * a pooled member does NOT destroy it — so without the epoch a re-test would replay the first
- * round's stale report (the bug where the Tester appeared to "pass regardless" and never
- * actually re-ran), and an eviction recovery would land back on the job whose runner just died
- * rather than on a fresh one. Epoch 0 (a step dispatched once) keeps the original unsuffixed
- * id, so single-dispatch steps are unaffected. See {@link AgentRunContext.dispatchEpoch}.
+ * The epoch is what makes that uniqueness total, because the engine dispatches one kind more than
+ * once per run in two ways: a step RE-dispatched (a Tester re-test after a fixer round, a gate's
+ * helper retry, a companion's rework round, an eviction recovery) and the same helper kind
+ * escalated off DIFFERENT steps (`fixer` serves four gates). The harness re-attaches to an EXISTING
+ * job id rather than re-running (replay idempotency), and a container-reusing transport — a warm
+ * local pool, a self-hosted runner pool — keeps that registry alive across rounds, since reclaiming
+ * a pooled member does NOT destroy it. So a reused id replays a completed job: the Tester that
+ * appeared to "pass regardless" and never re-tested, an eviction recovery landing back on the job
+ * whose runner just died. `dispatchEpochFor` counts the run's prior dispatches of the kind, so the
+ * id names the n-th job of that kind and the run's first keeps the unsuffixed shape.
  */
 function stepJobId(executionId: string, agentKind: string, dispatchEpoch = 0): string {
   const base = `${executionId}-${agentKind}`
@@ -598,7 +598,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     const result = view.result ?? {}
     await this.recordHarnessCallsOnce(handle, result)
     if (view.state === 'failed') {
-      jobLog.settled('failed', { failureCause: view.failureCause, evicted: view.evicted })
+      jobLog.settled('failed', settleFailureFields(view))
       return { state: 'failed', error: view.error ?? 'Implementation job failed', ...failureMeta }
     }
     // Completed: a structured `error` (e.g. "no file changes") is still a failure. The harness
@@ -946,7 +946,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // re-attaches to the prior round's completed job on a container-reusing transport.
     const jobId = stepJobId(executionId, context.agentKind, context.dispatchEpoch)
 
-    const { ref, harness, subscriptionVendor } = await this.resolveDispatchModel(
+    const { ref, harness, subscriptionVendor } = await this.modelRouter.resolveDispatchRef(
       context,
       workspaceId,
     )
@@ -1028,18 +1028,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Linked-context bodies are materialised into the checkout (under CONTEXT_DIR) so a
     // container agent can read what it needs on demand; the prompt only lists them. The
     // harness can't reach Jira/GitHub itself, so everything is prepared here, up front.
-    const { files: contextFiles } = buildContextFiles(context)
-    // Files a registered kind's preOp prepared for the agent to read up front (e.g. the
-    // `pr-reviewer` diff) — materialised into `.cat-context/` alongside the linked-doc files.
-    // The preOp already bounded their size; the agent's own prompt names the paths, so they need
-    // no linked-doc index entry (which is why they aren't fed through `buildContextFiles`).
-    for (const injected of context.injectedContextFiles ?? [])
-      contextFiles.push({
-        path: injected.path,
-        title: injected.path,
-        url: '',
-        content: injected.content,
-      })
+    const contextFiles = buildDispatchContextFiles(context)
     // The dispatch's resolved skills (a `skill` step's pick and/or the running kind's declared
     // playbooks), rendered harness-aware: the payload travels as the top-level `skills` job-body
     // field (the harness materialises them — natively for claude-code, under
@@ -1074,6 +1063,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Resolve the repo origin once so both the harness `RepoSpec` and the diagnostics repo
     // summary (returned below) agree on the VCS provider.
     const origin = (this.deps.resolveRepoOrigin ?? githubRepoOrigin)(repo)
+    const designImageDelivery = dispatchDesignImageDelivery(context, harness, ref)
     const common = buildCommonBody(
       context,
       {
@@ -1094,6 +1084,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           tuning?.guardLimits,
           context.block.estimate?.complexity,
         ),
+        // Only a dispatch that can actually show them sends a manifest: a harness with no image
+        // input would download the frames into a directory nothing ever opens, and its prompt
+        // already says (from the same verdict) that the pictures could not be delivered.
+        ...(designImageDelivery?.attached ? { designImages: context.designImages } : {}),
       },
       this.deps,
       this.agentKindRegistry,
@@ -1111,6 +1105,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ...(tools.unavailableToolServers.length
         ? { unavailableToolServers: tools.unavailableToolServers }
         : {}),
+      ...(designImageDelivery ? { designImageDelivery } : {}),
     }
     // The proxy-backed web-tools nudge + switch, shared by the kinds that allow web access
     // (coder/mocker/ci-fixer/fixer/tester/read-only). `search` was resolved in the wave above;
@@ -1209,39 +1204,6 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       testSecretEnv: args.resolvedTestSecrets.map((e) => ({ key: e.key, value: e.value })),
       generatorSecrets,
     }
-  }
-
-  /**
-   * The model this dispatch runs and the harness that will run it, resolved together because
-   * the second is a property of the first. "Subscriptions always win": a subscription-only model
-   * carries its harness; a dual-mode GLM/Kimi step pinned to its Cloudflare base is auto-routed
-   * to Claude Code when the workspace has a pooled token for the vendor. Shared with
-   * `isQuotaBased` so the dispatch and the spend gate agree on what the step runs.
-   *
-   * The Pi harness reaches models through the LLM proxy, so its model must be a provider the
-   * proxy can serve; locking it here stops the container choosing another. The subscription
-   * harnesses (Claude Code / Codex) talk direct to the vendor with a pooled token, so the
-   * proxyable guard does not apply to them.
-   */
-  private async resolveDispatchModel(
-    context: AgentRunContext,
-    workspaceId: string,
-  ): Promise<{ ref: ModelRef; harness: HarnessKind; subscriptionVendor?: SubscriptionVendor }> {
-    const { ref, subscriptionVendor } = await this.modelRouter.resolveEffectiveRef(
-      context,
-      workspaceId,
-    )
-    const harness: HarnessKind = ref.harness ?? 'pi'
-    if (harness === 'pi' && !isProxyableProvider(ref.provider)) {
-      throw new Error(
-        `Container implementation needs a model the LLM proxy can serve ` +
-          `(Workers AI, a direct OpenAI-compatible provider, or a local runner); ` +
-          `'${ref.provider}' is not supported. Pick a Workers AI model, configure a ` +
-          `provider key (QWEN_API_KEY / DEEPSEEK_API_KEY / MOONSHOT_API_KEY), or add a local ` +
-          `runner (Ollama / LM Studio / …) and pick that model.`,
-      )
-    }
-    return { ref, harness, ...(subscriptionVendor ? { subscriptionVendor } : {}) }
   }
 
   /**

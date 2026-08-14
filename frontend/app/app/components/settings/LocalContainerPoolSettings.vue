@@ -14,6 +14,7 @@ import { reactive, ref, watch } from 'vue'
 const { t } = useI18n()
 const store = useLocalSettingsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const saving = ref(false)
 
@@ -65,12 +66,7 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('settings.localMode.toast.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'settings.localMode.toast.saveFailed')
   } finally {
     saving.value = false
   }

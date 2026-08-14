@@ -6,6 +6,8 @@ import type {
   WorkspaceSettings,
 } from '../domain/types.js'
 import type { ResolvedAccountSettings } from './account-settings-repositories.js'
+import type { LocalModelDeclarations } from '../domain/local-model-declarations.js'
+import type { LocalModelEndpointRepository } from './local-model-repositories.js'
 import type { DocumentContent, LinkedDocumentRefreshOutcome } from './document-source.js'
 import type { ResolvedCatalogEntry } from './fragment-repositories.js'
 import type { AccountSkillRecord } from './skill-repositories.js'
@@ -15,7 +17,7 @@ import type { AccountSkillRecord } from './skill-repositories.js'
 import type { ResolvedFoundationalService } from '@cat-factory/contracts'
 export type { ResolvedFoundationalService }
 import type { SsoDiscoveryDocument } from './sso.js'
-import type { RepoContentEntry, RepoFileContent } from './github-client.js'
+import type { Paged, RepoContentEntry, RepoFileContent } from './github-client.js'
 import type { WorkspaceSettingsRepository } from './workspace-settings-repositories.js'
 import type { WorkspaceAccess } from '../domain/workspace-access.js'
 
@@ -265,7 +267,7 @@ export interface AppCaches {
    * bus, so the Worker enumerates live (caching only on the Node/local facades, where the PAT
    * picker is the primary flow).
    */
-  viewerRepos: GroupCacheHandle<GitHubRepo[]>
+  viewerRepos: GroupCacheHandle<Paged<GitHubRepo>>
   /**
    * The local facade's workspace-wide PAT repo enumeration (`GET /user/repos` with the
    * deployment's `GITHUB_PAT`), grouped AND keyed by installation id — the workspace-credential
@@ -280,7 +282,7 @@ export interface AppCaches {
    * the Worker's isolate-safe profile for the same reasons as `viewerRepos` (the Worker never
    * builds a PAT-backed client anyway).
    */
-  patInstallationRepos: GroupCacheHandle<GitHubRepo[]>
+  patInstallationRepos: GroupCacheHandle<Paged<GitHubRepo>>
   /**
    * A task's resolved merge-threshold preset (`riskPolicyRepository.get(id)` for a task's
    * picked preset, else `getDefault`), grouped by workspace id and keyed by the resolved id
@@ -288,11 +290,28 @@ export interface AppCaches {
    * on every gate evaluation (per review/tester/human-test/visual gate action and per merge
    * resolve). Wrapped ({@link RiskPolicyCacheValue}) so a picked-preset miss (deleted id falling
    * through to the default) or an unseeded workspace's null default caches as a value rather than
-   * a re-loaded null. Coherence is invalidation-driven: every `RiskPolicyService` write
-   * (create/update/remove/reseed + the lazy first-use seed) drops the workspace group after the
-   * write commits, so a preset edit is visible on the very next gate. Pass-through on the Worker's
-   * isolate-safe profile (our own mutable D1 state, no cross-isolate bus), so it caches only on the
-   * Node/local facades.
+   * a re-loaded null.
+   *
+   * Coherence is invalidation-driven, and since ADR 0055 there are TWO tiers of write with two
+   * different blast radii:
+   *
+   * - **A board's own write** (`RiskPolicyService` create/update/remove/reseed/clone, the two
+   *   suppression writes, and the lazy first-use seed) drops that WORKSPACE GROUP after the write
+   *   commits, so a preset edit — or an inherited policy being hidden — is visible on the very next
+   *   gate.
+   * - **An ACCOUNT-tier write** (`AccountRiskPolicyService` create/update/remove) drops the WHOLE
+   *   slice, because one account policy is inherited by every board under it and enumerating those
+   *   boards would be a read per invalidation. Over-invalidation is always safe; reading this slice
+   *   as workspace-grouped-only is not, since an account write dropping one group would leave every
+   *   other board in the account resolving the old posture until the TTL lapsed.
+   *
+   * Pass-through on the Worker's isolate-safe profile (our own mutable D1 state, no cross-isolate
+   * bus), so it caches only on the Node/local facades.
+   *
+   * The merged LIBRARY LIST is deliberately not cached here. Its readers are the board snapshot and
+   * the two selection guards, and a guard is an admission decision, which is the last place to want
+   * a stale-by-a-TTL answer (see `riskPolicyResolution.ts`); the list is instead kept to the round
+   * trips it took before the account tier existed.
    */
   riskPolicy: GroupCacheHandle<RiskPolicyCacheValue>
   /**
@@ -313,6 +332,25 @@ export interface AppCaches {
    * state, no cross-isolate bus), so it caches only on the Node/local facades.
    */
   modelPreset: GroupCacheHandle<ModelPresetCacheValue>
+  /**
+   * What the resolving USER declared about the locally-run models they enabled, grouped AND keyed
+   * by user id (one entry per group) and projected to what a reader needs
+   * ({@link LocalModelDeclarationsCacheValue}), so no sealed bearer key ever enters the bag.
+   *
+   * Its profile is `modelPreset`'s and its reason is the same: a per-dispatch read of a slow-moving
+   * row that a person edits by hand, from a settings panel, a handful of times ever. EVERY dispatch
+   * resolves it (the winning model is not known until `resolveStepModelRef` has walked its sources,
+   * so the read cannot be deferred to a local pin), which is a query per step on every deployment
+   * including the vast majority that have wired no runner at all, and one extra
+   * `/internal/persistence` round trip per step in mothership mode.
+   *
+   * Coherence is invalidation-driven: the two write paths (the endpoint upsert and remove, both
+   * behind one per-user controller) drop the user's entry after the write commits, so enabling a
+   * model or re-declaring its modality is visible on the very next dispatch. Pass-through on the
+   * Worker's isolate-safe profile (our own mutable D1 state, no cross-isolate bus), so it caches
+   * only on the Node/local facades.
+   */
+  localModelDeclarations: GroupCacheHandle<LocalModelDeclarationsCacheValue>
   /**
    * The signed-in caller's resolved workspace-RBAC access to one board (workspace-rbac
    * initiative), grouped by workspace id and keyed by user id — the three-read resolution
@@ -404,6 +442,44 @@ export interface RiskPolicyCacheValue {
  */
 export interface ModelPresetCacheValue {
   preset: ModelPreset | null
+}
+
+/**
+ * Cache-friendly wrapper for one user's local-model declarations: only the runners that have a
+ * model enabled, each with the declarations for them.
+ *
+ * Wrapped rather than cached bare so the common "this user runs no local models" case caches as a
+ * VALUE (layered-loader treats a bare `null` as unresolved, and an empty array would be a second
+ * shape to reason about), and PROJECTED rather than holding the endpoint records because those
+ * carry the sealed bearer key, which has no business in a cache serving the run path.
+ */
+export interface LocalModelDeclarationsCacheValue {
+  runners: LocalModelDeclarations[]
+}
+
+/**
+ * Read a user's local-model declarations through the {@link AppCaches.localModelDeclarations}
+ * slice (or straight from the repository when no cache is wired, as in tests and standalone
+ * services). Shared by every reader so the key/group and the projection cannot drift, the same
+ * reasoning as {@link readCachedWorkspaceSettings}. Group == key == user id.
+ *
+ * The result is the SHARED cached instance on a hit, so callers must treat it as immutable.
+ */
+export async function readCachedLocalModelDeclarations(
+  cache: GroupCacheHandle<LocalModelDeclarationsCacheValue> | undefined,
+  repository: LocalModelEndpointRepository,
+  userId: string,
+): Promise<readonly LocalModelDeclarations[]> {
+  const load = async (): Promise<LocalModelDeclarationsCacheValue> => {
+    const endpoints = await repository.listByUser(userId)
+    return {
+      runners: endpoints
+        .filter((e) => e.models.length > 0)
+        .map((e) => ({ provider: e.provider, models: e.models })),
+    }
+  }
+  const { runners } = cache ? await cache.get(userId, userId, load) : await load()
+  return runners
 }
 
 /**

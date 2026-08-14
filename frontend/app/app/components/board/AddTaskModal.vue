@@ -59,6 +59,7 @@ const pipelines = usePipelinesStore()
 const agentConfig = useAgentConfigStore()
 const fragments = useFragmentsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
 const { resolvePending, linkPending, presentLinkFailures } = useContextLinking()
@@ -379,13 +380,14 @@ const selectedModelPresetLabel = computed(() => {
 // still browsable.
 const fragmentPool = computed(() => fragments.forBlockType(frame.value?.type ?? 'service'))
 
-// Hide UI-testing pipelines (`tester-ui` / `visual-confirmation`) when the target frame has no
-// UI to exercise — they'd be refused server-side (see utils/pipeline + the backend gate). Also
-// hide `'recurring'`-only pipelines (a one-off task start of one is refused at run start) and every
-// pipeline whose purpose doesn't match the chosen task type (a doc task authors a doc, a review task
-// reviews a PR, and a `feature`/`bug` task ships code — so it is offered build + research only, not
-// the doc/review/planning presets). `blockLevel: 'task'` is passed literally because this modal only
-// ever creates a task leaf, which also drops the three planning presets the backend would refuse.
+// Hide UI-testing pipelines when the target frame has no UI for them to reach — a step scoped to
+// a frontend service excuses itself, so this only drops an UNCONDITIONAL one (see utils/pipeline
+// + the backend gate). Also hide `'recurring'`-only pipelines (a one-off task start of one is
+// refused at run start) and every pipeline whose purpose doesn't match the chosen task type (a doc
+// task authors a doc, a review task reviews a PR, a `bug` task ships code and may reach for a
+// bugfix preset, and a `feature` gets that set minus the bugfix ones, which have no defect report
+// to investigate). `blockLevel: 'task'` is passed literally because this modal only ever creates a
+// task leaf, which also drops the three planning presets the backend would refuse.
 // Re-filters as the chosen task type changes.
 const selectablePipelines = computed(() =>
   pipelines.pipelines.filter((p) =>
@@ -415,7 +417,15 @@ const DEFAULT_PIPELINE_FOR_TYPE: Partial<Record<TaskTypeChoice, string>> = {
  * deliberately does not name), the build rung this interface mode defaults to. Basic mode gets the
  * fixed Standard build, advanced the Adaptive one; `defaultBuildPipelineId` owns that rule so the
  * create form and the task card's plain "Start" cannot disagree about it. Empty when the resolved
- * preset is not in this workspace's library (an older seed, or a retired rung).
+ * preset is not in this workspace's library (an older seed, or a retired rung) or when the picker
+ * would not OFFER it for `type`.
+ *
+ * That second check is why it re-runs the picker's own predicate rather than scanning the whole
+ * library: a workspace whose declared interactive default is a bugfix preset would otherwise open a
+ * `feature` form on a selection with no matching row, and create the task pinned to a pipeline the
+ * same screen says is not allowed for its type. Parameterised by `type` rather than reading
+ * `selectablePipelines`, so the answer cannot depend on whether the watcher fires before or after
+ * the ref it filters on has settled.
  *
  * ONE definition, read by both the type watcher and the open-reset. They used to compute it
  * separately, the reset consulting `DEFAULT_PIPELINE_FOR_TYPE` alone and falling to `''` for every
@@ -428,8 +438,14 @@ function defaultPipelineIdFor(type: TaskTypeChoice): string {
   const preset =
     custom?.defaultPipelineId ??
     DEFAULT_PIPELINE_FOR_TYPE[type] ??
+    // The workspace's own declared in-app default, ahead of the interface-mode rung, so this form
+    // and the task card's plain Start still cannot disagree (see `declaredDefaultId`).
+    pipelines.declaredDefaultId('interactive') ??
     defaultBuildPipelineId(uiMode.isAdvanced)
-  return pipelines.pipelines.some((p) => p.id === preset) ? preset : ''
+  const resolved = pipelines.pipelines.find((p) => p.id === preset)
+  const offered =
+    !!resolved && pipelineAllowedForManualStart(resolved, frame.value, board.blocks, type, 'task')
+  return offered ? preset : ''
 }
 
 watch(taskType, (next) => {
@@ -730,12 +746,15 @@ async function submitCreate(acknowledgeReviewDebt: boolean) {
       openReviewFrictionDialog(conflict)
       return
     }
-    toast.add({
-      title: t('board.addTask.addFailedTitle'),
-      description: createRefusalMessage(e) ?? (e instanceof Error ? e.message : String(e)),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    const refusal = createRefusalMessage(e)
+    if (refusal) {
+      toast.add({
+        title: t('board.addTask.addFailedTitle'),
+        description: refusal,
+        icon: 'i-lucide-triangle-alert',
+        color: 'error',
+      })
+    } else present(e, 'board.addTask.addFailedTitle')
   } finally {
     saving.value = false
   }

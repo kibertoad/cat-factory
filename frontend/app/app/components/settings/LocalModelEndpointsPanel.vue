@@ -6,9 +6,12 @@
 // serves and tick which to enable. Save persists the endpoint; the enabled models then surface
 // automatically in the per-workspace model picker. One endpoint per runner type.
 import { computed, ref, watch } from 'vue'
+
 import {
+  knownLocalModel,
   LOCAL_RUNNER_DEFAULTS,
   LOCAL_RUNNER_LABELS,
+  type LocalModelDeclaration,
   type LocalRunner,
   type LocalRunnerUrlReason,
 } from '~/types/localModels'
@@ -19,6 +22,7 @@ const { t } = useI18n()
 const ui = useUiStore()
 const store = useLocalModelsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
 const open = computed({
@@ -26,16 +30,6 @@ const open = computed({
   set: (v: boolean) => (v ? ui.openLocalModels() : ui.closeLocalModels()),
 })
 const back = useIntegrationBack(open)
-
-// Load the user's endpoints whenever the panel opens (loaded independently of the
-// workspace snapshot, like personal subscriptions).
-watch(
-  open,
-  (isOpen) => {
-    if (isOpen) void store.load()
-  },
-  { immediate: true },
-)
 
 const RUNNERS: { value: LocalRunner; label: string }[] = (
   Object.keys(LOCAL_RUNNER_LABELS) as LocalRunner[]
@@ -58,14 +52,76 @@ function urlReasonText(reason: LocalRunnerUrlReason): string {
   return t(URL_REASON_KEYS[reason])
 }
 
+// Whether an enabled model reads IMAGES. Three states, because the runner's `/models` probe cannot
+// tell us and "nobody has said" is not the same answer as "no": undeclared says the platform never
+// asked, while `no` says the model cannot. Mirrors `LocalModelDeclaration.acceptsImages`.
+//
+// For a RECOGNISED family the platform already knows, so leaving this alone is the right answer and
+// the "not set" option says which way that falls: the control is the ESCAPE HATCH for a build the
+// table cannot know about (a text-only quant, a fine-tune, a re-tagged copy), not a step everyone
+// has to take.
+const IMAGE_INPUT_CHOICES = ['unknown', 'yes', 'no'] as const
+type ImageInputChoice = (typeof IMAGE_INPUT_CHOICES)[number]
+
+function choiceFor(declared: LocalModelDeclaration): ImageInputChoice {
+  return declared.acceptsImages === undefined ? 'unknown' : declared.acceptsImages ? 'yes' : 'no'
+}
+
+/** The declared modality for a choice, as a spread-ready slice (undeclared adds no key at all). */
+function modalityOf(choice: ImageInputChoice | undefined): { acceptsImages?: boolean } {
+  if (choice === 'yes') return { acceptsImages: true }
+  if (choice === 'no') return { acceptsImages: false }
+  return {}
+}
+
+/**
+ * What "not set" will actually do for one model id: name the recognised family and the modality it
+ * implies, else say plainly that nothing has been said. Read from the SAME table the engine folds
+ * onto the dispatched ref, so this label cannot promise a picture the run then withholds.
+ */
+function unsetLabelFor(modelId: string): string {
+  const known = knownLocalModel(modelId)
+  if (!known) return t('settings.localModelEndpoints.imageInput.unknown')
+  return t(
+    known.acceptsImages
+      ? 'settings.localModelEndpoints.imageInput.autoYes'
+      : 'settings.localModelEndpoints.imageInput.autoNo',
+    { family: known.label },
+  )
+}
+
 // ---- add / edit draft ------------------------------------------------------
 const provider = ref<LocalRunner>('ollama')
 const label = ref('')
 const baseUrl = ref(LOCAL_RUNNER_DEFAULTS.ollama ?? '')
 const apiKey = ref('')
-// The models discovered by the last "Test connection", plus the user's tick selection.
+// The models discovered by the last "Test connection", plus the user's tick selection and what
+// they declared about each ticked one (kept per model id, so un-ticking and re-ticking a model
+// does not silently drop the declaration they already made for it).
 const discovered = ref<string[]>([])
 const selected = ref<string[]>([])
+const imageInput = ref<Record<string, ImageInputChoice>>({})
+
+/**
+ * The three options per discovered model: "not set" carries what the recognised-family table will
+ * do. Built once per discovered set rather than per row per render, because the "not set" label
+ * scans the family table and a fresh array identity each tick also defeats the select's own
+ * memoisation (a runner serving forty models re-ran both on every keystroke elsewhere in the form).
+ */
+const imageInputItems = computed<Record<string, { value: ImageInputChoice; label: string }[]>>(() =>
+  Object.fromEntries(
+    discovered.value.map((modelId) => [
+      modelId,
+      IMAGE_INPUT_CHOICES.map((value) => ({
+        value,
+        label:
+          value === 'unknown'
+            ? unsetLabelFor(modelId)
+            : t(`settings.localModelEndpoints.imageInput.${value}`),
+      })),
+    ]),
+  ),
+)
 const testError = ref<string | null>(null)
 // The backend's own wording, kept as DETAIL beside a translated refusal rather than being
 // shown as the description (it names env vars an operator, not this user, acts on).
@@ -76,34 +132,48 @@ const busy = ref(false)
 
 const existing = computed(() => store.endpoints.find((e) => e.provider === provider.value))
 
-// Switching runner type prefills the default base URL and resets the discovered models —
-// editing an already-connected runner loads its stored config instead.
-watch(provider, (p) => {
+/**
+ * Point the draft at one runner: its stored config when that runner is already connected (so the
+ * ticks and the declarations the user made come back), else the defaults for a fresh one.
+ *
+ * Called EXPLICITLY from each event that means "start editing this runner", never watched off
+ * `provider`, because the commonest of those events does not change it: clicking Edit on the row
+ * the form is already showing assigns the same value, which fires no watcher. The draft would then
+ * be whatever the empty initial state was, and saving it PUTs every model with no declaration,
+ * destroying what the user had recorded with nothing saying so.
+ */
+function seedDraft(p: LocalRunner) {
   const e = store.endpoints.find((x) => x.provider === p)
-  if (e) {
-    label.value = e.label
-    baseUrl.value = e.baseUrl
-    discovered.value = [...e.models]
-    selected.value = [...e.models]
-  } else {
-    label.value = ''
-    baseUrl.value = LOCAL_RUNNER_DEFAULTS[p] ?? ''
-    discovered.value = []
-    selected.value = []
-  }
+  label.value = e?.label ?? ''
+  baseUrl.value = e?.baseUrl ?? LOCAL_RUNNER_DEFAULTS[p] ?? ''
+  discovered.value = e?.models.map((m) => m.id) ?? []
+  selected.value = e?.models.map((m) => m.id) ?? []
+  imageInput.value = Object.fromEntries(e?.models.map((m) => [m.id, choiceFor(m)]) ?? [])
   apiKey.value = ''
   testError.value = null
+  testErrorDetail.value = null
   tested.value = false
-})
-
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
 }
+
+/** Select a runner in the form: the runner-type select and each row's Edit button share this. */
+function selectRunner(p: LocalRunner) {
+  provider.value = p
+  seedDraft(p)
+}
+
+// Load the user's endpoints whenever the panel opens (loaded independently of the workspace
+// snapshot, like personal subscriptions), then seed the draft from what arrived. The seed WAITS
+// for the load: the panel mounts against an empty store, so seeding before it resolves would
+// leave a form headed "Edit runner" holding none of that runner's config.
+watch(
+  open,
+  async (isOpen) => {
+    if (!isOpen) return
+    await store.load()
+    seedDraft(provider.value)
+  },
+  { immediate: true },
+)
 
 async function test() {
   if (!baseUrl.value.trim()) return
@@ -155,7 +225,7 @@ async function save() {
       label: label.value.trim() || undefined,
       baseUrl: baseUrl.value.trim(),
       apiKey: apiKey.value.trim() || undefined,
-      models: selected.value,
+      models: selected.value.map((id) => ({ id, ...modalityOf(imageInput.value[id]) })),
     })
     apiKey.value = ''
     toast.add({
@@ -166,7 +236,7 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('settings.localModelEndpoints.toast.saveFailed'), e)
+    present(e, 'settings.localModelEndpoints.toast.saveFailed')
   } finally {
     busy.value = false
   }
@@ -186,16 +256,12 @@ async function remove(p: LocalRunner) {
   busy.value = true
   try {
     await store.remove(p)
-    if (provider.value === p) {
-      baseUrl.value = LOCAL_RUNNER_DEFAULTS[p] ?? ''
-      label.value = ''
-      discovered.value = []
-      selected.value = []
-      tested.value = false
-    }
+    // The row is gone from the store, so re-seeding the draft it was showing yields the
+    // fresh-runner defaults: the same reset, without a second copy of what a reset means.
+    if (provider.value === p) seedDraft(p)
     toast.add({ title: t('settings.localModelEndpoints.toast.removed'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError(t('settings.localModelEndpoints.toast.removeFailed'), e)
+    present(e, 'settings.localModelEndpoints.toast.removeFailed')
   } finally {
     busy.value = false
   }
@@ -254,6 +320,12 @@ async function remove(p: LocalRunner) {
               {{ t('settings.localModelEndpoints.blocked') }}
               <span class="block text-amber-300/70">{{ urlReasonText(e.urlBlockedReason) }}</span>
             </div>
+            <!-- Part of the stored model list could not be read and was discarded. Without this
+                 the shortened list reads exactly like a runner nothing was ever enabled on, and
+                 only one of those is fixed by re-ticking. -->
+            <div v-if="e.unreadableModels" class="mt-1 text-[11px] text-amber-400">
+              {{ t('settings.localModelEndpoints.modelsDiscarded') }}
+            </div>
           </div>
           <div class="flex items-center gap-1">
             <UButton
@@ -263,11 +335,7 @@ async function remove(p: LocalRunner) {
               size="xs"
               :disabled="busy"
               :title="t('settings.localModelEndpoints.edit')"
-              @click="
-                () => {
-                  provider = e.provider
-                }
-              "
+              @click="selectRunner(e.provider)"
             />
             <UButton
               icon="i-lucide-trash-2"
@@ -292,7 +360,13 @@ async function remove(p: LocalRunner) {
 
           <div class="flex flex-wrap items-end gap-3">
             <UFormField :label="t('settings.localModelEndpoints.runnerType')">
-              <USelect v-model="provider" :items="RUNNERS" value-key="value" class="w-48" />
+              <USelect
+                :model-value="provider"
+                :items="RUNNERS"
+                value-key="value"
+                class="w-48"
+                @update:model-value="(v: string) => selectRunner(v as LocalRunner)"
+              />
             </UFormField>
             <UFormField
               :label="t('settings.localModelEndpoints.labelOptional')"
@@ -357,23 +431,38 @@ async function remove(p: LocalRunner) {
             }}</span>
           </div>
 
-          <!-- discovered models multi-select -->
+          <!-- discovered models multi-select, each with its declared image support -->
           <div v-if="discovered.length" class="space-y-1.5">
             <span class="block text-[10px] uppercase tracking-wide text-slate-500">
               {{ t('settings.localModelEndpoints.enableModels') }}
             </span>
-            <div class="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-              <label
-                v-for="m in discovered"
-                :key="m"
-                class="flex items-center gap-2 text-sm text-slate-300"
-              >
-                <UCheckbox
-                  :model-value="selected.includes(m)"
-                  @update:model-value="(v: boolean | 'indeterminate') => toggleModel(m, v === true)"
+            <p class="text-[11px] text-slate-500">
+              {{ t('settings.localModelEndpoints.imageInputHint') }}
+            </p>
+            <div class="space-y-1.5">
+              <div v-for="m in discovered" :key="m" class="flex items-center gap-2">
+                <label class="flex min-w-0 flex-1 items-center gap-2 text-sm text-slate-300">
+                  <UCheckbox
+                    :model-value="selected.includes(m)"
+                    @update:model-value="
+                      (v: boolean | 'indeterminate') => toggleModel(m, v === true)
+                    "
+                  />
+                  <span class="truncate font-mono text-xs">{{ m }}</span>
+                </label>
+                <!-- Shown only for a model that is actually enabled: declaring a modality for one
+                     nothing can run would be a setting with no effect. -->
+                <USelect
+                  v-if="selected.includes(m)"
+                  :model-value="imageInput[m] ?? 'unknown'"
+                  :items="imageInputItems[m]"
+                  value-key="value"
+                  size="xs"
+                  class="w-52 shrink-0"
+                  :aria-label="t('settings.localModelEndpoints.imageInputLabel', { model: m })"
+                  @update:model-value="(v: string) => (imageInput[m] = v as ImageInputChoice)"
                 />
-                <span class="truncate font-mono text-xs">{{ m }}</span>
-              </label>
+              </div>
             </div>
           </div>
 

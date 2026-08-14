@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { appendFile, mkdir, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { killChildProcess, spawnDetached } from './process.js'
@@ -337,12 +337,22 @@ export async function materializeContextFiles(
  * One helper rather than a copy per materialiser: every writer into that directory owes the same
  * exclude, and a new one that forgot it would leak the platform's own files into a customer's
  * repository with nothing failing.
+ *
+ * IDEMPOTENT BY CONTENT, because that is the only shape that survives its own design: several
+ * materialisers legitimately run in one job (context files, skill resources, the codex image
+ * staging), so a blind append writes the same line two or three times per run, and on a persistent
+ * checkout it accretes one copy per run forever. Re-read and skip rather than tracking who called
+ * first, which would be a second piece of state to keep right.
  */
 export async function excludeContextDir(cwd: string): Promise<void> {
   const gitRoot = await findGitRoot(cwd)
   if (!gitRoot) return
+  const excludeFile = join(gitRoot, '.git', 'info', 'exclude')
+  const entry = `${CONTEXT_DIR}/`
   try {
-    await appendFile(join(gitRoot, '.git', 'info', 'exclude'), `\n${CONTEXT_DIR}/\n`, 'utf8')
+    const current = await readFile(excludeFile, 'utf8').catch(() => '')
+    if (current.split('\n').some((line) => line.trim() === entry)) return
+    await appendFile(excludeFile, `\n${entry}\n`, 'utf8')
   } catch {
     // No writable .git/info; the files simply stay untracked (still not auto-added on most flows).
   }
@@ -632,6 +642,16 @@ export interface HarnessCallMetric {
    * never disagree about which phase billed a call.
    */
   phase?: string
+  /**
+   * This row is not a TURN: it stands for the job as a whole, carrying the spend the CLI reported
+   * in its terminal cumulative total and did not attribute to any turn it narrated (see
+   * {@link unaccountedUsageCall}). It has no bodies, because there was no request to capture.
+   *
+   * The backend files it with a NULL turn index for that reason, while still deriving its row id
+   * from {@link seq} so a replayed poll re-records instead of duplicating. Absent on every real
+   * turn. `CliInlineLanguageModel`'s step-level row is the same idea on the inline path.
+   */
+  standsForJob?: boolean
 }
 
 /**
@@ -647,9 +667,13 @@ export interface HarnessCallMetric {
  * A published call must be FINAL. The backend records it the moment the drain reaches it and
  * IGNORES the terminal repeat (first write wins, so its stored prompt delta stays valid against
  * the chain tip it was written against), which means a field mutated after publishing never
- * reaches the store. A producer whose calls can still change (the cumulative-usage fallback,
- * whose totals arrive with the CLI's terminal `result` event) publishes through
- * {@link createCallMetricPublisher} instead, which withholds exactly those.
+ * reaches the store.
+ *
+ * That is a rule about every producer, and it is why the cumulative-usage reconciliation files its
+ * shortfall as a NEW row here at the end of the run (`unaccountedUsageCall`) rather than growing the
+ * last captured turn. This used to be wrapped by a publisher that withheld the turn attribution
+ * could still rewrite, trading a turn of streaming lag for that mutability; with nothing mutated,
+ * the wrapper had no reason left to exist.
  */
 export function publishCallMetric(
   calls: HarnessCallMetric[],
@@ -658,54 +682,6 @@ export function publishCallMetric(
 ): void {
   calls.push(call)
   onCallMetric?.(call)
-}
-
-/** Appends captured calls to a run's list, streaming each one as soon as it is final. */
-export interface CallMetricPublisher {
-  /** Append a captured call, streaming it now unless its tokens can still be rewritten. */
-  publish(call: HarnessCallMetric): void
-  /** Stream whatever is still withheld. Call once the run's totals are attributed. */
-  flush(): void
-}
-
-/**
- * A {@link publishCallMetric} wrapper for a producer whose per-call tokens may be filled in at
- * the END of the run: a CLI that reports only a cumulative total leaves every turn at zero, and
- * `attributeCumulativeUsage` pins the total onto the last call once the terminal `result` event
- * arrives.
- *
- * Since a published call must be final (the backend stores it on the drain and ignores the
- * terminal repeat), a call the CLI did NOT cost is appended to the list but WITHHELD from the
- * live stream — otherwise it records as a zero-token row and the attributed numbers never land.
- * The withholding window closes the moment any call IS costed: attribution can no longer fire, so
- * everything held is final and released at once, in capture order, and every later call streams
- * immediately whatever its tokens. {@link flush} covers the run that was never costed at all.
- */
-export function createCallMetricPublisher(
-  calls: HarnessCallMetric[],
-  onCallMetric?: (call: HarnessCallMetric) => void,
-): CallMetricPublisher {
-  const withheld: HarnessCallMetric[] = []
-  let anyCosted = false
-  const flush = (): void => {
-    for (const call of withheld) onCallMetric?.(call)
-    withheld.length = 0
-  }
-  return {
-    publish(call) {
-      const costed = call.inputTokens > 0 || call.outputTokens > 0
-      if (!costed && !anyCosted) {
-        publishCallMetric(calls, call)
-        withheld.push(call)
-        return
-      }
-      if (costed) anyCosted = true
-      // Released BEFORE this call so the live sequence stays in capture order.
-      flush()
-      publishCallMetric(calls, call, onCallMetric)
-    },
-    flush,
-  }
 }
 
 /** Pi's assistant summary plus {@link PiRunStats} describing what it did. */

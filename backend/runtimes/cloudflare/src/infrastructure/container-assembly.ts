@@ -30,6 +30,7 @@ import type {
 import { AuditService } from '@cat-factory/integrations'
 import {
   logger,
+  mcpAuthServerContainerFields,
   mcpOAuthContainerFields,
   mcpOAuthExecutorDeps,
   operationalMetrics,
@@ -50,12 +51,18 @@ import {
   applyGateProviders,
   warnUnwiredGates,
 } from '@cat-factory/gates'
-import type { NotificationChannel, PlatformAlertSink, RunLifecycleSink } from '@cat-factory/kernel'
+import type {
+  Logger,
+  NotificationChannel,
+  PlatformAlertSink,
+  RunLifecycleSink,
+} from '@cat-factory/kernel'
 import type { AppConfig } from './config'
 import { selectEnvConfigRepairer, selectRepoBootstrapper } from './container-dispatchers'
 import type { Env } from './env'
 import { requireAuditDb } from './env'
 import type { WorkerRegistries } from './container-registries.js'
+import { buildListWorkspaceRunRepos, buildResolveRunInitiatorToken } from './container-vcs-identity'
 import { baseUrlFor } from './ai/providerEndpoints'
 import { bedrockModelsCapability } from './ai/registries'
 import { buildResolvePresetProviderPreference } from './container-model-resolver.js'
@@ -320,6 +327,10 @@ function selectWorkerProviderCapabilities(
         cloudflareModelsEnabled: deps.cloudflareModelsEnabled,
         ...(deps.bedrockModels ? { bedrockModels: deps.bedrockModels } : {}),
         baseUrlFor: (provider) => baseUrlFor(provider, env),
+        // No `nativeAmbientAuth`, and the absence is a fact about workerd rather than a gap the
+        // Node/local sibling has filled in: an ambient vendor is one the HOST's own installed CLI
+        // serves as a subprocess, which an isolate has no way to spawn. So there is nothing here
+        // to wire, not a wiring left for later.
         localModelEndpoints: deps.localModelEndpoints,
         openRouterCatalog: deps.openRouterCatalog,
         accountSettings: deps.accountSettings,
@@ -479,6 +490,7 @@ function selectWorkerAgentExecutor(
     personalSubscriptions,
     agentContextObservability,
     executorPackageRegistries,
+    resolveBinaryArtifactStore,
     webSearchAccountSettings,
     toolSecretChain,
     mcpOAuthService,
@@ -506,6 +518,7 @@ function selectWorkerAgentExecutor(
           personalSubscriptions,
           agentContextObservability,
           resolvePackageRegistries: executorPackageRegistries,
+          resolveBinaryArtifactStore,
           webSearchAccountSettings,
           resolveToolSecrets: toolSecretChain.resolver,
           // The OAuth half of the same seam: the sealed grant store plus the chain above, which is
@@ -651,6 +664,11 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // connection + connect option so the SPA links to the instance a workspace is bound to.
     // Derived by the shared resolver both facades call, so they cannot name different hosts.
     vcsWebUrls: resolveVcsWebUrls(config),
+    // The one "does a run use its initiator's own token?" instance — the SAME builder the engine's
+    // GitHub client and the container push-token mint go through, so the board-load credential
+    // check judges the token a run would actually authenticate as (and honours a workspace that
+    // turned the preference off) rather than re-deciding the policy beside them.
+    resolveRunInitiatorToken: buildResolveRunInitiatorToken(env, db, clock),
     spendPricing: config.spend,
     // Price metered dynamic OpenRouter models at their real per-model rate (not the
     // bare-`openrouter` fallback) using this workspace's enabled catalog.
@@ -883,6 +901,9 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     // The block→service→repo resolver, surfaced so the task-search controller can scope a
     // GitHub-issue search to the originating service's repo (and refuse it when unlinked).
     resolveRepoTarget: buildResolveRepoTarget(db),
+    // Its board-wide sibling, surfaced so the credential check can ask whether this
+    // workspace's runs reach GitHub at all before judging a stored GitHub token.
+    listWorkspaceRunRepos: buildListWorkspaceRunRepos(db),
     agentRunRepository,
     // Execution-scoped repo, surfaced for the conformance suite's compareAndSwap parity check.
     executionRepository: dependencies.executionRepository,
@@ -980,22 +1001,21 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
       env,
       capabilityCredentialsService,
       mcpOAuthService,
+      publicApiKeys,
+      clock,
+      logger,
       toolSecretChain,
     }),
     // The per-service pre-PR validation-check store the shared controller reads. Always present
     // (no secret material), unlike the sealed stores around it.
     validationConfig: validationConfigService,
-    // The vendor-credential (subscription token pool) service the shared controller
-    // reads; present when the shared ENCRYPTION_KEY is configured.
+    // The vendor-credential (subscription token pool) service, the per-user individual-usage store
+    // (Claude) and the direct-provider key pool (account/workspace/user). Each is present exactly
+    // when the shared ENCRYPTION_KEY is; the INBOUND public-API keys are projected above, beside
+    // the authorization server that issues them.
     subscriptions,
-    // The per-user individual-usage subscription store (Claude); present when the
-    // shared ENCRYPTION_KEY is configured.
     personalSubscriptions,
-    // The direct-provider API-key pool (account/workspace/user); present when the
-    // shared ENCRYPTION_KEY is configured.
     apiKeys,
-    // The inbound public-API key store; present when the shared ENCRYPTION_KEY is configured.
-    publicApiKeys,
     // The per-workspace outbound notification-webhook config; present when ENCRYPTION_KEY is set.
     notificationWebhooks: notificationWebhookSupport?.service,
     // The on-call push the cron `scheduled` handler's health sweep hands its edges to.
@@ -1054,12 +1074,18 @@ function workerCapabilityCredentialFields(input: {
   env: Env
   capabilityCredentialsService: CapabilityCredentialsService | undefined
   mcpOAuthService: McpOAuthService | undefined
+  publicApiKeys: PublicApiKeyService | undefined
+  clock: Clock
+  logger: Logger
   toolSecretChain: ToolSecretChain
 }): Pick<
   ServerContainer,
   | 'capabilityCredentials'
   | 'mcpOAuth'
   | 'mcpOAuthRedirectUrl'
+  | 'mcpAuthServer'
+  | 'publicApiKeys'
+  | 'appBaseUrl'
   | 'toolSecretResolver'
   | 'toolSecretEnvironmentFallback'
 > {
@@ -1067,14 +1093,38 @@ function workerCapabilityCredentialFields(input: {
     ...(input.capabilityCredentialsService
       ? { capabilityCredentials: input.capabilityCredentialsService }
       : {}),
+    // The INBOUND public-API key store. It moved in here when the authorization server below was
+    // added: that server ISSUES one of these keys, so the store and the flow that mints from it are
+    // one wiring decision, and a facade cannot wire the flow while leaving the store behind.
+    publicApiKeys: input.publicApiKeys,
     ...mcpOAuthContainerFields({
       oauth: input.mcpOAuthService,
       redirectUrl: input.env.MCP_OAUTH_REDIRECT_URL,
     }),
+    // The mirror image: this deployment as the authorization server for its OWN hosted MCP
+    // endpoint, so a host connects by approving a consent screen instead of being handed a key.
+    // Present only where both halves are (a key to seal what the flow carries, and the public-API
+    // key store it issues from); the Node facade projects the same fields.
+    ...mcpAuthServerContainerFields({
+      encryptionKey: input.env.ENCRYPTION_KEY,
+      publicApiKeys: input.publicApiKeys,
+      clock: input.clock,
+      logger: input.logger,
+    }),
+    // Where the SPA is served, for the browser hand-off in that flow. Resolved exactly as the email
+    // config resolves it for invite and password-reset links, so a deployment configures its app
+    // URL once and both surfaces agree about where the app lives.
+    ...workerAppBaseUrl(input.env),
     // The probe resolves through the SAME chain a dispatch does, or it reports on a tenant's value
     // that is not this board's.
     ...toolSecretContainerFields(input.toolSecretChain),
   }
+}
+
+/** `APP_BASE_URL`, or the login redirect that stands in for it, as an ABSENT-or-set field. */
+function workerAppBaseUrl(env: Env): Pick<ServerContainer, 'appBaseUrl'> {
+  const appBaseUrl = env.APP_BASE_URL?.trim() || env.AUTH_SUCCESS_REDIRECT_URL?.trim()
+  return appBaseUrl ? { appBaseUrl } : {}
 }
 
 /**

@@ -1,18 +1,26 @@
 import {
   binaryCapabilityCoverage,
   binaryCapabilityProviders,
+  binaryCredentialInjectionName,
   binaryFormatCoverage,
   binaryModalityOverlaps,
+  binaryValueCoverage,
+  isHarnessTransport,
   requiredBinaryCapabilities,
 } from '@cat-factory/contracts'
 import type {
   BinaryGenerationOptions,
   BinaryGeneratorCapability,
+  BinaryGeneratorCredential,
+  BinaryGeneratorTransport,
   BinaryModality,
   BinaryOutputConfig,
+  BinaryUnacceptedValue,
+  BinaryValueOption,
 } from '@cat-factory/contracts'
 import type { BinaryGeneratorView } from './binary-generator-registry.js'
 import {
+  BINARY_GENERATED_PATH,
   BINARY_GENERATOR_CONTEXT_DIR,
   binaryGeneratorContextFileFor,
 } from './binary-output-paths.js'
@@ -58,25 +66,53 @@ export interface ResolvedBinaryGenerator {
   // would put a copy on the wire that nothing reads and that a future reader could believe was
   // authoritative.
   /**
-   * The credential's LOOKUP key, which is what the executor asks the resolver for. Absent means
-   * none is declared.
-   *
-   * This is NOT necessarily what the agent reads: {@link credentialEnvName} is, and the brief
-   * names that one. The two are separate because the lookup key is held to the platform's
-   * reserved-variable floor while the injected name is not, so an integration whose client reads
-   * a vendor's documented name can keep it.
-   */
-  credentialKey?: string
-  /**
-   * The environment variable the credential is delivered as, when it differs from
-   * {@link credentialKey}. Absent means the lookup key is also the variable.
+   * The credentials the executor resolves for this integration, in declaration order. EMPTY means
+   * none is declared and the integration is called unauthenticated.
    *
    * Carried on the projection rather than re-derived, because the executor rebuilds a dispatch
    * from the context alone and has neither the registry nor the step to look the definition up in.
    */
-  credentialEnvName?: string
-  /** Whether a missing credential means the integration must not be called (defaults true). */
-  credentialRequired?: boolean
+  credentials: ResolvedBinaryGeneratorCredential[]
+  /**
+   * How this integration is reached, and which CLI serves it when the answer is `harness`.
+   *
+   * Here for the reason {@link credentials} is and `capabilities` deliberately is NOT: the
+   * executor rebuilds a dispatch from the context alone, and this is a fact it has to ACT on
+   * rather than merely repeat. A harness-served generator needs its CLI's own generation tool
+   * switched on for the job, and nothing else on the wire says so.
+   *
+   * The executor keys off `transport` alone and never off a CLI NAME: which tool to enable is the
+   * harness's own business, and admission has already refused any step whose model resolves to a
+   * different one. A `harness === 'codex'` test in the backend would be that decision made twice,
+   * in the half that would then have to grow a branch per CLI.
+   */
+  transport?: BinaryGeneratorTransport
+  harness?: string
+}
+
+/**
+ * One credential on the dispatch projection: the two NAMES and the disposition, never a value.
+ *
+ * A shape of its own rather than three parallel arrays, because the three fields are one fact and
+ * splitting them would let a projection carry two keys and one injection name.
+ */
+export interface ResolvedBinaryGeneratorCredential {
+  /**
+   * The LOOKUP key, which is what the executor asks the resolver for.
+   *
+   * This is NOT necessarily what the agent reads: {@link envName} is, and the brief names that
+   * one. The two are separate because the lookup key is held to the platform's reserved-variable
+   * floor while the injected name is not, so an integration whose client reads a vendor's
+   * documented name can keep it.
+   */
+  key: string
+  /**
+   * The environment variable the value is delivered as, when it differs from {@link key}. Absent
+   * means the lookup key is also the variable.
+   */
+  envName?: string
+  /** Whether a missing value means the integration must not be called (defaults true). */
+  required?: boolean
 }
 
 /** Project a resolved selection into what the dispatch carries. Unresolved ids contribute
@@ -89,10 +125,28 @@ export function dispatchBinaryGenerators(
     id: generator.id,
     label: generator.name,
     modalities: [...generator.modalities],
-    ...(generator.credential ? { credentialKey: generator.credential.key } : {}),
-    ...(generator.credential?.envName ? { credentialEnvName: generator.credential.envName } : {}),
-    ...(generator.credential?.required === false ? { credentialRequired: false } : {}),
+    credentials: generator.credentials.map((credential) => ({
+      key: credential.key,
+      ...(credential.envName ? { envName: credential.envName } : {}),
+      ...(credential.required === false ? { required: false } : {}),
+    })),
+    ...(generator.transport ? { transport: generator.transport } : {}),
+    ...(generator.harness ? { harness: generator.harness } : {}),
   }))
+}
+
+/**
+ * Whether this dispatch needs the agent CLI's OWN generation tool switched on.
+ *
+ * Asked of the resolved selection rather than of the harness, because the selection is what says
+ * the step exists to generate: the CLI having a tool is not a reason to pay for it, and the tool
+ * bills the leased subscription at several times an ordinary turn. False for every dispatch that
+ * selected only API-transport integrations, which is byte-for-byte the prior behaviour.
+ */
+export function dispatchNeedsHarnessGeneration(
+  generators: readonly ResolvedBinaryGenerator[] | undefined,
+): boolean {
+  return (generators ?? []).some((generator) => isHarnessTransport(generator))
 }
 
 /** One way a step's generative-integration selection fails against the registry. */
@@ -130,6 +184,50 @@ export type BinaryGeneratorSelectionIssue =
    * every integration registered before this axis existed running unchanged.
    */
   | { problem: 'capability_unsupported'; capability: BinaryGeneratorCapability }
+  /**
+   * A generation option every selected integration CAN be asked for and none of them will take
+   * the step's VALUE at: a `7:3` aspect ratio asked of endpoints whose picklists offer ten
+   * others, a 96x96 render asked of one whose `size` parameter starts at 1024x1024.
+   *
+   * One notch finer than the capability above and refused for the reason each finer axis before
+   * it was: an unsupported value is not a thinner generation. The endpoint takes the parameter,
+   * so the call succeeds, and what comes back is the nearest thing the vendor chose, cropped or
+   * downscaled, with the modality covered, the format covered and the upload clean. The consumer
+   * that rejects it is weeks downstream.
+   *
+   * Only ever raised where EVERY integration declaring the capability enumerated what it takes.
+   * One that declared the capability and no set has said nothing about this value, which is
+   * {@link binaryValueCoverage}'s `unverifiable` and is reported rather than refused.
+   */
+  | { problem: 'option_value_unaccepted'; value: BinaryUnacceptedValue }
+  /**
+   * A HARNESS-transport integration whose CLI is not the one this step will dispatch under.
+   *
+   * The axis every other member of this union does not cover: those judge whether the integration
+   * can do the WORK, this judges whether it will be REACHABLE at all. A harness-served generator
+   * is a tool built into one agent CLI (Codex's `image_gen`), so a step whose model resolves to a
+   * different harness has selected an integration whose tool simply is not in the process — and
+   * nothing downstream notices. The agent is briefed on a generator it cannot call, tries, and
+   * reports the failure as its own.
+   *
+   * The requirement is DERIVED from the step's resolved model, never declared on the step, for
+   * the reason the whole design refuses declared requirements: a declaration is a second place to
+   * keep the truth, and the model already decides the harness. It is also why "can produce
+   * images" is NOT a flag on the model catalog — the capability belongs to the integration, and
+   * which harness serves it is the only fact the model contributes.
+   *
+   * Only ever raised when the harness is KNOWN. An unresolved model is the third outcome this
+   * design uses everywhere else (`unverifiable`): reported by nobody and refused by nobody,
+   * because a guess about which CLI a step will run under is worse than an absence.
+   */
+  | {
+      problem: 'generator_harness_unavailable'
+      generatorId: string
+      /** The CLI the integration declares serves it. */
+      requiredHarness: string
+      /** The CLI this step's model actually resolves to. */
+      resolvedHarness: string
+    }
 
 /** A step's selection, resolved against the registry's views. */
 export interface ResolvedBinaryGeneratorSelection {
@@ -184,12 +282,32 @@ export function resolveBinaryGeneratorSelection(
 export function binaryGeneratorSelectionIssues(
   config: BinaryOutputConfig | undefined,
   generators: readonly BinaryGeneratorView[],
+  resolvedHarness?: string,
 ): BinaryGeneratorSelectionIssue[] {
   const { selected, unresolvedIds } = resolveBinaryGeneratorSelection(config, generators)
   const issues: BinaryGeneratorSelectionIssue[] = unresolvedIds.map((generatorId) => ({
     problem: 'unknown_generator' as const,
     generatorId,
   }))
+  // The REACHABILITY axis, checked before the capability ones because it is the coarser fault and
+  // it SHORT-CIRCUITS them: a generator the step's CLI does not carry covers nothing, so every
+  // coverage judgement below would restate one misconfiguration as several, each with its own
+  // remedy, on a surface that renders every problem it recognises. Skipped entirely when the
+  // caller could not resolve the harness — see the issue's own doc for why a guess is worse than
+  // an absence. The unresolved-id issues above ride along because they are a different fault
+  // about different ids, and fixing this one would not surface them.
+  if (resolvedHarness) {
+    for (const generator of selected) {
+      if (!isHarnessTransport(generator) || generator.harness === resolvedHarness) continue
+      issues.push({
+        problem: 'generator_harness_unavailable',
+        generatorId: generator.id,
+        requiredHarness: generator.harness ?? '',
+        resolvedHarness,
+      })
+    }
+    if (issues.some((issue) => issue.problem === 'generator_harness_unavailable')) return issues
+  }
   const covered = new Set(selected.flatMap((generator) => generator.modalities))
   for (const modality of config?.modalities ?? []) {
     if (!covered.has(modality)) issues.push({ problem: 'modality_uncovered', modality })
@@ -209,7 +327,29 @@ export function binaryGeneratorSelectionIssues(
   ).uncovered) {
     issues.push({ problem: 'capability_unsupported', capability })
   }
+  // One notch finer again: the option is supported and the VALUE is not. Judged only over the
+  // integrations that declare the gating capability, so a selection failing the coarser check
+  // above is never reported twice for one fault, and only where every one of them enumerated
+  // what it takes.
+  for (const value of binaryValueCoverage(config?.generation, selected).unaccepted) {
+    issues.push({ problem: 'option_value_unaccepted', value })
+  }
   return issues
+}
+
+/**
+ * A value option in words, for a message a human reads.
+ *
+ * A `Record` rather than a `switch`, because unlike {@link describeCapability} this vocabulary is
+ * not a wire picklist: it is the key set of a table in `@cat-factory/contracts` that this build
+ * and the mothership both compile against, so a member from a newer build cannot arrive here
+ * without the option itself arriving with it. Adding one fails the typecheck, which is the whole
+ * guard the case needs.
+ */
+const VALUE_OPTION_LABELS: Record<BinaryValueOption, string> = {
+  aspectRatio: 'an aspect ratio',
+  outputSize: 'an output size',
+  upscale: 'an upscale factor',
 }
 
 /**
@@ -331,6 +471,13 @@ export function describeBinaryGeneratorSelectionIssues(
     if (issue.problem === 'capability_unsupported') {
       return `this step's generation options ask for ${describeCapability(issue.capability)}, and no selected integration supports it: remove the option, or select an integration that declares the capability`
     }
+    if (issue.problem === 'generator_harness_unavailable') {
+      return `'${issue.generatorId}' generates through the ${issue.requiredHarness} agent CLI, but this step's model runs on ${issue.resolvedHarness}: the generator's tool is not in that process at all. Pin the step (or the block) to a ${issue.requiredHarness} model, or select an integration this step's harness can reach`
+    }
+    if (issue.problem === 'option_value_unaccepted') {
+      const { option, requested, accepted } = issue.value
+      return `this step asks for ${VALUE_OPTION_LABELS[option]} of ${requested}, which no selected integration accepts: each of them states the values it takes, and between them those are ${accepted.join(', ')}. Ask for one of those, or select an integration that renders this one`
+    }
     return `no selected integration produces ${describeModality(issue.modality)}, which this step declares it delivers`
   })
   const problems = clauses.length === 1 ? clauses[0] : clauses.map((c) => `\n  - ${c}`).join('')
@@ -386,11 +533,21 @@ export function renderBinaryGeneratorSection(input: {
           '- Formats: not declared — read them off its API contract rather than assuming one.',
         )
       }
+      lines.push(...acceptedValueLines(generator))
+      // A harness-served integration answers the endpoint/credential/contract questions in one
+      // different way, so it takes a different block rather than three suppressed lines: the
+      // API-shaped renderer's answers are not merely empty here, they are wrong.
+      const harnessServed = isHarnessTransport(generator)
+      if (harnessServed) lines.push(...harnessLines(generator))
       if (generator.endpoint) lines.push(`- Endpoint: ${generator.endpoint}`)
       lines.push(`- ${generator.summary}`)
       if (generator.description.trim()) lines.push('', generator.description.trim())
       if (generator.guidance?.trim()) lines.push('', generator.guidance.trim())
-      lines.push('', ...credentialLines(generator), ...contractLines(generator), '')
+      lines.push(
+        '',
+        ...(harnessServed ? [] : [...credentialLines(generator), ...contractLines(generator)]),
+        '',
+      )
     }
     lines.push(...overlapLines(selected))
   }
@@ -463,6 +620,12 @@ function generationOptionLines(
     }
   }
   if (generation.negativePrompt) lines.push(`- Negative prompt: ${generation.negativePrompt}`)
+  // `!== undefined` rather than a truthiness check, and the two numeric options differ on whether
+  // that is load-bearing. `seed` accepts 0 (`minValue(0)`), so a falsy read would silently drop the
+  // one seed a run is most likely to have been pinned to, and a test pins that. `upscale` starts at
+  // 2 (`binaryUpscaleFactorSchema`), so there is no producible value the two readings disagree
+  // about: its mutant is EQUIVALENT and is left alive on purpose, since killing it would take an
+  // input the schema refuses. `requiredBinaryCapabilities` in contracts reads both the same way.
   if (generation.seed !== undefined) {
     lines.push(
       `- Seed: ${generation.seed}. Send it on every call so this run can be reproduced; vary it only where you are explicitly asked for several candidates of one subject.`,
@@ -507,6 +670,57 @@ function generationOptionLines(
     lines.push(
       `No selected integration declares support for ${coverage.unverifiable.map(describeCapability).join(', ')}, and at least one of them declares no capabilities at all, so whether it can is unknown rather than settled. Check its API contract before relying on ${coverage.unverifiable.length === 1 ? 'it' : 'them'}, and report the gap rather than generating as if the option had been applied.`,
       '',
+    )
+  }
+  // The VALUE half of the same sentence, and the reason it is stated separately: the option is
+  // supported everywhere, one integration has enumerated what it takes and this is not on the
+  // list, and another has enumerated nothing. Admission let the step through on the strength of
+  // the second one, so the agent is the party that has to route around the first, and it can only
+  // do that if it is told which fact it is holding.
+  const values = binaryValueCoverage(generation, selected)
+  // The DEFINITE version of that fact, and the one the providers list above actively misleads
+  // about: every integration named there declares the option, and one of them has written down
+  // that it will not take this value. Naming it is the whole remedy, since the agent is the party
+  // choosing which endpoint renders which artifact.
+  for (const value of values.partial) {
+    lines.push(
+      `${joinIds(value.refusedBy)} ${value.refusedBy.length === 1 ? 'states the values it accepts' : 'state the values they accept'} for ${VALUE_OPTION_LABELS[value.option]} and ${value.refusedBy.length === 1 ? 'does' : 'do'} NOT accept the ${value.requested} this step asks for, while another selected integration does. Send these generations to one that accepts it. Do not send this option to ${joinIds(value.refusedBy)}: the call would succeed and return a nearby value instead. If routing is impossible for an artifact, report the option by name rather than substituting.`,
+      '',
+    )
+  }
+  if (values.unverifiable.length > 0) {
+    const named = values.unverifiable.map((option) => VALUE_OPTION_LABELS[option]).join(', ')
+    lines.push(
+      `At least one selected integration states the values it accepts and does NOT accept what this step asks for (${named}), while another states no values at all. Route these generations to an integration that can render what is asked, read the accepted sets listed per integration above, and report the option by name rather than substituting a nearby value.`,
+      '',
+    )
+  }
+  return lines
+}
+
+/**
+ * The closed sets of values one integration accepts, stated per option beside its formats.
+ *
+ * On the integration's own entry rather than only in the options section below, because it is a
+ * fact about the endpoint the agent needs whatever this step happens to ask for: an agent holding
+ * two image APIs picks per artifact, and "this one renders 1024x1024 and nothing else" is exactly
+ * the kind of thing that decides. Silent per option where nothing was declared, which is the
+ * ordinary case and means the endpoint's own contract is the authority.
+ */
+function acceptedValueLines(generator: BinaryGeneratorView): string[] {
+  const accepts = generator.accepts
+  if (!accepts) return []
+  const lines: string[] = []
+  if (accepts.aspectRatios?.length) {
+    lines.push(`- Accepts these aspect ratios and no others: ${accepts.aspectRatios.join(', ')}.`)
+  }
+  if (accepts.outputSizes?.length) {
+    const sizes = accepts.outputSizes.map((size) => `${size.width}x${size.height}`)
+    lines.push(`- Renders at these exact sizes and no others: ${sizes.join(', ')}.`)
+  }
+  if (accepts.upscaleFactors?.length) {
+    lines.push(
+      `- Accepts these upscale factors and no others: ${accepts.upscaleFactors.join(', ')}.`,
     )
   }
   return lines
@@ -635,35 +849,104 @@ function requirementLines(
  * at all" would strand a working endpoint on the most ordinary misconfiguration there is, which
  * is the failure `required: false` exists to prevent.
  */
+/**
+ * What a HARNESS-SERVED integration's entry says instead of endpoint/credential/contract lines.
+ *
+ * All three of those would be actively wrong here, and the credential line is the one that does
+ * damage: with no credentials declared, the API-shaped renderer says "call it unauthenticated as
+ * its contract describes", which sends the agent looking for an HTTP endpoint that does not exist
+ * and turns a working capability into a reported gap.
+ *
+ * It also names the staging directory, because the CLI's own tool does not tell the model where it
+ * wrote — that is the whole reason the harness redirects the output. An agent that generated
+ * successfully and cannot find the file reports the same failure as one that never generated.
+ */
+function harnessLines(generator: BinaryGeneratorView): string[] {
+  return [
+    `- Served by your own \`${generator.harness}\` agent CLI: generate with its built-in generation tool. There is no API to call, no endpoint, and no credential — the run is already authenticated.`,
+    `- Output lands in \`${BINARY_GENERATED_PATH}/\`. Collect the files from there and store each one through the storage service above. Nothing else moves them, so a file you leave there is an artifact this step did not deliver.`,
+    `- If the tool is unavailable in this session, say so and report which artifacts you could not produce. Do NOT substitute another generator, and do not describe an image you did not make.`,
+  ]
+}
+
 function credentialLines(generator: BinaryGeneratorView): string[] {
-  const credential = generator.credential
-  if (!credential) {
+  const credentials = generator.credentials
+  if (credentials.length === 0) {
     return [
       `No credential is configured for \`${generator.id}\`: call it unauthenticated as its contract describes, and report a rejection rather than inventing a key.`,
     ]
   }
-  const usage = credential.usage
-    ? ` Send it as ${credential.usage}.`
-    : ' Its API contract states how to present it.'
-  // The INJECTION name, never the lookup key. They differ whenever a definition had to keep a
-  // vendor's documented variable name while looking the value up under one of its own, and naming
-  // the lookup key here would tell the agent to read a variable that is never set: an integration
-  // reported as unavailable on every run, with the brief itself as the reason nobody could see it.
-  const envName = credential.envName ?? credential.key
-  const provided = `The credential for \`${generator.id}\` is provided to your process as the environment variable \`${envName}\`.${usage} Read it from the environment, and never echo it, log it, commit it, or put it in your reply.`
-  // `required` defaults to TRUE: an integration whose declaration says nothing is authenticated,
-  // which is the safe reading. Being wrong that way costs a reported gap, while being wrong the
-  // other way burns the run on a call that 401s.
-  if (credential.required === false) {
-    return [
-      provided,
-      `\`${envName}\` is OPTIONAL for \`${generator.id}\`: if it is unset or empty, still call the integration, unauthenticated as its contract describes. Report a rejection rather than inventing a key.`,
-    ]
+  const lines: string[] = []
+  if (credentials.length > 1) lines.push(credentialSetLine(generator.id, credentials))
+  for (const credential of credentials) {
+    // The INJECTION name, never the lookup key. They differ whenever a definition had to keep a
+    // vendor's documented variable name while looking the value up under one of its own, and
+    // naming the lookup key here would tell the agent to read a variable that is never set: an
+    // integration reported as unavailable on every run, with the brief itself as the reason
+    // nobody could see it.
+    const envName = binaryCredentialInjectionName(credential)
+    const usage = credential.usage
+      ? ` Send it as ${credential.usage}.`
+      : ' Its API contract states how to present it.'
+    lines.push(
+      `The credential for \`${generator.id}\` is provided to your process as the environment variable \`${envName}\`.${usage} Read it from the environment, and never echo it, log it, commit it, or put it in your reply.`,
+    )
+    // `required` defaults to TRUE: an integration whose declaration says nothing is authenticated,
+    // which is the safe reading. Being wrong that way costs a reported gap, while being wrong the
+    // other way burns the run on a call that 401s.
+    if (credential.required === false) {
+      // What "call it anyway" MEANS depends on whether this is the integration's only credential.
+      // For a sole credential the call is genuinely unauthenticated; for one of several it is not,
+      // and telling the agent to make an unauthenticated call to an endpoint whose Basic key DID
+      // arrive is a 401 it would then report as a bad key.
+      const withoutIt =
+        credentials.length === 1
+          ? 'still call the integration, unauthenticated as its contract describes'
+          : `still call the integration, using whichever of its other values arrived and treating this one as absent`
+      lines.push(
+        `\`${envName}\` is OPTIONAL for \`${generator.id}\`: if it is unset or empty, ${withoutIt}. Report a rejection rather than inventing a key.`,
+      )
+      continue
+    }
+    lines.push(
+      `If \`${envName}\` is unset or empty, the platform could NOT provide the credential: do not call \`${generator.id}\` at all, and report that its credential was unavailable. An empty variable is not an empty key.`,
+    )
   }
-  return [
-    provided,
-    `If \`${envName}\` is unset or empty, the platform could NOT provide the credential: do not call \`${generator.id}\` at all, and report that its credential was unavailable. An empty variable is not an empty key.`,
-  ]
+  return lines
+}
+
+/**
+ * The set-level sentence an integration declaring SEVERAL credentials opens with, naming the set
+ * before its parts so two paragraphs do not read as two independent keys.
+ *
+ * What that sentence may CLAIM depends on how many of them are required, and that is the whole
+ * reason it is a function rather than one string. "Never call the integration with a subset of
+ * them" is exactly right for an HTTP Basic key/secret pair, and against a set mixing a required
+ * key with an optional one it directly contradicts that member's own line below, which tells the
+ * agent to call anyway when it is missing. An agent handed two opposed instructions resolves them
+ * by guessing, and either guess costs the run: obeying the set line strands a working endpoint on
+ * an absent optional value, obeying the member line is the subset call the pair rule exists to
+ * prevent.
+ *
+ * So the joint rule is stated over the REQUIRED members alone, and only where there are two of
+ * them to join. Below that there is no subset to refuse: at most one value is needed for a
+ * legitimate call, and claiming otherwise would invent a constraint the declaration never made.
+ */
+function credentialSetLine(
+  generatorId: string,
+  credentials: readonly BinaryGeneratorCredential[],
+): string {
+  const names = (list: readonly BinaryGeneratorCredential[]): string =>
+    list.map((credential) => `\`${binaryCredentialInjectionName(credential)}\``).join(', ')
+  const required = credentials.filter((credential) => credential.required !== false)
+  const opening = `\`${generatorId}\` is given ${credentials.length} separate values, provided to your process as the environment variables ${names(credentials)}.`
+  if (required.length < 2) {
+    return `${opening} They are not parts of one credential: each carries its own condition below, so read all of them before deciding how to call it.`
+  }
+  if (required.length === credentials.length) {
+    return `${opening} They are parts of ONE credential: combine them exactly as stated below, and never call the integration with a subset of them.`
+  }
+  return `${opening} ${names(required)} are parts of ONE credential: combine them exactly as stated below, and never call the integration without all of them. The rest are separate values, each optional in the way its own line states.`
 }
 
 /** Where an integration's API contract was injected, or the explicit statement that none exists. */

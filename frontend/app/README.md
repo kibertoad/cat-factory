@@ -69,6 +69,40 @@ Order within the column is by what the user loses by not reading it now; the too
 
 `app/components/layout/BoardTopOverlays.spec.ts` enforces the no-self-placement half, reading the member list from the component's own imports.
 
+### A board driver that MEASURES the DOM runs off the activity pulse, never a bare RAF
+
+Two board features cannot be derived from the stores alone: the dependency-edge overlay needs
+each card's on-screen rectangle, and the task-expansion driver needs the topmost card under the
+pointer. Both used `useRafFn`, so an open board paid O(edges) `querySelector` plus forced layout
+reads sixty times a second with nothing moving, and the edge overlay reassigned an
+equal-but-new segment array every frame on top of that.
+
+**A new driver of that kind pairs `useSettlingRaf(compute)` with the canvas pulse
+(`useBoardActivity`), and `compute` reports honestly whether it changed anything.** The pulse
+answers "something may have started moving" (DOM mutations under the canvas, its resize, the
+Vue Flow camera, pointer/wheel/scroll gestures) and the settling loop carries that wake through
+the animation that follows, parking once the output has held still for a few frames. Neither
+half works alone: a signal fires one frame BEFORE the transition it starts has any geometry, and
+a bare frame loop never stops.
+
+Two things this cost, both worth knowing before adding a third driver. `compute` returning
+`true` unconditionally silently restores the old behaviour, which is why the loop's contract is
+stated in terms of what the user can see rather than what the function did. And the pulse
+watches `style`/`class` attributes but not the geometry attributes the overlay itself writes,
+because a driver whose own output pulsed it awake would never settle.
+
+A `compute` that THROWS parks the loop and lets the error reach the frame callback, so the next
+pulse of any kind is what restarts it. Retrying the frame instead would turn one bad measurement
+into a 60Hz error storm, and staying awake with no frame scheduled would make every later poke a
+no-op and freeze the board for the session.
+
+What the pulse cannot see is a reflow with no mutation and no gesture, a late-loading image or
+font resizing a card. That leaves an arrow stale until the next pulse of any kind, which is the
+deliberate trade: firing too often costs a handful of frames, and the alternative is the loop
+that never sleeps.
+
+`app/utils/settlingLoop.spec.ts` pins the loop against a hand-driven frame clock.
+
 ### A store must be instantiable outside a component `setup`
 
 A Pinia setup store runs its body on the FIRST `useStore()` anywhere in the app, and that
@@ -161,6 +195,46 @@ Some bare tags do work, which is exactly what makes this worth writing down. Nux
 The failure is silent, which is why this is a rule rather than a preference. An unresolved tag warns in dev and then renders nothing, so a built SPA has a hole where the component should be. Nothing catches it: not typecheck, not the unit tests, not the e2e suite, and not the user, who reads it as a backend returning no data. Seven components had shipped this way.
 
 `scripts/check-component-imports.mjs` enforces it (CI's `repo-guards` job). If a panel section is missing and the data looks right, check the import first.
+
+### Every failure toast goes through ONE funnel
+
+**A failed call is reported with `usePipelineErrorToast().present(error, titleKey)`.** Never build
+`toast.add({ title, description: e instanceof Error ? e.message : String(e) })`, and never wrap that
+shape in a per-component `notifyError(title, e)` helper (29 components had a copy of the same six
+lines, plus four more spellings of it).
+
+The funnel is not a formatting convenience. Four properties are what it exists for, and a hand-built
+toast has none of them:
+
+- **Translated copy.** The description is resolved from the envelope's status class or its
+  `details.reason`; the backend's untranslated prose is DETAIL, never the headline (see the i18n
+  section). A hand-built toast shows English to every locale.
+- **It does not auto-dismiss.** An error is the one toast a reader has to finish, quote, or act on,
+  and a ~5s dismissal took it away mid-sentence. It keeps its close button, so leaving is a choice.
+- **One-click copy of the whole thing**, through `useCopyToClipboard` (so the copy's own
+  success/failure is reported rather than silently no-op'ing in an insecure context). Selecting text
+  in a toast is fiddly and impossible once it is gone.
+- **The `requestId` travels with it.** `mountRequestLogging` puts that id on every error envelope,
+  and it is the ONLY join between what the user saw and the one server log line that explains it. A
+  report that arrives without it costs whoever reads it the entire diagnosis.
+
+`present` takes a KEY, not a resolved title (plus optional interpolation params), so it can resolve
+its own copy. A store passes it through its context alongside `api`/`toast` (see
+`stores/board/context.ts`) rather than calling the composable per write. A site with BESPOKE copy for
+a recognised refusal keeps that branch and drains only its fallback into the funnel
+(`stores/board/placement.ts`, `components/board/AddTaskModal.vue`).
+
+**A FAILED CALL, though, not every refusal.** The funnel's whole job is to classify what the backend
+answered, so a local check that never left the browser must not be dressed up as one: a synthesized
+`new Error(t('...'))` has no envelope and no status, which is precisely the input `describeGenericFailure`
+reads as a network fault. A blank required field then renders as "The server could not be reached",
+with the real sentence hidden behind a disclosure. Client-side validation stays a plain
+`toast.add` with translated title and description (`components/settings/ModelConfigurationPanel.vue`).
+
+The still-open remainder is the INLINE family: `error.value = e.message` rendered in a panel, and
+`testResult = { ok: false, message }` rendered by `ConnectionTestVerdict`. Those need a render
+surface rather than a toast, and are tracked as G4 in
+[`error-message-coverage.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/error-message-coverage.md).
 
 ### Type a chip map with `BadgeColor`, never `string`
 
@@ -358,8 +432,12 @@ picking what each of them runs on are halves of the same job.
 The builder's palette narrows on two axes, and both controls sit on one row above the catalog
 (`PipelinePurposeSelect` above `AgentTierSelect`), each with its own "n hidden" hint so neither
 narrowing reads as an empty catalog. The tier says how deep to look; the **purpose** says what
-the pipeline is for (`build` / `document` / `review` / `research` / `planning`), and the palette
-drops the categories that purpose has no use for. It reaches past the palette: the saved-pipeline
+the pipeline is for (`build` / `bugfix` / `document` / `review` / `research` / `planning`), and the
+palette drops the categories that purpose has no use for. `bugfix` is the one pair that shares a
+row with another member: it ships code exactly as `build` does, and differs only in being offered
+to a `bug` task and withheld from a `feature` one, because a preset that investigates a defect
+report and writes a failing reproduction test has neither input on a feature. It reaches past the
+palette: the saved-pipeline
 library in the builder's third column lists the pipelines built for the purpose being edited, so
 one dial narrows both ends of the slideover. The purpose is not a view preference either: it is
 saved on the pipeline and also decides which task pickers offer it, which is why the control

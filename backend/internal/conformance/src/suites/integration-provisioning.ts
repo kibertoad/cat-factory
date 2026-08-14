@@ -3,9 +3,19 @@ import {
   type RunnerBackendProvider,
   createBackendRegistries,
 } from '@cat-factory/integrations'
-import type { RiskPolicy } from '@cat-factory/kernel'
+import { RISK_POLICY_SEEDS, type RiskPolicy } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
+
+/**
+ * The built-in catalog, as the expectations below DERIVE it rather than re-pin it. A literal count
+ * or version here is a total over a population this suite does not own: it fails on every ordinary
+ * addition to the catalog, names nothing about what actually broke, and trains the next person to
+ * re-pin it unread. What is worth asserting against a real D1 / Postgres is the RELATION — a
+ * facade lists exactly the catalog, and each row round-trips the version the catalog gave it.
+ */
+const SEEDED_IDS = RISK_POLICY_SEEDS.map((seed) => seed.id).sort()
+const seedFor = (id: string) => RISK_POLICY_SEEDS.find((seed) => seed.id === id)!
 
 /**
  * The empty merge-policy identity every built-in ships: no per-class rule, no role narrowing
@@ -20,6 +30,49 @@ function expectShippedPolicyIdentity(preset: RiskPolicy): void {
   expect(preset.dryRunRoles).toEqual([])
 }
 
+/**
+ * The seeded catalog as the store hands it back: the exact set of built-ins, the two a task resolves
+ * by default, and every budget column round-tripping. Returns the default preset's id, which is all
+ * the caller needs from it afterwards.
+ *
+ * One helper because these assertions are one claim (creating a board wrote the catalog and nothing
+ * dropped a column on the way), and because they belong to the SEED rather than to the
+ * single-default invariant the test goes on to exercise against presets it creates itself.
+ */
+function expectSeededCatalog(policies: RiskPolicy[]): string {
+  // Exactly the catalog, no more and no less: the property that actually breaks when a facade's
+  // seed writer drops a built-in or writes one twice.
+  expect(policies.map((p) => p.id).sort()).toEqual(SEEDED_IDS)
+  const balanced = policies.find((p) => p.id === 'mp_balanced')!
+  const manual = policies.find((p) => p.id === 'mp_manual_review')!
+  // Balanced is the in-app default and auto-merges; "Manual review only" does neither, and fully
+  // prevents auto-merge, so every PR under it is routed to a human.
+  expect(balanced.isDefault).toBe(true)
+  expect(balanced.autoMergeEnabled).toBe(true)
+  expect(manual.isDefault).toBe(false)
+  expect(manual.autoMergeEnabled).toBe(false)
+  // The version COLUMN round-trips, read against the catalog rather than a literal.
+  expect(balanced.version).toBe(seedFor('mp_balanced').version)
+  // The judge knobs round-trip with their defaults through both stores; "Manual review only"
+  // spends no rework rounds on its own (it routes everything to the human it already asks).
+  expect(balanced.judgeMinScore).toBe(0.7)
+  expect(balanced.judgeMaxBounces).toBe(1)
+  expect(manual.judgeMaxBounces).toBe(0)
+  // Every class falls back to the score ceilings and no role changes that, byte-for-byte the
+  // historical policy.
+  expectShippedPolicyIdentity(balanced)
+  expectShippedPolicyIdentity(manual)
+  // The remaining loop budgets round-trip with their defaults: the QC companion, the companion
+  // REWORK budget (read against the catalog rather than a literal, since the engine seeds every
+  // companion step from it, so a facade that dropped the column would put the loop back on a
+  // hard-coded ceiling no policy states), and the post-release-health watch.
+  expect(balanced.maxTesterQualityIterations).toBe(3)
+  expect(balanced.companionMaxReworks).toBe(seedFor('mp_balanced').companionMaxReworks)
+  expect(balanced.releaseWatchWindowMinutes).toBe(30)
+  expect(balanced.releaseMaxAttempts).toBe(1)
+  return balanced.id
+}
+
 export function defineProvisioningConformance(harness: ConformanceHarness): void {
   describe('merge presets', () => {
     it('seeds the built-in catalog, enforces the single-default invariant, and guards the default', async () => {
@@ -27,39 +80,13 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
       const { workspace } = await createWorkspace()
       const base = `/workspaces/${workspace.id}/risk-policies`
 
-      // CREATING the board wrote the whole built-in catalog: Balanced (default, auto-merge on)
-      // and "Manual review only" (non-default, auto-merge OFF). This first read is the first
-      // thing to have listed them, which is the point: the run path resolves a task's governing
-      // preset without listing anything, so a library that only appeared once somebody had read
-      // it would leave a board nobody had opened governed by the built-in fallback.
+      // CREATING the board wrote the whole built-in catalog. This first read is the first thing to
+      // have listed it, which is the point: the run path resolves a task's governing preset without
+      // listing anything, so a library that only appeared once somebody had read it would leave a
+      // board nobody had opened governed by the built-in fallback.
       const initial = await call<RiskPolicy[]>('GET', base)
       expect(initial.status).toBe(200)
-      expect(initial.body).toHaveLength(2)
-      const balanced = initial.body.find((p) => p.id === 'mp_balanced')!
-      const manual = initial.body.find((p) => p.id === 'mp_manual_review')!
-      expect(balanced.isDefault).toBe(true)
-      expect(balanced.autoMergeEnabled).toBe(true)
-      // Bumped to 6 when the built-ins gained the ROLE-SCOPED pair (`classRulesByRole` /
-      // `dryRunRoles`), so existing workspaces are advised to reseed and pick them up.
-      expect(balanced.version).toBe(6)
-      // The judge knobs round-trip with their defaults through both stores; "Manual review only"
-      // spends no rework rounds on its own (it routes everything to the human it already asks).
-      expect(balanced.judgeMinScore).toBe(0.7)
-      expect(balanced.judgeMaxBounces).toBe(1)
-      expect(manual.judgeMaxBounces).toBe(0)
-      // Every class falls back to the score ceilings and no role changes that — byte-for-byte the
-      // historical policy.
-      expectShippedPolicyIdentity(balanced)
-      expectShippedPolicyIdentity(manual)
-      // The QC-companion budget round-trips with its default through both stores.
-      expect(balanced.maxTesterQualityIterations).toBe(3)
-      // "Manual review only" fully prevents auto-merge: every PR is routed to human review.
-      expect(manual.isDefault).toBe(false)
-      expect(manual.autoMergeEnabled).toBe(false)
-      // The post-release-health knobs round-trip with their defaults through both stores.
-      expect(balanced.releaseWatchWindowMinutes).toBe(30)
-      expect(balanced.releaseMaxAttempts).toBe(1)
-      const seededDefaultId = balanced.id
+      const seededDefaultId = expectSeededCatalog(initial.body)
 
       // Add a non-default preset; the seeded default stays the default.
       const lenient = await call<RiskPolicy>('POST', base, {
@@ -71,6 +98,7 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
         maxRequirementIterations: 5,
         maxRequirementConcernAllowed: 'medium',
         maxTesterQualityIterations: 4,
+        companionMaxReworks: 1,
         releaseWatchWindowMinutes: 45,
         releaseMaxAttempts: 2,
       })
@@ -80,6 +108,7 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
       expect(lenient.body.maxRequirementIterations).toBe(5)
       expect(lenient.body.maxRequirementConcernAllowed).toBe('medium')
       expect(lenient.body.maxTesterQualityIterations).toBe(4)
+      expect(lenient.body.companionMaxReworks).toBe(1)
       expect(lenient.body.releaseWatchWindowMinutes).toBe(45)
       expect(lenient.body.releaseMaxAttempts).toBe(2)
 
@@ -99,8 +128,8 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
       expect(strict.body.isDefault).toBe(true)
 
       const afterPromote = await call<RiskPolicy[]>('GET', base)
-      // Two seeded built-ins + Lenient + Strict.
-      expect(afterPromote.body).toHaveLength(4)
+      // The seeded built-ins + Lenient + Strict.
+      expect(afterPromote.body).toHaveLength(RISK_POLICY_SEEDS.length + 2)
       const defaults = afterPromote.body.filter((p) => p.isDefault)
       expect(defaults.map((p) => p.id)).toEqual([strict.body.id])
       expect(afterPromote.body.find((p) => p.id === seededDefaultId)!.isDefault).toBe(false)
@@ -120,9 +149,50 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
       const del = await call('DELETE', `${base}/${lenient.body.id}`)
       expect(del.status).toBe(204)
       const final = await call<RiskPolicy[]>('GET', base)
-      expect(final.body.map((p) => p.id).sort()).toEqual(
-        [seededDefaultId, 'mp_manual_review', strict.body.id].sort(),
-      )
+      expect(final.body.map((p) => p.id).sort()).toEqual([...SEEDED_IDS, strict.body.id].sort())
+    })
+
+    it('holds one default PER SCOPE, promotes them independently, and guards both', async () => {
+      // The per-scope default invariant, against a REAL store on both runtimes. The two flags are
+      // independent columns on one row, which is exactly the shape a repository gets wrong
+      // quietly: an upsert whose conflict-update forgets `is_unattended_default` leaves the
+      // promotion silently unapplied, and `getDefault(ws, 'unattended')` reading the wrong column
+      // returns the in-app default instead. A hand-written fake repo cannot catch either.
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const base = `/workspaces/${workspace.id}/risk-policies`
+
+      const seeded = await call<RiskPolicy[]>('GET', base)
+      expect(seeded.body.filter((p) => p.isDefault).map((p) => p.id)).toEqual(['mp_balanced'])
+      expect(seeded.body.filter((p) => p.isUnattendedDefault).map((p) => p.id)).toEqual([
+        'mp_unattended',
+      ])
+      // The unattended built-in is the one seed that answers its own caps; the others do not.
+      expect(seeded.body.find((p) => p.id === 'mp_unattended')!.autonomy).toBe('unattended')
+      expect(seeded.body.find((p) => p.id === 'mp_balanced')!.autonomy).toBe('attended')
+
+      // Promoting the UNATTENDED default moves only that flag: the in-app default is untouched.
+      const promoted = await call<RiskPolicy>('PATCH', `${base}/mp_manual_review`, {
+        isUnattendedDefault: true,
+      })
+      expect(promoted.status).toBe(200)
+      const afterPromote = await call<RiskPolicy[]>('GET', base)
+      expect(afterPromote.body.filter((p) => p.isUnattendedDefault).map((p) => p.id)).toEqual([
+        'mp_manual_review',
+      ])
+      expect(afterPromote.body.filter((p) => p.isDefault).map((p) => p.id)).toEqual(['mp_balanced'])
+
+      // Neither scope's default can be deleted, and they are refused SEPARATELY — the workspace
+      // would otherwise be left resolving `FALLBACK_RISK_POLICY`, which auto-merges nothing.
+      expect((await call('DELETE', `${base}/mp_balanced`)).status).toBe(409)
+      expect((await call('DELETE', `${base}/mp_manual_review`)).status).toBe(409)
+
+      // ONE row may hold both flags: a deployment that wants a single posture everywhere says so.
+      await call('PATCH', `${base}/mp_balanced`, { isUnattendedDefault: true })
+      const merged = await call<RiskPolicy[]>('GET', base)
+      const both = merged.body.filter((p) => p.isDefault && p.isUnattendedDefault)
+      expect(both.map((p) => p.id)).toEqual(['mp_balanced'])
+      expect(merged.body.filter((p) => p.isUnattendedDefault)).toHaveLength(1)
     })
 
     it('ships catalog versions on the snapshot and reseeds a built-in (drift repair + new appeared)', async () => {
@@ -136,10 +206,11 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
         'GET',
         `/workspaces/${wsId}`,
       )
-      expect(snap.body.riskPolicyCatalogVersions).toMatchObject({
-        mp_balanced: 6,
-        mp_manual_review: 6,
-      })
+      // Every catalog id and its version, derived — so a new built-in is covered the day it is
+      // added, and `toEqual` catches a snapshot that ships one the catalog no longer has.
+      expect(snap.body.riskPolicyCatalogVersions).toEqual(
+        Object.fromEntries(RISK_POLICY_SEEDS.map((seed) => [seed.id, seed.version])),
+      )
 
       // Seed, then drift a built-in (turn its auto-merge OFF + rename). Reseed must restore the
       // canonical definition + version while preserving the user's default + ordering.
@@ -152,7 +223,7 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
       expect(reseeded.status).toBe(200)
       expect(reseeded.body.name).toBe('Balanced')
       expect(reseeded.body.autoMergeEnabled).toBe(true)
-      expect(reseeded.body.version).toBe(6)
+      expect(reseeded.body.version).toBe(seedFor('mp_balanced').version)
       // A reseed restores the whole shipped identity, so a workspace that drifted into narrowing
       // or sandboxing a role is returned to it rather than keeping half.
       expectShippedPolicyIdentity(reseeded.body)
@@ -486,24 +557,41 @@ function registerCustomBackendKindTests(harness: ConformanceHarness): void {
       if (!probe) return
       const userId = `usr_local_${Date.now()}`
 
-      // Upsert an Ollama runner with a bearer key + duplicate model ids.
+      // Upsert an Ollama runner with a bearer key + duplicate model ids. The models carry the
+      // user's DECLARATIONS, including the three-state modality: declared-yes, declared-no and
+      // undeclared all have to survive the store's JSON round-trip distinctly, because collapsing
+      // the third into `false` is exactly what would make a multimodal local model unreachable.
+      const declared = [
+        { id: 'qwen2.5-coder:32b', acceptsImages: false },
+        { id: 'muse-glimmer:30b', acceptsImages: true },
+        { id: 'gemma3' },
+      ]
       const created = await probe.upsert(userId, {
         provider: 'ollama',
         baseUrl: 'http://localhost:11434/v1',
         apiKey: 'secret-bearer-key',
-        models: ['qwen2.5-coder:32b', 'gemma3', 'qwen2.5-coder:32b'],
+        models: [...declared, { id: 'qwen2.5-coder:32b', acceptsImages: false }],
       })
       expect(created.provider).toBe('ollama')
       expect(created.hasApiKey).toBe(true)
       // The enabled-models JSON round-trips through the store, de-duplicated.
-      expect(created.models).toEqual(['qwen2.5-coder:32b', 'gemma3'])
+      expect(created.models).toEqual(declared)
 
       // The list (wire) shape never leaks the key.
       const listed = await probe.list(userId)
       expect(listed).toHaveLength(1)
       expect(JSON.stringify(listed)).not.toContain('secret-bearer-key')
       expect(listed[0]!.hasApiKey).toBe(true)
-      expect(listed[0]!.models).toEqual(['qwen2.5-coder:32b', 'gemma3'])
+      expect(listed[0]!.models).toEqual(declared)
+      // Read back from the store, an UNDECLARED model must still carry no modality key at all:
+      // `acceptsImages: undefined` and an absent property behave the same in the fold, but a store
+      // that materialised `false` would silently withhold every design render from that model.
+      expect(listed[0]!.models[2]).not.toHaveProperty('acceptsImages')
+      // A row this suite just wrote lost nothing reading it back, and every store has to SAY so
+      // rather than leave the field absent: `undefined` there would read as a clean row on the wire
+      // while a genuinely discarded list read the same, which is the distinction the flag exists
+      // for (the parse rule itself is pinned by kernel's own unit tests).
+      expect(listed[0]!.unreadableModels).toBe(false)
 
       // The run-time resolve path decrypts the key (the proxy / inline provider use this).
       const resolved = await probe.resolve(userId, 'ollama')
@@ -514,7 +602,7 @@ function registerCustomBackendKindTests(harness: ConformanceHarness): void {
       await probe.upsert(userId, {
         provider: 'lmstudio',
         baseUrl: 'http://localhost:1234/v1',
-        models: ['llama3.3'],
+        models: [{ id: 'llama3.3' }],
       })
       const both = await probe.list(userId)
       expect(both.map((e) => e.provider).sort()).toEqual(['lmstudio', 'ollama'])
@@ -540,7 +628,7 @@ function registerCustomBackendKindTests(harness: ConformanceHarness): void {
         'http://8.8.8.8/v1',
       ]) {
         await expect(
-          probe.upsert(userId, { provider: 'custom', baseUrl, models: ['m'] }),
+          probe.upsert(userId, { provider: 'custom', baseUrl, models: [{ id: 'm' }] }),
         ).rejects.toThrow()
       }
       // Nothing was stored.
@@ -550,7 +638,7 @@ function registerCustomBackendKindTests(harness: ConformanceHarness): void {
       const ok = await probe.upsert(userId, {
         provider: 'custom',
         baseUrl: 'http://127.0.0.1:8080/v1',
-        models: ['m'],
+        models: [{ id: 'm' }],
       })
       expect(ok.provider).toBe('custom')
       await probe.remove(userId, 'custom')

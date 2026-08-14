@@ -60,10 +60,30 @@ The layers, in order of where they bite:
 The agent's tool loop only edits files in the checkout. Every git operation (clone, branch,
 commit, push) is executed by the **harness**, not the agent, via `execFile('git', [...])` with a
 fixed argv and no shell (`backend/internal/executor-harness/src/git.ts`). The push is exactly
-`git push -u origin <branch>` (`pushBranch`), and the branch name comes off the **job body composed
-by the backend at dispatch** (`job.pushBranch ?? job.newBranch ?? job.branch`), never from model
-output. A hallucinated "argument" in the model's reply therefore has nowhere to become a remote, a
-branch, a refspec, or a flag.
+`git push [--force-with-lease=<branch>:<sha>] origin <sha>:refs/heads/<branch>` (`pushBranch`), and
+the branch name comes off the **job body composed by the backend at dispatch**
+(`job.pushBranch ?? job.newBranch ?? job.branch`), never from model output; both shas are read out
+of the checkout's own refs. A hallucinated "argument" in the model's reply therefore has nowhere to
+become a remote, a branch, a refspec, or a flag.
+
+**The force is bounded by a lease, and the lease is bounded twice over.** The harness
+checkpoint-pushes the agent's commits while it works, so it is its own competing writer: the agent
+can amend a commit that is already on the branch, which a plain push then refuses. The optional
+`--force-with-lease` is what lets that land, under two conditions that `workBranchLease` checks
+together, because the lease alone bounds only one end of it:
+
+1. the `<sha>` it expects is one **this pass itself pushed** (the source commit the push named), so
+   a tip the run merely cloned is never leased against, and
+2. the branch **still contains the tip this pass started from**, so a rewrite reaching below that
+   tip is refused rather than leased over. Without this, a resumed run that had landed one
+   checkpoint could force away the commits it resumed from.
+
+Neither value derives from model output. So the widest thing a compromised run gains is the ability
+to overwrite commits it itself published moments earlier, on the one branch it was already allowed
+to push; a second writer's commits (another dispatch, a person) refuse the push as `(stale info)`,
+a rewrite of an earlier run's work refuses as `(non-fast-forward)`, and any other ref is
+untouchable. `--force` with no lease appears nowhere on this path (the only unconditional force in
+the harness is the bootstrap `reinitAndPush` onto a repo the Worker pre-flighted as empty).
 
 Where a model-authored string legitimately must become a git or shell argument (the declared test
 paths in the bugfix reproduction proof, tracker board slugs), it is validated for **git magic, not
@@ -85,6 +105,18 @@ determined adversarial process could scrape the token from harness memory or sha
 on `PATH` before the harness's own push. Treat this layer as least-privilege hygiene that defeats
 casual and accidental exfiltration; the **container is the trust boundary**, and what a stolen token
 is worth is bounded by Layer 3, not by this one.
+
+The same shared user bounds AVAILABILITY, not just confidentiality: the agent may SIGNAL the harness,
+which is PID 1 of the job container, and stop the very process supervising it. That is not fixable by
+permissions here, because dropping the agent to a second uid needs a PID 1 running as root, which
+this image deliberately does not have and managed container runtimes forbid. Two things are done
+instead, and neither is a boundary. The harness does not answer to a pattern kill aimed at anything
+else: it runs from `dist/harness-server.js` and renames itself to `cat-factory-harness`, which
+rewrites both `/proc/<pid>/cmdline` and `comm`, so `pkill -f 'node dist/server.js'` and a bare
+`pkill node` find only what the agent itself started (an agent scaffolding a Node service really did
+match the old name and shut the harness down mid-job). And a harness that exits CLEANLY with a job
+still running is reported as `harness_shutdown` rather than an eviction, so the platform states what
+happened and does not spend an automatic retry reproducing it.
 
 This layer is at its weakest in **local native mode** (`LOCAL_NATIVE_AGENTS`): there is no container
 at all; the agent runs as your own user on your own machine, so the process boundary above is only
@@ -229,6 +261,22 @@ facades), and so does the engine's own GitHub client via `PatPreferringAppRegist
 the CI gate, mergeability, and the real merge call. The deployment credential is the fallback, not
 the default.
 
+**A public-API key can now BE an initiator, and that is how it reaches the rule above.** A key is
+minted as one of two identities (`actsAsSelf`, [`public-api.md`](./public-api.md#1-mint-a-key)). A
+**system** token — the default, and every headlessly-provisioned key — starts runs with
+`initiatedBy: null`, so nothing here applies to it: no personal PAT is consulted and no personal
+subscription can be unlocked, which is why an individual-usage model is refused outright rather
+than charged to someone who is not present. A **personal** token carries its minter's `usr_*`, so
+its runs are that person's in every sense this page describes: their PAT outranks the deployment's
+by the same precedence, and their sealed subscription can be activated for the run.
+
+Two properties bound that. The binding names **only the minter** (the wire field is a boolean and
+the server reads the id off the session), so a workspace admin cannot mint a key onto a colleague's
+credentials. And the subscription half additionally needs the **personal password on every call**,
+which the platform never stores — so a leaked personal token reaches that user's PAT (exactly as a
+leaked session would) but not their subscription. `allowInitiatorPat` governs the PAT half here as
+it does everywhere else.
+
 **`allowInitiatorPat` (per workspace, on by default) is the enforced control over that.** Turned
 off, every run authenticates as the App installation (or, in local mode, the deployment's own
 token) and the initiator's PAT is never even decrypted, so the blast radius goes back to being a
@@ -266,6 +314,33 @@ Consequences to internalize:
 - In local PAT mode the platform inherits the PAT's blast radius. A classic-scope PAT that can push
   to everything you own is exactly that dangerous in this context; use a fine-grained PAT restricted
   to the repos the deployment works on. The same advice applies, per member, to stored personal PATs.
+
+**What the platform can SAY about the token in use, and what it still cannot do.** The scope of a PAT
+is not narrowable from here, so the only control left is the holder knowing what they handed over.
+Three surfaces report it, from the same classification (`githubPatScope.ts`) and the same required-scope
+list (`@cat-factory/contracts`' `GITHUB_PAT_CLASSIC_SCOPES`): the connect form's warnings when a token
+is stored, the local facade's boot log, and a board-load check
+(`GET /workspaces/:id/github/pat-check`) that resolves the token a run would ACTUALLY authenticate as
+through the same `resolveRunInitiatorToken` the dispatch mint uses, so an `allowInitiatorPat` opt-out
+is honoured rather than re-decided. It judges a token only where a run would PRESENT it: the
+repositories the board's mounted services target are both the gate (none ⇒ nothing to judge, which is
+the answer for a GitLab-bound or not-yet-linked board) and the probe set.
+
+It answers per capability with a tri-state, because a CLASSIC token's scopes come back on
+`x-oauth-scopes` while a fine-grained one reports nothing anywhere. What a repository read can
+establish is asymmetric and reported that way: GitHub's repository payload names the authenticated
+IDENTITY's role, and a token's grants are a subset of its owner's, so `push: false` refutes the token
+while `push: true` only fails to refute it. A 404 is the one positive statement about the credential
+itself (GitHub 404s rather than 403s on a repository a credential may not see), and a 404 on EVERY
+targeted repository is reported as a missing capability: that is the fine-grained token pointed at the
+wrong repositories.
+
+The token's raw scope list is deliberately absent from that response. Reads pass the route's
+permission mount, so publishing it would let any member read the breadth of a shared DEPLOYMENT
+credential; the per-capability verdict is what a reader can act on.
+
+Note what none of this changes: the check reads capability, it does not bound it, and a token that
+passes it is still exactly as wide as the human who minted it made it.
 
 So the worst case of Layer 2's stated limit is "the repos this run was about" rather than "the
 installation", but only where the run authenticates as the App. Installation scope still bounds
@@ -334,6 +409,25 @@ route that served both would turn one compromised container into a reader of eve
 workspace. Anything outside that is a 404 rather than a 403: a container has no business learning which
 artifact ids exist. What remains inside the boundary is the workspace's own reference images, which
 is the same class of data the run was dispatched with.
+
+### What an MCP HOST reaches: the caller's own key, re-gated per call
+
+`POST /api/v1/mcp` serves the public API as MCP tools, and its security model is deliberately
+nothing of its own. The endpoint authenticates the same `cf_live_…` bearer every `/api/v1` call
+takes, and each tool call becomes one in-process `/api/v1` dispatch (`http/loopback.ts`) under THAT
+key, re-running the key gate and the per-operation scope rung, so nothing is reachable through a
+tool that the same key could not reach with `curl`, and revoking the key severs the host. The
+loopback forwards the caller's key verbatim and mints nothing, so the surface adds no credential of
+its own to steal. Recursion is prevented by construction rather than by a guard: the tool table is
+generated from the spec and the endpoint is deliberately absent from it, so no tool can name a path
+that re-enters it; a future hand-authored or composed tool is what would break that argument.
+
+Two residuals, stated rather than hidden: a legacy JSON-RPC batch fans one authenticated request
+into N dispatches inside one invocation, each re-gated, so the fan-out is a cost exposure rather
+than a bypass and the first shape to bound if the endpoint ever needs a limit
+([`public-api.md`](./public-api.md#from-an-mcp-host)); and the serving side has no OAuth yet, so a
+host holds a long-lived key in its own config, tracked as slice 7 of
+[`mcp-maturation.md`](../../docs/initiatives/mcp-maturation.md).
 
 ## Layer 4: no agent DECISION merges to the default branch (mechanism + configuration, given Layer 2)
 

@@ -35,6 +35,14 @@ import { loadWorkspaceAccess } from './workspaceAccess.js'
 //               token verified inside the controller, not by the session gate.
 //   /api      — the public external API; authenticated by an in-controller public-API key
 //               (`Authorization: Bearer cf_live_…`), not the session gate.
+//   /.well-known: the OAuth metadata documents an MCP host reads BEFORE it has any credential
+//               (RFC 9728 / RFC 8414). Public by specification: they carry nothing secret and
+//               exist to be read by a client with no relationship to this deployment yet.
+//   /oauth    : this deployment's own authorization server for its hosted MCP endpoint. Every
+//               route under it is unauthenticated by construction: registering a client is the act
+//               of becoming known, and the token exchange proves itself with the PKCE verifier
+//               rather than a session. The one step that needs a signed-in human is the consent
+//               screen, which is a page in the SPA whose approval call is ordinary gated API.
 //
 // EXPORTED because it is one half of an invariant the app cannot state on its own: every
 // provider-facing receiver in `PROVIDER_CALLBACK_CONTROLLERS` mounts at a prefix that MUST appear
@@ -55,6 +63,8 @@ export const PUBLIC_PREFIXES = [
   '/documents',
   '/internal',
   '/api',
+  '/.well-known',
+  '/oauth',
 ]
 
 /** The exact WebSocket-upgrade shape that self-authenticates via `?ticket=`. */

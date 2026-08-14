@@ -5,6 +5,7 @@ import { ExecutionService } from '../modules/execution/ExecutionService.js'
 import { createTesterQualityReviewer } from './modules.js'
 import { makeDocumentUrlResolver } from '../modules/execution/linked-context.js'
 import { resolvePresetModelForKind } from '../modules/modelPresets/ModelPresetService.js'
+import { createWorkspaceRiskPolicyLibrary } from '../modules/merge/WorkspaceRiskPolicyLibrary.js'
 import { BoardScanService } from '../modules/boardScan/BoardScanService.js'
 import { BoardService } from '../modules/board/BoardService.js'
 import type { createEngineCollaborators } from './engine-collaborators.js'
@@ -90,9 +91,19 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     // Read-through slice for `resolveRiskPolicy` (the merge preset re-read on every gate
     // evaluation); `RiskPolicyService` invalidates it on every preset write.
     riskPolicyCache: caches.riskPolicy,
+    // WHICH policy a run resolves comes from the board's merged library, not its own rows: a task
+    // may pin a policy its ACCOUNT defines (ADR 0055), and the run has to be governed by the same
+    // posture the picker offered it. Composed from `dependencies` through the shared factory rather
+    // than threaded from the risk-policy module, so the engine's wiring does not depend on that
+    // module having been built first; the library holds no state, so the second instance costs
+    // nothing and cannot diverge (the precedence itself lives in kernel).
+    riskPolicyReader: createWorkspaceRiskPolicyLibrary(dependencies),
     // Its sibling one row over: the block's MODEL preset, resolved on every dispatch for the
     // step's model AND the route order. Invalidated by `ModelPresetService` on every write.
     modelPresetCache: caches.modelPreset,
+    // And the per-USER one: what the run's initiator declared about their locally-run models, also
+    // resolved on every dispatch. Invalidated by the local-runner controller's two write routes.
+    localModelDeclarationsCache: caches.localModelDeclarations,
     // The per-class change classification the merge policy's rules key off, plus the best-effort
     // record of every merge decision. Absent ⇒ `unknown` class, no rule matches, nothing stored.
     mergeTrackRecord: mergeTrackRecords?.service,

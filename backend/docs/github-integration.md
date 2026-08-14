@@ -167,10 +167,17 @@ delta listing.
 | `GET`                 | `/github/setup/callback`                                                             | App install callback (browser-facing)      |
 | `GET`                 | `/workspaces/:id/github/install-url`                                                 | Signed install URL                         |
 | `GET`/`POST`/`DELETE` | `/workspaces/:id/github/connection` (+ `/connect`)                                   | Manage the binding                         |
+| `GET`                 | `/workspaces/:id/github/pat-check`                                                   | What the PAT a run would use can do        |
 | `POST`                | `/workspaces/:id/github/resync`                                                      | Trigger resync (incremental / repo / full) |
 | `GET`                 | `/workspaces/:id/github/repos` · `…/repos/:repoId/branches` · `…/pulls` · `…/issues` | Projection reads                           |
 | `POST`                | `…/repos/:repoId/branches` · `…/commits` · `…/pulls`                                 | Writes                                     |
 | `PUT`                 | `…/repos/:repoId/pulls/:number/merge`                                                | Merge a PR                                 |
 | `POST`                | `…/repos/:repoId/issues/:number/comments`                                            | Comment                                    |
 
-All workspace-scoped endpoints return `503` when the integration is not configured.
+All workspace-scoped endpoints return `503` when the integration is not configured, with ONE
+deliberate exception: `pat-check` answers `200 { state: 'not_applicable' }` instead. Local mode
+reaches GitHub with a personal access token and wires no App module at all, so a capability guard
+there would refuse the question on exactly the deployment shape it exists to answer for; and a
+hosted App deployment has a perfectly good answer ("no PAT is in play") that the SPA can act on
+without first branching on the deployment shape. What it reports, and why each capability is a
+tri-state rather than a boolean, is in `backend/docs/security-model.md`.

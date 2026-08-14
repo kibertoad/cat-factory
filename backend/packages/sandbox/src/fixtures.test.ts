@@ -19,8 +19,12 @@ describe('listBuiltinFixtures', () => {
 
 describe('baselineVersionId', () => {
   it('maps a catalog kind to its baseline lineage id', () => {
-    expect(baselineVersionId('reviewer')).toBe('baseline:review')
-    // architecture review has no numbered baseline → falls back to the agent kind.
+    expect(baselineVersionId('coder')).toBe('baseline:build')
+    // Both reviewers are COMPANIONS, whose prompt is composed per pairing rather than numbered
+    // (`baseSystemPromptFor` gives a companion the companion track, which wins over every built-in
+    // phase), so each falls back to its agent kind rather than naming a numbered phase prompt whose
+    // text it never sends.
+    expect(baselineVersionId('reviewer')).toBe('baseline:reviewer')
     expect(baselineVersionId('architect-companion')).toBe('baseline:architect-companion')
   })
 })
@@ -33,7 +37,7 @@ describe('suggestExperiment', () => {
       fixtureIds: ['review-token-bucket-simple'],
     })
     expect(exp.agentKind).toBe('reviewer')
-    expect(exp.matrix.promptVersionIds).toEqual(['baseline:review'])
+    expect(exp.matrix.promptVersionIds).toEqual(['baseline:reviewer'])
     expect(exp.matrix.models).toHaveLength(2)
     expect(exp.matrix.fixtureIds).toEqual(['review-token-bucket-simple'])
     expect(exp.repeats).toBe(1)

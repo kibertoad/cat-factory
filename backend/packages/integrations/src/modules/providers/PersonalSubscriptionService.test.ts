@@ -43,7 +43,10 @@ class FakeSubs implements PersonalSubscriptionRepository {
   async getByUserVendor(userId: string, vendor: SubscriptionVendor) {
     return this.live().find((r) => r.userId === userId && r.vendor === vendor) ?? null
   }
+  /** Counted, so "one read for the whole vendor sweep" is assertable rather than assumed. */
+  listByUserCalls = 0
   async listByUser(userId: string) {
+    this.listByUserCalls += 1
     return this.live().filter((r) => r.userId === userId)
   }
   async upsert(record: PersonalSubscriptionRecord) {
@@ -187,6 +190,26 @@ describe('PersonalSubscriptionService', () => {
     ).rejects.toMatchObject({
       details: { reason: 'subscription_expired' },
     })
+    // And it is not reported as CONFIGURED either, by either question. A lapsed credential that
+    // still answered "wired" put the model in the catalog as selectable and had the run refused at
+    // its first dispatch, naming the model where the subscription is what needs renewing.
+    expect(await svc.has('usr_7', 'claude')).toBe(false)
+    expect([...(await svc.liveVendors('usr_7'))]).toEqual([])
+  })
+
+  it('answers every vendor in one read, and only for the user asked about', async () => {
+    // The whole vendor sweep is one question with one answer: the capability resolver and
+    // `GET /api/v1/models` both want the SET, and five single-row lookups is five round trips on a
+    // read the catalog and every run start take.
+    const { svc, subs } = makeService()
+    for (const vendor of ['claude', 'codex'] as const) {
+      await svc.store('usr_7', { vendor, label: 'm', token: 'T', password: 'longpassword' })
+    }
+    await svc.store('usr_8', { vendor: 'claude', label: 'm', token: 'T', password: 'longpassword' })
+    const reads = subs.listByUserCalls
+    expect([...(await svc.liveVendors('usr_7'))].sort()).toEqual(['claude', 'codex'])
+    expect(subs.listByUserCalls - reads).toBe(1)
+    expect([...(await svc.liveVendors('usr_9'))]).toEqual([])
   })
 
   it('clears a run and sweeps expired activations', async () => {
@@ -202,6 +225,27 @@ describe('PersonalSubscriptionService', () => {
     await svc.activateForRun('exec_2', 'usr_7', 'claude', 'longpassword')
     acts.rows[0]!.expiresAt = 0
     expect(await svc.sweepExpiredActivations()).toBe(1)
+  })
+
+  it('calls an activation FRESH only while over half its life is left', async () => {
+    // The threshold an interaction reads to decide whether re-minting is necessary at all. It lives
+    // here because only this service knows the TTL it mints against, and it is what keeps a headless
+    // driver answering a run's parks from paying the unlock's 210k PBKDF2 iterations once per call.
+    let now = 1000
+    const { svc } = makeService(() => now)
+    await svc.store('usr_7', { vendor: 'claude', label: 'm', token: 'T', password: 'longpassword' })
+    await svc.activateForRun('exec_1', 'usr_7', 'claude', 'longpassword')
+    expect(await svc.hasFreshActivation('exec_1', 'usr_7', 'claude')).toBe(true)
+
+    // Just past halfway: still LIVE, so a dispatch would work — and deliberately no longer fresh,
+    // because the point is to re-mint while a caller is present rather than at the edge of expiry.
+    now += DEFAULT_ACTIVATION_TTL_MS / 2 + 1
+    expect(await svc.hasFreshActivation('exec_1', 'usr_7', 'claude')).toBe(false)
+    expect(await svc.hasActivation('exec_1', 'usr_7', 'claude')).toBe(true)
+
+    // And past the TTL it is neither.
+    now += DEFAULT_ACTIVATION_TTL_MS
+    expect(await svc.hasActivation('exec_1', 'usr_7', 'claude')).toBe(false)
   })
 
   it('computes expiry/renewal status and lists expiring subscriptions', async () => {

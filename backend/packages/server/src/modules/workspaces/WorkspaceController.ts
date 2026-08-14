@@ -31,6 +31,7 @@ import type {
 import type { AgentKindRegistry, AgentRouting } from '@cat-factory/agents'
 import {
   applyInfraReachability,
+  getErrorMessage,
   recordedUnreachableAreas,
   resolveWorkspaceAccess,
   runBestEffort,
@@ -308,6 +309,17 @@ async function snapshotBinaryGenerators(
     // array would make every builder render "supports nothing" for a definition that said
     // nothing: the same absent-reads-as-zero mistake the rest of this surface avoids.
     ...(view.capabilities.length > 0 ? { capabilities: view.capabilities } : {}),
+    // Carried for the same reason, and already absent-or-declared on the view: the builder judges
+    // a step's aspect ratio and output size against it, so omitting it would leave the picker
+    // silent about a value the only selected endpoint refuses.
+    ...(view.accepts ? { accepts: view.accepts } : {}),
+    // The REACHABILITY facts, carried for the same reason again: a harness-served integration is
+    // only available to a step whose model resolves to that CLI, and the picker is where someone
+    // can still act on that. Omitted here, the constraint would first appear as a refused run
+    // start against a selection the product's own picker offered. Neither field names a
+    // credential, an endpoint or a contract, so the omissions this projection exists for hold.
+    ...(view.transport ? { transport: view.transport } : {}),
+    ...(view.harness ? { harness: view.harness } : {}),
   }))
   return generators.length > 0 ? { generators } : {}
 }
@@ -415,7 +427,7 @@ async function snapshotSkills(
     // library is visible in the operator log, but never let it 500 the board snapshot.
     sharedLogger.warn('skill catalog read failed; degrading snapshot skills to none', {
       accountId,
-      err: err instanceof Error ? err.message : String(err),
+      err: getErrorMessage(err),
     })
     return undefined
   }
@@ -558,8 +570,8 @@ async function loadSnapshotSlices(
     sharedStacks,
     // The workspace's model presets (the model→agent mapping library a task picks
     // from), so the board renders the Model Configuration settings + the per-task
-    // preset picker on load. `list` seeds the built-in presets (Kimi K2.7 default +
-    // GLM-5.2) on first read.
+    // preset picker on load. `list` seeds the built-in catalog on first read (the members
+    // are `seedModelPresets()`; which one is the DEFAULT is this facade's choice).
     modelPresets,
     // The workspace's consensus-group library (the estimate-gated panels a pipeline step
     // escalates to), so the builder's per-step tier picker and the settings editor render

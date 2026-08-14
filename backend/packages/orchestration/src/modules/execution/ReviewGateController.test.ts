@@ -96,6 +96,13 @@ function fakeDeps(over: Partial<ReviewGateControllerDeps> = {}) {
   // collaborators (debagged), so the fakes group under those two objects.
   const executionRepository = {
     get: vi.fn(async (_ws: string, _id: string): Promise<ExecutionInstance | null> => null),
+    // The block's LIVE run, read by the off-path (HTTP-driven) entry points to resolve which of
+    // the workspace's two default risk policies governs the review's iteration budget. Null here
+    // degrades to the interactive scope, which is what an inspector call on a task with no live
+    // run means; the gate path never reaches this, it passes the run it already holds.
+    getByBlock: vi.fn(
+      async (_ws: string, _blockId: string): Promise<ExecutionInstance | null> => null,
+    ),
     upsert: vi.fn(async () => {}),
   }
   const stateMachine = {
@@ -705,5 +712,284 @@ describe('ReviewGateController — headless question writeback', () => {
     })
     await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
     expect(t.postReviewQuestions).not.toHaveBeenCalled()
+  })
+})
+
+describe('ReviewGateController — the QUESTIONS an unattended run answers for itself', () => {
+  // ADR 0053 let an unattended policy answer a park the AUTOMATION raised by giving up, and left a
+  // review still ASKING questions parking under either posture. This is the narrowing that came
+  // after it, and what these pin is the boundary rather than the mechanism: TWO independent
+  // judgements must agree (the reviewer's group, then the Writer's grade) before anything is folded
+  // in with nobody reading it, and any disagreement parks exactly as before.
+  const UNATTENDED: ReviewPreset = {
+    maxRequirementIterations: 3,
+    maxRequirementConcernAllowed: 'none',
+    autonomy: 'unattended',
+    minAutoAnswerConfidence: 0.8,
+  }
+
+  /** A finding, plus the auto recommendation that answered it, at a given grade. */
+  function graded(id: string, confidence: number | null, autoAnswerable = true) {
+    return {
+      // The `reply` matters: `hasNotesToIncorporate` short-circuits a fold with nothing in it, so a
+      // fixture whose findings are `answered` with no text would settle the review without ever
+      // reaching the incorporation this describes.
+      item: {
+        id,
+        status: 'answered',
+        reply: `answer for ${id}`,
+        title: id,
+        detail: 'd',
+        autoAnswerable,
+      },
+      rec: {
+        auto: true,
+        status: 'accepted',
+        sourceFinding: { title: id, detail: 'd', itemId: id },
+        confidence,
+      },
+    }
+  }
+
+  function setup(preset: ReviewPreset = UNATTENDED) {
+    const deps = fakeDeps({ resolveRiskPolicy: vi.fn(async () => preset) })
+    return { deps, ctrl: new ReviewGateController(deps), k: fakeKind() }
+  }
+
+  it('folds in and advances when every finding is graded at or above the floor', async () => {
+    const { deps, ctrl, k } = setup()
+    const a = graded('itm_1', 0.9)
+    const b = graded('itm_2', 0.95)
+    k.set(
+      review({
+        status: 'ready',
+        items: [a.item, b.item],
+        recommendations: [a.rec, b.rec],
+      } as never),
+    )
+    // The fold settles the review, which is what the incorporation cycle does when the answers
+    // converge; the gate then advances rather than parking.
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      const settled = review({ status: 'incorporated' })
+      k.set(settled)
+      return settled
+    })
+    const s = step()
+    const inst = instance([s, step({ agentKind: 'architect' })])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'continue' })
+    expect(k.kind.incorporate).toHaveBeenCalled()
+    expect(deps.stateMachine.parkStepOnDecision).not.toHaveBeenCalled()
+    // ON THE RECORD: without the stamp, a run that advanced on machine-written answers is
+    // indistinguishable from one a product owner signed off.
+    expect(s.autoAnsweredByPolicy).toBe(true)
+    expect(s.reviewCapSettledByPolicy).toBeUndefined()
+  })
+
+  it('parks on a finding graded BELOW the floor, and folds nothing in', async () => {
+    const { ctrl, k } = setup()
+    const ok = graded('itm_1', 0.9)
+    const weak = graded('itm_2', 0.5)
+    k.set(
+      review({
+        status: 'ready',
+        items: [ok.item, weak.item],
+        recommendations: [ok.rec, weak.rec],
+      } as never),
+    )
+    const s = step()
+    const inst = instance([s])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(k.kind.incorporate).not.toHaveBeenCalled()
+    expect(s.autoAnsweredByPolicy).toBeUndefined()
+  })
+
+  it('parks on a finding the REVIEWER said needs a product owner, however graded the rest are', async () => {
+    // The group the reviewer assigned is the outer gate: no confidence number reaches past it.
+    const { ctrl, k } = setup()
+    const graded1 = graded('itm_1', 1)
+    k.set(
+      review({
+        status: 'ready',
+        items: [graded1.item, { id: 'itm_2', status: 'open', title: 'pricing', detail: 'which?' }],
+        recommendations: [graded1.rec],
+      } as never),
+    )
+    const s = step()
+    const inst = instance([s])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(k.kind.incorporate).not.toHaveBeenCalled()
+  })
+
+  it('parks under an ATTENDED policy even when every answer is confident', async () => {
+    // The whole feature is a property of the POSTURE, so the in-app default is byte-for-byte the
+    // previous behaviour: the human is handed a pre-filled review and still decides to incorporate.
+    const { ctrl, k } = setup({ maxRequirementIterations: 6, maxRequirementConcernAllowed: 'none' })
+    const a = graded('itm_1', 1)
+    k.set(review({ status: 'ready', items: [a.item], recommendations: [a.rec] } as never))
+    const s = step()
+    const inst = instance([s])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(k.kind.incorporate).not.toHaveBeenCalled()
+    expect(s.autoAnsweredByPolicy).toBeUndefined()
+  })
+
+  it('stops looping when a re-review raises a finding a person has to answer', async () => {
+    // The loop exists because a re-review can surface a fresh batch of practice-level findings, and
+    // it must still stop the moment one of them is not. One fold, then a park.
+    const { ctrl, k } = setup()
+    const a = graded('itm_1', 0.9)
+    k.set(review({ status: 'ready', items: [a.item], recommendations: [a.rec] } as never))
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      const next = review({
+        status: 'ready',
+        items: [{ id: 'itm_9', status: 'open', title: 'scope', detail: 'unclear' }],
+        iteration: 2,
+      } as never)
+      k.set(next)
+      return next
+    })
+    const s = step()
+    const inst = instance([s])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(k.kind.incorporate).toHaveBeenCalledTimes(1)
+    expect(s.autoAnsweredByPolicy).toBe(true)
+  })
+
+  it('does not run at all when the step opted out of auto-recommendation', async () => {
+    // The floor compares against a Writer suggestion, so a step that produces none has nothing to
+    // settle from; folding on the item statuses alone would take an answer nobody wrote.
+    const { ctrl, k } = setup()
+    const a = graded('itm_1', 0.9)
+    k.set(review({ status: 'ready', items: [a.item], recommendations: [a.rec] } as never))
+    const s = step({ stepOptions: { autoRecommend: false } } as Partial<PipelineStep>)
+    const inst = instance([s])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(k.kind.incorporate).not.toHaveBeenCalled()
+  })
+})
+
+describe('ReviewGateController — settling a SECOND batch of practice-level findings', () => {
+  const UNATTENDED: ReviewPreset = {
+    maxRequirementIterations: 3,
+    maxRequirementConcernAllowed: 'none',
+    autonomy: 'unattended',
+    minAutoAnswerConfidence: 0.8,
+  }
+
+  function graded(id: string, confidence: number) {
+    return {
+      item: { id, status: 'answered', reply: `answer for ${id}`, title: id, detail: 'd' },
+      rec: {
+        auto: true,
+        status: 'accepted',
+        sourceFinding: { title: id, detail: 'd', itemId: id },
+        confidence,
+      },
+    }
+  }
+
+  // The loop's whole reason to exist is a re-review that surfaces a FRESH batch of practice-level
+  // findings, and the order of operations is what nearly killed it: `reReview` returns its snapshot,
+  // and only then does the Writer's auto-recommendation pass grade the new findings on the row. A
+  // cycle that re-checked the pre-grading snapshot saw every fresh finding as ungraded, cleared no
+  // floor, and parked the run on exactly the batch it had just proved it could settle.
+  it('re-reads after the auto-recommendation pass, so cycle 2 sees the grades', async () => {
+    const deps = fakeDeps({ resolveRiskPolicy: vi.fn(async () => UNATTENDED) })
+    const ctrl = new ReviewGateController(deps)
+    const k = fakeKind()
+    const first = graded('itm_1', 0.9)
+    const second = graded('itm_2', 0.9)
+    k.set(review({ status: 'ready', items: [first.item], recommendations: [first.rec] } as never))
+
+    let passes = 0
+    // The reviewer's own snapshot: the fresh finding is still OPEN and carries no suggestion, which
+    // is the only state it can be in before the Writer has run against it.
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      passes += 1
+      const next =
+        passes === 1
+          ? review({
+              status: 'ready',
+              items: [{ id: 'itm_2', status: 'open', title: 'itm_2', detail: 'd' }],
+              iteration: 2,
+            } as never)
+          : review({ status: 'incorporated', iteration: 3 } as never)
+      k.set(next)
+      return next
+    })
+    // The Writer's pass: it answers every open finding the reviewer marked answerable and grades
+    // each answer, rewriting the persisted row the reviewer's snapshot was taken from.
+    ;(k.kind.autoRecommend as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      if (passes !== 1) return
+      k.set(
+        review({
+          status: 'ready',
+          items: [second.item],
+          recommendations: [second.rec],
+          iteration: 2,
+        } as never),
+      )
+    })
+
+    const s = step()
+    const inst = instance([s, step({ agentKind: 'architect' })])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'continue' })
+    // TWO folds: the second is the batch that used to park the run.
+    expect(k.kind.incorporate).toHaveBeenCalledTimes(2)
+    expect(deps.stateMachine.parkStepOnDecision).not.toHaveBeenCalled()
+    expect(s.autoAnsweredByPolicy).toBe(true)
+  })
+
+  // The re-read must not turn a genuine park into a fold: when the Writer leaves the fresh batch
+  // ungraded (a garbled reply, an outage), the reloaded row still shows no grade and the run parks.
+  it('still parks when the auto-recommendation pass grades nothing', async () => {
+    const deps = fakeDeps({ resolveRiskPolicy: vi.fn(async () => UNATTENDED) })
+    const ctrl = new ReviewGateController(deps)
+    const k = fakeKind()
+    const first = graded('itm_1', 0.9)
+    k.set(review({ status: 'ready', items: [first.item], recommendations: [first.rec] } as never))
+    let reviewed = false
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      reviewed = true
+      const next = review({
+        status: 'ready',
+        items: [{ id: 'itm_2', status: 'open', title: 'itm_2', detail: 'd' }],
+        iteration: 2,
+      } as never)
+      k.set(next)
+      return next
+    })
+    // An UNGRADED suggestion clears no floor above zero, so a garbled Writer reply parks the run.
+    ;(k.kind.autoRecommend as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      if (!reviewed) return
+      k.set(
+        review({
+          status: 'ready',
+          items: [{ id: 'itm_2', status: 'answered', reply: 'a', title: 'itm_2', detail: 'd' }],
+          recommendations: [
+            {
+              auto: true,
+              status: 'accepted',
+              sourceFinding: { title: 'itm_2', detail: 'd', itemId: 'itm_2' },
+              confidence: null,
+            },
+          ],
+          iteration: 2,
+        } as never),
+      )
+    })
+
+    const s = step()
+    const inst = instance([s])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(k.kind.incorporate).toHaveBeenCalledTimes(1)
   })
 })

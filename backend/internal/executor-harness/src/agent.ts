@@ -12,6 +12,7 @@ import type {
   TestSecretSpec,
 } from './job.js'
 import { standUpFrontend, tearDownFrontend } from './frontend-infra.js'
+import { artifactUploadEnv } from './artifact-upload.js'
 import { configurePackageRegistries } from './package-registries.js'
 import { captureRedactedOutput, redactSecrets, registerKnownSecrets } from './redact.js'
 import {
@@ -30,7 +31,8 @@ import { inferVcsProvider, openPullRequest } from './vcs-api.js'
 import type { PiRunStats, RunDiagnostics } from './pi-reduction.js'
 import { applyPrDescription } from './pr-description.js'
 import { makeDirClaimer } from './checkout-dir.js'
-import { noChangesReason, runCodingAgent, runMultiRepoCoding } from './coding-agent.js'
+import { noChangesReason, runCodingAgent } from './coding-agent.js'
+import { runMultiRepoCoding } from './multi-repo-coding.js'
 import { validationFailureMessage } from './validation-checks.js'
 import { prepopulateDependencies, withDependencyNote } from './dependency-install.js'
 import { agentCapabilities, mergeEffort } from './agent-shared.js'
@@ -49,6 +51,7 @@ import {
   diagnosticsSuffix,
   resolveStructuredOutput,
 } from './structured-output.js'
+import { extractJsonObject } from './json-reply.js'
 import type { RunOptions } from './runner.js'
 import { log, type Logger } from './logger.js'
 
@@ -262,23 +265,6 @@ async function resolveReplyCustom(
   return { value: resolved.value, diagnostics: resolved.diagnostics }
 }
 
-/** Extract the first JSON object from an agent's final message (tolerating fences/prose). */
-function extractJsonObject(text: string): unknown {
-  const trimmed = text.trim()
-  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed)
-  const body = fenced ? (fenced[1] ?? '') : trimmed
-  try {
-    return JSON.parse(body)
-  } catch {
-    const start = body.indexOf('{')
-    const end = body.lastIndexOf('}')
-    if (start === -1 || end === -1 || end <= start) {
-      throw new Error('agent did not return a JSON object')
-    }
-    return JSON.parse(body.slice(start, end + 1))
-  }
-}
-
 /**
  * The service work directory for a checkout at `dir`: the monorepo service subtree
  * (`repo.serviceDirectory`, created if missing) when the job is service-scoped, else the clone
@@ -332,9 +318,13 @@ export async function handleAgent(job: AgentJob, opts: RunOptions = {}): Promise
     // not the other would be an integration that works or 401s depending on how its step was
     // registered. Per-job env like everything else here — never `process.env`, which the shared
     // native host process makes a cross-job leak.
+    // The platform's own artifact ingest, layered on for EVERY mode for the same reason: which
+    // kinds get the seam is the backend's call (it keys off the kind's declared `ui` image), so a
+    // mode check here would be that decision made twice, in the half that cannot see the registry.
     const scoped = withAgentEnv(opts, {
       ...registryEnv,
       ...secretEnv(job.generatorSecrets),
+      ...artifactUploadEnv(job.artifactUpload),
     })
     if (job.mode === 'preview') return await runPreviewMode(job, scoped)
     return job.mode === 'coding'

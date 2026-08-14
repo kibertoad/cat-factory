@@ -55,6 +55,22 @@ export type ContainerEvictionKind = 'crash' | 'transient'
 export const CONTAINER_EVICTION_ERROR = 'Job not found (container evicted or crashed)'
 
 /**
+ * The one-line `error` a transport reports beside {@link RunnerJobView.harnessShutdown}: the
+ * harness that was running this job did not crash or vanish, it EXITED CLEANLY while the job was
+ * still in flight, which means something asked it to stop.
+ *
+ * Deliberately worded without the eviction sentinel, because the two need opposite handling and
+ * the dispatch-time `isContainerEvictionError` matches that substring: an eviction is worth one
+ * fresh container, whereas a shutdown mid-job is caused by whatever shut it down and a retry
+ * walks back into it. The incident that named this: an agent scaffolding a Node service ran
+ * `pkill -f 'node dist/server.js'` to stop the service it had just smoke-tested and matched the
+ * harness's own PID 1, so the engine spent its whole eviction budget re-running an agent that
+ * killed its container each time and reported infrastructure churn.
+ */
+export const HARNESS_SHUTDOWN_ERROR =
+  'The executor-harness shut down while this job was still running'
+
+/**
  * One forward-looking item the Coder streamed (a loose end / side-task / question), as the
  * harness reports it on a poll (drain-on-read). Structurally the harness's `FollowUpLine` /
  * the contracts' `StreamedFollowUp`; kept as a local shape so this port stays schema-free.
@@ -108,6 +124,15 @@ export interface HarnessCallMetric {
    * Absent on an older harness image; the recorder then stores the unattributed `''` phase.
    */
   phase?: string
+  /**
+   * This row is not a TURN: it stands for the JOB, carrying spend the CLI reported in its terminal
+   * cumulative total and attributed to no turn it narrated. It has no bodies, since there was no
+   * request to capture, and it is recorded with a NULL `turnIndex` for the same reason — a
+   * fabricated turn among measured ones is indistinguishable from a measured one, which is the
+   * whole point of keeping it apart. Its row id still derives from {@link seq}, so a replayed poll
+   * re-records rather than duplicating. Absent on every real turn.
+   */
+  standsForJob?: boolean
 }
 
 /** The structured work product a finished job records. */
@@ -119,8 +144,12 @@ export interface RunnerJobResult {
    * phase 3): one per involved-service repo it actually changed, beside the own-service
    * `prUrl`/`branch`. The executor's `toRunResult` lifts these onto `AgentRunResult`. Absent
    * for a single-repo run.
+   *
+   * `frameIds` echoes back the involved frames the DISPATCH attributed to that checkout: the
+   * fan-out clones one checkout per repo, so a monorepo hosting several of the run's involved
+   * services yields ONE pull request carrying all of their frames.
    */
-  peerPullRequests?: { repo: string; frameId?: string; prUrl: string; branch: string }[]
+  peerPullRequests?: { repo: string; frameIds?: string[]; prUrl: string; branch: string }[]
   summary?: string
   error?: string
   /** A repo-bootstrap job's pushed default branch (the bootstrap coding flow's product). */
@@ -345,6 +374,18 @@ export interface RunnerJobView {
    * which is why it lives beside — not inside — {@link failureCause}.
    */
   evicted?: ContainerEvictionKind
+  /**
+   * Present on a failed view minted by a TRANSPORT that watched the harness exit CLEANLY (exit
+   * code 0, no signal) while this job was still running: it was shut down, not evicted. Never set
+   * beside {@link evicted}: they are the two readings of a backend that stopped answering, and
+   * this one is the reading that says a retry is pointless.
+   *
+   * The distinction is only available where the runtime reports an exit CODE. A runtime that
+   * reports a coarse status (Apple `container`) answers "unknown", which stays an eviction: an
+   * absent code is not a zero, and reading it as one would report every container death there as
+   * a shutdown. See {@link HARNESS_SHUTDOWN_ERROR} for what makes the two need opposite handling.
+   */
+  harnessShutdown?: true
   /**
    * Present on a failed view: an extended, redacted diagnostic (phase-timing breakdown,
    * last-tool breadcrumb) distinct from the one-line {@link error}. The engine surfaces it

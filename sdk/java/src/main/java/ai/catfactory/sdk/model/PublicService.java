@@ -4,12 +4,14 @@
 package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PublicService} wire model.
  * @param description the {@code description} field.
+ * @param provisioning May be absent entirely.
  * @param serviceId the {@code serviceId} field.
  * @param status the {@code status} field.
  * @param title the {@code title} field.
@@ -18,6 +20,9 @@ import org.jspecify.annotations.Nullable;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicService(
     @JsonProperty("description") String description,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("provisioning") @Nullable PublicServiceProvisioning provisioning,
 
     @JsonProperty("serviceId") String serviceId,
 
@@ -41,6 +46,7 @@ public record PublicService(
      */
     public static final class Builder {
         private @Nullable String description;
+        private @Nullable PublicServiceProvisioning provisioning;
         private @Nullable String serviceId;
         private @Nullable TaskStatus status;
         private @Nullable String title;
@@ -49,6 +55,12 @@ public record PublicService(
         /** Set {@code description}. */
         public Builder description(@Nullable String description) {
             this.description = description;
+            return this;
+        }
+
+        /** Set {@code provisioning}. */
+        public Builder provisioning(@Nullable PublicServiceProvisioning provisioning) {
+            this.provisioning = provisioning;
             return this;
         }
 
@@ -78,7 +90,7 @@ public record PublicService(
 
         /** Build the {@link PublicService}. */
         public PublicService build() {
-            return new PublicService(description, serviceId, status, title, type);
+            return new PublicService(description, provisioning, serviceId, status, title, type);
         }
     }
 }

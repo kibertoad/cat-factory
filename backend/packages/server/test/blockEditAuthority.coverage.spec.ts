@@ -79,13 +79,21 @@ const ATTRIBUTED = [
  */
 const UNATTRIBUTED: Record<string, string> = {
   'server:modules/publicApi/PublicApiController.ts':
-    'a headless `/api/v1` caller authenticates as an API KEY, which holds scopes rather than a ' +
-    'workspace tier, so there is no role for a merge preset to sandbox or narrow, and the task ' +
-    'patch contract exposes title/description only, so no preset can be selected here in any case.',
+    'the `/api/v1` task PATCH route. A headless caller authenticates as an API KEY, which holds ' +
+    'scopes rather than a workspace tier, so there is no role for a risk policy to sandbox or ' +
+    'narrow and nothing for the selection guard to judge. The route CAN re-point `riskPolicyId`, ' +
+    'so this is a real exemption and not a vacuous one: which policies a key may pin is the ' +
+    'admission rule tracked in `docs/initiatives/role-scoped-risk-policy-admission.md`.',
+  'server:modules/publicApi/PublicProvisioningController.ts':
+    'the `/api/v1` service PATCH route, on the same API-key reading as the task routes below: a ' +
+    'key holds scopes rather than a workspace tier, so no role-scoped restriction exists for a ' +
+    'policy selection to drop. A SERVICE frame carries no `riskPolicyId` of its own either, and ' +
+    '`toBlockPatch` lowers the body key by key rather than spreading it, so none reaches ' +
+    '`updateBlock` even if the public service schema gains one.',
   'server:modules/publicApi/taskCreation.ts':
     'the `/api/v1` task CREATION route, on the same API-key reading as the patch route above. ' +
     'Stated at the route rather than inside `addServiceTask`, because that method takes a full ' +
-    '`AddTaskInput` and would carry a preset the day the public contract exposes one.',
+    '`AddTaskInput` and is reached by callers that DO have a tier.',
   'orchestration:container/modules.ts':
     'the tracker intake path: a ticket arriving on a schedule or a webhook delivery is filed by ' +
     'nobody, so there is no session and no tier, and inventing one would scope an entire ' +
@@ -162,49 +170,103 @@ describe('board-write sites classify their editor', () => {
 })
 
 /**
- * The second half of the two `/api/v1` exemptions above, which their reasons LEAN ON and nothing
- * enforced: an API key holds no tier, so the guard cannot judge what it selects, and both reasons
- * answer "what if it selects something anyway?" with the claim that the public contract exposes no
- * preset at all. That was a comment guarding a hole one optional field wide.
+ * The second half of the three `/api/v1` exemptions above, which their reasons LEAN ON.
  *
- * The hole is not hypothetical plumbing: `createTaskWithAttachments` spreads the parsed body
- * straight onto the internal `AddTaskInput` (`const { ticket, documents, fields, ...rest } = body`),
- * and `AddTaskInput` carries `riskPolicyId`. So the day the public schema gains that field, every
- * headless caller can author a task onto any preset in the workspace, unjudged, and the only thing
- * that would have said so is a sentence in a test's exemption list.
+ * Until surface 1.43.0 the claim they leaned on was that the public contract exposed no preset at
+ * all, so nothing could be selected through a key in the first place. That is no longer true: both
+ * public task schemas now carry `modelPresetId` and `riskPolicyId`, deliberately (see the schema's
+ * own doc for why withholding one was never the control it resembled). What replaces the old
+ * assertion is the property that makes the exemptions HONEST rather than lucky.
  *
- * Both halves are asserted, because they fail differently: a DECLARED field would be a deliberate
- * contract change that has to come back here, and an unstripped unknown key would be a caller
- * smuggling one past a schema that never mentions it.
+ * Two things are pinned, and they fail differently.
+ *
+ * The public field NAMES the internal one, character for character. Both routes lower the parsed
+ * body by SPREAD (`const { ticket, documents, fields, ...rest } = body`, and `...authored` on the
+ * patch), so the pins reach `AddTaskInput` / `UpdateBlockInput` only because the two vocabularies
+ * agree. Rename either side alone and the spread silently stops carrying the value: no type error,
+ * no failing route test, just every headless task quietly running on the workspace default. That
+ * is precisely the "succeeds while being about something else" failure the field exists to
+ * prevent, arriving through the plumbing instead of through a typo.
+ *
+ * And the surface admits NO OTHER internal knob by the same route. The spread is total, so any
+ * field the public schema declares and `AddTaskInput` happens to share is lowered whether anyone
+ * decided that or not; the pins are the two that were decided.
  */
-describe('the /api/v1 task surface cannot select a merge preset', () => {
+describe('the /api/v1 task surface lowers its preset pins by name', () => {
   /**
    * Read off the INTERNAL schemas rather than written down here, so this spec cannot go vacuous by
-   * outliving the field: rename `riskPolicyId` and these two reads fail, which is the failure that
-   * points at the rename. A public schema is free of the field only if there IS a field.
+   * outliving either field: rename one internally and these reads fail, which is the failure that
+   * points at the rename.
    */
-  const INTERNAL_PRESET_FIELD = 'riskPolicyId'
+  const PINS = ['modelPresetId', 'riskPolicyId'] as const
 
-  it('still describes a real field (the internal writes it guards both carry one)', () => {
-    expect(Object.keys(addTaskSchema.entries)).toContain(INTERNAL_PRESET_FIELD)
-    expect(Object.keys(updateBlockSchema.entries)).toContain(INTERNAL_PRESET_FIELD)
+  it('still describes real internal fields (the writes it guards both carry them)', () => {
+    for (const pin of PINS) {
+      expect(Object.keys(addTaskSchema.entries)).toContain(pin)
+      expect(Object.keys(updateBlockSchema.entries)).toContain(pin)
+    }
   })
 
-  it('declares no preset field on either public schema', () => {
-    expect(Object.keys(createPublicTaskSchema.entries)).not.toContain(INTERNAL_PRESET_FIELD)
-    expect(Object.keys(updatePublicTaskSchema.entries)).not.toContain(INTERNAL_PRESET_FIELD)
+  it('declares each pin on both public schemas, under the internal spelling', () => {
+    for (const pin of PINS) {
+      expect(Object.keys(createPublicTaskSchema.entries)).toContain(pin)
+      expect(Object.keys(updatePublicTaskSchema.entries)).toContain(pin)
+    }
   })
 
-  it('strips a preset a caller supplies anyway, so the spread onto AddTaskInput cannot carry it', () => {
+  it('carries a supplied pin THROUGH the parse, so the spread onto the internal input lands it', () => {
     const created = v.parse(createPublicTaskSchema, {
       title: 'Ship it',
-      [INTERNAL_PRESET_FIELD]: 'mp_open',
+      modelPresetId: 'mdp_claude',
+      riskPolicyId: 'mp_open',
     })
-    expect(created).not.toHaveProperty(INTERNAL_PRESET_FIELD)
+    expect(created).toMatchObject({ modelPresetId: 'mdp_claude', riskPolicyId: 'mp_open' })
     const patched = v.parse(updatePublicTaskSchema, {
       title: 'Renamed',
-      [INTERNAL_PRESET_FIELD]: 'mp_open',
+      modelPresetId: 'mdp_claude',
+      riskPolicyId: 'mp_open',
     })
-    expect(patched).not.toHaveProperty(INTERNAL_PRESET_FIELD)
+    expect(patched).toMatchObject({ modelPresetId: 'mdp_claude', riskPolicyId: 'mp_open' })
+  })
+
+  it('admits no OTHER internal write field through the same spread', () => {
+    // Whatever the two schemas share is lowered by the spread, so the overlap IS the decision.
+    // Derived from the schemas themselves rather than listed, so a public field added tomorrow
+    // that happens to collide with an internal knob (`agentConfig`, `epicId`, …) fails here
+    // instead of shipping as an undeclared capability.
+    const overlap = (publicKeys: string[], internalKeys: string[]) =>
+      publicKeys.filter((key) => internalKeys.includes(key)).sort()
+    const create = overlap(
+      Object.keys(createPublicTaskSchema.entries),
+      Object.keys(addTaskSchema.entries),
+    )
+    const update = overlap(
+      Object.keys(updatePublicTaskSchema.entries),
+      Object.keys(updateBlockSchema.entries),
+    )
+    // `title`/`description` (+ `taskType` at creation, `autoStartDependents` on the patch) are the
+    // authored input both surfaces have always shared; the two pins are what 1.43.0 added. Nothing
+    // else may join them without a decision made here.
+    //
+    // `pipelineId` at CREATION is the decision 1.50.0 made, and it is deliberately create-only: a
+    // caller files a task and lets somebody start it later, from the board or from an empty start
+    // body, and still gets the chain the filer chose. It is NOT on the patch, because re-pointing a
+    // task's pipeline after the fact is a board judgement about work already described, and the
+    // start call already takes a `pipelineId` for the one run a caller wants to redirect.
+    expect(create).toEqual([
+      'description',
+      'modelPresetId',
+      'pipelineId',
+      'riskPolicyId',
+      'taskType',
+      'title',
+    ])
+    expect(update).toEqual([
+      'autoStartDependents',
+      'description',
+      'modelPresetId',
+      'riskPolicyId',
+      'title',
+    ])
   })
 })

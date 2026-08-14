@@ -23,7 +23,12 @@ const EXEMPT: Record<string, string> = {
     'does not exist yet, so there is no config to resolve and nothing on disk to install from.',
 }
 
-const SOURCES = ['../src/agent.ts', '../src/coding-agent.ts', '../src/bootstrap-mode.ts']
+const SOURCES = [
+  '../src/agent.ts',
+  '../src/coding-agent.ts',
+  '../src/multi-repo-coding.ts',
+  '../src/bootstrap-mode.ts',
+]
 
 /**
  * Top-level function bodies, keyed by name. Crude on purpose: a real parse would buy nothing

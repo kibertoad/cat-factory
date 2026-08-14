@@ -1,5 +1,2049 @@
 # @cat-factory/orchestration
 
+## 0.272.1
+
+### Patch Changes
+
+- Updated dependencies [409238f]
+  - @cat-factory/kernel@0.301.0
+  - @cat-factory/contracts@0.313.0
+  - @cat-factory/agents@0.131.0
+  - @cat-factory/spend@0.15.95
+  - @cat-factory/caching@0.20.22
+  - @cat-factory/integrations@0.162.1
+  - @cat-factory/prompt-fragments@1.0.77
+  - @cat-factory/sandbox@0.11.154
+  - @cat-factory/workspaces@0.28.10
+
+## 0.272.0
+
+### Minor Changes
+
+- 0ef48d1: Stop an agent's own cleanup command from killing the harness that supervises it, and report a
+  harness that WAS stopped as what it is.
+
+  A local acceptance run failed as "the container kept vanishing, treating as deterministic" after
+  two full coder passes. Nothing evicted anything. The harness ran as PID 1 with the command line
+  `node dist/server.js`, which is also where the Fastify service the coder was scaffolding built to;
+  the agent started that service in the background to smoke-test it over a real socket, then ran
+  `pkill -f 'node dist/server.js'` to stop it again. The image ships no `pkill`, so that failed with
+  `command not found` and the next turn used something that works without procps, which matched PID 1
+  and shut the harness down. The container exited 0, the engine could only see a backend that had
+  stopped answering, so it called it an eviction, spent its crash-recovery budget re-running the same
+  agent into the same wall, and blamed infrastructure churn.
+
+  **The harness no longer answers to a pattern kill aimed at anything else.** It runs from
+  `dist/harness-server.js` and sets `process.title = 'cat-factory-harness'`, which on Linux rewrites
+  both `/proc/<pid>/cmdline` and (truncated) `/proc/<pid>/comm`, so neither `pkill -f 'node dist/…'`
+  nor a bare `pkill node` nor a hand-rolled `/proc` sweep can name it. It is not a security boundary
+  and is not claimed as one: the agent shares the harness's uid, and separating them needs a PID 1
+  running as root, which this image deliberately does not have. What it removes is the accident.
+
+  **`procps` + `psmisc` are now in the image**, which reads backwards until you look at what the
+  absence caused: `pkill`/`pgrep`/`ps` are the narrow tools an agent reaches for first, and the
+  fallback it writes when they are missing is the unbounded one that took the harness down.
+
+  **A harness that exits cleanly mid-job is no longer an eviction.** Every transport that can read an
+  exit code (the local container and native-process legs, the Cloudflare per-run container, and a
+  Kubernetes runner pod's `state.terminated`) now distinguishes a workload that exited 0 with a job
+  still in flight from one that crashed or was reclaimed, and reports `harnessShutdown` instead of
+  `evicted`. The engine fails that run immediately with a new `harness_shutdown` failure kind
+  (additive to the public failure-kind vocabulary; OpenAPI surface 1.54.0) and a hint that names the
+  causes worth checking, rather than spending an automatic retry that walks back into whatever
+  stopped it. A backend that reports no exit code (Apple `container`, a manifest-driven runner pool
+  whose scheduler exposes only status words) keeps reporting an eviction, because an absent code is
+  not a zero.
+
+  The distinction is only ever drawn where NOTHING else explains the stop. Infrastructure churn is
+  named and recovers on its own budget, and it stays named even after its attribution window passes:
+  a rollout drain the harness answered by exiting 0, discovered minutes later by a re-driven poll, is
+  still that drain rather than a shutdown. The same rule orders the engine's own reading: a killed
+  job that some branch settles WITHOUT failing the run (a parked PR review's read-only Challenge
+  Investigator) keeps that settlement, since losing a human's in-flight curation is worse than the
+  retry this failure kind exists to prevent. `container.harness_shutdown` counts the class, kept out
+  of `container.evicted` so the eviction rate an operator sizes infrastructure by is not inflated by
+  deaths no infrastructure change prevents.
+
+  **An aborted agent run says who aborted it.** The Claude Code / Codex runner rejected with a
+  hard-coded "agent run aborted by watchdog" for every abort, including the shutdown handler's, so a
+  job killed by something else filed its failure against a watchdog that never fired. It now carries
+  the abort reason the caller supplied, the way the Pi runner already did, and an abort that supplied
+  none falls back to saying so rather than quoting the platform's own contentless "This operation was
+  aborted" (a reasonless `abort()` sets an `AbortError` that IS an `Error`, so the fallback was
+  unreachable).
+
+  The image moves to `cat-factory-executor:1.121.0` across the wrangler config, the publish script and
+  `RECOMMENDED_HARNESS_IMAGE`: the entrypoint rename and `procps` are only in effect once a deployment
+  runs a tag that contains them.
+
+  **The acceptance suite stops blaming the merge threshold for a failed run.** Its "the merge was
+  HELD" hint fired on "there is a pull request and the status is not done", which is also true of a
+  run that died three phases before any merge was considered; it is now offered only where nothing
+  else explains the stop.
+
+### Patch Changes
+
+- Updated dependencies [0ef48d1]
+  - @cat-factory/kernel@0.300.0
+  - @cat-factory/contracts@0.312.0
+  - @cat-factory/integrations@0.162.0
+  - @cat-factory/agents@0.130.2
+  - @cat-factory/caching@0.20.21
+  - @cat-factory/prompt-fragments@1.0.76
+  - @cat-factory/sandbox@0.11.153
+  - @cat-factory/spend@0.15.94
+  - @cat-factory/workspaces@0.28.9
+
+## 0.271.1
+
+### Patch Changes
+
+- d5c1f1c: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with (`ai@7.0.64`,
+  `@ai-sdk/openai@4.0.41`, `@ai-sdk/amazon-bedrock@5.0.55`). The Cloudflare toolchain moves
+  together again: `wrangler@4.122.0` and `@cloudflare/vitest-pool-workers@0.21.2`, whose bundled
+  wrangler tracks it. `@aws-sdk/client-s3` goes to 3.1109.0 and the SPA's store engine to
+  `pinia@4.0.3` / `@pinia/nuxt@1.0.2`.
+
+  `capnweb` moves 0.10.0 to 0.11.0 in the Gatekeeper Worker. The release is additive (stubs as
+  stream chunks, exact ArrayBuffer/DataView serialization, URL over RPC) and touches neither
+  `RpcTarget` nor `newWorkersRpcResponse`, the only two symbols we import. Its 0.11.1 patch, which
+  enforces an ASCII-only dist bundle so a consumer's `btoa()` cannot choke on the runtime, missed
+  the release-age window by two hours and is the first thing the next sweep should pick up.
+
+  Held back deliberately: `@changesets/cli` 3.0.0 and, in the frontend, `typescript` 7 (Nuxt 4.5.2
+  itself depends on `typescript@6.0.3`). No `minimumReleaseAgeExclude` entries were added: every
+  version above already satisfies the gate.
+
+- Updated dependencies [d5c1f1c]
+- Updated dependencies [c67e924]
+  - @cat-factory/agents@0.130.1
+  - @cat-factory/integrations@0.161.0
+  - @cat-factory/kernel@0.299.1
+  - @cat-factory/contracts@0.311.0
+  - @cat-factory/sandbox@0.11.152
+  - @cat-factory/caching@0.20.20
+  - @cat-factory/prompt-fragments@1.0.75
+  - @cat-factory/spend@0.15.93
+  - @cat-factory/workspaces@0.28.8
+
+## 0.271.0
+
+### Minor Changes
+
+- 056e18d: Hold a run while a companion's MUST-FIX finding is open, whatever the rating said.
+
+  A companion returned one number for a whole deliverable, and that number alone decided whether the
+  run moved on. So a reviewer that found something genuinely unshippable — an unhandled failure mode,
+  a requirement not met, a claim the work does not support — could still rate the change 0.9 against a
+  0.8 bar and watch the pipeline advance past it. The urgency it meant was in the summary prose, in
+  the `**Must fix**` group the prompt asked for, which is a channel only a person reads.
+
+  Reviews are now GRADED. Each point a companion raises is its own `comments` entry carrying a
+  `severity` of `blocker`, `major` or `minor` (the same three levels the prose groups named), and the
+  verdict's two halves are read independently by kernel's new `disposeCompanionVerdict`: any open
+  `blocker` reworks the producer whatever the rating, and the rating decides everything else. The
+  `summary` becomes a short whole-verdict paragraph rather than a second copy of the list, matching
+  what the judge prompt already does, since both are rendered together and a review written twice is
+  two orderings that can disagree.
+
+  **Spending the rework budget on a blocker parks for a person, and an unattended risk policy does not
+  answer that park.** ADR 0053's rule is that a policy may take the "proceed anyway" a person would
+  have been offered when an automatic loop reports it GAVE UP; a reviewer naming a must-fix is not
+  that, so accepting the work anyway would be overruling a review nobody read. The distinction is a
+  closed vocabulary (`CompanionParkReason`, the sibling of `JudgeParkReason`) rather than prose, and
+  only `budget_spent` reaches the policy. The run panel's cap prompt states which of the two it is,
+  because the person answering an unanswerable-by-policy park should know what they are being asked to
+  overrule.
+
+  That vocabulary is also what a loop stopped EARLY as unproductive (`companionLoopStalled`) now
+  resolves against. Abandoning the rounds still on the budget takes the cap's park, so the reason is
+  re-decided for the abandoned budget instead of being assumed to be a spent one: a standstill is the
+  automation reporting that it gave up, an open `blocker` is not, and a stalled loop routinely carries
+  both (the run that motivated the stall rule had two must-fix items open the whole way). So an
+  unattended policy answers a stalled quality loop and still waits for a person on a blocked one.
+
+  An out-of-vocabulary severity from a model reads as `major`, the same "unreadable severity reads as
+  its safe default" rule the judge and PR-review findings use: the whole assessment is one parse, and
+  an unparseable companion verdict fails the run, which is far worse than one point landing a level
+  off. `major` and not either extreme, so a typo can neither manufacture a hard stop nor retire a real
+  one. A comment with no severity at all (a person's "request changes" note, or one recorded before
+  this existed) stays ungraded and never blocks.
+
+  The findings now render. Each verdict card in the run panel lists them worst first with a severity
+  badge beside each, which is new: `comments` were persisted and fed back into later rounds but shown
+  to nobody, so the point holding a run was invisible to the person being asked to resolve it. Both
+  sides of the rework loop read the grades too — the producer is told which comments are blocking and
+  works them first, and a re-grading companion sees its earlier rounds' points labelled.
+
+  **Every surface that a person or an integration answers this park from names the findings, because
+  the summary no longer can.** With the prose groups gone, three places were reading the review out of
+  a channel that stopped carrying it. The extra round a person grants at the cap loops the producer
+  back with the verdict's graded `comments` attached, as the automatic rework path already did, so the
+  round somebody just paid for names the points it is for. The `approval-gate` entry of
+  `GET /api/v1/runs/{runId}/decisions` gains a `blockingFindings` array (spec `1.53.0`, additive), so a
+  caller answering `resolve-exceeded` with `proceed` can read the must-fixes it would be overruling
+  rather than inferring them from a verdict paragraph. And a companion's findings anchor to a
+  structured item by id rather than by quoting prose, which the producer prompt was rendering against
+  an empty target: an anchored point now names its item, and a point that anchors neither way is
+  addressed to the proposal as a whole.
+
+  **A first batch of nothing but nits no longer costs a round.** The rule that spends one round on a
+  first review's findings asked only whether there were any, so a reviewer that followed its own
+  instruction (a `minor` is "never worth holding anything for"), rated work above the bar and attached
+  one polish note bought a full producer re-run plus a re-grading call. It now takes a point the
+  reviewer did NOT call a nit, and the prompt states what each level costs so the grade decides
+  something a reviewer can predict. An ungraded point still counts: its urgency is unknown rather than
+  known to be low.
+
+  The panel's verdict badge derives its `>=` / `<` glyph from the comparison rather than from
+  `passed`, which are no longer the same fact: a round held by an open blocker fails at a rating that
+  cleared its bar, and reading one off the other printed `95% < 80%` above the findings explaining it.
+  The cap prompt's stalled wording drops its claim about the rating for the same reason.
+
+  A severity read off a STORED row is narrowed through `isReviewCommentSeverity` rather than trusted:
+  the schema's `major` fallback runs on the model reply, which is the only thing it parses, so a level
+  retired from the vocabulary would reach an exhaustive `Record` and come back `undefined`. Such a
+  value now sorts with the ungraded, carries no mechanical force, and is NAMED as unrecognised on the
+  panel instead of being painted as a level nobody chose.
+
+  `REVIEW_SUMMARY_LAYOUT` is replaced by `REVIEW_FINDINGS_LAYOUT`; a deployment appending the old
+  constant to its own companion prompt should append the new one, and one relying on the shared
+  companion prompt needs no change. Website: kibertoad/cat-factory-website#60.
+
+### Patch Changes
+
+- Updated dependencies [056e18d]
+  - @cat-factory/contracts@0.310.0
+  - @cat-factory/kernel@0.299.0
+  - @cat-factory/agents@0.130.0
+  - @cat-factory/integrations@0.160.17
+  - @cat-factory/prompt-fragments@1.0.74
+  - @cat-factory/sandbox@0.11.151
+  - @cat-factory/spend@0.15.92
+  - @cat-factory/workspaces@0.28.7
+  - @cat-factory/caching@0.20.19
+
+## 0.270.2
+
+### Patch Changes
+
+- Updated dependencies [a81879b]
+  - @cat-factory/contracts@0.309.0
+  - @cat-factory/kernel@0.298.2
+  - @cat-factory/agents@0.129.2
+  - @cat-factory/integrations@0.160.16
+  - @cat-factory/prompt-fragments@1.0.73
+  - @cat-factory/sandbox@0.11.150
+  - @cat-factory/spend@0.15.91
+  - @cat-factory/workspaces@0.28.6
+  - @cat-factory/caching@0.20.18
+
+## 0.270.1
+
+### Patch Changes
+
+- 0e1e0fa: Record what a subscription run actually spent, snapshot an inline agent's context, and stop a
+  companion loop that has stopped converging.
+
+  Five defects a Kaizen grading surfaced, of which the grader itself correctly diagnosed one.
+
+  **Per-call output tokens were lost on every harness-served call.** Claude Code's `stream-json`
+  `assistant` envelopes carry the message-START usage snapshot: the input and cache counts are final,
+  `output_tokens` is the handful produced when the message opened, and `stop_reason` is null. The
+  reconciliation against the terminal cumulative total was the intended rescue but guarded on whether
+  ANY tokens had been reported, which the input side always satisfies, so it stood down and the output
+  side stayed at the snapshot. Measured on a real board: a `coder` step recorded 198 output tokens
+  against the 14,033 its terminal event reported, an `initiative-analyst` 531 against 30,471, with the
+  input side matching exactly (which is what hid it). The shortfall is now computed PER SIDE, and it is
+  filed as its OWN row standing for the job rather than added to the last captured turn: a turn grown
+  by thousands of tokens it did not produce is a derived number that reads as a measured one on every
+  surface showing per-call figures. It is also reconciled against the PARENT loop's calls alone, which
+  matters in `ambientAuth` mode, where the CLI streams subagent turns onto the parent's stdout with no
+  transcript watcher to own them: those turns were both hiding the shortfall and, being last,
+  attracting it. Cost accounting was never affected; per-call telemetry, the observability panel,
+  `/api/v1/debug/*` and the step rollups were.
+
+  **A finish reason nobody reported is no longer recorded as `stop`.** Both subscription CLIs expose
+  none, and three sites defaulted to `stop` anyway, which asserts the very thing a truncation check
+  tries to disprove and made `finishReason === 'length'` unfireable on that whole path. Absent is now
+  carried as absent, end to end — including through the AI SDK boundary, whose closed union has no
+  "unknown" member, so its `other` placeholder with no vendor string behind it is read back as the
+  absence it stands for rather than as a classification.
+
+  **Inline agent kinds recorded no context snapshot at all.** `agent_context_snapshots` had exactly one
+  producer, the container executor, so every companion and inline document kind was missing from it.
+  The inline executor now files one through the same recorder, on both facades, and the dependency is a
+  required key with a nullable value so a facade that forgets it fails to typecheck rather than
+  silently recording nothing. The inline SERVICES that call `generateText` directly (the judges, the
+  requirements reviewer, Kaizen's own grader) still file none; that is named in the code and the docs
+  instead of being implied closed.
+
+  **The Kaizen grader was fed two misleading figures**, and spent two of its six recommendations on
+  defects that did not exist. Its digest summed `promptTokens` alone, which is FRESH input by
+  definition, reporting 16 where the real input was 332,552; and it rendered a null finish reason as
+  `unknown` beside a flat "Truncated calls: 0". It now reports the three input classes, and a
+  truncation count carries the number of calls that actually reported a reason on the same line, so a
+  "0" measured over one call in eight cannot read as a clean step. Its "no snapshot captured" line also
+  stopped guessing a cause, having blamed a switch that was enabled.
+
+  **A companion rework loop now stops when it stops making progress.** `attempts < maxAttempts` bounds
+  how long a loop may run and says nothing about whether it is converging: a run re-graded an unchanged
+  document to the same 0.76 four times, burning its whole budget. When the producer returns the text it
+  was asked to revise AND the rating does not move, the loop stops early and takes the same
+  iteration-cap exit, so an attended run parks for a person and an unattended one settles by policy.
+  The rule reads a step's reply as its work, so it applies only to producers whose deliverable IS that
+  reply: a `coder` pushes commits and may legitimately answer with nothing, which is why its reviewer
+  reads the real diff, and a rework a human asked for is excluded too (it spends none of the automatic
+  budget). The step records `stalled` beside `exceeded`, since only one of them means the remaining
+  rounds were abandoned, and the park says which one it is instead of claiming a limit was hit.
+
+- Updated dependencies [0e1e0fa]
+  - @cat-factory/contracts@0.308.1
+  - @cat-factory/agents@0.129.1
+  - @cat-factory/kernel@0.298.1
+  - @cat-factory/integrations@0.160.15
+  - @cat-factory/prompt-fragments@1.0.72
+  - @cat-factory/sandbox@0.11.149
+  - @cat-factory/spend@0.15.90
+  - @cat-factory/workspaces@0.28.5
+  - @cat-factory/caching@0.20.17
+
+## 0.270.0
+
+### Minor Changes
+
+- 7312e0a: Stop a refused work-branch push from failing a run whose work is already on the branch.
+
+  The harness checkpoint-pushes the agent's commits every 60s so an evicted container's work
+  survives, which makes it its own competing writer: a commit is published within a minute of being
+  made, the agent cannot see that from inside the container, and amending it afterwards is ordinary
+  git hygiene (the delivery contract even asks it to validate AFTER committing, which is exactly the
+  sequence that produces an amend). The final push was then refused as a non-fast-forward and the
+  whole run failed with a complete scaffold sitting on the branch.
+
+  Every push after the first now carries `--force-with-lease` against the sha THIS pass published,
+  which is the sha the push itself named: `pushBranch` pushes `<sha>:refs/heads/<branch>` and returns
+  it, rather than reading `refs/remotes/origin/<branch>` back afterwards, which a fresh coding run's
+  single-branch clone never creates. That is the whole discrimination: the run's own rewrite lands, and
+  a second writer's commits (a concurrent dispatch, a person) still refuse the push as `(stale info)`,
+  which is the "never clobber another run's work" property the resume design leans on.
+
+  The lease is withheld entirely unless the branch still contains the tip this pass started from
+  (`workBranchLease`), because the lease alone does not bound the force to this pass's own commits: a
+  resumed run that had already landed one checkpoint would otherwise force over the commits it
+  resumed from and take an earlier run's work with them.
+
+  A refused push is no longer a generic `git` fault. It reports the new `branch-contended` failure
+  cause, and the engine recovers by re-dispatching the step once (`MAX_BRANCH_CONTENTION_RECOVERIES`,
+  recorded on `PipelineStep.branchContentionRecoveries` and projected by the debug API): the fresh
+  dispatch resumes the branch as it now stands, so the agent continues on top of whatever is on it.
+  Past the budget the run fails with a remedy naming which of the two causes it was, rather than git's
+  own "use `git pull`" hint, which is advice for a person at a terminal. Each refusal also increments
+  the new `container.branch_contended` operational counter, since a re-dispatch that a run reports as
+  a clean success is invisible per run and costs a whole agent run twice.
+
+  The checkpoint also stops re-pushing an unchanged branch. Its gate was "the branch advanced past the
+  pre-run tip", which stays true forever once it has, so every tick issued a push: an hour-long run
+  that commits eight times spent ~60 authenticated round trips, ~52 of them answering "Everything
+  up-to-date" and each counting against the host's push rate limits. It now pushes only an
+  UNPUBLISHED tip, which makes the interval a loss window rather than a rate (one push per commit the
+  agent makes, whatever the model or the run's length) and leaves the durability guarantee unchanged.
+
+  The `build` prompt bumps to v6 with the matching half of the rule stated to the agent: add commits,
+  never rewrite them.
+
+  `/api/v1/debug/runs/:runId` gains `branchContentionRecoveries` per step (OpenAPI 1.52.0, additive):
+  a run that recovered reports as an ordinary success, so nothing else tells a post-mortem that one
+  agent pass was paid for twice.
+
+  Also fixes a git failure printing its stderr twice (`execFile` already folds it into the rejection
+  message), which made one refused push read as two attempts.
+
+### Patch Changes
+
+- Updated dependencies [7312e0a]
+  - @cat-factory/kernel@0.298.0
+  - @cat-factory/contracts@0.308.0
+  - @cat-factory/agents@0.129.0
+  - @cat-factory/caching@0.20.16
+  - @cat-factory/integrations@0.160.14
+  - @cat-factory/prompt-fragments@1.0.71
+  - @cat-factory/sandbox@0.11.148
+  - @cat-factory/spend@0.15.89
+  - @cat-factory/workspaces@0.28.4
+
+## 0.269.0
+
+### Minor Changes
+
+- 95408c2: A companion's automatic rework budget is now a risk-policy field instead of a constant in the engine.
+
+  Every other automatic loop reads its ceiling off the task's policy: the CI fixer (`ciMaxAttempts`),
+  the iterative requirements review (`maxRequirementIterations`), the Tester's quality gate
+  (`maxTesterQualityIterations`), a judge's bounces (`judgeMaxBounces`), the post-release-health watch.
+  The companion loop, which has the widest reach of them (every `reviewer`, `architect-companion`,
+  `spec-companion` and any pair a deployment registers) and is the one an operator actually watches
+  spend container dispatches, was pinned at 3 by `DEFAULT_COMPANION_MAX_ATTEMPTS` with no way to state
+  otherwise. `companionMaxReworks` closes that, on both policy tiers (account and workspace) and in the
+  policy editor beside the requirement-iteration budget.
+
+  `0` is a real posture rather than a disabled loop: the companion still grades and still writes its
+  verdict, and the first verdict below the bar goes straight to the iteration-cap park (or to
+  `proceed`, on a policy whose `autonomy` is `unattended`) instead of buying a round. A verdict at or
+  above the bar advances, comments and all. That last part is the one place this number changed an
+  existing rule rather than parameterising it: a companion's FIRST batch of comments loops the producer
+  back whatever it scored, and that rule now asks whether there is a round to spend before it fires.
+  Left alone, `0` would have parked every companion step, since a review with nothing at all to say is
+  the rare one.
+
+  A step is seeded with the catalog default at run start, where no policy is resolved, so the resolved
+  value is adopted onto `step.companion.maxAttempts` at the companion's first grading, the same way the
+  Tester's quality budget is adopted on its first report. That read happens once per step, keyed on the
+  step having recorded no verdict yet: a human granting an extra round at the cap does it by raising
+  that same field (and the grant charges the round immediately), so a later read would report a ceiling
+  the step no longer has. Keyed on the attempt count instead, it also fired a second time after a human
+  "request changes" on a gated companion, which re-runs the producer while deliberately charging no
+  round.
+
+  No behaviour changes by default. The column default and all three built-in seeds carry the 3 the
+  engine held, so a stored policy and a freshly seeded one are byte-for-byte identical and no seed
+  needed a version bump. The field stays off `/api/v1`, where the risk-policy projection deliberately
+  publishes only what decides whether a run can land without a person.
+
+### Patch Changes
+
+- Updated dependencies [95408c2]
+  - @cat-factory/contracts@0.307.0
+  - @cat-factory/kernel@0.297.0
+  - @cat-factory/agents@0.128.2
+  - @cat-factory/integrations@0.160.13
+  - @cat-factory/prompt-fragments@1.0.70
+  - @cat-factory/sandbox@0.11.147
+  - @cat-factory/spend@0.15.88
+  - @cat-factory/workspaces@0.28.3
+  - @cat-factory/caching@0.20.15
+
+## 0.268.1
+
+### Patch Changes
+
+- 792ecde: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with (`ai@7.0.62`,
+  `@ai-sdk/anthropic@4.0.38` / `openai@4.0.40` / `openai-compatible@3.0.30` /
+  `amazon-bedrock@5.0.54`). The Cloudflare toolchain moves together: `wrangler@4.121.0`,
+  `@cloudflare/workers-types@5.20260812.1` and `@cloudflare/vitest-pool-workers@0.21.1`, whose only
+  change over 0.20.3 is the wrangler and miniflare it bundles, so the pool now carries the same
+  wrangler the workspace declares instead of one release behind it.
+
+  `esbuild` gains three scoped `pnpm-workspace.yaml` overrides pinning vite's, tsx's and nitropack's
+  loose ranges to the 0.28.1 that wrangler and `@cloudflare/vitest-pool-workers` pin exactly. Without
+  them a re-resolve hands vite's optional PEER slot the newer 0.28.2 and the tree gains a second
+  esbuild; because pnpm resolves an auto-installed peer without its own `optionalDependencies`, that
+  copy never gets its platform binary and esbuild's postinstall aborts the entire install. The
+  overrides are deliberately scoped rather than top-level: `drizzle-kit`, `@intlify/bundle-utils` and
+  `fontless` declare narrower ranges that a blanket pin would force them out of.
+
+  Held back deliberately: `@changesets/cli` 3.0.0 and, in the frontend, `typescript` 7 (Nuxt 4.5.2
+  itself depends on `typescript@6.0.3`). No `minimumReleaseAgeExclude` entries were added: every
+  version above already satisfies the gate.
+
+- Updated dependencies [792ecde]
+  - @cat-factory/agents@0.128.1
+  - @cat-factory/integrations@0.160.12
+  - @cat-factory/kernel@0.296.1
+  - @cat-factory/sandbox@0.11.146
+  - @cat-factory/caching@0.20.14
+  - @cat-factory/prompt-fragments@1.0.69
+  - @cat-factory/spend@0.15.87
+  - @cat-factory/workspaces@0.28.2
+
+## 0.268.0
+
+### Minor Changes
+
+- fc9afb4: Let a binary-output step generate through the agent CLI's own tool, with no vendor API key.
+
+  `BinaryGeneratorDefinition` gains a `transport` discriminator. `api` is the existing shape (a
+  metered endpoint the agent's own code calls with an injected credential) and stays the default, so
+  every registered integration is unchanged. `harness` is new: the artifact is produced by a tool
+  built into the agent CLI the step dispatches under, which today means Codex's `image_gen` — a path
+  available ONLY on ChatGPT subscription auth, since an `OPENAI_API_KEY` session is routed to the
+  Images API and never offered the tool. A harness-transport definition may declare no `endpoint`,
+  `credentials` or `contracts`; the credential rule is the one that matters, because a declared one
+  would be an environment variable the deployment believes authenticates something and that nothing
+  ever reads.
+
+  Boot validation holds a harness transport to a CLI that actually generates, which today is codex
+  alone. "This build runs that CLI" and "that CLI has a generation tool" are different questions, and
+  admitting the first lets a definition naming `pi` or `claude-code` pass every check, dispatch with
+  the tool flag set, produce nothing, and brief the agent to collect from a directory nothing created.
+
+  Reachability becomes its own admission axis (`generator_harness_unavailable`): a step selecting a
+  harness-served integration must resolve to that CLI. The requirement is DERIVED from the step's
+  model by the same precedence dispatch uses — including the fall-through past an unresolvable block
+  pin and the "subscriptions always win" override, without which the guard refuses a codex-served
+  generator on a step that is about to run codex. An unresolved model raises nothing. Notably this is
+  NOT a capability flag on the model catalog: whether the tool is offered is decided by the vendor per
+  session and per plan tier, so a boolean on a model row would be a guarantee nothing here can verify.
+  The pipeline builder states the constraint it cannot check (which CLI serves each candidate, and
+  which the current selection needs) as advice, since a pipeline is a template and the model is chosen
+  per task.
+
+  The harness redirects codex's output into `.cat-context/binary-output/generated/` before the CLI
+  starts, because codex exposes no path for what it generated and its output directory is also where
+  the run's decrypted subscription credential lives. It is opt-in per job: the tool bills the leased
+  plan at several times an ordinary turn. `generateImages` joins the job-body capability handshake, so
+  a runner pool on an older image is refused rather than run blind against a brief that names the
+  staging directory regardless. Where the capability genuinely cannot be honoured (an `ambientAuth`
+  run has no per-run home to redirect, a filesystem refuses the link) the harness says so in the
+  prompt instead of dropping it, and the teardown report tells a late-arriving image apart from one
+  that was never reachable.
+
+  Separately, the harness now consumes the job body's `artifactUpload` and surfaces it as
+  `ARTIFACT_UPLOAD_URL` / `ARTIFACT_UPLOAD_TOKEN`. The backend has injected that field and served the
+  ingest route since the visual-confirmation work while the container parsed neither, so a UI run's
+  screenshots were dropped with no error anywhere.
+
+### Patch Changes
+
+- fc56d82: Make every re-dispatch mint a fresh harness job id, and make the producer answer the review.
+
+  A container-backed producer looped back by its companion kept the same harness job id, so the
+  harness replayed its first completed job: same output, same recorded usage, no model call. The
+  companion then re-graded a byte-identical artifact and, correctly, never moved its rating. On a real
+  run the architect was dispatched four times, produced one container session and four identical
+  `token_usage` rows, and the score sat at 0.76 until the rework budget ran out.
+
+  `dispatchEpochFor` no longer sums per-loop counters (which had to be extended for each new loop, and
+  could go DOWN when a loop-back zeroed one). It reads the run's own dispatch record, so the job id
+  names the n-th job of that kind in the run: unique by construction, across re-dispatches AND across
+  two steps escalating the same helper kind. That closes the same replay on the tester's
+  quality-control re-run and on both human-gate fix loops, which were exposed too. The deploy path's
+  analogue now counts the human-test gate's rebuild loop-back for the same reason.
+
+  Producers are also required to account for every point raised (change it and say what changed, or
+  leave it and say why) in their REPLY rather than in the artifact they commit, and the grader is told
+  to check that accounting against the work rather than believe it. A rework round now says whether a
+  person or an automatic reviewer asked for it, since both arrive through the same prompt slice.
+
+- Updated dependencies [fc56d82]
+- Updated dependencies [fc9afb4]
+  - @cat-factory/contracts@0.306.0
+  - @cat-factory/kernel@0.296.0
+  - @cat-factory/agents@0.128.0
+  - @cat-factory/integrations@0.160.11
+  - @cat-factory/prompt-fragments@1.0.68
+  - @cat-factory/sandbox@0.11.145
+  - @cat-factory/spend@0.15.86
+  - @cat-factory/workspaces@0.28.1
+  - @cat-factory/caching@0.20.13
+
+## 0.267.0
+
+### Minor Changes
+
+- edd4fd0: A fourth built-in model preset, **GPT-5.6 Sol** (`mdp_chatgpt`), is seeded for every workspace
+  alongside Kimi K2.7, GLM-5.2 and Claude Opus 5, so `claude | chatgpt | kimi` is finally expressible
+  as a pin rather than as a note in a config file.
+
+  It needs no new catalog route to be usable. `gpt-5.6-sol` carries an `openrouter` route and a Codex
+  `subscription` route, which is the same pair `claude-opus` already had, so `effectiveVariant` lands
+  on whichever the workspace holds: an OpenRouter key alone makes the preset dispatchable to a SYSTEM
+  API key (a Codex subscription is per-seat and individual-only, so a system token may not spend one),
+  and a connected subscription wins where there is one. Deliberately NOT a seeded default on any
+  deployment shape: Cloudflare and Node still seed Kimi K2.7, local mode still seeds Claude Opus 5.
+  The seed id names a VENDOR rather than a generation (`mdp_chatgpt`, not `mdp_gpt56sol`) so a built-in
+  can roll its `baseModelId` forward without becoming a preset nobody selected; argued in ADR 0056.
+
+  **An OpenAI API key is not one of those routes, and the run-start refusal now says which are.**
+  `openai` is a first-class poolable provider with its own onboarding copy, so "add an API key for the
+  provider" read as a `platform.openai.com` secret key, which cannot make this preset dispatchable.
+  `providers_unconfigured` now names each unusable model's DECLARED routes, computed from the catalog by
+  the new kernel `declaredModelRouteLabels`: `gpt-5.6-sol (needs OpenRouter or ChatGPT (Codex))`. That
+  fixes the misattribution for every subscription-or-gateway-only model rather than for this one, and
+  `details.models` still carries the bare ids the SPA and the four SDK clients read.
+
+  **Model presets gained the catalog NAME channel pipelines already had.** The snapshot ships
+  `modelPresetCatalogNames` beside `modelPresetCatalogVersions`, built from one `seedModelPresets()`
+  read. A brand-new built-in has no stored row to take a name off, which is exactly the state the
+  startup advisory offers to fix: without the map the SPA humanises the id, so every board created
+  before this release would have been offered "Chatgpt" instead of GPT-5.6 Sol. A new optional field on
+  the wire, so an older SPA keeps working off the humanised fallback.
+
+  **The built-in seed is now ONE batched write.** `ModelPresetRepository.upsertMany` (mirrored D1 batch
+  and Drizzle transaction, allow-listed for mothership mode) replaces a serial `upsert` per built-in on
+  a path that runs at a workspace's first board load, where every shipped built-in used to add a
+  round-trip. The single-default invariant is read over the batch: a promoted member demotes every row
+  outside it, and each member's own flag stands as written.
+
+  `catalog.test.ts` gains the assertion nothing else could make: every built-in's base model AND every
+  per-kind override names a model `MODEL_CATALOG` actually ships. A preset's `baseModelId` is a plain
+  string matched at DISPATCH, so a built-in naming a renamed or dropped model typechecks, seeds, lists
+  and is selectable, then fails on the first agent step of whichever run picked it. The expectation is
+  derived from the catalog rather than hand-listed, so a rename breaks a test instead of a live run. The
+  conformance seeding assertion is derived the same way, and now compares the persisted rows against
+  the catalog member by member and in order instead of counting them.
+
+  The `acceptance-suite-operator-setup` initiative tracker is retired into
+  [ADR 0056](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/adr/0056-acceptance-suite-operator-setup.md),
+  its committed scope now complete.
+
+### Patch Changes
+
+- Updated dependencies [edd4fd0]
+  - @cat-factory/kernel@0.295.0
+  - @cat-factory/contracts@0.305.0
+  - @cat-factory/workspaces@0.28.0
+  - @cat-factory/agents@0.127.3
+  - @cat-factory/caching@0.20.12
+  - @cat-factory/integrations@0.160.10
+  - @cat-factory/prompt-fragments@1.0.67
+  - @cat-factory/sandbox@0.11.144
+  - @cat-factory/spend@0.15.85
+
+## 0.266.0
+
+### Minor Changes
+
+- 36e0c9b: A headless caller can now DELETE a board service, and the acceptance suite has a command that clears a
+  board back to "before any pass ran".
+
+  The two halves are one change. The acceptance preflight refuses a fresh pass whose target repository
+  already backs a service frame an earlier pass created, and it offers three ways out: resume the pass
+  that owns it, point the suite at fresh repositories, or delete the frame. The third was not a command:
+  deleting a service was an app act, and a public-API key authenticates on `/api/v1` only. So the one
+  branch an operator running a HEADLESS pass could not act on headlessly was the one that starts over.
+
+  **`DELETE /api/v1/services/{serviceId}`** (`admin`, OpenAPI `1.51.0`) closes that, additively. It runs
+  the same sequence the app's own delete does, so a run still going under the frame is stopped and its
+  container killed before anything is removed. Two answers a caller branches on rather than retries: a
+  frame holding UNFINISHED tasks is refused with `422 service_has_unfinished_tasks` (deleting one would
+  discard work in flight along with its history, so meaning it looks like deleting those tasks first),
+  and an ARCHIVED frame is a `404`, which is the population rule every per-service endpoint here
+  follows. Archiving stays app-only, deliberately: a surface that publishes neither the archive nor the
+  restore has no business deleting through one.
+
+  That refusal is decided BEFORE the run teardown, which is the ordering both delete controllers now
+  share (`BoardService.assertRemovable`, handing back the board list the teardown and the remove both
+  reuse, so the sequence still costs one read). The guard used to live only inside `removeBlock`, one
+  step past a teardown that kills every container, cancels every durable driver and deletes every run
+  row under the frame: a `422` therefore described a board it had already emptied of exactly the
+  history the refusal exists to protect. It now leaves everything as it was, which is what the SPA's
+  own delete has always claimed too.
+
+  **`pnpm --filter @cat-factory/acceptance run reset [runId|latest] [--yes]`** is what uses it. It
+  targets what the CONFIGURATION would adopt rather than what a ledger remembers, because the gate
+  refuses over the board as it stands and the hardest case is leftover state whose owning ledger is gone
+  (another machine, another operator, a state directory somebody cleared). Naming a pass widens the
+  target to that pass's whole ledger.
+
+  Three properties are worth knowing before running it. It PREVIEWS by default and changes nothing
+  without `--yes`, naming every frame, task and file, and the preview is decided by the same retention
+  rule the apply runs, so a pass is listed under "to remove" or under "KEPT" and never under the one it
+  will not get. It keeps a pass's local files whenever any frame that ledger names is still on the
+  board, since the ledger is the only thing that maps a leftover frame back to a run id, and removing it
+  strands that frame with no pass for the next refusal to name; a repository it could not FREE keeps
+  every ledger for the same reason one step out, because the frame still holding it is one no read here
+  can name at all. And it STATES what no key can reclaim: the two repositories keep whatever a previous
+  pass scaffolded (with its branches and pull requests), a reporter-filed issue stays open, and per-PR
+  cluster namespaces are untouched, so a cleared board is not a fresh one.
+
+  One diagnosis it deliberately declines to make: `GET /api/v1/repos` reports `linkedElsewhere: true`
+  with `serviceId: null` for a service homed on another board of the account AND for a frame ARCHIVED on
+  this one (the flag is computed against the frames a board visibly lists), and the two have opposite
+  fixes. Every message that names it now names both, `target-repos`' own remedy included, rather than
+  sending an operator to a board that does not exist.
+
+  `--all` clears the whole board rather than one configuration's share of it. The two questions the
+  default asks are narrow by design (they answer the two refusals a pass earns), so a board accumulates
+  frames neither can see: a pass run under a different name prefix, one whose repositories the `.env` has
+  since replaced, a frame raised by hand. None of them blocks the next pass, which is why no refusal
+  prints the flag and why it is an operator's request rather than a remedy. It reuses the task reads and
+  deletes the surface already published (`GET /api/v1/services/{serviceId}/tasks`, whose pages it walks,
+  and `DELETE /api/v1/tasks/{taskId}`), so the endpoint added here is still the only new one. Two things
+  it changes rather than widens: the preview STATES the scope, because a board holding a single pass
+  renders an identical frame list either way, and every pass file in the state directory goes with the
+  board, a refused attempt's included, since a board with no frames left maps nothing and a file kept
+  back is a run id `latest` may still resolve to.
+
+  The suite's configuration now resolves in two halves, and `reset` needs only the BOARD half (the
+  deployment, the key, the two repositories, the state directory). Requiring a cluster and a reporter
+  token to clear a board would refuse exactly the operator whose cluster has moved on, which is who is
+  resetting.
+
+### Patch Changes
+
+- Updated dependencies [36e0c9b]
+  - @cat-factory/contracts@0.304.0
+  - @cat-factory/agents@0.127.2
+  - @cat-factory/integrations@0.160.9
+  - @cat-factory/kernel@0.294.1
+  - @cat-factory/prompt-fragments@1.0.66
+  - @cat-factory/sandbox@0.11.143
+  - @cat-factory/spend@0.15.84
+  - @cat-factory/workspaces@0.27.28
+  - @cat-factory/caching@0.20.11
+
+## 0.265.0
+
+### Minor Changes
+
+- 569181d: Account-scoped risk policies, inherited by every board (ADR 0055).
+
+  A risk policy could only be authored per board, so an organisation with one merge posture had to
+  copy it onto every board and keep the copies in step by hand. There is now an ACCOUNT tier: policies
+  authored once for a whole account, which every board under it inherits read-only, may CLONE into its
+  own library to edit, and may HIDE so no task on that board can pick it. Managed from a new "Risk
+  policies" tab in Account settings; a board's own settings panel lists what it inherits above what it
+  owns, plus what it is hiding.
+
+  The board's visible library is `account ⊕ workspace` with the board's own row winning a collision,
+  and one merged reader answers for the settings editor, every picker and the ENGINE, so a task can pin
+  an inherited policy and the run is governed by the posture the picker offered.
+
+  Two internal breaks, both pre-1.0 surfaces:
+
+  - `RiskPolicyRepository` gained a read-only supertype `WorkspaceRiskPolicyReader`, and the engine,
+    the two board guards and `resolveRiskPolicy` now hold that instead of the repository
+    (`RunMergePolicyDeps` / `ExecutionServiceDependencies` renamed the field to `riskPolicyReader`).
+  - `GET /workspaces/:ws/risk-policies` and the board snapshot answer library entries carrying `tier`.
+
+  `GET /api/v1/risk-policies` now lists inherited policies too (an additive behaviour change: the
+  response shape is unchanged, and a deployment with no account policies sees exactly what it saw
+  before). Editing or deleting an inherited policy answers `409` with
+  `details.reason: 'risk_policy_inherited'`; cloning or hiding a board's own policy answers
+  `risk_policy_not_inherited`. `GET /workspaces/:ws/risk-policy-suppressions` answers `503`
+  `risk_policy_suppressions_unwired` where the store is absent, matching its write routes rather than
+  claiming the board hides nothing.
+
+  **Needs a catfactory.ai page before release.** This adds an operator-facing capability anyone can act
+  on with no checkout (author account-wide merge postures; clone or hide an inherited one from a board),
+  so per ADR 0051 it owes a website page that the repo's CI cannot see. The website PR is not open yet
+  and is NOT part of this change.
+
+### Patch Changes
+
+- Updated dependencies [569181d]
+  - @cat-factory/contracts@0.303.0
+  - @cat-factory/kernel@0.294.0
+  - @cat-factory/agents@0.127.1
+  - @cat-factory/integrations@0.160.8
+  - @cat-factory/prompt-fragments@1.0.65
+  - @cat-factory/sandbox@0.11.142
+  - @cat-factory/spend@0.15.83
+  - @cat-factory/workspaces@0.27.27
+  - @cat-factory/caching@0.20.10
+
+## 0.264.1
+
+### Patch Changes
+
+- 0a85a59: Stop a run refusal from floating a phantom unhandled rejection on the Worker.
+
+  `RunLifecycleController.start` / `startAgentKind` returned `launch(...)` without awaiting it, and
+  `launch` refuses SYNCHRONOUSLY (the launch-constraint gate, the gate-override arity check). A bare
+  `return` therefore handed an already-rejected promise to the async function's adoption step, which
+  attaches its handler one microtask later: workerd's unhandled-rejection detector runs at the end of
+  the current microtask checkpoint and saw a rejected promise nobody was watching, while V8's own
+  detector waits a turn longer and never did. The caller was awaiting it the whole time, so nothing
+  was ever unhandled; on Cloudflare it simply read in the logs like a crash rather than the 422 it is.
+
+## 0.264.0
+
+### Minor Changes
+
+- 1a0b593: A workspace now states which PIPELINE a run resolves per intake, the way it already states which risk
+  policy, and a requirements review's findings are split into the two groups that decide who answers
+  them.
+
+  Three changes, one theme: a run nobody is watching should reach a pull request without stopping for a
+  person who is not coming, and should stop for one exactly where a person is what the situation needs.
+
+  **Per-scope default pipelines.** `Pipeline.isDefault` and `Pipeline.isUnattendedDefault`, scoped by
+  the same `runDefaultScopeFor(intakeOrigin)` the risk-policy default takes, written through the
+  `organize` body — the one pipeline write a BUILT-IN accepts, which is what makes a shipped rung
+  promotable at all. Only the UNATTENDED scope is seeded: the in-app scope already resolved an answer
+  without a flagged row (the interface-mode rung, then catalog order), and seeding one would silently
+  overrule the adaptive rung an advanced-mode board runs today. An operator-declared row outranks both.
+
+  The seeded rung is a new built-in, **`pl_unattended`**. It is the adaptive shape with two deliberate
+  differences: no `requirements-review`, because the rung a headless caller lands on by default cannot
+  open a conversation nobody is there to have; and `human-test` plus `human-review` behind ESTIMATE
+  GATES after the guards, because dropping the conversation removes the platform's chance to ask about
+  scope, so the oversight is bought back where the evidence is strongest. A caller that wants the
+  conversation names `pl_complex` and answers it over `/api/v1/runs/:runId/decisions` or on the ticket.
+
+  `mp_unattended` narrows the three loop budgets its own posture makes cheap (three reviewer passes
+  rather than six, two tester-QC iterations, no judge bounce): each is a cap `autonomy: 'unattended'`
+  settles as "proceed", so spending it buys the run nothing but tokens. `ciMaxAttempts` is deliberately
+  untouched — exhausting it raises `ci_failed`, a park this policy does not answer, so cutting it would
+  produce one more stop for a person rather than one fewer. Landing authority is unchanged, and the seed
+  is NOT version-bumped: existing workspaces hold a CLONE of their own default there (ADR 0053's
+  migration), and a reseed would restore stock ceilings alongside the narrower budgets.
+
+  **The two groups, shown and graded.** The reviewer already classified each finding as answerable from
+  practice or needing a product decision; that is now the review window's primary grouping rather than a
+  badge on one edge case, with each section saying what its group is. Every Requirement-Writer
+  suggestion additionally reports a `confidence`, a different claim from `groundedIn`: that one says
+  where the answer came from, this one how sure the Writer is of it (a standard can settle a finding only
+  partly; a general practice can be near-universal). Shown as a band on every suggestion.
+
+  **And a run nobody is watching may settle the first group.** Under `autonomy: 'unattended'` the gate
+  folds the answers in and carries on when every finding was dismissed, resolved, answered by a person,
+  or auto-answered above the policy's new `minAutoAnswerConfidence` floor (default 0.8). One finding in
+  the other group, or one graded below the floor, parks the whole review exactly as before, and an
+  UNGRADED suggestion clears no floor above zero — so a garbled Writer reply parks the run rather than
+  quietly answering it. The step stamps `autoAnsweredByPolicy`, distinct from the existing
+  `reviewCapSettledByPolicy`: that one means the loop gave up, this one that it converged on answers
+  nobody read. ADR 0053 ruled this out on the grounds that inventing a product judgement is off limits;
+  the narrowing that makes it compatible rather than an exception is that TWO independent judgements
+  must agree before anything is folded.
+
+  **Under `attended`, nothing about the review changes.** A suggestion there is a draft a person is
+  about to read, so grading it changes nothing about who decides.
+
+  Two `/api/v1` additions (`pipelineId` on task creation, and on `GET /pipelines` both a per-row
+  `unattendedDefault` and the list-level `unattendedDefaultPipelineId` that is the one to read: the
+  resolution has a rung the list cannot show, so a per-row flag alone reports `false` everywhere on a
+  workspace whose empty start bodies work). OpenAPI `1.50.0`, plus one behaviour change worth reading
+  before upgrading: `POST
+/tasks/:taskId/start` with an empty body now STARTS a run for a key that satisfies `decide`, where it
+  used to answer `400 pipeline_required`. A `write` key sees no change, deliberately — the seeded rung
+  reaches a human test and a human PR review, so offering it to a caller that cannot answer a park
+  would trade an actionable "pass a pipelineId" for a 403 about a pipeline it never picked. The refusal
+  survives wherever no default resolves.
+
+### Patch Changes
+
+- Updated dependencies [1a0b593]
+  - @cat-factory/contracts@0.302.0
+  - @cat-factory/kernel@0.293.0
+  - @cat-factory/agents@0.127.0
+  - @cat-factory/integrations@0.160.7
+  - @cat-factory/prompt-fragments@1.0.64
+  - @cat-factory/sandbox@0.11.141
+  - @cat-factory/spend@0.15.82
+  - @cat-factory/workspaces@0.27.26
+  - @cat-factory/caching@0.20.9
+
+## 0.263.2
+
+### Patch Changes
+
+- Updated dependencies [7d1477c]
+  - @cat-factory/kernel@0.292.2
+  - @cat-factory/agents@0.126.8
+  - @cat-factory/caching@0.20.8
+  - @cat-factory/integrations@0.160.6
+  - @cat-factory/prompt-fragments@1.0.63
+  - @cat-factory/sandbox@0.11.140
+  - @cat-factory/spend@0.15.81
+  - @cat-factory/workspaces@0.27.25
+
+## 0.263.1
+
+### Patch Changes
+
+- Updated dependencies [c09ddbe]
+  - @cat-factory/agents@0.126.7
+  - @cat-factory/kernel@0.292.1
+  - @cat-factory/sandbox@0.11.139
+  - @cat-factory/caching@0.20.7
+  - @cat-factory/integrations@0.160.5
+  - @cat-factory/prompt-fragments@1.0.62
+  - @cat-factory/spend@0.15.80
+  - @cat-factory/workspaces@0.27.24
+
+## 0.263.0
+
+### Minor Changes
+
+- fc4a1e4: A run nobody is watching now finishes instead of waiting on a person who is not coming, and a
+  workspace states that posture per intake rather than once for everything.
+
+  Four parks stopped an otherwise-autonomous run, and none of them is a checkpoint anybody asked for:
+  a companion at its automatic rework cap, a JUDGE at its bounce cap, an iterative review at its
+  reviewer-pass cap, and the Coder's follow-up companion holding the run while any item is undecided.
+  Each is the automation reporting that it gave up, and each already offered a person a documented
+  "proceed anyway". A run started over `/api/v1`, dispatched from a ticket or fired by a schedule had
+  nobody to offer it to, so it waited indefinitely. The headless acceptance suite found this on
+  `pl_build`, stopping on an `approval-gate` raised by `architect-companion`.
+
+  A judge's other two parks are deliberately NOT in that set — `onFail: 'park'` is a registration
+  asking for a person, and a verdict with no producing step to bounce to never got to try — so
+  `disposeJudgeVerdict` now returns a machine-readable `JudgeParkReason` instead of leaving the engine
+  to tell them apart by their prose. A review still ASKING questions parks under either posture too:
+  the answers are a product judgement, and inventing them is the one thing an unattended policy may
+  never do.
+
+  - **`RiskPolicy.autonomy`** (`attended` | `unattended`) decides which way those three go. `attended`
+    is byte-for-byte the previous behaviour and is what every existing policy, every custom one, and
+    the built-in fallback get. `unattended` takes the "proceed" answer ON THE RECORD:
+    `step.companion.capSettledByPolicy` and `followUpItem.dismissedByPolicy` say that policy decided,
+    because the last companion verdict already says the producer was below the bar and a run that
+    advanced anyway must not read like one whose companion quietly stopped grading.
+  - **It never touches a park the PIPELINE asked for.** An approval gate, a `human-test` step, visual
+    confirmation, the human/PR review gate, a brainstorm or interview, the fork choice and the input
+    gate all stop the run under either value. A companion step that is ALSO gated still raises its
+    human approval gate at the cap, because the cap settling is routed through the same pass branch a
+    converged companion takes.
+  - **A workspace now has TWO default policies.** `isDefault` governs a task somebody started in the
+    app; the new `isUnattendedDefault` governs one nothing is watching. Which applies is
+    `riskPolicyDefaultScopeFor(intakeOrigin)`, its own `Record` rather than a reuse of
+    `isHeadlessIntake` — the two disagree about `schedule`, which is not headless (its reused block
+    has no stable place to hold a clarification conversation) and is nonetheless unwatched.
+  - **A third built-in, `mp_unattended` ("Unattended delivery")**, seeded as that default. It is
+    `Balanced` with one field changed, deliberately: a seed may decide that an unwatched run should
+    not wait forever on an automation budget, and may not decide that it gets to land a change an
+    operator's own thresholds would have held.
+  - **Pinning a task to it is a permission**, not a preference. `refuseRiskPolicySelection` gained a
+    `relaxes_run_oversight` arm: `mp_unattended`'s role layer is empty, identical to `Balanced`'s, so
+    without it any member could re-point a task onto the seeded policy and remove the human
+    checkpoints their workspace's own default raises.
+  - **Every grading loop now remembers its own rounds.** `step.companion.verdicts` recorded one verdict
+    per cycle and no prompt read it, so a companion re-graded a revised document with no idea what it
+    had asked for last time — the loop resampled instead of converging, and a rework budget bought
+    nothing. Both sides of the loop now receive the rounds so far (`AgentRunContext.priorReview`,
+    folded once in `userPromptFor`, so an inline companion, a container-backed one, a
+    deployment-registered one and the producer being reworked all get it), and the 0..1 scale is
+    anchored and SHARED with the judge bucket, which had carried its previous verdict all along.
+
+  **Migration, and the one thing to check.** Both facades' migrations materialise `mp_unattended` in
+  every existing workspace as a CLONE of that workspace's own default row, with `autonomy` the only
+  field changed. Cloning, not seeding stock values: a built-in is editable in place, so a workspace
+  that tightened its `Balanced` still holds `id = 'mp_balanced'`, and writing catalog ceilings beside
+  it would hand every API-started run there a wider licence to land than its operator granted. Every
+  ceiling, budget and per-role restriction is inherited (`dryRunRoles` and `submissionClassesByRole`
+  above all). Landing authority does not move underneath anyone; what changes is that such runs stop
+  parking on the caps. A deployment that WANTS its API-started runs to keep parking re-points
+  `isUnattendedDefault` at a policy whose `autonomy` is `attended`.
+
+  `Balanced` and `Manual review only` are NOT version-bumped. Both new fields land on them as the
+  migration's column defaults, so a stored row and a freshly seeded one are identical — advising every
+  existing workspace to reseed for a zero-delta change would invite them to overwrite their own edits.
+
+  **Public API (additive, OpenAPI 1.49.0).** `GET /api/v1/risk-policies` gains `isUnattendedDefault`
+  and `autonomy`. `isDefault` keeps its exact former meaning, so nothing an existing client was told
+  becomes wrong; it was reading about the other scope. A caller predicting whether its own runs can
+  reach a terminal state unassisted should read `autonomy` on the `isUnattendedDefault` row.
+
+  **Internal break.** `RiskPolicyRepository.getDefault` takes the scope, and
+  `RunMergePolicy.resolve` / the engine's `resolveRiskPolicy` callback take the run. Both are required
+  rather than defaulted: a call site that has not decided which kind of run it is resolving for now
+  fails to compile, because the alternative reads as correct and silently hands an unwatched run the
+  in-app policy.
+
+  Design record: [ADR 0053](../backend/docs/adr/0053-unattended-run-autonomy.md).
+
+### Patch Changes
+
+- Updated dependencies [fc4a1e4]
+  - @cat-factory/contracts@0.301.0
+  - @cat-factory/kernel@0.292.0
+  - @cat-factory/agents@0.126.6
+  - @cat-factory/integrations@0.160.4
+  - @cat-factory/prompt-fragments@1.0.61
+  - @cat-factory/sandbox@0.11.138
+  - @cat-factory/spend@0.15.79
+  - @cat-factory/workspaces@0.27.23
+  - @cat-factory/caching@0.20.6
+
+## 0.262.0
+
+### Minor Changes
+
+- ee733ee: A run whose stored row cannot be decoded is now closed instead of re-driven forever, and one
+  unrecoverable run no longer ends the stale-run sweep.
+
+  The two are the same incident. A `kind='execution'` row with no `block_id` fails `rowToExecution`,
+  and every path that could settle such a run begins by READING it: the re-drive throws on the load,
+  and so does the hard-stall backstop whose entire job is to settle a run recovery cannot resume. The
+  row therefore stayed `running` forever, was re-listed by every sweep (`listStale` is ordered oldest
+  first, so it sorted to the front of each one), and past the hard-stall deadline its throw escaped
+  the per-run body and ended the whole pass: no other stale run recovered, no spend-paused run
+  resumed, no batch enqueue happened, tick after tick, while the sweeper reported itself as running.
+
+  - **Disposal.** `RunStateMachine.loadOrDispose` recognises a `DataIntegrityError` by TYPE (a
+    transient database failure still propagates and leaves the run alone) and settles the run through
+    `markFailed`, the one write that decodes nothing. Both the driver entry point
+    (`ExecutionService.advanceInstance`) and the settle path (`failRun`) read through it, so such a
+    row is closed on its first re-drive rather than an hour later.
+  - **The owning block goes with it.** A settled run row with the card still `in_progress` leaves the
+    human half of the incident unresolved forever, because the run is dropped from the board snapshot
+    and there is no failure card and no Retry. The run names no block, but the block names the run:
+    the new `BlockRepository.getByExecution` reads that reverse link, and the card drops to `blocked`
+    with a pushed board event and no fabricated progress.
+  - **Only a MALFORMED row is disposed of.** A stored value this build does not RECOGNISE is a fact
+    about the reader, not the row: during a rolling deploy an unknown `ExecutionStatus` member is a
+    healthy run the newer replica wrote, and disposal is irreversible while a re-drive costs a tick.
+    `DataIntegrityError` now carries a `DataIntegrityFault`, and the reversible half is the fallback
+    wherever the fault is unknown or absent.
+  - **Isolation.** Both facades' sweeps recover one run at a time inside a per-run boundary, log the
+    run they skipped, and count it as `sweep.run_recovery_failed`. A pass that took runs on and
+    recovered NONE of them reports itself as a FAILED pass, since such a pass now completes and a
+    recorded success would reset `sweep_degraded` on precisely the wedged sweeper it watches for. A
+    run whose probe threw keeps its per-process orphan clock, so the hard-stall backstop can still
+    reach it.
+  - **A new failure kind, `state_unreadable`** (surface version 1.48.0, additive), so these runs are
+    distinguishable in the operator's failure-kind breakdown rather than filed under `stalled`, whose
+    advice is "retry" and whose retry would re-read the same row.
+  - **A write-side guard.** Composing the stored `detail` for a run that `rowToExecution` would refuse
+    now throws, for both invariants it checks (no `blockId`, a cursor outside its step list), so the
+    writer that produces one reports the fault instead of a sweeper hours later. Both facades'
+    `upsert`/`insertLive`/`compareAndSwap` compose through that one function.
+
+  `DataIntegrityError` moved to `@cat-factory/kernel` (re-exported from `@cat-factory/server`, so no
+  import breaks) because the engine has to be able to recognise it. It also survives the mothership
+  persistence RPC as its own error code rather than an opaque 500, without which the disposal would be
+  a no-op on mothership deployments.
+
+  Documented on the website in kibertoad/cat-factory-website#53.
+
+### Patch Changes
+
+- Updated dependencies [ee733ee]
+  - @cat-factory/contracts@0.300.0
+  - @cat-factory/kernel@0.291.0
+  - @cat-factory/agents@0.126.5
+  - @cat-factory/integrations@0.160.3
+  - @cat-factory/prompt-fragments@1.0.60
+  - @cat-factory/sandbox@0.11.137
+  - @cat-factory/spend@0.15.78
+  - @cat-factory/workspaces@0.27.22
+  - @cat-factory/caching@0.20.5
+
+## 0.261.2
+
+### Patch Changes
+
+- Updated dependencies [01086d8]
+  - @cat-factory/contracts@0.299.1
+  - @cat-factory/integrations@0.160.2
+  - @cat-factory/kernel@0.290.1
+  - @cat-factory/agents@0.126.4
+  - @cat-factory/prompt-fragments@1.0.59
+  - @cat-factory/sandbox@0.11.136
+  - @cat-factory/spend@0.15.77
+  - @cat-factory/workspaces@0.27.21
+  - @cat-factory/caching@0.20.4
+
+## 0.261.1
+
+### Patch Changes
+
+- Updated dependencies [1bcdacc]
+  - @cat-factory/kernel@0.290.0
+  - @cat-factory/agents@0.126.3
+  - @cat-factory/caching@0.20.3
+  - @cat-factory/integrations@0.160.1
+  - @cat-factory/prompt-fragments@1.0.58
+  - @cat-factory/sandbox@0.11.135
+  - @cat-factory/spend@0.15.76
+  - @cat-factory/workspaces@0.27.20
+
+## 0.261.0
+
+### Minor Changes
+
+- 195b248: Tracker writeback is ON by default, and `/api/v1` can now read and change it:
+  `GET /api/v1/tracker/writeback` reports what a task's linked tracker issue hears as its pull request
+  progresses, and `PATCH /api/v1/tracker/writeback` changes one action without moving the others.
+  Surface version 1.46.0, additive.
+
+  **BEHAVIOUR CHANGE, and worth reading before upgrading.** All three writeback actions (comment when
+  the pull request opens, comment and CLOSE the issue when it merges, post a headless run's parked
+  review findings) now default to ON for a workspace that has never configured them. All three were
+  off. Nothing published said what the defaults were, so this is not an `/api/v1` break, but it IS a
+  change a deployment notices: a board that never opened the issue-tracker settings panel now closes a
+  linked ticket when its task's pull request merges, and comments on it twice on the way. A deployment
+  that wants the old behaviour turns it off with one call to the new PATCH (or in the app), and a single
+  task can still opt out through its own per-task override.
+
+  The reasoning for the flip is that these actions only ever touch an issue a task is LINKED to, and
+  nothing links one by accident: a link arrives because somebody imported the issue, the recurring
+  intake picked it up, or a headless caller filed a task with `ticket`. Every one of those is a request
+  to work the issue where it was filed, so the half-closed loop was the common outcome and the wrong
+  one: a merged pull request beside an issue still sitting open with nothing on it saying the work was
+  done. The default now lives in ONE place (`DEFAULT_TRACKER_WRITEBACK` in `@cat-factory/contracts`),
+  read by the settings service, the writeback service and the SPA's panel, which previously spelled it
+  three times.
+
+  The public pair closes the last gap in the ticket-driven loop. A caller could file a task FROM a
+  ticket and the platform would write back to that issue, but WHETHER it did was workspace
+  configuration reachable only from the app, so the deployment shape that most needs the loop closed
+  (nobody in the SPA at all) could neither read the disposition nor change it, and could not tell "this
+  deployment leaves tickets open" from "the writeback is broken". Three things about the shape: it
+  publishes the WRITEBACK half of `tracker_settings` and not the filing selection, which is a separate
+  decision the writeback does not key off; the write MERGES, so a caller acting on one action cannot
+  move the other two; and `updatedAt` is null when nobody has ever chosen, which is how a caller knows
+  it is reading defaults rather than somebody's decision.
+
+  **Every writeback write now merges, the app's own included.** An omitted action used to revert to the
+  deployment default on the internal wholesale PUT, which the default flip above turns from harmless
+  into a silent re-enable: the recurring-pipeline dialog persists a FILING tracker and names no
+  writeback action, so scheduling a tech-debt pipeline switched writeback back on for a workspace that
+  had deliberately turned it off. Absence now means "not moving this action" on both doors, which is
+  the only reading any caller wanted, and the merge itself moved down into the two repositories
+  (`TrackerSettingsRepository.merge`, replacing `put`), so the SPA panel and a headless patch naming
+  different actions both land instead of one silently losing to the other's stale snapshot.
+
+  The acceptance suite gains a fifth spec built on all of it: an issue filed on the backend repository
+  by an OUTSIDE reporter (its own provider credential, since an issue the platform created and closed
+  proves only that the credential works), a task filed FROM that issue over `/api/v1`, delivery through
+  `pl_build`, and then the pair of claims that the platform CLOSED the issue and commented on it at both
+  edges of the pull request's life. The pair matters because a provider closes an issue by itself when a
+  merged pull request's text carries `Closes #12`, and that path posts no comment: a closed issue alone
+  cannot tell the writeback from the host noticing a word an agent wrote. Two new prerequisites refuse
+  before any of it spends anything, and `run configure` opens the token page prefilled.
+
+### Patch Changes
+
+- Updated dependencies [195b248]
+  - @cat-factory/contracts@0.299.0
+  - @cat-factory/integrations@0.160.0
+  - @cat-factory/agents@0.126.2
+  - @cat-factory/kernel@0.289.1
+  - @cat-factory/prompt-fragments@1.0.57
+  - @cat-factory/sandbox@0.11.134
+  - @cat-factory/spend@0.15.75
+  - @cat-factory/workspaces@0.27.19
+  - @cat-factory/caching@0.20.2
+
+## 0.260.1
+
+### Patch Changes
+
+- Updated dependencies [bc2478d]
+  - @cat-factory/contracts@0.298.0
+  - @cat-factory/kernel@0.289.0
+  - @cat-factory/integrations@0.159.0
+  - @cat-factory/agents@0.126.1
+  - @cat-factory/prompt-fragments@1.0.56
+  - @cat-factory/sandbox@0.11.133
+  - @cat-factory/spend@0.15.74
+  - @cat-factory/workspaces@0.27.18
+  - @cat-factory/caching@0.20.1
+
+## 0.260.0
+
+### Minor Changes
+
+- a634746: A locally-run model can now be given a run's design renders. Its image support resolves in two
+  tiers: a table of recognised open-weights families (`KNOWN_LOCAL_MODELS`, so ticking Gemma 4 or Muse
+  Glimmer needs no second step), overridden by a per-model declaration on the user's own runner entry
+  for anything the table cannot know about.
+
+  The gap was structural rather than a missed case. `acceptsImages` is a per-FLAVOUR fact declared on
+  `MODEL_CATALOG`, and a local model has no catalog row: it lives on one person's machine, its id is
+  free text, and the OpenAI-compatible `/models` probe the panel discovers models with returns ids and
+  nothing else. So every local ref arrived with the modality absent and `resolveDesignImageDelivery`
+  answered `unknown_model_image_input` for all of them, forever. That reason exists precisely so this
+  would stay visible instead of reading as a text-only model, and the arrival of image-capable local
+  models is what turned it from a latent hole into a lost capability.
+
+  The declaration wins over the table on purpose: the person who pulled the weights is the one who
+  knows whether they are running a text-only quant, a fine-tune or a re-tagged copy. The table
+  therefore carries only families whose SILENCE costs a capability (every member is image-capable; a
+  text-only entry would behave identically to an absent one), and a family whose modality depends on
+  the size is left out rather than approximated, which is why Gemma 3 is absent while Gemma 4 is
+  present. It lives in `@cat-factory/contracts` because the settings panel labels its "not set" option
+  with what the table will do and the engine folds the same answer onto the dispatched ref.
+
+  The initiator's declarations are read on EVERY dispatch, because the winning model is not known
+  until the shared resolver has walked its sources, so the read goes through a new `AppCaches`
+  slice keyed on the user (the endpoint write paths invalidate it). Without that, a deployment with no
+  local runners at all still paid a query per step, and a mothership-mode node an extra
+  `/internal/persistence` round trip per step.
+
+  Delivery still joins the HARNESS's answer first, and that is what decides where this lands today: a
+  local ref names no harness, so a container dispatch runs it on Pi, whose `HARNESS_IMAGE_INPUT` entry
+  is `false` and refuses without consulting the ref. The modality is therefore acted on by the inline
+  path, and the container path becomes a reader the day an image-carrying harness serves a local model,
+  which is a one-line table edit rather than new plumbing. It is resolved for every path regardless,
+  because the winning model is not known until the shared resolver has walked its sources.
+
+  `contextTokens` is deliberately NOT declared for a local model, though the same shape could carry it.
+  The window a runner serves is a fact about its config rather than about the weights (Ollama's
+  `num_ctx` default sits far below what a 128K-window model can do), nothing enforces it for a local
+  ref, and stating a number the runner silently ignores would be worse than stating none. The
+  truncation trap that follows from that is now written down in `backend/docs/model-support.md`.
+
+  **Internal break:** the endpoint row's enabled-model list changes from `string[]` to a declaration
+  array. A row written before this loses its entries on read: bare strings are dropped rather than
+  coerced, so the break cannot arrive as a model id of `[object Object]`. The endpoint reports the
+  discard (`unreadableModels`) and the panel names it per runner, because a shortened list on its own
+  reads exactly like a runner nobody ever enabled a model on and only one of those is fixed by
+  re-ticking. The fix is to re-tick the models in "My local runners", which rewrites the whole blob.
+
+### Patch Changes
+
+- Updated dependencies [a634746]
+  - @cat-factory/contracts@0.297.0
+  - @cat-factory/kernel@0.288.0
+  - @cat-factory/caching@0.20.0
+  - @cat-factory/integrations@0.158.0
+  - @cat-factory/agents@0.126.0
+  - @cat-factory/prompt-fragments@1.0.55
+  - @cat-factory/sandbox@0.11.132
+  - @cat-factory/spend@0.15.73
+  - @cat-factory/workspaces@0.27.17
+
+## 0.259.0
+
+### Minor Changes
+
+- 7893f35: `/api/v1` can ADOPT a repository that already exists: `GET /api/v1/repos/available` lists what a
+  workspace's connection can reach, and `POST /api/v1/repos/link` adopts one by name. Surface version
+  1.44.0, additive.
+
+  The hole they close was invisible from the surface. `GET /api/v1/repos` serves the repositories a
+  workspace has LINKED, which is a set someone assembles in the app: linking is explicit per workspace,
+  the provider webhook for an added repository does not project one, and a resync refreshes what is
+  already linked rather than rediscovering the installation. So a repository that exists and is
+  perfectly reachable is absent from every public read until a human opens the picker, and
+  `POST /api/v1/services` answers 404 for its `repoId`, which is byte-for-byte what a caller gets for a
+  repository that does not exist. A deployment could CREATE a repository through this API (1.41.0's
+  bootstrap) and could not adopt one it already had.
+
+  The two reads are a population pair rather than a duplicate, with `linked` as the join, so an absent
+  repository is now diagnosable: reachable-but-unadopted appears in `/repos/available` with
+  `linked: false`, and one that does not exist appears in neither. The adopt takes `owner`/`name`
+  because a caller setting a workspace up from configuration knows the name and cannot know a provider
+  id for a repository no public read lists; it is idempotent, answers the same row shape `/repos`
+  serves (projected from the same read, so the two cannot disagree about whether a repository is free),
+  and refuses an unreachable one with `404 repo_not_reachable`, a reason that covers "does not exist"
+  and "your credential is not granted it" together because a provider answers those identically.
+  `GitHubSyncService.linkRepoBySlug` resolves through the same path the app's own picker uses, and
+  matches the OWNER as well as the name: a slug search can surface a look-alike, and linking that one
+  would file a caller's work in someone else's account while answering 200.
+
+  The acceptance suite uses them, which is what makes a hand-written `.env` a supported way in rather
+  than a setup only `configure` could finish. Spec 01 adopts a repository the workspace does not hold
+  instead of refusing; `target-repos` gates on REACHABILITY, point-reading `/repos/available` for
+  anything unlinked and reporting "reachable but not adopted yet" as a pass; and `configure` adopts each
+  repository rather than printing instructions for doing it by hand. Every attempt states its outcome,
+  because a loop that reports only its positive answer is indistinguishable from one doing nothing, and
+  what a refusal now asks for is only what no API can do: create the repository, and grant the
+  credential access to it.
+
+  Review follow-ups on the pair, all still inside 1.44.0 and still additive:
+
+  Both rows now report whether a repository is SPOKEN FOR, from one account-scoped judgement.
+  `/repos/available` publishes `serviceId` and `linkedElsewhere` exactly as `/repos` does, because a
+  repository nobody here has linked can still back a service on another board of the account, and
+  `POST /api/v1/services` refuses it either way. A discovery read that could not say so handed a
+  caller a repository whose next call fails, and it was the acceptance gate that felt it first: it
+  green-lit a pass that then died on the adopt, after the run the gate exists to precede. The
+  judgement is now `PublicBoardReads.repoUse`, asked once of the projection (the repos list) and once
+  of a batch of ids (the available read), so there is no second derivation to drift.
+
+  The available read also publishes `truncated`. The provider legs behind it stop at a page cap and a
+  search cap, so on a wide connection the rows are a prefix and a reachable repository can be missing
+  from them, which is indistinguishable from the non-existence this read exists to diagnose. A
+  point-read (`?q=owner/name`) resolves the exact slug directly and stays authoritative either way.
+
+  A provider refusal is answered as one on BOTH operations and on either provider. The available read
+  was left unwrapped, so a revoked credential or a rate limit on it arrived as `500 internal` rather
+  than the documented 503/429; and the mapping recognised `GitHubApiError` alone, so a GitLab-connected
+  workspace got that same `500` for a revoked token on both routes. Kernel now owns a `VcsApiError`
+  base that both provider clients extend, which is the identity a consumer above the adapters branches
+  on.
+
+  The adopt is idempotent for a repository the credential can no longer reach: it resolves from what
+  the workspace LINKS before consulting the provider, so a re-run no longer answers 404 for a
+  repository `GET /api/v1/repos` still lists (a personal repository, or a narrowed App grant). And the
+  link's `owner` accepts a namespace PATH, so a GitLab project under nested groups can be adopted at
+  all: the available read published `group/subgroup` and the adopt refused it with a 422.
+
+  In the suite, "the connection cannot reach it" is now recognised by `details.reason`, not by the 404
+  alone: a deployment older than these endpoints answers an unmatched route with the same status, and
+  reading that as "create the repository" sent an operator to create one they already had.
+
+  Internal, breaking for in-repo callers only: `GitHubSyncService.listAvailableRepos` answers
+  `{ repos, truncated }` rather than an array, the kernel `GitHubClient.searchInstallationRepos` port
+  answers a `Paged` rather than an array (every adapter caps something, and a search that filters a
+  bounded listing can return two rows and still be a prefix, which no row count reveals), and the
+  `viewerRepos` / `patInstallationRepos` caches hold the whole page rather than its items (an
+  enumeration that stopped at the cap is a prefix, and caching only the rows served that prefix to
+  every later keystroke as the complete set).
+
+### Patch Changes
+
+- Updated dependencies [7893f35]
+  - @cat-factory/contracts@0.296.0
+  - @cat-factory/integrations@0.157.0
+  - @cat-factory/kernel@0.287.0
+  - @cat-factory/caching@0.19.0
+  - @cat-factory/agents@0.125.8
+  - @cat-factory/prompt-fragments@1.0.54
+  - @cat-factory/sandbox@0.11.131
+  - @cat-factory/spend@0.15.72
+  - @cat-factory/workspaces@0.27.16
+
+## 0.258.0
+
+### Minor Changes
+
+- 07ff467: Let `/api/v1` callers pin what a task runs on (surface 1.43.0). `GET /api/v1/model-presets` lists
+  the model library, task create and task PATCH accept `modelPresetId` and `riskPolicyId`, and the
+  task projection reads both back. A pinned id no library carries is refused with `details.reason`
+  naming which one it missed, rather than falling back to the default, because a run that quietly
+  used another model succeeds while being about something else. The check lives on `BoardService`, so
+  the SPA, tracker intake, an initiative spawn and blueprint reconciliation get the same refusal.
+
+  **Breaking, deliberately, on a surface with no adopters:** `GET /api/v1/merge-presets` is renamed
+  to `GET /api/v1/risk-policies` in place (response `presets` → `policies`, `presetId` → `policyId`,
+  SDK group `mergePresets` → `riskPolicies`, reasons `merge_preset_*` → `risk_policy_*`). It shipped
+  one release ago under the name the product renamed away from a month before that, and the id it
+  serves is what a task pins as `riskPolicyId`, so leaving it would put two names for one concept on
+  one wire permanently. `backend/docs/public-api-versions.md` records why this is an exception to ADR
+  0034 rather than a precedent.
+
+### Patch Changes
+
+- Updated dependencies [07ff467]
+  - @cat-factory/contracts@0.295.0
+  - @cat-factory/agents@0.125.7
+  - @cat-factory/integrations@0.156.1
+  - @cat-factory/kernel@0.286.3
+  - @cat-factory/prompt-fragments@1.0.53
+  - @cat-factory/sandbox@0.11.130
+  - @cat-factory/spend@0.15.71
+  - @cat-factory/workspaces@0.27.15
+  - @cat-factory/caching@0.18.44
+
+## 0.257.2
+
+### Patch Changes
+
+- Updated dependencies [9b3473a]
+  - @cat-factory/contracts@0.294.0
+  - @cat-factory/integrations@0.156.0
+  - @cat-factory/agents@0.125.6
+  - @cat-factory/kernel@0.286.2
+  - @cat-factory/prompt-fragments@1.0.52
+  - @cat-factory/sandbox@0.11.129
+  - @cat-factory/spend@0.15.70
+  - @cat-factory/workspaces@0.27.14
+  - @cat-factory/caching@0.18.43
+
+## 0.257.1
+
+### Patch Changes
+
+- b889842: Report the actual cause of a failure everywhere, not just on a "Test connection" button.
+
+  The previous slice taught the connection PROBES to read the cause chain, because on Node a transport
+  failure is `TypeError: fetch failed` and what happened hangs off `.cause`. It turned out the repo had
+  three describers of a thrown value and the other two stopped at `error.message`: `getErrorMessage`
+  (the string a human is shown, and what a persisted failure reason or a PR comment records) and
+  `describeError` (every log line). So a probe could name `connect ECONNREFUSED 127.0.0.1:6443` while
+  the log line and the toast for the same failure still said `fetch failed`, which is what made a
+  Kubernetes connect failure unexplainable even with the probe fixed.
+
+  All three now flatten through one kernel core (`shared/error-chain.logic.ts`): `.cause` plus each
+  `AggregateError` branch (so a dual-stack `localhost` reports what happened on each address), scrubbed
+  through `redactSecrets`, capped with a marker saying what it dropped, and bounded by link identity so
+  a cause cycle terminates. Roughly 90 hand-rolled `e instanceof Error ? e.message : String(e)` copies
+  across the backend now call `getErrorMessage`, and five local `errMessage`/`messageOf` wrappers are
+  deleted.
+
+  Who may read a chain is part of the rule. An AUTHENTICATED reader gets it, because the inner link is
+  usually the only thing saying whether the fix is theirs or the deployment's; where a deployment's
+  model endpoints are platform-internal, their host and port do reach a workspace member through an
+  ordinary 4xx. An UNAUTHENTICATED surface does not: `/ready` on BOTH facades answers with kernel's
+  `publicDiagnostic` (the outermost link, scrubbed) rather than publishing the deployment's database
+  address, sharing one helper so the two runtimes cannot drift to different depths.
+
+  A VERDICT does not read the rendered string either. `errorChainMatches` tests each link uncapped, so
+  a sentinel phrase pushed past the display budget by a long wrapper cannot silently turn a recognised
+  rollout stop into a crash. Relatedly, log fields get their own, much wider cap than the 400 characters
+  a human-facing message is held to, and an error with nothing to say answers with the empty string
+  rather than the bare constructor name, so a call site's `getErrorMessage(e) || '<what to do>'` guard
+  still fires.
+
+  `redactSecrets` now spares a single-case word and an env-var-shaped identifier where a field-name rule
+  matched: it scrubs the message a person reads, and `Missing required key: OPENAI_API_KEY` must not
+  lose the name they have to go and set. Every credential shape the rules exist for still matches.
+
+  An error message may therefore now carry appended causes where it did not before. The opening phrase
+  is unchanged, which is what the downstream `/dispatch failed/i` and eviction-sentinel checks match on.
+
+  On the SPA, every failure toast goes through the one funnel that already existed for pipeline errors,
+  instead of 29 per-component copies of the same `notifyError(title, e)` and ~83 direct `toast.add`
+  calls rendering the raw message. Beyond the translated copy that funnel already resolved, a failure
+  toast now stays until dismissed instead of vanishing after about five seconds, its text is
+  selectable, and one click copies the whole report: the action that failed, the class of failure, the
+  backend's own account, and the `requestId` that is the only join between what the user saw and the
+  server log line explaining it. Conflict (409) toasts get the same treatment, which matters most on
+  the unknown-reason path, since that is where a reason an older SPA build has never heard of lands.
+
+  `@cat-factory/cli` carries its own copy of the describer rather than importing kernel. That package is
+  published and deliberately runtime-dependency-free, so a `workspace:*` import from its `bin` resolves
+  through pnpm's link locally and is simply absent off the registry; a conformity test pins the copy to
+  kernel's output byte for byte.
+
+- Updated dependencies [b889842]
+  - @cat-factory/kernel@0.286.1
+  - @cat-factory/integrations@0.155.5
+  - @cat-factory/agents@0.125.5
+  - @cat-factory/workspaces@0.27.13
+  - @cat-factory/caching@0.18.42
+  - @cat-factory/prompt-fragments@1.0.51
+  - @cat-factory/sandbox@0.11.128
+  - @cat-factory/spend@0.15.69
+
+## 0.257.0
+
+### Minor Changes
+
+- b25732f: Add deployment provisioning to `/api/v1`, so a workspace can be taken from "connected" to "able to
+  run a pipeline" with no browser. Surface version 1.41.0; every change is additive.
+
+  Eight new operations: `POST /api/v1/repos/bootstrap` and `GET /api/v1/repos/bootstrap/{jobId}` create
+  a repository and adapt it with the bootstrapper agent; `POST /api/v1/environments/connections` and
+  `.../test` bind or probe the cluster per-run environments deploy onto; `PATCH
+/api/v1/services/{serviceId}` declares where a service's manifests live; and `GET /api/v1/models`,
+  `GET /api/v1/vcs/connection` and `GET /api/v1/merge-presets` report what the deployment has wired. All
+  `admin`, including the reads: they name deployment configuration rather than board content, and a
+  caller that can read them is already at the rung that could change them.
+
+  `PublicService` also gains an optional `provisioning`, so a caller that just set it can confirm what
+  landed. It is projected only for the shapes this surface publishes; a service provisioned through
+  another engine reports nothing rather than a coerced value.
+
+  A service PATCH OVERLAYS the stored provisioning rather than replacing it (the column is one JSON
+  blob, and this surface publishes two of its fields, so a wholesale write dropped the image overrides
+  and Secret injections an operator authored in the app), and it must name at least one field.
+  `GET /api/v1/models` reports `excludesUserScopedModels`, and `GET /api/v1/merge-presets` reports
+  `submissionRestrictedRoles`: in both cases a state the surface previously rendered identically to
+  "nothing here", where the two need opposite reactions. `GET /api/v1/vcs/connection` now answers on a
+  GitLab-only deployment, which builds no GitHub module and so was refused with a 503.
+
+  No breaking change: nothing published was renamed, retyped or re-scoped, and the SDKs tolerate the new
+  enum members by design. The bootstrap request's `type` enum is PINNED to the name the service
+  creation route already published (`scripts/sdk/ir.mjs`), because sharing a value set is what
+  otherwise renames a released type in four clients.
+
+### Patch Changes
+
+- Updated dependencies [b25732f]
+  - @cat-factory/contracts@0.293.0
+  - @cat-factory/kernel@0.286.0
+  - @cat-factory/agents@0.125.4
+  - @cat-factory/integrations@0.155.4
+  - @cat-factory/prompt-fragments@1.0.50
+  - @cat-factory/sandbox@0.11.127
+  - @cat-factory/spend@0.15.68
+  - @cat-factory/workspaces@0.27.12
+  - @cat-factory/caching@0.18.41
+
+## 0.256.4
+
+### Patch Changes
+
+- 7119ca7: Warn on board load when the GitHub token a run would use cannot push or open pull requests.
+
+  A personal access token is the operational credential on two deployment shapes: local mode, where
+  one token is both the sign-in identity and what every agent step clones, pushes and merges with,
+  and a hosted deployment whose run initiator stored a `github_pat`, which outranks the App
+  installation on the run path. On both, a token minted without `repo` (or a fine-grained token
+  pointed at the wrong repositories) reached its first failure several steps into a pipeline, as a
+  403 out of a container, after the run had already spent money. Local mode logged a boot warning
+  about it, which is a line in a terminal nobody is looking at; a hosted deployment said nothing at
+  all.
+
+  A new `GET /workspaces/:id/github/pat-check` answers what that token can actually do, and the SPA
+  raises a banner linking straight to GitHub's token form, pre-filled where GitHub allows it.
+
+  The parts worth reviewing:
+
+  **Which token gets judged, and whether one is judged at all.** The check resolves through the same
+  `resolveRunInitiatorToken` the dispatch mint and the engine's GitHub client already share, now
+  surfaced on `CoreDependencies`, so a workspace that turned `allowInitiatorPat` off is not nagged
+  about a credential none of its runs touch. Re-deriving the gate in the controller was the
+  alternative, and it would have been a fourth copy of a security decision that exists to be singular.
+
+  The second half of that question is answered by a new `listWorkspaceRunRepos` seam, the block-free
+  counterpart of `resolveRepoTarget`, built beside it on every facade: every repository this board's
+  mounted services target. A token is judged only where a run would present it, so a board that
+  targets no GitHub repository (bound to GitLab, or nothing linked yet) answers `not_applicable`
+  rather than rendering a scope verdict over pipelines that never reach GitHub. The same set is what
+  a fine-grained token is probed against, so the probe's cap samples the work rather than the
+  alphabet: the repository projection lists everything the connection can see and is ordered by owner
+  and name, which no run consults.
+
+  **Per capability, not a boolean.** GitHub reports a classic token's scopes in `x-oauth-scopes` and
+  reports nothing whatsoever for a fine-grained one, whose reach is knowable only by probing a
+  repository: that answers for push and answers nothing for pull requests or workflows. Each
+  capability therefore carries `granted` / `missing` / `unknown`, and only `missing` raises anything.
+  Folding `unknown` into either would have meant silencing a real gap or nagging every correctly
+  configured fine-grained deployment forever. The fine-grained probe is a capped sample of the
+  targeted repositories and says how many it did not read.
+
+  **What a repository read can and cannot establish.** GitHub's repository payload reports the
+  authenticated IDENTITY's role, not the grants of the credential presenting it, and a token's reach
+  is a subset of its owner's. So `push: false` refutes the token while `push: true` only fails to
+  refute it, and only the first is reported as a verdict. The one positive statement available about
+  the credential itself is a 404, which GitHub returns rather than a 403 for a repository a
+  credential may not see; a 404 on every targeted repository is therefore `missing`, and the report
+  names those repositories, which is the fine-grained-token-pointed-at-the-wrong-repositories case
+  this feature exists to catch. A single 404 among readable repositories stays `unknown`: it is
+  ambiguous with a projection row pointing at a renamed repository, and a stale row must not be
+  reported as a broken credential.
+
+  **A throttled token is not a rejected one.** GitHub spells an exhausted primary or secondary rate
+  limit with the same 403 it uses to refuse a credential, so the rate-limit markers are read first
+  and answer `probe_failed`. Read as a rejection, a throttled board load raises the loudest banner
+  the product has and advertises minting a replacement.
+
+  **A classic token with no scopes is a distinct fact from an unreadable one.** GitHub sends
+  `x-oauth-scopes` for every classic token, so an empty value states that this one grants nothing.
+  Treating an empty header as an absent one classified it as unreadable, which sent it down the
+  fine-grained path where a repository read its owner could satisfy reported it as fine. It now
+  classifies as a classic token missing everything, and the connect form gained a warning
+  (`github_pat_no_scopes`) saying so.
+
+  **The scope list is not on the wire.** Nothing renders it, reads pass the route's permission mount,
+  and the one source whose scopes this endpoint could expose is a shared deployment credential.
+
+  **What does not raise the banner.** An unreachable GitHub is `probe_failed`, not a verdict: the
+  remedy a permissions banner advertises is wrong and expensive during an upstream blip. A missing
+  `workflow` scope is advisory, listed inside the card but never its reason for opening, because
+  without it a run still pushes, opens its PR and merges and fails only on changes that touch
+  `.github/workflows/*`.
+
+  **Classic versus fine-grained.** The re-mint link carries over the kind of the token being
+  replaced, so a deployment that standardised on fine-grained tokens is not pushed back to a classic
+  one by a warning. Only the classic form accepts a prefill; GitHub's fine-grained form takes no
+  permission parameters at all, so that half is a bare link and the banner names the permissions to
+  grant. Saying so is deliberate: a link that silently arrived with nothing selected reads as
+  "already done for you".
+
+  **On the SPA side**, the check is single-flighted separately from the connection reads and never
+  awaited by them. It is the only one of the three that leaves the deployment, and two modals block
+  their open on `probe()`; awaited, an unreachable GitHub held those modals for the full outbound
+  timeout to settle a banner they do not render. It follows the door rather than the batch: the
+  on-board-open fan-out checks at most once per board, while the deliberate-refresh door re-checks,
+  because the surfaces that force a refresh are the ones that just changed what the answer depends
+  on. Three panels whose own comments said "probe once so the pickers light up" moved onto
+  `ensureProbed`, which is what they meant.
+
+  The required-scope list is now one constant in `@cat-factory/contracts`, read by the local
+  facade's boot warning and setup link, its scope classifier, and the SPA — it was two copies before,
+  which is two answers to "what should I tick".
+
+- Updated dependencies [7119ca7]
+  - @cat-factory/integrations@0.155.3
+  - @cat-factory/contracts@0.292.2
+  - @cat-factory/kernel@0.285.3
+  - @cat-factory/agents@0.125.3
+  - @cat-factory/prompt-fragments@1.0.49
+  - @cat-factory/sandbox@0.11.126
+  - @cat-factory/spend@0.15.67
+  - @cat-factory/workspaces@0.27.11
+  - @cat-factory/caching@0.18.40
+
+## 0.256.3
+
+### Patch Changes
+
+- Updated dependencies [3dde85c]
+  - @cat-factory/integrations@0.155.2
+
+## 0.256.2
+
+### Patch Changes
+
+- Updated dependencies [57a7ecd]
+  - @cat-factory/integrations@0.155.1
+  - @cat-factory/contracts@0.292.1
+  - @cat-factory/kernel@0.285.2
+  - @cat-factory/agents@0.125.2
+  - @cat-factory/prompt-fragments@1.0.48
+  - @cat-factory/sandbox@0.11.125
+  - @cat-factory/spend@0.15.66
+  - @cat-factory/workspaces@0.27.10
+  - @cat-factory/caching@0.18.39
+
+## 0.256.1
+
+### Patch Changes
+
+- Updated dependencies [5f6699a]
+  - @cat-factory/contracts@0.292.0
+  - @cat-factory/integrations@0.155.0
+  - @cat-factory/agents@0.125.1
+  - @cat-factory/kernel@0.285.1
+  - @cat-factory/prompt-fragments@1.0.47
+  - @cat-factory/sandbox@0.11.124
+  - @cat-factory/spend@0.15.65
+  - @cat-factory/workspaces@0.27.9
+  - @cat-factory/caching@0.18.38
+
+## 0.256.0
+
+### Minor Changes
+
+- 2428b6b: Attribute a cross-service run's pull request to every involved service frame whose changes ride
+  it, not just the first.
+
+  The multi-repo fan-out checks out one repo per REPO, so several involved services living in one
+  monorepo already shared a checkout, a work branch and a single pull request. Only the RECORD was
+  singular, which left every frame but the first looking like a service the run had opened no pull
+  request for. The attribution is now a set (`frameIds`) from the dispatch through the harness echo
+  to `block.peerPullRequests`, the merge order, and the verification report. The own-service report
+  carries it too, naming the involved services co-located in the task's own repo: those open no pull
+  request of their own, so that report is the only place their change is reported. A peer checkout
+  also stops inheriting one co-located service's `serviceDirectory`: it is whole-repo, as the primary
+  already was, so the services that resolved second are reachable.
+
+  A recorded peer pull request is now ADDRESSED by its repo rather than by its frames, which is what
+  a checkout is identified by, and one the platform cannot resolve is named to the merger instead of
+  being dropped from the combined diff it scores.
+
+  Internal break: `peerPullRequestSchema.frameId`, `allPullRequests`, `MergePrEntry.frameId`,
+  `PrReportTarget.frameId` and the harness `peerRepos`/`peerPullRequests` wire fields are replaced
+  by `frameIds`. Peer PRs recorded on a block before this ship lose their frame attribution (the
+  pull requests themselves are untouched). Public `/api/v1` is additive only: `PrReportScope` gains
+  `frameIds` and keeps `frameId` as its head (surface version 1.40.0). `frameId` is no longer always
+  null on an own-service report: it names a co-located involved service when there is one.
+
+  The runner image moves to `cat-factory-executor:1.109.0`.
+
+### Patch Changes
+
+- Updated dependencies [22b2459]
+- Updated dependencies [2428b6b]
+  - @cat-factory/kernel@0.285.0
+  - @cat-factory/agents@0.125.0
+  - @cat-factory/integrations@0.154.0
+  - @cat-factory/contracts@0.291.0
+  - @cat-factory/caching@0.18.37
+  - @cat-factory/prompt-fragments@1.0.46
+  - @cat-factory/sandbox@0.11.123
+  - @cat-factory/spend@0.15.64
+  - @cat-factory/workspaces@0.27.8
+
+## 0.255.0
+
+### Minor Changes
+
+- 19baddf: Show a task's design PICTURES to the agents that build the screen.
+
+  The frames an import retains for a linked design (Figma, Zeplin) already fed the
+  visual-confirmation gate and the UI tester's capture set. They now also reach the kinds that build
+  or plan a screen, on the two channels a dispatch can actually carry an image over: written into
+  `.cat-context/design-renders/` for a harness whose CLI reads image files, and attached to the model
+  request as image parts for an inline call. Which kinds get them is a declared trait
+  (`design-images`, on `coder` / `architect` / `fixer`), so a deployment's own UI kind opts in the
+  same way.
+
+  Delivery joins two DECLARED facts, and neither is inferred: `HARNESS_IMAGE_INPUT` says which agent
+  CLI can get bytes into a turn (`claude-code`; Codex and Pi are `false` with their reason stated),
+  and the new per-flavour `ModelRef.acceptsImages` says which model takes one. A dispatch that cannot
+  show the pictures TELLS the agent they exist, with which of the two is missing, so the textual
+  design description never reads as everything the platform had. An UNDECLARED model modality is its
+  own refusal reason rather than a silent "no", so an undeclared multimodal model cannot read as a
+  text-only one forever.
+
+  **Runner image bump** (`cat-factory-executor:1.107.0`): the harness gained the download for the new
+  manifest, and `designImages` joins `HARNESS_BODY_CAPABILITIES`, so a deployment running an older
+  image is told rather than leaving the backend's prompt naming a directory nothing wrote. Mirror the
+  tag into your registry and roll it out; nothing else in the change requires it.
+
+  Recorded prompt bodies now pass through `redactImagePayloads` on both the inline and proxy paths: a
+  `Uint8Array` JSON-stringifies to one entry per byte, so an attached frame would otherwise have
+  landed in telemetry as megabytes per recorded call.
+
+### Patch Changes
+
+- Updated dependencies [19baddf]
+  - @cat-factory/kernel@0.284.0
+  - @cat-factory/agents@0.124.0
+  - @cat-factory/caching@0.18.36
+  - @cat-factory/integrations@0.153.12
+  - @cat-factory/prompt-fragments@1.0.45
+  - @cat-factory/sandbox@0.11.122
+  - @cat-factory/spend@0.15.63
+  - @cat-factory/workspaces@0.27.7
+
+## 0.254.0
+
+### Minor Changes
+
+- 31f43c1: Let a generative binary integration declare WHICH values it accepts, not only that it accepts the option.
+
+  A capability is a yes/no, and for several real endpoints the honest answer is "yes, at one of these".
+  Two image APIs both declare `aspect-ratio`: one honours any ratio because it takes a width and a
+  height, the other offers a picklist of ten. A step asking for `7:3` is admitted against both and
+  served by one. Nothing reports the crop, because the modality is covered, the format is covered and
+  the upload succeeded. That is the silent wrong artifact the capability axis exists to prevent,
+  arriving through the capability axis, and no wording of a yes/no repairs it.
+
+  So a definition may also declare `accepts`: the closed SETS of values it takes, for the three options
+  with an enumerable domain (`aspectRatios`, `outputSizes`, `upscaleFactors`). Admission refuses a
+  value nothing selected accepts, naming what they do accept; the pipeline builder raises the same
+  refusal where the fix is a visible field; and each integration's accepted sets are stated in the
+  agent's brief beside its formats, since an agent holding two image APIs chooses per artifact.
+
+  **FIVE outcomes, judged per option and per DECLARER over the integrations that declare the gating
+  capability.** Nobody stating a set is SILENT, which is the one that let this ship: it is the state
+  every registration is in until someone audits an endpoint, and an advisory firing there would ride
+  nearly every step carrying an aspect ratio. Every stated set containing the value is covered; a
+  value one stated set contains and another EXCLUDES is PARTIAL, reported with the integrations that
+  exclude it named; a value on no stated set with some declarer silent is UNVERIFIABLE and reported; a
+  value every declarer enumerated away is refused.
+
+  The partial outcome is the motivating example itself, so judging on the first accepting declarer
+  would have shipped the axis silent about the case that justified it: two endpoints enumerate, one
+  takes the value and the other crops, no refusal and no advisory, while the brief's provider list
+  names both as honouring the option. It also inverts the reporting, which is the sharper argument: a
+  declarer that stated NOTHING raises an advisory, so auditing that endpoint and writing down an
+  accurate set would have bought silence. It is advisory rather than a refusal for the reason one
+  declarer covers a capability, since which integration renders which artifact is the agent's call;
+  naming the ones that refuse is what makes it actionable.
+
+  **A stated set whose gating capability is undeclared fails BOOT**
+  (`binary_generator_accepts_without_capability`). The two halves are otherwise believed by different
+  readers: the brief renders the set as fact, the value rule judges only over the capability's
+  declarers and never sees it, and admission refuses every step asking for the option as
+  `capability_unsupported`. That is the accurate half made unreachable and the step refused for
+  lacking a capability the same registration was documenting.
+
+  **This supersedes a rule the previous release stated**, and the two are worth reading in order.
+  `@cat-factory/contracts@0.289.0`'s note said a capability "says the request can CARRY a value, never
+  which values are accepted", and put an endpoint offering a closed list of exact `WxH` sizes on
+  `aspect-ratio` rather than `exact-size`. The first half survives and is now the boundary between the
+  two fields; the second half is reversed below, and a definition written to it keeps working
+  unchanged, since it declares a capability it genuinely has and gains the more honest one plus a set.
+  What changed is not the principle but a fact about where staleness cuts: a declared set that is too
+  narrow refuses by name, which is visible and one word to fix, while the behaviour it replaces is
+  silent and delivers the wrong asset.
+
+  **`exact-size` changes meaning, and this is the part to look at.** It used to mean ARBITRARY
+  dimensions, which forced an endpoint whose `size` parameter offers a closed list of `WxH` values to
+  declare `aspect-ratio` instead: a size-taking API classified as shape-taking, with a step needing
+  96x96 admitted against one whose nearest listed value is 1024x1024. The capability now answers what
+  the REQUEST CARRIES (a shape on `aspect-ratio`, dimensions on `exact-size`, both when both) and
+  `accepts.outputSizes` answers which ones. Capabilities are deployment code and are never persisted,
+  so no data migrates and no registration breaks: a definition that declared `aspect-ratio` for its
+  size list keeps working unchanged and gains a more honest option.
+
+  What deliberately did NOT ship, because each is the failure this axis is about wearing a new costume.
+  A range (`min`/`max`/`step`/`multiple-of`) is a constraint language, and the first thing it would
+  have to express is "any pair up to 4 MP in multiples of 32", which is the `resolutionRange`
+  discriminator the design record refuses; an endpoint with a genuine range declares the capability,
+  states no set, and puts its limits in `guidance`. A "closest supported value" rule would turn the
+  refusal back into a silent substitution. And an endpoint with no parameter at all still declares
+  nothing: `upscale: [2]` for an upscaler that enlarges at its own fixed ratio is not a narrower
+  statement of the truth, it is a fabricated one.
+
+  An empty list is refused at registration, so absent stays the one spelling of "not stated". A
+  mothership-mode node absorbs a reply with no `accepts` (an older mothership serves none, and every
+  option is then judged exactly as it was before this field existed), checking that a present one is an
+  object and that each member it knows is an array, which is the same tolerance the capability axis
+  gets and the opposite of the credential list's refusal. A member this build has no table entry for is
+  left alone rather than refused, so a mothership one build ahead is not an ordering constraint.
+
+### Patch Changes
+
+- Updated dependencies [31f43c1]
+  - @cat-factory/contracts@0.290.0
+  - @cat-factory/kernel@0.283.0
+  - @cat-factory/agents@0.123.6
+  - @cat-factory/integrations@0.153.11
+  - @cat-factory/prompt-fragments@1.0.44
+  - @cat-factory/sandbox@0.11.121
+  - @cat-factory/spend@0.15.62
+  - @cat-factory/workspaces@0.27.6
+  - @cat-factory/caching@0.18.35
+
+## 0.253.1
+
+### Patch Changes
+
+- 3ff215a: Slice 9 of the `mcp-maturation.md` tracker: a consensus-diverted step now states the tool servers
+  (MCP) it cannot reach, instead of losing them in silence.
+
+  A panel runs its participants as inline model calls with no checkout and no agent CLI, so there is
+  nowhere to wire an MCP server. Nothing said so. Boot validation's `tool_servers_without_container`
+  warning keys on the kind's declared surface, which is a container for nearly every consensus-eligible
+  kind (architect, analysis, the reviewers), and that is exactly the set a deployment attaches a
+  read-only research server to; the container executor, which owns the whole unavailability vocabulary,
+  is not on this path at all. So the prompt promised nothing, the step recorded nothing, and a diverted
+  step read exactly like a kind that had declared no tool servers.
+
+  The panel now reports it in both channels a container dispatch uses. The participants' system prompt
+  carries the same `toolServersSection` a container run composes, after the surface statement, so a
+  model planning around the vendor tool its instructions name learns it is absent. And the step carries
+  the resolution: `AgentExecutor.previewToolServers` is the inline counterpart of
+  `AgentJobHandle.toolServers`, answered at dispatch and stamped with the dispatched kind by the engine
+  through the same helper the container fold uses, so an executor still cannot label a resolution with
+  a kind other than the one that ran. A preview rather than a field on the result for the reason the
+  container path records off the handle: a step that later fails keeps its record, where a
+  result-carried field would be absent on exactly the runs a reader needs it for. A kind that declared
+  no servers records nothing at all, because an inline surface wires nothing by construction and an
+  all-empty record would claim a resolution where none was possible.
+
+  PUBLIC API, additive (OpenAPI `1.39.0`): the unavailable-tool-server `reason` vocabulary gains
+  `consensus_panel`, carried by the run reads that project `toolServers`. A member of its own rather
+  than `harness_unsupported` because no harness is involved: the kind's standard surface may serve the
+  server perfectly and the same step with consensus off would have got it, so a consumer acting on the
+  harness reason would go widening a list that was never the constraint. The four generated clients and
+  both projections carry the new member, so they bump with the surface.
+
+- Updated dependencies [3ff215a]
+  - @cat-factory/contracts@0.289.1
+  - @cat-factory/kernel@0.282.1
+  - @cat-factory/agents@0.123.5
+  - @cat-factory/integrations@0.153.10
+  - @cat-factory/prompt-fragments@1.0.43
+  - @cat-factory/sandbox@0.11.120
+  - @cat-factory/spend@0.15.61
+  - @cat-factory/workspaces@0.27.5
+  - @cat-factory/caching@0.18.34
+
+## 0.253.0
+
+### Minor Changes
+
+- e3cf16a: Let a generative binary integration declare SEVERAL credentials, for the vendors whose account is not one string.
+
+  `BinaryGeneratorDefinition.credential` becomes `credentials`, a list. The shape that broke the single
+  field is HTTP Basic over a key/secret pair (Scenario, and a long tail of REST APIs that authenticate
+  the same way): the only way to declare it was to colon-join the two halves into one variable, which
+  rotates them together, offers the operator one credential-checklist row where their vendor console
+  issues two values, and turns a mis-joined value into a 401 indistinguishable from a wrong key.
+
+  Nothing about the model changed to allow this, which is the argument for it. Every other layer the
+  value travels through was already plural: the kernel `ToolSecretResolver` port takes `keys`, a tool
+  server declares `credentials`, the checklist keys its rows by `(subject, id, key)`, and the job body
+  carries pairs. The single field was the one singular link in that chain.
+
+  **A deployment registering an integration must rename `credential: {…}` to `credentials: [{…}]`.**
+  Definitions are code, so the break arrives as a typecheck failure at the composition root rather than
+  as a run that quietly authenticates with nothing.
+
+  Two rules ship with it. Injection names must be distinct within a definition, refused at boot and
+  compared case-folded (the fold the reserved-key floor already applies, since two spellings are one
+  variable wherever the environment ignores case), because the job body is keyed by the variable each
+  value arrives as and a collision would silently deliver one value and drop the other. And the brief NAMES a multi-credential set before its parts, so
+  an agent handed two paragraphs does not read them as two independent keys and try the first alone.
+  That set line states its joint rule over the REQUIRED members only: "never call it with a subset of
+  them" is right for a Basic pair and contradicts an optional member's own line, which says to call
+  anyway when that one is missing.
+
+  Across DEFINITIONS the same injection name is refused only where the lookup key behind it differs.
+  Two integrations on one vendor account legitimately share a variable, since both resolve the same
+  value; two that mean different values by it have no right arbitration, because serving the first sets
+  the variable the second integration's brief tells the agent to read. Boot refuses that
+  (`binary_generator_injection_name_collision`), and dispatch, which a mothership node reaches with
+  definitions it never boot-validated, withholds the value from every claimant instead of picking one.
+
+  There is deliberately no auth-scheme field and no platform-side header assembly: the agent writes the
+  request, each credential's `usage` is where it is told how that value is presented, and a scheme enum
+  would need a new member for the first vendor with a signed request or a rotating timestamp.
+
+  A mothership-mode node REFUSES a generator reply that carries no `credentials`, where the sibling
+  capability axis absorbs the same absence. The asymmetry is deliberate: an empty capability
+  declaration is a documented reading ("only the coarse facts are known"), while an empty credential
+  list reads as "this integration is unauthenticated" and the brief would tell the agent exactly that
+  about a deployment that configured a key. So a node needs a mothership new enough to serve the plural
+  field and fails loudly against one that is not, rather than reporting a 401 against an integration
+  nobody gave credentials to.
+
+  Also states, in the capability vocabulary itself, the rule a closed-enumeration endpoint kept turning
+  into a judgement call: a capability says the request can CARRY a value, never which values are
+  accepted. An endpoint offering a closed list of exact `WxH` sizes is handed pixel dimensions and
+  still rounds, so it declares `aspect-ratio` (whose meaning already covers a set it rounds to) and not
+  `exact-size`, whose test is whether an ARBITRARY pair can be asked for. Where no coarser member
+  exists, an endpoint that accepts an option only at values it fixes declares nothing and says what it
+  does in `guidance`: declaring the accepted values instead would be the stale per-integration table
+  the design record refuses, and for an upscaler with no factor to enumerate it would be a fabricated
+  one, admitting a step that asked for 4x and serving it an enlargement at an unknown multiple.
+
+### Patch Changes
+
+- Updated dependencies [e3cf16a]
+  - @cat-factory/contracts@0.289.0
+  - @cat-factory/kernel@0.282.0
+  - @cat-factory/agents@0.123.4
+  - @cat-factory/integrations@0.153.9
+  - @cat-factory/prompt-fragments@1.0.42
+  - @cat-factory/sandbox@0.11.119
+  - @cat-factory/spend@0.15.60
+  - @cat-factory/workspaces@0.27.4
+  - @cat-factory/caching@0.18.33
+
+## 0.252.0
+
+### Minor Changes
+
+- 83764b5: Put a run's live environments on the outcome summary (spec 1.38.0, outcome `version` 3). Additive.
+
+  The outcome summary gains an `environments` section: one row per throwaway environment the run
+  stood up, carrying its URL, its state, the TTL instant when the platform recorded one, the service
+  frame it belongs to, the environment id an operator greps for, the producer's verbatim cause, and
+  whether the run's deployer declared that the environment outlives the run. The app's outcome card
+  renders it beside the captured views, and `GET /api/v1/runs/:runId/outcome` serves the same
+  reduction, so "click and look" no longer means opening the step that provisioned it.
+
+  `state` is the field that matters and `live` is the only one that offers a link. Every other row
+  (`provisioning`, `failed`, `reclaiming`, `reclaimed`, `expired`) still carries whatever URL it had,
+  because that is what names the environment, so a consumer rendering the URL without the state
+  beside it hands someone a link to something that is no longer there. A client with a clock owes the
+  other half of that: `expiresAt` is served as an instant rather than folded into `state` (the
+  reduction is clock-free so the app and the endpoint cannot disagree about one run), so a `live` row
+  whose TTL has passed is not a URL to hand anyone.
+
+  Several producers know something about the same environment, and they are reconciled BY IDENTITY
+  before they are ranked: the run's step projections and the `human-test` gate's own record fold into
+  one observation per environment id, above which the disposer's terminal record wins and below which
+  the deployer's provision-time row is the floor. An environment a LATER deploy of the same frame
+  replaced is reported as gone, derived rather than observed, since nothing refreshes its projection
+  again. A reclaim that FAILED leaves the row `live` with the provider's cause beside it: the
+  environment is still standing and its URL still works, and that it should not be is the verification
+  report's teardown proof rather than this section's question.
+
+  Absences stay three distinct facts: `no_environment_step` (the pipeline provisions nothing),
+  `not_provisioned` (something was meant to and nothing is recorded yet) and `infraless` (every frame
+  declares no environment of its own). `hasOutcomeToShow` counts a reported environment, so the "read
+  the result" affordance now appears on a run whose only product so far is something to look at.
+
+  The rules this shares with the PR verification report moved into contracts' `run-evidence.ts`
+  beside the tester rules: which frames the run's deploys settled, what it observed of each
+  environment, which recorded lifecycle states mean one is gone, and whether the deployer declared
+  retention. The disposer reclaims by the same fold, so the set of environments a run stood up has one
+  statement rather than three. `DEPLOYER_AGENT_KIND` / `DISPOSER_AGENT_KIND` are defined there now and
+  re-exported from `pipeline-environment-lifecycle.ts` under the same names, so no importer moves.
+
+  A `deployer` step now also records the environment id on a frame whose provision FAILED, where the
+  provision got far enough to have a record to fail against. Internal step state, so stale rows simply
+  lack it; what it buys is that the failed environment the run projected is nameable as the one that
+  frame broke on rather than surfacing as a second environment nothing accounts for.
+
+  The spec generator's per-version changelog moved to `backend/docs/public-api-versions.md`, a
+  document rather than a 250-line comment block in a script: it grows with every release and never
+  shrinks, and the file-size ratchet said so first. Nothing about how the number is set changed, and
+  the note that makes the next silent version collision arrive as a merge conflict travels with it.
+
+### Patch Changes
+
+- Updated dependencies [83764b5]
+  - @cat-factory/contracts@0.288.0
+  - @cat-factory/agents@0.123.3
+  - @cat-factory/integrations@0.153.8
+  - @cat-factory/kernel@0.281.3
+  - @cat-factory/prompt-fragments@1.0.41
+  - @cat-factory/sandbox@0.11.118
+  - @cat-factory/spend@0.15.59
+  - @cat-factory/workspaces@0.27.3
+  - @cat-factory/caching@0.18.32
+
+## 0.251.1
+
+### Patch Changes
+
+- 1fbd83c: Findings of the 2026-08-09 MCP audit, the low-hanging half (the rest lands in the
+  `mcp-maturation.md` tracker as slice 9 and its new inventory rows).
+
+  A tool-server credential rides the ONE channel its transport has: a `stdio` server is a child
+  process with an environment and no request, an `http` server is a remote url with headers and no
+  process. Naming the other one resolved the value and folded it into nothing, leaving the server
+  wired, advertised in the prompt, and started unauthenticated. Both directions are now refused, at
+  all three layers a definition can reach: boot validation (`unusable_credential_header` for a header
+  on `stdio`, `missing_credential_header` for an `http` credential with none, both errors), the
+  dispatch, and the Test-button probe. The two runtime refusals exist because a mothership-mode node
+  boot-validates nothing it resolves.
+
+  FLAGGED BREAK: a deployment carrying either (previously silently broken) declaration now fails boot
+  naming the server, the key and the fix. Remove the `header` on a `stdio` credential; add one to an
+  `http` credential.
+
+  PUBLIC API, additive (OpenAPI `1.37.0`): the unavailable-tool-server `reason` vocabulary gains
+  `unusable_secret`, which the run reads project. It is kept apart from `missing_secret` (the value
+  resolved) and `reserved_secret` (nothing was withheld), because only its own member points at the
+  declaration. The probe's status vocabulary gains the app-only `credential_unusable` beside it.
+
+  The rest is doc truth: the `@cat-factory/mcp-server` README's mounting example imports from
+  `./http` (the root drags the stdio boot into a Worker bundle) and its group table lists all sixteen
+  groups; three docs stop claiming two omitted operations where the omission list has three; the
+  hosted endpoint's JSON-RPC batch acceptance is stated as transport compatibility rather than a
+  protocol promise (the 2025-06-18 revision removed batching); `security-model.md` gains the
+  serving-side subsection; and the `MCP_OAUTH_CALLBACK_PATH` docstring stops claiming consumers that
+  did not exist.
+
+- Updated dependencies [1fbd83c]
+- Updated dependencies [00228c6]
+  - @cat-factory/contracts@0.287.1
+  - @cat-factory/kernel@0.281.2
+  - @cat-factory/agents@0.123.2
+  - @cat-factory/integrations@0.153.7
+  - @cat-factory/prompt-fragments@1.0.40
+  - @cat-factory/sandbox@0.11.117
+  - @cat-factory/spend@0.15.58
+  - @cat-factory/workspaces@0.27.2
+  - @cat-factory/caching@0.18.31
+
+## 0.251.0
+
+### Minor Changes
+
+- bf473bd: `/api/v1` gains `GET /api/v1/runs/{runId}/spec` at `read` scope: the in-repo specification a run was
+  judged against, read at the branch that run pushed its work to. Additive, so the OpenAPI surface
+  version moves to 1.36.0 and nothing existing changes shape, scope or error vocabulary.
+
+  It is the sibling `GET /api/v1/services/{serviceId}/spec` could not stand in for. That one answers
+  the repository's default branch, and a task's spec increment does not merge while its pull request
+  is open, so a caller joining `requirements` rows from `…/report` or `…/outcome` back to the criteria
+  they were scored against found no criterion for exactly the rows the run had added. The pair mirrors
+  the internal split the SPA's outcome card already needed for the same reason.
+
+  Both public reads and both internal ones now go through one reader, and the run read goes through
+  the engine's own evidence loader, so the tree a caller joins against is the tree the platform joined
+  against: the same branch rule, the same tester gate and the same per-run memo the verification
+  report and the outcome summary use.
+
+  The loader change worth knowing about is that it now reports WHERE a spec read stopped instead of
+  folding every outcome onto an empty view. The two reductions still fold (a coverage section states
+  its own absence), but the endpoint does not: an unwired integration and an unreadable repository are
+  `503`s carrying their own `details.reason`, and a fourth `anchor` value, `not_read`, says the
+  platform has consulted no tree for this run yet. Folded, an outage would have told an integrator
+  that a run was judged against a service declaring no requirements.
+
+  The read also resolves the branch head before walking, which adds one repository call per run
+  (memoised with the tree, so a later reader gets the commit the tester ruled at rather than one
+  resolved afterwards). That resolution now carries a second job: a run keeps naming its pull
+  request's head branch after the branch is deleted, which is the ordinary sequel to a merge, so a
+  read that finds neither a head nor an anchor there falls back to the repository default and names it
+  in `provenance.ref`. Without it the post-hoc audit this endpoint exists for was the one case that
+  answered a permanent `503`. Only a confirmed missing branch moves the read; a host that will not
+  answer for the ref leaves it alone, so an incident cannot swap the tree.
+
+  Between the two wiring refusals and the `not_read` gate, the gate now goes first: before a tester
+  reports, a run answers `not_read` whatever the deployment wired. Ranked by what was cheap to check,
+  an unwired deployment and an unconnected workspace behaved differently for the same run, one
+  answering `503` throughout and the other flipping from `200` to `503` partway through.
+
+### Patch Changes
+
+- Updated dependencies [bf473bd]
+  - @cat-factory/contracts@0.287.0
+  - @cat-factory/agents@0.123.1
+  - @cat-factory/integrations@0.153.6
+  - @cat-factory/kernel@0.281.1
+  - @cat-factory/prompt-fragments@1.0.39
+  - @cat-factory/sandbox@0.11.116
+  - @cat-factory/spend@0.15.57
+  - @cat-factory/workspaces@0.27.1
+  - @cat-factory/caching@0.18.30
+
 ## 0.250.0
 
 ### Minor Changes

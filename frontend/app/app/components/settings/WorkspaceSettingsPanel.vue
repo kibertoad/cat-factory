@@ -29,6 +29,7 @@ const store = useWorkspaceSettingsStore()
 const workspace = useWorkspaceStore()
 const access = useWorkspaceAccess()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const slots = useReactiveSlots<AppSlots>()
 // Whether the deployment registers any reusable operation at all, hidden or not, so the
 // Operations tab exists only where there is something for it to manage. Not the OFFERED catalog:
@@ -300,12 +301,7 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('settings.workspaceSettings.toast.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'settings.workspaceSettings.toast.saveFailed')
   } finally {
     saving.value = false
   }

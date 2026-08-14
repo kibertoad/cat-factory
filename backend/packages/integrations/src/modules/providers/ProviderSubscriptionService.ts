@@ -12,14 +12,12 @@ import { SUBSCRIPTION_VENDORS, isIndividualVendor } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import { DEFAULT_USAGE_WINDOW_MS, chooseToken } from './providers.logic.js'
 
-// Every vendor whose subscription harness we support that is ALSO poolable — i.e.
-// excluding the individual-usage vendors (Claude), which are stored per-user by the
-// PersonalSubscriptionService and never shared in a workspace pool. The single source
-// of truth is the SUBSCRIPTION_VENDORS map in the kernel, so adding a poolable vendor
-// there automatically widens the unfiltered `listTokens` sweep below.
-const ALL_VENDORS = (Object.keys(SUBSCRIPTION_VENDORS) as SubscriptionVendor[]).filter(
-  (v) => !isIndividualVendor(v),
-)
+// The individual-usage vendors (Claude, Codex, GLM) are stored per-user by the
+// PersonalSubscriptionService and never shared in a workspace pool, so every unfiltered read here
+// drops them. `isIndividualVendor` is asked per ROW rather than pre-computed into a vendor list,
+// because the reads are now one statement over the whole workspace: the single source of truth
+// stays the kernel's SUBSCRIPTION_VENDORS map either way, and a newly poolable vendor needs no
+// edit here at all.
 
 // Upper bound on live tokens per workspace+vendor. The rotation pool is meant to hold
 // a handful of subscriptions for quota headroom; a generous ceiling keeps the feature
@@ -133,23 +131,48 @@ export class ProviderSubscriptionService {
     return toSummary(record)
   }
 
-  /** All live tokens for a workspace (optionally filtered by vendor), metadata only. */
+  /**
+   * All live tokens for a workspace (optionally filtered by vendor), metadata only.
+   *
+   * The unfiltered read goes to the repository ONCE and drops the individual-usage vendors here.
+   * Filtering in memory rather than issuing one statement per poolable vendor keeps a closed
+   * vocabulary from becoming a per-member round trip, and the pool is small by construction
+   * (`MAX_TOKENS_PER_VENDOR` per group), so there is nothing to page.
+   */
   async listTokens(
     workspaceId: string,
     vendor?: SubscriptionVendor,
   ): Promise<VendorCredentialSummary[]> {
-    const vendors: SubscriptionVendor[] = vendor ? [vendor] : ALL_VENDORS
-    const out: VendorCredentialSummary[] = []
-    for (const v of vendors) {
-      const rows = await this.deps.providerSubscriptionTokenRepository.listByVendor(workspaceId, v)
-      for (const row of rows) out.push(toSummary(row))
-    }
-    return out
+    const rows = vendor
+      ? await this.deps.providerSubscriptionTokenRepository.listByVendor(workspaceId, vendor)
+      : (await this.deps.providerSubscriptionTokenRepository.listByWorkspace(workspaceId)).filter(
+          (row) => !isIndividualVendor(row.vendor),
+        )
+    return rows.map(toSummary)
+  }
+
+  /**
+   * Every vendor the workspace has at least one ENABLED pooled token for, in ONE read.
+   *
+   * The batch sibling of {@link hasToken}, for the caller that asks about the whole vocabulary at
+   * once: the capability resolver folds it into a workspace's catalog, which both the model picker
+   * and every run start resolve through. Asking per vendor there was one statement per poolable
+   * vendor for an answer a single `listByWorkspace` carries whole.
+   *
+   * Individual-usage vendors are filtered out for the same reason {@link hasToken} refuses them:
+   * they are never pooled, so a row for one could only be stale data and reporting it would offer
+   * the executor a credential the personal store owns.
+   */
+  async liveVendors(workspaceId: string): Promise<Set<SubscriptionVendor>> {
+    const rows = await this.deps.providerSubscriptionTokenRepository.listByWorkspace(workspaceId)
+    return new Set(
+      rows.filter((row) => row.enabled && !isIndividualVendor(row.vendor)).map((row) => row.vendor),
+    )
   }
 
   /**
    * Whether the workspace has at least one live token for a vendor. Individual-usage
-   * vendors are never pooled, so this is always false for them — the executor routes
+   * vendors are never pooled, so this is always false for them: the executor routes
    * those through the per-user PersonalSubscriptionService instead.
    */
   async hasToken(workspaceId: string, vendor: SubscriptionVendor): Promise<boolean> {

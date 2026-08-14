@@ -121,7 +121,7 @@ binaryGenerators.register({
   mediaTypes: ['image/png'],
   endpoint: 'https://api.retrodiffusion.ai/v1',
   guidance: 'Inference is synchronous; the response carries base64 images in `base64_images`.',
-  credential: { key: 'RD_TOKEN', usage: 'the X-RD-Token request header' },
+  credentials: [{ key: 'RD_TOKEN', usage: 'the X-RD-Token request header' }],
   contracts: [{ contractId: 'api', format: 'openapi', title: 'Inference API', body: OPENAPI }],
 })
 ```
@@ -133,6 +133,97 @@ instrument a specific step is pointed at. Their lifecycles differ too: the catal
 tenant-editable state with rows behind it, while an integration is deployment code with a
 credential attached. What they DO share is the contract vocabulary (`uploadApiContractSchema`) and
 the renderer, so an agent reads one kind of contract file whatever registry it came from.
+
+### Two transports, because not every generator is an API
+
+`transport` discriminates how an integration is REACHED: `api` (the default, and what every
+definition above means) is a metered vendor endpoint the agent's own code calls with an injected
+credential; `harness` is a tool built into the agent CLI the step dispatches under. Codex carries
+one (`image_gen`, gpt-image-2), and it is available ONLY on ChatGPT subscription auth: an
+`OPENAI_API_KEY` session is routed to the Images API and never offered the tool. So it is the one
+generative path a deployment can offer with no vendor key anywhere.
+
+A DISCRIMINATOR rather than "an integration with no endpoint", because those are different claims
+and only one is checkable. An `api` definition missing its endpoint has said "nobody filled this
+in"; a `harness` one has said "there is no endpoint, and here is what serves it". Left implicit,
+the second reads as the first and the step is admitted to run under a CLI with no such tool.
+
+Three consequences, each of which is a rule somewhere:
+
+- **A harness transport may declare no `endpoint`, `credentials` or `contracts`** (schema check).
+  The first two would only mislead the brief; the CREDENTIAL is the one that bites, because its
+  value is injected into the agent's process, so declaring one means a variable the deployment
+  believes authenticates something and that nothing ever reads. The auth is the leased
+  subscription the run already used.
+- **A harness transport may name only a CLI that actually GENERATES** (`harnessServesBinaryGeneration`,
+  boot validation). "This build runs that CLI" and "that CLI has a generation tool" are two
+  questions, and admitting the first lets a definition naming `pi` or `claude-code` pass every
+  structural check, resolve, dispatch with the flag set, produce nothing, and brief the agent to
+  collect from a staging directory nothing created. The run then reports a model problem for one
+  string of deployment code.
+- **Reachability is an admission axis of its own** (`generator_harness_unavailable`), because every
+  other issue judges whether the integration can do the WORK and this judges whether it is in the
+  process at all. The requirement is DERIVED from the step's resolved model
+  (`RunAdmission.resolveStepHarnesses`), never declared. An unresolved model raises nothing: the
+  third outcome the format, capability and value axes all take, because a guess about which CLI a
+  step will run under is worse than an absence. It also SHORT-CIRCUITS the coverage axes, since an
+  unreachable generator covers nothing and every one of them would restate the same fault.
+
+  The derivation is a second copy of the dispatch precedence, and every way it can drift refuses a
+  run that would have worked. Both halves bite: `resolveStepModelRef` falls THROUGH an unresolvable
+  block pin rather than stopping at one, and `ModelRouter.resolveEffectiveRef` applies
+  "subscriptions always win" ON TOP of a catalog flavour order that puts `subscription` LAST, so a
+  dual-mode model on a workspace holding a token for its vendor dispatches on the subscription
+  harness while the bare catalog order resolves it to a metered route. Miss either and the guard
+  refuses a codex-served generator on a step that is about to run codex, or goes quiet on exactly
+  the stale pin most likely to be wrong.
+
+- **"Can generate images" is NOT a flag on the model catalog**, and that was the tempting shortcut.
+  It is a property of the TOOL, which the vendor provisions per session and per plan tier and which
+  demonstrably is not always offered (openai/codex#36832: the app exposes `image_gen` while the CLI
+  filters it out on the same config). A boolean on a model row would be a guarantee nothing here
+  can verify, persisted on blocks via `modelId`, going stale the moment the vendor changes gating.
+  What the model legitimately contributes is WHICH CLI runs, which is exactly what the derivation
+  above reads.
+
+**Where the bytes land is the platform's problem, not the model's.** Codex writes to
+`$CODEX_HOME/generated_images/` and exposes no path, URL or artifact id for it to the model
+(openai/codex#28887, #28898, #28873, #28849, all open), and `codex exec --json` surfaces no
+structured tool bodies at all — so asking the agent where it put the file is the thing that does
+not work. `$CODEX_HOME` is also where the decrypted subscription credential lives, so sending the
+agent to look there would point a prompt-injectable process at it. The harness therefore
+REDIRECTS: `generated_images` is created as a symlink into `.cat-context/binary-output/generated/`
+before the CLI starts, so the file is simply there when the tool returns, with no polling and no
+race. A post-run sweep backs that up for a redirect that could not be made, and NAMES what it
+found, because an image that arrived too late for the agent to store is a different fact from a run
+that generated none.
+
+**The tool is opt-in per job** (`generateImages` on the job body, set when the dispatch resolved a
+harness-served generator). It bills the leased plan at 3-5x an ordinary turn, so an always-on image
+capability would charge every run for one it never uses. The backend keys off the TRANSPORT and
+never off a CLI name; which tool to enable is the harness's own business.
+
+**And it is a handshake CAPABILITY** (`HARNESS_BODY_CAPABILITIES`), not merely an optional field.
+The test that decides membership is whether the PROMPT would lie, and here it does: the generator
+brief names the staging directory unconditionally, so a runner pool one image behind ignores the
+flag while the agent is told where to collect from. That is the blind run the handshake exists to
+refuse, and without membership the dispatch cannot even see the question.
+
+**A capability that cannot be honoured is STATED, twice over.** Under `ambientAuth` there is no
+per-run home to configure or redirect and the developer's own `~/.codex` is never touched, so the
+tool is simply not there: `createCodexHome` answers the outcome rather than a bare home, and
+`codexImageGapNote` folds one sentence into the prompt naming what is missing and pointing at the
+brief's own "if the tool is unavailable, say so" instruction. A refused REDIRECT (an existing
+directory, a filesystem that will not make a link) gets its own wording, because the tool is on and
+its output is unreachable until the post-run sweep, which is a different fact and a different fix.
+The teardown report reads the same outcome, so a rescued file is never called a late arrival when
+the redirect never existed.
+
+**The builder states the constraint it cannot check.** A pipeline is a template and the model is
+resolved per block at dispatch, so the picker cannot judge whether a step will run the required CLI.
+It says which CLI serves each harness-backed candidate (in the label) and which the current
+selection therefore needs (`generator_harness_required`, ADVISORY), which is what keeps the
+admission refusal from arriving as a surprise about a selection the product's own picker offered.
 
 ### Content types are a closed vocabulary
 
@@ -248,15 +339,15 @@ storage id is fixed in the workspace catalog by whoever runs the board, an integ
 in the deployment's own build, and one reason would send half the readers to the wrong place. It
 also runs with NO catalog seam wired, since the registry needs no I/O.
 
-### The credential: declared by name, delivered per job, never to a prompt
+### The credentials: declared by name, delivered per job, never to a prompt
 
 This is the one place the feature's original "credentials reach the agent through the existing
 seams" answer did not hold. A tool server's credential works because the platform configures the
 client; an image API is called by the agent's OWN code, so the value has to be in that job's
 environment or the integration is decorative.
 
-So a definition declares the credential BY NAME and the value takes the same route a tool server's
-does, one channel over:
+So a definition declares its credentials BY NAME and each value takes the same route a tool
+server's does, one channel over:
 
 1. the ENGINE resolves the selection onto `AgentRunContext.binaryGenerators`: ids, content types
    and the credential's KEY NAME, all non-secret, which is why the agent-context snapshot may
@@ -277,6 +368,58 @@ an unset variable means the platform could not provide the key and the integrati
 called, and the agent can SEE the variable, so a second declaration from the executor could only
 agree with the environment or contradict it. A run that generates what it can and NAMES the gap
 beats one that refuses to start over the most ordinary misconfiguration there is.
+
+**A vendor account is not always one string, so `credentials` is a LIST.** HTTP Basic over a
+key/secret pair is the shape that breaks a single field, and it is common enough (Scenario,
+Twilio, Mailgun and a long tail of REST APIs) to be a shape rather than one vendor's eccentricity.
+The workaround under one field was colon-joining the halves into a single variable, which rotates
+them together, offers the operator one checklist row where their vendor console shows two values,
+and turns a mis-joined value into a 401 indistinguishable from a wrong key. Every other layer this
+travels through was already plural (the resolver port takes `keys`, a tool server declares
+`credentials`, the checklist keys rows by `(subject, id, key)`, the job body carries pairs), so
+the single field was the one singular link in the chain.
+
+Two rules come with it. INJECTION NAMES must be distinct within a definition, refused at
+registration: the job body is keyed by the variable each value arrives as, so a collision does not
+conflict loudly, one value silently wins and the integration authenticates with half a pair. And
+the brief NAMES a multi-credential set before its parts, because two credential paragraphs read as
+two independent keys and an agent has no reason not to try the first alone.
+
+Distinctness is judged CASE-FOLDED, the same fold the reserved-key floor applies, because
+`ACME_KEY` and `acme_key` are two declarations and one variable wherever the environment ignores
+case. Comparing them exactly would call the pair distinct and let one value overwrite the other on
+the one platform where nothing reports it. What is injected is still the spelling the deployment
+wrote, which is also what the brief names, so the fold decides collisions and never what the agent
+reads.
+
+**The same name ACROSS definitions is refused only when the key behind it differs.** One vendor
+behind an image endpoint and a music endpoint is one account, and sharing a variable is the point
+there: both look the value up under the same key, so whichever resolves first sets it to exactly
+what the other wanted. Different keys behind one name is the opposite and has no right answer.
+Serving the first claimant sets the variable the SECOND integration's brief tells the agent to
+read, so it authenticates one vendor with the other's key, and a pair loses a half the same way
+while the brief still says the two names belong together. So boot refuses it
+(`binary_generator_injection_name_collision`), and dispatch, which a mothership node reaches with
+definitions it never boot-validated, withholds the value from every claimant rather than picking
+one. Unset is the only state the brief already describes truthfully.
+
+**The multi-credential set line states its joint rule over the REQUIRED members alone.** "Never
+call the integration with a subset of them" is right for a Basic pair and contradicts an optional
+member's own line, which tells the agent to call anyway when that one is missing. Below two
+required members there is no subset to refuse, and the set line says so instead.
+
+There is no `authScheme` field and deliberately so: the agent writes the request, `usage` is
+already where each half says how it is presented, and a scheme enum would need a member for the
+first vendor with a signed request or a rotating timestamp. The platform names values; it does not
+assemble headers.
+
+**The mothership relay refuses a reply carrying no `credentials`**, where the sibling capability
+axis absorbs the same absence. The asymmetry is which state the fill would land on: an empty
+capability declaration is a documented reading ("only the coarse facts are known"), while an empty
+credential list reads as "this integration is unauthenticated" and the brief would tell the agent
+so about a deployment that configured a key. That is a 401 reported against an integration nobody
+gave credentials to, with the skew invisible. A node therefore needs a mothership new enough to
+serve the plural field, and fails loudly against one that is not.
 
 ### The brief leads with generation
 
@@ -815,6 +958,89 @@ opposite facts. A malformed `dimensions` drops the measurement and KEEPS the ent
 fields are what make a record findable, and losing a stored artifact over an optional observation
 would be the reporting loss this feature exists to prevent.
 
+### The value axis: a capability is a yes/no, and some endpoints answer "yes, at one of these"
+
+A capability partitions "can the request carry this at all", and for several real endpoints that
+is only half the truth. Grok Imagine and Nano Banana take an aspect ratio from a closed picklist;
+Flux and Retro Diffusion honour any ratio because they take a width and a height. All four declare
+`aspect-ratio`, so a step asking for `7:3` is admitted against every one of them and served by
+two. Nothing reports the crop: the modality is covered, the format is covered, the upload
+succeeded. That is the silent wrong artifact the capability axis exists to prevent, arriving
+through the capability axis, and no wording of a yes/no repairs it.
+
+So a definition may also declare `accepts` (`binary-capabilities.ts`): the closed SETS of values
+it takes, per option, for the three options with an enumerable domain (`aspectRatios`,
+`outputSizes`, `upscaleFactors`). `binaryValueCoverage` judges the step's requested value against
+them, admission refuses `option_value_unaccepted`, and the picker and the brief state the rest.
+
+**Why this is not the per-integration table the design record refuses.** It clears the same bar
+`mediaTypes` cleared: a set of accepted values partitions exactly, so `covered` / `uncovered` is
+computable and a refusal is a fact rather than a taste. It also unlocks nothing new to ASK for,
+which is the property that separates it from `style` / `resolutionRange`: it makes an existing ask
+checkable. And staleness cuts the safe way, which is the objection worth answering directly. A
+vendor that ADDS a value leaves the declaration too narrow, and a step asking for the new one is
+refused by name: visible, and one word to fix. A vendor that REMOVES one leaves it too wide, which
+is exactly today's behaviour and no worse. The status quo, by contrast, fails silently and
+delivers the wrong asset.
+
+Five rulings bound it:
+
+- **FIVE outcomes, and the extra silent one is what let this ship.** Judged per option and PER
+  DECLARER over the integrations that DECLARE the gating capability (counting the others would
+  report one fault twice under two headings): nobody stated a set is SILENT, every stated set
+  containing the value is covered, some stated set containing it beside one that EXCLUDES it is
+  PARTIAL (advisory, naming who excludes it), no stated set containing it with some declarer
+  silent is UNVERIFIABLE (advisory), and every declarer having enumerated it away is UNACCEPTED
+  (refusal). The silent case is the one that matters most: it is the state every registration is
+  in until an endpoint is audited, and an advisory that fired there would ride nearly every step
+  carrying an aspect ratio, which is how a line stops being read.
+- **The disposition is a function of the WHOLE declarer set, never of the first agreeable member.**
+  Shipped as a `some(accepts)` short-circuit, the rule went silent on its own motivating example
+  the moment BOTH endpoints enumerated: one takes `7:3`, the other crops to its nearest listed
+  shape, no refusal and no advisory, with `binaryCapabilityProviders` naming both as honouring the
+  option one paragraph earlier in the same brief. It also inverted the reporting, which is the
+  sharper tell: the LESS informed selection (a declarer that stated nothing) raised an advisory, so
+  auditing that endpoint and writing down an accurate set BOUGHT SILENCE. Partial is advisory
+  rather than a refusal for the reason one declarer covers a capability: which integration renders
+  which artifact is the agent's call. What is not optional is NAMING the ones that refuse, since
+  routing around them is the entire remedy.
+- **A stated `accepts` set whose gating capability is undeclared fails BOOT**
+  (`binary_generator_accepts_without_capability`), the same class as the media-type/modality
+  contradiction beside it. Left to run, the two halves are believed by different readers: the brief
+  renders the set as fact, the value rule judges only over the capability's declarers and never
+  sees it, and admission refuses every step asking for the option as `capability_unsupported`. The
+  accurate half is unreachable and the step is refused for lacking a capability the same
+  registration was documenting.
+- **An endpoint that takes NO parameter declares nothing, and a set cannot rescue it.** Recraft's
+  `crispUpscale` enlarges at a ratio it fixes itself, so declaring `upscale` for it would admit a
+  step asking for 4x and hand back an unknown multiple. `upscale: [2]` would not be a narrower
+  statement of that truth, it would be a fabricated one. The line is whether the REQUEST can carry
+  the value, and an endpoint on the wrong side of it says what it does in `guidance` and is
+  refused the option: a visible false refusal beats a silent wrong artifact, and the honest
+  reading is usually that the option was the wrong way to state the requirement.
+- **A set, or nothing. No ranges, and no negotiation.** `min`/`max`/`step`/`multiple-of` is a
+  constraint language, and the first thing it would have to express is Flux's "any pair up to 4 MP
+  in multiples of 32", which is the `resolutionRange` discriminator wearing a new name. An
+  endpoint with a genuine range declares the capability, states no set, and puts its limits in
+  `guidance`. A "closest supported value" rule is refused for the opposite reason: it turns the
+  refusal back into the silent substitution this whole axis is about. An empty list is refused at
+  registration too, so absent stays the one spelling of "not stated".
+- **`exact-size` moved, and the move is the structural half of this change.** It used to mean
+  ARBITRARY dimensions, which forced an endpoint whose `size` parameter offers a closed list of
+  `WxH` values to declare `aspect-ratio` instead: a size-taking API classified as shape-taking,
+  with a step needing 96x96 admitted against one whose nearest listed value is 1024x1024. Now the
+  capability answers what the REQUEST CARRIES (a shape goes on `aspect-ratio`, dimensions on
+  `exact-size`, both when both) and `accepts.outputSizes` answers which ones. Capabilities are
+  declared in deployment code and never persisted, so nothing had to migrate; a definition that
+  declared `aspect-ratio` for its size list keeps working and gains a better option.
+
+The sibling this deliberately does NOT add is a MAXIMUM: Flux takes eight reference images and
+Grok Imagine takes three, both declare `multi-reference`, and a step handing over five is admitted
+and quietly served with three. It is the same family of fault and it needs a different predicate
+(a bound, not a membership) and a different refusal payload, and the option it constrains is a
+list the step authors rather than a value it picks. Recorded in the remaining work below rather
+than folded in here, so it is not rediscovered from scratch.
+
 ## Side-by-side candidates: the choice the platform CAN make visible
 
 The section above states the overlap and ranks nothing, on the ground that the platform has no
@@ -869,13 +1095,28 @@ controller both facades mount.
 
 ## Remaining work
 
-- [ ] **A worked example generator** in `backend/internal/example-custom-agent`, once a real
-      image-generation harness path exists to demonstrate against.
+- [ ] **A worked example generator** in `backend/internal/example-custom-agent`. The harness path it
+      was waiting on now exists (`transport: 'harness'`), so this is unblocked: the example should
+      register a codex-served image generator and a step selecting it.
+- [ ] **A conformance assertion for the harness pin**, driving a run whose model resolves to the
+      wrong CLI and asserting the `generator_harness_unavailable` refusal on both facades. The rule
+      is pure and unit-tested, but nothing yet pins that BOTH facades reach it through admission.
+- [ ] **An `unavailable` disposition for a codex session that was never offered the tool.** Today an
+      unprovisioned `image_gen` (openai/codex#28102, #37496, #19133, all open) reaches the agent as
+      a tool that simply is not there, and the brief tells it to say so — which relies on the model
+      reporting honestly. A platform-side signal would need the CLI to expose its resolved tool
+      list, which it does not; worth revisiting when it does.
 - [ ] **A conformance assertion for the capability projection** on the snapshot's
       `binaryGenerators`, alongside the existing `binaryOutput` trait one. It needs a
       `binaryGeneratorRegistry` option on the conformance harness, which no suite has needed yet;
       the projection itself is built in the shared controller both facades mount, so the gap it
       would close is a regression guard rather than a live parity risk.
+- [ ] **A maximum for the reference-image count**, the sibling the value axis above names and
+      holds. Flux takes eight and Grok Imagine three, both declare `multi-reference`, and a step
+      handing over five is admitted and served with three. It is one field on `accepts` and one
+      branch in `binaryValueCoverage`, but it is a BOUND rather than a set, so it needs its own
+      predicate and its own refusal payload; worth landing beside the first deployment that
+      actually holds two reference-capable integrations with different ceilings.
 - [ ] **A `publicDecision` kind for the candidate park.** Every other dedicated park is projected
       onto `/api/v1` as its own decision kind, so a headless caller currently sees a `blocked` run
       with no decision to answer. It is deliberately NOT added here, because `publicDecisionKindSchema`'s

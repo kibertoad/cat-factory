@@ -281,11 +281,12 @@ table, link plumbing, controller, and renderer are all reused.
 
 ## Renders
 
-The text half describes a screen; the render is the screen. An import now DOWNLOADS the pixels and
+The text half describes a screen; the render is the screen. An import DOWNLOADS the pixels and
 retains them, through the kernel `DocumentSourceProvider.fetchRenders` port, so the design's frames
 land on the same shelf the visual-confirmation gate already reads from (`kind: 'reference'` binary
-artifacts). Nothing consumes them yet: pairing them into the gate and handing them to image-capable
-models are the later slices of the same track.
+artifacts). They are then read by three consumers: the gate pairs them against captured screenshots,
+a capturing dispatch writes them into `.cat-context/reference-screenshots/`, and a BUILDING dispatch
+is shown them (see below).
 
 - **Separate from `fetchDocument`, on purpose.** The two are wanted at different moments and cost
   different things. A design file's version moves on ANY edit anywhere in it, so the dispatch-time
@@ -319,11 +320,30 @@ models are the later slices of the same track.
   render failure never fails an import. Where no image storage is configured the download is not even
   attempted, and the row says `storage_unavailable`.
 
+### Handing the pixels to an agent
+
+A dispatch of a kind carrying the `design-images` trait (the implementer, architect and fixer, plus
+any deployment kind that declares it) is handed the retained frames as PICTURES, capped at 6 against
+the capture path's 24: an attached image is re-read on every turn of the run, where a capture
+reference costs one transfer. Delivery joins two DECLARED facts and refuses with the reason when
+either is missing (kernel's `resolveDesignImageDelivery`):
+
+- **The harness** (`HARNESS_IMAGE_INPUT`): whether the CLI can get bytes into a turn. `claude-code`
+  reads an image file with its own tool, which is why the container channel is files in
+  `.cat-context/design-renders/` rather than anything this backend composes. Codex and Pi are
+  `false` today, each with its reason stated at the table.
+- **The model** (`ModelRef.acceptsImages`, per FLAVOUR): whether it takes one. ABSENT is a third
+  answer and gets its own refusal reason, so an undeclared multimodal flavour reads as the platform's
+  silence rather than as a text-only model.
+
+An inline dispatch has no CLI and no disk, so it attaches image parts to the model request instead;
+the prompt names the channel it actually used, because pointing a container agent at a message or an
+inline model at a directory is worse than naming neither. A dispatch that cannot show the pictures
+NAMES them anyway, with the cause, so the textual description above never reads as everything the
+platform had.
+
 ## Out of scope (deliberately)
 
-- **Handing the pixels to an agent.** The renders are RETAINED, not yet delivered: context files are
-  `utf8` strings by type and no harness can take an image content part today. That is the last slice
-  of the pixel track, and it is an image-bumping change.
 - **Code → canvas (the reverse flow).** Turning generated code _into_ editable design layers is
   design-authoring driven from an interactive client, the opposite direction from
   design→agent-context, and not something a headless backend consumes.

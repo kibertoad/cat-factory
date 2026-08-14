@@ -28,6 +28,7 @@ const keys = useApiKeysStore()
 const models = useModelsStore()
 const auth = useAuthStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirmAction, toastDone } = useConfirmAction()
 
 /** Account-wide mode (single account scope) vs the default workspace/user toggle. */
@@ -108,6 +109,13 @@ const DIRECT_PROVIDERS = computed<ProviderMeta[]>(() => [
       t('providers.apiKeys.providers.moonshot.step1'),
       t('providers.apiKeys.providers.moonshot.step2'),
     ],
+  },
+  {
+    value: 'xai',
+    label: t('providers.apiKeys.providers.xai.label'),
+    url: 'https://console.x.ai/',
+    steps: [t('providers.apiKeys.providers.xai.step1'), t('providers.apiKeys.providers.xai.step2')],
+    caches: true,
   },
 ])
 
@@ -202,11 +210,7 @@ async function add() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('providers.apiKeys.toast.connectFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'providers.apiKeys.toast.connectFailed')
   } finally {
     busy.value = false
   }
@@ -221,11 +225,7 @@ async function updateKey(k: ApiKey, patch: { enabled?: boolean; isDefault?: bool
     // Enabling/disabling changes provider selectability in the picker — refresh it.
     if (workspace.workspaceId) await models.refresh(workspace.workspaceId)
   } catch (e) {
-    toast.add({
-      title: t('providers.apiKeys.toast.updateFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'providers.apiKeys.toast.updateFailed')
   }
 }
 
@@ -239,11 +239,7 @@ async function remove(k: ApiKey) {
     if (workspace.workspaceId) await models.refresh(workspace.workspaceId)
     toastDone('remove', noun)
   } catch (e) {
-    toast.add({
-      title: t('providers.apiKeys.toast.removeFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'providers.apiKeys.toast.removeFailed')
   }
 }
 </script>

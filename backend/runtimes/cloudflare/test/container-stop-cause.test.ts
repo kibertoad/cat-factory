@@ -72,10 +72,16 @@ describe('stop-cause bookkeeping', () => {
   it('forgets a reclaim the poll found too late to explain', async () => {
     // The container recovered and ran on, so whatever killed it later is its own death, not
     // this one's. Without the window a single reclaim would excuse every eviction after it.
+    //
+    // "Forgets" is about the BUDGET: the cause is gone, so the eviction is the crash an
+    // unattributed one is. The record still says it once named a cause, which grants nothing and
+    // only stops a clean exit code beside it being read as a shutdown.
     const storage = fakeStorage()
     await recordStopCause(storage, { cause: 'idle' }, NOW)
 
-    expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.idle + 1, JOB)).toEqual({})
+    expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.idle + 1, JOB)).toEqual({
+      expiredCause: 'idle',
+    })
   })
 
   it('gives an idle reclaim a wider window than a rollout, because it is found later', async () => {
@@ -87,7 +93,9 @@ describe('stop-cause bookkeeping', () => {
 
     const storage = fakeStorage()
     await recordStopCause(storage, { cause: 'rollout' }, NOW)
-    expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.idle, JOB)).toEqual({})
+    expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.idle, JOB)).toEqual({
+      expiredCause: 'rollout',
+    })
   })
 
   it('spends a record on one job, so one reclaim explains exactly one eviction', async () => {
@@ -199,7 +207,23 @@ describe('stop-cause bookkeeping', () => {
     )
 
     expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.rollout + 1, JOB)).toEqual({
+      expiredCause: 'rollout',
       exit: { code: 143, reason: 'runtime_signal' },
+    })
+  })
+
+  it('still reports a cause that has aged out, so its exit code explains nothing', async () => {
+    // The two halves age on windows nearly fifteen times apart, so an EXPLAINED stop routinely
+    // reaches the reader with only its exit state left. That is not the same fact as a stop
+    // nothing explained, and the difference decides whether a clean exit reads as somebody
+    // shutting the harness down: a drain the harness answered by exiting 0, found by a re-driven
+    // poll minutes later, would otherwise fail a healthy run outright.
+    const storage = fakeStorage()
+    await recordStopCause(storage, { cause: 'rollout', exit: { code: 0, reason: 'exit' } }, NOW)
+
+    expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.rollout + 1, JOB)).toEqual({
+      expiredCause: 'rollout',
+      exit: { code: 0, reason: 'exit' },
     })
   })
 
@@ -257,6 +281,45 @@ describe('CloudflareContainerTransport 404 classification', () => {
 
     expect(view.evicted).toBe('crash')
     expect(view.error).toBe('Job not found (container evicted or crashed)')
+  })
+
+  it('reports a workload that exited 0 as a shutdown rather than a crash', async () => {
+    // A container whose only workload is the harness cannot exit 0 while a job is in flight
+    // unless something stopped it, and a fresh container meets that same something. Only read
+    // where NOTHING else explains the stop: a reclaim we asked for records no observation at all,
+    // and a named cause is churn, which recovers on the transient budget.
+    const view = await new CloudflareContainerTransport(
+      namespace404({ exit: { code: 0, reason: 'exit' } }),
+    ).poll(ref)
+
+    expect(view.harnessShutdown).toBe(true)
+    expect(view.evicted).toBeUndefined()
+    expect(view.error).not.toMatch(/evicted or crashed/)
+  })
+
+  it('keeps a rollout drain a transient eviction even when it exited 0', async () => {
+    // The precedence that makes the rule above safe: infrastructure churn is named, recovers on
+    // the larger budget, and must not be re-read as somebody shutting the harness down.
+    const view = await new CloudflareContainerTransport(
+      namespace404({ cause: 'rollout', exit: { code: 0, reason: 'exit' } }),
+    ).poll(ref)
+
+    expect(view.evicted).toBe('transient')
+    expect(view.harnessShutdown).toBeUndefined()
+  })
+
+  it('keeps an AGED-OUT drain an eviction, rather than promoting it to a shutdown', async () => {
+    // The other half of that precedence, and the one an expiry can silently undo. Once the
+    // rollout window passes the cause is no longer worth the transient budget, but it is still
+    // the account of the stop — so the exit 0 beside it is that drain's mechanics, not evidence
+    // the harness was killed. Read as a shutdown it would fail the run with no retry at all,
+    // which is strictly worse than the crash budget expiry is supposed to fall back to.
+    const view = await new CloudflareContainerTransport(
+      namespace404({ expiredCause: 'rollout', exit: { code: 0, reason: 'exit' } }),
+    ).poll(ref)
+
+    expect(view.harnessShutdown).toBeUndefined()
+    expect(view.evicted).toBe('crash')
   })
 
   it('attaches the container exit state to an otherwise unexplained crash', async () => {

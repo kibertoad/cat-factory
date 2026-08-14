@@ -19,19 +19,11 @@ const accounts = useAccountsStore()
 const workspace = useWorkspaceStore()
 const ui = useUiStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const access = useWorkspaceAccess()
 const { confirm } = useConfirm()
 
 const busy = ref(false)
-
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
 
 // The cloud provider new services in the active account default to (a service may
 // override it per-frame). `docker` is the local Docker/Podman backend. The brand
@@ -52,7 +44,7 @@ async function setDefaultProvider(provider: CloudProvider) {
   try {
     await accounts.setDefaultCloudProvider(id, provider)
   } catch (e) {
-    notifyError(t('layout.boardSwitcher.toast.updateProviderFailed'), e)
+    present(e, 'layout.boardSwitcher.toast.updateProviderFailed')
   }
 }
 
@@ -146,7 +138,7 @@ async function selectAccount(id: string) {
   try {
     await workspace.selectAccount(id)
   } catch (e) {
-    notifyError(t('layout.boardSwitcher.toast.switchAccountFailed'), e)
+    present(e, 'layout.boardSwitcher.toast.switchAccountFailed')
   } finally {
     busy.value = false
   }
@@ -157,7 +149,7 @@ async function switchBoard(id: string) {
   try {
     await workspace.switchTo(id)
   } catch (e) {
-    notifyError(t('layout.boardSwitcher.toast.openBoardFailed'), e)
+    present(e, 'layout.boardSwitcher.toast.openBoardFailed')
   } finally {
     busy.value = false
   }
@@ -181,7 +173,7 @@ async function removeBoard() {
     await workspace.remove(id)
     toast.add({ title: t('layout.boardSwitcher.toast.boardDeleted'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError(t('layout.boardSwitcher.toast.deleteBoardFailed'), e)
+    present(e, 'layout.boardSwitcher.toast.deleteBoardFailed')
   } finally {
     busy.value = false
   }
@@ -248,7 +240,7 @@ async function submitPrompt() {
     }
     prompt.value = null
   } catch (e) {
-    notifyError(t('common.actionFailed'), e)
+    present(e, 'common.actionFailed')
   } finally {
     busy.value = false
   }

@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { LocalSettings } from '@cat-factory/contracts'
 import {
+  getErrorMessage,
   PREVIEW_HARNESS_JOB_ID,
   type PreviewRef,
   type PreviewTransport,
@@ -77,7 +78,7 @@ function previewRunId(frameId: string): string {
  * few ways). Used to translate a pinned-preview `-p` failure into an actionable message.
  */
 function isHostPortInUseError(err: unknown): boolean {
-  const message = (err instanceof Error ? err.message : String(err)).toLowerCase()
+  const message = getErrorMessage(err).toLowerCase()
   return (
     message.includes('port is already allocated') ||
     message.includes('address already in use') ||

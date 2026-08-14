@@ -4,6 +4,7 @@ import type {
   BlockType,
   CloudProvider,
   ConsensusStepConfig,
+  DesignImageSet,
   DocumentOrigin,
   EnvironmentAccessHandle,
   EnvironmentStatus,
@@ -15,6 +16,7 @@ import type {
   PeerPullRequest,
   ReferenceRepo,
   ReferenceScreenshotSet,
+  ReviewCommentSeverity,
   AprioriBranch,
   ServiceProvisioning,
   StepSubtasks,
@@ -24,12 +26,14 @@ import type {
   TaskTypeFields,
   WebSearchAvailability,
 } from '../domain/types.js'
+import type { LocalModelDeclarations } from '../domain/local-model-declarations.js'
 import type {
   ResolvedSkill,
   ResolvedToolServer,
   UnavailableToolServer,
 } from '../domain/agent-capabilities.js'
 import type { ResolvedBinaryGenerator } from '../domain/binary-generators.js'
+import type { DesignImageDelivery } from '../domain/design-image-delivery.js'
 import type { DocumentFreshness } from '../domain/document-freshness.js'
 import type { OwnServiceContext } from '../domain/block-tree.js'
 import type { CustomTaskTypeContext } from '../domain/task-type-context.js'
@@ -49,6 +53,32 @@ import type {
 //   - a test fake             — deterministic, used by the integration tests
 // Modelling the work as a port keeps the engine free of LLM/infra concerns and
 // lets the integration tests drive it with a deterministic fake.
+
+/**
+ * One point a review left on a specific part of an agent's work, as a PROMPT needs it: what it
+ * targets, how urgently, and the note itself.
+ *
+ * The prompt-facing projection of the persisted `StepReviewComment`, carrying the two ways a point
+ * anchors and neither of the persisted re-anchoring internals (`srcStart` / `srcEnd`, which locate a
+ * block in a rendering no agent sees). BOTH anchors travel, because the two reviewers anchor
+ * differently and a producer told to fix a specific point must be able to find it: a human review
+ * quotes the verbatim `quotedSource` it targets, while a companion grading structured items names
+ * the item's `anchorId` and quotes nothing. Dropping the second one left every companion finding
+ * rendered against an empty target.
+ *
+ * Named rather than inlined at each site because three of them state the same shape and one of them
+ * silently stated a narrower one.
+ */
+export interface ReviewedPoint {
+  /** Verbatim source of the prose block the point targets, when the reviewed output was prose. */
+  quotedSource?: string
+  /** Id of the structured item it targets (a spec requirement, an acceptance criterion). */
+  anchorId?: string
+  /** The urgency it was graded at; absent on a person's comment, which carries no grading. */
+  severity?: ReviewCommentSeverity
+  /** The note itself. */
+  body: string
+}
 
 export interface AgentRunContext {
   agentKind: AgentKind
@@ -73,16 +103,16 @@ export interface AgentRunContext {
   /** Index of this step within the pipeline. */
   stepIndex: number
   /**
-   * Monotonic per-step dispatch counter, folded into the harness job id so a step that is
-   * RE-dispatched within one run (the Tester→Fixer loop's re-test, a fixer round, a polling
-   * gate's helper attempt) never collides with — and so never RE-ATTACHES to — a prior
-   * round's completed harness job. The harness keys its `JobRegistry` by the backend-supplied
-   * job id and re-attaches to an existing entry rather than re-running (replay idempotency),
-   * and a container-reusing transport (a warm local pool / a self-hosted runner pool) keeps
-   * that registry alive across rounds because reclaiming a pooled member does NOT destroy it.
-   * Without a per-round epoch the re-test would replay the first round's stale report. Derived
-   * from the step's own round counter; absent/0 for a step dispatched once (the id is then
-   * unsuffixed, so single-dispatch steps are unaffected).
+   * How many jobs of THIS agent kind the run has already dispatched, folded into the harness job
+   * id so no dispatch can collide with — and so never RE-ATTACHES to — an earlier one's completed
+   * job. The harness keys its `JobRegistry` by the backend-supplied job id and re-attaches to an
+   * existing entry rather than re-running (replay idempotency), and a container-reusing transport
+   * (a warm local pool / a self-hosted runner pool) keeps that registry alive across rounds
+   * because reclaiming a pooled member does NOT destroy it. So a reused id replays a finished job:
+   * the Tester re-test that returned the first round's stale report, a companion rework round
+   * re-grading a byte-identical artifact. Monotonic by construction (the engine reads the run's own
+   * per-kind dispatch record) and absent/0 for the run's FIRST job of a kind, whose id is then
+   * unsuffixed.
    */
   dispatchEpoch?: number
   /** Whether this is the pipeline's last step (drives task finalisation). */
@@ -141,6 +171,18 @@ export interface AgentRunContext {
    * preset omitted still resolves — see kernel's `orderedProviderPreference`.
    */
   providerPreference?: readonly ModelFlavor[]
+  /**
+   * What the RUN INITIATOR declared about the locally-run models they enabled (Ollama / LM Studio
+   * / …), folded onto the resolved ref by `resolveStepModelRef`.
+   *
+   * Resolved ONCE per dispatch by the engine (`AgentContextBuilder`), for the same reason as
+   * {@link providerPreference}, but for a second reason too, and it is the load-bearing one: a
+   * local model has NO catalog entry, so the per-flavour facts every other model's ref carries have
+   * nowhere else to come from, and the boot-time `resolveBlockModel` closure has no user in hand to
+   * read them for. Absent (a system run, a deployment with no local runners) ⇒ every local ref
+   * stays undeclared, which reads as `unknown_model_image_input` rather than as a text-only model.
+   */
+  localModelDeclarations?: readonly LocalModelDeclarations[]
   /**
    * Consensus configuration for this step, when it is consensus-enabled in the
    * pipeline (copied from the pipeline's `consensus` array onto the run's step).
@@ -456,6 +498,32 @@ export interface AgentRunContext {
    */
   referenceScreenshots?: ReferenceScreenshotSet
   /**
+   * The pictures of this task's designs, for a kind that BUILDS or PLANS from one (the
+   * `design-images` trait). The frames the task's linked designs retained plus the images a person
+   * attached to it: the same reference set the capture path reads, put to the opposite use.
+   *
+   * Resolved by the ENGINE, which knows what the task holds. Whether they can actually reach the
+   * model is a DISPATCH fact (the harness and the resolved model), so it lands separately on
+   * {@link designImageDelivery} rather than gating this: the set has to survive an un-attachable
+   * dispatch, or the prompt has nothing to name when it states what was withheld.
+   *
+   * Absent when the kind carries no such trait, when the deployment stores no binaries, or when
+   * the task links no design.
+   */
+  designImages?: DesignImageSet
+  /**
+   * What THIS dispatch could do with {@link designImages}: attached, or refused with the cause.
+   *
+   * Set by the executor rather than the context builder, because both halves of the answer are
+   * resolved at dispatch (the harness the job runs on, the model the step resolved to) and neither
+   * is knowable while the context is being built. The same shape as `toolServers` /
+   * `unavailableToolServers`: the engine states the intent, the dispatch states what became of it.
+   *
+   * Never absent while `designImages` is present. A run holding pictures its agent was not shown
+   * must SAY so, or the agent reads the textual design description as everything the platform had.
+   */
+  designImageDelivery?: DesignImageDelivery
+  /**
    * A live ephemeral environment a deployer step provisioned earlier in this run
    * (resolved from the run's block). Present only when the environment
    * integration is wired and a deployer step has produced a ready environment —
@@ -595,33 +663,79 @@ export interface AgentRunContext {
    */
   aprioriBranches?: AprioriBranch[]
   /**
-   * For a `conflict-resolver` the conflicts gate dispatched on a PEER-repo conflict
-   * (a multi-repo, service-connections task), which of the block's repos the resolver
-   * must target — set by the engine from the gate's `step.gate.conflictTarget` when the
-   * conflict is on a connected involved service's repo (`frameId` present). The container
-   * executor resolves THAT frame's repo (not the task's own service) and clones its PR
-   * (work) branch. Absent ⇒ the own-service repo (the single-repo default). Only the
+   * For a `conflict-resolver` the conflicts gate dispatched on a multi-repo
+   * (service-connections) task, which of the block's repos conflicted, set by the engine from
+   * the gate's `step.gate.conflictTarget`. The container executor resolves THAT repo and clones
+   * its PR (work) branch when it is a peer, and leaves the resolver on the own service when it
+   * is the own repo. Absent ⇒ the own-service repo (the single-repo default). Only the
    * conflict-resolver reads it; every other kind ignores it.
+   *
+   * `repo` is what ADDRESSES the checkout and is always set. `frameId` rides along as
+   * attribution when the conflicted pull request recorded one, and seeds the repo resolution;
+   * nothing decides own-versus-peer on its presence, since a peer pull request recorded without
+   * its frames would then read as an own-repo conflict.
    */
-  conflictTarget?: { repo: string; frameId: string }
+  conflictTarget?: { repo: string; frameId?: string }
   /**
    * If this step previously raised a decision that a human has now resolved,
    * the resolved decision — so the agent can finish instead of re-raising it.
    */
   resolvedDecision: { question: string; chosen: string } | null
   /**
-   * When a human reviewed this step's gated proposal and requested changes, the
-   * previous proposal plus their feedback. Present only on a re-run triggered by
-   * "Request changes"; the agent should revise its previous proposal to address
-   * the feedback rather than start from scratch. `comments` are GitHub-review-style
-   * notes on specific blocks of the proposal (a human review carries the verbatim
-   * `quotedSource` it targets; a companion's anchor-based comment omits it), folded
-   * into the prompt alongside the freeform `feedback`.
+   * When this step's previous proposal was reviewed and changes were requested, that proposal
+   * plus the feedback. Present only on the re-run it drove; the agent should revise its previous
+   * proposal to address the feedback rather than start from scratch. `comments` are
+   * GitHub-review-style notes on specific blocks of the proposal (a human review carries the
+   * verbatim `quotedSource` it targets; a companion's anchor-based comment names an `anchorId`
+   * instead), folded into the prompt alongside the freeform `feedback`. A reviewer's comment
+   * carries the `severity` it graded the point at, so a producer working through a long list knows
+   * which ones are holding the run rather than guessing from the prose; a person's carries none.
+   * See {@link ReviewedPoint}.
+   *
+   * `requestedBy` says which of the two loops this is — a person's "request changes" or an
+   * automatic reviewer's round — because the prompt has to say so and cannot infer it: BOTH arrive
+   * here, and a companion rework round framed as "a human reviewed your proposal" tells the agent
+   * somebody is waiting on work no person has read.
    */
   revision?: {
     previousProposal: string
     feedback: string
-    comments?: { quotedSource?: string; body: string }[]
+    comments?: ReviewedPoint[]
+    requestedBy: 'human' | 'reviewer'
+  }
+  /**
+   * The rounds this step's companion loop has ALREADY been through, oldest first — the memory
+   * that turns a repeated grading into a ratchet instead of independent draws.
+   *
+   * Both sides of the loop receive it, framed by `role`:
+   *  - `grader` (the companion itself): every verdict it has given so far. Without this it
+   *    re-grades a revised document with no idea what it asked for last time, so it cannot tell
+   *    "they fixed it" from "they never touched it", spends each round's attention on a fresh
+   *    subset, and returns a score drawn from the same distribution however much improved. That
+   *    is what makes a rework budget buy nothing, and it is the question the budget is spent to
+   *    answer. The JUDGE bucket has had this from the start (`JudgeSubject.previousFindings`);
+   *    this is the companion bucket catching up.
+   *  - `producer` (the step being reworked): the EARLIER rounds only, because the current one is
+   *    already in {@link revision} in the "here is what to fix" framing. It stops a producer from
+   *    regressing on a point raised two rounds ago, which nothing else tells it about.
+   *
+   * Absent on the first grading of a step, on every non-companion step, and on the human
+   * "request changes" path (one person's review is not a loop with a history).
+   */
+  priorReview?: {
+    role: 'grader' | 'producer'
+    /** The bar every round was judged against, so a score in the list is readable. */
+    threshold: number
+    /** How many automatic rework rounds this loop may still spend; 0 ⇒ this is the last. */
+    roundsRemaining: number
+    rounds: {
+      /** 1-based, in the order they happened. */
+      round: number
+      rating: number
+      passed: boolean
+      summary: string
+      comments?: ReviewedPoint[]
+    }[]
   }
   /**
    * The initiative context a run carries, resolved by the engine from the block's `initiatives`
@@ -855,6 +969,30 @@ export interface AgentRunResult {
 export interface AgentExecutor {
   run(context: AgentRunContext): Promise<AgentRunResult>
   /**
+   * What an INLINE dispatch will do with the tool servers (MCP) the running agent kind declared,
+   * answered BEFORE the work, the counterpart of {@link AgentJobHandle.toolServers} on the path
+   * that returns a result instead of a handle.
+   *
+   * Its one producer today is the consensus executor: a diverted step runs as inline model calls
+   * with no agent CLI to wire a server into, so every declared server is WITHHELD, and the record
+   * is what stops that reading as a step whose kind declared none. An inline executor with nothing
+   * to withhold returns undefined rather than two empty lists: an inline surface never wires
+   * anything, so an all-empty resolution from one would state that a resolution happened where no
+   * wiring was ever possible.
+   *
+   * A PREVIEW rather than a field on {@link AgentRunResult}, for the same reason
+   * {@link AgentExecutor.resolveModel} is one: the container path records its resolution off the
+   * job handle at dispatch, so the record outlives a job that later fails, and a result-carried
+   * field is by construction absent on exactly the runs where a reader most needs to know what the
+   * agent could reach. Must be cheap and side-effect-free: the answer comes from the kind's
+   * DECLARATIONS, never from resolving credentials for a dispatch that has nowhere to send them.
+   *
+   * Carries no agent kind for the same reason the handle's does not: the engine stamps the
+   * DISPATCHED kind as it folds, so an executor cannot label a resolution with a kind other than
+   * the one that ran.
+   */
+  previewToolServers?(context: AgentRunContext): Promise<DispatchToolServers | undefined>
+  /**
    * Resolve the concrete model this step will run (`provider:model`) WITHOUT doing
    * the work — no LLM call, no container dispatch. The engine calls it up front so a
    * step's model can be surfaced to the board the moment the step starts (during the
@@ -1056,6 +1194,12 @@ export type AgentJobUpdate =
       detail?: string
       backend?: string
       evicted?: ContainerEvictionKind
+      /**
+       * The transport watched the harness EXIT CLEANLY with this job still in flight (forwarded
+       * from {@link RunnerJobView.harnessShutdown}): it was shut down, not lost. Mutually
+       * exclusive with `evicted`, and the driver treats it as terminal rather than recovering it.
+       */
+      harnessShutdown?: true
       /**
        * The pre-PR validation report of a job that failed BECAUSE its checks stayed red until
        * the attempt budget was spent — the evidence behind the failure (each command's exit code
