@@ -66,6 +66,7 @@ import { ContainerAgentExecutor, type ResolveRunnerTransport } from './ai/Contai
 import type { AccountSettingsService } from '@cat-factory/integrations'
 import type { JobPackageRegistrySpec } from '@cat-factory/server'
 import { CloudflareContainerTransport } from './containers/CloudflareContainerTransport'
+import { agentContainerNamespace } from './containers/runContainerNamespace'
 import { ContainerInstanceRegistry } from './containers/ContainerInstanceRegistry'
 import { D1LiveContainerRepository } from './repositories/D1LiveContainerRepository'
 import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
@@ -280,11 +281,21 @@ export function buildResolveTransport(deps: {
   // each dispatched container in the live inventory and clears it on release, so the
   // cron reaper (index.ts) can kill anything that outlived its lifetime — covering
   // run/blueprint/bootstrap through this one transport with no per-flow wiring.
-  const cloudflare = env.EXEC_CONTAINER
+  // ONE resolver for both, so the transport starts a container and the reaper kills it through
+  // the same class. Two of them would drift the moment a variant is added on one side only,
+  // and the failure is silent: `idFromName` in the wrong namespace hands back a stub for a
+  // container that was never started, so the reap reports success over a still-running browser.
+  const containerNamespace = env.EXEC_CONTAINER
+    ? agentContainerNamespace({
+        exec: env.EXEC_CONTAINER,
+        ...(env.UI_CONTAINER ? { ui: env.UI_CONTAINER } : {}),
+      })
+    : null
+  const cloudflare = containerNamespace
     ? new CloudflareContainerTransport(
-        env.EXEC_CONTAINER,
+        containerNamespace,
         new ContainerInstanceRegistry(
-          env.EXEC_CONTAINER,
+          containerNamespace,
           new D1LiveContainerRepository({ db }),
           clock,
         ),

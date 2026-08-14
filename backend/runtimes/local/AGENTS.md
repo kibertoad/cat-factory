@@ -14,6 +14,9 @@ transport + the GitHub token/client seams differ.
 
 - `LocalContainerRunnerTransport.ts`: the per-run container transport (the local analogue of
   the CF Container transport + the runner-pool transport, over the same `RunnerTransport` port).
+  Per run AND per IMAGE: a step declaring `image: 'ui'` gets its own container keyed
+  `ui:<runId>` on `LOCAL_HARNESS_IMAGE_UI`, always per-run even with a warm pool on, since pool
+  members all run one image. An unconfigured variant is REFUSED at dispatch.
 - `LocalProcessRunnerTransport.ts`: the NATIVE backend (`LOCAL_NATIVE_AGENTS`), one long-lived
   host process serving every concurrent job. Its stderr is PIPED and kept as a bounded tail
   (nothing is forwarded to the developer's console), because that is where the harness routes its
@@ -127,7 +130,10 @@ transport + the GitHub token/client seams differ.
   what its own prune took (`telemetry_pruned_runs`) BEFORE deleting, since afterwards there is
   nothing left to tell; the retention sweep forgets a marker once its run has no local rows left.
 - `harnessImage.ts`: `RECOMMENDED_HARNESS_IMAGE`, the executor image tag local mode pulls at
-  boot (must stay a matched set with the backend; `CLAUDE.md` → "Releases & changesets").
+  boot (must stay a matched set with the backend; `CLAUDE.md` → "Releases & changesets"), plus
+  `RECOMMENDED_UI_HARNESS_IMAGE`, its browser-carrying sibling. The UI image is NOT pre-pulled at
+  boot: a stock start should not spend gigabytes on tooling most deployments never dispatch to,
+  so the runtime pulls it on the first `image: 'ui'` dispatch.
 - `harnessInline.ts`: serving an enabled subscription harness ref as an INLINE call: the
   developer's host `claude`/`codex` (ambient login, unmetered) when its binary is present, else a
   warm container on a leased credential. Also the host-CLI supervision budget

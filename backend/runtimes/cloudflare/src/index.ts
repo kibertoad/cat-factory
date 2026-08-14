@@ -18,6 +18,7 @@ import { D1CommitProjectionRepository } from './infrastructure/repositories/D1Co
 import { D1LiveContainerRepository } from './infrastructure/repositories/D1LiveContainerRepository'
 import { D1SubscriptionActivationRepository } from './infrastructure/repositories/D1PersonalSubscriptionRepository'
 import { ContainerInstanceRegistry } from './infrastructure/containers/ContainerInstanceRegistry'
+import { agentContainerNamespace } from './infrastructure/containers/runContainerNamespace'
 import { D1RateLimitRepository } from './infrastructure/repositories/D1RateLimitRepository'
 import { D1TokenUsageRepository } from './infrastructure/repositories/D1TokenUsageRepository'
 import { D1LlmCallMetricRepository } from './infrastructure/repositories/D1LlmCallMetricRepository'
@@ -125,6 +126,9 @@ export { ExecutionContainer } from './infrastructure/containers/ExecutionContain
 // Container-enabled Durable Object backing per-run DEPLOY containers (the deploy-harness
 // image: real kubectl/kustomize/helm — the `image: 'deploy'` dispatch variant).
 export { DeployContainer } from './infrastructure/containers/DeployContainer'
+// Container-enabled Durable Object backing per-run UI-TESTER containers (the browser image:
+// Playwright + Chromium + WireMock, the `image: 'ui'` dispatch variant).
+export { UiTesterContainer } from './infrastructure/containers/UiTesterContainer'
 // Per-workspace WebSocket fan-out hub (real-time execution/board events).
 export { WorkspaceEventsHub } from './infrastructure/durable-objects/WorkspaceEventsHub'
 // Cross-isolate cache-coherency directory (per-group generation counters; see appCachesHost.ts).
@@ -856,7 +860,12 @@ function reclaimExpiredActivations(env: Env, tick: SweepTick, clock: SystemClock
 function reapStaleContainers(env: Env, tick: SweepTick, clock: SystemClock): void {
   if (env.EXEC_CONTAINER) {
     const reaper = new ContainerInstanceRegistry(
-      env.EXEC_CONTAINER,
+      // The same resolver the dispatch path builds, so the cron kills a leaked UI-tester
+      // container through the class it was actually started in.
+      agentContainerNamespace({
+        exec: env.EXEC_CONTAINER,
+        ...(env.UI_CONTAINER ? { ui: env.UI_CONTAINER } : {}),
+      }),
       new D1LiveContainerRepository({ db: env.DB }),
       clock,
     )

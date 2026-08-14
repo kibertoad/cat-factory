@@ -6,9 +6,10 @@ screenshots** they supply, can dispatch a **Fixer** to make changes, and is fed 
 browser-driven **UI tester**, all on top of a new runtime-neutral **binary-artifact storage**
 abstraction.
 
-It landed in three coherent, independently-verified slices plus the image definition. One
-piece (routing a job into the dedicated UI-tester image) is intentionally left as a
-deploy-time follow-up (see "What's left").
+It landed in three coherent, independently-verified slices plus the image definition. Routing a
+job into the dedicated UI-tester image was left as a deploy-time follow-up at the time and has
+since landed on every backend, together with publishing and booting that image in CI (see
+"What's left", item 1a, which now records how it works rather than what remains).
 
 ---
 
@@ -81,8 +82,8 @@ binary-artifact storage (the substrate both rely on)
   and upload each via the run's `ARTIFACT_UPLOAD_URL` / `ARTIFACT_UPLOAD_TOKEN`.
 - Renamed everywhere: seed pipelines, configs/traits, the SPA palette (API Tester + UI Tester),
   and all tests/snapshots.
-- `Dockerfile.ui` (Playwright + Chromium on the slim base image) added: see "What's left" for
-  routing.
+- `Dockerfile.ui` (Playwright + Chromium on the slim base image) added; the routing that reaches
+  it is item 1a below.
 - **Verified:** Node execution conformance (38 tests) passes with the renamed kind.
 
 ### Part C: Visual Confirmation gate + SPA ✅ backend verified, SPA typechecked
@@ -210,20 +211,46 @@ For `tester-ui` to auto-capture, three things have to be true. The backend seam 
 now DONE; the two deploy-coupled / harness pieces remain (they couldn't be built/verified in the
 dev container).
 
-**1a. Route a job INTO the UI-tester image (deploy-coupled).** The image is defined
-(`Dockerfile.ui`) and the dispatch seam (`RunnerDispatchOptions.image: 'ui'`, set for `tester-ui`
-in `ContainerAgentExecutor.dispatchOptions`) is in place, but nothing maps that flag to the image
-yet:
+**1a. Route a job INTO the UI-tester image: DONE.** The variant now travels on the job REF
+(`RunnerJobRef.image`), not only on the dispatch options, because that is what every later call
+has to address the container by. `containerKeyForRef` derives the container's identity from it
+(the run id, qualified by the variant), and the executor re-derives the variant from the step's
+AGENT KIND at dispatch, poll and release alike, so a poll from a fresh process after a durable
+replay lands on the same container with nothing remembered in between.
 
-- **Cloudflare** reuses **one container per run** (one Durable Object per run id), so a `tester-ui`
-  step needs its OWN container on the UI image. Add a second `[[containers]]` class (e.g.
-  `UiTesterContainer`) pinned to `cat-factory-executor-ui:<tag>`, an env binding, and route on
-  `options.image === 'ui'` in `CloudflareContainerTransport.dispatch` (currently ignores options).
-- **Local / self-hosted pool** likewise reuse a per-run container; thread the UI image tag for
-  `image: 'ui'` (a separate container for that step) in `LocalContainerRunnerTransport` /
-  `RunnerPoolTransport`.
-- Publish the UI image: `docker build -f Dockerfile.ui --build-arg BASE_TAG=<v> -t
-cat-factory-executor-ui:<v> .` and wire the tag into `deploy/backend` (package.json + wrangler).
+- **Cloudflare**: a `UiTesterContainer` class bound as `UI_CONTAINER`, pinned to
+  `cat-factory-executor-ui:<tag>`. The transport resolves the class per ref through
+  `agentContainerNamespace`, and the live-container inventory carries the variant
+  (migration 0094) so the cron reaper kills a leaked browser container through the class that
+  actually holds it. Reaping it through the executor class was the silent half: `idFromName`
+  returns a usable stub in any namespace, so the kill would report success over a container
+  still running.
+- **Local Docker**: `LOCAL_HARNESS_IMAGE_UI` (defaulting to the matched
+  `RECOMMENDED_UI_HARNESS_IMAGE`), a second per-run container keyed `ui:<runId>`, and a
+  `ui` job routed per-run even when a warm pool is on, since pool members all run one image.
+  It is NOT pre-pulled at boot: a stock local start should not spend gigabytes on a browser
+  most deployments never dispatch to.
+- **Self-hosted pools** already forwarded the variant; the Kubernetes backend's `imageUi` now
+  REFUSES an unconfigured `ui` dispatch instead of falling back to the executor image.
+- **Publishing**: `docker-publish.yml`'s `publish-ui` job builds it on the executor image at the
+  same version and pushes it multi-arch, after booting it (see below). The image-tag guard
+  covers it as the `executor-ui` descriptor, so its pin cannot drift from the harness version.
+
+**A refusal, not a fallback.** Every backend refuses a `ui` dispatch it has no image for, naming
+the binding or variable to set. Serving it the default image is what the seam existed to stop:
+the browser-driven tester runs happily until it needs a browser, which is after the checkout, the
+install and the model's first turns, and what comes back is an `abort` no reader can tell apart
+from an app that would not boot. A deployment that has not wired the image should lose the step,
+not the diagnosis; the gate itself still runs in manual mode.
+
+**The image is BOOTED in CI, not just built.** `.github/workflows/ui-image-smoketest.yml` (gated
+on the image's own sources) and the pre-push step in `publish-ui` both run
+`scripts/smoketest-ui-image.sh`: build, boot, wait for `/health`, then in-container checks as the
+`harness` user for the pinned pnpm/yarn, `serve` answering, a real Chromium rendering AND
+screenshotting the served page, WireMock standing up, and nothing under `/home/harness` owned by
+root. That last one is a permission trap the build cannot see; the browser checks are why a
+build-only gate was not enough, since the corepack line that staged the package managers had been
+unrunnable since the base moved to `node:26` and no build ever failed for it.
 
 **1b. Harness consumption (executor-harness image, image-bumped): DONE.** The harness parses the
 job body's `artifactUpload` (`{ url, token }`) and surfaces it to the agent as the
@@ -248,10 +275,10 @@ container-token-authed `POST ${proxyBaseUrl}/artifacts/ingest` that stores the b
 `screenshot` artifact scoped to the token's workspace + execution. Image-allow-list + size guard +
 `nosniff` serving are shared with the workspace upload endpoint (`imageArtifacts.ts`).
 
-Until 1a lands, the gate is fully usable against **manually-uploaded** reference + screenshots;
-auto-capture lights up once the UI-image routing is wired (the harness half is done). The
-`pl_visual` pipeline still parks for a human regardless (manual mode), so it is safe to expose: it
-just won't have auto-captured shots until then.
+Auto-capture is now wired end to end on every backend. A deployment that has not published +
+pinned the UI image keeps the manual mode: it uploads reference designs and screenshots by hand,
+and a pipeline carrying `tester-ui` fails that step at dispatch with the wiring named. The
+`pl_visual` pipeline parks for a human either way.
 
 ### 2. Recapture-after-fix loop (enhancement)
 
@@ -307,6 +334,10 @@ cd frontend/app && pnpm typecheck && pnpm exec vitest run app/utils/catalog.spec
   backends, `migrations/0017_binary_artifacts.sql`.
 - Tester: `orchestration/.../ci.logic.ts` (constants), `agents/prompts/testing.ts`,
   `server/.../ContainerAgentExecutor.ts`, `executor-harness/Dockerfile.ui`.
+- Image routing: `kernel/ports/runner-transport.ts` (`RunnerImageVariant`, `containerKeyForRef`),
+  `cloudflare/.../containers/runContainerNamespace.ts` + `UiTesterContainer.ts`,
+  `local/.../LocalContainerRunnerTransport.ts`, `scripts/runner-images.mjs`,
+  `executor-harness/scripts/smoketest-ui-image.sh`.
 - Gate: `orchestration/.../VisualConfirmationController.ts`, `…/ExecutionService.ts` (delegation),
   `contracts/entities.ts` + `contracts/routes/visual-confirm.ts`, `kernel/domain/seed.ts`
   (`pl_visual`).

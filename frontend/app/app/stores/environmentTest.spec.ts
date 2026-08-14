@@ -77,6 +77,39 @@ describe('environmentTest store — monotonic run reconcile', () => {
     expect(store.runForBlock('blk_r1')!.status).toBe('failed')
   })
 
+  /**
+   * Overlapping refreshes preserve the same still-running run, so the point-read is deduped. It
+   * must be deduped with a QUEUED FOLLOW-UP rather than dropped: the outstanding read may have been
+   * issued before the run reached terminal, and it is the later ask that would observe the outcome.
+   * Nothing asks a third time (terminal runs emit no event and the snapshot omits them), so a
+   * dropped ask leaves the inspector on "testing" for the rest of the session.
+   */
+  it('re-reads once when a hydrate asks again while a point-read is still out', async () => {
+    store.upsert(run('r1', { status: 'running', updatedAt: 5 }))
+    let releaseFirst!: () => void
+    const held = new Promise<void>((r) => (releaseFirst = r))
+    apiMock.getEnvironmentTest = vi
+      .fn()
+      // Issued before the run reached terminal, so it can only ever answer `running`.
+      .mockImplementationOnce(async () => {
+        await held
+        return run('r1', { status: 'running', updatedAt: 6 })
+      })
+      // The queued follow-up: the read that picks up the outcome.
+      .mockImplementationOnce(async () =>
+        run('r1', { status: 'succeeded', stage: 'done', updatedAt: 9 }),
+      )
+
+    store.hydrate([], 'ws_test')
+    store.hydrate([], 'ws_test')
+    // Deduped while the first read is out: the second hydrate did not issue its own.
+    expect(apiMock.getEnvironmentTest).toHaveBeenCalledTimes(1)
+
+    releaseFirst()
+    await vi.waitFor(() => expect(store.runForBlock('blk_r1')!.status).toBe('succeeded'))
+    expect(apiMock.getEnvironmentTest).toHaveBeenCalledTimes(2)
+  })
+
   it('hydrate DROPS a cached run from a different workspace (board switch starts clean)', () => {
     store.upsert(run('r1', { status: 'failed', updatedAt: 5, workspaceId: 'ws_other' }))
     store.hydrate([run('r2', { workspaceId: 'ws_test' })], 'ws_test')

@@ -248,6 +248,19 @@ works in (`not_started`, `in_progress`, `needs_you`) plus a collapsed **Done** s
 The vocabulary, the classification and the Done caps are `app/utils/swimlanes.ts`; the ordering and
 grouping are `app/utils/laneSort.ts`; `composables/useFrameLanes.ts` is the only store-facing half.
 
+`useFrameLanes` runs ONE INSTANCE PER MOUNTED FRAME and any execution event invalidates all of them,
+so what it derives is a performance decision as much as a modelling one. Two rules hold that line: a
+derivation over WORKSPACE-wide state belongs on the store that owns its input, never here (the
+review-debt map is `notifications.reviewDebtByBlock` for exactly this reason), and the assembled
+output passes through `utils/laneIdentity.ts`, which hands back the previous lane / group / entry
+objects wherever the fresh ones match, so the common event that moves no card leaves `TaskLane` and
+`LaneGroup` diffing on `===`. That reuse is sound only while every DERIVED field is compared (those
+exist nowhere but the entry, so a stale one is a lie nothing corrects), which is why a new
+`LaneTaskEntry` field must be added to `sameEntry` in the same change. The `task` itself is compared
+by reference and deliberately not field by field: a replaced block is a new reference, and an
+in-place patch (`board/placement.ts`, the optimistic drag and field edits) is one object both entries
+share, which the renderer reads through and deep reactivity invalidates on its own.
+
 **A lane is a CLAIM, which is a higher bar than a badge.** A mislabelled badge sits beside the
 truth; a card filed in the wrong lane states something false _and_ hides the card from the column
 its reader was scanning. Three rules follow, and they are what the tests pin:
@@ -942,16 +955,30 @@ event left to restore it.
   to the coarse signal, so nothing is lost but the refresh. A bootstrap's frame is always the first
   case, which is why the `bootstrap` event's job rides live while the frame's own transitions
   arrive as coarse `board` events beside it.
-- **Full refreshes MUST be monotonic.** Two `refresh()` calls can be in flight; a staler one
-  resolving later overwrites the newer. `workspace.refresh()` guards this with a sequence. Do not
-  reintroduce an unguarded `hydrate(await fetch())`, and apply the guard to any new coalesced
-  refresh path.
+- **Full refreshes go through the ONE funnel, which is what makes them monotonic.**
+  `workspace.refresh()` IS the funnel (`stores/workspace/refreshFunnel.ts`), so the ~35 direct
+  post-mutation call sites need no opt-in and a new one inherits it. It SERIALIZES: at most one
+  snapshot fetch is outstanding, so two cannot resolve out of order and no sequence stamp is
+  needed. It is deliberately not plain single-flight: a caller arriving mid-fetch joins a single
+  QUEUED follow-up rather than the in-flight request, because a caller that mutated and then
+  refreshed is entitled to a snapshot read AFTER its call. Do not reintroduce an unguarded
+  `hydrate(await fetch())`, and never add a second refresh path beside the funnel.
+- **Serializing makes one stalled request everyone's problem, so the slot is BOUNDED.** The API
+  client sets no timeout, and a hung fetch behind a shared slot stops every later refresh, the
+  coarse-event resync and the retry chain at once. The funnel puts a deadline on its own read and
+  ABORTS it, so a dead connection surfaces as an ordinary failure rather than a wedge; a snapshot
+  arriving after the deadline is never applied. Anything else that serializes work behind one slot
+  owes the same bound. The same argument is why a dedupe must QUEUE the later ask rather than drop it
+  (`environmentTest.reconcileRun`): the outstanding read may predate the state the later ask exists
+  to observe.
 - **Never gate readiness on a snapshot a later resync can undo.** The on-connect resync flips
-  `connected` only after it settles (which is why e2e gates on `data-connected`).
+  `connected` only after it settles (which is why e2e gates on `data-connected`). A resync that
+  stands down because a NEWER one started must hand its caller that newer one, not resolve: a
+  stand-down is not a reconcile, and `socket.onopen` cannot tell the difference.
 - **A REPLACE-style `hydrate` must never silently drop live-only state.** Either fold that state
-  into the snapshot or reconcile rather than replace. The `refreshSeq` guard above orders
-  refreshes against each OTHER and does nothing when ONE slow fetch straddles a live event, so
-  every such store also takes a WATERMARK: `refresh()` captures each one's `hydrateBaseline()`
+  into the snapshot or reconcile rather than replace. The funnel above orders refreshes against
+  each OTHER and does nothing when ONE slow fetch straddles a live event, so every such store also
+  takes a WATERMARK: `refresh()` captures each one's `hydrateBaseline()`
   before the fetch (`LiveWriteBaselines`) and its `hydrate` keeps whatever was written after it.
   `board` and `notifications` are the two today; `execution` gets the same protection from the
   server `rev` it carries. Whether the store can re-derive the dropped state is what decides how
@@ -969,9 +996,18 @@ event left to restore it.
   "thinking…" bubble spinning). Every echo therefore goes through
   `execution.echoAfter(executionId, send, apply)`, which captures the run's `rev` before the
   request and drops the echo if anything advanced it. Never hand-roll the await-then-assign.
+- **The coarse-event debounce is capped, and it checks coverage before firing.**
+  (`composables/workspaceStream/coarseRefresh.ts`, which owns both ways a full resync is asked for:
+  the on-connect reconcile and the `board`-event fan-out.) Trailing-only
+  re-armed forever under a sustained sub-300ms event stream, so the board stopped resyncing exactly
+  when the workspace was busiest; there is now a max-wait. Before fetching it asks the funnel
+  whether a snapshot issued after the latest coarse event has already hydrated
+  (`refreshMark()` / `hydratedSince()`) and stands down if so, which is what stops a mutation that
+  refreshes directly AND raises a coarse event from paying for two snapshots. That skip rests on
+  the server emitting a coarse `board` event only after committing what it announces.
 - **Pin it with a store-level unit test** (`stores/workspace.spec.ts` for refreshes,
-  `stores/execution.spec.ts` for echoes): drive the two orderings and assert the fresher one
-  wins.
+  `stores/workspace/refreshFunnel.spec.ts` for the funnel's own rules, `stores/execution.spec.ts`
+  for echoes): drive the two orderings and assert the fresher one wins.
 
 ## Internationalization (i18n) authoring
 

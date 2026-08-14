@@ -12,9 +12,12 @@ import type {
 } from '@cat-factory/kernel'
 import {
   composePostMortem,
+  containerKeyForRef,
   describeError,
   getErrorMessage,
   runBestEffort,
+  runIdFromContainerKey,
+  UnavailableError,
 } from '@cat-factory/kernel'
 import { resolveDockerResources } from '@cat-factory/contracts'
 import type { LocalSettings } from '@cat-factory/contracts'
@@ -44,7 +47,11 @@ import {
 } from './runtimes/index.js'
 import { requireHarnessSharedSecret } from './config.js'
 import { type LocalVcsCredential, harnessAllowedHosts } from './vcsCredential.js'
-import { RECOMMENDED_HARNESS_IMAGE, resolveHarnessImage } from './harnessImage.js'
+import {
+  RECOMMENDED_HARNESS_IMAGE,
+  resolveHarnessImage,
+  resolveUiHarnessImage,
+} from './harnessImage.js'
 import { recommendedHarnessVersion, verifyHarnessVersion } from './harnessVersion.js'
 
 const execFileAsync = promisify(execFile)
@@ -101,6 +108,15 @@ export type { ContainerExec } from './runtimes/index.js'
 export interface LocalContainerRunnerTransportOptions {
   /** The executor-harness image ref (a GHCR pull or a locally built tag). */
   image: string
+  /**
+   * The UI-TESTER image ref, for a job whose kind declares `image: 'ui'` (Playwright + a
+   * browser). Its own container, on its own image: a per-run container cannot change image
+   * mid-run, and the browser tooling is deliberately not in the image every other step pulls.
+   *
+   * Unset ⇒ such a job is REFUSED at dispatch rather than run on {@link image}, which has no
+   * browser. See `imageFor`.
+   */
+  imageUi?: string
   /**
    * The container runtime adapter (Docker-family or Apple). Defaults to the Docker-CLI
    * adapter (`docker` binary) so existing callers/tests keep working.
@@ -216,6 +232,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   readonly backend = 'local-container'
   private readonly adapter: ContainerRuntimeAdapter
   private readonly image: string
+  private readonly imageUi: string | undefined
   private readonly sharedSecret: string
   private readonly network?: string
   // Mutable: the warm-pool sizing + checkout env are re-read live via `applySettings` when
@@ -267,6 +284,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         installId: resolveInstallId({ HARNESS_SHARED_SECRET: options.sharedSecret }),
       })
     this.image = options.image
+    this.imageUi = options.imageUi
     this.sharedSecret = options.sharedSecret
     this.network = options.network
     this.extraEnv = options.env ?? {}
@@ -360,18 +378,46 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     return this.members.some((m) => m.leasedTo === runId)
   }
 
+  /**
+   * The image a job runs on, refusing a variant this deployment has not configured.
+   *
+   * The refusal is deliberate. Serving a `ui` job the default image gives a browser-driven
+   * tester no browser, which it discovers only after the checkout, the install and the model's
+   * first turns, and then reports as an `abort` a reader cannot tell apart from an app that
+   * would not start. One refused dispatch, naming the variable, is the cheaper answer.
+   */
+  private imageFor(ref: RunnerJobRef): string {
+    if (ref.image !== 'ui') return this.image
+    if (this.imageUi) return this.imageUi
+    throw new UnavailableError(
+      'This step runs on the UI-tester executor image (Playwright + a browser), which this ' +
+        'deployment has not configured. Set LOCAL_HARNESS_IMAGE_UI to a published ' +
+        'cat-factory-executor-ui tag (or a locally built one) and restart. Until then, drop ' +
+        'the `tester-ui` step from the pipeline: the visual-confirmation gate still runs on ' +
+        'screenshots a person uploads.',
+      'runner_image_unwired',
+      { image: ref.image, variable: 'LOCAL_HARNESS_IMAGE_UI' },
+    )
+  }
+
   async dispatch(
     ref: RunnerJobRef,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'agent',
     options?: RunnerDispatchOptions,
   ): Promise<RunnerDispatchAck | undefined> {
+    // A non-default image is always per-run, never pooled: pool members are started on ONE
+    // image and reused across runs, so a leased member is by construction the wrong container
+    // for a job that asked for a different one. Checked BEFORE the lease/cache lookups, which
+    // key off the run and would otherwise hand a `tester-ui` job the run's ordinary container.
+    const containerKey = containerKeyForRef(ref)
+    if (ref.image && ref.image !== 'default') return this.dispatchPerRun(ref, spec, kind, options)
     // Route a run to the backend it ALREADY holds, regardless of the CURRENT pool mode
     // (settings can flip pooling on/off live): a leased pool member re-attaches to the
     // pool; an existing per-run container stays per-run. Only a BRAND-NEW run picks its
     // mode from `poolingEnabled` — so a live resize never strands an in-flight run.
     if (this.hasLeasedMember(ref.runId)) return this.dispatchPooled(ref, spec, kind)
-    if (this.cache.has(ref.runId)) return this.dispatchPerRun(ref, spec, kind, options)
+    if (this.cache.has(containerKey)) return this.dispatchPerRun(ref, spec, kind, options)
     if (this.poolingEnabled) return this.dispatchPooled(ref, spec, kind)
     return this.dispatchPerRun(ref, spec, kind, options)
   }
@@ -382,19 +428,24 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     kind: RunnerDispatchKind,
     options?: RunnerDispatchOptions,
   ): Promise<RunnerDispatchAck | undefined> {
-    // The container is per-RUN: a run's first step starts it, later steps re-attach to
-    // it (resolved by the run id), and the harness keys each step's job by the per-step
-    // `ref.jobId` carried in the spec body.
-    const runId = ref.runId
-    let resolved = await this.resolve(runId)
+    // The container is per-RUN and per IMAGE: a run's first step on a given image starts it,
+    // later steps on that image re-attach (resolved by the container key), and the harness keys
+    // each step's job by the per-step `ref.jobId` carried in the spec body. A step declaring a
+    // different image gets a second container beside the run's ordinary one, which is what the
+    // qualified key addresses.
+    const containerKey = containerKeyForRef(ref)
+    // Resolved BEFORE any container work so an unconfigured variant refuses without first
+    // removing a container or starting one.
+    const image = this.imageFor(ref)
+    let resolved = await this.resolve(containerKey)
     if (!resolved) {
-      // A prior attempt may have left an exited/dead container under this run (resolve()
+      // A prior attempt may have left an exited/dead container under this key (resolve()
       // returns undefined for one whose endpoint is gone). Remove any such container
       // first so it can't shadow the fresh one in later lookups.
-      await this.adapter.removeRun(this.exec, runId)
+      await this.adapter.removeRun(this.exec, containerKey)
       const containerId = await this.adapter.run(this.exec, {
-        runId,
-        image: this.image,
+        runId: containerKey,
+        image,
         sharedSecret: this.sharedSecret,
         // The Tester stands its infra up with `docker compose` INSIDE the job container
         // (Docker-in-Docker). The container is per-RUN and created by the run's FIRST step
@@ -411,7 +462,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
       })
       const endpoint = await this.waitForEndpoint(containerId)
       resolved = { containerId, ...endpoint }
-      this.cache.set(runId, resolved)
+      this.cache.set(containerKey, resolved)
       await this.waitForHealth(endpoint, containerId)
     }
 
@@ -422,9 +473,12 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   }
 
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
-    if (this.hasLeasedMember(ref.runId)) return this.pollPooled(ref)
+    // A pooled member never serves a non-default image (dispatch routes those per-run), so the
+    // lease lookup is skipped for one: the run's leased member is a different container.
+    const containerKey = containerKeyForRef(ref)
+    if (containerKey === ref.runId && this.hasLeasedMember(ref.runId)) return this.pollPooled(ref)
 
-    const resolved = await this.resolve(ref.runId)
+    const resolved = await this.resolve(containerKey)
     // No container for this run at all → it was evicted/reaped (or never started).
     if (!resolved) return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
 
@@ -443,7 +497,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
       label: 'Local container',
       isDead: async () => {
         if (await this.adapter.isRunning(this.exec, resolved.containerId)) return false
-        this.cache.delete(ref.runId)
+        this.cache.delete(containerKey)
         return true
       },
       exitedCleanly: () => this.exitedCleanly(exitState),
@@ -468,11 +522,14 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
    * member instead RETURNS it to the pool (or removes a transient/over-capacity one).
    */
   async release(ref: RunnerJobRef): Promise<void> {
-    if (this.hasLeasedMember(ref.runId)) return this.releasePooled(ref)
+    const containerKey = containerKeyForRef(ref)
+    if (containerKey === ref.runId && this.hasLeasedMember(ref.runId))
+      return this.releasePooled(ref)
 
     const containerId =
-      this.cache.get(ref.runId)?.containerId ?? (await this.adapter.find(this.exec, ref.runId))
-    this.cache.delete(ref.runId)
+      this.cache.get(containerKey)?.containerId ??
+      (await this.adapter.find(this.exec, containerKey))
+    this.cache.delete(containerKey)
     if (!containerId) return
     await this.adapter.remove(this.exec, containerId)
   }
@@ -492,8 +549,10 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
    * Deliberately NOT `release`: on the pooled path release does the opposite of stopping.
    */
   async stopJob(ref: RunnerJobRef): Promise<RunnerJobStopOutcome> {
-    const member = this.members.find((m) => m.leasedTo === ref.runId)
-    const endpoint = member ?? (await this.resolve(ref.runId))
+    const containerKey = containerKeyForRef(ref)
+    const member =
+      containerKey === ref.runId ? this.members.find((m) => m.leasedTo === ref.runId) : undefined
+    const endpoint = member ?? (await this.resolve(containerKey))
     // Nothing is serving this run: there is no job left to stop, which IS the stopped state.
     if (!endpoint) return 'stopped'
     try {
@@ -555,8 +614,11 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   async reapOrphanedRuns(liveRunIds: (ids: string[]) => Promise<string[]>): Promise<number> {
     const running = await this.adapter.listRunContainers(this.exec)
     if (running.length === 0) return 0
-    const live = new Set(await liveRunIds(running.map((c) => c.runId)))
-    const orphans = running.filter((c) => !live.has(c.runId))
+    // The adapter's `runId` is the CONTAINER KEY, which for a non-default image is the run id
+    // qualified by the variant. Ask about the RUN: passing the key through would report "no such
+    // run" for every UI-tester container and sweep one out from under a live run.
+    const live = new Set(await liveRunIds(running.map((c) => runIdFromContainerKey(c.runId))))
+    const orphans = running.filter((c) => !live.has(runIdFromContainerKey(c.runId)))
     for (const c of orphans) {
       this.cache.delete(c.runId)
       await this.adapter.remove(this.exec, c.containerId).catch(() => undefined)
@@ -1108,6 +1170,11 @@ export function createLocalContainerTransportFromEnv(
   const extraEnv = checkoutExtraEnv(settings)
   return new LocalContainerRunnerTransport({
     image,
+    // Same rule as the base image, with one difference: the UI image is NOT pre-pulled at boot
+    // (it carries a browser and a JRE, so a stock local start would spend gigabytes on tooling
+    // most deployments never dispatch to). It is pulled by the runtime on the first `image: 'ui'
+    // dispatch, which is the first moment anything needs it.
+    imageUi: resolveUiHarnessImage(env),
     adapter: createRuntimeAdapter(env),
     sharedSecret: requireHarnessSharedSecret(env),
     network: env.LOCAL_DOCKER_NETWORK?.trim() || undefined,

@@ -593,6 +593,7 @@ export type {
   RunnerDispatchAck,
   RunnerDispatchKind,
   RunnerDispatchOptions,
+  RunnerImageVariant,
   RunnerJobContainer,
   RunnerJobProgress,
   RunnerJobRef,
@@ -606,7 +607,12 @@ export type {
   RunnerTransport,
   RunnerValidationReport,
 } from './runner-transport.js'
-export { CONTAINER_EVICTION_ERROR, HARNESS_SHUTDOWN_ERROR } from './runner-transport.js'
+export {
+  CONTAINER_EVICTION_ERROR,
+  containerKeyForRef,
+  HARNESS_SHUTDOWN_ERROR,
+  runIdFromContainerKey,
+} from './runner-transport.js'
 export type { PreviewRef, PreviewTransport, PreviewView } from './preview-transport.js'
 export { PREVIEW_HARNESS_JOB_ID, PREVIEW_PROVISION_TYPE } from './preview-transport.js'
 export type {

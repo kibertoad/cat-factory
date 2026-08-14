@@ -179,14 +179,37 @@ export const useExecutionStore = defineStore('execution', () => {
     return id ? byId.value.get(id) : undefined
   }
 
+  /**
+   * Each block's run, indexed once per change to `instances` instead of scanned per lookup.
+   *
+   * A block only holds several runs transiently: a stale reconnect snapshot re-listing a retry's
+   * now-deleted terminal predecessor alongside the live successor. Prefer the live one so this
+   * projection agrees with `agentRuns.byBlock` (whose last-write-wins already resolves to it):
+   * the failed predecessor is dead and about to fall out on the next read.
+   *
+   * The single pass states that rule as "replace whatever is held whenever it is TERMINAL", which
+   * is the array form (`runs.find(live) ?? runs.at(-1)`) exactly: the first live run wins and is
+   * never displaced, and with no live run the LAST terminal one wins. Keep the two in step, since
+   * this is the only place the rule is written now.
+   *
+   * WHY AN INDEX. {@link getByBlock} was a full `instances` scan per call on three per-event hot
+   * paths: a computed on every mounted task card (`TaskPipelineMini`), `classify` inside the
+   * swimlane assembly of every mounted frame (`useFrameLanes`), and the board's expansion
+   * measurement pass (`useTaskExpansion`, per hover probe and per task when deep-zoomed). Each
+   * execution event invalidated all of them, so the board paid O(cards x runs) per event where one
+   * shared Map pays O(runs).
+   */
+  const byBlockLive = computed(() => {
+    const map = new Map<string, ExecutionInstance>()
+    for (const e of instances.value) {
+      const held = map.get(e.blockId)
+      if (!held || isTerminal(held.status)) map.set(e.blockId, e)
+    }
+    return map
+  })
+
   function getByBlock(blockId: string) {
-    const runs = instances.value.filter((e) => e.blockId === blockId)
-    if (runs.length <= 1) return runs[0]
-    // A block only holds several runs transiently: a stale reconnect snapshot re-listing a
-    // retry's now-deleted terminal predecessor alongside the live successor. Prefer the live
-    // one so this projection agrees with `agentRuns.byBlock` (whose last-write-wins already
-    // resolves to it) — the failed predecessor is dead and about to fall out on the next read.
-    return runs.find((e) => !isTerminal(e.status)) ?? runs.at(-1)
+    return byBlockLive.value.get(blockId)
   }
 
   // What across every cached run is awaiting a human (open decisions + approval gates, their

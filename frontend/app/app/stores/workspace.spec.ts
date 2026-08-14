@@ -45,12 +45,17 @@ beforeEach(() => {
 
 // Regression for the live-push CLOBBER race: `board`-type stream events (and the on-connect
 // resync) each trigger a full-snapshot `refresh()`, and `hydrate` REPLACES the block list. Two
-// refreshes can be in flight at once (events >300ms apart, or a resync + a board event), and if a
-// slower/staler fetch resolves AFTER a newer one, its hydrate used to clobber the newer state —
-// dropping a just-spawned block whose only live delivery was the coarse board event, so its card
-// never reappeared (no further event to restore it). This surfaced as an intermittent e2e timeout
-// where a spawned task/document card never rendered. `refresh()` now stamps each call so only the
-// latest-issued one commits; this test pins that a stale out-of-order refresh can't win.
+// refreshes used to be in flight at once (events >300ms apart, or a resync + a board event), and a
+// slower/staler fetch resolving AFTER a newer one clobbered the newer state, dropping a
+// just-spawned block whose only live delivery was the coarse board event, so its card never
+// reappeared (no further event to restore it). That surfaced as an intermittent e2e timeout where a
+// spawned task/document card never rendered.
+//
+// `refresh()` now goes through the funnel, which SERIALIZES: a call arriving during a fetch waits
+// for a follow-up fetch issued after it rather than racing beside it. So the out-of-order clobber
+// is structurally unreachable rather than detected and discarded, and what this test pins is the
+// property that replaced the sequence stamp: overlapping refreshes never interleave, and the board
+// ends on the LAST snapshot fetched. `refreshFunnel.spec.ts` covers the coalescing rules directly.
 
 /** Minimal block — only the fields the board store's index getters read. */
 function block(id: string, over: Partial<Block> = {}): Block {
@@ -102,20 +107,19 @@ function snapshot(
 }
 
 describe('workspace store refresh ordering', () => {
-  it('a stale refresh resolving out of order does not clobber a newer one', async () => {
+  it('serializes overlapping refreshes so the board ends on the last snapshot fetched', async () => {
     const frame = block('f1')
     const spawned = block('spawned', { level: 'task', parentId: 'f1' })
-    let resolveStale!: (s: WorkspaceSnapshot) => void
-    let resolveFresh!: (s: WorkspaceSnapshot) => void
+    let resolveFirst!: (s: WorkspaceSnapshot) => void
 
     const getWorkspace = vi
       .fn()
       // 1) switchTo establishes the active board (no spawned block yet).
       .mockResolvedValueOnce(snapshot('ws1', [frame]))
-      // 2) the EARLIER-issued refresh (stale: still no spawned block) — resolved LAST below.
-      .mockReturnValueOnce(new Promise<WorkspaceSnapshot>((r) => (resolveStale = r)))
-      // 3) the LATER-issued refresh (fresh: the spawned block landed) — resolved FIRST below.
-      .mockReturnValueOnce(new Promise<WorkspaceSnapshot>((r) => (resolveFresh = r)))
+      // 2) the first refresh's fetch: still no spawned block, and held open below.
+      .mockReturnValueOnce(new Promise<WorkspaceSnapshot>((r) => (resolveFirst = r)))
+      // 3) the follow-up fetch, ISSUED ONLY AFTER (2) settles, which is why it sees the spawn.
+      .mockResolvedValueOnce(snapshot('ws1', [frame, spawned]))
     vi.stubGlobal('useApi', () => ({ getWorkspace }))
 
     const ws = useWorkspaceStore()
@@ -123,21 +127,23 @@ describe('workspace store refresh ordering', () => {
     await ws.switchTo('ws1')
     expect(board.getBlock('spawned')).toBeUndefined()
 
-    // Two overlapping refreshes: the later-issued one carries the fresher snapshot, but the
-    // earlier-issued (stale) one resolves last — the exact out-of-order clobber the guard blocks.
-    const stalePass = ws.refresh()
-    const freshPass = ws.refresh()
-    resolveFresh(snapshot('ws1', [frame, spawned]))
-    resolveStale(snapshot('ws1', [frame]))
-    await Promise.all([stalePass, freshPass])
+    // A second refresh arriving mid-fetch does NOT start a racing fetch: one is outstanding.
+    const first = ws.refresh()
+    const second = ws.refresh()
+    expect(getWorkspace).toHaveBeenCalledTimes(2)
 
-    // The fresh snapshot won and the stale one was discarded: the spawned card survives.
+    resolveFirst(snapshot('ws1', [frame]))
+    await Promise.all([first, second])
+
+    // The follow-up ran after the first settled and its snapshot is what the board holds, so a
+    // caller that refreshed after spawning the block sees it.
+    expect(getWorkspace).toHaveBeenCalledTimes(3)
     expect(board.getBlock('spawned')).toBeDefined()
   })
 
-  // Regression for the SECOND clobber axis: a refresh vs an interleaved live `upsert`. The
-  // `refreshSeq` guard above only orders refreshes against each OTHER — it does nothing when a
-  // single refresh's (slow) fetch overlaps a targeted live event. A run's status transitions
+  // Regression for the SECOND clobber axis: a refresh vs an interleaved live `upsert`. Serializing
+  // refreshes orders them against each OTHER and does nothing when a single refresh's (slow) fetch
+  // overlaps a targeted live event. A run's status transitions
   // (…→ in_progress → pr_ready/done) arrive as `execution`-event `board.upsert`s; a refresh whose
   // snapshot was FETCHED while the block was still `in_progress` must not, on resolving later,
   // replace that block back to the stale status. This was the reliable-under-CI-latency e2e

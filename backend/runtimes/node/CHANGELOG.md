@@ -1,5 +1,86 @@
 # @cat-factory/node-server
 
+## 0.208.1
+
+### Patch Changes
+
+- Updated dependencies [5333319]
+  - @cat-factory/kernel@0.306.0
+  - @cat-factory/server@0.291.0
+  - @cat-factory/integrations@0.165.0
+  - @cat-factory/agents@0.133.2
+  - @cat-factory/binary-generators@0.2.1
+  - @cat-factory/caching@0.20.27
+  - @cat-factory/consensus@0.16.27
+  - @cat-factory/eks@0.1.331
+  - @cat-factory/gates@0.10.58
+  - @cat-factory/gitlab@0.20.28
+  - @cat-factory/observability-langfuse@0.10.102
+  - @cat-factory/observability-otel@0.21.6
+  - @cat-factory/orchestration@0.276.1
+  - @cat-factory/prompt-fragments@1.0.82
+  - @cat-factory/provider-bedrock@0.7.479
+  - @cat-factory/provider-cloudflare@0.7.480
+  - @cat-factory/provider-s3@0.2.399
+  - @cat-factory/spend@0.15.100
+
+## 0.208.0
+
+### Minor Changes
+
+- 053aac8: Ship Nano Banana as the platform's first generative binary integration, and hook the built-in Media
+  pipeline to it.
+
+  `@cat-factory/binary-generators` is a new package holding the definition (Google's Gemini image
+  models, with the OpenAPI contract a run's agent reads) and `defineBinaryGenerator`, the authoring
+  seam a deployment writes its own integrations with. It runs the platform's OWN registration rules at
+  import, now shared from kernel (`binaryGeneratorDetailIssues`, `binaryGeneratorInjectionCollisions`)
+  rather than reachable only inside orchestration's boot validator.
+
+  Every facade now defaults `binaryGeneratorRegistry` to `binaryGeneratorRegistryWithBuiltins()`, and
+  the shipped `pl_media` preset selects `nano-banana`, so a Media task generates images once
+  `GEMINI_API_KEY` is set as a capability credential and nothing else is configured.
+
+  **For a deployment that injects its own `binaryGeneratorRegistry`**: an injected instance replaces
+  the shipped set rather than merging with it, so `pl_media` would then select an id nothing answers
+  to and its runs are refused at admission (`binary_output_generator_invalid`). Start from
+  `binaryGeneratorRegistryWithBuiltins()` and register onto that instance, or edit the preset's step.
+
+  On the **Worker**, an injected registry is now registered process-wide by `createApp`, which is what
+  carries it to the entry points that take no options. A binary-output step's dispatch brief is
+  composed by the durable driver, so before this a deployment's own integrations were absent from
+  every brief it built while the platform's shipped one was present.
+
+  `PLATFORM_FOUNDATIONAL_SERVICES` is a new kernel export: the frozen definitions
+  `defaultFoundationalServiceRegistry()` seeds from, shared across registries rather than copied per
+  one. A caller can now tell the platform's own service from a deployment's replacement of the same
+  id, which is what the local facade's mothership boot warnings need. Both of them (the estate and the
+  generative integrations) report only what the deployment registered, and report a shipped id a
+  deployment REPLACED, which subtracting by id could not see.
+
+### Patch Changes
+
+- Updated dependencies [053aac8]
+  - @cat-factory/binary-generators@0.2.0
+  - @cat-factory/contracts@0.317.0
+  - @cat-factory/kernel@0.305.0
+  - @cat-factory/orchestration@0.276.0
+  - @cat-factory/agents@0.133.1
+  - @cat-factory/consensus@0.16.26
+  - @cat-factory/eks@0.1.330
+  - @cat-factory/gates@0.10.57
+  - @cat-factory/gitlab@0.20.27
+  - @cat-factory/integrations@0.164.1
+  - @cat-factory/observability-otel@0.21.5
+  - @cat-factory/prompt-fragments@1.0.81
+  - @cat-factory/server@0.290.1
+  - @cat-factory/spend@0.15.99
+  - @cat-factory/caching@0.20.26
+  - @cat-factory/observability-langfuse@0.10.101
+  - @cat-factory/provider-bedrock@0.7.478
+  - @cat-factory/provider-cloudflare@0.7.479
+  - @cat-factory/provider-s3@0.2.398
+
 ## 0.207.0
 
 ### Minor Changes

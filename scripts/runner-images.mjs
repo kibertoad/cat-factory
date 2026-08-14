@@ -38,6 +38,25 @@ export const IMAGES = [
     ],
   },
   {
+    // The UI-tester image (Playwright + Chromium + WireMock, layered on the executor image).
+    // It has NO package of its own: it is the same harness with extra tooling, so it is
+    // versioned by the executor-harness package and rebuilt whenever that image is. That is why
+    // its source list is the executor's PLUS `Dockerfile.ui`, and why a change to the base
+    // Dockerfile bumps both tags together.
+    label: 'executor-ui',
+    image: 'cat-factory-executor-ui',
+    harnessPkg: 'backend/internal/executor-harness/package.json',
+    // RECOMMENDED_UI_HARNESS_IMAGE — the tag local mode dispatches an `image: 'ui'` job to.
+    extraPins: ['backend/runtimes/local/src/harnessImage.ts'],
+    sourcePrefixes: ['backend/internal/executor-harness/src/'],
+    sourceFiles: [
+      'backend/internal/executor-harness/Dockerfile',
+      'backend/internal/executor-harness/Dockerfile.ui',
+      'backend/internal/executor-harness/tsconfig.json',
+      'backend/internal/executor-harness/package.json',
+    ],
+  },
+  {
     label: 'deploy',
     image: 'cat-factory-deploy',
     harnessPkg: 'backend/internal/deploy-harness/package.json',

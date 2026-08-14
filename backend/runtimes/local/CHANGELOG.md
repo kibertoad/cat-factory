@@ -1,5 +1,130 @@
 # @cat-factory/local-server
 
+## 0.136.0
+
+### Minor Changes
+
+- 5333319: Route a job to the UI-tester executor image, on every backend, and publish that image.
+
+  The `image: 'ui'` dispatch variant has existed since the visual-confirmation gate landed: the
+  `tester-ui` kind declares it, the executor sets it, the job body carries the screenshot-upload
+  seam and the reference-design manifest that go with it. Nothing mapped it to an image. On
+  Cloudflare and local Docker a browser-driven tester therefore ran on the plain executor image,
+  which has no browser, and the repo published no UI image for anything to point at even if it had.
+
+  The variant now travels on the job REF rather than only on the dispatch options, because a
+  per-run container backend has to address the same container again on every poll and release, and
+  those get no options. `containerKeyForRef` derives the container's identity from it (the run id,
+  qualified by the variant), and the executor re-derives the variant from the step's agent kind at
+  each site, so a poll from a fresh process after a durable replay lands on the right container with
+  nothing remembered in between. Cloudflare gains a `UiTesterContainer` class bound as
+  `UI_CONTAINER`; local Docker gains `LOCAL_HARNESS_IMAGE_UI` and a second per-run container.
+
+  **An unwired variant is refused, not downgraded.** Every backend fails the dispatch, naming the
+  binding or variable to set, where the Kubernetes pool previously fell back to its default image.
+  Falling back is what the variant existed to prevent: the tester runs happily until it needs a
+  browser, which is after the checkout, the install and the model's first turns, and reports an
+  `abort` no reader can distinguish from an app that would not start. A deployment that has not
+  wired the image loses the step, not the diagnosis, and the visual-confirmation gate still runs on
+  screenshots a person uploads.
+
+  Two things to watch. The live-container inventory carries the variant (D1 migration 0094) because
+  the cron reaper kills through a Durable Object namespace and `idFromName` returns a usable stub in
+  any of them: reaping a browser container through the executor class killed nothing and reported
+  success. And the local orphan sweep now maps a container key back to its run before asking whether
+  that run is live, or every UI container reads as belonging to no run and is swept out from under a
+  run mid-step.
+
+  The UI image is published by CI alongside the executor image it layers on, pinned to the same
+  version, and is BOOTED before it is pushed: the smoketest starts a container, waits for the
+  harness, then drives a real Chromium against a `serve`d page inside it. A build-only gate was not
+  enough, which the corepack line this branch already fixed demonstrates: it had been unrunnable
+  since the base moved to `node:26` and no build ever failed for it.
+
+### Patch Changes
+
+- 5333319: Move the workspace to pnpm 11.21.0 and install pnpm from the registry rather than through corepack.
+
+  The UI-tester image staged pnpm and yarn with `corepack enable && corepack prepare …`, and that
+  line cannot work any more: the base is `node:26-trixie-slim`, and Node stopped shipping corepack,
+  so the `Dockerfile.ui` build failed before it reached the tooling it was staging and neither
+  manager was landing in the image at all. Both now install from the registry, pnpm at 11.21.0 and
+  yarn from `@yarnpkg/cli-dist@4.10.3` (yarn 4 is not published under the bare `yarn` name, which is
+  what corepack was covering for). A frontend that declares a different pnpm in `packageManager`
+  still gets that one, because pnpm honours the field itself.
+
+  Corepack is gone from the two deploy images as well, where it only ever put pnpm on PATH. They now
+  read the version out of the root `packageManager` field, so an image cannot install a pnpm that did
+  not write the lockfile it installs from. `@pnpm/exe`, the self-contained build, was tried first and
+  rejected: it links `libatomic.so.1`, which `node:24-slim` does not carry, and it would bundle a
+  second Node beside the one those images already run on.
+
+  The image tag moves to `cat-factory-executor:1.123.0` across the wrangler config, the publish
+  script and `RECOMMENDED_HARNESS_IMAGE`, since republishing over a live tag does not roll a
+  deployment out. The deploy image is unchanged and keeps `0.2.13`.
+
+- Updated dependencies [5333319]
+- Updated dependencies [5333319]
+  - @cat-factory/executor-harness@1.124.0
+  - @cat-factory/kernel@0.306.0
+  - @cat-factory/server@0.291.0
+  - @cat-factory/integrations@0.165.0
+  - @cat-factory/agents@0.133.2
+  - @cat-factory/binary-generators@0.2.1
+  - @cat-factory/gitlab@0.20.28
+  - @cat-factory/orchestration@0.276.1
+  - @cat-factory/prompt-fragments@1.0.82
+  - @cat-factory/node-server@0.208.1
+
+## 0.135.0
+
+### Minor Changes
+
+- 053aac8: Ship Nano Banana as the platform's first generative binary integration, and hook the built-in Media
+  pipeline to it.
+
+  `@cat-factory/binary-generators` is a new package holding the definition (Google's Gemini image
+  models, with the OpenAPI contract a run's agent reads) and `defineBinaryGenerator`, the authoring
+  seam a deployment writes its own integrations with. It runs the platform's OWN registration rules at
+  import, now shared from kernel (`binaryGeneratorDetailIssues`, `binaryGeneratorInjectionCollisions`)
+  rather than reachable only inside orchestration's boot validator.
+
+  Every facade now defaults `binaryGeneratorRegistry` to `binaryGeneratorRegistryWithBuiltins()`, and
+  the shipped `pl_media` preset selects `nano-banana`, so a Media task generates images once
+  `GEMINI_API_KEY` is set as a capability credential and nothing else is configured.
+
+  **For a deployment that injects its own `binaryGeneratorRegistry`**: an injected instance replaces
+  the shipped set rather than merging with it, so `pl_media` would then select an id nothing answers
+  to and its runs are refused at admission (`binary_output_generator_invalid`). Start from
+  `binaryGeneratorRegistryWithBuiltins()` and register onto that instance, or edit the preset's step.
+
+  On the **Worker**, an injected registry is now registered process-wide by `createApp`, which is what
+  carries it to the entry points that take no options. A binary-output step's dispatch brief is
+  composed by the durable driver, so before this a deployment's own integrations were absent from
+  every brief it built while the platform's shipped one was present.
+
+  `PLATFORM_FOUNDATIONAL_SERVICES` is a new kernel export: the frozen definitions
+  `defaultFoundationalServiceRegistry()` seeds from, shared across registries rather than copied per
+  one. A caller can now tell the platform's own service from a deployment's replacement of the same
+  id, which is what the local facade's mothership boot warnings need. Both of them (the estate and the
+  generative integrations) report only what the deployment registered, and report a shipped id a
+  deployment REPLACED, which subtracting by id could not see.
+
+### Patch Changes
+
+- Updated dependencies [053aac8]
+  - @cat-factory/binary-generators@0.2.0
+  - @cat-factory/contracts@0.317.0
+  - @cat-factory/kernel@0.305.0
+  - @cat-factory/orchestration@0.276.0
+  - @cat-factory/node-server@0.208.0
+  - @cat-factory/agents@0.133.1
+  - @cat-factory/gitlab@0.20.27
+  - @cat-factory/integrations@0.164.1
+  - @cat-factory/prompt-fragments@1.0.81
+  - @cat-factory/server@0.290.1
+  - @cat-factory/executor-harness@1.122.0
+
 ## 0.134.0
 
 ### Minor Changes

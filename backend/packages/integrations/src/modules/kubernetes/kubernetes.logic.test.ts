@@ -295,8 +295,20 @@ describe('assertApiServerUrlSafe', () => {
 describe('resolveImage / resolveResources', () => {
   it('uses the UI image only when asked and configured', () => {
     expect(resolveImage(config)).toBe(config.image)
-    expect(resolveImage(config, { image: 'ui' })).toBe(config.image)
     expect(resolveImage({ ...config, imageUi: 'ui-img' }, { image: 'ui' })).toBe('ui-img')
+  })
+  // The pool used to fall back to the plain executor image here. Nothing downstream notices:
+  // the browser-driven tester runs happily until it needs a browser, which is after the
+  // checkout, the install and the model's first turns, and reports an `abort` that reads like
+  // an app which would not boot. The refusal is the only signal that names the real cause.
+  it('refuses a ui dispatch when no UI image is configured, rather than serving the default', () => {
+    expect(() => resolveImage(config, { image: 'ui' })).toThrow(/imageUi/)
+  })
+  // The deploy variant keeps its fallback on purpose: the deploy harness preflights for its own
+  // CLIs and fails loudly naming them, so the pod reaching the executor image is already
+  // reported. Pinned so the two are not "harmonised" into one rule by a later reader.
+  it('still falls back to the default image for an unconfigured deploy variant', () => {
+    expect(resolveImage(config, { image: 'deploy' })).toBe(config.image)
   })
   it('prefers a per-size override over the default for BOTH requests and limits', () => {
     const sized: KubernetesRunnerConfig = {

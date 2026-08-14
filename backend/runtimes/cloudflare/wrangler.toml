@@ -128,6 +128,20 @@ instance_type = "standard-1"
 name = "DEPLOY_CONTAINER"
 class_name = "DeployContainer"
 
+# Per-run UI-TESTER container (the heavier browser image: Playwright + Chromium, pnpm/yarn,
+# `serve`, and a headless JRE + WireMock, layered on the executor harness). The `image: 'ui'`
+# dispatch variant routes here; a run gets one ALONGSIDE its ExecutionContainer instance,
+# because a per-run container cannot change image mid-run.
+[[containers]]
+class_name = "UiTesterContainer"
+image = "../../internal/executor-harness/Dockerfile.ui"
+max_instances = 10
+instance_type = "standard-1"
+
+[[durable_objects.bindings]]
+name = "UI_CONTAINER"
+class_name = "UiTesterContainer"
+
 # Per-workspace WebSocket fan-out hub.
 [[durable_objects.bindings]]
 name = "WORKSPACE_EVENTS"
@@ -159,3 +173,7 @@ new_sqlite_classes = ["DeployContainer"]
 [[migrations]]
 tag = "v5"
 new_sqlite_classes = ["CacheGenerationDirectory"]
+
+[[migrations]]
+tag = "v6"
+new_sqlite_classes = ["UiTesterContainer"]

@@ -3,7 +3,7 @@
 # UI-tester image — the executor-harness image for the `tester-ui` agent kind ONLY.
 #
 # It layers Playwright + a Chromium browser — plus the self-contained frontend UI-test
-# tooling (pnpm/yarn via corepack, the `serve` static server, a headless JRE + WireMock
+# tooling (pnpm/yarn, the `serve` static server, a headless JRE + WireMock
 # standalone) — on top of the slim base executor image, so all of it is isolated to the one
 # kind that needs it and never bloats the cold-start / pull of every other agent (coder,
 # merger, ci-fixer, …). A transport routes a job to this image when the dispatch option
@@ -14,18 +14,30 @@
 # against the running app, captures one screenshot per distinct view, and uploads each to the
 # binary-artifact store via the run's ARTIFACT_UPLOAD_URL / ARTIFACT_UPLOAD_TOKEN.
 #
-# Build (the version tag must match the base image you publish):
-#   docker build -f Dockerfile.ui --build-arg BASE_TAG=<version> -t cat-factory-executor-ui:<version> .
+# Build (the base ref must be the executor image of the SAME version you are publishing):
+#   docker build -f Dockerfile.ui \
+#     --build-arg BASE_IMAGE=ghcr.io/kibertoad/cat-factory-executor:<version> \
+#     -t cat-factory-executor-ui:<version> .
 #
-# DEPLOY NOTE: routing a job to this image is still wired per-runtime — on Cloudflare a second
-# `[[containers]]` class pinned to this image (the per-run container model means the UI-tester
-# step runs its own container); on a self-hosted pool / local Docker, the transport selects this
-# image tag for `image: 'ui'`. That wiring is the remaining deploy-time step.
+# CI does this on every image-affecting push (.github/workflows/docker-publish.yml, the
+# `executor-ui` job, which builds after the base image it layers on), and
+# .github/workflows/ui-image-smoketest.yml builds and BOOTS it on any change to this file.
+#
+# The base is a full ref rather than a bare tag so a fork can layer onto its own published
+# executor image, and so `scripts/sync-runner-image-tags.mjs` can keep the pinned version in the
+# publish scripts in step with the harness package (it rewrites `<image>:<semver>` refs and
+# leaves the `:latest` default here alone).
 
-ARG BASE_TAG=latest
-FROM ghcr.io/kibertoad/cat-factory-executor:${BASE_TAG}
+ARG BASE_IMAGE=ghcr.io/kibertoad/cat-factory-executor:latest
+FROM ${BASE_IMAGE}
 
+# The root layers below run with HOME still pointing at /home/harness (the base image sets it
+# at its end), which is the same trap the base Dockerfile documents at its own install: a root
+# `npm install -g` seeds a ROOT-OWNED cache in /home/harness/.npm, and the harness user then
+# cannot write it (EACCES) when a frontend's install runs as that user at job time. So HOME is
+# moved to root's own for the whole root section and restored before dropping privileges.
 USER root
+ENV HOME=/root
 
 # Playwright + Chromium and the OS libraries it needs. Pinned so the image is reproducible;
 # bump alongside the harness version when upgrading. `--with-deps` installs the apt packages
@@ -39,13 +51,21 @@ RUN npm install -g playwright@1.61.1 \
 # builds a frontend, mocks its other backend upstreams with WireMock, serves the built app,
 # and drives Playwright against it — all as localhost processes in this one container. So the
 # UI image layers on:
-#   - pnpm + yarn (via corepack) alongside the base image's npm, so a frontend's declared
-#     package manager resolves without a per-repo install of the manager itself;
+#   - pnpm + yarn alongside the base image's npm, so a frontend's declared package manager
+#     resolves without a per-repo install of the manager itself;
 #   - `serve`, the static file server used for `serveMode: 'static'`;
 #   - a headless JRE + WireMock standalone (pinned), the mock upstream for every backend the
 #     frontend depends on that is NOT the service currently under test.
 # All pinned so the image is reproducible; bump alongside the harness version.
-RUN corepack enable && corepack prepare pnpm@10.20.0 --activate && corepack prepare yarn@4.10.3 --activate
+#
+# Both managers install from the registry, NOT through corepack. Corepack is not an option any
+# more: the base is node:26, and Node stopped shipping corepack, so `corepack enable` here was
+# failing the build outright and neither manager was reaching the image. It is not what we would
+# want back either, since it routes every pnpm call through a Node wrapper of its own. Yarn 4 is
+# not published under the bare `yarn` name (that package stops at 1.22), so it comes from
+# `@yarnpkg/cli-dist`, the same bundle corepack would have fetched. A repo declaring a DIFFERENT
+# pnpm in `packageManager` still gets that one: pnpm honours the field itself.
+RUN npm install -g pnpm@11.21.0 @yarnpkg/cli-dist@4.10.3
 RUN npm install -g serve@14.2.5
 ARG WIREMOCK_VERSION=3.13.1
 ENV WIREMOCK_JAR=/opt/wiremock/wiremock-standalone.jar
@@ -57,4 +77,7 @@ RUN apt-get update \
      -o "${WIREMOCK_JAR}" \
   && chown -R harness:harness /opt/wiremock
 
+# Back to the base image's own HOME + user for the runtime. Everything above wrote to /root,
+# so /home/harness is exactly as the base left it.
+ENV HOME=/home/harness
 USER harness

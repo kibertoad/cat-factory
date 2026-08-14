@@ -9,7 +9,14 @@
 FROM node:24-slim AS build
 WORKDIR /app
 ENV CI=true
-RUN corepack enable
+
+# pnpm straight from the registry, NOT via corepack: corepack runs every pnpm call through an extra
+# Node wrapper of its own. Not `@pnpm/exe` either — the self-contained build links libatomic.so.1,
+# which the slim base does not carry. The version is read out of the workspace's own
+# `packageManager` field (copied ahead of the tree so the layer caches independently of a source
+# change), so the image can never install a pnpm that did not write the lockfile it installs from.
+COPY package.json ./
+RUN npm install -g "pnpm@$(node -p "require('./package.json').packageManager.split('@').pop().split('+')[0]")"
 
 # The SPA's API base is baked in at build time (`ssr: false`), and a preview stack's host port is
 # only known at `up` time — so the ONLY value that can work here is the EMPTY one: same-origin,

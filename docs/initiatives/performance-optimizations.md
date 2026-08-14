@@ -1,6 +1,6 @@
 # Initiative: performance optimizations (prioritized)
 
-**Status:** in progress; items 1, 2, 3, 4, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 21, 23 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · targeted board events · spend/workspace-settings/account-settings cache slices · GitHub-sync + fan-out-publisher parallelism · reuse-the-loaded-list batch across autoStart/initiative-spawn/blueprint-reconcile/block-delete · agent-context single frame-walk + parallel wave · password-reset-token expiry index · risk-policy merge-preset cache slice · board RAF loops driven by an activity pulse) · frontend deep re-audit 2026-08-14, after the task-swimlanes rework (#1777): items 5/10/19/20 re-verified and refreshed, PR links backfilled, items 25-30 added · **Owner:** core · **Started:** 2026-07-09
+**Status:** in progress; items 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 23, 25, 28 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · targeted board events · spend/workspace-settings/account-settings cache slices · GitHub-sync + fan-out-publisher parallelism · reuse-the-loaded-list batch across autoStart/initiative-spawn/blueprint-reconcile/block-delete · agent-context single frame-walk + parallel wave · password-reset-token expiry index · risk-policy merge-preset cache slice · board RAF loops driven by an activity pulse · per-block execution index · shared lane derivations with structural sharing · the one refresh funnel) · frontend deep re-audit 2026-08-14, after the task-swimlanes rework (#1777): items 5/10/19/20 re-verified and refreshed, PR links backfilled, items 25-30 added · **Owner:** core · **Started:** 2026-07-09
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -58,7 +58,7 @@ symmetric" (CLAUDE.md).
 | 7   | P2  | caching      | `SpendService` three banned TTL `Map`s (pricing / account / user limits)                                                            | ✅ done | [#1060](https://github.com/kibertoad/cat-factory/pull/1060) |
 | 8   | P2  | caching      | `AccountSettingsService` legacy 30s `Map` (the named anti-pattern)                                                                  | ✅ done | [#1068](https://github.com/kibertoad/cat-factory/pull/1068) |
 | 9   | P2  | caching      | `WorkspaceSettingsService.get` uncached; read per recorded LLM call                                                                 | ✅ done | [#1060](https://github.com/kibertoad/cat-factory/pull/1060) |
-| 10  | P2  | frontend     | One event re-classifies + re-sorts every frame's swimlanes; no structural sharing (rewritten post-#1777)                            | ⬜ todo |                                                             |
+| 10  | P2  | frontend     | One event re-classifies + re-sorts every frame's swimlanes; no structural sharing (rewritten post-#1777)                            | ✅ done | [#2023](https://github.com/kibertoad/cat-factory/pull/2023) |
 | 11  | P2  | frontend     | Two unconditional 60fps RAF loops doing DOM measurement while idle                                                                  | ✅ done | [#1914](https://github.com/kibertoad/cat-factory/pull/1914) |
 | 12  | P2  | integrations | `GitHubSyncService`: serial per-workspace fan-out + serial resource syncs                                                           | ✅ done | [#1085](https://github.com/kibertoad/cat-factory/pull/1085) |
 | 13  | P2  | engine       | `AgentContextBuilder` re-walks block ancestry per resolver, sequentially                                                            | ✅ done | [#1143](https://github.com/kibertoad/cat-factory/pull/1143) |
@@ -73,10 +73,10 @@ symmetric" (CLAUDE.md).
 | 22  | P3  | spend        | `isOverBudget`: up to 3 live SUM aggregates per proxied LLM call (design decision)                                                  | ⬜ todo |                                                             |
 | 23  | P3  | engine       | `resolveRiskPolicy` re-reads merge preset per gate evaluation (optional slice)                                                      | ✅ done | [#1143](https://github.com/kibertoad/cat-factory/pull/1143) |
 | 24  | P2  | gateways     | Dispatch GH client: no single-flight / throttle; concurrent same-run steps duplicate token mint + branch probe                      | ⬜ todo |                                                             |
-| 25  | P1  | frontend     | `execution.getByBlock` full scan per call on the card/lane/measurement paths; cards scan global gate lists                          | ⬜ todo |                                                             |
+| 25  | P1  | frontend     | `execution.getByBlock` full scan per call on the card/lane/measurement paths; cards scan global gate lists                          | ✅ done | [#2023](https://github.com/kibertoad/cat-factory/pull/2023) |
 | 26  | P2  | frontend     | Activity pulse re-wakes the DOM-measuring loops on every card re-render, so a busy board never parks them                           | ⬜ todo |                                                             |
 | 27  | P2  | frontend     | Observability/kaizen stores grow unbounded per session and survive board switches                                                   | ⬜ todo |                                                             |
-| 28  | P2  | frontend     | ~35 direct `refresh()` call sites + starvable trailing-only debounce + stacking retry chains                                        | ⬜ todo |                                                             |
+| 28  | P2  | frontend     | ~35 direct `refresh()` call sites + starvable trailing-only debounce + stacking retry chains                                        | ✅ done | [#2023](https://github.com/kibertoad/cat-factory/pull/2023) |
 | 29  | P3  | frontend     | Deep reactivity over `execution.instances` (shallowRef viable) and `board.blocks` (blocked by in-place writes)                      | ⬜ todo |                                                             |
 | 30  | P3  | frontend     | Identity churn, uncached derived counts, per-invocation timers, drag/viewport listener leaks (grouped)                              | ⬜ todo |                                                             |
 
@@ -432,6 +432,22 @@ Breadth found in the re-audit, all in the same recompute:
 fields the comparators read) so a progress-only event short-circuits downstream `===` checks.
 The `getByBlock` scans inside `classify` are item 25 and should land first, since they dominate
 the recompute this item makes rarer.
+
+**Landed ([#2023](https://github.com/kibertoad/cat-factory/pull/2023), with items 25 and 28):** `collectReviewDebt` moved onto the notifications store as
+`reviewDebtByBlock`, so the workspace-wide reduction is derived once instead of once per mounted
+frame; `laneSort` compares text through one lazily built `Intl.Collator` (no options, so the
+collation is byte-for-byte what `localeCompare` performed); and the assembled output passes through
+`utils/laneIdentity.ts`, which hands back the previous lane / group / entry objects wherever the
+fresh ones are field-for-field identical, so a progress-only event leaves `TaskLane` / `LaneGroup`
+diffing on `===`. What makes reuse sound is the DERIVED fields being compared: `moduleName`,
+`initiativeName`, `epicName` and the activity/wait stamps exist only on the entry, so a reused entry
+carrying a stale one is a lie nothing else corrects. `task` is compared by reference, and review
+corrected the reason: it is NOT that the board store always replaces the object (`board/placement.ts`
+patches a block in place for its optimistic writes), but that a replaced block is a new reference and
+an in-place patch is one object both entries share, which a renderer reads through and Vue's deep
+reactivity invalidates on its own. The rule a future field must respect (add it to `sameEntry` or
+reuse goes stale) is stated at that file's head and pinned by `laneIdentity.spec.ts`. Still open
+here: incremental maintenance of the gate/run projections themselves (item 20's third bullet).
 
 ### 11. Two unconditional 60fps DOM-measuring RAF loops (P2)
 
@@ -792,6 +808,15 @@ it. Switch `TaskCard`'s two finds to the existing byBlock maps; index `recurring
 pipeline-default lookup the same way. Pure SPA change, PR-sized, and it multiplies with item 10:
 each removes a factor of the O(frames × tasks × runs) product.
 
+**Landed ([#2023](https://github.com/kibertoad/cat-factory/pull/2023)):** `byBlockLive` is a single pass stating the preference rule as "replace whatever is held
+whenever it is TERMINAL", which is the array form (`find(live) ?? at(-1)`) exactly: the first live
+run wins and is never displaced, and with no live run the last terminal one wins. `getByBlock` is
+now a Map read, so `TaskPipelineMini`, `useFrameLanes.classify` and `useTaskExpansion` all pay O(1).
+`TaskCard`'s two global `find`s read `decisionsByBlock` / `approvalsByBlock`, `recurring.byBlock`
+indexes its schedules, and `pipelines.getPipeline` indexes the catalog by id. Both orderings of the
+retry-predecessor case are pinned in `execution.spec.ts`. Not addressed here: `outcomeReadable`
+still recomputes per card on every event because `byId` invalidates wholesale (item 20/29).
+
 ### 26. The activity pulse re-wakes the DOM-measuring loops on every card re-render (P2)
 
 Item 11's follow-up. The canvas MutationObserver is deliberately broad
@@ -862,6 +887,37 @@ call sites go through; where a mutation's own response already carries the autho
 hydrate that store directly instead of refetching the world; an in-flight map for
 `reconcileRun`. Must respect the live-push coherence rules: the funnel keeps the
 capture-baseline-then-hydrate ordering `refresh()` already does.
+
+**Landed ([#2023](https://github.com/kibertoad/cat-factory/pull/2023), `stores/workspace/refreshFunnel.ts`):** the funnel IS `refresh()`, so the ~35 direct call
+sites needed no edit and a new mutation has nothing to opt into. It is deliberately NOT plain
+single-flight: a caller that mutated and then refreshed is entitled to a snapshot read AFTER its
+call, so a call arriving mid-fetch joins a single QUEUED follow-up rather than the in-flight
+request. N concurrent callers therefore cost one extra fetch between them, never one each, and no
+caller ever observes a pre-mutation world. The stream's debounce gained a 2s max-wait cap (trailing
+alone re-armed forever under a sustained sub-300ms stream, so the board stopped resyncing exactly
+when it was busiest) plus a coverage check: `refreshMark()` / `hydratedSince()` let it drop a
+resync that some mutation's own refresh already served, which is the double-snapshot the finding
+opens with. The `refreshSeq` guard is gone: with one fetch at a time, two snapshots cannot resolve
+out of order, and that guard existed only to order them.
+
+Serializing is what makes the two bounds below load-bearing, and both were added in review:
+
+- **The slot has a 30s DEADLINE and aborts the request.** The wretch client sets no timeout, so a
+  stalled connection can leave a GET pending indefinitely; behind one slot that single stall wedges
+  every refresh, the resync and the retry chain at once. A deadline turns it into an ordinary failure
+  they can all act on, and a snapshot arriving after it is never applied.
+- **A queued follow-up is tagged with the board it was queued FOR** and stands down on a switch,
+  rather than reading the CURRENT board on behalf of a caller that asked about the old one.
+
+`refreshWithRetry` chains stand down when a newer one starts, and a stood-down chain HANDS ITS CALLER
+the newer chain rather than resolving: `socket.onopen` announces `connected` off that promise, so
+resolving early would announce a board whose reconcile is still in flight. `reconcileRun` dedupes
+its point-read with one queued follow-up, for the same reason the funnel is not plain single-flight:
+the outstanding read may predate the run reaching terminal, and nothing asks a third time.
+
+Behaviour to watch: the coverage skip assumes the server emits a coarse `board` event only AFTER
+committing what it announces. Not addressed here: hydrating a mutation's own response instead of
+refetching the world, which is a per-call-site change rather than a funnel one.
 
 ### 29. Deep reactivity over the two biggest arrays (P3)
 
@@ -963,6 +1019,14 @@ are the bar.
    win), then 10 (lane-assembly breadth; multiplies with 25), then 5 (now three parts:
    by-id endpoint, store carry-forward, projection with `hasOutput`), then 26/27/28 in
    any order, then 20/29/30.
+   8b. 25, 10 and 28 landed together (they share the per-event and per-refresh hot paths and
+   the same store seams). 28 was pulled ahead of 5 deliberately: 5 is the one frontend item
+   that is NOT groupable, because its own premise correction makes it three dependent slices
+   (a by-id instance endpoint that does not exist on either runtime, then a store carry-forward
+   for the heavy fields, and only then the projection), and 28 call sites read the instance
+   SYNCHRONOUSLY off the hydrated cache today. Landing it beside two unrelated items would have
+   put a wire-shape change and a new endpoint behind the same review as two pure SPA fixes.
+   Remaining frontend order: 5 (as its own sequence), then 26/27, then 20/29/30.
 9. Items 19, 21 as small both-runtime persistence PRs (19 pairs naturally with 5).
 10. Items 22, 24 last among backend; each needs a short design note before code.
 
