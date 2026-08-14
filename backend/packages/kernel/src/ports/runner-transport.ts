@@ -2,6 +2,7 @@ import type { CloudProvider, InstanceSize, StepSubtasks } from '../domain/types.
 import type { HarnessFailureCause } from '../domain/harness-failure.js'
 import type { LlmToolSpan } from './llm-trace-sink.js'
 import type { AgentEffortReport } from '@cat-factory/contracts'
+import { isPlatformImageVariant, PLATFORM_IMAGE_VARIANTS } from '@cat-factory/contracts'
 
 // Port for "where a repo-operating coding job actually runs". The
 // ContainerAgentExecutor dispatches each job and polls it through this transport
@@ -274,19 +275,61 @@ interface RunnerInfraSetup {
 export type RunnerDispatchKind = 'agent' | 'deploy'
 
 /**
- * Which executor image a job runs on. `default` is the standard harness image; `ui` is the
- * heavier UI-tester image that bundles Playwright + a browser (the `tester-ui` kind needs it,
- * and only it, so the browser never bloats every other kind's cold-start); `deploy` is the
- * separate deploy-harness image (slim base + `kubectl`/`kustomize`/`helm`).
+ * Which executor image a job runs on, by NAME.
+ *
+ * Three names are the PLATFORM's, because it publishes those images ({@link
+ * PLATFORM_IMAGE_VARIANTS}): `default` is the standard harness image; `ui` is the heavier
+ * UI-tester image that bundles Playwright + a browser (the `tester-ui` kind needs it, and only
+ * it, so the browser never bloats every other kind's cold-start); `deploy` is the separate
+ * deploy-harness image (slim base + `kubectl`/`kustomize`/`helm`).
+ *
+ * Anything else is a DEPLOYMENT's own variant: a slug one of its agent kinds declares
+ * (`AgentStepSpec.image`) and its runner backend maps to an image. That is the whole reason the
+ * type is open rather than a union of the three. The split exists because different kinds need
+ * different images, and a deployment whose own agent needs a tool the harness image has no
+ * reason to carry had two options: install it inside every run, or put it in every kind's cold
+ * start. The platform cannot enumerate those names, and it does not have to: what it owns is the
+ * ROUTING (a variant is part of the container's identity, {@link containerKeyForRef}) and the
+ * REFUSAL below.
  *
  * A backend that cannot serve a declared variant REFUSES the dispatch rather than running the
  * job on its default image. The two are not interchangeable in the direction that matters: a
  * browser-driven tester on the plain image has no browser, and it discovers that only after a
  * checkout, an install and a model's first turns have been paid for, then reports an `abort`
- * indistinguishable from an app that would not boot. Naming the missing wiring at dispatch
- * costs nothing and says which knob to set.
+ * indistinguishable from an app that would not boot. A deployment's own variant is worse still,
+ * because nothing in the platform knows what it carried, so the job would report a missing
+ * artifact with no cause anywhere. Naming the missing wiring at dispatch costs nothing and says
+ * which knob to set.
  */
-export type RunnerImageVariant = 'default' | 'ui' | 'deploy'
+export type RunnerImageVariant = string
+
+// The reserved-name half of the vocabulary lives on the WIRE (`@cat-factory/contracts`), because
+// a runner backend's variant map is edited in the SPA and an agent kind's declaration is written
+// by a deployment: both must be held to one list of names the platform has already claimed.
+export { PLATFORM_IMAGE_VARIANTS, isPlatformImageVariant }
+
+/**
+ * The refusal a DEPLOYMENT-named image variant earns when the resolved runner backend maps it to
+ * nothing, with the per-backend knob named by the caller.
+ *
+ * One message, in kernel, because three backends refuse it and an operator reading three
+ * wordings for one misconfiguration learns three things instead of one. The platform's own
+ * variants keep their bespoke messages: the platform knows what `ui` is FOR, so it can say what
+ * a deployment loses by leaving it unwired and what to do instead, and this one cannot say
+ * anything about a variant it has never heard of beyond where the mapping goes.
+ */
+export function deploymentImageVariantMessage(variant: string, setting: string): string {
+  return (
+    `This step's agent kind declares the "${variant}" executor image, which this deployment's ` +
+    `runner backend maps to no image. Add "${variant}" to ${setting}, or drop the kind's ` +
+    `\`image\` declaration if the default harness image is enough: running the default instead ` +
+    `would produce a job without whatever "${variant}" carries, and a step reporting a missing ` +
+    `result with nothing naming the cause.`
+  )
+}
+
+/** The `details.reason` every unwired-image refusal carries, whoever raises it. */
+export const RUNNER_IMAGE_UNWIRED_REASON = 'runner_image_unwired'
 
 /**
  * Optional, transport-level provisioning hints resolved per-service at dispatch.

@@ -3,6 +3,7 @@ import {
   connectionFailureResult,
   type ConnectionTestResult,
   CONTAINER_EVICTION_ERROR,
+  containerKeyForRef,
   getErrorMessage,
   HARNESS_SHUTDOWN_ERROR,
   harnessDispatchError,
@@ -37,10 +38,14 @@ import {
   proxyUrl,
 } from './kubernetes.logic.js'
 
-// Native Kubernetes runner transport (target k8s 1.35+). One bare Pod per RUN,
-// named deterministically from `ref.runId`; every step of the run re-attaches to
-// that pod by `ref.jobId` — mirroring CloudflareContainerTransport's per-run model
-// and the harness's per-run-container assumption. The orchestrator reaches the
+// Native Kubernetes runner transport (target k8s 1.35+). One bare Pod per run and IMAGE
+// VARIANT, named deterministically from kernel's `containerKeyForRef`; every step of the run
+// that wants the same image re-attaches to that pod by `ref.jobId`, and a step declaring a
+// different one gets its own pod — mirroring CloudflareContainerTransport's model (a container
+// class per variant) and the harness's per-container assumption. Keying on the run id alone
+// silently sent the second variant's job into the first's pod, because a later `ensurePod`
+// 409s and re-attaches by design: right for two steps that want one image, and a browser-driven
+// tester running on an image with no browser for two that do not. The orchestrator reaches the
 // per-pod executor-harness HTTP server through the kube-apiserver POD-PROXY
 // subresource, so it needs only HTTPS to the apiserver (no in-cluster networking,
 // no per-run Service/Ingress) and the full RunnerJobView fidelity is preserved
@@ -104,7 +109,7 @@ export class KubernetesRunnerTransport implements RunnerTransport {
     kind: RunnerDispatchKind = 'agent',
     options?: RunnerDispatchOptions,
   ): Promise<RunnerDispatchAck | undefined> {
-    const name = podName(ref.runId)
+    const name = podName(containerKeyForRef(ref))
     await this.ensurePod(name, ref.runId, options)
     await this.waitForPodReady(name)
     const res = await this.proxyFetch('POST', name, '/jobs', { ...spec, kind }, DISPATCH_TIMEOUT_MS)
@@ -126,7 +131,7 @@ export class KubernetesRunnerTransport implements RunnerTransport {
   }
 
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
-    const name = podName(ref.runId)
+    const name = podName(containerKeyForRef(ref))
     const res = await this.proxyFetch(
       'GET',
       name,
@@ -166,7 +171,7 @@ export class KubernetesRunnerTransport implements RunnerTransport {
 
   /** Reclaim the run's pod (idempotent — a missing pod is a no-op). */
   async release(ref: RunnerJobRef): Promise<void> {
-    const name = podName(ref.runId)
+    const name = podName(containerKeyForRef(ref))
     const res = await this.apiFetch(
       'DELETE',
       podUrl(this.config, name),
@@ -191,12 +196,12 @@ export class KubernetesRunnerTransport implements RunnerTransport {
    * the harness through the pod-proxy and waits for it to settle, and anything else escalates to
    * deleting the pod, which stops everything in it.
    *
-   * The pod is per-RUN, so the escalation costs the rest of the run, which is exactly the trade
-   * the only caller has already made by failing it. A bare Pod is not garbage-collected either,
+   * The pod holds the rest of the run's steps that share this image, so the escalation costs
+   * them, which is exactly the trade the only caller has already made by failing the run. A bare Pod is not garbage-collected either,
    * so a stop that gave up here would leak the pod as well as the agent.
    */
   async stopJob(ref: RunnerJobRef): Promise<RunnerJobStopOutcome> {
-    const name = podName(ref.runId)
+    const name = podName(containerKeyForRef(ref))
     const res = await this.proxyFetch(
       'DELETE',
       name,
@@ -253,8 +258,8 @@ export class KubernetesRunnerTransport implements RunnerTransport {
    * Both come from one read because they are one question asked twice, and a pod being deleted
    * between two reads would let the verdict and the detail describe different moments.
    *
-   * The pod is per-RUN, so whatever it reports is unambiguously this run's: none of the
-   * shared-backend caution the local warm pool needs applies here.
+   * The pod is per (run, image variant), so whatever it reports is unambiguously this run's:
+   * none of the shared-backend caution the local warm pool needs applies here.
    *
    * Never throws, and never returns silence for a failure to look. Three outcomes are three
    * different investigations and only one of them is "the container died": a pod that is GONE

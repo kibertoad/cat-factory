@@ -3,7 +3,14 @@ import type {
   ProviderConfigField,
   RunnerDispatchOptions,
 } from '@cat-factory/kernel'
-import { isCloudMetadataHost, UnavailableError, ValidationError } from '@cat-factory/kernel'
+import {
+  deploymentImageVariantMessage,
+  isCloudMetadataHost,
+  isPlatformImageVariant,
+  RUNNER_IMAGE_UNWIRED_REASON,
+  UnavailableError,
+  ValidationError,
+} from '@cat-factory/kernel'
 import { KUBERNETES_RUNNER_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
 
 // Pure helpers for the native Kubernetes runner backend. No I/O here — URL
@@ -105,9 +112,18 @@ export function k8sName(value: string, prefix: string, max = 63, fallback = 'x')
   return `${prefix}${body}`
 }
 
-/** Deterministic per-RUN pod name (one pod per run; steps re-attach to it). */
-export function podName(runId: string): string {
-  return k8sName(runId, 'cf-run-', 63, 'run')
+/**
+ * Deterministic pod name for one CONTAINER KEY (kernel's `containerKeyForRef`): a run's steps
+ * share one pod, EXCEPT that a step declaring a different executor image gets its own.
+ *
+ * It takes the key rather than the run id because that is the whole identity. A run's later
+ * `ensurePod` 409s and re-attaches by design, which is right for two steps that want the same
+ * image and silently wrong for two that do not: the second would run in the first's container,
+ * on an image chosen before its variant was known. The key already qualifies the run id with
+ * the variant, and `k8sName` folds its `:` into a hyphen like any other separator.
+ */
+export function podName(containerKey: string): string {
+  return k8sName(containerKey, 'cf-run-', 63, 'run')
 }
 
 /** kube-apiserver root with any trailing slash stripped (shared by runner + env). */
@@ -219,12 +235,23 @@ export function resolveImage(
         "runner pool configures no UI-tester image. Set the pool's `imageUi` to a published " +
         'cat-factory-executor-ui tag. Until then, drop the `tester-ui` step from the pipeline: ' +
         'the visual-confirmation gate still runs on screenshots a person uploads.',
-      'runner_image_unwired',
+      RUNNER_IMAGE_UNWIRED_REASON,
       { image: options.image, setting: 'imageUi' },
     )
   }
   if (options?.image === 'deploy' && config.imageDeploy) return config.imageDeploy
-  return config.image
+  const variant = options?.image
+  if (!variant || isPlatformImageVariant(variant)) return config.image
+  // A DEPLOYMENT's own variant. Unlike `deploy` above, which falls back to the executor image so
+  // the deploy harness's own preflight reports the missing CLIs, nothing here knows what this one
+  // carries: running the default would produce a job silently missing it.
+  const mapped = config.imageVariants?.[variant]
+  if (mapped) return mapped
+  throw new UnavailableError(
+    deploymentImageVariantMessage(variant, "the runner backend's `imageVariants`"),
+    RUNNER_IMAGE_UNWIRED_REASON,
+    { image: variant, setting: 'imageVariants' },
+  )
 }
 
 /** Resolve the pod resource block for a dispatch (per-size override, else the default). */

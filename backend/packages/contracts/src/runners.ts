@@ -213,6 +213,23 @@ export type KubernetesResourceQuantities = v.InferOutput<typeof kubernetesResour
 /** The secret-bundle key the Kubernetes backend reads the ServiceAccount token from. */
 export const KUBERNETES_RUNNER_TOKEN_SECRET_KEY = 'apiToken'
 
+/**
+ * The container image variants the PLATFORM itself publishes, and therefore the names a
+ * deployment may not claim for an image of its own: each has its own named setting on every
+ * runner backend, and re-pointing one would silently change what a built-in kind runs.
+ *
+ * On the WIRE rather than in the backend alone, for the reason the capability tags are: the
+ * people who must not collide with these names are outside it. A deployment registers an agent
+ * kind naming its own variant, and an operator fills in a backend's variant map in the SPA.
+ * Kernel re-exports it, so a backend and a registration are held to one list.
+ */
+export const PLATFORM_IMAGE_VARIANTS: readonly string[] = ['default', 'ui', 'deploy']
+
+/** Whether `variant` is one the platform publishes, rather than a deployment's own. */
+export function isPlatformImageVariant(variant: string): boolean {
+  return PLATFORM_IMAGE_VARIANTS.includes(variant)
+}
+
 export const kubernetesRunnerConfigSchema = v.object({
   /** Human label for the connection (shown in the UI). */
   label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
@@ -239,6 +256,37 @@ export const kubernetesRunnerConfigSchema = v.object({
    * raw-manifest REST path is unaffected); set it to enable the pool's deploy backend.
    */
   imageDeploy: v.optional(v.string()),
+  /**
+   * The DEPLOYMENT's own image variants: the name one of its agent kinds declares
+   * (`AgentStepSpec.image`) mapped to the tag a pod for it pulls.
+   *
+   * A map rather than more named fields, because these are open-ended in a way the three above
+   * are not: `image` / `imageUi` / `imageDeploy` are images this repo publishes and every backend
+   * knows the meaning of, while what a deployment's own agent kind needs in its container is
+   * known only to that deployment. A kind declaring a name this map does not carry is refused at
+   * dispatch rather than quietly run on the default image, which would produce a job missing
+   * whatever the variant existed for and a step reporting nothing about why.
+   *
+   * The platform's own names are not accepted here: they have their own fields above, and a
+   * second place to set them would be a second answer to one question.
+   */
+  imageVariants: v.optional(
+    v.pipe(
+      v.record(
+        v.pipe(
+          v.string(),
+          v.trim(),
+          v.maxLength(64),
+          v.regex(/^[a-z0-9][a-z0-9-]*$/, 'must be a lower-kebab slug'),
+        ),
+        v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+      ),
+      v.check(
+        (variants) => Object.keys(variants).every((name) => !isPlatformImageVariant(name)),
+        'must not redefine a platform image variant (default, ui, deploy): each has its own field',
+      ),
+    ),
+  ),
   /** Container port the harness HTTP server listens on (default 8080). */
   harnessPort: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65535))),
   /** Name of an `imagePullSecrets` entry for a private registry. */

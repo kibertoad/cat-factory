@@ -610,7 +610,11 @@ export type {
 export {
   CONTAINER_EVICTION_ERROR,
   containerKeyForRef,
+  deploymentImageVariantMessage,
   HARNESS_SHUTDOWN_ERROR,
+  isPlatformImageVariant,
+  PLATFORM_IMAGE_VARIANTS,
+  RUNNER_IMAGE_UNWIRED_REASON,
   runIdFromContainerKey,
 } from './runner-transport.js'
 export type { PreviewRef, PreviewTransport, PreviewView } from './preview-transport.js'

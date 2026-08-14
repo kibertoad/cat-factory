@@ -311,6 +311,50 @@ describe('validateRegistrations', () => {
     ).not.toThrow()
   })
 
+  it('accepts a kind naming its OWN image variant, and refuses a reserved or malformed one', () => {
+    // The name is open so a deployment can point a kind at an image of its own, and open is why
+    // boot has to grade it: nothing downstream tells a typo from a variant a backend was never
+    // configured for, and both surface as the same refused dispatch on whichever pipeline reaches
+    // the step first.
+    registry.register({
+      kind: 'snapper',
+      systemPrompt: 'snap',
+      agent: { surface: 'container-explore', image: 'pixel-tools' },
+    })
+    // `ui` is the platform's, and a deployment's own browser kind should run on it rather than
+    // publish a second copy of the same image.
+    registry.register({
+      kind: 'own-tester',
+      systemPrompt: 'test',
+      agent: { surface: 'container-explore', image: 'ui' },
+    })
+    expect(
+      collectRegistrationProblems({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      }).filter((p) => p.code.startsWith('agent_image_variant')),
+    ).toEqual([])
+
+    // `default` is spelled by OMISSION and `deploy` belongs to the environment provisioner, which
+    // dispatches through its own transport: a kind naming it asks for `kubectl` in an agent
+    // container through a door built for something else.
+    registry.register({
+      kind: 'confused',
+      systemPrompt: 'x',
+      agent: { surface: 'container-explore', image: 'deploy' },
+    })
+    registry.register({
+      kind: 'shouty',
+      systemPrompt: 'x',
+      agent: { surface: 'container-explore', image: 'Pixel_Tools' },
+    })
+    const codes = collectRegistrationProblems({
+      registries: { agentKindRegistry: registry, gateRegistry: gates },
+    })
+      .filter((p) => p.code.startsWith('agent_image_variant'))
+      .map((p) => p.code)
+    expect(codes).toEqual(['agent_image_variant_reserved', 'agent_image_variant_invalid'])
+  })
+
   it('accepts a built-in helper kind (ci-fixer) without a registered kind', () => {
     gates.register('license-check', goodGate('ci-fixer'))
     expect(

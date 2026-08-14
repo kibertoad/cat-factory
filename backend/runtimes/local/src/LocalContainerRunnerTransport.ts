@@ -13,9 +13,11 @@ import type {
 import {
   composePostMortem,
   containerKeyForRef,
+  deploymentImageVariantMessage,
   describeError,
   getErrorMessage,
   runBestEffort,
+  RUNNER_IMAGE_UNWIRED_REASON,
   runIdFromContainerKey,
   UnavailableError,
 } from '@cat-factory/kernel'
@@ -50,6 +52,7 @@ import { type LocalVcsCredential, harnessAllowedHosts } from './vcsCredential.js
 import {
   RECOMMENDED_HARNESS_IMAGE,
   resolveHarnessImage,
+  resolveHarnessImageVariants,
   resolveUiHarnessImage,
 } from './harnessImage.js'
 import { recommendedHarnessVersion, verifyHarnessVersion } from './harnessVersion.js'
@@ -117,6 +120,18 @@ export interface LocalContainerRunnerTransportOptions {
    * browser. See `imageFor`.
    */
   imageUi?: string
+  /**
+   * The DEPLOYMENT's own image variants: the name one of its agent kinds declares
+   * (`AgentStepSpec.image`) mapped to the image ref a container for it runs. From
+   * `LOCAL_HARNESS_IMAGE_VARIANTS`.
+   *
+   * A map rather than more named options, because these are open-ended in a way `image` and
+   * `imageUi` are not: those two are images this repo publishes and every backend knows the
+   * meaning of, while what a deployment's own kind needs in its container is known only to that
+   * deployment. Absent ⇒ any such variant is refused at dispatch, which is the same disposition
+   * an unconfigured `imageUi` gets and for a stronger reason.
+   */
+  imageVariants?: Record<string, string>
   /**
    * The container runtime adapter (Docker-family or Apple). Defaults to the Docker-CLI
    * adapter (`docker` binary) so existing callers/tests keep working.
@@ -233,6 +248,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   private readonly adapter: ContainerRuntimeAdapter
   private readonly image: string
   private readonly imageUi: string | undefined
+  private readonly imageVariants: Record<string, string>
   private readonly sharedSecret: string
   private readonly network?: string
   // Mutable: the warm-pool sizing + checkout env are re-read live via `applySettings` when
@@ -285,6 +301,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
       })
     this.image = options.image
     this.imageUi = options.imageUi
+    this.imageVariants = options.imageVariants ?? {}
     this.sharedSecret = options.sharedSecret
     this.network = options.network
     this.extraEnv = options.env ?? {}
@@ -387,16 +404,29 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
    * would not start. One refused dispatch, naming the variable, is the cheaper answer.
    */
   private imageFor(ref: RunnerJobRef): string {
-    if (ref.image !== 'ui') return this.image
-    if (this.imageUi) return this.imageUi
+    const variant = ref.image
+    if (!variant || variant === 'default') return this.image
+    if (variant === 'ui') {
+      if (this.imageUi) return this.imageUi
+      throw new UnavailableError(
+        'This step runs on the UI-tester executor image (Playwright + a browser), which this ' +
+          'deployment has not configured. Set LOCAL_HARNESS_IMAGE_UI to a published ' +
+          'cat-factory-executor-ui tag (or a locally built one) and restart. Until then, drop ' +
+          'the `tester-ui` step from the pipeline: the visual-confirmation gate still runs on ' +
+          'screenshots a person uploads.',
+        RUNNER_IMAGE_UNWIRED_REASON,
+        { image: variant, variable: 'LOCAL_HARNESS_IMAGE_UI' },
+      )
+    }
+    // A DEPLOYMENT's own variant, named by one of its agent kinds and mapped here. The message
+    // is the shared one because this is the case the platform can say nothing specific about: it
+    // does not know what the image carries, only where the mapping goes.
+    const mapped = this.imageVariants[variant]
+    if (mapped) return mapped
     throw new UnavailableError(
-      'This step runs on the UI-tester executor image (Playwright + a browser), which this ' +
-        'deployment has not configured. Set LOCAL_HARNESS_IMAGE_UI to a published ' +
-        'cat-factory-executor-ui tag (or a locally built one) and restart. Until then, drop ' +
-        'the `tester-ui` step from the pipeline: the visual-confirmation gate still runs on ' +
-        'screenshots a person uploads.',
-      'runner_image_unwired',
-      { image: ref.image, variable: 'LOCAL_HARNESS_IMAGE_UI' },
+      deploymentImageVariantMessage(variant, 'LOCAL_HARNESS_IMAGE_VARIANTS'),
+      RUNNER_IMAGE_UNWIRED_REASON,
+      { image: variant, variable: 'LOCAL_HARNESS_IMAGE_VARIANTS' },
     )
   }
 
@@ -1175,6 +1205,7 @@ export function createLocalContainerTransportFromEnv(
     // most deployments never dispatch to). It is pulled by the runtime on the first `image: 'ui'
     // dispatch, which is the first moment anything needs it.
     imageUi: resolveUiHarnessImage(env),
+    imageVariants: resolveHarnessImageVariants(env),
     adapter: createRuntimeAdapter(env),
     sharedSecret: requireHarnessSharedSecret(env),
     network: env.LOCAL_DOCKER_NETWORK?.trim() || undefined,

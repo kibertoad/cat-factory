@@ -58,3 +58,16 @@ built-in catalog, which is authored with it) plus `MEDIA_GENERATOR_AGENT_KIND`,
 option types. A deployment replacing a shipped preset was writing five index-aligned arrays by
 hand, and naming what its step selects meant either a copied string literal or a second dependency
 below the facade.
+
+**An agent kind can name its OWN container image.** The variant is a slug rather than a
+three-member union: `ui` stays the platform's browser image, and anything else is a deployment's,
+mapped by its runner backend (a Kubernetes pool's `imageVariants`, local Docker's
+`LOCAL_HARNESS_IMAGE_VARIANTS`, a Cloudflare `[[containers]]` class bound as
+`RUNNER_CONTAINER_<VARIANT>` and subclassing the newly-exported `RunContainer`). Boot refuses a
+kind naming `default` or `deploy`, or a name that is not a slug; a backend with no image for a
+variant refuses the dispatch rather than running the default, which for a deployment's own image
+would produce a job silently missing whatever it carried.
+
+**Bug fix**: the Kubernetes runner pool keyed its pod by run id alone, so a `tester-ui` step
+re-attached to the pod an earlier step created on the base image and ran browser work without a
+browser. It now keys by `containerKeyForRef`, like the Cloudflare and local backends.

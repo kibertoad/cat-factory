@@ -17,6 +17,7 @@
 // CLAUDE.md "Any change that affects the runner image MUST bump the image tag". The image and
 // the backend are a matched set and must be released together.
 
+import { isPlatformImageVariant } from '@cat-factory/kernel'
 import { isOffValue } from './envFlags.js'
 
 /**
@@ -54,6 +55,37 @@ export function resolveHarnessImage(env: NodeJS.ProcessEnv): string {
  */
 export function resolveUiHarnessImage(env: NodeJS.ProcessEnv): string {
   return env.LOCAL_HARNESS_IMAGE_UI?.trim() || RECOMMENDED_UI_HARNESS_IMAGE
+}
+
+/**
+ * The DEPLOYMENT's own image variants, parsed from `LOCAL_HARNESS_IMAGE_VARIANTS`:
+ * `name=image-ref` pairs, comma-separated (`pixel-tools=ghcr.io/acme/pixel:1,fonts=…`).
+ *
+ * A comma-separated list rather than one variable per variant, because the set is open: the
+ * platform cannot enumerate a deployment's own names, so it cannot pre-declare their variables
+ * either, and a `LOCAL_HARNESS_IMAGE_<NAME>` convention would put a slug through an
+ * env-var-name transformation that has to round-trip exactly (a `pixel-tools` variant and a
+ * `pixel_tools` one collide the moment it does not).
+ *
+ * A malformed entry is DROPPED rather than defaulted, and the variant then refuses at dispatch
+ * naming this variable: an entry with no `=`, an empty name or an empty ref says nothing about
+ * which image was meant, and inventing one would put the job on an image nobody chose. The
+ * platform's own `ui` / `default` names are ignored here too, since they have their own
+ * variables and a second place to set them would be a second answer.
+ */
+export function resolveHarnessImageVariants(env: NodeJS.ProcessEnv): Record<string, string> {
+  const raw = env.LOCAL_HARNESS_IMAGE_VARIANTS?.trim()
+  if (!raw) return {}
+  const variants: Record<string, string> = {}
+  for (const entry of raw.split(',')) {
+    const separator = entry.indexOf('=')
+    if (separator <= 0) continue
+    const name = entry.slice(0, separator).trim()
+    const image = entry.slice(separator + 1).trim()
+    if (!name || !image || isPlatformImageVariant(name)) continue
+    variants[name] = image
+  }
+  return variants
 }
 
 /**

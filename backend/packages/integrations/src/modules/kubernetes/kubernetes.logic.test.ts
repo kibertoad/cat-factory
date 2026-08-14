@@ -1,4 +1,5 @@
 import type { KubernetesRunnerConfig } from '@cat-factory/kernel'
+import { containerKeyForRef } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   apiServerConnectionFailureMessage,
@@ -30,6 +31,17 @@ describe('podName', () => {
     const name = podName('x'.repeat(100))
     expect(name.length).toBeLessThanOrEqual(63)
     expect(name.startsWith('cf-run-')).toBe(true)
+  })
+
+  it('gives a VARIANT its own pod, so a later step cannot re-attach to the wrong image', () => {
+    // It takes the container KEY, not the run id: a run's second `ensurePod` 409s and re-attaches
+    // by design, which is right for two steps that want the same image and silently wrong for two
+    // that do not. Keyed on the run alone, a `tester-ui` step landed in the pod an earlier coder
+    // step created on the base image, and Playwright was simply absent.
+    expect(podName(containerKeyForRef({ runId: 'exec_1', jobId: 'j' }))).toBe('cf-run-exec-1')
+    expect(podName(containerKeyForRef({ runId: 'exec_1', jobId: 'j', image: 'ui' }))).toBe(
+      'cf-run-ui-exec-1',
+    )
   })
 })
 
@@ -309,6 +321,23 @@ describe('resolveImage / resolveResources', () => {
   // reported. Pinned so the two are not "harmonised" into one rule by a later reader.
   it('still falls back to the default image for an unconfigured deploy variant', () => {
     expect(resolveImage(config, { image: 'deploy' })).toBe(config.image)
+  })
+
+  it("serves a DEPLOYMENT's own variant from the image map", () => {
+    const withVariant = { ...config, imageVariants: { 'pixel-tools': 'ghcr.io/acme/pixel:2' } }
+    expect(resolveImage(withVariant, { image: 'pixel-tools' })).toBe('ghcr.io/acme/pixel:2')
+    // The platform's own names keep their own settings: a map entry cannot repoint them, and the
+    // schema refuses one, so this only pins that the lookup does not reach for them either.
+    expect(resolveImage(withVariant, { image: 'default' })).toBe(config.image)
+  })
+
+  it('refuses an unmapped deployment variant, where `deploy` falls back', () => {
+    // The opposite disposition from the `deploy` case above, and deliberately: the platform knows
+    // what the deploy image carries, so the harness's own preflight reports the missing CLIs.
+    // Nothing here knows what `pixel-tools` carried, so running the default would produce a job
+    // silently missing it and a step reporting no cause.
+    expect(() => resolveImage(config, { image: 'pixel-tools' })).toThrow(/pixel-tools/)
+    expect(() => resolveImage(config, { image: 'pixel-tools' })).toThrow(/imageVariants/)
   })
   it('prefers a per-size override over the default for BOTH requests and limits', () => {
     const sized: KubernetesRunnerConfig = {

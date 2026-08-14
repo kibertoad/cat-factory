@@ -290,45 +290,52 @@ import '@cat-factory/example-custom-agent'
 …then `linkRepo`s a target repo and runs `pl_org_audit`. It proves a brand-new
 repo-writing agent ships with **zero** harness changes.
 
-## The container image a kind runs in, and why it is not a per-kind choice
+## The container image a kind runs in
 
-A kind declares `image: 'ui'` to get the heavier Playwright + browser image, and a deployment
-whose own kind needs a tool the harness image has no reason to carry will reach for a fourth
-variant of the same shape: name it on the kind, map the name to a tag in the runner backend, done.
-That is not the smallest correct change, and the reason is worth stating because it is invisible
-from the definition.
+A kind declares the executor image its jobs need by NAME (`AgentStepSpec.image`). Three names are
+the platform's own: `default` (spelled by omission), `ui` (Playwright + a browser, what `tester-ui`
+runs on) and `deploy` (the k8s-CLI image the environment provisioner dispatches, which a kind may
+not claim). Anything else is a DEPLOYMENT's variant, mapped to an image by its runner backend:
 
-**The container is per RUN, not per step, on all three backends.** The Cloudflare Container is
-addressed by `idFromName(runId)`, the Kubernetes pod by `podName(runId)` (a later step's
-`ensurePod` 409s and re-attaches, by design), and the local Docker transport resolves a container
-by run id. A run's first container-dispatching step CREATES the container; every later step of that
-run runs inside it, and the engine reclaims it when the RUN ends (`stopRunContainer`), not between
-steps. So the image is a property of the run's first dispatch, and a `image` declaration on any
-LATER step of the same run cannot take effect: it re-attaches to what is already there.
+| backend               | where the name is mapped                                                                                                                                                            |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Kubernetes / EKS pool | the runner config's `imageVariants` (`{ "pixel-tools": "ghcr.io/acme/pixel:2" }`)                                                                                                   |
+| local Docker          | `LOCAL_HARNESS_IMAGE_VARIANTS=pixel-tools=ghcr.io/acme/pixel:2,fonts=…`                                                                                                             |
+| Cloudflare            | a `[[containers]]` class (subclass the exported `RunContainer`) plus a durable-object binding named `RUNNER_CONTAINER_PIXEL_TOOLS`, because a Container's image is pinned per CLASS |
+| manifest-driven pool  | forwarded verbatim as `{{input.image}}`; the pool maps it                                                                                                                           |
 
-That is already true of the platform's own `ui` variant. On a chain like coder → tester-ui, the
-pod or container exists before the tester's step is dispatched, so on a self-hosted backend the UI
-tester re-attaches to the base executor image; on Cloudflare a second `[[containers]]` class pinned
-to the UI image is the wiring `Dockerfile.ui`'s deploy note calls "the remaining deploy-time step".
-A fourth variant declared on a kind would inherit that exactly, and silently: the job runs, the
-tool the variant existed for is absent, and the step reports a missing artifact with nothing
-naming the cause.
+Two rules make this safe, and both were learned the hard way.
 
-**So the ask is a per-STEP container identity, not a wider `image` union.** Two shapes could
-deliver it, and both are larger than a field:
+**A variant is part of the CONTAINER's identity, not a dispatch-time hint.** The container is per
+run on every backend, so a run's steps share one, and a step declaring a different image needs its
+own: `containerKeyForRef` qualifies the run id with the variant, and the ref carries it so the
+poll and release sites address the container the dispatch started. It is DERIVED from the step's
+agent kind at both sites rather than remembered between them, because the poll rebuilds its handle
+from the persisted step alone, in another process after a durable replay. Keyed on the run id
+alone, a later step re-attached to whatever the run's first step created: a browser-driven tester
+running on an image with no browser.
 
-- **Key the container by (run, variant)** rather than by run. The poll path is the constraint: it
-  rebuilds a job's handle from the STEP alone, so the variant has to be persisted at dispatch and
-  re-supplied when polling, exactly as the resolved model and the leased subscription token are
-  (`recordDispatchAttribution`). Release then has to reclaim every variant's container for a run,
-  not one.
-- **Expose the tool from the harness** instead of from the image, where it can be. For anything
-  that ships as a WASM module or a static binary small enough to live in the base image, this needs
-  no image seam at all, and it is the cheaper answer for the case that prompted the question (a
-  pixel-grid snapper over a generator's output).
+**A backend with no image for a variant REFUSES the dispatch** (`runner_image_unwired`) rather than
+falling back to its default. The platform's own variants say what a deployment loses by leaving
+them unwired; a deployment's own gets the shared message, because nothing here knows what the image
+carried. That asymmetry is the point: an unwired `ui` costs a browser the tester discovers it needs
+after paying for a checkout, an install and the model's first turns, and an unwired `pixel-tools`
+costs a tool nothing in the platform can even name, so the job would report a missing result with
+no cause anywhere. The one deliberate fallback left is `deploy`, whose harness preflights for its
+own CLIs and reports them.
 
-Until one of those lands, a kind needing its own image must be the ONLY container-dispatching step
-of its run, which for a single-step generating pipeline is no constraint at all.
+Boot refuses a kind that declares `default` or `deploy`, or a name that is not a lower-kebab slug
+(the name is a map key and half a container's identity, so it is held to the shape every other
+registered id is). It does not refuse a name no backend maps: which backends a workspace runs on is
+not knowable at boot, and a deployment that binds the image on its pool and not on its laptop is an
+ordinary state, not a misregistration.
+
+**What this does NOT do is install anything.** There is no `tools:` declaration and no per-kind
+package manifest: that would put the platform in the business of resolving software supply chains,
+and the first kind needing a system library or a private registry would need an escape hatch that
+is "name your own image" with more steps. The image IS the dependency declaration. Where the tool
+ships as WASM or a static binary small enough for the base image, exposing it from the harness is
+still the cheaper answer and needs no variant at all.
 
 ## Status / scope
 

@@ -296,6 +296,9 @@ export function collectRegistrationProblems(
   // 6. Agent capabilities: the skills + tool servers declared for each kind.
   problems.push(...checkAgentCapabilities(registry))
 
+  //  7b. A kind's declared IMAGE VARIANT: a slug, and never a platform name it may not claim.
+  problems.push(...checkAgentImageVariants(registry))
+
   // 7. Agent-kind VARIANTS: their base kind must exist and they must actually change the prompt.
   problems.push(...checkAgentKindVariants(opts, registeredKindIds))
 
@@ -475,6 +478,58 @@ function checkCredentialInjectionNames(opts: ValidateRegistrationsOptions): Regi
         `carrying both withholds it from BOTH of them. Give one a distinct \`envName\`, or point ` +
         `both at the same lookup key if they really share an account.`,
     })
+  }
+  return problems
+}
+
+/**
+ * A registered kind's declared executor IMAGE VARIANT (`AgentStepSpec.image`).
+ *
+ * The name is open so a deployment can point a kind at its own image, and open is exactly why
+ * boot has to grade it: nothing downstream can tell a typo from a variant this backend has not
+ * been configured for, and both surface as the same refused dispatch, hours later, on whichever
+ * pipeline happens to reach that step first.
+ *
+ * Two names are refused outright rather than merely warned about:
+ *
+ * - `deploy` is the environment provisioner's image, dispatched through its own transport. A kind
+ *   naming it is asking for `kubectl` in an agent container through a door built for something
+ *   else, and on the Cloudflare agent path it is refused at dispatch anyway, so boot is where the
+ *   registration itself should fail.
+ * - `default` is spelled by OMISSION. Accepting it as a value would make two spellings of one
+ *   state, and only one of them keys the run's shared container (`containerKeyForRef` treats them
+ *   the same, which is right, and is a coincidence a reader should not have to verify).
+ *
+ * `ui` is deliberately allowed: it is the platform's image, and a deployment's own browser-driven
+ * kind should run on it rather than publish a second copy.
+ */
+function checkAgentImageVariants(registry: AgentKindRegistry): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  for (const definition of registry.all()) {
+    const variant = definition.agent?.image
+    if (!variant) continue
+    if (variant === 'default' || variant === 'deploy') {
+      problems.push({
+        severity: 'error',
+        code: 'agent_image_variant_reserved',
+        message:
+          `Agent kind "${definition.kind}" declares the "${variant}" executor image, which a kind ` +
+          (variant === 'default'
+            ? 'may not name: the default image is what a kind with no `image` declaration runs on.'
+            : "may not use: it is the environment provisioner's image, dispatched through its own transport."),
+      })
+      continue
+    }
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(variant) || variant.length > 64) {
+      problems.push({
+        severity: 'error',
+        code: 'agent_image_variant_invalid',
+        message:
+          `Agent kind "${definition.kind}" declares the executor image "${variant}", which is not a ` +
+          `lower-kebab slug. The name is a key in a runner backend's image map and a container's ` +
+          `identity, so it is held to the shape every other registered id is.`,
+      })
+    }
   }
   return problems
 }

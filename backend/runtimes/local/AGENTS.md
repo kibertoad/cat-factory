@@ -16,7 +16,9 @@ transport + the GitHub token/client seams differ.
   the CF Container transport + the runner-pool transport, over the same `RunnerTransport` port).
   Per run AND per IMAGE: a step declaring `image: 'ui'` gets its own container keyed
   `ui:<runId>` on `LOCAL_HARNESS_IMAGE_UI`, always per-run even with a warm pool on, since pool
-  members all run one image. An unconfigured variant is REFUSED at dispatch.
+  members all run one image. A DEPLOYMENT's own variant works the same way, mapped by
+  `LOCAL_HARNESS_IMAGE_VARIANTS` (`pixel-tools=ghcr.io/acme/pixel:2,…`). An unconfigured variant
+  is REFUSED at dispatch.
 - `LocalProcessRunnerTransport.ts`: the NATIVE backend (`LOCAL_NATIVE_AGENTS`), one long-lived
   host process serving every concurrent job. Its stderr is PIPED and kept as a bounded tail
   (nothing is forwarded to the developer's console), because that is where the harness routes its

@@ -18,7 +18,10 @@ import { D1CommitProjectionRepository } from './infrastructure/repositories/D1Co
 import { D1LiveContainerRepository } from './infrastructure/repositories/D1LiveContainerRepository'
 import { D1SubscriptionActivationRepository } from './infrastructure/repositories/D1PersonalSubscriptionRepository'
 import { ContainerInstanceRegistry } from './infrastructure/containers/ContainerInstanceRegistry'
-import { agentContainerNamespace } from './infrastructure/containers/runContainerNamespace'
+import {
+  agentContainerNamespace,
+  deploymentContainerBindings,
+} from './infrastructure/containers/runContainerNamespace'
 import { D1RateLimitRepository } from './infrastructure/repositories/D1RateLimitRepository'
 import { D1TokenUsageRepository } from './infrastructure/repositories/D1TokenUsageRepository'
 import { D1LlmCallMetricRepository } from './infrastructure/repositories/D1LlmCallMetricRepository'
@@ -129,6 +132,16 @@ export { DeployContainer } from './infrastructure/containers/DeployContainer'
 // Container-enabled Durable Object backing per-run UI-TESTER containers (the browser image:
 // Playwright + Chromium + WireMock, the `image: 'ui'` dispatch variant).
 export { UiTesterContainer } from './infrastructure/containers/UiTesterContainer'
+// The BASE class the three above are, exported so a deployment can bind a container class of its
+// own: a Cloudflare Container's image is pinned per CLASS, so an agent kind declaring its own
+// `image` variant needs one. Subclass it (the subclasses add nothing), add the `[[containers]]`
+// block and a durable-object binding named `RUNNER_CONTAINER_<VARIANT>`, and the agent path
+// routes that variant to it — see `runContainerNamespace.ts`.
+export { RunContainer } from './infrastructure/containers/RunContainer'
+export {
+  DEPLOYMENT_CONTAINER_BINDING_PREFIX,
+  deploymentContainerBinding,
+} from './infrastructure/containers/runContainerNamespace'
 // Per-workspace WebSocket fan-out hub (real-time execution/board events).
 export { WorkspaceEventsHub } from './infrastructure/durable-objects/WorkspaceEventsHub'
 // Cross-isolate cache-coherency directory (per-group generation counters; see appCachesHost.ts).
@@ -865,6 +878,7 @@ function reapStaleContainers(env: Env, tick: SweepTick, clock: SystemClock): voi
       agentContainerNamespace({
         exec: env.EXEC_CONTAINER,
         ...(env.UI_CONTAINER ? { ui: env.UI_CONTAINER } : {}),
+        deployment: deploymentContainerBindings(env as unknown as Record<string, unknown>),
       }),
       new D1LiveContainerRepository({ db: env.DB }),
       clock,
