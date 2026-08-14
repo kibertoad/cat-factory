@@ -1186,6 +1186,29 @@ naming a location, so the loss reads as a broken link rather than as a reclaim. 
 by default and has to be named to be exempted; both metadata stores build their predicate from
 it, and the conformance suite asserts it at the store, which is where they can differ.
 
+### The park a shipped preset finally made visible
+
+`pl_media` is the first built-in whose step parks on a candidate comparison, and public-API
+admission could not see it. `parkSurfacesOf` had four checks and all four read the step CHAIN,
+where a comparison lives in a step's OPTIONS: `pl_media` is one `media-generator` step with no
+gate flag, no parking kind, no human-wait gate and no interview trait, so every check said it
+never stops. A plain `write` key was therefore admitted to START a run that then parked with
+nothing on `/api/v1` able to answer it. That is the same hole `human-review` and the interview
+gate each opened once before, and the lesson repeating a third time: an enumeration written
+against the mechanisms somebody thought of misses the ones they did not.
+
+So the comparison is the FIFTH mechanism, and the first that derives from what a deployment
+AUTHORS rather than from what it registers. `AdmissiblePipelineShape` grew a `stepOptions` leg
+narrowed to exactly the one field admission reads, so a future option cannot look like something
+this module might also consult. PRESENCE of `comparison` is the whole test: authoring already
+refuses one that cannot produce two candidates, so a saved comparison parks.
+
+Answering it is a separate question from admitting it, and only the answer half is deferred. The
+keep-decision has a real route, it is simply not projected onto `/api/v1`, so
+`BINARY_CANDIDATE_PARK_SURFACE` stays out of `PUBLICLY_ANSWERABLE_PARK_SURFACES` and the refusal
+points at the cancel path. That is the opposite reason `human-review` is absent from that set:
+its answer is a person approving a pull request on the VCS host, which no API here could offer.
+
 ### What the platform holding the bytes buys, and why it is the point
 
 An artifact in an org's private bucket is a location string: the report records it, and a reader
@@ -1245,17 +1268,9 @@ labelling a non-image row with the agent's own account of what the file is.
       here, because `publicDecisionKindSchema`'s own rule is that a member ships with its routes:
       the kind needs a `keep-candidates` verb, an entry in `PUBLICLY_ANSWERABLE_PARK_SURFACES`, a
       `scripts/sdk/surface.mjs` row and a regeneration of all four SDKs plus the MCP projection.
-      Until then the park is an in-app surface, and this line is the record of that.
-
-      What DID have to land with `pl_media` is the admission half, because the two are not the
-          same question. Leaving the park unprojected means a headless caller cannot ANSWER it;
-          leaving it out of `parkSurfacesOf` meant a plain `write` key was admitted to START a run
-          that would park there, which is the hole `human-review` and the interview gate each opened
-          once before. `BINARY_CANDIDATE_PARK_SURFACE` closes it: the comparison is the FIFTH park
-          mechanism and the first that lives in a step's OPTIONS rather than in its kind, its gate
-          flag or a registered trait, so `AdmissiblePipelineShape` grew a narrow `stepOptions` leg to
-          see it. Landing the decision kind later is then one move: add it to the answerable set and
-          the refusal starts naming the route instead of the cancel path.
+      Until then the park is an in-app surface, and this line is the record of that. Only the
+      ANSWER half is deferred: admission already refuses the start (see "The park a shipped
+      preset finally made visible" above), so nothing reaches a park it cannot answer.
 
 - [ ] **An e2e spec for the candidate park**, driving generate → park → compare → keep through the
       live pushed UI. It is the assembled-product half the unit tests cannot reach (the window is
