@@ -657,7 +657,7 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
         return { status: 'torn_down' }
       },
       asyncProvision: {
-        buildProvisionJob(req): DeployProvisionJob {
+        async buildProvisionJob(req): Promise<DeployProvisionJob> {
           provider.lastBuild = req
           return {
             ref: req.deploy!.ref,
@@ -837,7 +837,7 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
   it('falls back to the synchronous path when the provider builds no deploy job', async () => {
     // A provider whose buildProvisionJob returns null (raw manifests) provisions synchronously.
     const provider = asyncProvider()
-    provider.asyncProvision!.buildProvisionJob = () => null
+    provider.asyncProvision!.buildProvisionJob = async () => null
     provider.provision = async () => READY
     const registry = fakeRegistry()
     const service = makeAsyncService(provider, registry, {

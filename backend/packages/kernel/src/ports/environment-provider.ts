@@ -452,8 +452,13 @@ export interface AsyncProvisionCapability {
    * `provision()` path. The Kubernetes adapter returns a job only when the manifest source
    * needs rendering (`renderer: 'kustomize'`) or helm releases are declared; raw manifests
    * keep the in-Worker REST path.
+   *
+   * ASYNC because a provider may also have to PREPARE the target for the job it is handing
+   * over: the Kubernetes adapter creates the namespace and wires its registry pull credential
+   * here, because those are cluster writes the render container cannot make for itself without
+   * the platform's own credentials. A throw is a provision failure, exactly as an inline one is.
    */
-  buildProvisionJob(req: ProvisionEnvironmentRequest): DeployProvisionJob | null
+  buildProvisionJob(req: ProvisionEnvironmentRequest): Promise<DeployProvisionJob | null>
   /**
    * Map a finished deploy job's view (namespace, URL, status) into a
    * {@link ProvisionedEnvironment}. Called by the engine when a job built by

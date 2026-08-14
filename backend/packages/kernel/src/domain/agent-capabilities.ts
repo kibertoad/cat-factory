@@ -1,6 +1,7 @@
 import type { ToolServerUnavailableReason } from '@cat-factory/contracts'
 import type { HarnessKind } from '../ports/model-provider.js'
 import { isHarnessKind } from '../ports/model-provider.js'
+import { isLoopbackHost } from '../shared/ip-host.logic.js'
 
 // ---------------------------------------------------------------------------
 // Agent CAPABILITIES — the skills an agent applies and the tool servers (MCP) it may call.
@@ -747,8 +748,4 @@ function parseMcpHttpUrl(raw: string): { scheme: string; host: string } | undefi
   const hostname = parsed.hostname
   const host = hostname.startsWith('[') ? hostname.slice(1, -1) : hostname
   return { scheme: parsed.protocol.slice(0, -1), host }
-}
-
-function isLoopbackHost(host: string): boolean {
-  return host === 'localhost' || host === '::1' || /^127\.\d+\.\d+\.\d+$/.test(host)
 }

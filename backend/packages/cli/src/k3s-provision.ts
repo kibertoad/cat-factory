@@ -10,6 +10,7 @@ import {
   type TcpProbe,
 } from './k3s-ingress.js'
 import { type Io } from './io.js'
+import { isLocalMachineHost } from './localHost.js'
 import {
   type HostState,
   isRecreateOffer,
@@ -349,15 +350,6 @@ export function decodeToken(base64: string): string {
 /** kubeconfig context names that unambiguously denote a LOCAL cluster. */
 const LOCAL_CONTEXT_PREFIXES = ['k3d-', 'kind-'] as const
 const LOCAL_CONTEXT_NAMES = ['minikube', 'docker-desktop', 'orbstack', 'colima', 'rancher-desktop']
-/** Hostnames that denote a LOCAL apiserver (loopback / the Docker host alias). */
-const LOCAL_API_HOSTS = [
-  'localhost',
-  '127.0.0.1',
-  '0.0.0.0',
-  '::1',
-  '[::1]',
-  'host.docker.internal',
-]
 
 /** Normalize the wildcard bind address k3d writes for the apiserver to a dialable loopback host. */
 export function normalizeApiServerUrl(url: string): string {
@@ -369,6 +361,14 @@ export function normalizeApiServerUrl(url: string): string {
  * mutating a remote/production cluster in `--yes` mode: the `use-existing` offer fires for ANY
  * reachable kubeconfig, which may point at a shared cluster. A local-looking context name OR a
  * loopback/Docker-host apiserver is treated as local.
+ *
+ * The apiserver half is `localHost.ts`'s `isLocalMachineHost`, a pinned copy of kernel's helper
+ * of the same name (this package ships with no runtime dependencies, so it cannot import kernel;
+ * `localHost.conformity.test.ts` is what stops the two drifting). It replaced a hand-kept host
+ * list here: that list and the environment provider's had already separated, and the one missing
+ * k3d's `0.0.0.0` silently withheld a behaviour from the default local setup. The mDNS and
+ * wildcard-DNS suffixes stay here because they are heuristics about a DEVELOPER'S kubeconfig,
+ * not facts about the host.
  */
 export function looksLocalCluster(context: string | undefined, apiServerUrl: string): boolean {
   const ctx = (context ?? '').toLowerCase()
@@ -380,8 +380,8 @@ export function looksLocalCluster(context: string | undefined, apiServerUrl: str
   } catch {
     host = ''
   }
-  if (LOCAL_API_HOSTS.includes(host)) return true
-  return host.endsWith('.local') || host.endsWith('.localhost') || host.endsWith('.nip.io')
+  if (host && isLocalMachineHost(host)) return true
+  return host.endsWith('.local') || host.endsWith('.nip.io')
 }
 
 // ---------------------------------------------------------------------------

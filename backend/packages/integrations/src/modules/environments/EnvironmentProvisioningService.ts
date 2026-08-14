@@ -413,7 +413,7 @@ export class EnvironmentProvisioningService {
     )
     let job: DeployProvisionJob | null = null
     try {
-      job = resolved.provider.asyncProvision?.buildProvisionJob(req) ?? null
+      job = (await resolved.provider.asyncProvision?.buildProvisionJob(req)) ?? null
     } catch (error) {
       // `buildProvisionJob` throws when rendering is needed but the deploy inputs aren't wired.
       // Persist a failed env so the deployer step shows the cause, then propagate.

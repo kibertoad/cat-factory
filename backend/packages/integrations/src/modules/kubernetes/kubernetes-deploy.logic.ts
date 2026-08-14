@@ -233,6 +233,26 @@ export interface BuildDeployJobParams {
 }
 
 /**
+ * Whether the namespace the backend derives is the one the deploy actually lands in.
+ *
+ * True for a raw source (nothing can retarget it) and for a kustomize source with a
+ * `namespaceTemplate`, which the harness pins with `kustomize edit set namespace`. False for the
+ * remaining case, a kustomize overlay declaring its OWN namespace: the harness discovers that
+ * name by building the overlay INSIDE the container, so before dispatch the backend genuinely
+ * does not know where the workloads will go.
+ *
+ * This is the mirror of the harness's `resolveTargetNamespace` early return, and it is exported
+ * because a caller that writes into the namespace BEFORE dispatch (the registry-credential
+ * wiring) has to ask the same question. Writing on a false answer creates an empty namespace
+ * nothing tears down, and puts the credential somewhere no pod reads, while the log reports a
+ * success.
+ */
+export function deployTargetsBackendNamespace(config: KubernetesProvisionConfig): boolean {
+  const renderer = config.manifestSource.renderer ?? 'raw'
+  return renderer !== 'kustomize' || !!config.namespaceTemplate
+}
+
+/**
  * Build the deploy-job body the backend dispatches to the deploy harness, with every template
  * rendered and every secret resolved. `setNamespace` pins the backend-derived namespace (via
  * `kustomize edit set namespace`) only for a `kustomize` source WITH a configured
@@ -254,7 +274,7 @@ export function buildDeployJobSpec(params: BuildDeployJobParams): DeployJobSpec 
   const images = resolveImageOverrides(config.images, vars)
   const secretInjections = resolveSecretInjections(config.secretInjections, vars, resolveSecret)
   const helmReleases = resolveHelmReleases(config.helmReleases, vars, resolveSecret)
-  const setNamespace = renderer === 'kustomize' && !!config.namespaceTemplate
+  const setNamespace = renderer === 'kustomize' && deployTargetsBackendNamespace(config)
   const spec: DeployJobSpec = {
     jobId,
     cluster: {
