@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { collectReviewDebt } from '@cat-factory/contracts'
 import type { Notification } from '~/types/domain'
 import type {
   NotificationRoutingMatrix,
@@ -90,6 +91,20 @@ export const useNotificationsStore = defineStore('notifications', () => {
     return map
   })
 
+  /**
+   * Per-block "waiting since", derived from the open review-wait cards by the same
+   * `collectReviewDebt` the backend's friction check uses. It is the fallback source for the park
+   * surfaces that stamp no `step.pausedAt`.
+   *
+   * Derived HERE rather than in the reader because the reader is per FRAME: `useFrameLanes` runs
+   * one instance per mounted service frame and each was re-deriving the same reduction over the
+   * WHOLE open list, so a board with n frames paid O(frames x open notifications) on every
+   * notification change for one workspace-wide fact. One store computed serves every frame.
+   */
+  const reviewDebtByBlock = computed(
+    () => new Map(collectReviewDebt(open.value).map((d) => [d.blockId, d.waitingSince])),
+  )
+
   /** Total open count, for the toolbar badge. */
   const count = computed(() => open.value.length)
 
@@ -170,6 +185,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
     hydrateBaseline,
     upsert,
     byBlock,
+    reviewDebtByBlock,
     count,
     act,
     dismiss,

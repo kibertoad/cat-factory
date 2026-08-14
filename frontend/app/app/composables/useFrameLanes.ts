@@ -1,13 +1,13 @@
 import { computed, type Ref } from 'vue'
-import { collectReviewDebt } from '@cat-factory/contracts'
 import type { Block } from '~/types/domain'
+import { createLaneMemo } from '~/utils/laneIdentity'
 import {
   groupLaneTasks,
   runActivityAt,
   runWaitingSince,
   sortLaneTasks,
-  type LaneGroup,
   type LaneTaskEntry,
+  type RenderedLane,
 } from '~/utils/laneSort'
 import {
   classifyTask,
@@ -16,14 +16,6 @@ import {
   type DoneLaneSelection,
   type TaskLane,
 } from '~/utils/swimlanes'
-
-/** One rendered lane: its identity, its groups, and the count its header states. */
-export interface RenderedLane {
-  readonly lane: TaskLane
-  readonly groups: LaneGroup[]
-  /** Every task classified into this lane, BEFORE the Done lane's caps. */
-  readonly total: number
-}
 
 /** A lane entry plus the lane it was classified into. */
 interface ClassifiedEntry {
@@ -58,16 +50,6 @@ export function useFrameLanes(frameId: Ref<string>) {
   )
 
   /**
-   * Per-block "waiting since", derived once from the workspace's open review-wait cards by the
-   * same `collectReviewDebt` the backend's friction check uses. It is the fallback source for
-   * the park surfaces that stamp no `step.pausedAt`; deriving it once rather than per task is
-   * what keeps this assembly linear.
-   */
-  const waitingSinceByBlock = computed(
-    () => new Map(collectReviewDebt(notifications.open).map((d) => [d.blockId, d.waitingSince])),
-  )
-
-  /**
    * The module a task belongs to: the module BLOCK's title when it already lives in one, else
    * the module it DECLARES. The engine only materialises the block on merge
    * (`applyModuleAssignment`), so keying on the parent alone would leave every unmerged task in
@@ -79,6 +61,17 @@ export function useFrameLanes(frameId: Ref<string>) {
     return task.moduleName?.trim() || null
   }
 
+  /**
+   * One task's lane, reason and rendered entry.
+   *
+   * Every cross-block lookup here is a Map read off an index a STORE maintains, never a reduction
+   * of its own: this composable runs ONE INSTANCE PER MOUNTED FRAME, so deriving a workspace-wide
+   * fact here makes a board with n frames pay for it n times on every change. The review-debt map
+   * (`notifications.reviewDebtByBlock`) is the worked example: a reduction over the whole
+   * workspace's open notifications, and it belongs on the store that owns its input. The rule for
+   * anything else this assembly needs: a per-FRAME derivation belongs here, a workspace-wide one
+   * belongs on that store.
+   */
   function classify(task: Block, order: number): ClassifiedEntry {
     const run = execution.getByBlock(task.id) ?? null
     const decisions = execution.decisionsByBlock.get(task.id) ?? []
@@ -111,7 +104,7 @@ export function useFrameLanes(frameId: Ref<string>) {
         reason,
         order,
         activityAt: runActivityAt(run),
-        waitingSince: runWaitingSince(run, waitingSinceByBlock.value.get(task.id) ?? null),
+        waitingSince: runWaitingSince(run, notifications.reviewDebtByBlock.get(task.id) ?? null),
         moduleName: moduleNameOf(task),
         initiativeName: task.initiativeId
           ? (board.getBlock(task.initiativeId)?.title ?? null)
@@ -153,18 +146,28 @@ export function useFrameLanes(frameId: Ref<string>) {
     ),
   )
 
+  /**
+   * Identity preservation for the assembled output, so an event that changed nothing in a lane
+   * hands `TaskLane`/`LaneGroup` the SAME objects it had and their diffs short-circuit on `===`.
+   * Every execution event invalidates this whole chain for every mounted frame, and most of them
+   * (a subtask tick, a progress fold) move no card at all. See `utils/laneIdentity.ts`.
+   */
+  const shareLanes = createLaneMemo()
+
   const lanes = computed<RenderedLane[]>(() =>
-    TASK_LANES.map((lane) => {
-      const bucket = byLane.value.get(lane) ?? []
-      // Only the Done lane is capped; every other lane renders everything in it.
-      const visible = lane === 'done' ? admittedByCaps(bucket, doneSelection.value) : bucket
-      const ordered = sortLaneTasks(visible, laneView.sortKey, lane)
-      return {
-        lane,
-        groups: groupLaneTasks(ordered, laneView.groupKey, moduleBlockIdByName.value),
-        total: bucket.length,
-      }
-    }),
+    shareLanes(
+      TASK_LANES.map((lane) => {
+        const bucket = byLane.value.get(lane) ?? []
+        // Only the Done lane is capped; every other lane renders everything in it.
+        const visible = lane === 'done' ? admittedByCaps(bucket, doneSelection.value) : bucket
+        const ordered = sortLaneTasks(visible, laneView.sortKey, lane)
+        return {
+          lane,
+          groups: groupLaneTasks(ordered, laneView.groupKey, moduleBlockIdByName.value),
+          total: bucket.length,
+        }
+      }),
+    ),
   )
 
   return { lanes, doneSelection }

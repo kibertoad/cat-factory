@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { Pipeline } from '~/types/domain'
 import type {
   GateConfigForm,
@@ -126,8 +126,15 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     gateConfigForms.value = forms
   }
 
+  /**
+   * The library indexed by id. Indexed rather than scanned because every task card resolves its
+   * own default pipeline through {@link getPipeline}, so a `find` there is O(cards x catalog) on
+   * every catalog or card change.
+   */
+  const pipelineById = computed(() => new Map(pipelines.value.map((p) => [p.id, p])))
+
   function getPipeline(id: string) {
-    return pipelines.value.find((p) => p.id === id)
+    return pipelineById.value.get(id)
   }
 
   /**

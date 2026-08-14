@@ -232,9 +232,10 @@ async function merge() {
 // separately by the AgentFailureCard above). The board previously only handled
 // decisions, so an approval-gated task was a dead end: it read "Decision needed"
 // (the old generic `blocked` label) with no badge and a click that did nothing.
-const pendingDecision = computed(() =>
-  execution.openDecisions.find((d) => d.blockId === props.taskId),
-)
+// Read off the per-block index rather than scanning the workspace-wide list: this computed is
+// mounted once per card and invalidated by every execution event, so a `find` over `openDecisions`
+// cost O(cards x open gates) per event. `decisionsByBlock` is the index built for exactly this.
+const pendingDecision = computed(() => execution.decisionsByBlock.get(props.taskId)?.[0])
 // The async stage an iterative reviewer gate (requirements-review / clarity-review) is
 // mid-cycle in (folding the answers, then re-reviewing), or null. While set, the gate
 // needs NO human action, so its approval is suppressed below and a working indicator
@@ -250,7 +251,7 @@ const reviewStageLabel = computed(() =>
         : null,
 )
 const pendingApproval = computed(() => {
-  const a = execution.openApprovals.find((a) => a.blockId === props.taskId)
+  const a = execution.approvalsByBlock.get(props.taskId)?.[0]
   // A reviewer gate whose review is incorporating / re-reviewing in the driver is doing
   // background work, not awaiting a human — don't surface it as "Approval needed".
   if (a && reviews.isBackground(a.agentKind, props.taskId)) return undefined

@@ -62,14 +62,38 @@ export const useEnvironmentTestStore = defineStore('environmentTest', () => {
     }
   }
 
+  /**
+   * Runs whose point-read is already out, and whether a later hydrate asked again while it was.
+   * Overlapping refreshes preserve the same still-running runs and would each re-issue the same
+   * GET, so the reads multiply with refresh frequency exactly when the board is busiest.
+   *
+   * Dropping the later ask outright would be wrong for the same reason plain single-flight is wrong
+   * for `workspace.refresh()`: the outstanding read may have been ISSUED before the run reached
+   * terminal, and it is the later ask that would have observed the outcome. Nothing asks again after
+   * that (terminal runs emit no event and the snapshot omits them), so the inspector would sit on
+   * "testing" for the rest of the session. One queued follow-up per run keeps the dedupe while
+   * leaving the newest ask an answer: N overlapping hydrates cost one extra read between them.
+   */
+  const reconciling = new Map<string, { again: boolean }>()
+
   /** Best-effort point-read of one run, folded in through the monotonic {@link upsert}. */
   async function reconcileRun(workspaceId: string, id: string) {
+    const outstanding = reconciling.get(id)
+    if (outstanding) {
+      outstanding.again = true
+      return
+    }
+    const state = { again: false }
+    reconciling.set(id, state)
     try {
       upsert(await api.getEnvironmentTest(workspaceId, id))
     } catch {
       // Best-effort: a transient fetch failure just leaves the cached state; the next
       // snapshot/event reconciles it.
+    } finally {
+      reconciling.delete(id)
     }
+    if (state.again) await reconcileRun(workspaceId, id)
   }
 
   /**

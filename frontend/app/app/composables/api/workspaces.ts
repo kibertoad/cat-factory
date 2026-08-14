@@ -29,8 +29,10 @@ export function workspacesApi({ send, ws }: ApiContext) {
       body: { name?: string; description?: string; seed?: boolean; accountId?: string } = {},
     ) => send(createWorkspaceContract, { body }),
 
-    getWorkspace: (workspaceId: string) =>
-      send(getWorkspaceContract, { pathParams: { workspaceId } }),
+    // `signal` is what lets the refresh funnel put a deadline on the app's heaviest read: it holds
+    // one slot for every refresh in the SPA, and the client sets no timeout of its own.
+    getWorkspace: (workspaceId: string, signal?: AbortSignal) =>
+      send(getWorkspaceContract, { pathParams: { workspaceId }, signal }),
 
     updateWorkspace: (workspaceId: string, body: { name?: string; description?: string | null }) =>
       send(updateWorkspaceContract, { pathParams: { workspaceId }, body }),

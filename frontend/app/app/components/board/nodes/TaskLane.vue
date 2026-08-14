@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import LaneGroup from './LaneGroup.vue'
-import type { RenderedLane } from '~/composables/useFrameLanes'
 import { LANE_GEOMETRY } from '~/utils/laneGeometry'
-import type { LaneGroupKey } from '~/utils/laneSort'
+import type { LaneGroupKey, RenderedLane } from '~/utils/laneSort'
 import { LANE_META } from '~/utils/swimlanes'
 
 /**
