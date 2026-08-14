@@ -411,4 +411,5 @@ export const DEFAULT_NOTIFICATION_WEBHOOK_TYPES = [
   'pipeline_complete',
   'ci_failed',
   'test_failed',
+  'deploy_blocked',
 ] as const satisfies readonly v.InferOutput<typeof notificationTypeSchema>[]

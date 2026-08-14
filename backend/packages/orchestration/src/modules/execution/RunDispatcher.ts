@@ -51,6 +51,8 @@ import { reviewableArtifactOutput } from './artifact-review.logic.js'
 import { HUMAN_TEST_AGENT_KIND } from './ci.logic.js'
 import { AgentContextBuilder } from './AgentContextBuilder.js'
 import { DeployerStepController } from './DeployerStepController.js'
+import { DeployFixController } from './DeployFixController.js'
+import { SettledHelperRouter } from './SettledHelperRouter.js'
 import { DisposerStepController } from './DisposerStepController.js'
 import { FollowUpGateController } from './FollowUpGateController.js'
 import { RunRepoOpsController } from './RunRepoOpsController.js'
@@ -189,6 +191,10 @@ export class RunDispatcher {
    * back as callbacks so the agent and deployer paths share one implementation of each.
    */
   private readonly deployer: DeployerStepController
+  /** The deployer bounded repair loop (escalation + re-provision) for repo-fixable failures. */
+  private readonly deployFix: DeployFixController
+  /** Routes a settled job that belongs to a step's helper rather than to the step itself. */
+  private readonly settledHelpers: SettledHelperRouter
   /**
    * The deterministic `disposer` step — the deployer's counterpart, reclaiming the environments
    * the run stood up at the point in the pipeline its author chose. Extracted to
@@ -286,11 +292,20 @@ export class RunDispatcher {
     this.blueprintReconciler = deps.blueprintReconciler
     this.initiativeService = deps.initiativeService
     this.resolveRiskPolicy = deps.resolveRiskPolicy
+    this.deployFix = new DeployFixController({
+      agentExecutor: deps.agentExecutor,
+      contextBuilder: deps.contextBuilder,
+      runStateMachine: deps.runStateMachine,
+      clock: deps.clock,
+      notificationService: deps.notificationService,
+      logger: deps.logger,
+    })
     this.deployer = new DeployerStepController({
       blockRepository: deps.blockRepository,
       contextBuilder: deps.contextBuilder,
       runStateMachine: deps.runStateMachine,
       environmentProvisioning: deps.environmentProvisioning,
+      deployFix: this.deployFix,
       recordStepResult: (ws, instance, step, isFinalStep, result) =>
         this.recordStepResult(ws, instance, step, isFinalStep, result),
       applyContainerRunning: (step, update) => applyContainerRunning(step, update),
@@ -395,6 +410,15 @@ export class RunDispatcher {
         this.pollRunning.recoverContainerEviction(ws, instance, step, failure),
       markContainerErrored: (ws, instance, step) =>
         this.pollRunning.markContainerErrored(ws, instance, step),
+    })
+    this.settledHelpers = new SettledHelperRouter({
+      resolveInvestigateHelperCompletion: (ws, instance, step, update) =>
+        this.pollRunning.resolveInvestigateHelperCompletion(ws, instance, step, update),
+      resolveDeployFixCompletion: (ctx) => this.deployFix.resolveFixerCompletion(ctx),
+      gateFor: (kind) => this.gateFor(kind),
+      reprobeGateAfterHelper: (gate, ctx) => this.pollRunning.reprobeGateAfterHelper(gate, ctx),
+      resolveHelperPhaseCompletion: (ws, instance, step, update) =>
+        this.pollCompletion.resolveHelperPhaseCompletion(ws, instance, step, update),
     })
     this.gateStepController = new GateStepController(
       {
@@ -574,7 +598,16 @@ export class RunDispatcher {
     // A `deployer` step's async job is a CONTAINER-backed deploy (kustomize/helm), polled
     // through the environment provisioning service — NOT the agent executor. Route it before
     // the executor resolution below (the deployer never goes through the agent executor).
-    if (isDeployStep(step.agentKind) && this.environmentProvisioning) {
+    // EXCEPT while the remediation loop is fixing, when the in-flight job is the deploy-fixer
+    // AGENT and belongs on the executor path below (which also gives it running progress and
+    // eviction recovery for free). Both ride step.jobId, so this phase is the only thing telling
+    // them apart: without it the fixer job is handed to the deploy poller, which never dispatched
+    // it and cannot find it.
+    if (
+      isDeployStep(step.agentKind) &&
+      step.deployFix?.phase !== 'fixing' &&
+      this.environmentProvisioning
+    ) {
       return this.deployer.pollDeployerJob(workspaceId, instance, step)
     }
 
@@ -600,47 +633,12 @@ export class RunDispatcher {
     // `toolServers.logic.ts`). Mutation only; whichever arm runs owns the persist.
     applyObservedToolServers(step, update.toolServers)
 
-    // A gate whose helper INVESTIGATES instead of fixing (post-release-health → on-call)
-    // declares a `resolveHelperCompletion` hook on its definition. When such a helper's job
-    // settles — done OR failed — we call the hook INSTEAD of re-probing the precheck
-    // (re-probing an investigate-don't-fix helper would just regress again and burn the
-    // budget) and finish the gate step with the output it returns. The gate raises its own
-    // `release_regression` notification + enriches any open incident inside the hook (from the
-    // signals stashed at escalation); the run then completes for a human to act out-of-band.
-    const investigated = await this.pollRunning.resolveInvestigateHelperCompletion(
-      workspaceId,
-      instance,
-      step,
-      update,
-    )
-    if (investigated) return investigated
-
-    // A polling gate step's in-flight job is its helper agent (ci-fixer /
-    // conflict-resolver), NOT the step's own work: when it finishes (or fails) we
-    // don't record a result or advance — we drop the handle, return the gate to
-    // `checking`, and re-run the precheck (the helper's push triggers a fresh CI run /
-    // updates mergeability). A helper that failed without pushing leaves the precheck
-    // negative, so the next check re-dispatches (until the attempt budget is spent).
-    const reprobeGate = this.gateFor(step.agentKind)
-    if (reprobeGate) {
-      return this.pollRunning.reprobeGateAfterHelper(reprobeGate, {
-        workspaceId,
-        instance,
-        step,
-        update,
-      })
-    }
-
-    // A helper job (Fixer / conflict-resolver) in flight for a tester / human-test /
-    // visual-confirmation gate is NOT the step's own work: settle that round and re-park/re-dispatch
-    // instead of recording a step result. Returns null when this step has no such helper in flight.
-    const phased = await this.pollCompletion.resolveHelperPhaseCompletion(
-      workspaceId,
-      instance,
-      step,
-      update,
-    )
-    if (phased) return phased
+    // A settled job that belongs to this step's HELPER (a gate's ci-fixer / conflict-resolver or
+    // on-call, a tester's fixer, a failed deployer's deploy-fixer) is a round in the step's own
+    // loop, NOT its result: the router settles that round and this path never records one. Null
+    // when the job is the step's own work. See `SettledHelperRouter` for the ordering rule.
+    const helped = await this.settledHelpers.route({ workspaceId, instance, step, update })
+    if (helped) return helped
 
     if (update.state === 'failed') {
       return this.pollCompletion.handleFailedPoll(workspaceId, instance, step, update)

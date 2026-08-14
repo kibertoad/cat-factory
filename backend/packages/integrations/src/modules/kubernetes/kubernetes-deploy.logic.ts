@@ -322,6 +322,16 @@ export function mapDeployOutcome(
       access: null,
       fields: { ...vars },
       error: view.error ?? 'Deploy job did not return an environment outcome',
+      // Deliberately UNCLASSIFIED, and that is a decision rather than an omission. What the deploy
+      // container hands back is the free-form output of `kubectl`/`kustomize`/`helm`, not an
+      // apiserver `Status`, so there is no `reason` to read and nothing to run `classifyApplyFailure`
+      // over. Matching phrases in that text would look like coverage and be the exact hazard the
+      // classification exists to remove: a manifest whose `{{image}}` was never substituted fails
+      // this path with a validation error indistinguishable from one whose manifests are genuinely
+      // wrong, and reading the first as `manifest_invalid` dispatches a fixer whose only available
+      // move is to hard-code the image. Classifying this path needs a structured cause from the
+      // deploy harness itself (tracked in `docs/initiatives/deployment-failure-remediation.md`),
+      // and until it has one, unclassified is the honest answer: never repo-fixable.
     }
   }
   const status: EnvironmentStatus = outcome.status === 'ready' ? 'ready' : 'provisioning'

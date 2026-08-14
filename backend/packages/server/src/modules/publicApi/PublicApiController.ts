@@ -47,7 +47,11 @@ import {
   personalUnlockFor,
   unlockIsUnavailable,
 } from './personalUnlock.js'
-import { headlessActRefusal, notificationActEffect } from '../notifications/notificationActions.js'
+import {
+  headlessActRefusal,
+  notificationActEffect,
+  RUN_RETRYING_NOTIFICATION_TYPES,
+} from '../notifications/notificationActions.js'
 import type { AppEnv } from '../../http/env.js'
 import { optionalJsonBody } from '../../http/optionalJsonBody.js'
 import { keyInitiatorRole } from '../../http/runAdmission.js'
@@ -1353,10 +1357,12 @@ function registerNotificationRoutes(app: Hono<AppEnv>): void {
         409,
       )
     }
-    // A ci-/test-failure card's `act` retries the run — resuming LLM work. Refuse it when the
-    // run resolves to an individual-usage model (the same `personalGateForRun` primitive the
-    // retry route uses). A no-op for a poolable model, and skipped entirely for a card whose
-    // side-effect is a merge (no personal credential needed) or that is already resolved.
+    // A card whose `act` RETRIES THE RUN resumes LLM work. Refuse it when the run resolves to an
+    // individual-usage model (the same `personalGateForRun` primitive the retry route uses). A
+    // no-op for a poolable model, and skipped entirely for a card whose side-effect is a merge (no
+    // personal credential needed) or that is already resolved. Which cards those are is read off
+    // the SAME set the effect branches on, so a card added to the retry class cannot reach this
+    // route ungated.
     //
     // Probed with NO unlock even when the key carries one, unlike the start and retry routes.
     // `notificationActEffect` is a shared side-effect whose retry arm mints no activation (the
@@ -1365,7 +1371,7 @@ function registerNotificationRoutes(app: Hono<AppEnv>): void {
     // Lifting it means threading the gate through that effect, for both surfaces at once.
     if (
       existing.status === 'open' &&
-      (existing.type === 'ci_failed' || existing.type === 'test_failed') &&
+      RUN_RETRYING_NOTIFICATION_TYPES.has(existing.type) &&
       existing.executionId
     ) {
       try {

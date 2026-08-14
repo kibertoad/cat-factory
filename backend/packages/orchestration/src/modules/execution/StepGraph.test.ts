@@ -151,6 +151,41 @@ describe('StepGraph.resetStepForRerun', () => {
     // it is the whole of what makes that reading available to a diagnosing reader.
     expect(s.dispatches).toEqual([{ agentKind: 'coder', count: 1 }])
   })
+
+  it('clears the deployer fan-out state INCLUDING the spent remediation budget', () => {
+    // Every field here belongs to one provisioning attempt, and the human-test gate loops a
+    // `deployer` step back to rebuild its environment. A budget carried across that loop-back is
+    // worse than a stale display: the re-run provisions from scratch, so its first failure is a
+    // first failure, and an `attempts` already at the bar sends it straight to `deploy_blocked`
+    // with no repair round ever dispatched. `phase` is the other half, since a stale `fixing`
+    // hands the re-run's deploy job to the agent poller that never dispatched it.
+    const graph = new StepGraph(clock)
+    const s = step({
+      state: 'working',
+      deployEnvs: {
+        'frame-1': { status: 'failed', url: null, environmentId: 'env_1', error: 'x' },
+      },
+      deployFrameId: 'frame-1',
+      deployPrimaryFrameId: 'frame-1',
+      deployProvisioning: { type: 'kubernetes' },
+      deployFix: {
+        phase: 'fixing',
+        attempts: 2,
+        maxAttempts: 2,
+        frameId: 'frame-1',
+        reason: 'manifest_invalid',
+        lastError: 'Deployment is invalid',
+      },
+    })
+    graph.resetStepForRerun(s)
+    expect([
+      s.deployEnvs,
+      s.deployFrameId,
+      s.deployPrimaryFrameId,
+      s.deployProvisioning,
+      s.deployFix,
+    ]).toEqual([undefined, undefined, undefined, undefined, undefined])
+  })
 })
 
 // Two facts have to OUTLIVE a reset, because a reset is exactly what destroys the evidence that

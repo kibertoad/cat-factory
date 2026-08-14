@@ -132,6 +132,12 @@ export class StepGraph {
     step.deployFrameId = undefined
     step.deployProvisioning = undefined
     step.deployPrimaryFrameId = undefined
+    // The remediation budget goes with the fan-out state it belongs to. A re-run provisions from
+    // scratch, so it is a fresh failure if it fails, and carrying the spent `attempts` across would
+    // send its FIRST failure straight to the give-up: a `deploy_blocked` card raised with zero
+    // repair rounds actually run. `phase` matters as much as the counter, since a stale `fixing`
+    // routes the re-run's deploy job to the agent poller that never dispatched it.
+    step.deployFix = undefined
     // Re-seed a `ralph` step's loop state: unlike the fields above it must NOT be dropped (a
     // ralph step with no state dispatches with no completion command and silently degrades to a
     // one-shot coder), but keeping it as-is is just as wrong — a spent `attempts` would send the

@@ -59,7 +59,10 @@ function controller(view: RunnerJobView) {
       getHandleForBlock: async () => undefined,
       finalizeProvision: async () => {
         calls.finalized += 1
-        return { id: 'env-1', status: 'failed', lastError: 'provider said no' }
+        return {
+          handle: { id: 'env-1', status: 'failed', lastError: 'provider said no' },
+          reason: null,
+        }
       },
     },
     recordStepResult: async () => ({ kind: 'noop' as const }),

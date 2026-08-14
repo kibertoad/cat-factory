@@ -157,6 +157,7 @@ function makeService(opts: {
       const dispatch = opts.dispatch ?? {
         kind: 'completed' as const,
         handle: { id: 'env-1', url: 'https://x' } as EnvironmentHandle,
+        reason: null,
       }
       // Mirror the real service's registry writes: a dispatched job leaves a
       // `provisioning` placeholder; a synchronous provision records the real env.
@@ -190,7 +191,7 @@ function makeService(opts: {
         frameId: args.frameId!,
         externalId: 'ext-1',
       })
-      return handle
+      return { handle, reason: null }
     },
     releaseProvisionJob: async (_ws, ref) => {
       released.push(ref)
@@ -307,6 +308,7 @@ describe('EnvironmentTestService — start guards and the happy paths', () => {
       dispatch: {
         kind: 'completed',
         handle: { id: 'env-9', url: 'https://live' } as EnvironmentHandle,
+        reason: null,
       },
     })
     const started = await service.startTest('ws', 'frame-1')
@@ -337,7 +339,11 @@ describe('EnvironmentTestService — start guards and the happy paths', () => {
     const { service, teardowns } = makeService({
       repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
       // A REST provider records the env at dispatch but it's still coming up.
-      dispatch: { kind: 'completed', handle: { id: 'env-9', url: null } as EnvironmentHandle },
+      dispatch: {
+        kind: 'completed',
+        handle: { id: 'env-9', url: null } as EnvironmentHandle,
+        reason: null,
+      },
       statusPolls: [{ status: 'provisioning' }, { status: 'provisioning' }, { status: 'ready' }],
     })
     const started = await service.startTest('ws', 'frame-1')
@@ -362,7 +368,11 @@ describe('EnvironmentTestService — start guards and the happy paths', () => {
     const { repo, calls } = fakeRepo()
     const { service, teardowns } = makeService({
       repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
-      dispatch: { kind: 'completed', handle: { id: 'env-9', url: null } as EnvironmentHandle },
+      dispatch: {
+        kind: 'completed',
+        handle: { id: 'env-9', url: null } as EnvironmentHandle,
+        reason: null,
+      },
       statusPolls: [{ status: 'failed', lastError: 'VM failed to boot' }],
     })
     const started = await service.startTest('ws', 'frame-1')
@@ -518,6 +528,7 @@ describe('EnvironmentTestService — failure, teardown and terminal guards', () 
       dispatch: {
         kind: 'completed',
         handle: { id: 'env-gone', url: 'https://live' } as EnvironmentHandle,
+        reason: null,
       },
       teardownImpl: {
         teardown: async () => {
@@ -544,6 +555,7 @@ describe('EnvironmentTestService — failure, teardown and terminal guards', () 
       dispatch: {
         kind: 'completed',
         handle: { id: 'env-stuck', url: 'https://live' } as EnvironmentHandle,
+        reason: null,
       },
       teardownImpl: {
         teardown: async () => {
@@ -565,7 +577,11 @@ describe('EnvironmentTestService — failure, teardown and terminal guards', () 
     const { repo, calls } = fakeRepo()
     const { service, teardowns } = makeService({
       repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
-      dispatch: { kind: 'completed', handle: { id: 'env-budget', url: null } as EnvironmentHandle },
+      dispatch: {
+        kind: 'completed',
+        handle: { id: 'env-budget', url: null } as EnvironmentHandle,
+        reason: null,
+      },
     })
     const started = await service.startTest('ws', 'frame-1')
     // still `provisioning` (never polled to completion) — the driver's budget ran out.
@@ -586,7 +602,11 @@ describe('EnvironmentTestService — failure, teardown and terminal guards', () 
     const { repo, calls } = fakeRepo()
     const { service, teardowns, registry } = makeService({
       repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
-      dispatch: { kind: 'completed', handle: { id: 'env-2', url: null } as EnvironmentHandle },
+      dispatch: {
+        kind: 'completed',
+        handle: { id: 'env-2', url: null } as EnvironmentHandle,
+        reason: null,
+      },
     })
     const started = await service.startTest('ws', 'frame-1')
     const stopped = await service.stop('ws', started.id)

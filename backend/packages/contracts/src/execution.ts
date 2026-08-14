@@ -22,6 +22,7 @@ import { stepContextDocumentSchema } from './documents.js'
 // The polling-GATE and the human-verdict-gate step-state clusters each live in their own
 // module (the `forkDecision.ts` / `judge.ts` shape); `PipelineStep` composes them back in below.
 import { gateStepStateSchema } from './gate.js'
+import { deployFixStateSchema } from './deploy-fix.js'
 import { humanTestStepStateSchema, visualConfirmStepStateSchema } from './human-verdict-gates.js'
 import {
   environmentStatusSchema,
@@ -1270,6 +1271,12 @@ export const pipelineStepSchema = v.object({
    * fanned out.
    */
   deployPrimaryFrameId: v.optional(v.string()),
+  /**
+   * The live state of a deployer step REMEDIATION loop: the deploy-fixer rounds dispatched
+   * against a repo-fixable provisioning failure. Absent on a deployer that never failed that way.
+   * See {@link deployFixStateSchema}.
+   */
+  deployFix: v.optional(deployFixStateSchema),
   /**
    * A `disposer` step records each service frame's TERMINAL reclaim outcome here, keyed by frame
    * block id — the mirror of {@link deployEnvs} at the other end of the lifecycle, and, like it,
