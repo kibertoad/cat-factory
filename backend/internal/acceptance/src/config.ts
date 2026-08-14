@@ -349,10 +349,11 @@ export function resolveConfig(env: EnvRecord): ConfigResolution {
           trimmed(env.ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE) ?? DEFAULT_INGRESS_HOST_TEMPLATE,
         namespaceTemplate:
           trimmed(env.ACCEPTANCE_K3S_NAMESPACE_TEMPLATE) ?? 'cf-acc-{{pullNumber}}',
-        // GHCR under the repository's own owner, which needs no second credential decision: the
-        // workflow the briefs ask for pushes there with the `GITHUB_TOKEN` it already has. The
-        // `image-template` prerequisite renders this before a pass starts and says outright that
-        // it did not check whether anything publishes it, or whether the cluster may pull it.
+        // GHCR under the repository's own owner, which needs no second credential decision on
+        // either side: the workflow the briefs ask for pushes there with the `GITHUB_TOKEN` it
+        // already has, and the platform wires the workspace's own VCS credential into each per-PR
+        // namespace so the cluster can pull it back. The `image-template` prerequisite renders
+        // this before a pass starts and says what it could not check.
         imageTemplate: trimmed(env.ACCEPTANCE_K3S_IMAGE_TEMPLATE) ?? DEFAULT_IMAGE_TEMPLATE,
       },
       // The reporter half, resolved by the function `reset --purge-repos` calls rather than beside

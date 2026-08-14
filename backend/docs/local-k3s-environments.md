@@ -33,6 +33,9 @@ third-party adapter uses (registered by reference via `createBackendRegistries()
   `{{namespace}}`/`{{image}}`/`{{repoOwner}}`/`{{repoName}}`, force each resource into the
   namespace, and apply via server-side apply (`PATCH …?fieldManager=cat-factory`). Returns
   `provisioning`; readiness converges through the status poll.
+- **Registry auth (loopback clusters only)**: between the parse and the apply, write the run's own
+  git credential into the namespace as a `dockerconfigjson` Secret and attach it to `default` plus
+  every ServiceAccount the manifests declare or name. Details + the gate below.
 - **Status**: aggregate the namespace's Deployments (`availableReplicas` vs desired) and resolve
   the URL (ingress-template host, or read-back of an applied Service/Ingress LoadBalancer).
 - **Teardown**: delete the namespace (cascades), tolerant of a 404.
@@ -206,6 +209,50 @@ the cluster CA into `caCertPem`:
 ```bash
 kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d
 ```
+
+## Registry credentials for a throwaway cluster
+
+Operating this is on the website
+([Deploy on Kubernetes](https://www.catfactory.ai/deploy/kubernetes.html#pulling-a-private-image-on-a-local-cluster));
+what follows is why it is shaped this way.
+
+A per-PR namespace is minted seconds before the manifests are applied, so a pull secret cannot be
+waiting in it, and a private package answers 403 for the whole life of the environment. The
+credential that fixes it is already in hand: every provision resolves a short-lived git token to
+clone the manifests repo (`ProvisionEnvironmentRequest.clone`), and that same token authenticates
+against the VCS host's own registry. So `ensureRegistryAuth` writes it into the namespace as a
+`dockerconfigjson` Secret and attaches it to the service accounts, and nothing is configured,
+asked for, or stored.
+
+Four decisions in it are worth keeping:
+
+- **The gate is the APISERVER being loopback, not the handler's declared engine.** A public-API
+  caller cannot choose between `local-k3s` and `remote-kubernetes` (`KUBERNETES_ENGINE` in
+  `PublicProvisioningController` pins every API-registered connection to the remote name, and that
+  split is deliberately not a public fact), so gating on the engine would give two
+  identically-configured clusters different behaviour depending on which door connected them, and
+  would miss the acceptance suite entirely. Loopback rather than "private": a shared staging
+  cluster on 10.x is somebody else's machine however private its address.
+- **A different FIELD MANAGER from the manifest apply.** Server-side apply treats each apply from
+  one manager as that manager's complete desired state, so patching a ServiceAccount under
+  `cat-factory` would have the manifests' own later apply of that account strip the
+  `imagePullSecrets` it does not mention. `REGISTRY_AUTH_FIELD_MANAGER` keeps the two owning
+  disjoint fields.
+- **Before the workloads, and covering the accounts they NAME.** Pods are created moments after
+  their Deployment applies, and a pod that starts without the secret sits in `ImagePullBackOff`
+  until the kubelet retries; a workload setting `serviceAccountName` never reads `default`, so
+  attaching only there would miss exactly the manifests that bothered to have an identity.
+- **Best-effort, and never silent.** A deployment whose packages are already public pulls fine
+  without any of this, so a refused write must not fail a provision that would otherwise succeed.
+  Every outcome (wired, skipped and why, failed and why) goes to the provisioning log as a
+  `registry-auth` step, because an unauthenticated pull and a private package look identical right
+  up until the 403.
+
+The container-render path (`buildProvisionJob`, hence its `Promise` return) does the same over the
+apiserver before dispatch, and reaches only `default`: the manifests render inside the container,
+so the accounts they declare cannot be enumerated. The recorded step says so rather than implying
+the coverage the raw path gets. What the credential cannot supply is SCOPE, which is the one
+remaining way a pull fails: the token needs package-read rights on its provider.
 
 ## Running AGENTS on a local k3s (runner backend)
 

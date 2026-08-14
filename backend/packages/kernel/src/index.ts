@@ -826,6 +826,7 @@ export {
   decodeIpv4,
   isCloudMetadataHost,
   isBlockedPrivateHost,
+  isLoopbackHost,
 } from './shared/ip-host.logic.js'
 export {
   isSecretShapedFilename,

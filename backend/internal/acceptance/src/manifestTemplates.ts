@@ -90,16 +90,24 @@ export const MANIFEST_TEMPLATE_PREREQUISITES: readonly Prerequisite<ManifestTemp
         imageTemplateSample({ owner: config.repoOwner, name: config.repos.backend }),
       )
       if (verdict.ok) {
-        // States what it did NOT check, in the same breath as the pass. All three omissions are
-        // reachable states of a correctly configured suite, and each presents as an environment
+        // States what it did NOT check, in the same breath as the pass. Each omission is a
+        // reachable state of a correctly configured suite, and each presents as an environment
         // that provisions and never becomes ready, which reads like a cluster fault.
+        //
+        // The PULL half used to be listed here as unfixable. It no longer is: against a loopback
+        // apiserver the platform now wires the workspace's own git credential into each per-PR
+        // namespace as a registry pull secret, so a private GHCR package pulls with no setup. What
+        // remains unreadable from here is whether THAT credential carries package-read scope,
+        // because it is the deployment's sealed VCS connection and no `/api/v1` operation
+        // publishes a token's scopes. A pass names it so the 403 has somewhere to point.
         return satisfied(
           `'${template}' renders as '${verdict.rendered}'. Three things are not readable from ` +
             `here: whether anything PUBLISHES that reference (the workflow the briefs ask for ` +
-            `first runs when the pull request opens), whether the cluster may PULL it (a GHCR ` +
-            `package is private until someone makes it public, and the kubelet then answers 403 ` +
-            `with no way to pass a credential: see the README), and whether the owner is spelled ` +
-            `as the provider spells it (the platform fills {{repoOwner}} from the pull request URL)`,
+            `first runs when the pull request opens), whether the workspace's VCS credential may ` +
+            `PULL it (the platform wires that credential into each per-PR namespace on a local ` +
+            `cluster, so a private package needs no setup, but a token without package-read ` +
+            `scope still earns a 403: see the README), and whether the owner is spelled as the ` +
+            `provider spells it (the platform fills {{repoOwner}} from the pull request URL)`,
         )
       }
       return unsatisfied(`ACCEPTANCE_K3S_IMAGE_TEMPLATE ('${template}') ${verdict.problem}`, {

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
   KubernetesEnvironmentConfig,
   KubernetesProvisionConfig,
+  RecipeStepLog,
   RepoFiles,
   RunRepoContext,
 } from '@cat-factory/kernel'
@@ -413,8 +414,8 @@ describe('KubernetesEnvironmentProvider.asyncProvision', () => {
     clone: { cloneUrl: 'https://github.com/acme/web.git', ref: 'feat', token: 'gh-tok' },
   }
 
-  it('returns null for a raw source with no render fields (use the REST path)', () => {
-    const job = new KubernetesEnvironmentProvider().asyncProvision!.buildProvisionJob({
+  it('returns null for a raw source with no render fields (use the REST path)', async () => {
+    const job = await new KubernetesEnvironmentProvider().asyncProvision!.buildProvisionJob({
       manifest,
       inputs: { pullNumber: '42', branch: 'feat' },
       resolveSecret,
@@ -423,8 +424,8 @@ describe('KubernetesEnvironmentProvider.asyncProvision', () => {
     expect(job).toBeNull()
   })
 
-  it('builds a deploy job for a kustomize source', () => {
-    const job = new KubernetesEnvironmentProvider().asyncProvision!.buildProvisionJob({
+  it('builds a deploy job for a kustomize source', async () => {
+    const job = await new KubernetesEnvironmentProvider().asyncProvision!.buildProvisionJob({
       manifest: kubernetesConfigToManifest(kustomizeConfig),
       inputs: { pullNumber: '42', branch: 'feat' },
       resolveSecret,
@@ -447,14 +448,14 @@ describe('KubernetesEnvironmentProvider.asyncProvision', () => {
     expect(spec.url).toEqual({ source: 'gatewayStatus', scheme: 'https' })
   })
 
-  it('throws when rendering is needed but no deploy inputs are provided', () => {
-    expect(() =>
+  it('throws when rendering is needed but no deploy inputs are provided', async () => {
+    await expect(
       new KubernetesEnvironmentProvider().asyncProvision!.buildProvisionJob({
         manifest: kubernetesConfigToManifest(kustomizeConfig),
         inputs: { pullNumber: '42', branch: 'feat' },
         resolveSecret,
       }),
-    ).toThrow(/deploy inputs/i)
+    ).rejects.toThrow(/deploy inputs/i)
   })
 
   it('maps a finished deploy job view into a provisioned environment', () => {
@@ -557,5 +558,173 @@ describe('KubernetesEnvironmentProvider.confirmTeardown', () => {
     })
 
     expect(probe.state).toBe('gone')
+  })
+})
+
+describe('KubernetesEnvironmentProvider registry auth', () => {
+  // A cluster on THIS machine, which is what the automatic wiring keys on: k3d, kind, Rancher
+  // Desktop and WSL2 k3s all present their apiserver on loopback.
+  const localConfig: KubernetesProvisionConfig = {
+    ...config,
+    apiServerUrl: 'https://127.0.0.1:6443',
+  }
+  const clone = { cloneUrl: 'https://github.com/acme/web.git', ref: 'feat', token: 'gh-tok' }
+  const localInputs = { pullNumber: '42', branch: 'feat', repoOwner: 'acme' }
+
+  /** A provision on the raw path, with the image template pointed at the repo's own GHCR package. */
+  function provisionLocal(
+    overrides: {
+      config?: KubernetesProvisionConfig
+      clone?: () => Promise<typeof clone | undefined>
+      recordStep?: (log: RecipeStepLog) => Promise<void>
+    } = {},
+  ) {
+    const cfg = overrides.config ?? {
+      ...localConfig,
+      imageTemplate: 'ghcr.io/{{repoOwner}}/web:pr-{{pullNumber}}',
+    }
+    return new KubernetesEnvironmentProvider().provision({
+      manifest: kubernetesConfigToManifest(cfg),
+      inputs: localInputs,
+      resolveSecret,
+      runRepo: runRepo({ 'k8s/app.yaml': DEPLOY_YAML }),
+      clone: overrides.clone ?? (async () => clone),
+      ...(overrides.recordStep ? { recordStep: overrides.recordStep } : {}),
+    })
+  }
+
+  /** The pull-secret + service-account writes, in the order they were issued. */
+  function registryWrites(calls: { method: string; url: string; body: string | null }[]) {
+    return calls.filter((c) => c.url.includes(`fieldManager=cat-factory-registry-auth`))
+  }
+
+  it('wires the clone credential into the namespace before the workloads are applied', async () => {
+    const calls = stubFetch(() => ({ status: 200 }))
+    await provisionLocal()
+
+    const writes = registryWrites(calls)
+    expect(writes.map((c) => c.url.split('?')[0])).toEqual([
+      'https://127.0.0.1:6443/api/v1/namespaces/cf-env-42/secrets/cat-factory-registry-auth',
+      'https://127.0.0.1:6443/api/v1/namespaces/cf-env-42/serviceaccounts/default',
+    ])
+    const secret = JSON.parse(writes[0]!.body!)
+    expect(secret.type).toBe('kubernetes.io/dockerconfigjson')
+    expect(JSON.parse(atob(secret.data['.dockerconfigjson'])).auths['ghcr.io']).toEqual({
+      username: 'acme',
+      password: 'gh-tok',
+      auth: btoa('acme:gh-tok'),
+    })
+
+    // Ordering is the point: a Deployment's pods are created moments after it applies, so a
+    // secret written afterwards costs an ImagePullBackOff cycle on every fresh environment.
+    const deploymentApply = calls.findIndex((c) => c.url.includes('/deployments/web'))
+    const lastRegistryWrite = calls.lastIndexOf(writes[writes.length - 1]!)
+    expect(lastRegistryWrite).toBeLessThan(deploymentApply)
+  })
+
+  it('leaves a remote cluster alone, credential or not', async () => {
+    // The gate that keeps this a local-dev convenience: pushing a git credential into every
+    // per-PR namespace is right for a cluster that gets thrown away and is not a decision to
+    // make implicitly against a shared one.
+    const calls = stubFetch(() => ({ status: 200 }))
+    await provisionLocal({
+      // The shared-cluster shape: `config` reaches its apiserver at cluster.test, not loopback.
+      config: { ...config, imageTemplate: 'ghcr.io/{{repoOwner}}/web:pr-{{pullNumber}}' },
+    })
+    expect(registryWrites(calls)).toEqual([])
+  })
+
+  it('writes nothing, and says so, when no credential covers the image', async () => {
+    // "Absent" and "wired" must not read the same in the log: an unauthenticated pull is the
+    // normal case AND what a private package looks like right up until the kubelet 403s.
+    const calls = stubFetch(() => ({ status: 200 }))
+    const steps: RecipeStepLog[] = []
+    await provisionLocal({
+      config: { ...localConfig, imageTemplate: 'postgres:16' },
+      recordStep: async (log) => void steps.push(log),
+    })
+    expect(registryWrites(calls)).toEqual([])
+    expect(steps).toHaveLength(1)
+    expect(steps[0]!.outcome).toBe('success')
+    expect(steps[0]!.detail).toContain('No registry credential wired')
+    expect(steps[0]!.detail).toContain('postgres:16')
+  })
+
+  it('records what it wired, naming the registry and never the token', async () => {
+    stubFetch(() => ({ status: 200 }))
+    const steps: RecipeStepLog[] = []
+    await provisionLocal({ recordStep: async (log) => void steps.push(log) })
+    expect(steps[0]!.detail).toContain('ghcr.io')
+    expect(steps[0]!.detail).toContain('package-read scope')
+    expect(JSON.stringify(steps)).not.toContain('gh-tok')
+  })
+
+  it('provisions anyway when the cluster refuses the pull secret, and reports the cause', async () => {
+    // Best-effort by design: a deployment whose packages are already public pulls fine without
+    // any of this, so a refused write must not fail a provision that would have succeeded.
+    const calls = stubFetch((c) =>
+      c.url.includes('/secrets/cat-factory-registry-auth') ? { status: 403 } : { status: 200 },
+    )
+    const steps: RecipeStepLog[] = []
+    const result = await provisionLocal({ recordStep: async (log) => void steps.push(log) })
+
+    expect(result.status).toBe('provisioning')
+    expect(calls.some((c) => c.url.includes('/deployments/web'))).toBe(true)
+    expect(steps[0]!.outcome).toBe('failure')
+    expect(steps[0]!.error).toContain('403')
+  })
+
+  it('attaches the credential to the accounts the manifests name, not just the default', async () => {
+    const calls = stubFetch(() => ({ status: 200 }))
+    await new KubernetesEnvironmentProvider().provision({
+      manifest: kubernetesConfigToManifest({
+        ...localConfig,
+        imageTemplate: 'ghcr.io/acme/web:pr-{{pullNumber}}',
+      }),
+      inputs: localInputs,
+      resolveSecret,
+      runRepo: runRepo({
+        'k8s/app.yaml': DEPLOY_YAML.replace(
+          '    spec:\n',
+          '    spec:\n      serviceAccountName: web-sa\n',
+        ),
+      }),
+      clone: async () => clone,
+    })
+    const accounts = registryWrites(calls)
+      .filter((c) => c.url.includes('/serviceaccounts/'))
+      .map((c) => c.url.split('/serviceaccounts/')[1]!.split('?')[0])
+    expect(accounts).toEqual(['default', 'web-sa'])
+  })
+
+  it('prepares the namespace and its credential before handing over a container render', async () => {
+    // Both render paths must behave the same way about a private registry. The container cannot
+    // do this for itself: it holds no platform credential to create a Secret with.
+    const calls = stubFetch(() => ({ status: 200 }))
+    const steps: RecipeStepLog[] = []
+    const job = await new KubernetesEnvironmentProvider().asyncProvision!.buildProvisionJob({
+      manifest: kubernetesConfigToManifest({
+        ...localConfig,
+        manifestSource: { type: 'colocated', path: 'k8s/overlays/preview', renderer: 'kustomize' },
+        images: [{ name: 'app', newNameTemplate: 'ghcr.io/acme/web' }],
+      } as KubernetesProvisionConfig),
+      inputs: localInputs,
+      resolveSecret,
+      deploy: { ref: { runId: 'run-1', jobId: 'job-1' }, clone },
+      clone: async () => clone,
+      recordStep: async (log) => void steps.push(log),
+    })
+
+    expect(job).not.toBeNull()
+    expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/api/v1/namespaces'))).toBe(
+      true,
+    )
+    expect(registryWrites(calls).map((c) => c.url.split('?')[0])).toEqual([
+      'https://127.0.0.1:6443/api/v1/namespaces/cf-env-42/secrets/cat-factory-registry-auth',
+      'https://127.0.0.1:6443/api/v1/namespaces/cf-env-42/serviceaccounts/default',
+    ])
+    // The honest limit of this path, stated where an operator reads it: the manifests render in
+    // the container, so the accounts they declare cannot be enumerated here.
+    expect(steps[0]!.detail).toContain('the default one only')
   })
 })

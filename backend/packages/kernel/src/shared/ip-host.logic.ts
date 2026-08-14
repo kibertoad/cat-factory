@@ -97,6 +97,20 @@ export function isCloudMetadataHost(hostname: string): boolean {
 }
 
 /**
+ * Whether a hostname names THIS machine: `localhost`, any `127.x.x.x`, or the IPv6 `::1`.
+ *
+ * Narrower than {@link isBlockedPrivateHost} on purpose, and the two answer different questions.
+ * That one asks "could this reach something private" and so blocks the whole RFC1918 space; this
+ * one asks "is this the same machine", which a LAN address is not. A caller that relaxes a rule
+ * for a developer's own throwaway cluster wants exactly this narrow answer: a shared staging
+ * cluster on 10.x is somebody else's, however private its address.
+ */
+export function isLoopbackHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  return host === 'localhost' || host === '::1' || /^127\.\d+\.\d+\.\d+$/.test(host)
+}
+
+/**
  * Reject hostnames that point at the local network rather than a public host: blocks
  * loopback, link-local (incl. cloud metadata), `.localhost`/`.internal`/`.local`, the
  * RFC1918 private ranges, and the obfuscated numeric encodings. The STRICT policy

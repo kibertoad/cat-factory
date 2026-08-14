@@ -425,16 +425,27 @@ pull request does. `pl_build` puts a whole `reviewer` pass between the pull requ
 `ImagePullBackOff` and the kubelet retries until it lands, which the environment status poll
 absorbs as an environment that took longer to become ready.
 
-**The cluster must be able to pull that reference with NO credential.** A GHCR package published by
-Actions is private until somebody makes it public, and the kubelet then answers 403 for the whole
-life of the environment. There is no configuration path out of that here: the Kubernetes
-environment connection carries no registry credential, and the per-PR namespace is created by the
-platform seconds before the manifests are applied, so an `imagePullSecret` cannot be waiting in it.
-So make each repository's package public once (its **Package settings → Change visibility**, after
-the first publish), or point `ACCEPTANCE_K3S_IMAGE_TEMPLATE` at a registry the cluster reads
-anonymously. The `image-template` prerequisite states this omission in its PASS text, because it
-cannot check it: a private package presents as an environment that provisions and never becomes
-ready, which reads like a broken cluster.
+**A private package needs no setup, and one thing about the token does.** A GHCR package published
+by Actions is private until somebody makes it public, and a kubelet with no credential answers 403
+for the whole life of the environment. The platform closes that itself: when the apiserver is a
+loopback address (which every local k3s, k3d, kind and Rancher Desktop cluster is), each per-PR
+namespace gets the workspace's own VCS credential written into it as a `dockerconfigjson` pull
+secret, attached to the service accounts the manifests run as, before the workloads are applied.
+Nothing is configured for this and nothing is asked of you.
+
+What it cannot supply is SCOPE. The credential is whatever token the workspace's VCS connection
+holds, so it must be allowed to read packages: a classic PAT needs `read:packages`, a fine-grained
+one needs "Packages: Read", and a GitHub App installation needs `packages: read`. Without it the
+pull still 403s, and the environment still presents as one that provisions and never becomes ready.
+The `image-template` prerequisite names this in its PASS text because it cannot check it: the
+deployment's connection is sealed and no `/api/v1` operation publishes a token's scopes. Making
+each package public once (its **Package settings → Change visibility**) remains a valid way to
+sidestep the whole question, as does pointing `ACCEPTANCE_K3S_IMAGE_TEMPLATE` at a registry the
+cluster reads anonymously.
+
+A pass writes what it did into the environment's provisioning log under `registry-auth`, naming
+the registry and the account count on success and the reason on a skip, so an `ImagePullBackOff`
+can be told apart from a credential that was never wired.
 
 ## Configuration
 
