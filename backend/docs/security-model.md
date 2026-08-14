@@ -135,10 +135,10 @@ ambient cloud env), which is exactly why that transport is not for untrusted inp
 ### The second path between those two environments: a capability CREDENTIAL
 
 `childEnv.ts` states the invariant on the path where the platform's environment and an agent's
-process meet by INHERITANCE. There is one other path, and it is a deliberate one: a tool server or
-a generative binary integration declares the credential it needs BY NAME, and the facade-wired
-`ToolSecretResolver` resolves it onto the job body, from where the harness injects it into that one
-job's agent process. The platform's own resolver chain answers from the per-workspace credential
+process meet by INHERITANCE. There is one other path, and it is a deliberate one: a tool server, a
+generative binary integration or a FOUNDATIONAL SERVICE declares the credential it needs BY NAME,
+and the facade-wired `ToolSecretResolver` resolves it onto the job body, from where the harness
+injects it into that one job's agent process. The platform's own resolver chain answers from the per-workspace credential
 store first and falls back per key to `createEnvToolSecretResolver`, which reads the deployment's
 own environment.
 
@@ -154,14 +154,25 @@ clean and shipped the deployment's master sealing key to a third party. So:
   agent's or the MCP server's process, and it reads nothing. Everything below binds the lookup
   name. An `http` tool server always had this split (`key` is the lookup, `header` is where the
   value goes); `envName` is the same split for the stdio and generative-integration cases.
+- **Only DEPLOYMENT CODE may declare one.** All three declarers are composition-root registries,
+  and that is load-bearing rather than incidental: a declaration is a request to read a named value
+  off the deployment's own environment (the fallback resolver) and hand it to an agent process, so
+  the declarer must sit inside the same trust boundary as the process doing the reading. A
+  foundational service is the only one of the three that ALSO has a REST write boundary, where the
+  author is a workspace admin rather than the deployment, and there the two are not the same:
+  `storedTierMayNotDeclareCredentials` refuses a credential on an account or workspace row, and the
+  persisted record carries no field for one. The reserved-key floor below bounds what a declaration
+  could reach even from code; it is a floor, not a licence, and it is not what stands between a
+  tenant and the deployment's environment.
 - **A capability credential may not be LOOKED UP BY a variable the platform reads**
   (`isReservedPlatformEnvKey`, `backend/packages/contracts/src/reserved-env-keys.ts`): the same
   exact-names-plus-prefix-families shape `childEnv.ts` uses, and case-insensitive for the same
   reason (`process.env` lookup is case-insensitive on Windows). Refused where the declaration is
   made (the generative-integration credential schema; boot validation for a tool server) AND at
   dispatch, because a **mothership-mode node boot-validates none of the definitions it resolves**:
-  they arrive per dispatch over `/internal/binary-generators`, authored by a process one build
-  ahead of it, against an environment that is a developer's own laptop. `ENCRYPTION_KEY` and
+  they arrive per dispatch over `/internal/binary-generators` and
+  `/internal/foundational-services`, authored by a process one build ahead of it, against an
+  environment that is a developer's own laptop. `ENCRYPTION_KEY` and
   `HARNESS_SHARED_SECRET` are the keys to the boundary BETWEEN those two processes, held by the
   side meant to keep them; that is what the floor protects, with no configuration.
 - **The injection name carries a narrower rule, not the floor** (`isToolchainEnvName`): not `PATH`,

@@ -1,18 +1,24 @@
 import type { AgentRunContext, ToolSecretResolver, ToolSecretSubject } from '@cat-factory/kernel'
 import { createRecordingLogger } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
-import { resolveBinaryGeneratorSecrets } from './binaryGenerators.js'
+import { resolveCapabilitySecrets } from './capabilitySecrets.js'
 
-// The credentials of a step's generative binary integrations, for one container dispatch. What
-// these pin is the contract the feature rests on: the VALUES leave through the job body alone,
-// a key that does not resolve degrades to a stated absence rather than a failed dispatch, and the
-// resolver is told WHICH KIND of subject it is answering for.
+// The credentials of a step's registered CAPABILITIES, for one container dispatch: its generative
+// binary integrations, and the foundational services it was briefed to read and store through.
+// What these pin is the contract the feature rests on: the VALUES leave through the job body
+// alone, a key that does not resolve degrades to a stated absence rather than a failed dispatch,
+// the resolver is told WHICH KIND of subject it is answering for, and one variable two
+// capabilities disagree about is withheld from both however they were registered.
 
-function context(generators: AgentRunContext['binaryGenerators']): AgentRunContext {
+function context(
+  generators: AgentRunContext['binaryGenerators'],
+  foundationalCredentials?: AgentRunContext['foundationalCredentials'],
+): AgentRunContext {
   return {
     agentKind: 'image-generator',
     pipelineName: 'p',
     binaryGenerators: generators,
+    foundationalCredentials,
   } as unknown as AgentRunContext
 }
 
@@ -34,7 +40,7 @@ function recordingResolver(values: Record<string, string>): {
   }
 }
 
-describe('resolveBinaryGeneratorSecrets', () => {
+describe('resolveCapabilitySecrets', () => {
   const retro = {
     id: 'retro-diffusion',
     label: 'Retro Diffusion',
@@ -45,7 +51,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
   it('resolves each declared credential into a job-body env pair', async () => {
     const { resolver, subjects } = recordingResolver({ RD_TOKEN: 'tok' })
     expect(
-      await resolveBinaryGeneratorSecrets({
+      await resolveCapabilitySecrets({
         context: context([retro]),
         workspaceId: 'ws1',
         resolveToolSecrets: resolver,
@@ -63,7 +69,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
     const logger = createRecordingLogger()
     const { resolver } = recordingResolver({})
     expect(
-      await resolveBinaryGeneratorSecrets({
+      await resolveCapabilitySecrets({
         context: context([retro]),
         workspaceId: 'ws1',
         resolveToolSecrets: resolver,
@@ -83,7 +89,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
     const logger = createRecordingLogger()
     const { resolver } = recordingResolver({})
     expect(
-      await resolveBinaryGeneratorSecrets({
+      await resolveCapabilitySecrets({
         context: context([{ ...retro, credentials: [{ key: 'RD_TOKEN', required: false }] }]),
         workspaceId: 'ws1',
         resolveToolSecrets: resolver,
@@ -111,7 +117,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
         return Object.fromEntries(keys.map((k) => [k.key, `v-${k.key}`]))
       },
     }
-    const secrets = await resolveBinaryGeneratorSecrets({
+    const secrets = await resolveCapabilitySecrets({
       context: context([
         retro,
         {
@@ -141,7 +147,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
       },
     }
     expect(
-      await resolveBinaryGeneratorSecrets({
+      await resolveCapabilitySecrets({
         context: context([retro]),
         workspaceId: 'ws1',
         resolveToolSecrets: broken,
@@ -152,7 +158,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
 
   it('asks once per KEY, so two integrations sharing one variable cannot fight over it', async () => {
     const { resolver, subjects } = recordingResolver({ RD_TOKEN: 'tok' })
-    const secrets = await resolveBinaryGeneratorSecrets({
+    const secrets = await resolveCapabilitySecrets({
       context: context([
         retro,
         {
@@ -172,14 +178,14 @@ describe('resolveBinaryGeneratorSecrets', () => {
   it('resolves nothing for a step with no integrations, or an integration with no credential', async () => {
     const { resolver, subjects } = recordingResolver({ RD_TOKEN: 'tok' })
     expect(
-      await resolveBinaryGeneratorSecrets({
+      await resolveCapabilitySecrets({
         context: context([]),
         workspaceId: 'ws1',
         resolveToolSecrets: resolver,
       }),
     ).toEqual([])
     expect(
-      await resolveBinaryGeneratorSecrets({
+      await resolveCapabilitySecrets({
         context: context([
           { id: 'open-gen', label: 'Open', modalities: ['image'], credentials: [] },
         ]),
@@ -192,7 +198,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
 
   it('resolves nothing when the facade wires no secret resolver at all', async () => {
     expect(
-      await resolveBinaryGeneratorSecrets({ context: context([retro]), workspaceId: 'ws1' }),
+      await resolveCapabilitySecrets({ context: context([retro]), workspaceId: 'ws1' }),
     ).toEqual([])
   })
 
@@ -204,7 +210,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
   it('refuses a reserved platform key without asking the resolver, and says so at WARN', async () => {
     const { resolver, subjects } = recordingResolver({ ENCRYPTION_KEY: 'master-key' })
     const logger = createRecordingLogger()
-    const secrets = await resolveBinaryGeneratorSecrets({
+    const secrets = await resolveCapabilitySecrets({
       context: context([{ ...retro, credentials: [{ key: 'ENCRYPTION_KEY' }] }]),
       workspaceId: 'ws1',
       resolveToolSecrets: resolver,
@@ -222,7 +228,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
   it('matches a reserved key case-insensitively, because `process.env` does on Windows', async () => {
     const { resolver, subjects } = recordingResolver({ harness_shared_secret: 'shh' })
     expect(
-      await resolveBinaryGeneratorSecrets({
+      await resolveCapabilitySecrets({
         context: context([{ ...retro, credentials: [{ key: 'harness_shared_secret' }] }]),
         workspaceId: 'ws1',
         resolveToolSecrets: resolver,
@@ -237,7 +243,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
   it('looks the value up under a credential `key` and injects it under its `envName`', async () => {
     const { resolver } = recordingResolver({ ACME_IMAGE_TOKEN: 'tok' })
     expect(
-      await resolveBinaryGeneratorSecrets({
+      await resolveCapabilitySecrets({
         context: context([
           { ...retro, credentials: [{ key: 'ACME_IMAGE_TOKEN', envName: 'GITHUB_MODELS_KEY' }] },
         ]),
@@ -255,7 +261,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
     const { resolver, subjects } = recordingResolver({ FIRST_KEY: 'a', SECOND_KEY: 'b' })
     const logger = createRecordingLogger()
     expect(
-      await resolveBinaryGeneratorSecrets({
+      await resolveCapabilitySecrets({
         context: context([
           { ...retro, id: 'one', credentials: [{ key: 'FIRST_KEY', envName: 'VENDOR_KEY' }] },
           { ...retro, id: 'two', credentials: [{ key: 'SECOND_KEY', envName: 'VENDOR_KEY' }] },
@@ -271,7 +277,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
     expect(warn).toHaveLength(1)
     expect(warn[0]?.fields).toMatchObject({
       credentialEnvName: 'VENDOR_KEY',
-      binaryGeneratorIds: ['one', 'two'],
+      capabilities: ['binary-generator:one', 'binary-generator:two'],
     })
   })
 
@@ -282,7 +288,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
     // would name a variable in the brief that is set nowhere on a platform keeping them apart.
     const { resolver } = recordingResolver({ FIRST_KEY: 'a', SECOND_KEY: 'b', RD_TOKEN: 'c' })
     expect(
-      await resolveBinaryGeneratorSecrets({
+      await resolveCapabilitySecrets({
         context: context([
           { ...retro, id: 'one', credentials: [{ key: 'FIRST_KEY', envName: 'VENDOR_KEY' }] },
           { ...retro, id: 'two', credentials: [{ key: 'SECOND_KEY', envName: 'vendor_key' }] },
@@ -300,7 +306,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
     // still gets that one, so a collision cannot silently widen into an unrelated outage.
     const { resolver } = recordingResolver({ FIRST_KEY: 'a', SECOND_KEY: 'b', SOLO_KEY: 'c' })
     expect(
-      await resolveBinaryGeneratorSecrets({
+      await resolveCapabilitySecrets({
         context: context([
           { ...retro, id: 'one', credentials: [{ key: 'FIRST_KEY', envName: 'VENDOR_KEY' }] },
           {
@@ -325,7 +331,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
       SCENARIO_API_SECRET: 'ss',
     })
     expect(
-      await resolveBinaryGeneratorSecrets({
+      await resolveCapabilitySecrets({
         context: context([
           {
             ...retro,
@@ -358,7 +364,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
       },
     }
     expect(
-      await resolveBinaryGeneratorSecrets({
+      await resolveCapabilitySecrets({
         context: context([
           {
             ...retro,
@@ -386,7 +392,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
     const { resolver } = recordingResolver({ SCENARIO_API_KEY: 'kk' })
     const logger = createRecordingLogger()
     expect(
-      await resolveBinaryGeneratorSecrets({
+      await resolveCapabilitySecrets({
         context: context([
           {
             ...retro,
@@ -405,7 +411,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
     const { resolver, subjects } = recordingResolver({ ACME_IMAGE_TOKEN: 'tok' })
     const logger = createRecordingLogger()
     expect(
-      await resolveBinaryGeneratorSecrets({
+      await resolveCapabilitySecrets({
         context: context([
           { ...retro, credentials: [{ key: 'ACME_IMAGE_TOKEN', envName: 'NODE_OPTIONS' }] },
         ]),
@@ -416,5 +422,109 @@ describe('resolveBinaryGeneratorSecrets', () => {
     ).toEqual([])
     expect(subjects).toEqual([])
     expect(logger.lines.filter((line) => line.level === 'warn')).toHaveLength(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The FOUNDATIONAL SERVICE half: what a step authenticates to in order to STORE what it made,
+// which the platform had no way to declare until this landed. The rules are the integrations'
+// rules, and the cases below are the ones that are only reachable with two producers.
+// ---------------------------------------------------------------------------
+describe('resolveCapabilitySecrets — foundational services', () => {
+  const storage = {
+    id: 'file-storage',
+    name: 'File Storage',
+    credentials: [{ key: 'FILE_STORAGE_TOKEN' }],
+  }
+
+  it('resolves a storage service credential under its OWN subject kind', async () => {
+    // The subject discriminator is what keeps two registries' ids apart: a deployment may register
+    // a `file-storage` tool server beside a `file-storage` catalog service, and a resolver scoping
+    // by id alone would hand each the other's secret.
+    const { resolver, subjects } = recordingResolver({ FILE_STORAGE_TOKEN: 'tok' })
+    expect(
+      await resolveCapabilitySecrets({
+        context: context([], [storage]),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+      }),
+    ).toEqual([{ key: 'FILE_STORAGE_TOKEN', value: 'tok' }])
+    expect(subjects).toEqual([{ kind: 'foundational-service', id: 'file-storage' }])
+  })
+
+  it('serves a generator and a storage service in ONE dispatch', async () => {
+    // The shape the whole feature exists for: generate through a vendor, store through the org's
+    // own service, both authenticated, neither aware of the other.
+    const { resolver } = recordingResolver({ RD_TOKEN: 'a', FILE_STORAGE_TOKEN: 'b' })
+    expect(
+      await resolveCapabilitySecrets({
+        context: context(
+          [
+            {
+              id: 'retro-diffusion',
+              label: 'Retro',
+              modalities: ['image'],
+              credentials: [{ key: 'RD_TOKEN' }],
+            },
+          ],
+          [storage],
+        ),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+      }),
+    ).toEqual([
+      { key: 'RD_TOKEN', value: 'a' },
+      { key: 'FILE_STORAGE_TOKEN', value: 'b' },
+    ])
+  })
+
+  it('withholds a variable a generator and a service disagree about, from BOTH', async () => {
+    // The case no registration check can catch: the two are registered on different registries, so
+    // only a dispatch ever sees the pair. Serving the generator (which happens to sort first) would
+    // set the variable the storage brief tells the agent to read to a vendor API key, and the
+    // upload would 401 with a variable present at every layer that could report it.
+    const { resolver, subjects } = recordingResolver({ RD_TOKEN: 'a', FILE_STORAGE_TOKEN: 'b' })
+    const logger = createRecordingLogger()
+    expect(
+      await resolveCapabilitySecrets({
+        context: context(
+          [
+            {
+              id: 'retro-diffusion',
+              label: 'Retro',
+              modalities: ['image'],
+              credentials: [{ key: 'RD_TOKEN', envName: 'SHARED_TOKEN' }],
+            },
+          ],
+          [{ ...storage, credentials: [{ key: 'FILE_STORAGE_TOKEN', envName: 'SHARED_TOKEN' }] }],
+        ),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+        logger,
+      }),
+    ).toEqual([])
+    expect(subjects).toEqual([])
+    expect(logger.lines.filter((line) => line.level === 'warn')[0]?.fields).toMatchObject({
+      credentialEnvName: 'SHARED_TOKEN',
+      capabilities: ['binary-generator:retro-diffusion', 'foundational-service:file-storage'],
+    })
+  })
+
+  it('refuses a reserved platform key on a service exactly as on an integration', async () => {
+    // The floor is re-applied per dispatch rather than trusted from registration, because a
+    // mothership-mode node boot-validates none of the definitions it resolves and the environment
+    // the key would be read from is a developer's own laptop.
+    const { resolver, subjects } = recordingResolver({ ENCRYPTION_KEY: 'master' })
+    const logger = createRecordingLogger()
+    expect(
+      await resolveCapabilitySecrets({
+        context: context([], [{ ...storage, credentials: [{ key: 'ENCRYPTION_KEY' }] }]),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+        logger,
+      }),
+    ).toEqual([])
+    expect(subjects).toEqual([])
+    expect(logger.lines.some((line) => line.level === 'warn')).toBe(true)
   })
 })

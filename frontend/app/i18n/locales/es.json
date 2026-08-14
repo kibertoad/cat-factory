@@ -3374,7 +3374,8 @@
       "noneDeclared": "Ninguna de las capacidades registradas de esta instalación pide credenciales.",
       "subject": {
         "toolServer": "Servidor de herramientas",
-        "binaryGenerator": "Integración generativa"
+        "binaryGenerator": "Integración generativa",
+        "foundationalService": "Servicio fundacional"
       },
       "incomplete": {
         "title": "Puede que esta lista esté incompleta",
@@ -6685,6 +6686,7 @@
       "unknownGenerators": "Nombró una integración generativa que esta instalación no registra: {ids}. La entrada se conserva tal como se declaró; la integración se registra en el código de la instalación, no en este espacio de trabajo. | Nombró integraciones generativas que esta instalación no registra: {ids}. Sus entradas se conservan tal como se declararon; las integraciones se registran en el código de la instalación, no en este espacio de trabajo.",
       "generatorsUnverified": "No se han podido leer las integraciones generativas de esta instalación al cerrarse el paso, así que las integraciones indicadas abajo no se han contrastado con ellas. Las entradas se conservan tal como se declararon."
     },
+    "processedBy": "luego {tool}",
     "unknownGeneratorBadge": "No registrada",
     "missizedBadge": "Tamaño incorrecto",
     "candidates": {

@@ -27,6 +27,7 @@ import {
   isLocalRunner,
   pipelineHasVisualStep,
   stepConditionSatisfied,
+  storesThroughPlatformAssets,
 } from '@cat-factory/contracts'
 import {
   BINARY_OUTPUT_TRAIT,
@@ -242,8 +243,14 @@ export class RunAdmission {
     await this.assertDeployerConfigured(workspaceId, block, shape.agentKinds, enabled, initiatedBy)
 
     // A chain carrying an agent that relies on binary-artifact storage (the UI Tester uploads
-    // screenshots) needs the account to have storage configured.
-    await this.assertBinaryStorageConfigured(workspaceId, activeKinds)
+    // screenshots) needs the account to have storage configured — unless the step in question
+    // stores through some OTHER catalog service, whose bytes never reach that store.
+    await this.assertBinaryStorageConfigured(
+      workspaceId,
+      shape.agentKinds,
+      shape.stepOptions,
+      enabled,
+    )
 
     // A chain carrying a BINARY-GENERATING step (the `binary-output` trait — a deployment's
     // image generator) needs each such step's selection to resolve: its foundational-service
@@ -732,13 +739,32 @@ export class RunAdmission {
    * The check is trait-driven so it stays universal: a future artifact-producing kind just
    * carries the trait. Pass-through when no store resolver is wired (tests/conformance with
    * no storage) — matching the other optional start guards.
+   *
+   * The trait says the KIND stores binaries; only the STEP says where. So the requirement is
+   * resolved per step, from `usesPlatformAssetStorage` — the same fact the in-container upload
+   * seam already reads to decide whether the job gets an ingest endpoint into the account store.
+   * A `media-generator` step selecting the platform's own asset service still demands the store
+   * (that IS the store its bytes land in); the same kind repointed at an org's object service
+   * does not, because refusing that run would name a settings page unrelated to anything it
+   * touches. `tester-ui` makes no step-level selection at all, so it is held to the store
+   * exactly as before: for a kind with no selection to make, the trait is the whole statement.
    */
   private async assertBinaryStorageConfigured(
     workspaceId: string,
     agentKinds: readonly string[],
+    stepOptions: readonly (StepOptions | null)[] | undefined,
+    enabled: readonly boolean[] | undefined,
   ): Promise<void> {
-    if (!agentKinds.some((kind) => hasTrait(kind, BINARY_STORAGE_TRAIT, this.agentKindRegistry)))
-      return
+    const needsStore = agentKinds.some((kind, i) => {
+      if (enabled?.[i] === false) return false
+      if (!hasTrait(kind, BINARY_STORAGE_TRAIT, this.agentKindRegistry)) return false
+      const selection = stepOptions?.[i]?.binaryOutput
+      // No selection to make ⇒ the account store is this kind's only possible target, so the
+      // trait is the whole statement (the UI tester's screenshots). A selection naming some other
+      // catalog service takes the bytes out of the platform entirely.
+      return !selection || storesThroughPlatformAssets(selection.storageServiceId)
+    })
+    if (!needsStore) return
     const resolve = this.resolveBinaryArtifactStore
     if (!resolve) return
     const store = await resolve(workspaceId)

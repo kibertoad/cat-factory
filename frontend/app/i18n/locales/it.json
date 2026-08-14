@@ -806,7 +806,8 @@
       "noneDeclared": "Nessuna delle capacità registrate in questo deployment richiede credenziali.",
       "subject": {
         "toolServer": "Server di strumenti",
-        "binaryGenerator": "Integrazione generativa"
+        "binaryGenerator": "Integrazione generativa",
+        "foundationalService": "Servizio fondazionale"
       },
       "incomplete": {
         "title": "Questo elenco potrebbe essere incompleto",
@@ -5393,6 +5394,7 @@
       "unknownGenerators": "Ha indicato un'integrazione generativa che questa installazione non registra: {ids}. La voce viene mantenuta come dichiarata; l'integrazione si registra nel codice dell'installazione, non in questo spazio di lavoro. | Ha indicato integrazioni generative che questa installazione non registra: {ids}. Le loro voci vengono mantenute come dichiarate; le integrazioni si registrano nel codice dell'installazione, non in questo spazio di lavoro.",
       "generatorsUnverified": "Non è stato possibile leggere le integrazioni generative di questa installazione alla chiusura del passaggio, quindi le integrazioni indicate sotto non sono state verificate. Le voci sono conservate come dichiarate."
     },
+    "processedBy": "poi {tool}",
     "unknownGeneratorBadge": "Non registrata",
     "missizedBadge": "Dimensione errata",
     "candidates": {

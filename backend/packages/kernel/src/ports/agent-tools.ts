@@ -17,6 +17,17 @@ export type ToolSecretSubject =
    * body and becomes an environment variable of that one job's agent process.
    */
   | { kind: 'binary-generator'; id: string }
+  /**
+   * A FOUNDATIONAL SERVICE a dispatch was briefed on — the catalog service a binary-output step
+   * stores through, or one whose contracts a consumer kind was handed. Its resolved value rides
+   * the job body and becomes an environment variable of that one job's agent process, exactly as
+   * the two above do.
+   *
+   * Only a service the DEPLOYMENT registered in code ever appears here: a stored account or
+   * workspace row may not declare a credential, because the shipped resolver reads a declared key
+   * off the deployment's own environment.
+   */
+  | { kind: 'foundational-service'; id: string }
 
 /**
  * Resolves the credentials a declared CAPABILITY needs, per dispatch. The port exists so the

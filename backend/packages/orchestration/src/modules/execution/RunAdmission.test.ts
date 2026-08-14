@@ -1,5 +1,6 @@
 import { AgentKindRegistry } from '@cat-factory/agents'
 import type { Block } from '@cat-factory/kernel'
+import { PLATFORM_ASSET_STORAGE_SERVICE_ID } from '@cat-factory/contracts'
 import {
   ASSET_STORAGE_CAPABILITY,
   ConflictError,
@@ -8,7 +9,7 @@ import {
   defaultBinaryGeneratorRegistry,
   registryBinaryGeneratorSource,
 } from '@cat-factory/kernel'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FoundationalServiceResolver } from './run-foundational-services.js'
 import { RunAdmission, type RunAdmissionDeps } from './RunAdmission.js'
 
@@ -21,6 +22,20 @@ registry.register({
   kind: 'image-generator',
   systemPrompt: 'You generate images.',
   traits: ['binary-output'],
+})
+// The shipped `media-generator`'s shape: it generates AND it declares that its bytes land in the
+// platform's own store. Which of those two is true of a given RUN is the step's selection to say.
+registry.register({
+  kind: 'platform-generator',
+  systemPrompt: 'You generate images into the platform store.',
+  traits: ['binary-output', 'binary-storage'],
+})
+// The `tester-ui` shape: it stores binaries and has no step-level selection to make, so the trait
+// is the whole statement.
+registry.register({
+  kind: 'screenshot-taker',
+  systemPrompt: 'You capture screenshots.',
+  traits: ['binary-storage'],
 })
 
 const block = { id: 'b1', level: 'task', dependsOn: [], title: 'T' } as unknown as Block
@@ -41,6 +56,7 @@ function catalogResolver(
     catalogIdsFor: vi.fn(async () => services.map((s) => s.id)),
     contextFilesFor: vi.fn(async () => []),
     binaryOutputContextFilesFor: vi.fn(async () => []),
+    credentialsFor: vi.fn(async () => []),
   }
 }
 
@@ -79,8 +95,10 @@ function generatorRegistry() {
 function admission(
   resolver?: FoundationalServiceResolver,
   generatorSource = registryBinaryGeneratorSource(generatorRegistry()),
+  resolveBinaryArtifactStore?: RunAdmissionDeps['resolveBinaryArtifactStore'],
 ): RunAdmission {
   const deps = {
+    ...(resolveBinaryArtifactStore ? { resolveBinaryArtifactStore } : {}),
     workspaceRepository: { accountOf: vi.fn(async () => 'acc') },
     blockRepository: { listByWorkspace: vi.fn(async () => []) },
     executionRepository: { listLive: vi.fn(async () => []) },
@@ -637,5 +655,81 @@ describe('RunAdmission — the step harness is resolved the way the DISPATCH res
     // this block has none, so a call here would be the harness resolution's own. It must not
     // happen twice for one kind.
     expect(resolveWorkspaceModelDefault.mock.calls).toHaveLength(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The BINARY-STORAGE precondition, which is about the account's own content storage rather than
+// about the catalog. The trait says a kind stores binaries; only the STEP says where they land,
+// and before this the guard read the trait alone: a generator repointed at an org's object
+// service was refused a run over a store its bytes were never going to touch, and the refusal
+// named a content-storage settings page that had nothing to do with the failure.
+// ---------------------------------------------------------------------------
+describe('RunAdmission — the binary-storage precondition', () => {
+  const platformStorage = {
+    id: PLATFORM_ASSET_STORAGE_SERVICE_ID,
+    capabilities: [ASSET_STORAGE_CAPABILITY],
+  }
+  const orgStorage = { id: 'file-storage', capabilities: [ASSET_STORAGE_CAPABILITY] }
+  // One recording resolver, cleared per test: the last case asserts the guard never REACHES it,
+  // which a shared call log from the refusals above would satisfy in the wrong direction.
+  const STORAGE_OFF = vi.fn(async () => null)
+  beforeEach(() => STORAGE_OFF.mockClear())
+
+  function guard(services: { id: string; capabilities: string[] }[]): RunAdmission {
+    return admission(catalogResolver(services), undefined, STORAGE_OFF)
+  }
+
+  it('refuses a kind that stores with no selection to make, exactly as before', async () => {
+    const error = await refusal(
+      guard([]).assertRunnable('ws', block, { agentKinds: ['screenshot-taker'] }, null),
+    )
+    expect(error.details).toMatchObject({ reason: 'binary_storage_unconfigured' })
+  })
+
+  it('refuses a generator whose step stores through the PLATFORM asset service', async () => {
+    // The shipped `pl_media` shape: those bytes land in exactly the store the account has not
+    // configured, so the refusal points at the right settings page.
+    const error = await refusal(
+      guard([platformStorage]).assertRunnable(
+        'ws',
+        block,
+        {
+          agentKinds: ['platform-generator'],
+          stepOptions: [{ binaryOutput: { storageServiceId: PLATFORM_ASSET_STORAGE_SERVICE_ID } }],
+        },
+        null,
+      ),
+    )
+    expect(error.details).toMatchObject({ reason: 'binary_storage_unconfigured' })
+  })
+
+  it('admits the SAME kind when its step stores through an org service', async () => {
+    await guard([orgStorage]).assertRunnable(
+      'ws',
+      block,
+      {
+        agentKinds: ['platform-generator'],
+        stepOptions: [{ binaryOutput: { storageServiceId: 'file-storage' } }],
+      },
+      null,
+    )
+    // The account store is not merely tolerated as absent here: it is never consulted, because
+    // nothing in this run reaches it. A resolver call would mean the guard still believes the
+    // kind decides, and would refuse the moment the resolver answered null in production.
+    expect(STORAGE_OFF).not.toHaveBeenCalled()
+  })
+
+  it('ignores a DISABLED step, like every other shape check', async () => {
+    await guard([orgStorage]).assertRunnable(
+      'ws',
+      block,
+      {
+        agentKinds: ['image-generator', 'screenshot-taker'],
+        stepOptions: [{ binaryOutput: { storageServiceId: 'file-storage' } }, null],
+        enabled: [true, false],
+      },
+      null,
+    )
   })
 })

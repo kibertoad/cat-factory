@@ -182,6 +182,11 @@ export {
   subscriptionQuotaCeiling,
   isSubscriptionVendor,
 } from './domain/subscription-quota.js'
+// The pipeline AUTHORING helper the built-in catalog is written with, exported so a deployment
+// registering its own pipeline writes the same named-step form instead of hand-aligning five
+// parallel arrays (`docs/initiatives/binary-output-foundational-storage.md`, the reuse path).
+export { definePipeline } from './domain/define-pipeline.js'
+export type { PipelineSpec, PipelineStepSpec } from './domain/define-pipeline.js'
 export type { RetiredPipeline } from './domain/seed.js'
 export {
   seedBlocks,
@@ -276,6 +281,8 @@ export {
   type FoundationalContractBundle,
   type FoundationalDefinitionProblem,
   type FoundationalIndexRead,
+  type ResolvedServiceCredential,
+  type ResolvedServiceCredentials,
   FOUNDATIONAL_CATALOG_FILE,
   FOUNDATIONAL_CONTEXT_DIR,
   FOUNDATIONAL_DECLARATION_TAG,
@@ -285,6 +292,7 @@ export {
   contextFileFor,
   describeFoundationalProblem,
   detectContractFormat,
+  dispatchServiceCredentials,
   indexContractOperations,
   indexOpenApiOperations,
   indexToadContractOperations,
@@ -295,6 +303,7 @@ export {
   renderContractDocument,
   renderFoundationalCatalog,
   renderFoundationalIndex,
+  renderServiceCredentials,
   summarizeContract,
   validateFoundationalDefinition,
 } from './domain/foundational-services.js'

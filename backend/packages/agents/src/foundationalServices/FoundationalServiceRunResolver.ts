@@ -8,9 +8,11 @@ import type {
   FoundationalCatalogView,
   InjectedContextFile,
   ResolvedBinaryGeneratorSelection,
+  ResolvedServiceCredentials,
 } from '@cat-factory/kernel'
 import {
   BINARY_OUTPUT_BRIEF_FILE,
+  dispatchServiceCredentials,
   FOUNDATIONAL_INDEX_FILE,
   binaryContextFileFor,
   binaryGeneratorContextFileFor,
@@ -49,7 +51,37 @@ export class FoundationalServiceRunResolver {
       description: service.description,
       capabilities: service.capabilities,
       contracts: service.contracts,
+      // Key NAMES only, and only ever present on a `builtin` entry (the merge is what puts it
+      // there; a stored row cannot declare one). Carried on the view so the two surfaces that
+      // must agree — the brief that tells an agent which variable to read, and the dispatch
+      // projection that puts a value in it — are built from one read of one catalog.
+      ...(service.credentials?.length ? { credentials: service.credentials } : {}),
     }))
+  }
+
+  /**
+   * The credential DECLARATIONS of the services a dispatch was briefed on, projected for the
+   * container executor to resolve values for.
+   *
+   * Takes the ids rather than reading the step itself, because the two callers compute them from
+   * different places (a binary-output step's own selection, a consumer kind's declared set) and
+   * the projection must not learn either shape. Unknown ids are DROPPED rather than reported: an
+   * id the catalog does not resolve is already stated to the agent by the brief that could not
+   * describe it, and there is no credential to withhold for a service that does not exist.
+   *
+   * THROWS what the catalog read throws. Unlike the injected files, whose absence the trait
+   * guidance defines, an empty credential set is indistinguishable from "these services need no
+   * credentials"; the caller wraps this best-effort so a failure costs the values and never the
+   * dispatch, and the agent then reads unset variables, which the brief already defines.
+   */
+  async credentialsFor(
+    workspaceId: string,
+    serviceIds: readonly string[],
+  ): Promise<ResolvedServiceCredentials[]> {
+    if (serviceIds.length === 0) return []
+    const wanted = new Set(serviceIds)
+    const catalog = await this.catalogFor(workspaceId)
+    return dispatchServiceCredentials(catalog.filter((service) => wanted.has(service.id)))
   }
 
   /** Just the ids in the merged catalog — the check a settled design's declaration runs against. */
@@ -102,6 +134,10 @@ export class FoundationalServiceRunResolver {
             title: doc.title,
             body: doc.body,
           })),
+          // Stated in the SAME file as the contract it authenticates: an agent reading a bundle
+          // whose every route wants a bearer token, with nothing naming the variable that holds
+          // one, has a documented API and no way to call it.
+          ...(service.credentials?.length ? { credentials: service.credentials } : {}),
         }
       })
       .filter((bundle): bundle is NonNullable<typeof bundle> => bundle !== null)

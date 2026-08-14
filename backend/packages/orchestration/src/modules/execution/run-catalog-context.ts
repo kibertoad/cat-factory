@@ -6,6 +6,7 @@ import type {
   InjectedContextFile,
   Logger,
   ResolvedBinaryGenerator,
+  ResolvedServiceCredentials,
 } from '@cat-factory/kernel'
 import { memoizeBinaryGeneratorViews } from '@cat-factory/kernel'
 import {
@@ -14,6 +15,7 @@ import {
   createFoundationalDeclarationRecorder,
   resolveFoundationalContext,
 } from './run-foundational-services.js'
+import { dispatchFoundationalCredentialsFor } from './run-foundational-credentials.js'
 import {
   type BinaryOutputDeclarationRecorder,
   createBinaryOutputDeclarationRecorder,
@@ -41,6 +43,12 @@ export interface CatalogRunSlice {
   foundationalContextFiles: InjectedContextFile[]
   binaryOutputContextFiles: InjectedContextFile[]
   binaryGenerators: ResolvedBinaryGenerator[]
+  /**
+   * The credential DECLARATIONS of every catalog service this dispatch was briefed on: the key
+   * names the container executor resolves values for onto the job body. Empty when nothing this
+   * dispatch reads or writes through needs authenticating, which is the ordinary case.
+   */
+  foundationalCredentials: ResolvedServiceCredentials[]
   /**
    * The catalog service this dispatch stores through, when it was briefed to store anything.
    * Pure (no I/O) and derived from the same trait gate as the two reads above, so it rides the
@@ -77,25 +85,28 @@ export class CatalogRunContext {
   }
 
   /**
-   * ALL THREE catalog-backed reads of one dispatch, resolved concurrently — the ONE entry the
-   * context read wave takes, so the builder holds a single wave slot rather than three:
+   * ALL FOUR catalog-backed reads of one dispatch, resolved concurrently — the ONE entry the
+   * context read wave takes, so the builder holds a single wave slot rather than four:
    *
    * - the FOUNDATIONAL SERVICES files (the catalog for a design kind, the declared services' API
    *   contracts for a consumer kind, nothing for anything else), read only from the steps BEFORE
    *   the one being dispatched so a re-dispatched design cannot read its own prior round;
    * - the BINARY-OUTPUT brief for a kind carrying the trait, off the step's own selection;
    * - the GENERATIVE INTEGRATIONS that selection names — the non-secret projection the container
-   *   executor turns into credentials on the job body.
+   *   executor turns into credentials on the job body;
+   * - the CREDENTIAL declarations of every catalog service this dispatch was briefed on, which is
+   *   the same projection one layer over: what authenticates the storage and context services,
+   *   where the integrations' half authenticates what MAKES the artifact.
    *
-   * They belong together rather than merely being adjacent: all three go through this
-   * collaborator, all three are BEST-EFFORT inside (each gap has a stated rendering — an
+   * They belong together rather than merely being adjacent: all four go through this
+   * collaborator, all four are BEST-EFFORT inside (each gap has a stated rendering — an
    * `unavailable` catalog file, an absent brief the trait guidance already defines as "do not
-   * attempt any upload", no integrations to hand credentials for), and on a mothership-mode node
-   * all three can cross the machine API. That last point is why the generative half belongs in
-   * the wave at all rather than after it, where it would serialise a round trip behind the
-   * others for nothing.
+   * attempt any upload", no integrations to hand credentials for, an unset variable the briefs
+   * define as "the platform could not provide it"), and on a mothership-mode node all four can
+   * cross the machine API. That last point is why the generative half belongs in the wave at all
+   * rather than after it, where it would serialise a round trip behind the others for nothing.
    *
-   * Exposed as the WHOLE slice rather than three per-read methods, because the sharing below is
+   * Exposed as the WHOLE slice rather than four per-read methods, because the sharing below is
    * only correct within one dispatch: a caller that could take the halves separately could take
    * them at different times, which is the drift this collaborator exists to prevent.
    *
@@ -119,22 +130,24 @@ export class CatalogRunContext {
           binaryGeneratorSource: memoizeBinaryGeneratorViews(this.deps.binaryGeneratorSource),
         }
       : this.deps
-    const [foundationalContextFiles, binaryOutputContextFiles, binaryGenerators] =
-      await Promise.all([
-        resolveFoundationalContext({
-          ...deps,
-          workspaceId,
-          agentKind,
-          priorSteps: instance.steps.slice(0, instance.currentStep),
-        }),
-        resolveBinaryOutputContext({ ...deps, workspaceId, agentKind, step }),
-        dispatchBinaryGeneratorsFor({ ...deps, agentKind, step }),
-      ])
+    const priorSteps = instance.steps.slice(0, instance.currentStep)
+    const [
+      foundationalContextFiles,
+      binaryOutputContextFiles,
+      binaryGenerators,
+      foundationalCredentials,
+    ] = await Promise.all([
+      resolveFoundationalContext({ ...deps, workspaceId, agentKind, priorSteps }),
+      resolveBinaryOutputContext({ ...deps, workspaceId, agentKind, step }),
+      dispatchBinaryGeneratorsFor({ ...deps, agentKind, step }),
+      dispatchFoundationalCredentialsFor({ ...deps, workspaceId, agentKind, step, priorSteps }),
+    ])
     const binaryStorageServiceId = dispatchBinaryStorageFor({ ...deps, agentKind, step })
     return {
       foundationalContextFiles,
       binaryOutputContextFiles,
       binaryGenerators,
+      foundationalCredentials,
       ...(binaryStorageServiceId ? { binaryStorageServiceId } : {}),
     }
   }

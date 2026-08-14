@@ -479,6 +479,16 @@ export class AgentKindRegistry {
    * Assign extra capability traits to an (existing) agent kind — additive, idempotent per trait.
    * Used by an opt-in package (e.g. `@cat-factory/consensus`) to mark built-in kinds eligible for
    * a strategy without redefining their prompt. Read back via {@link assignedTraitsFor}.
+   *
+   * There is deliberately NO inverse. A trait a kind declares is part of what that kind IS, and a
+   * deployment removing one is claiming to know better than the kind's author about the kind's own
+   * requirements. The ask that reaches for a subtraction is always a trait that is wrong for a
+   * particular USE, and the fix is a correct trait rather than a way to drop a stated one: the
+   * `binary-storage` precondition is the worked example, and what it needed was to be resolved
+   * from the step's own storage selection (`storesThroughPlatformAssets`), not a way to unassign
+   * it. A subtraction would also be half a seam by construction, since `traitsFor` unions three
+   * sources and a kind's traits can come from `STANDARD_AGENT_TRAITS`, where nothing a deployment
+   * writes can reach them: it would remove a trait from some kinds and silently not from others.
    */
   assignTraits(kind: AgentKind, traits: Iterable<AgentTrait>): void {
     const set = this.assignedTraits.get(kind) ?? new Set<AgentTrait>()

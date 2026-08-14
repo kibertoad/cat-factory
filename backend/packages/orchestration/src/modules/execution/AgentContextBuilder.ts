@@ -583,6 +583,9 @@ export class AgentContextBuilder {
       ...(catalogSlice.binaryStorageServiceId
         ? { binaryStorageServiceId: catalogSlice.binaryStorageServiceId }
         : {}),
+      ...(catalogSlice.foundationalCredentials.length
+        ? { foundationalCredentials: catalogSlice.foundationalCredentials }
+        : {}),
       ...runImages,
       priorOutputs,
       decisions: instance.steps

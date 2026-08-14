@@ -1,7 +1,7 @@
 import {
   type BinaryGeneratorDefinition,
   binaryAcceptsWithoutCapability,
-  binaryCredentialInjectionName,
+  credentialInjectionName,
   comparableCredentialInjectionName,
   modalitiesOfMediaType,
 } from '@cat-factory/contracts'
@@ -193,7 +193,7 @@ export function binaryGeneratorInjectionCollisions(
     for (const credential of definition.credentials ?? []) {
       const comparable = comparableCredentialInjectionName(credential)
       const claim = claims.get(comparable) ?? {
-        spelling: binaryCredentialInjectionName(credential),
+        spelling: credentialInjectionName(credential),
         byKey: new Map<string, string[]>(),
       }
       claim.byKey.set(credential.key, [...(claim.byKey.get(credential.key) ?? []), definition.id])

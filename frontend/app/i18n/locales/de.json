@@ -806,7 +806,8 @@
       "noneDeclared": "Keine der registrierten Fähigkeiten dieser Installation fordert Zugangsdaten an.",
       "subject": {
         "toolServer": "Tool-Server",
-        "binaryGenerator": "Generative Integration"
+        "binaryGenerator": "Generative Integration",
+        "foundationalService": "Basisdienst"
       },
       "incomplete": {
         "title": "Diese Liste ist möglicherweise unvollständig",
@@ -5393,6 +5394,7 @@
       "unknownGenerators": "Eine generative Integration genannt, die diese Installation nicht registriert: {ids}. Der Eintrag bleibt wie angegeben erhalten; die Integration wird im Code der Installation registriert, nicht in diesem Workspace. | Generative Integrationen genannt, die diese Installation nicht registriert: {ids}. Ihre Einträge bleiben wie angegeben erhalten; Integrationen werden im Code der Installation registriert, nicht in diesem Workspace.",
       "generatorsUnverified": "Die generativen Integrationen dieser Installation konnten beim Abschluss des Schritts nicht gelesen werden, daher wurden die unten genannten Integrationen nicht dagegen geprüft. Die Einträge bleiben wie angegeben erhalten."
     },
+    "processedBy": "dann {tool}",
     "unknownGeneratorBadge": "Nicht registriert",
     "missizedBadge": "Falsche Größe",
     "candidates": {

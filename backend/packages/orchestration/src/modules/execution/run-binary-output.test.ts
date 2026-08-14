@@ -46,6 +46,7 @@ function resolver(overrides: Partial<FoundationalServiceResolver> = {}) {
     binaryOutputContextFilesFor: vi.fn(async () => [
       { path: BINARY_OUTPUT_BRIEF_FILE, content: 'brief' },
     ]),
+    credentialsFor: vi.fn(async () => []),
     ...overrides,
   } satisfies FoundationalServiceResolver & Record<string, unknown>
 }

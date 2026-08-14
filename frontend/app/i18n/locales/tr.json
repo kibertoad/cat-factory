@@ -3516,7 +3516,8 @@
       "noneDeclared": "Bu kurulumda kayıtlı yeteneklerin hiçbiri kimlik bilgisi istemiyor.",
       "subject": {
         "toolServer": "Araç sunucusu",
-        "binaryGenerator": "Üretken entegrasyon"
+        "binaryGenerator": "Üretken entegrasyon",
+        "foundationalService": "Temel servis"
       },
       "incomplete": {
         "title": "Bu liste eksik olabilir",
@@ -6685,6 +6686,7 @@
       "unknownGenerators": "Bu kurulumun kaydetmediği bir üretken entegrasyon belirtildi: {ids}. Kayıt bildirildiği gibi korunur; entegrasyon bu çalışma alanında değil, kurulumun kodunda kaydedilir. | Bu kurulumun kaydetmediği üretken entegrasyonlar belirtildi: {ids}. Kayıtları bildirildiği gibi korunur; entegrasyonlar bu çalışma alanında değil, kurulumun kodunda kaydedilir.",
       "generatorsUnverified": "Adım tamamlanırken bu dağıtımın üretken entegrasyonları okunamadı, bu yüzden aşağıda adı geçen entegrasyonlar bunlarla karşılaştırılmadı. Kayıtlar bildirildiği gibi saklanır."
     },
+    "processedBy": "ardından {tool}",
     "unknownGeneratorBadge": "Kayıtlı değil",
     "missizedBadge": "Yanlış boyut",
     "candidates": {

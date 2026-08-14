@@ -30,6 +30,7 @@ type CredentialSubject = CapabilityCredentialStatus['declaredBy'][number]['subje
 const SUBJECT_LABELS = computed<Record<CredentialSubject, string>>(() => ({
   'tool-server': t('settings.capabilityCredentials.subject.toolServer'),
   'binary-generator': t('settings.capabilityCredentials.subject.binaryGenerator'),
+  'foundational-service': t('settings.capabilityCredentials.subject.foundationalService'),
 }))
 
 // Draft values, keyed by credential key. Never prefilled: nothing here was ever read back, and a

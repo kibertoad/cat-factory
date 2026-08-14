@@ -1,4 +1,8 @@
 import * as v from 'valibot'
+import {
+  capabilityCredentialSchema,
+  uniqueCredentialInjectionNames,
+} from './capability-credentials.js'
 import { fragmentOwnerKindSchema } from './fragment-library.js'
 
 // ---------------------------------------------------------------------------
@@ -205,6 +209,13 @@ export const resolvedFoundationalServiceSchema = v.object({
   description: v.string(),
   capabilities: v.array(v.string()),
   contracts: v.array(apiContractSummarySchema),
+  /**
+   * The credentials this service authenticates with, by KEY NAME only. Present only on a
+   * `builtin` entry, because only the code-registered tier may declare one (see
+   * {@link createFoundationalServiceSchema}); an account or workspace row carries none and this
+   * is absent rather than empty for it.
+   */
+  credentials: v.optional(v.array(capabilityCredentialSchema)),
   tier: foundationalServiceTierSchema,
 })
 export type ResolvedFoundationalService = v.InferOutput<typeof resolvedFoundationalServiceSchema>
@@ -253,15 +264,72 @@ export const uploadApiContractSchema = v.object({
 export type UploadApiContract = v.InferOutput<typeof uploadApiContractSchema>
 
 /** Register a foundational service at the addressed tier. */
-export const createFoundationalServiceSchema = v.object({
-  id: slug,
-  name: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
-  summary: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(400)),
-  description: v.pipe(v.string(), v.trim(), v.maxLength(20_000)),
-  capabilities: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(64)))),
-  contracts: v.optional(v.array(uploadApiContractSchema)),
-})
+export const createFoundationalServiceSchema = v.pipe(
+  v.object({
+    id: slug,
+    name: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+    summary: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(400)),
+    description: v.pipe(v.string(), v.trim(), v.maxLength(20_000)),
+    capabilities: v.optional(
+      v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(64))),
+    ),
+    contracts: v.optional(v.array(uploadApiContractSchema)),
+    /**
+     * The credentials a step must authenticate to this service WITH, declared by key name and
+     * never by value, resolved per dispatch through the same `ToolSecretResolver` a generative
+     * integration's are and injected into the job as named environment variables. The service's
+     * own `description` and contract document are what tell the agent which variable carries
+     * what, exactly as an integration's `usage` does.
+     *
+     * Only the DEPLOYMENT's own code-registered (`builtin`) tier may declare these, and the
+     * write boundary refuses them on a stored account/workspace row
+     * ({@link storedTierMayNotDeclareCredentials}). The reason is the resolver's shipped default:
+     * it reads the declared key off the DEPLOYMENT'S OWN ENVIRONMENT, so a declaration is a
+     * request to read deployment-level secret state and hand it to an agent process. Every other
+     * declarer on the platform (tool servers, generative integrations) is deployment code, where
+     * that is the same trust boundary as the process itself; a foundational service is the first
+     * one a workspace ADMIN can also create over REST, and there the two are not the same at all.
+     * `isReservedPlatformEnvKey` bounds the damage to non-platform variables, which is a floor,
+     * not a licence.
+     *
+     * A per-workspace credential is still perfectly reachable: the deployment declares the KEY in
+     * code and each workspace stores its own VALUE in the sealed capability-credential store,
+     * which is the split that store exists for.
+     */
+    credentials: v.optional(v.array(capabilityCredentialSchema)),
+  }),
+  v.check(
+    (service) => uniqueCredentialInjectionNames(service.credentials ?? []),
+    'each credential must arrive as its own environment variable (duplicate injection name)',
+  ),
+)
 export type CreateFoundationalServiceInput = v.InferOutput<typeof createFoundationalServiceSchema>
+
+/**
+ * The refusal a STORED (account / workspace) foundational service earns by declaring credentials,
+ * or null when it declares none.
+ *
+ * A message rather than a boolean because the caller throws it verbatim, and the operator's next
+ * move is not obvious from "not allowed": the capability they want does exist, one layer over, and
+ * this names it.
+ *
+ * The rule cannot live in the schema, because ONE schema serves both doors on purpose: the REST
+ * write boundary and `foundationalServiceDefinitionIssues`, which holds a deployment's
+ * code-registered definition to exactly what an uploaded one must satisfy. What differs between
+ * them is not the SHAPE but the DECLARER, and only the caller knows which one it is.
+ */
+export function storedTierMayNotDeclareCredentials(input: {
+  credentials?: unknown[]
+}): string | null {
+  if (!input.credentials?.length) return null
+  return (
+    'A foundational service registered here cannot declare credentials: the resolver reads a ' +
+    "declared key off the deployment's own environment, so only a service the deployment " +
+    'registers in code may name one. To give this service a credential, declare the KEY on the ' +
+    "code-registered definition and store each workspace's VALUE under that key in the " +
+    'capability-credential settings.'
+  )
+}
 
 /**
  * The ways `definition` fails {@link createFoundationalServiceSchema}, as readable lines — empty
@@ -292,6 +360,13 @@ export const updateFoundationalServiceSchema = v.object({
   description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(20_000))),
   capabilities: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(64)))),
   contracts: v.optional(v.array(uploadApiContractSchema)),
+  /**
+   * Refused rather than accepted, for the reason {@link createFoundationalServiceSchema} gives:
+   * a stored row may not declare credentials, and this is the door that would otherwise add them
+   * to one that was created without any. Present in the schema at all so the refusal is a stated
+   * rule with a message, rather than a field silently stripped by object parsing.
+   */
+  credentials: v.optional(v.array(capabilityCredentialSchema)),
 })
 export type UpdateFoundationalServiceInput = v.InferOutput<typeof updateFoundationalServiceSchema>
 

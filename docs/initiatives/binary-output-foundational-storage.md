@@ -354,14 +354,23 @@ server's does, one channel over:
    record it;
 2. the CONTAINER EXECUTOR resolves the values through the kernel `ToolSecretResolver` port (the
    facade's, so a deployment needing per-workspace keys implements the port and nothing else
-   changes) and writes them to the job body's `generatorSecrets`;
+   changes) and writes them to the job body's `capabilitySecrets`;
 3. the HARNESS layers them onto THAT JOB's agent env, never `process.env`, which the shared
    native host process makes a cross-job leak, and registers each value for redaction.
 
-`ToolSecretResolver`'s input gained a discriminated `subject` (`tool-server` | `binary-generator`)
-because two registries mint these ids and nothing stops them colliding: a deployment with a
-`retro-diffusion` tool server AND a `retro-diffusion` integration would otherwise hand each the
-other's secret from a per-workspace store.
+`ToolSecretResolver`'s input gained a discriminated `subject`
+(`tool-server` | `binary-generator` | `foundational-service`) because three registries mint these
+ids and nothing stops them colliding: a deployment with a `retro-diffusion` tool server AND a
+`retro-diffusion` integration would otherwise hand each the other's secret from a per-workspace
+store.
+
+**The STORAGE half of a step's selection declares credentials on the same terms**, which is what
+makes a step storing through an org's own object service work at all: the brief names the variable
+(`renderServiceCredentials`), the engine projects the declarations onto
+`AgentRunContext.foundationalCredentials`, and one resolver (`resolveCapabilitySecrets`) serves
+both producers so a variable-name conflict BETWEEN them is visible where it happens, per job.
+Only a code-registered service may declare one; the reasoning, and what an override loses, is in
+[ADR 0031](../../backend/docs/adr/0031-foundational-services.md#authenticating-to-a-service-declared-credentials-and-only-from-code).
 
 **An unresolvable credential is not a failed dispatch.** The brief states, per integration, that
 an unset variable means the platform could not provide the key and the integration must not be
@@ -1284,6 +1293,37 @@ declaration is wrong in both directions, and neither shows up as an error: an un
 renders as a generic file, and a mis-declared bundle renders a broken `<img>` reporting itself as
 loaded, because the fetch genuinely succeeded. The declaration keeps the job it is good for,
 labelling a non-image row with the agent's own account of what the file is.
+
+### What an ORG-held asset still cannot do, and the shape of the answer
+
+Everything above is about assets the platform holds. A step storing through an org's own service
+can now AUTHENTICATE to it (see the credential seam), and a human still cannot LOOK at what it
+stored: `StoredAssetView` is gated on `platformAssetIdOf`, the fallback is a `previewUrl` the
+storage service must have issued, and a bearer-authenticated object store issues none. So the
+candidate-comparison park, which exists precisely because admission cannot choose between seven
+image integrations and a human can, degrades on an org estate to rows of prose: a subject, a
+generator id, a location. `withoutPreview` counts them honestly, and the park still costs an
+interrupt and a generation per candidate to produce a choice made blind.
+
+The answer is a service-declared READ operation proxied through the same authenticated blob route
+the platform's own assets use, so the SPA's fetch is unchanged and only the bytes' origin differs.
+It is deliberately NOT in this change, and not because it is large: it is a different KIND of
+change. Every credential the platform resolves today is spent by an AGENT, inside a job, against
+an endpoint the step was briefed on. A preview proxy spends one in the REQUEST path, on a viewer's
+behalf, to pull bytes out of an org's private bucket and through the platform. That is an
+expansion of what a deployment's credential is used for, it is a new SSRF surface (the fetch
+target comes from a model-authored `location`), and both belong in `security-model.md` with an ADR
+rather than as a route added beside a picker. Two constraints are already settled by everything
+above and would bind it: ONE operation, GET by location, no listing and no write; and a failure
+that renders as "the service did not return it" rather than as an absent artifact, because those
+are the two states this whole feature keeps insisting are different.
+
+The alternative somebody will propose first is worth naming so it is not re-proposed: stage
+candidates through `platform-assets` (previewable, and its `DELETE /{location}` already reclaims
+the rejects) and store only the survivors through the org service. It solves the comparison with no
+credential work and it is worse: the storage target becomes two fields where the model is one
+selection, the step is briefed on a service it was not asked to use, and the second phase has to
+MOVE bytes between two services, which is a data path neither of them offers.
 
 ## Remaining work
 

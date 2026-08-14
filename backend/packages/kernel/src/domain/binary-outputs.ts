@@ -19,6 +19,7 @@ import {
 } from './binary-output-paths.js'
 import { extractFencedDeclaration } from './fenced-declaration.js'
 import type { FoundationalCatalogView } from './foundational-services.js'
+import { renderServiceCredentials } from './foundational-services.js'
 import {
   type ResolvedBinaryGeneratorSelection,
   renderBinaryGeneratorSection,
@@ -292,11 +293,16 @@ function coerceArtifact(entry: unknown): BinaryOutputArtifact | null {
   // Lowercased like `service`, and for the same reason: registry ids are lower-kebab slugs, so a
   // model that capitalises one means the registered integration and must not be reported unknown.
   const generator = identityField(record.generator)?.toLowerCase()
+  // NOT lowercased and NOT an identity field, unlike `generator` beside it: a post-processor
+  // resolves against no registry, so there is no id for a capitalised spelling to miss. It is a
+  // LABEL, kept on the same terms as `description`.
+  const processedBy = displayField(record.processedBy)
   const dimensions = dimensionsField(record.dimensions)
   if (entity) artifact.entity = entity
   if (contentType) artifact.contentType = contentType
   if (description) artifact.description = description
   if (generator) artifact.generator = generator
+  if (processedBy) artifact.processedBy = processedBy
   if (dimensions) artifact.dimensions = dimensions
   // The platform CLASSIFIES; the model only reports. An unrecognised media type leaves `modality`
   // ABSENT rather than guessing one — "we cannot tell what this is" is not "this is not an image".
@@ -519,7 +525,12 @@ function renderStorageSection(input: BinaryOutputBriefInput): string[] {
       '',
     )
   }
-  lines.push(...contractPointer(input.storage), '')
+  lines.push(...contractPointer(input.storage))
+  // How to AUTHENTICATE to it, from the same helper the consumer contract document uses and
+  // naming the same variable the dispatch resolver sets. Without this the brief hands an agent a
+  // contract whose every route is bearer-authenticated and no way to satisfy one, which is the
+  // failure a storage service could not previously express.
+  lines.push('', ...renderServiceCredentials(input.storage.credentials), '')
   return lines
 }
 

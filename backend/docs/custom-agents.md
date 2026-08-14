@@ -290,6 +290,46 @@ import '@cat-factory/example-custom-agent'
 …then `linkRepo`s a target repo and runs `pl_org_audit`. It proves a brand-new
 repo-writing agent ships with **zero** harness changes.
 
+## The container image a kind runs in, and why it is not a per-kind choice
+
+A kind declares `image: 'ui'` to get the heavier Playwright + browser image, and a deployment
+whose own kind needs a tool the harness image has no reason to carry will reach for a fourth
+variant of the same shape: name it on the kind, map the name to a tag in the runner backend, done.
+That is not the smallest correct change, and the reason is worth stating because it is invisible
+from the definition.
+
+**The container is per RUN, not per step, on all three backends.** The Cloudflare Container is
+addressed by `idFromName(runId)`, the Kubernetes pod by `podName(runId)` (a later step's
+`ensurePod` 409s and re-attaches, by design), and the local Docker transport resolves a container
+by run id. A run's first container-dispatching step CREATES the container; every later step of that
+run runs inside it, and the engine reclaims it when the RUN ends (`stopRunContainer`), not between
+steps. So the image is a property of the run's first dispatch, and a `image` declaration on any
+LATER step of the same run cannot take effect: it re-attaches to what is already there.
+
+That is already true of the platform's own `ui` variant. On a chain like coder → tester-ui, the
+pod or container exists before the tester's step is dispatched, so on a self-hosted backend the UI
+tester re-attaches to the base executor image; on Cloudflare a second `[[containers]]` class pinned
+to the UI image is the wiring `Dockerfile.ui`'s deploy note calls "the remaining deploy-time step".
+A fourth variant declared on a kind would inherit that exactly, and silently: the job runs, the
+tool the variant existed for is absent, and the step reports a missing artifact with nothing
+naming the cause.
+
+**So the ask is a per-STEP container identity, not a wider `image` union.** Two shapes could
+deliver it, and both are larger than a field:
+
+- **Key the container by (run, variant)** rather than by run. The poll path is the constraint: it
+  rebuilds a job's handle from the STEP alone, so the variant has to be persisted at dispatch and
+  re-supplied when polling, exactly as the resolved model and the leased subscription token are
+  (`recordDispatchAttribution`). Release then has to reclaim every variant's container for a run,
+  not one.
+- **Expose the tool from the harness** instead of from the image, where it can be. For anything
+  that ships as a WASM module or a static binary small enough to live in the base image, this needs
+  no image seam at all, and it is the cheaper answer for the case that prompted the question (a
+  pixel-grid snapper over a generator's output).
+
+Until one of those lands, a kind needing its own image must be the ONLY container-dispatching step
+of its run, which for a single-step generating pipeline is no constraint at all.
+
 ## Status / scope
 
 - The extension framework (the three-stage model, the registry seams, live pre/post-op

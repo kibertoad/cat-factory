@@ -3374,7 +3374,8 @@
       "noneDeclared": "Żadna z zarejestrowanych funkcji tego wdrożenia nie prosi o poświadczenia.",
       "subject": {
         "toolServer": "Serwer narzędzi",
-        "binaryGenerator": "Integracja generatywna"
+        "binaryGenerator": "Integracja generatywna",
+        "foundationalService": "Usługa fundamentalna"
       },
       "incomplete": {
         "title": "Ta lista może być niepełna",
@@ -6685,6 +6686,7 @@
       "unknownGenerators": "Wskazano integrację generatywną, której ta instalacja nie rejestruje: {ids}. Wpis zostaje zachowany zgodnie z deklaracją; integrację rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym. | Wskazano integracje generatywne, których ta instalacja nie rejestruje: {ids}. Ich wpisy zostają zachowane zgodnie z deklaracją; integracje rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym. | Wskazano integracji generatywnych, których ta instalacja nie rejestruje: {ids}. Ich wpisy zostają zachowane zgodnie z deklaracją; integracje rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym.",
       "generatorsUnverified": "Nie udało się odczytać integracji generatywnych tego wdrożenia przy zamykaniu kroku, więc wymienione poniżej integracje nie zostały z nimi porównane. Wpisy są zachowane w takiej postaci, w jakiej je zgłoszono."
     },
+    "processedBy": "następnie {tool}",
     "unknownGeneratorBadge": "Niezarejestrowana",
     "missizedBadge": "Zły rozmiar",
     "candidates": {

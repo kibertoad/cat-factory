@@ -246,6 +246,32 @@ export {
   RALPH_PIPELINE_ID,
   MEDIA_PIPELINE_ID,
 } from '@cat-factory/kernel'
+// The pipeline AUTHORING seam, so a deployment writes a registered pipeline the way the built-in
+// catalog is written: a list of NAMED steps, lowered into `Pipeline`'s index-aligned
+// `agentKinds`/`gates`/`enabled`/`gating`/`stepOptions` arrays by the same helper. Hand-aligning
+// five arrays is an invariant maintained by eye, and a step inserted in the middle shifts four of
+// them silently.
+export { definePipeline } from '@cat-factory/kernel'
+export type { PipelineSpec, PipelineStepSpec, StepOptions } from '@cat-factory/kernel'
+// What a pipeline's STEP has to be able to NAME, for a deployment replacing a shipped preset with
+// one of its own: the generating kind, the platform's own storage service, the two traits that
+// decide what a kind gets, and the option shapes it fills in. Withholding these turns a one-line
+// registration into either a copied string literal (a second source of truth for a value the
+// platform branches on, refused at the write boundary if it misses by a character) or a second
+// direct dependency on an internal package whose version must be kept in step with this facade's
+// own copy by hand.
+export {
+  MEDIA_GENERATOR_AGENT_KIND,
+  BINARY_OUTPUT_TRAIT,
+  BINARY_STORAGE_TRAIT,
+} from '@cat-factory/agents'
+export type { AgentKindVariantDefinition } from '@cat-factory/agents'
+export {
+  PLATFORM_ASSET_STORAGE_SERVICE_ID,
+  ASSET_STORAGE_CAPABILITY,
+  GENERATION_CONTEXT_CAPABILITY,
+} from '@cat-factory/contracts'
+export type { BinaryOutputConfig } from '@cat-factory/contracts'
 // The built-in model-preset ids + the catalog fallback default, re-exported so a local deploy-app
 // wrapper can name a preset when passing `startLocal({ defaultModelPresetId })` without a direct
 // `@cat-factory/kernel` import (parity with the Node facade).
