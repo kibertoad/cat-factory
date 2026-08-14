@@ -10,25 +10,36 @@ interface Harness {
   /** Reject the oldest pending fetch. */
   readonly fail: (message?: string) => Promise<void>
   readonly fetches: () => number
+  /** The workspace ids the funnel actually fetched, in order. */
+  readonly fetched: () => string[]
   readonly applied: () => string[]
+  /** Whether the oldest pending fetch has been aborted. */
+  readonly aborted: () => boolean
   setWorkspaceId: (id: string | null) => void
 }
 
-function harness(initialId: string | null = 'ws1'): Harness {
+function harness(initialId: string | null = 'ws1', deadlineMs?: number): Harness {
   let workspaceId = initialId
-  const pending: { resolve: (s: WorkspaceSnapshot) => void; reject: (e: Error) => void }[] = []
-  let fetches = 0
+  const pending: {
+    resolve: (s: WorkspaceSnapshot) => void
+    reject: (e: Error) => void
+    signal: AbortSignal
+  }[] = []
+  const fetched: string[] = []
   const applied: string[] = []
   const baselines = {} as LiveWriteBaselines
 
   const funnel = createRefreshFunnel({
     currentWorkspaceId: () => workspaceId,
-    fetchSnapshot: () => {
-      fetches++
-      return new Promise<WorkspaceSnapshot>((resolve, reject) => pending.push({ resolve, reject }))
+    fetchSnapshot: (id, signal) => {
+      fetched.push(id)
+      return new Promise<WorkspaceSnapshot>((resolve, reject) =>
+        pending.push({ resolve, reject, signal }),
+      )
     },
     captureBaselines: () => baselines,
     apply: (snapshot) => applied.push(snapshot.workspace.id),
+    deadlineMs,
   })
 
   /** Let the funnel's internal continuations run before the assertions read its state. */
@@ -44,8 +55,10 @@ function harness(initialId: string | null = 'ws1'): Harness {
       pending.shift()!.reject(new Error(message))
       await drain()
     },
-    fetches: () => fetches,
+    fetches: () => fetched.length,
+    fetched: () => fetched,
     applied: () => applied,
+    aborted: () => pending[0]!.signal.aborted,
     setWorkspaceId: (id) => {
       workspaceId = id
     },
@@ -138,6 +151,54 @@ describe('refresh funnel', () => {
     await h.settle('stale')
     await done
     expect(h.applied()).toEqual([])
+  })
+
+  /**
+   * The queued follow-up is queued FOR a board. A switch while it waits makes it pointless, and
+   * issuing it anyway would read the NEW board's snapshot on behalf of a caller that asked about
+   * the old one, race the switch's own hydrate, and resolve as though the old board had refreshed.
+   */
+  it('does not fetch the new board on behalf of a follow-up queued for the old one', async () => {
+    const h = harness()
+    const first = h.funnel.refresh()
+    const queued = h.funnel.refresh()
+    h.setWorkspaceId('ws2')
+    await h.settle('stale')
+    await first
+    await queued
+    expect(h.fetched()).toEqual(['ws1'])
+    expect(h.applied()).toEqual([])
+  })
+
+  /**
+   * The slot is bounded, because serializing every refresh through it makes ONE stalled request
+   * everyone's problem: the client sets no timeout, so a dropped connection would otherwise leave
+   * the funnel holding a fetch that never settles and every later caller queued behind it forever.
+   */
+  describe('deadline', () => {
+    it('fails the caller, aborts the request and frees the slot when a fetch never settles', async () => {
+      const h = harness('ws1', 5)
+      const stalled = expect(h.funnel.refresh()).rejects.toThrow(/timed out/)
+      await stalled
+      expect(h.aborted()).toBe(true)
+
+      // The funnel is usable again: a fresh caller issues its own fetch rather than joining the
+      // hang, and the abandoned request can no longer hydrate anything if it does answer.
+      const next = h.funnel.refresh()
+      expect(h.fetches()).toBe(2)
+      await h.settle('late-answer-from-the-abandoned-fetch')
+      expect(h.applied()).toEqual([])
+      await h.settle('recovered')
+      await next
+      expect(h.applied()).toEqual(['recovered'])
+    })
+
+    it('does not count a timed-out fetch as coverage', async () => {
+      const h = harness('ws1', 5)
+      const mark = h.funnel.refreshMark()
+      await expect(h.funnel.refresh()).rejects.toThrow(/timed out/)
+      expect(h.funnel.hydratedSince(mark)).toBe(false)
+    })
   })
 
   describe('coverage mark', () => {

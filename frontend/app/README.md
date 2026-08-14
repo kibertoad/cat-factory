@@ -254,8 +254,12 @@ derivation over WORKSPACE-wide state belongs on the store that owns its input, n
 review-debt map is `notifications.reviewDebtByBlock` for exactly this reason), and the assembled
 output passes through `utils/laneIdentity.ts`, which hands back the previous lane / group / entry
 objects wherever the fresh ones match, so the common event that moves no card leaves `TaskLane` and
-`LaneGroup` diffing on `===`. That reuse is sound only while every field the renderer reads is
-compared, which is why a new `LaneTaskEntry` field must be added to `sameEntry` in the same change.
+`LaneGroup` diffing on `===`. That reuse is sound only while every DERIVED field is compared (those
+exist nowhere but the entry, so a stale one is a lie nothing corrects), which is why a new
+`LaneTaskEntry` field must be added to `sameEntry` in the same change. The `task` itself is compared
+by reference and deliberately not field by field: a replaced block is a new reference, and an
+in-place patch (`board/placement.ts`, the optimistic drag and field edits) is one object both entries
+share, which the renderer reads through and deep reactivity invalidates on its own.
 
 **A lane is a CLAIM, which is a higher bar than a badge.** A mislabelled badge sits beside the
 truth; a card filed in the wrong lane states something false _and_ hides the card from the column
@@ -959,8 +963,18 @@ event left to restore it.
   QUEUED follow-up rather than the in-flight request, because a caller that mutated and then
   refreshed is entitled to a snapshot read AFTER its call. Do not reintroduce an unguarded
   `hydrate(await fetch())`, and never add a second refresh path beside the funnel.
+- **Serializing makes one stalled request everyone's problem, so the slot is BOUNDED.** The API
+  client sets no timeout, and a hung fetch behind a shared slot stops every later refresh, the
+  coarse-event resync and the retry chain at once. The funnel puts a deadline on its own read and
+  ABORTS it, so a dead connection surfaces as an ordinary failure rather than a wedge; a snapshot
+  arriving after the deadline is never applied. Anything else that serializes work behind one slot
+  owes the same bound. The same argument is why a dedupe must QUEUE the later ask rather than drop it
+  (`environmentTest.reconcileRun`): the outstanding read may predate the state the later ask exists
+  to observe.
 - **Never gate readiness on a snapshot a later resync can undo.** The on-connect resync flips
-  `connected` only after it settles (which is why e2e gates on `data-connected`).
+  `connected` only after it settles (which is why e2e gates on `data-connected`). A resync that
+  stands down because a NEWER one started must hand its caller that newer one, not resolve: a
+  stand-down is not a reconcile, and `socket.onopen` cannot tell the difference.
 - **A REPLACE-style `hydrate` must never silently drop live-only state.** Either fold that state
   into the snapshot or reconcile rather than replace. The funnel above orders refreshes against
   each OTHER and does nothing when ONE slow fetch straddles a live event, so every such store also
@@ -982,7 +996,9 @@ event left to restore it.
   "thinking…" bubble spinning). Every echo therefore goes through
   `execution.echoAfter(executionId, send, apply)`, which captures the run's `rev` before the
   request and drops the echo if anything advanced it. Never hand-roll the await-then-assign.
-- **The coarse-event debounce is capped, and it checks coverage before firing.** Trailing-only
+- **The coarse-event debounce is capped, and it checks coverage before firing.**
+  (`composables/workspaceStream/coarseRefresh.ts`, which owns both ways a full resync is asked for:
+  the on-connect reconcile and the `board`-event fan-out.) Trailing-only
   re-armed forever under a sustained sub-300ms event stream, so the board stopped resyncing exactly
   when the workspace was busiest; there is now a max-wait. Before fetching it asks the funnel
   whether a snapshot issued after the latest coarse event has already hydrated

@@ -261,6 +261,20 @@ export interface LaneGroup {
 }
 
 /**
+ * One rendered lane: its identity, its groups, and the count its header states.
+ *
+ * Lives beside the shapes it composes rather than in `composables/useFrameLanes`, which assembles
+ * it: `utils/laneIdentity.ts` compares these, and a util reaching into a composable for its central
+ * type points the dependency the wrong way round.
+ */
+export interface RenderedLane {
+  readonly lane: TaskLane
+  readonly groups: LaneGroup[]
+  /** Every task classified into this lane, BEFORE the Done lane's caps. */
+  readonly total: number
+}
+
+/**
  * The value a task is grouped under, or null for the catch-all group.
  *
  * `module` reads the module NAME rather than the parent block id because a task declares

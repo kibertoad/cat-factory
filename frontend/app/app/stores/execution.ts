@@ -184,13 +184,13 @@ export const useExecutionStore = defineStore('execution', () => {
    *
    * A block only holds several runs transiently: a stale reconnect snapshot re-listing a retry's
    * now-deleted terminal predecessor alongside the live successor. Prefer the live one so this
-   * projection agrees with `agentRuns.byBlock` (whose last-write-wins already resolves to it) —
+   * projection agrees with `agentRuns.byBlock` (whose last-write-wins already resolves to it):
    * the failed predecessor is dead and about to fall out on the next read.
    *
    * The single pass states that rule as "replace whatever is held whenever it is TERMINAL", which
    * is the array form (`runs.find(live) ?? runs.at(-1)`) exactly: the first live run wins and is
-   * never displaced, and with no live run the LAST terminal one wins. Keep the two in step — this
-   * is the only place the rule is written now.
+   * never displaced, and with no live run the LAST terminal one wins. Keep the two in step, since
+   * this is the only place the rule is written now.
    *
    * WHY AN INDEX. {@link getByBlock} was a full `instances` scan per call on three per-event hot
    * paths: a computed on every mounted task card (`TaskPipelineMini`), `classify` inside the
@@ -229,7 +229,6 @@ export const useExecutionStore = defineStore('execution', () => {
     upsert,
     echoAfter,
     byId,
-    byBlockLive,
     getInstance,
     getByBlock,
     ...pendingGates,

@@ -24,6 +24,13 @@ coarse-event debounce gained a max-wait cap, since trailing-only re-armed foreve
 event stream and the board stopped resyncing exactly when the workspace was busiest, plus a coverage
 check that drops a resync a mutation's own refresh already served.
 
+Serializing every refresh behind one slot is what makes a stalled request everyone's problem, so
+the slot is bounded: the funnel puts a deadline on its own snapshot read and aborts it, since the
+API client sets no timeout and a hung fetch would otherwise stop every later refresh, the
+coarse-event resync and the retry chain together. A queued follow-up is tagged with the board it was
+queued for, so a board switch stands it down rather than fetching the new board on behalf of a caller
+that asked about the old one.
+
 Two things to watch. The coverage skip assumes the server emits a coarse `board` event only after
 committing what it announces. And the refresh sequence guard is gone: with one fetch outstanding at
 a time, two snapshots cannot resolve out of order, so the ordering it provided is now structural.

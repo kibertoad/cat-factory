@@ -5,6 +5,7 @@ import {
   applyWorkspaceEvent,
   type WorkspaceEventTargets,
 } from '~/composables/workspaceStream/applyWorkspaceEvent'
+import { createCoarseRefresh } from '~/composables/workspaceStream/coarseRefresh'
 
 /**
  * Subscribes to the backend's per-workspace WebSocket event stream and keeps the
@@ -53,68 +54,22 @@ export function useWorkspaceStream() {
   let stopped = false
   let attempt = 0
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  let boardDebounce: ReturnType<typeof setTimeout> | null = null
 
   // http→ws, https→wss. `apiBase` is an absolute origin on a split-origin deployment (see
   // nuxt.config.ts) and EMPTY on a same-origin one (one proxy in front of the SPA + the API —
   // the compose preview stack), where the socket origin comes from the page instead.
   const wsBase = wsOriginFor(String(apiBase), import.meta.client ? window.location.origin : '')
 
-  // A coarse board refresh (the resync on reconnect, and the `board` event fan-out) must not be
-  // left silently stale by ONE transient failure: retry a few times with backoff so a blip
-  // self-heals. Bounded (the socket-level reconnect + the offline banner are the backstop for a
-  // genuine outage). Aborts between attempts if the stream stopped or the workspace switched.
-  //
-  // A chain also stands down when a NEWER one has started: the backoff sleeps run for seconds, so
-  // a sustained event stream used to leave several chains alive at once, each still issuing full
-  // snapshot fetches for a resync a later chain had already superseded.
-  const REFRESH_MAX_ATTEMPTS = 4
-  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
-  let refreshChain = 0
-  async function refreshWithRetry(workspaceId: string): Promise<void> {
-    const chain = ++refreshChain
-    for (let i = 0; i < REFRESH_MAX_ATTEMPTS; i++) {
-      if (stopped || workspace.workspaceId !== workspaceId || chain !== refreshChain) return
-      try {
-        await workspace.refresh()
-        return
-      } catch {
-        if (i < REFRESH_MAX_ATTEMPTS - 1) await sleep(Math.min(4_000, 400 * 2 ** i))
-      }
-    }
-  }
-
-  // The coarse-event debounce. Trailing, so a burst of `board` events costs one refresh, and
-  // CAPPED, because trailing alone re-armed the timer forever under a sustained sub-300ms stream:
-  // the board stopped resyncing exactly when the workspace was busiest. Past the cap the pending
-  // refresh fires on schedule and the next event starts a fresh window.
-  const BOARD_DEBOUNCE_MS = 300
-  const BOARD_DEBOUNCE_MAX_WAIT_MS = 2_000
-  let debounceWindowStart = 0
-  // The funnel's coverage mark as of the LATEST coarse event in this window. A snapshot fetch
-  // issued after that event necessarily contains what the event announced (the server emits it
-  // after committing), so if one has already hydrated by the time the timer fires there is nothing
-  // left to resync. This is what stops a mutation that refreshes directly AND raises a coarse
-  // event from paying for two full snapshots.
-  let coverageMark = 0
-
-  function debouncedBoardRefresh() {
-    const workspaceId = workspace.workspaceId
-    if (!workspaceId) return
-    const now = Date.now()
-    coverageMark = workspace.refreshMark()
-    if (boardDebounce) clearTimeout(boardDebounce)
-    else debounceWindowStart = now
-    const wait = Math.max(
-      0,
-      Math.min(BOARD_DEBOUNCE_MS, debounceWindowStart + BOARD_DEBOUNCE_MAX_WAIT_MS - now),
-    )
-    boardDebounce = setTimeout(() => {
-      boardDebounce = null
-      if (workspace.hydratedSince(coverageMark)) return
-      void refreshWithRetry(workspaceId)
-    }, wait)
-  }
+  // How a full resync is scheduled and driven (the retry chain, the capped debounce and its
+  // coverage check), extracted into a cohesive collaborator over bound callbacks so those rules are
+  // testable without a socket. This file keeps the socket lifecycle and the event routing.
+  const coarse = createCoarseRefresh({
+    stopped: () => stopped,
+    currentWorkspaceId: () => workspace.workspaceId,
+    refresh: () => workspace.refresh(),
+    refreshMark: () => workspace.refreshMark(),
+    hydratedSince: (mark) => workspace.hydratedSince(mark),
+  })
 
   // The stores this stream feeds, bound once. Routing lives in `applyWorkspaceEvent` so the
   // targeted-vs-coarse decision on a `board` event is unit-testable without a socket.
@@ -134,7 +89,7 @@ export function useWorkspaceStream() {
     upsertKaizen: (g) => kaizen.upsert(g),
     upsertInitiative: (i) => initiatives.upsert(i),
     upsertDocInterview: (s) => docInterview.upsert(s),
-    refreshBoard: () => debouncedBoardRefresh(),
+    refreshBoard: () => coarse.schedule(),
   }
 
   function onMessage(raw: string) {
@@ -190,10 +145,10 @@ export function useWorkspaceStream() {
       // it. Anything acting on a `connected` board (a user, or an e2e spec gating on
       // `data-connected`) then does so only after this reconcile, so a lagging resync
       // can't drop the state that action produces. The resync RETRIES on a transient
-      // failure (`refreshWithRetry`) so a reconnect no longer presents as fully live while
+      // failure (`coarse.withRetry`) so a reconnect no longer presents as fully live while
       // silently missing everything from the outage; `connected` is still set even if every
       // retry fails (we ARE connected; a refresh error must not wedge the indicator/tests).
-      void refreshWithRetry(workspaceId).finally(() => {
+      void coarse.withRetry(workspaceId).finally(() => {
         // A workspace switch (or stop()) may have happened while the refresh was in
         // flight — don't announce a connection for a socket we've since abandoned.
         if (!stopped && socket && workspace.workspaceId === workspaceId) {
@@ -237,7 +192,7 @@ export function useWorkspaceStream() {
   function stop() {
     stopped = true
     if (reconnectTimer) clearTimeout(reconnectTimer)
-    if (boardDebounce) clearTimeout(boardDebounce)
+    coarse.cancel()
     socket?.close()
     socket = null
     connected.value = false

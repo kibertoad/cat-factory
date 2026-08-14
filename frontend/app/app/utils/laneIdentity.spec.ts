@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { createLaneMemo } from '~/utils/laneIdentity'
-import type { LaneGroup, LaneTaskEntry } from '~/utils/laneSort'
-import type { RenderedLane } from '~/composables/useFrameLanes'
+import type { LaneGroup, LaneTaskEntry, RenderedLane } from '~/utils/laneSort'
 import type { Block } from '~/types/domain'
 
 const taskA = { id: 'a', title: 'A' } as unknown as Block
@@ -56,8 +55,8 @@ describe('lane structural sharing', () => {
     expect(second[1]).not.toBe(first[1])
   })
 
-  // The rule that makes reuse sound: a changed task is a changed OBJECT (the board store replaces
-  // a block on every write), so identity on `task` is what covers the whole Block behind it.
+  // Half of the reference rule: a REPLACED block (what every `board.upsert` does) is a new object,
+  // so reuse cannot hand a renderer the pre-write one.
   it('does not reuse an entry whose task object was replaced', () => {
     const share = createLaneMemo()
     const first = share(lanes([group('g1', [entry(taskA)])]))
@@ -65,6 +64,29 @@ describe('lane structural sharing', () => {
     const second = share(lanes([group('g1', [entry(renamed)])]))
     expect(second).not.toBe(first)
     expect(second[0]!.groups[0]!.entries[0]!.task).toBe(renamed)
+  })
+
+  /**
+   * The other half, and the case the comparison deliberately does NOT try to detect:
+   * `stores/board/placement.ts` patches a block IN PLACE for its optimistic writes, so both entries
+   * hold the same object and no comparison over it could see the difference. Reuse is still
+   * observationally identical, because the object a renderer reads through IS the patched one (and
+   * `board.blocks` is deeply reactive, so the patch invalidates whatever read it). What must not be
+   * reused is an entry whose DERIVED fields moved with the patch, which is the assertion below.
+   */
+  it('reuses an entry whose task was patched in place, but not its derived fields', () => {
+    const share = createLaneMemo()
+    const task = { id: 'a', title: 'A', moduleName: null } as unknown as Block
+    const first = share(lanes([group('g1', [entry(task)])]))
+    Object.assign(task, { title: 'A patched', moduleName: 'billing' })
+    // Same derived fields: the entry is reused, and it carries the patched object.
+    const unchanged = share(lanes([group('g1', [entry(task)])]))
+    expect(unchanged).toBe(first)
+    expect(unchanged[0]!.groups[0]!.entries[0]!.task.title).toBe('A patched')
+    // The assembly re-derived `moduleName` from the patch: that is a fresh entry.
+    const rederived = share(lanes([group('g1', [entry(task, { moduleName: 'billing' })])]))
+    expect(rederived).not.toBe(first)
+    expect(rederived[0]!.groups[0]!.entries[0]!.moduleName).toBe('billing')
   })
 
   it('treats reordering, additions and removals as changes', () => {

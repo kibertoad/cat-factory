@@ -208,7 +208,7 @@ export const useWorkspaceStore = defineStore(
     // reasoning: `stores/workspace/refreshFunnel.ts`.
     const { refresh, refreshMark, hydratedSince } = createRefreshFunnel({
       currentWorkspaceId: () => workspaceId.value,
-      fetchSnapshot: (id) => api.getWorkspace(id),
+      fetchSnapshot: (id, signal) => api.getWorkspace(id, signal),
       captureBaselines: (): LiveWriteBaselines => ({
         board: useBoardStore().hydrateBaseline(),
         notifications: useNotificationsStore().hydrateBaseline(),

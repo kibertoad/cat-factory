@@ -1,5 +1,4 @@
-import type { LaneGroup, LaneTaskEntry } from '~/utils/laneSort'
-import type { RenderedLane } from '~/composables/useFrameLanes'
+import type { LaneGroup, LaneTaskEntry, RenderedLane } from '~/utils/laneSort'
 
 // ---------------------------------------------------------------------------
 // Structural sharing for the swimlane output.
@@ -8,7 +7,7 @@ import type { RenderedLane } from '~/composables/useFrameLanes'
 // pending-gate indexes, the coarse agent-run summary and the open notifications. Any ONE execution
 // event invalidates the whole chain for EVERY mounted frame, and the chain rebuilds every entry,
 // every group and every lane as fresh objects. Vue then sees new identities all the way down, so
-// `TaskLane` / `LaneGroup` re-render and every card diff re-runs — even for the (common) case where
+// `TaskLane` / `LaneGroup` re-render and every card diff re-runs, even for the (common) case where
 // the event changed one run's progress and moved nothing.
 //
 // WHAT THIS DOES. Compare the freshly built value against the previous one field by field and hand
@@ -17,11 +16,21 @@ import type { RenderedLane } from '~/composables/useFrameLanes'
 // reused, unchanged lanes let the whole array be reused.
 //
 // THE CORRECTNESS RULE. Reuse is only sound when the reused object is observationally identical to
-// the fresh one, so the comparison must cover EVERY field the renderer can read. `task` is compared
-// by REFERENCE, which is what makes that hold for the whole `Block` behind it: the board store
-// replaces a block object on every write to it, so a changed task is a changed reference. A field
-// added to `LaneTaskEntry` must be added to {@link sameEntry} in the same change, which is why that
-// function destructures rather than reading through a loop over keys.
+// the fresh one, so the comparison must cover every DERIVED field: a value this assembly computed
+// (`moduleName`, `initiativeName`, `epicName`, the activity/wait stamps) exists only on the entry,
+// so a reused entry carrying a stale one is a lie nothing else can correct. That is why
+// {@link sameEntry} destructures rather than looping over keys, and why a field added to
+// `LaneTaskEntry` must be added to it in the same change.
+//
+// `task` is compared by REFERENCE, and that is NOT because the board store always replaces the
+// object: `stores/board/placement.ts` patches a block IN PLACE for its optimistic drag, reparent and
+// field edits, so the previous entry and the fresh one hold the very same object. Reference equality
+// is still the right comparison, for a different reason on each side. A REPLACED block (every
+// `board.upsert`, i.e. every server-sourced write) is a new reference, so it is caught here. A block
+// patched IN PLACE is one object that both entries share, so a renderer reading through the reused
+// entry reads the new value, and `board.blocks` is deeply reactive, so the mutation itself
+// invalidates whatever read it. What the mutation cannot reach is a value DERIVED off it, which is
+// exactly what the field comparison above covers.
 // ---------------------------------------------------------------------------
 
 function sameEntry(a: LaneTaskEntry, b: LaneTaskEntry): boolean {

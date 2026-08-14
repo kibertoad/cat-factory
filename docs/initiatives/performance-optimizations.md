@@ -439,11 +439,15 @@ frame; `laneSort` compares text through one lazily built `Intl.Collator` (no opt
 collation is byte-for-byte what `localeCompare` performed); and the assembled output passes through
 `utils/laneIdentity.ts`, which hands back the previous lane / group / entry objects wherever the
 fresh ones are field-for-field identical, so a progress-only event leaves `TaskLane` / `LaneGroup`
-diffing on `===`. Reuse is sound because `task` is compared by REFERENCE: the board store replaces a
-block object on every write, so a changed task is a changed reference. The rule a future field must
-respect (add it to `sameEntry` or reuse goes stale) is stated at that file's head and pinned by
-`laneIdentity.spec.ts`. Still open here: incremental maintenance of the gate/run projections
-themselves (item 20's third bullet).
+diffing on `===`. What makes reuse sound is the DERIVED fields being compared: `moduleName`,
+`initiativeName`, `epicName` and the activity/wait stamps exist only on the entry, so a reused entry
+carrying a stale one is a lie nothing else corrects. `task` is compared by reference, and review
+corrected the reason: it is NOT that the board store always replaces the object (`board/placement.ts`
+patches a block in place for its optimistic writes), but that a replaced block is a new reference and
+an in-place patch is one object both entries share, which a renderer reads through and Vue's deep
+reactivity invalidates on its own. The rule a future field must respect (add it to `sameEntry` or
+reuse goes stale) is stated at that file's head and pinned by `laneIdentity.spec.ts`. Still open
+here: incremental maintenance of the gate/run projections themselves (item 20's third bullet).
 
 ### 11. Two unconditional 60fps DOM-measuring RAF loops (P2)
 
@@ -893,9 +897,24 @@ caller ever observes a pre-mutation world. The stream's debounce gained a 2s max
 alone re-armed forever under a sustained sub-300ms stream, so the board stopped resyncing exactly
 when it was busiest) plus a coverage check: `refreshMark()` / `hydratedSince()` let it drop a
 resync that some mutation's own refresh already served, which is the double-snapshot the finding
-opens with. `refreshWithRetry` chains stand down when a newer one starts, and `reconcileRun` holds
-an in-flight set. The `refreshSeq` guard is gone: with one fetch at a time, two snapshots cannot
-resolve out of order, and that guard existed only to order them. The board-switch discard remains.
+opens with. The `refreshSeq` guard is gone: with one fetch at a time, two snapshots cannot resolve
+out of order, and that guard existed only to order them.
+
+Serializing is what makes the two bounds below load-bearing, and both were added in review:
+
+- **The slot has a 30s DEADLINE and aborts the request.** The wretch client sets no timeout, so a
+  stalled connection can leave a GET pending indefinitely; behind one slot that single stall wedges
+  every refresh, the resync and the retry chain at once. A deadline turns it into an ordinary failure
+  they can all act on, and a snapshot arriving after it is never applied.
+- **A queued follow-up is tagged with the board it was queued FOR** and stands down on a switch,
+  rather than reading the CURRENT board on behalf of a caller that asked about the old one.
+
+`refreshWithRetry` chains stand down when a newer one starts, and a stood-down chain HANDS ITS CALLER
+the newer chain rather than resolving: `socket.onopen` announces `connected` off that promise, so
+resolving early would announce a board whose reconcile is still in flight. `reconcileRun` dedupes
+its point-read with one queued follow-up, for the same reason the funnel is not plain single-flight:
+the outstanding read may predate the run reaching terminal, and nothing asks a third time.
+
 Behaviour to watch: the coverage skip assumes the server emits a coarse `board` event only AFTER
 committing what it announces. Not addressed here: hydrating a mutation's own response instead of
 refetching the world, which is a per-call-site change rather than a funnel one.
