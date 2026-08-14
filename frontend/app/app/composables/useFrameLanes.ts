@@ -1,6 +1,6 @@
 import { computed, type Ref } from 'vue'
-import { collectReviewDebt } from '@cat-factory/contracts'
 import type { Block } from '~/types/domain'
+import { createLaneMemo } from '~/utils/laneIdentity'
 import {
   groupLaneTasks,
   runActivityAt,
@@ -58,14 +58,16 @@ export function useFrameLanes(frameId: Ref<string>) {
   )
 
   /**
-   * Per-block "waiting since", derived once from the workspace's open review-wait cards by the
-   * same `collectReviewDebt` the backend's friction check uses. It is the fallback source for
-   * the park surfaces that stamp no `step.pausedAt`; deriving it once rather than per task is
-   * what keeps this assembly linear.
+   * Per-block "waiting since": the fallback source for the park surfaces that stamp no
+   * `step.pausedAt`. Read off the notifications store's own index rather than re-derived here.
+   *
+   * This composable runs ONE INSTANCE PER MOUNTED FRAME, and the reduction behind that index is
+   * over the whole workspace's open notifications, so deriving it here made a board with n frames
+   * pay O(frames x open notifications) for one workspace-wide fact on every notification change.
+   * The rule for anything else this assembly needs: a per-FRAME derivation belongs here, a
+   * workspace-wide one belongs on the store that owns its input.
    */
-  const waitingSinceByBlock = computed(
-    () => new Map(collectReviewDebt(notifications.open).map((d) => [d.blockId, d.waitingSince])),
-  )
+  const waitingSinceByBlock = computed(() => notifications.reviewDebtByBlock)
 
   /**
    * The module a task belongs to: the module BLOCK's title when it already lives in one, else
@@ -153,18 +155,28 @@ export function useFrameLanes(frameId: Ref<string>) {
     ),
   )
 
+  /**
+   * Identity preservation for the assembled output, so an event that changed nothing in a lane
+   * hands `TaskLane`/`LaneGroup` the SAME objects it had and their diffs short-circuit on `===`.
+   * Every execution event invalidates this whole chain for every mounted frame, and most of them
+   * (a subtask tick, a progress fold) move no card at all. See `utils/laneIdentity.ts`.
+   */
+  const shareLanes = createLaneMemo()
+
   const lanes = computed<RenderedLane[]>(() =>
-    TASK_LANES.map((lane) => {
-      const bucket = byLane.value.get(lane) ?? []
-      // Only the Done lane is capped; every other lane renders everything in it.
-      const visible = lane === 'done' ? admittedByCaps(bucket, doneSelection.value) : bucket
-      const ordered = sortLaneTasks(visible, laneView.sortKey, lane)
-      return {
-        lane,
-        groups: groupLaneTasks(ordered, laneView.groupKey, moduleBlockIdByName.value),
-        total: bucket.length,
-      }
-    }),
+    shareLanes(
+      TASK_LANES.map((lane) => {
+        const bucket = byLane.value.get(lane) ?? []
+        // Only the Done lane is capped; every other lane renders everything in it.
+        const visible = lane === 'done' ? admittedByCaps(bucket, doneSelection.value) : bucket
+        const ordered = sortLaneTasks(visible, laneView.sortKey, lane)
+        return {
+          lane,
+          groups: groupLaneTasks(ordered, laneView.groupKey, moduleBlockIdByName.value),
+          total: bucket.length,
+        }
+      }),
+    ),
   )
 
   return { lanes, doneSelection }

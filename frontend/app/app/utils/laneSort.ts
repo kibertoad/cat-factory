@@ -179,8 +179,26 @@ const NEEDS_YOU_TIER: Partial<Record<LaneReason, number>> = {
 
 type Comparator = (a: LaneTaskEntry, b: LaneTaskEntry) => number
 
+/**
+ * One collator for every text comparison in this module, built lazily and reused.
+ *
+ * `String.prototype.localeCompare` constructs a fresh collator per CALL, and these comparators run
+ * O(n log n) times per lane per frame on every board event: the `task_type` comparator alone made
+ * two of those calls per comparison. Constructing the collator once turns the dominant cost of a
+ * text sort back into the comparison itself.
+ *
+ * Built with NO options, so it is the same collation `a.localeCompare(b)` performed: this is a
+ * caching change, and a lane whose order shifted under it would be a behaviour change nobody asked
+ * for wearing a performance change's clothes.
+ */
+let collator: Intl.Collator | undefined
+function compareText(a: string, b: string): number {
+  collator ??= new Intl.Collator()
+  return collator.compare(a, b)
+}
+
 const EXPLICIT_COMPARATORS: Record<Exclude<LaneSortKey, 'smart'>, Comparator> = {
-  title: (a, b) => a.task.title.localeCompare(b.task.title),
+  title: (a, b) => compareText(a.task.title, b.task.title),
   oldest_activity: (a, b) => nullsLast(a.activityAt, b.activityAt, ascending),
   newest_activity: (a, b) => nullsLast(a.activityAt, b.activityAt, descending),
   longest_wait: (a, b) => nullsLast(a.waitingSince, b.waitingSince, ascending),
@@ -188,8 +206,8 @@ const EXPLICIT_COMPARATORS: Record<Exclude<LaneSortKey, 'smart'>, Comparator> = 
   impact_desc: (a, b) =>
     nullsLast(a.task.estimate?.impact ?? null, b.task.estimate?.impact ?? null, descending),
   task_type: (a, b) =>
-    (a.task.taskType ?? '').localeCompare(b.task.taskType ?? '') ||
-    a.task.title.localeCompare(b.task.title),
+    compareText(a.task.taskType ?? '', b.task.taskType ?? '') ||
+    compareText(a.task.title, b.task.title),
 }
 
 /**

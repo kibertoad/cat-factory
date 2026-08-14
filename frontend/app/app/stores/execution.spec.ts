@@ -273,3 +273,48 @@ describe('execution store echoAfter (optimistic-echo guard)', () => {
     expect(returned).toBe('body')
   })
 })
+
+describe('execution store per-block index', () => {
+  let store: ReturnType<typeof useExecutionStore>
+  beforeEach(() => {
+    store = useExecutionStore()
+  })
+
+  function run(id: string, blockId: string, status: string): ExecutionInstance {
+    return { id, blockId, status, steps: [] } as unknown as ExecutionInstance
+  }
+
+  it('indexes one run per block', () => {
+    store.hydrate([run('e1', 'b1', 'running'), run('e2', 'b2', 'done')], 'ws1')
+    expect(store.getByBlock('b1')?.id).toBe('e1')
+    expect(store.getByBlock('b2')?.id).toBe('e2')
+    expect(store.getByBlock('missing')).toBeUndefined()
+  })
+
+  // The case the index has to keep answering the way the scan it replaced did: a stale reconnect
+  // snapshot re-listing a retry's now-deleted terminal predecessor beside the live successor.
+  it('prefers the live run over a terminal predecessor on the same block, in either order', () => {
+    store.hydrate([run('old', 'b1', 'failed'), run('new', 'b1', 'running')], 'ws1')
+    expect(store.getByBlock('b1')?.id).toBe('new')
+
+    store.hydrate([run('new2', 'b2', 'running'), run('old2', 'b2', 'failed')], 'ws1')
+    expect(store.getByBlock('b2')?.id).toBe('new2')
+  })
+
+  it('answers the LAST run when a block holds only terminal ones', () => {
+    store.hydrate([run('first', 'b1', 'done'), run('second', 'b1', 'failed')], 'ws1')
+    expect(store.getByBlock('b1')?.id).toBe('second')
+  })
+
+  it('keeps the first live run when a block holds several', () => {
+    store.hydrate([run('a', 'b1', 'running'), run('b', 'b1', 'blocked')], 'ws1')
+    expect(store.getByBlock('b1')?.id).toBe('a')
+  })
+
+  it('re-indexes when an event upserts a run', () => {
+    store.hydrate([run('e1', 'b1', 'running')], 'ws1')
+    expect(store.getByBlock('b1')?.status).toBe('running')
+    store.upsert({ ...run('e1', 'b1', 'done'), rev: 2 } as unknown as ExecutionInstance)
+    expect(store.getByBlock('b1')?.status).toBe('done')
+  })
+})

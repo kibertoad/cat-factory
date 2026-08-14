@@ -32,9 +32,23 @@ export const useRecurringPipelinesStore = defineStore('recurringPipelines', () =
     return map
   })
 
+  /**
+   * Schedules indexed by the block they reuse. Indexed rather than scanned because `byBlock` is
+   * read from a computed on every mounted task card: a `find` there is O(cards x schedules) on
+   * every change, the same shape the execution store's `byBlockLive` index replaced.
+   *
+   * First wins, matching the `find` this replaced: a block backs at most one schedule, so a second
+   * row for it is transient state a refresh resolves, not a choice to make here.
+   */
+  const scheduleByBlock = computed(() => {
+    const map = new Map<string, PipelineSchedule>()
+    for (const s of schedules.value) if (!map.has(s.blockId)) map.set(s.blockId, s)
+    return map
+  })
+
   /** The schedule whose reused block is `blockId`, if any. */
   function byBlock(blockId: string): PipelineSchedule | undefined {
-    return schedules.value.find((s) => s.blockId === blockId)
+    return scheduleByBlock.value.get(blockId)
   }
 
   async function create(input: Parameters<typeof api.createRecurringPipeline>[1]) {

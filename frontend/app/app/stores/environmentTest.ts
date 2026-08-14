@@ -62,13 +62,25 @@ export const useEnvironmentTestStore = defineStore('environmentTest', () => {
     }
   }
 
+  /**
+   * Runs whose point-read is already out. Overlapping refreshes preserve the same still-running
+   * runs and would each re-issue the same GET, so the reads multiply with refresh frequency
+   * exactly when the board is busiest. Keyed by run id and cleared when the read settles, so this
+   * dedupes concurrent reads without ever caching an answer.
+   */
+  const reconciling = new Set<string>()
+
   /** Best-effort point-read of one run, folded in through the monotonic {@link upsert}. */
   async function reconcileRun(workspaceId: string, id: string) {
+    if (reconciling.has(id)) return
+    reconciling.add(id)
     try {
       upsert(await api.getEnvironmentTest(workspaceId, id))
     } catch {
       // Best-effort: a transient fetch failure just leaves the cached state; the next
       // snapshot/event reconciles it.
+    } finally {
+      reconciling.delete(id)
     }
   }
 

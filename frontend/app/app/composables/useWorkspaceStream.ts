@@ -64,11 +64,17 @@ export function useWorkspaceStream() {
   // left silently stale by ONE transient failure: retry a few times with backoff so a blip
   // self-heals. Bounded (the socket-level reconnect + the offline banner are the backstop for a
   // genuine outage). Aborts between attempts if the stream stopped or the workspace switched.
+  //
+  // A chain also stands down when a NEWER one has started: the backoff sleeps run for seconds, so
+  // a sustained event stream used to leave several chains alive at once, each still issuing full
+  // snapshot fetches for a resync a later chain had already superseded.
   const REFRESH_MAX_ATTEMPTS = 4
   const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+  let refreshChain = 0
   async function refreshWithRetry(workspaceId: string): Promise<void> {
+    const chain = ++refreshChain
     for (let i = 0; i < REFRESH_MAX_ATTEMPTS; i++) {
-      if (stopped || workspace.workspaceId !== workspaceId) return
+      if (stopped || workspace.workspaceId !== workspaceId || chain !== refreshChain) return
       try {
         await workspace.refresh()
         return
@@ -78,11 +84,36 @@ export function useWorkspaceStream() {
     }
   }
 
+  // The coarse-event debounce. Trailing, so a burst of `board` events costs one refresh, and
+  // CAPPED, because trailing alone re-armed the timer forever under a sustained sub-300ms stream:
+  // the board stopped resyncing exactly when the workspace was busiest. Past the cap the pending
+  // refresh fires on schedule and the next event starts a fresh window.
+  const BOARD_DEBOUNCE_MS = 300
+  const BOARD_DEBOUNCE_MAX_WAIT_MS = 2_000
+  let debounceWindowStart = 0
+  // The funnel's coverage mark as of the LATEST coarse event in this window. A snapshot fetch
+  // issued after that event necessarily contains what the event announced (the server emits it
+  // after committing), so if one has already hydrated by the time the timer fires there is nothing
+  // left to resync. This is what stops a mutation that refreshes directly AND raises a coarse
+  // event from paying for two full snapshots.
+  let coverageMark = 0
+
   function debouncedBoardRefresh() {
     const workspaceId = workspace.workspaceId
     if (!workspaceId) return
+    const now = Date.now()
+    coverageMark = workspace.refreshMark()
     if (boardDebounce) clearTimeout(boardDebounce)
-    boardDebounce = setTimeout(() => void refreshWithRetry(workspaceId), 300)
+    else debounceWindowStart = now
+    const wait = Math.max(
+      0,
+      Math.min(BOARD_DEBOUNCE_MS, debounceWindowStart + BOARD_DEBOUNCE_MAX_WAIT_MS - now),
+    )
+    boardDebounce = setTimeout(() => {
+      boardDebounce = null
+      if (workspace.hydratedSince(coverageMark)) return
+      void refreshWithRetry(workspaceId)
+    }, wait)
   }
 
   // The stores this stream feeds, bound once. Routing lives in `applyWorkspaceEvent` so the

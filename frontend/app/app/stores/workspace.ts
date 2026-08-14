@@ -14,6 +14,7 @@ import type { LiveWriteBaselines } from '~/stores/workspace/hydrate'
 import { applySnapshotToStores, resetPerBoardCaches } from '~/stores/workspace/hydrate'
 import { createWorkspaceCommands } from '~/stores/workspace/commands'
 import { createInfraSetupState } from '~/stores/workspace/infraSetup'
+import { createRefreshFunnel } from '~/stores/workspace/refreshFunnel'
 import { markBoot } from '~/utils/bootMarks'
 import { retryWhileBackendUnreachable } from '~/utils/backendReady'
 
@@ -198,34 +199,22 @@ export const useWorkspaceStore = defineStore(
       resolveActiveBoard,
     })
 
-    // Monotonic guard for {@link refresh}: `board`-type stream events (and the on-connect resync)
-    // each fire a full-snapshot refresh, and {@link hydrate} REPLACES the block list. Without
-    // ordering, two in-flight fetches can resolve out of order, so a slower/staler snapshot's
-    // hydrate clobbers a newer one — dropping a just-spawned block whose ONLY live delivery was
-    // the coarse `board` event (there is no per-block push), so its card never reappears (no
-    // further event to restore it). Stamping each call lets only the latest-issued refresh commit.
-    let refreshSeq = 0
-
-    /** Re-fetch the snapshot and re-hydrate (after mutations and on stream (re)connect). */
-    async function refresh() {
-      const targetId = workspaceId.value
-      if (!targetId) return
-      const seq = ++refreshSeq
-      // Capture the live-write baselines BEFORE the fetch: anything a live event writes while
-      // this (potentially slow) snapshot is in flight is newer than the snapshot, so `hydrate`
-      // must NOT clobber it back. The `refreshSeq` guard below only orders refreshes against each
-      // OTHER — this guards a refresh against an interleaved live write (a run's terminal status
-      // landing mid-fetch, or the inbox card it raises), the coherence hazard under CI latency.
-      const baselines: LiveWriteBaselines = {
+    // The one door every full-snapshot refresh goes through: it coalesces the ~35 direct
+    // post-mutation call sites and the stream's coarse-event resync into at most one in-flight
+    // fetch plus one queued follow-up, and exposes the coverage mark the stream's debounce uses to
+    // drop a resync a mutation's own refresh already served. Ordering (a stale snapshot's hydrate
+    // clobbering a newer one, which would drop a just-spawned block whose ONLY live delivery was
+    // the coarse `board` event) falls out of there being one fetch at a time. Rules and the
+    // reasoning: `stores/workspace/refreshFunnel.ts`.
+    const { refresh, refreshMark, hydratedSince } = createRefreshFunnel({
+      currentWorkspaceId: () => workspaceId.value,
+      fetchSnapshot: (id) => api.getWorkspace(id),
+      captureBaselines: (): LiveWriteBaselines => ({
         board: useBoardStore().hydrateBaseline(),
         notifications: useNotificationsStore().hydrateBaseline(),
-      }
-      const snapshot = await api.getWorkspace(targetId)
-      // A newer refresh was issued (or the active board switched) while this fetch was in flight —
-      // discard this older/staler result so it can't clobber the newer hydrate.
-      if (seq !== refreshSeq || workspaceId.value !== targetId) return
-      hydrate(snapshot, baselines)
-    }
+      }),
+      apply: hydrate,
+    })
 
     /** The active workspace id, or throw if the app isn't bootstrapped yet. */
     function requireId(): string {
@@ -262,6 +251,8 @@ export const useWorkspaceStore = defineStore(
       rename,
       remove,
       refresh,
+      refreshMark,
+      hydratedSince,
       requireId,
       resumeSpend,
     }
