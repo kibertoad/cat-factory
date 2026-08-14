@@ -4,9 +4,18 @@ import type {
   DocumentArtifactRef,
   DocumentOrigin,
 } from '@cat-factory/kernel'
-import { dedupeDocumentRefs } from '@cat-factory/kernel'
+import { RETAINED_BINARY_ARTIFACT_KINDS, dedupeDocumentRefs } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
+
+/**
+ * The age sweep's WHERE clause, built ONCE from the port's retained-kind list so the list and the
+ * delete bind the same placeholders in the same order. The kind list is a module constant, never
+ * caller input, so interpolating its placeholder run is not a SQL-injection surface; the VALUES
+ * are still bound.
+ */
+const AGED_WHERE = `WHERE workspace_id = ? AND created_at < ? AND document_source IS NULL
+   AND kind NOT IN (${RETAINED_BINARY_ARTIFACT_KINDS.map(() => '?').join(', ')})`
 
 interface ArtifactRow {
   workspace_id: string
@@ -207,26 +216,21 @@ export class D1BinaryArtifactMetadataStore implements BinaryArtifactMetadataStor
       .run()
   }
 
-  // The age sweep's two halves carry the SAME `document_source IS NULL` exemption: a document's
-  // renders expire with their document, never on a clock (see the port).
+  // The age sweep's two halves share ONE predicate ({@link agedWhere}) so they cannot drift: a
+  // document's renders expire with their document, and a retained kind (a generated product
+  // asset) never expires on a clock at all (see the port).
   async listOlderThan(workspaceId: string, olderThan: number): Promise<BinaryArtifactRecord[]> {
     const { results } = await this.db
-      .prepare(
-        `SELECT * FROM binary_artifacts
-         WHERE workspace_id = ? AND created_at < ? AND document_source IS NULL`,
-      )
-      .bind(workspaceId, olderThan)
+      .prepare(`SELECT * FROM binary_artifacts ${AGED_WHERE}`)
+      .bind(workspaceId, olderThan, ...RETAINED_BINARY_ARTIFACT_KINDS)
       .all<ArtifactRow>()
     return (results ?? []).map(rowToRecord)
   }
 
   async deleteOlderThan(workspaceId: string, olderThan: number): Promise<number> {
     const { meta } = await this.db
-      .prepare(
-        `DELETE FROM binary_artifacts
-         WHERE workspace_id = ? AND created_at < ? AND document_source IS NULL`,
-      )
-      .bind(workspaceId, olderThan)
+      .prepare(`DELETE FROM binary_artifacts ${AGED_WHERE}`)
+      .bind(workspaceId, olderThan, ...RETAINED_BINARY_ARTIFACT_KINDS)
       .run()
     return meta.changes ?? 0
   }

@@ -794,3 +794,19 @@ an eviction and re-dispatched on the crash budget. Those two need opposite handl
 worth one fresh container, and a shutdown is caused by something that is still there on the next
 attempt (a host restart, an operator, or, in the run that named this, the agent's own cleanup
 command killing the harness process). A dashboard that counts `evicted` will see that count fall.
+
+## 1.55.0
+
+One additive enum member, `asset`, in the run-artifact kind vocabulary
+(`GET /api/v1/runs/{runId}/artifacts`, and the artifact rows the blob endpoint is addressed from).
+Nothing existing changes shape or meaning, and the SDKs tolerate unknown enum values by design, so
+a consumer built against 1.54.0 keeps parsing.
+
+**What a consumer NOTICES is a new population in a list it already reads.** The two members that
+existed are an EVIDENCE pair: a `screenshot` is what a run captured, a `reference` is the design a
+human uploaded for it to be judged against, and pairing them by `view` is what the vocabulary was
+for. An `asset` is neither half of that pair: it is a DELIVERABLE a media-generating step produced
+and stored through the platform's own asset storage, so a caller that pairs screenshots against
+references must filter it out rather than treat it as an unmatched capture. It also does not
+expire: assets are exempt from the retention sweep that reclaims a run's screenshots, so a run's
+artifact list can stay non-empty long after its evidence is gone.

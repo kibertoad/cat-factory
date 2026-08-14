@@ -303,6 +303,7 @@ export type {
 } from './binary-artifacts.js'
 export {
   BUILTIN_BINARY_ARTIFACT_STORAGE_KINDS,
+  RETAINED_BINARY_ARTIFACT_KINDS,
   createBinaryArtifactStore,
   dedupeDocumentRefs,
 } from './binary-artifacts.js'

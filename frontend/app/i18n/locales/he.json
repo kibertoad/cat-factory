@@ -201,6 +201,7 @@
         "bug": "באג",
         "document": "מסמך",
         "spike": "ספייק",
+        "media": "מדיה",
         "recurring": "מחזורי",
         "review": "סקירה",
         "ralph": "לולאת Ralph"
@@ -3698,7 +3699,8 @@
         "document": "מסמך",
         "spike": "חקירה",
         "review": "סקירה",
-        "ralph": "לולאת Ralph"
+        "ralph": "לולאת Ralph",
+        "media": "מדיה"
       },
       "reviewFriction": {
         "heading": "חיכוך חוב סקירה",
@@ -4857,7 +4859,8 @@
         "document": "תיעוד",
         "review": "סקירה",
         "research": "מחקר",
-        "planning": "תכנון"
+        "planning": "תכנון",
+        "media": "מדיה"
       },
       "strategyOption": {
         "specialist-panel": "פאנל מומחים",
@@ -6583,6 +6586,14 @@
       "automatic": "נוצר {total} מועמד ונשמר אוטומטית, ללא בדיקה.",
       "chosen": "נשמרו {kept} מתוך {total} מועמדים שנוצרו.",
       "awaiting": "נוצרו {total} מועמדים והם ממתינים להשוואה."
+    },
+    "asset": {
+      "loading": "טוען את הקובץ…",
+      "loadFailed": "לא ניתן היה לטעון את הקובץ השמור.",
+      "retry": "נסה שוב",
+      "open": "פתיחה",
+      "download": "שמירת עותק",
+      "unknownType": "קובץ שמור"
     }
   },
   "sandbox": {

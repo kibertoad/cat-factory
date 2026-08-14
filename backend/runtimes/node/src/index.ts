@@ -115,7 +115,9 @@ export { TaskTypeRegistry, defaultTaskTypeRegistry } from '@cat-factory/kernel'
 // deployment news a `defaultFoundationalServiceRegistry()`, registers the shared capabilities its
 // org already runs on it, and passes it via the `foundationalServiceRegistry` option. They resolve
 // as the `builtin` tier of every workspace's catalog, so a board designs against the estate from
-// its first request. See backend/docs/adr/0031-foundational-services.md.
+// its first request. The default holds the platform's own asset storage; a deployment that stores
+// assets elsewhere registers its own service and suppresses that id at either stored tier.
+// See backend/docs/adr/0031-foundational-services.md.
 export {
   FoundationalServiceRegistry,
   type FoundationalServiceDefinition,

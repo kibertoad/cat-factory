@@ -362,6 +362,11 @@ export {
 } from './agents/kinds/spike.js'
 export { SKILL_AGENT_KIND, SKILL_AGENT_KINDS, registerSkillAgent } from './agents/kinds/skill.js'
 export {
+  MEDIA_AGENT_KINDS,
+  MEDIA_GENERATOR_AGENT_KIND,
+  registerMediaAgent,
+} from './agents/kinds/media.js'
+export {
   FORK_PROPOSER_KIND,
   FORK_PROPOSER_AGENT_KINDS,
   FORK_PROPOSER_SYSTEM_PROMPT,

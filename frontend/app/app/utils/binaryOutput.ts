@@ -9,6 +9,7 @@ import {
   isHarnessTransport,
   modalityCarriesPixelDimensions,
   normalizeMediaType,
+  platformAssetIdOf,
   requiredBinaryCapabilities,
 } from '@cat-factory/contracts'
 import type {
@@ -103,6 +104,17 @@ export interface BinaryOutputRow extends BinaryOutputArtifact {
    * instead of letting an absent measurement read as a passing one.
    */
   missized: boolean
+  /**
+   * The platform's own artifact id, when THIS deployment is what holds the bytes: the row's
+   * service is the platform asset store and its `location` is a well-formed artifact id.
+   *
+   * It is what turns a location string into a picture the reader can look at and a file they can
+   * save, which is the whole difference between an asset in our storage and one in an org's
+   * private bucket. Null covers BOTH "stored elsewhere" and "stored here, but the location is not
+   * an id" — a model's location is prose, and a paraphrased one costs the row its preview and
+   * never its record.
+   */
+  assetId: string | null
 }
 
 /**
@@ -301,6 +313,7 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
     unknown: unknown.has(artifact.service),
     // An UNATTRIBUTED row (no `generator` claimed) is not unknown — see the field's own note.
     generatorUnknown: artifact.generator !== undefined && unknownGenerators.has(artifact.generator),
+    assetId: platformAssetIdOf(artifact),
     // An UNMEASURED row is not missized either: absent dimensions are counted by
     // `sizeUnreported`, never folded in here.
     missized:

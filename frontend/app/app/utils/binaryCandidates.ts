@@ -1,3 +1,4 @@
+import { platformAssetIdOf } from '@cat-factory/contracts'
 import type { BinaryCandidate, BinaryCandidateStepState, PipelineStep } from '~/types/execution'
 
 // ---------------------------------------------------------------------------
@@ -23,6 +24,17 @@ export interface BinaryCandidateRow extends BinaryCandidate {
   kept: boolean
   /** The id it is to be stored under, when the person who kept it assigned one. */
   storeAs?: string
+  /**
+   * The platform's own artifact id, when this candidate was staged through the platform's asset
+   * storage rather than an org's own service.
+   *
+   * It is the OTHER way a candidate gets a preview, and the one that works on a private estate:
+   * `previewUrl` needs the storage service to have issued a public link, which ours never does
+   * (its bytes are behind the workspace's own authenticated blob route). Without this a
+   * deployment using the shipped storage would compare candidates it could not see, which is the
+   * one thing this window exists to make possible.
+   */
+  assetId: string | null
 }
 
 /** The candidates for one subject, which is the unit a person compares. */
@@ -81,6 +93,7 @@ export function binaryCandidateView(
     const choice = kept.get(candidate.id)
     group.rows.push({
       ...candidate,
+      assetId: platformAssetIdOf(candidate),
       kept: choice !== undefined,
       ...(choice?.storeAs ? { storeAs: choice.storeAs } : {}),
     })
@@ -91,7 +104,12 @@ export function binaryCandidateView(
     awaiting: state.status === 'awaiting_choice',
     multiSelect: state.multiSelect === true,
     automatic: state.choice?.automatic === true,
-    withoutPreview: state.candidates.filter((candidate) => !candidate.previewUrl).length,
+    // Counts a candidate with NEITHER kind of preview: a service-issued link, or bytes the
+    // platform holds itself. Reading only `previewUrl` here would report every candidate of every
+    // run on the shipped storage as unviewable while the window was rendering all of them.
+    withoutPreview: state.candidates.filter(
+      (candidate) => !candidate.previewUrl && !platformAssetIdOf(candidate),
+    ).length,
   }
 }
 

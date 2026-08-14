@@ -104,6 +104,7 @@ const TASK_TYPES = computed<{ value: TaskTypeChoice; label: string; icon: string
       icon: 'i-lucide-clipboard-check',
     },
     { value: 'ralph', label: t('board.addTask.types.ralph'), icon: 'i-lucide-infinity' },
+    { value: 'media', label: t('board.addTask.types.media'), icon: 'i-lucide-image-plus' },
     { value: 'recurring', label: t('board.addTask.types.recurring'), icon: 'i-lucide-repeat' },
   ]
   // A document repository only accepts document/spike tasks (see BoardService.addTask).

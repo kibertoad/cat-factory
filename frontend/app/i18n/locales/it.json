@@ -1077,7 +1077,8 @@
         "document": "documento",
         "spike": "spike",
         "review": "revisione",
-        "ralph": "Ciclo Ralph"
+        "ralph": "Ciclo Ralph",
+        "media": "media"
       },
       "reviewFriction": {
         "heading": "Attrito per revisioni in sospeso",
@@ -2968,6 +2969,7 @@
         "bug": "Bug",
         "document": "Documento",
         "spike": "Spike",
+        "media": "Media",
         "recurring": "Ricorrente",
         "review": "Revisione",
         "ralph": "Ciclo Ralph"
@@ -4414,7 +4416,8 @@
         "document": "Documentazione",
         "review": "Revisione",
         "research": "Ricerca",
-        "planning": "Pianificazione"
+        "planning": "Pianificazione",
+        "media": "Media"
       },
       "strategyOption": {
         "specialist-panel": "Panel di specialisti",
@@ -5312,6 +5315,14 @@
       "automatic": "È stato generato {total} candidato e tenuto automaticamente, senza revisione.",
       "chosen": "Sono stati tenuti {kept} dei {total} candidati generati.",
       "awaiting": "Sono stati generati {total} candidati e attendono di essere confrontati."
+    },
+    "asset": {
+      "loading": "Caricamento del file…",
+      "loadFailed": "Non è stato possibile caricare il file archiviato.",
+      "retry": "Riprova",
+      "open": "Apri",
+      "download": "Salva una copia",
+      "unknownType": "File archiviato"
     }
   },
   "brainstorm": {

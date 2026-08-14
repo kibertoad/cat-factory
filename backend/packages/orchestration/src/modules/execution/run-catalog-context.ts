@@ -18,6 +18,7 @@ import {
   type BinaryOutputDeclarationRecorder,
   createBinaryOutputDeclarationRecorder,
   dispatchBinaryGeneratorsFor,
+  dispatchBinaryStorageFor,
   resolveBinaryOutputContext,
 } from './run-binary-output.js'
 
@@ -40,6 +41,12 @@ export interface CatalogRunSlice {
   foundationalContextFiles: InjectedContextFile[]
   binaryOutputContextFiles: InjectedContextFile[]
   binaryGenerators: ResolvedBinaryGenerator[]
+  /**
+   * The catalog service this dispatch stores through, when it was briefed to store anything.
+   * Pure (no I/O) and derived from the same trait gate as the two reads above, so it rides the
+   * slice rather than becoming a fourth thing the builder has to remember to ask for.
+   */
+  binaryStorageServiceId?: string
 }
 
 export interface CatalogRunContextDeps {
@@ -123,7 +130,13 @@ export class CatalogRunContext {
         resolveBinaryOutputContext({ ...deps, workspaceId, agentKind, step }),
         dispatchBinaryGeneratorsFor({ ...deps, agentKind, step }),
       ])
-    return { foundationalContextFiles, binaryOutputContextFiles, binaryGenerators }
+    const binaryStorageServiceId = dispatchBinaryStorageFor({ ...deps, agentKind, step })
+    return {
+      foundationalContextFiles,
+      binaryOutputContextFiles,
+      binaryGenerators,
+      ...(binaryStorageServiceId ? { binaryStorageServiceId } : {}),
+    }
   }
 
   /**

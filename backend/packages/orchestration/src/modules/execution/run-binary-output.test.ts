@@ -11,6 +11,7 @@ import type { FoundationalServiceResolver } from './run-foundational-services.js
 import {
   createBinaryOutputDeclarationRecorder,
   dispatchBinaryGeneratorsFor,
+  dispatchBinaryStorageFor,
   resolveBinaryOutputContext,
 } from './run-binary-output.js'
 
@@ -313,5 +314,45 @@ describe('dispatchBinaryGeneratorsFor', () => {
         }),
       }),
     ).resolves.toEqual([])
+  })
+})
+
+describe('dispatchBinaryStorageFor', () => {
+  it('answers the storage service a briefed step selected', () => {
+    // The container executor's ONE input for deciding whether this job gets an upload seam into
+    // the platform's own asset storage. It cannot read that off the brief (prose) or off the kind
+    // (a deployment's generator stores wherever its step points it).
+    expect(
+      dispatchBinaryStorageFor({
+        agentKind: 'image-generator',
+        agentKindRegistry: registry,
+        step: step({ stepOptions: { binaryOutput: { storageServiceId: 'asset-store' } } }),
+      }),
+    ).toBe('asset-store')
+  })
+
+  it('answers nothing for a kind that was never briefed, selection or not', () => {
+    // Gated on the EFFECTIVE kind's trait, exactly as the brief and the credentials are: a step
+    // handed an upload endpoint with no brief has a capability nothing told it about.
+    expect(
+      dispatchBinaryStorageFor({
+        agentKind: 'coder',
+        agentKindRegistry: registry,
+        step: step({
+          agentKind: 'coder',
+          stepOptions: { binaryOutput: { storageServiceId: 'asset-store' } },
+        }),
+      }),
+    ).toBeUndefined()
+  })
+
+  it('answers nothing for a briefed step that selected no storage', () => {
+    expect(
+      dispatchBinaryStorageFor({
+        agentKind: 'image-generator',
+        agentKindRegistry: registry,
+        step: step(),
+      }),
+    ).toBeUndefined()
   })
 })

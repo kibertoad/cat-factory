@@ -7,6 +7,7 @@ import { reportsController } from './modules/reports/ReportsController.js'
 import { agentRunController } from './modules/agentRuns/AgentRunController.js'
 import { artifactController } from './modules/artifacts/ArtifactController.js'
 import { harnessArtifactController } from './modules/artifacts/HarnessArtifactController.js'
+import { harnessAssetController } from './modules/artifacts/HarnessAssetController.js'
 import { authController } from './modules/auth/AuthController.js'
 import { boardController } from './modules/board/BoardController.js'
 import { bootstrapController } from './modules/bootstrap/BootstrapController.js'
@@ -238,6 +239,11 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // `${proxyBaseUrl}/artifacts/ingest` and `${proxyBaseUrl}/artifacts/reference/:id`). 503
   // when no blob storage.
   app.route('/', harnessArtifactController())
+  // In-container ASSET ingest for a binary-output step storing through the platform's own asset
+  // storage (`${proxyBaseUrl}/assets/ingest`, same container session token). Its own controller
+  // rather than a mode on the one above: different content types, different size and per-run
+  // ceilings, and — the load-bearing one — a row the retention sweep never reclaims.
+  app.route('/', harnessAssetController())
   // SearXNG-compatible web-search proxy for implementation containers (same
   // model-locked container token; the search runs server-side under the deployment's
   // own key via the `webSearch` gateway, so no provider key reaches the sandbox). A

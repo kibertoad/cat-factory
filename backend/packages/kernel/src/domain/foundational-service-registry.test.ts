@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { defaultFoundationalServiceRegistry } from './foundational-service-registry.js'
+import {
+  FoundationalServiceRegistry,
+  defaultFoundationalServiceRegistry,
+} from './foundational-service-registry.js'
 
 // The `builtin` tier's own unit: what a deployment registers in code, projected for the catalog
 // merge (identity + manifests) and for the lazy contract read (the same manifests + bodies).
+//
+// These drive a BARE registry rather than `defaultFoundationalServiceRegistry()`, which ships the
+// platform's own asset-storage service: what is under test here is the class, and positional
+// assertions over `entries()` would otherwise be reading whatever the default happens to hold.
+// The default's own contents are `platform-asset-service.test.ts`.
 
 const OPENAPI = 'openapi: 3.0.3\npaths:\n  /files:\n    get: {}\n    post: {}\n'
 
@@ -17,7 +25,7 @@ const definition = {
 
 describe('FoundationalServiceRegistry', () => {
   it('projects a registered service with its operation index and no document body', () => {
-    const registry = defaultFoundationalServiceRegistry()
+    const registry = new FoundationalServiceRegistry()
     registry.register(definition)
     const [entry] = registry.entries()
     expect(entry).toMatchObject({ id: 'file-storage', capabilities: ['asset-storage'] })
@@ -33,7 +41,7 @@ describe('FoundationalServiceRegistry', () => {
   it('serves the SAME operation index with the document as the catalog showed', () => {
     // A consumer must never read a document whose operation list disagrees with the one the
     // design was chosen from, which is why both projections are built from one summary.
-    const registry = defaultFoundationalServiceRegistry()
+    const registry = new FoundationalServiceRegistry()
     registry.register(definition)
     const [document] = registry.documentsFor('file-storage')
     expect(document?.body).toBe(OPENAPI)
@@ -41,7 +49,7 @@ describe('FoundationalServiceRegistry', () => {
   })
 
   it('re-registering an id REPLACES it, and the projection follows', () => {
-    const registry = defaultFoundationalServiceRegistry()
+    const registry = new FoundationalServiceRegistry()
     registry.register(definition)
     expect(registry.entries()[0]?.name).toBe('File Storage')
     registry.register({ ...definition, name: 'Blob Store', contracts: [] })
@@ -53,6 +61,8 @@ describe('FoundationalServiceRegistry', () => {
   })
 
   it('answers an unregistered id with no documents rather than throwing', () => {
+    expect(new FoundationalServiceRegistry().documentsFor('nope')).toEqual([])
+    // Including on the default registry, which holds one service and must not answer for another.
     expect(defaultFoundationalServiceRegistry().documentsFor('nope')).toEqual([])
   })
 })

@@ -45,8 +45,27 @@ export type BuiltinBinaryArtifactStorageKind =
  */
 export type BinaryArtifactStorageKind = BuiltinBinaryArtifactStorageKind | (string & {})
 
-/** What an artifact is — drives actual-vs-reference pairing in the gate UI. */
-export type BinaryArtifactKind = 'screenshot' | 'reference'
+/**
+ * What an artifact is.
+ *
+ * `screenshot` / `reference` are run EVIDENCE and drive actual-vs-reference pairing in the
+ * visual-confirmation gate. `asset` is the odd one out and deliberately so: it is a PRODUCT
+ * deliverable a binary-output step generated and stored through the platform's own asset
+ * storage ({@link PLATFORM_ASSET_STORAGE_SERVICE_ID} in `@cat-factory/contracts`), so it
+ * outlives the run that made it and is EXEMPT from the age-based retention sweep. See
+ * {@link BinaryArtifactStore.pruneOlderThan}.
+ */
+export type BinaryArtifactKind = 'screenshot' | 'reference' | 'asset'
+
+/**
+ * The artifact kinds the age-based retention sweep may reclaim, as the ONE statement both
+ * metadata stores build their predicate from.
+ *
+ * Stated as what the sweep KEEPS rather than as what it drops, so a kind added later is swept by
+ * default and has to be named here to be exempted: the opposite reading would silently retain a
+ * new kind forever, which nothing would ever surface. Today the exempt set is `asset` alone.
+ */
+export const RETAINED_BINARY_ARTIFACT_KINDS: readonly BinaryArtifactKind[] = ['asset']
 
 /**
  * The document an artifact was rendered FROM, when it came from one.
@@ -199,6 +218,13 @@ export interface BinaryArtifactStore {
    * would leave `documents.render_status` saying `stored` over an empty set, and nothing would
    * re-download them, because an unedited design is never re-imported. Their reclaim is the
    * document's own, not the calendar's.
+   *
+   * It ALSO exempts every kind in {@link RETAINED_BINARY_ARTIFACT_KINDS}, which today means the
+   * `asset` deliverables of a binary-output step. The same argument one axis over: a retention
+   * window sized for run debris is the wrong clock for the thing the run was started to produce,
+   * and a generated asset that vanished two weeks later would take its step's whole report with
+   * it (the report records WHERE each artifact went, so a swept one reads as a broken link with
+   * nothing saying the platform removed it).
    */
   pruneOlderThan(workspaceId: string, olderThan: number): Promise<number>
   /**
@@ -260,14 +286,15 @@ export interface BinaryArtifactMetadataStore {
   delete(workspaceId: string, id: string): Promise<void>
   /**
    * Records in the workspace created before `olderThan` (epoch ms) — for the retention sweep.
-   * EXCLUDES document-keyed renders, whose lifetime is their document's; see
-   * {@link BinaryArtifactStore.pruneOlderThan} for why age is the wrong clock for those.
+   * EXCLUDES document-keyed renders, whose lifetime is their document's, and every kind in
+   * {@link RETAINED_BINARY_ARTIFACT_KINDS}; see {@link BinaryArtifactStore.pruneOlderThan} for
+   * why age is the wrong clock for either.
    */
   listOlderThan(workspaceId: string, olderThan: number): Promise<BinaryArtifactRecord[]>
   /**
    * Delete metadata rows in the workspace created before `olderThan`; returns the count. Carries
-   * the SAME document-keyed exemption as {@link listOlderThan}: the two predicates are one rule,
-   * and a delete wider than its list would reclaim rows whose bytes nothing had removed.
+   * the SAME exemptions as {@link listOlderThan}: the two predicates are one rule, and a delete
+   * wider than its list would reclaim rows whose bytes nothing had removed.
    */
   deleteOlderThan(workspaceId: string, olderThan: number): Promise<number>
   /** Every record in the workspace — for the workspace-delete purge. */

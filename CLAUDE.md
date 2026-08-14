@@ -721,9 +721,8 @@ missing, refreshes descriptions, and **NEVER deletes or touches authored tasks**
 
 **In-repo spec implementation state**: `requirementItem.state` (`aspirational` ⇄ `established`) keeps an
 agreed-but-unbuilt requirement out of build prompts. Trap: `specPromotionPostOp` is the ONE author and
-it NEVER demotes; `coerceRequirement` defaults a garbled state to `aspirational`, so a model cannot
-promote by assertion. Doc:
-[`service-acceptance-criteria.md`](./docs/initiatives/service-acceptance-criteria.md).
+it NEVER demotes; `coerceRequirement` defaults a garbled state to `aspirational`, so a model cannot promote
+by assertion. Doc: [`service-acceptance-criteria.md`](./docs/initiatives/service-acceptance-criteria.md).
 
 **Pre-dispatch input gate**: a deterministic reduction over a task's OWN authored fields, run at step 0
 before the first dispatch, parking the run for FREE when there is structurally nothing to act on.
@@ -765,9 +764,10 @@ declaration", "empty declaration" and "unknown id" are three states needing diff
 
 **Binary-output steps**: a `binary-output`-trait kind generates artifacts, stored through a foundational
 service its step SELECTS; what MAKES them is `BinaryGeneratorRegistry`, read only via `BinaryGeneratorSource`
-(unreachable ⇒ 503, mothership rule), whose `capabilities` + `accepts` gate the options and, past two
-producers, a human CANDIDATE park. Deadliest trap: content type is CLOSED and stops deciding at the SECOND
-producer, so overlaps are STATED and never ranked. Doc: [`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
+(unreachable ⇒ 503, mothership rule), whose `capabilities` + `accepts` gate the options and, past two producers,
+a human CANDIDATE park. The `media` task type runs the shipped generator kind against `platform-assets`, the ONE
+service `defaultFoundationalServiceRegistry()` holds. Deadliest trap: content type is CLOSED and stops deciding
+at the SECOND producer, so overlaps are STATED and never ranked. Doc: [`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
 
 **Compose layers**: `StackRecipe` / `SharedStack` name an ORDERED list of `ComposeFileRef` layers
 (in-repo path, `inline`, or `repo`), letting a deployment declare infra dependencies in code. Traps: the

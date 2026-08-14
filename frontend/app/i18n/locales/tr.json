@@ -201,6 +201,7 @@
         "bug": "Hata",
         "document": "Belge",
         "spike": "Spike",
+        "media": "Medya",
         "recurring": "Yinelenen",
         "review": "İnceleme",
         "ralph": "Ralph döngüsü"
@@ -3698,7 +3699,8 @@
         "document": "belge",
         "spike": "inceleme",
         "review": "inceleme",
-        "ralph": "Ralph döngüsü"
+        "ralph": "Ralph döngüsü",
+        "media": "medya"
       },
       "reviewFriction": {
         "heading": "İnceleme borcu sürtünmesi",
@@ -4857,7 +4859,8 @@
         "document": "Dokümantasyon",
         "review": "İnceleme",
         "research": "Araştırma",
-        "planning": "Planlama"
+        "planning": "Planlama",
+        "media": "Medya"
       },
       "strategyOption": {
         "specialist-panel": "Uzman paneli",
@@ -6583,6 +6586,14 @@
       "automatic": "{total} aday üretildi ve inceleme olmadan otomatik olarak tutuldu.",
       "chosen": "Üretilen {total} adayın {kept} tanesi tutuldu.",
       "awaiting": "{total} aday üretildi ve karşılaştırılmayı bekliyor."
+    },
+    "asset": {
+      "loading": "Dosya yükleniyor…",
+      "loadFailed": "Saklanan dosya yüklenemedi.",
+      "retry": "Yeniden dene",
+      "open": "Aç",
+      "download": "Kopyasını kaydet",
+      "unknownType": "Saklanan dosya"
     }
   },
   "sandbox": {

@@ -201,6 +201,7 @@
         "bug": "Error",
         "document": "Documento",
         "spike": "Spike",
+        "media": "Medios",
         "recurring": "Recurrente",
         "review": "Revisión",
         "ralph": "Bucle Ralph"
@@ -3556,7 +3557,8 @@
         "document": "documento",
         "spike": "spike",
         "review": "revisión",
-        "ralph": "Bucle Ralph"
+        "ralph": "Bucle Ralph",
+        "media": "medios"
       },
       "reviewFriction": {
         "heading": "Fricción por revisión pendiente",
@@ -4857,7 +4859,8 @@
         "document": "Documentación",
         "review": "Revisión",
         "research": "Investigación",
-        "planning": "Planificación"
+        "planning": "Planificación",
+        "media": "Medios"
       },
       "strategyOption": {
         "specialist-panel": "Panel de especialistas",
@@ -6583,6 +6586,14 @@
       "automatic": "Se generó {total} candidato y se conservó automáticamente, sin revisión.",
       "chosen": "Se conservaron {kept} de {total} candidatos generados.",
       "awaiting": "Se generaron {total} candidatos y están a la espera de compararse."
+    },
+    "asset": {
+      "loading": "Cargando el archivo…",
+      "loadFailed": "No se pudo cargar el archivo almacenado.",
+      "retry": "Reintentar",
+      "open": "Abrir",
+      "download": "Guardar una copia",
+      "unknownType": "Archivo almacenado"
     }
   },
   "sandbox": {

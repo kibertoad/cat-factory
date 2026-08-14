@@ -1093,6 +1093,98 @@ is the same argument `forkDecision` / `followUps` make. The one surface that doe
 the snapshot's `binaryGenerators.capabilities` projection, and it is built in the shared
 controller both facades mount.
 
+## The built-in Media task type, and the storage the platform ships for it
+
+Everything above is reachable only by a deployment that writes code: it registers a generator
+KIND, registers an object store as a foundational SERVICE with an OpenAPI document for it, and
+builds a pipeline. That is the right shape for an org with an asset estate, and it made the
+platform's most demonstrable capability the one nothing shipped could exercise. `media` closes
+that: a task type, one agent kind, one preset, and a storage target that exists on every
+deployment.
+
+### What ships
+
+- **`media`**, a built-in task type (`BUILTIN_TASK_TYPES`), defaulting to **`pl_media`**
+  (`defaultPipelineIdForTaskType`) exactly as `document` defaults to `pl_document`.
+- **`media`**, a `PipelinePurpose`, so a media task is offered media presets and NOTHING else
+  (`pipelineAllowedForTaskType`), and the builder's palette narrows to the kinds that suit one.
+  Its own member rather than a flavour of `build`: nothing here ships code, so every
+  code-shipping surface (the implementation and testing palette rows, the merge tail) is wrong
+  for it.
+- **`media-generator`**, the FIRST built-in kind to carry `BINARY_OUTPUT_TRAIT`. Read-only over
+  the checkout, opens no pull request, declares no `structuredOutput` (its deliverable is the
+  fenced block in its reply), and declares `purposes: ['media']` so it appears nowhere else.
+- **`pl_media`**, one step, shipping a `binaryOutput` selection rather than a blank one. That is
+  forced rather than convenient: `assertValidBinaryOutputSteps` refuses a generating step with no
+  storage service at SAVE and at run start, so an unconfigured preset would be one nobody could
+  start until they had opened the builder. It ships `comparison` on, because generating one
+  picture and keeping it is the case that never needed a pipeline.
+
+### The storage: the platform's own, as a `builtin`-tier service
+
+`defaultFoundationalServiceRegistry()` returned an EMPTY registry for as long as the tier
+existed, on the ground that no shared business capability is universal. That reasoning holds for
+an org's estate and does not cover the platform's own storage, which every deployment already
+runs for run evidence and which is the one thing a generating step cannot be configured without.
+So the default now holds exactly one service, `platform-assets`, carrying
+`ASSET_STORAGE_CAPABILITY` and an OpenAPI contract for an ingest API.
+
+Nothing about it is special-cased downstream. It is selected, validated, briefed, refused and
+suppressed like any other catalog id: a deployment that stores assets in its own bucket registers
+that service and tombstones this one at either stored tier.
+
+Three things are worth stating because each was a decision:
+
+- **The bytes land in the account's binary-artifact store**, the same one screenshots use, which
+  is what makes "at least one binary storage configured" the precondition rather than a new
+  subsystem. A local deployment defaults that store to the FILESYSTEM
+  (`contentStorageDefaultBackend: 'fs'`), so an unconfigured laptop can run the whole flow. On a
+  deployment with no store at all the run is refused UP FRONT, because `media-generator` also
+  carries `BINARY_STORAGE_TRAIT`: the `binary_storage_unconfigured` conflict names the fix, where
+  the alternative is an agent discovering it at the end of a paid generation.
+- **The endpoint is an ENVIRONMENT VARIABLE, not an OpenAPI `servers` entry.** It is per-run and
+  per-transport, so a base URL written into the document would be a fact kernel cannot know and
+  every deployment would read as wrong. The contract names `ARTIFACT_UPLOAD_URL` /
+  `ARTIFACT_UPLOAD_TOKEN` instead, which are the harness's own variables, restated in kernel and
+  pinned against it (`artifact-upload.conformity.test.ts`) because the image can import no
+  workspace package. Drift there is silent in the worst way: a contract naming a variable nothing
+  sets reads, through the trait guidance's own wording, as a storage outage on a deployment whose
+  storage is fine.
+- **The upload seam is gated on WHERE THE STEP POINTS, never on the kind.** `AgentRunContext`
+  gained `binaryStorageServiceId` for exactly this: only a step storing through `platform-assets`
+  is handed a credential for our ingest route, so a deployment's own generator delivering into its
+  own object store never sees one. Gating on the kind or the trait would hand every generating
+  step an endpoint its brief never mentioned.
+
+`asset` is its own `BinaryArtifactKind`, and the reason is RETENTION rather than taxonomy: the
+age sweep is sized for run DEBRIS, and an asset is the thing the run was started to produce. A
+swept one takes its step's report with it in the worst possible form, since the report goes on
+naming a location, so the loss reads as a broken link rather than as a reclaim. The exemption is
+`RETAINED_BINARY_ARTIFACT_KINDS`, stated as what the sweep KEEPS so a kind added later is swept
+by default and has to be named to be exempted; both metadata stores build their predicate from
+it, and the conformance suite asserts it at the store, which is where they can differ.
+
+### What the platform holding the bytes buys, and why it is the point
+
+An artifact in an org's private bucket is a location string: the report records it, and a reader
+copies it somewhere else to find out what it is. The `binary-candidates` window has always had
+the same limit, rendering whatever `previewUrl` the storage service happened to issue and saying
+so when there was none.
+
+Ours issues none either, deliberately (the bytes sit behind the workspace's own authenticated
+blob route), and it does not need to: the platform can SERVE them. `platformAssetIdOf` makes the
+join in the read model, from the row's own two fields, and answers null for both "stored
+elsewhere" and "stored here, with a location that is not an artifact id" — a location is
+model-authored prose, and a paraphrased one costs the row its preview, never its record. On that
+id, `StoredAssetView` renders the artifact, opens it, and hands it over to be saved elsewhere, in
+the comparison window BEFORE the choice and in the step's report AFTER it.
+
+Whether a row renders as a picture is `rendersInlineAsImage`, in `@cat-factory/contracts` and not
+in either half: the server clamps its own blob responses to that list (everything else comes back
+`application/octet-stream` + `attachment` + `nosniff`, which is what makes the wide upload gate
+safe), and the SPA decides from it what to point an `<img>` at. Two copies disagree in both
+directions, and each direction is invisible from the other end.
+
 ## Remaining work
 
 - [ ] **A worked example generator** in `backend/internal/example-custom-agent`. The harness path it
@@ -1127,7 +1219,13 @@ controller both facades mount.
 - [ ] **An e2e spec for the candidate park**, driving generate → park → compare → keep through the
       live pushed UI. It is the assembled-product half the unit tests cannot reach (the window is
       opened by the park classifier and settled over the stream), and it needs a fake generating
-      kind in the e2e stack.
+      kind in the e2e stack. The built-in `media` task type is now the cheapest way to write it:
+      the stack no longer has to register a kind, a service or a pipeline of its own.
+- [ ] **A per-workspace ceiling on stored assets**, beside the per-run one. `MAX_ASSETS_PER_RUN`
+      bounds one container's writes, which is the runaway it exists to stop; assets are exempt
+      from the age sweep, so a board generating every day accumulates without bound and only the
+      account's own storage bill says so. The shape is the retention settings', not the cap's:
+      it is a policy a human sets, not a number the ingest route enforces.
 
 When that lands, convert this tracker into a numbered ADR under `backend/docs/adr/` and `git rm`
 it in the same PR.

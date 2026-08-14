@@ -208,6 +208,7 @@ export {
   REVIEW_PIPELINE_ID,
   SPIKE_PIPELINE_ID,
   RALPH_PIPELINE_ID,
+  MEDIA_PIPELINE_ID,
   defaultPipelineIdForTaskType,
 } from './domain/seed.js'
 
@@ -306,6 +307,14 @@ export {
   FoundationalServiceRegistry,
   defaultFoundationalServiceRegistry,
 } from './domain/foundational-service-registry.js'
+
+// The ONE service that registry ships with: the platform's own asset storage, which is what a
+// binary-output step selects when the deployment runs no object store of its own.
+export {
+  ASSET_UPLOAD_TOKEN_ENV,
+  ASSET_UPLOAD_URL_ENV,
+  platformAssetStorageService,
+} from './domain/platform-asset-service.js'
 
 // Where that `builtin` tier is READ from: the in-process registry by default, the MOTHERSHIP's
 // over `/internal/foundational-services` on a mothership-mode node (which has no estate of its
