@@ -20,6 +20,8 @@ import MarkdownProse from '~/components/common/MarkdownProse.vue'
 const props = defineProps<{
   step: PipelineStep
   runFailed: boolean
+  /** Whether the run is still being driven; passed through so its container card can freeze. */
+  runActive: boolean
   durationLabel: string | null
   isRunning: boolean
   stepNumber: number
@@ -246,7 +248,12 @@ async function copyRunId() {
 
     <!-- container lifecycle (status / live phase / id + url) — shared with the Tester
          window so both surface what the container is doing and where it lives. -->
-    <StepContainerStatus :step="step" :run-failed="runFailed" class="mt-4" />
+    <StepContainerStatus
+      :step="step"
+      :run-failed="runFailed"
+      :run-active="runActive"
+      class="mt-4"
+    />
 
     <!-- live subtask breakdown -->
     <div v-if="step.subtasks && step.subtasks.total > 0" class="mt-4">

@@ -25,6 +25,7 @@ import {
   REDIRECT_PARK_PRESENTATION,
   type RedirectParkView,
   dedicatedParkView,
+  runIsActive,
 } from '~/utils/pipelineRender'
 import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
 
@@ -125,13 +126,12 @@ const showHistory = ref(false)
 // "spinning up" phase, no spinner.
 const runFailed = computed(() => instance.value?.status === 'failed')
 
-// Whether the run is still doing something (can still spin infra up/down). A terminal
-// run (`done`/`failed`) has nothing left to provision, so the infra-attempts drawer
-// stops its background live-polling (manual refresh stays available).
-const runLive = computed(() => {
-  const status = instance.value?.status
-  return status != null && status !== 'done' && status !== 'failed'
-})
+// Whether the engine is still driving this run, and so can still spin infrastructure up or down.
+// One shared predicate drives every infra surface below: the attempts drawer's background poll
+// (manual refresh stays available regardless), the container card's cold-boot spinner, and the
+// environment panel's transition spinner. A run that is terminal OR parked has nothing in flight,
+// so none of those may keep animating.
+const runActive = computed(() => runIsActive(instance.value?.status))
 
 // Live elapsed-time clock for the open step.
 const { isRunning, durationLabel } = useStepTimer({
@@ -497,6 +497,7 @@ async function copyOutput() {
                 <StepMetadataCard
                   :step="step"
                   :run-failed="runFailed"
+                  :run-active="runActive"
                   :duration-label="durationLabel"
                   :is-running="isRunning"
                   :step-number="stepNumber"
@@ -592,7 +593,11 @@ async function copyOutput() {
 
               <!-- ephemeral environment lifecycle (spinning up / running / shut down /
                    errored + the exact error), when this step runs against one -->
-              <EnvironmentStatusPanel v-if="stepEnvironment" :environment="stepEnvironment" />
+              <EnvironmentStatusPanel
+                v-if="stepEnvironment"
+                :environment="stepEnvironment"
+                :run-active="runActive"
+              />
 
               <!-- frontend UI-test: how the frame's backend bindings resolved (env var →
                    live URL | mocked) + the run-start advisories (duplicate env vars /
@@ -639,7 +644,7 @@ async function copyOutput() {
                   v-if="showProvisioning"
                   class="mt-2"
                   :execution-id="executionId"
-                  :live="runLive"
+                  :live="runActive"
                 />
               </div>
 
