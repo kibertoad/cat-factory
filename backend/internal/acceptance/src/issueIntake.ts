@@ -1,24 +1,27 @@
 // Scenario 04's two halves that are not a pipeline run: getting the reporter's issue filed exactly once
 // across attempts, and grading what the platform did to it afterwards.
 //
-// It sits beside `resume.ts` and `evidence.ts` on purpose, and copies their rules rather than
+// It sits beside the kit's `resume.ts` and `evidence.ts` on purpose, and copies their rules rather than
 // inventing its own:
 //
-//   - **Filing is recorded the moment it happens** (`resume.ts`'s rule), because an issue is the one
+//   - **Filing is recorded the moment it happens** (the kit's `resume.ts` rule), because an issue is the one
 //     thing this suite creates that no `/api/v1` read can hand back. A crash between the POST and
 //     the ledger write leaves an open issue on somebody's repository that the next attempt cannot
 //     find, so it files a second one and delivers that: two pull requests, and the first issue left
 //     open forever with the platform's own comments on it.
-//   - **What is asserted is what the PLATFORM did**, not what an agent wrote (`evidence.ts`'s rule).
+//   - **What is asserted is what the PLATFORM did**, not what an agent wrote (the kit's `evidence.ts` rule).
 //     The evidence here is the issue's own state and comment list, read from the provider, which is
 //     as far from agent prose as this suite gets: the reporter's credential and the platform's are
 //     different credentials, so nothing the run says about itself can produce it.
 
 import type { PrReportRunProvider } from '@cat-factory/sdk'
-import { waitFor } from './deadline.ts'
-import { check, type Check } from './evidence.ts'
-import type { Journal } from './journal.ts'
-import { describeThrown } from './operatorText.ts'
+import {
+  type Check,
+  check,
+  describeThrown,
+  type Journal,
+  waitFor,
+} from '@cat-factory/acceptance-kit'
 import type { IssueApi, IssueState, IssueTarget } from './vcsIssues.ts'
 import { slug } from './vcsIssues.ts'
 import type { IssueRecord } from './world.ts'
@@ -137,7 +140,7 @@ export class IssueGoneError extends Error {}
  * therefore hand the grader a half-written issue and fail a writeback that was working, which is
  * the opposite of the determinism the pair exists for.
  *
- * **Expiry RETURNS rather than throws**, which is where this departs from `deadline.ts`'s rule that
+ * **Expiry RETURNS rather than throws**, which is where this departs from the kit's `deadline.ts` rule that
  * a wait states what it last saw. The rule is honoured, by the grader: it renders each claim with
  * its own detail (`state=open, 1 comment(s)`, `1 distinct comment(s) name <pr>`), which is strictly
  * more than the one-line last observation an expiry could carry. Giving up is not a verdict here,

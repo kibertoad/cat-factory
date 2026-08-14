@@ -27,17 +27,16 @@
 // also goes to stdout, for the reason the pass's do: a report and a refusal are both the answer, and
 // splitting them across two streams loses whichever half the reader is capturing.
 
-import { readJournal } from './journal.ts'
-import { stateDirFrom } from './config.ts'
-import { formatDuration } from './deadline.ts'
-import { envFile } from './envFile.ts'
 import {
   findMostRecentPass,
-  packageRoot,
+  formatDuration,
   passPaths,
+  readJournal,
   readLatestRunId,
-  resolveStateDir,
-} from './passFiles.ts'
+} from '@cat-factory/acceptance-kit'
+import { stateDirFrom } from './config.ts'
+import { envFile } from './envFile.ts'
+import { packageRoot } from './packageRoot.ts'
 import { formatPassStatus, resolveStatusTarget, summarisePass } from './status.ts'
 import { emptyWorld, readWorld } from './world.ts'
 
@@ -45,7 +44,7 @@ process.exitCode = run()
 
 function run(): number {
   const env = { ...envFile(packageRoot), ...process.env }
-  const stateDir = resolveStateDir(stateDirFrom(env))
+  const stateDir = stateDirFrom(env)
   const latestRunId = readLatestRunId(stateDir)
   const target = resolveStatusTarget({
     // Collapsed to `undefined` rather than left as an empty string: a blank argument or a blank

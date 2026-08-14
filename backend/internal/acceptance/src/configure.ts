@@ -46,13 +46,12 @@ import {
   REPO_CREATION_URL,
   REPORTER_TOKEN_URL,
 } from './configureEnv.ts'
-import { describeThrown } from './operatorText.ts'
-import { formatRemedy } from './preflight.ts'
 import {
   isPersonalCredentialState,
   presetAvailability,
   type PresetAvailability,
 } from './presets.ts'
+import { describeThrown, formatRemedy } from '@cat-factory/acceptance-kit'
 
 /**
  * What one adopt attempt answered.
@@ -168,7 +167,7 @@ const DEFAULT_PREFIX = 'cf-acc'
 /**
  * One read's outcome, keeping "answered" apart from "could not be asked".
  *
- * The same three-state rule `preflight.ts` is built on, applied to a command that RESOLVES values
+ * The same three-state rule the kit's `preflight.ts` is built on, applied to a command that RESOLVES values
  * rather than grading them: a `.catch(() => null)` here would report an unreachable deployment as a
  * workspace with no VCS connection and an unreadable preset library as an empty one, sending an
  * operator to fix the wrong thing. Every read this command makes is optional (it falls back to

@@ -1,3 +1,5 @@
+import { OperatorRefusal, resolveStateDir } from '@cat-factory/acceptance-kit'
+import { packageRoot } from './packageRoot.ts'
 // What the suite needs from the environment, resolved ONCE and reported as a whole.
 //
 // The resolution is a pure function over a plain record so it can be unit-tested with no
@@ -14,8 +16,6 @@
 // per-run budget. `reset` is why the seam exists rather than being tidy: an operator clearing a
 // half-built pass off a board is often doing it because the cluster it named is gone, and a cleanup
 // that refuses until the abandoned thing is configured again is a cleanup nobody can run.
-
-import { OperatorRefusal } from './operatorText.ts'
 
 /**
  * The two templates a pass falls back to, exported because the CHECKS offer them as the fix.
@@ -160,7 +160,7 @@ export type AcceptanceConfig = BoardConfig & {
   vcs: VcsReporterConfig
   /**
    * Ceiling for ONE pipeline run, in ms. Not a whole-scenario timeout: it is the deadline the run-waiter
-   * grades against, so exceeding it reports which step was still working (see `deadline.ts`).
+   * grades against, so exceeding it reports which step was still working (see the kit's `deadline.ts`).
    */
   runBudgetMs: number
 }
@@ -398,15 +398,21 @@ export function resolveReporterConfig(env: EnvRecord): ReporterConfigResolution 
 }
 
 /**
- * Where a pass keeps its ledger and journal, from the environment alone.
+ * Where a pass keeps its ledger and journal, ABSOLUTE, from the environment alone.
  *
  * Separate from `resolveConfig` because two callers need it WITHOUT the rest: the status CLI, which
  * takes no API key and no cluster, and `runAcceptance.ts`, which resolves the pass's run id before
  * the preflight exists to report a half-configured deployment. Both had the default spelled out again;
  * a third spelling of `.acceptance` is a state directory an operator cannot find.
+ *
+ * Resolved HERE and nowhere else, which is the seam the kit asks for: a relative path is anchored on
+ * this package (where the operator's `.env` lives) rather than on the kit's own install path, and
+ * every reader below it then takes an absolute directory rather than re-deciding what a relative one
+ * means. Two CLIs used to re-resolve it, which is one place too many for a value that names where a
+ * pass can be found.
  */
 export function stateDirFrom(env: EnvRecord): string {
-  return trimmed(env.ACCEPTANCE_STATE_DIR) ?? '.acceptance'
+  return resolveStateDir(trimmed(env.ACCEPTANCE_STATE_DIR) ?? '.acceptance', packageRoot)
 }
 
 /**

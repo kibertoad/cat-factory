@@ -1,14 +1,9 @@
 import type { CatFactoryClient } from '@cat-factory/sdk'
 import { describe, expect, it } from 'vitest'
+import { envAssignment, type PrerequisiteVerdict, type Remedy } from '@cat-factory/acceptance-kit'
 import { unreachableRepoSteps } from '../src/adopt.ts'
 import type { AcceptanceConfig } from '../src/config.ts'
-import {
-  envAssignment,
-  perPersonPrefixInvocation,
-  resetInvocation,
-  resumeInvocation,
-} from '../src/operatorText.ts'
-import type { PrerequisiteVerdict, Remedy } from '../src/preflight.ts'
+import { perPersonPrefixInvocation, resetInvocation, resumeInvocation } from '../src/identity.ts'
 import { type PreflightContext, PREREQUISITES } from '../src/prerequisites.ts'
 import type { IssueApi, IssueCredentialVerdict } from '../src/vcsIssues.ts'
 
@@ -1013,5 +1008,26 @@ describe('image-template', () => {
     expect(detail).toContain('PUBLISHES')
     expect(detail).toContain('403')
     expect(detail).toContain('pull request URL')
+  })
+})
+
+describe('the registry', () => {
+  it('gives every prerequisite a distinct id, which scenario 00 names its tests from', () => {
+    const ids = PREREQUISITES.map((prerequisite) => prerequisite.id)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('states what each prerequisite guarantees, since that is what a failure is read as', () => {
+    for (const entry of PREREQUISITES) {
+      expect(entry.what.length, `${entry.id} has no 'what'`).toBeGreaterThan(0)
+    }
+  })
+
+  it('keeps advisories to the ones a pass can genuinely proceed through', () => {
+    // Derived from the registry rather than pinned to a number: the point is that `advisory` stays
+    // rare and deliberate, not that it stays at today's count. A prerequisite whose failure ends
+    // the pass an hour later belongs on the required side however awkward that is.
+    const advisory = PREREQUISITES.filter((entry) => entry.disposition === 'advisory')
+    expect(advisory.map((entry) => entry.id)).toEqual(['pipeline-catalog'])
   })
 })

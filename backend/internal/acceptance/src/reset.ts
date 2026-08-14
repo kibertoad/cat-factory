@@ -38,11 +38,11 @@
 // because the frame still holding it is one no read here can name at all (`keepReason`).
 
 import { CatFactoryNotFoundError, CatFactoryValidationError } from '@cat-factory/sdk'
+import { describeThrown, type LatestPointer } from '@cat-factory/acceptance-kit'
 import { blockedRepoMessage, sameRepo } from './adopt.ts'
 import type { BoardConfig } from './config.ts'
 import { serviceTitles } from './instructions.ts'
-import { describeThrown, resetInvocation } from './operatorText.ts'
-import type { LatestPointer } from './passFiles.ts'
+import { resetInvocation } from './identity.ts'
 import type { World } from './world.ts'
 
 /**
@@ -146,7 +146,7 @@ export type ResetClient = {
   deleteService(serviceId: string): Promise<void>
 }
 
-/** One pass on disk, as the caller read it through `passFiles.ts` (the one owner of the layout). */
+/** One pass on disk, as the caller read it through the kit's `passFiles.ts` (the one owner of the layout). */
 export type ResetPassOnDisk = {
   runId: string
   ledgerPath: string

@@ -16,6 +16,7 @@
 // reversible by a person, and a repository purge that fails should not leave the issues untouched as
 // well.
 
+import { describeThrown } from '@cat-factory/acceptance-kit'
 import { offsetValidationIssue } from './instructions.ts'
 import {
   applyIssuePurge,
@@ -25,7 +26,6 @@ import {
   type LedgerIssue,
   planIssuePurge,
 } from './issuePurge.ts'
-import { describeThrown } from './operatorText.ts'
 import {
   applyRepoPurge,
   planRepoPurge,

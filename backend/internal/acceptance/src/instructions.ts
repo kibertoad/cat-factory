@@ -236,7 +236,7 @@ Cover the offset arithmetic and the button states with unit tests.`.trim()
  * repositories, and none of it is in this text.
  *
  * `liveEnvironmentUrl` is a URL the caller has established is still STANDING
- * (`retainedEnvironmentUrl` in `evidence.ts`), never merely one a settled report recorded. Absent
+ * (`retainedEnvironmentUrl` in the kit's `evidence.ts`), never merely one a settled report recorded. Absent
  * is stated as "reproduce locally" rather than omitted: a report that silently drops its "where"
  * reads to an investigator like one whose reporter never had an environment at all.
  */

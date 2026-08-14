@@ -1,5 +1,7 @@
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { resolveConfig } from '../src/config.ts'
+import { packageRoot } from '../src/packageRoot.ts'
 
 // The refusal is the thing worth testing here. Everything else in this package needs a live
 // deployment; this is the one part whose whole job is to happen BEFORE there is one, and the
@@ -111,7 +113,9 @@ describe('resolveConfig', () => {
   it('applies the defaults an operator does not have to think about', () => {
     const config = expectOk(COMPLETE)
     expect(config.namePrefix).toBe('cf-acc')
-    expect(config.stateDir).toBe('.acceptance')
+    // Absolute, and anchored on this package rather than on the process's working directory: a
+    // relative default resolved anywhere else is a state directory an operator cannot find.
+    expect(config.stateDir).toBe(join(packageRoot, '.acceptance'))
     expect(config.runBudgetMs).toBe(90 * 60 * 1000)
     // nip.io resolves `<anything>.127.0.0.1` to loopback, so the default template needs no DNS.
     expect(config.cluster.ingressHostTemplate).toContain('127.0.0.1.nip.io')

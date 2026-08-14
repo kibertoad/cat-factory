@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { type Journal } from '@cat-factory/acceptance-kit'
 import { checkIssueWriteback, fileReporterIssue, waitForIssueSettled } from '../src/issueIntake.ts'
-import type { Journal } from '../src/journal.ts'
 import type { IssueApi, IssueState } from '../src/vcsIssues.ts'
 import type { IssueRecord } from '../src/world.ts'
 

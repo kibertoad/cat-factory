@@ -26,6 +26,12 @@
 // cluster. Both halves of the wiring are supplied here, once, before any run needs them.
 
 import assert from 'node:assert/strict'
+import {
+  fileAndDrive,
+  requireRunDone,
+  type RunRecord,
+  type Scenario,
+} from '@cat-factory/acceptance-kit'
 import { adoptRepoAsService, type ServiceType } from '../adopt.ts'
 import type { Harness } from '../harness.ts'
 import {
@@ -36,10 +42,7 @@ import {
 } from '../instructions.ts'
 import { buildK3sConnection, buildK3sSecrets, buildServiceProvisioning } from '../k3s.ts'
 import { filePinnedTask } from '../publicApi.ts'
-import { fileAndDrive } from '../resume.ts'
-import { requireRunDone } from '../runDriver.ts'
-import type { Scenario } from '../scenarioRunner.ts'
-import type { RunRecord, ServiceRecord } from '../world.ts'
+import type { ServiceRecord } from '../world.ts'
 
 /** What each half of the pair is, as `POST /api/v1/services` names it. */
 const SERVICE_TYPES: Record<'backend' | 'frontend', ServiceType> = {
@@ -55,7 +58,7 @@ const STEER =
   'worked examples. Do not broaden the scope.'
 
 export function adoptAndScaffoldScenario(harness: Harness): Scenario {
-  const { config, client, world, journal, unlock } = harness
+  const { config, client, world, journal, credentials, epilogue } = harness
   const titles = serviceTitles(config.namePrefix)
 
   return {
@@ -170,7 +173,7 @@ export function adoptAndScaffoldScenario(harness: Harness): Scenario {
         return existing
       }
       // `say`, not `record`: this is the one event on the resume path an operator would want to
-      // interrupt, and `record` appends to the ledger without printing anything (`journal.ts`).
+      // interrupt, and `record` appends to the ledger without printing anything (the kit's `journal.ts`).
       journal.say(
         'milestone',
         `the ledger names service ${existing.serviceId} but the board no longer lists it; ` +
@@ -209,7 +212,8 @@ export function adoptAndScaffoldScenario(harness: Harness): Scenario {
     const { run, record } = await fileAndDrive({
       client,
       journal,
-      unlock,
+      credentials,
+      epilogue,
       existing: world.value[options.ledgerKey],
       label: options.title,
       createTask: () =>

@@ -28,16 +28,17 @@
 
 import { rmSync } from 'node:fs'
 import type { PrReportRunProvider } from '@cat-factory/sdk'
-import { type BoardConfig, resolveBoardConfig, resolveReporterConfig } from './config.ts'
-import { envFile } from './envFile.ts'
-import { describeThrown, resetInvocation, scrubbed } from './operatorText.ts'
 import {
+  describeThrown,
   latestPointerPath,
   listPasses,
-  packageRoot,
   readLatestPointer,
-  resolveStateDir,
-} from './passFiles.ts'
+  scrubbed,
+} from '@cat-factory/acceptance-kit'
+import { type BoardConfig, resolveBoardConfig, resolveReporterConfig } from './config.ts'
+import { envFile } from './envFile.ts'
+import { resetInvocation } from './identity.ts'
+import { packageRoot } from './packageRoot.ts'
 import {
   formatProviderPlan,
   formatProviderReport,
@@ -96,7 +97,7 @@ async function run(): Promise<number> {
   // Off the resolved config rather than re-derived from the environment: `stateDir` is one of the
   // six variables `resolveBoardConfig` names, and the reason that table exists is that a pass and a
   // cleanup cannot come to disagree about which board they are pointed at.
-  const stateDir = resolveStateDir(config.stateDir)
+  const stateDir = config.stateDir
   const latest = readLatestPointer(stateDir)
 
   // `latest` resolves through the same pointer a resume follows, and an unresolvable one is a

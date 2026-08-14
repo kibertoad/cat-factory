@@ -51,7 +51,7 @@ deterministic. That is why it is a hand-run acceptance pass rather than a lane.
 
 Five scenarios, run in order, in one process. Each one's output is the next one's input.
 
-That order is the ARRAY in `src/scenarios/index.ts`, walked by `src/scenarioRunner.ts`. It is worth
+That order is the ARRAY in `src/scenarios/index.ts`, walked by the kit's [`scenarioRunner.ts`](../../packages/acceptance-kit/src/scenarioRunner.ts). It is worth
 saying only because it used to need a custom vitest sequencer: the default one reorders the files it
 is handed from a cache of the previous run (failed first, then longest-duration first), so paired
 with `bail: 1` the slowest spec of the last pass ran FIRST, failed in milliseconds on a ledger key
@@ -179,7 +179,7 @@ Three states, not two: a probe that cannot READ an answer reports that, and neve
 that the prerequisite is unmet.
 
 **And such a probe names its CAUSE**, because there are three ways to fail and they need opposite
-fixes. `src/probeFailure.ts` owns the distinction, as a discriminated verdict rather than one shape
+fixes. The kit's [`probeFailure.ts`](../../packages/acceptance-kit/src/probeFailure.ts) owns the distinction, as a discriminated verdict rather than one shape
 with optional fields.
 
 _It never got an answer._ A transport failure on Node is a bare `TypeError: fetch failed` with the
@@ -812,11 +812,11 @@ and commands rather than a description of them, and why they are rendered from w
 coder's reply for "fixed the off-by-one" is testing the model's turn of phrase; change the model
 and it goes red having found nothing wrong. The verification report exists because the platform
 derives its verdicts in code from captured facts, so `reproduction.verdict`, `environments.proof`,
-`ci.verdict` and `merge.outcome` are stable claims. `src/evidence.ts` reduces them, and is itself
+`ci.verdict` and `merge.outcome` are stable claims. The kit's [`evidence.ts`](../../packages/acceptance-kit/src/evidence.ts) reduces them, and is itself
 unit-tested: a bug in a grader reports green and nothing else notices.
 
 **2. Never auto-answer a decision the suite was not designed for, or one that is in flight.**
-`src/decisions.ts` answers exactly two kinds and hard-fails on every other, naming it. The tempting
+The kit's [`decisions.ts`](../../packages/acceptance-kit/src/decisions.ts) answers exactly two kinds and hard-fails on every other, naming it. The tempting
 shape is a loop that settles whatever it finds so the run keeps moving; that produces a green suite
 that proves nothing, because a `pr-review` gate auto-resolved and a `fork` auto-picked are
 decisions a person was supposed to make.
@@ -830,7 +830,7 @@ very answers it gave, while the run still reaches `done` and the ledger still re
 answered. A review parked at its ITERATION CAP (`exceeded`) is refused rather than pushed past,
 for the same reason a `fork` is: the choice belongs to a person.
 
-**3. A wait that expires must say what it last saw.** `src/deadline.ts` owns every wait and the
+**3. A wait that expires must say what it last saw.** The kit's [`deadline.ts`](../../packages/acceptance-kit/src/deadline.ts) owns every wait and the
 runner deliberately introduces no timeout of its own (the vitest one was disabled for the same
 reason): "timed out after 5400000ms" is true and useless, where "step 3 `coder` was still working,
 4/9 subtasks" separates a parked run from a wedged one from a slow one.
@@ -846,7 +846,7 @@ backend when it stops serving) in front of a `node --watch` that cycles the proc
 change, so a restart is an ordinary event over an afternoon. One of them killed a pass 41 minutes
 in: a `pl_build` scaffold with its coder and reviewer done and a pull request open, whose next
 `GET /tasks/:id/run` threw `connect ECONNREFUSED` and took the scenario with it, while the run
-itself carried on to its deployer step unobserved. So `src/deploymentOutage.ts` makes an
+itself carried on to its deployer step unobserved. So the kit's [`deploymentOutage.ts`](../../packages/acceptance-kit/src/deploymentOutage.ts) makes an
 unanswered poll an OBSERVATION for two minutes (journalled, and the recovery is journalled too,
 because an unexplained gap in the observations is how a restart becomes invisible), and an outage
 that outlasts that says the deployment stopped answering rather than blaming the run. An ANSWER is
@@ -888,7 +888,7 @@ backing a service with one, connecting the cluster, declaring a service's manife
 a model preset and reading what the deployment has wired are all public operations.
 
 What is left outside are two UNAUTHENTICATED reads on the deployment root, `GET /health` and
-`GET /auth/config`, in [`src/deploymentApi.ts`](./src/deploymentApi.ts). They are not a smaller
+`GET /auth/config`, in the kit's [`deploymentApi.ts`](../../packages/acceptance-kit/src/deploymentApi.ts). They are not a smaller
 escape hatch; they answer a question `/api/v1` structurally cannot. Both have to work for a
 deployment whose configuration failed to validate, and such a backend serves a fallback app that
 answers 503 on every other route, `/api/v1` included. A key-authenticated health check cannot
@@ -899,51 +899,59 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 
 ## Where things live
 
-| Path                         | What                                                                                                                                                                                                                             |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/runAcceptance.ts`       | `pnpm run acceptance`. Settles the run id and the password, builds the harness, drives the scenarios, owns what an operator reads and the exit code.                                                                             |
-| `src/scenarioRunner.ts`      | The driver: order, bail, the per-step report, the summary, the exit code. Pure over its seams; unit-tested.                                                                                                                      |
-| `src/scenarios/index.ts`     | The ORDER, as an array. What the vitest sequencer used to be. Unit-tested against each id's own numeric prefix, so a scenario added out of place fails a test rather than a live pass.                                           |
-| `src/scenarios/*.ts`         | The five scenarios themselves, one per file, each a factory over the harness.                                                                                                                                                    |
-| `src/harness.ts`             | What every scenario is handed, built once per pass, plus the prerequisite gate the driver runs before each of them.                                                                                                              |
-| `src/personalPasswordAsk.ts` | What the up-front ask decides, and what it does when it cannot: degrade and continue, except for a person declining. Unit-tested.                                                                                                |
-| `src/config.ts`              | Environment → config in two halves (a BOARD, and what it takes to RUN a pass on one), reporting every problem at once. Pure; unit-tested.                                                                                        |
-| `src/envFile.ts`             | The `.env` at the package root, read the same way by all four commands. Pure.                                                                                                                                                    |
-| `src/preflight.ts`           | The prerequisite vocabulary, runner, refusal, and the pass's GATE, which is where the report scenario's evaluation is handed to the gate seconds behind it rather than made twice. Pure; unit-tested.                            |
-| `src/manifestTemplates.ts`   | The two checks that render the templates the briefs embed (ingress host, image reference). Config-only, so they carry the narrower context. Unit-tested.                                                                         |
-| `src/prerequisites.ts`       | The checks, each with the steps and commands that fix it. Unit-tested.                                                                                                                                                           |
-| `src/probeFailure.ts`        | What a THROWN probe was (never answered / refused / answered by something else) and the remedy for each. Pure; unit-tested.                                                                                                      |
-| `src/operatorText.ts`        | How a value is rendered for an operator: a thrown chain, a scrubbed address, and every pasteable command, whose shell dialect is decided here and nowhere else. Unit-tested; reads the ambient shell unless a dialect is passed. |
-| `src/adopt.ts`               | Repository → board service (adopting it first when the workspace has not), every way that join refuses, and the one copy of the reachability steps the gate and `configure` share. Unit-tested.                                  |
-| `src/presets.ts`             | The one preset-to-catalog join `configure`, `model-preset` and the up-front unlock share. Pure; unit-tested.                                                                                                                     |
-| `src/world.ts`               | The resumable ledger: what a pass created, and what a ledger says.                                                                                                                                                               |
-| `src/passFiles.ts`           | Where a pass's files live, which passes a state directory holds, the `latest` pointer, and the ONE spelling of the package root all four commands resolve their `.env` against.                                                  |
-| `src/journal.ts`             | The append-only progress record a pass can be watched through.                                                                                                                                                                   |
-| `src/status.ts`              | Ledger + journal → "where is this pass", plus WHICH pass a bare invocation is about (the argument asks, the environment pins). Unit-tested; its closing resume line takes the ambient shell from `operatorText.ts`.              |
-| `src/statusCli.ts`           | `pnpm run status`. Reads the two files and nothing else, finding them through the same `.env` the pass does.                                                                                                                     |
-| `src/reset.ts`               | Starting over: which frames a clear targets (this configuration's two questions, a named pass, or `--all`), the order the deletes go in, what it refuses to remove, and what it cannot reclaim. Driven by seams; unit-tested.    |
-| `src/resetCli.ts`            | `pnpm run reset`. Supplies the real clients and file removals, parses the positional and the three flags, owns the exit code.                                                                                                    |
-| `src/providerPurge.ts`       | `--purge-repos`: composing the issue and repository halves into one plan, one apply and one report. Unit-tested through its two halves.                                                                                          |
-| `src/repoPurge.ts`           | Emptying a repository back to its README RECOVERABLY: what to keep, what to tag, the order the writes go in, and the recovery command. Pure; unit-tested.                                                                        |
-| `src/issuePurge.ts`          | Which issues are this suite's to close (ledger-named, plus author-and-title discovery) and which are somebody's real ones. Pure; unit-tested.                                                                                    |
-| `src/repoContentApi.ts`      | The provider calls `repoPurge.ts` plans against, provider-keyed. The one decision in it: the emptied tree is built with no `base_tree`.                                                                                          |
-| `src/configure.ts`           | `configure`'s flow: what it resolves, what it asks. Driven by seams; unit-tested.                                                                                                                                                |
-| `src/configureEnv.ts`        | The `.env` merge and the creation URL. Pure; unit-tested.                                                                                                                                                                        |
-| `src/configureCli.ts`        | `pnpm run configure`. Supplies the real terminal, shell, files and client.                                                                                                                                                       |
-| `src/publicApi.ts`           | SDK client, the one task-creation door, run observation, the polling wait.                                                                                                                                                       |
-| `src/resume.ts`              | File a task, or adopt / re-attach to what a previous pass left.                                                                                                                                                                  |
-| `src/runDriver.ts`           | Drive a started run to terminal, answering parks under one shared budget.                                                                                                                                                        |
-| `src/decisions.ts`           | The two kinds this suite answers, what is answerable NOW, and the refusals.                                                                                                                                                      |
-| `src/evidence.ts`            | The report reductions the scenarios assert on. Pure; unit-tested.                                                                                                                                                                |
-| `src/instructions.ts`        | The briefs, the two frame titles, the reporter's issue, and the reasoning behind the planted defect.                                                                                                                             |
-| `src/vcsIssues.ts`           | The reporter's own client: filing an issue on the provider and reading it back, provider-keyed. The one thing here that is not the platform.                                                                                     |
-| `src/issueIntake.ts`         | Filing that issue exactly once across attempts, waiting for the platform to settle it, and the pair of claims that grades what it did.                                                                                           |
-| `src/k3s.ts`                 | The engine connection and the per-service manifest source.                                                                                                                                                                       |
-| `src/deploymentApi.ts`       | The two unauthenticated deployment root reads (`/health`, `/auth/config`), and the typed answer a non-2xx or non-JSON reply becomes. Unit-tested.                                                                                |
-| `src/deploymentOutage.ts`    | Which thrown poll is an outage to wait through, and for how long. Pure; unit-tested.                                                                                                                                             |
-| `src/deadline.ts`            | Waiting, with the observation the expiry needs.                                                                                                                                                                                  |
+| Path                         | What                                                                                                                                                                                                                          |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/runAcceptance.ts`       | `pnpm run acceptance`. Settles the run id and the password, builds the harness, hands the scenarios to the kit's `runPass`, and owns the two exits nothing has been created through.                                          |
+| `src/identity.ts`            | Who this suite is, as the kit's refusals render it (the run command, the resume variable, the configuration file), plus the three commands only this suite prints. Unit-tested.                                               |
+| `src/packageRoot.ts`         | The ONE spelling of the package root, which the `.env` and a relative state directory both anchor on.                                                                                                                         |
+| `src/world.ts`               | WHAT this suite's ledger holds (its two services, its runs, the issue it filed), over the kit's `LedgerStore`. Unit-tested.                                                                                                   |
+| `src/publicApi.ts`           | The two clients wired to this configuration (the unlock rides their header seam), the one task-creation door, and what is wrong with a key pointed at another board.                                                          |
+| `src/scenarios/index.ts`     | The ORDER, as an array. What the vitest sequencer used to be. Unit-tested against each id's own numeric prefix, so a scenario added out of place fails a test rather than a live pass.                                        |
+| `src/scenarios/*.ts`         | The five scenarios themselves, one per file, each a factory over the harness.                                                                                                                                                 |
+| `src/harness.ts`             | What every scenario is handed, built once per pass, plus the prerequisite gate the driver runs before each of them.                                                                                                           |
+| `src/personalPasswordAsk.ts` | What the up-front ask decides, and what it does when it cannot: degrade and continue, except for a person declining. Unit-tested.                                                                                             |
+| `src/config.ts`              | Environment → config in two halves (a BOARD, and what it takes to RUN a pass on one), reporting every problem at once. Pure; unit-tested.                                                                                     |
+| `src/envFile.ts`             | The `.env` at the package root, read the same way by all four commands. Pure.                                                                                                                                                 |
+| `src/manifestTemplates.ts`   | The two checks that render the templates the briefs embed (ingress host, image reference). Config-only, so they carry the narrower context. Unit-tested.                                                                      |
+| `src/prerequisites.ts`       | The checks, each with the steps and commands that fix it. Unit-tested.                                                                                                                                                        |
+| `src/adopt.ts`               | Repository → board service (adopting it first when the workspace has not), every way that join refuses, and the one copy of the reachability steps the gate and `configure` share. Unit-tested.                               |
+| `src/presets.ts`             | The one preset-to-catalog join `configure`, `model-preset` and the up-front unlock share. Pure; unit-tested.                                                                                                                  |
+| `src/status.ts`              | Ledger + journal → "where is this pass", plus WHICH pass a bare invocation is about (the argument asks, the environment pins). Unit-tested; its closing resume line takes the ambient shell from `operatorText.ts`.           |
+| `src/statusCli.ts`           | `pnpm run status`. Reads the two files and nothing else, finding them through the same `.env` the pass does.                                                                                                                  |
+| `src/reset.ts`               | Starting over: which frames a clear targets (this configuration's two questions, a named pass, or `--all`), the order the deletes go in, what it refuses to remove, and what it cannot reclaim. Driven by seams; unit-tested. |
+| `src/resetCli.ts`            | `pnpm run reset`. Supplies the real clients and file removals, parses the positional and the three flags, owns the exit code.                                                                                                 |
+| `src/providerPurge.ts`       | `--purge-repos`: composing the issue and repository halves into one plan, one apply and one report. Unit-tested through its two halves.                                                                                       |
+| `src/repoPurge.ts`           | Emptying a repository back to its README RECOVERABLY: what to keep, what to tag, the order the writes go in, and the recovery command. Pure; unit-tested.                                                                     |
+| `src/issuePurge.ts`          | Which issues are this suite's to close (ledger-named, plus author-and-title discovery) and which are somebody's real ones. Pure; unit-tested.                                                                                 |
+| `src/repoContentApi.ts`      | The provider calls `repoPurge.ts` plans against, provider-keyed. The one decision in it: the emptied tree is built with no `base_tree`.                                                                                       |
+| `src/configure.ts`           | `configure`'s flow: what it resolves, what it asks. Driven by seams; unit-tested.                                                                                                                                             |
+| `src/configureEnv.ts`        | The `.env` merge and the creation URL. Pure; unit-tested.                                                                                                                                                                     |
+| `src/configureCli.ts`        | `pnpm run configure`. Supplies the real terminal, shell, files and client.                                                                                                                                                    |
+| `src/instructions.ts`        | The briefs, the two frame titles, the reporter's issue, and the reasoning behind the planted defect.                                                                                                                          |
+| `src/vcsIssues.ts`           | The reporter's own client: filing an issue on the provider and reading it back, provider-keyed. The one thing here that is not the platform.                                                                                  |
+| `src/issueIntake.ts`         | Filing that issue exactly once across attempts, waiting for the platform to settle it, and the pair of claims that grades what it did.                                                                                        |
+| `src/k3s.ts`                 | The engine connection and the per-service manifest source.                                                                                                                                                                    |
 
-**See also:** [`backend/internal/e2e`](../e2e) (the faked-externals product suite),
+### What the KIT owns
+
+Everything above sits on [`@cat-factory/acceptance-kit`](../../packages/acceptance-kit), which is
+this suite with the suite taken out: the scenario driver, the ledger and journal mechanics, the
+prerequisite vocabulary and its refusals, the waits, the run driver and the evidence reductions. It
+is published, so a deployment can cover its OWN providers, agent kinds or gates the same way without
+copying this package.
+
+What stays here is what the kit cannot know: the prerequisites (what a deployment must have wired to
+run THIS pass), the five scenarios, the briefs, the configuration, the personal-subscription prompt,
+and the identity the kit's refusals render against (`src/identity.ts`). The seams are
+`Prerequisite`, `Scenario`, `SuiteIdentity` and `CredentialRetry`; the kit's own README documents
+each.
+
+One consequence worth knowing before a pass: **the kit is a workspace package, so `pnpm build` has
+to have run** (the suite itself is type-stripped and builds nothing). Any tree that can serve a
+local deployment has already done it.
+
+**See also:** [`@cat-factory/acceptance-kit`](../../packages/acceptance-kit) (the building blocks),
+[`backend/internal/e2e`](../e2e) (the faked-externals product suite),
 [`backend/internal/sdk-smoketest`](../sdk-smoketest) (the same SDK against a booted backend),
 [`backend/docs/public-api.md`](../../docs/public-api.md),
 [`backend/docs/local-k3s-environments.md`](../../docs/local-k3s-environments.md).
