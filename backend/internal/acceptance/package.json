@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/acceptance",
-  "version": "0.4.14",
+  "version": "0.4.15",
   "private": true,
   "description": "Acceptance suite against a LIVE local deployment: drives the published TypeScript SDK over the real /api/v1 to bootstrap two empty repos, ship a cross-service feature onto a real k3s ephemeral environment, and then investigate and fix the defect that feature leaves behind. Real agents, real LLM spend, real pull requests. Never run in CI. Not published.",
   "type": "module",
