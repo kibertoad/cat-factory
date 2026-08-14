@@ -1,6 +1,6 @@
 # Initiative: performance optimizations (prioritized)
 
-**Status:** in progress; items 1, 2, 3, 4, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 21, 23 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · targeted board events · spend/workspace-settings/account-settings cache slices · GitHub-sync + fan-out-publisher parallelism · reuse-the-loaded-list batch across autoStart/initiative-spawn/blueprint-reconcile/block-delete · agent-context single frame-walk + parallel wave · password-reset-token expiry index · risk-policy merge-preset cache slice · board RAF loops driven by an activity pulse) · **Owner:** core · **Started:** 2026-07-09
+**Status:** in progress; items 1, 2, 3, 4, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 21, 23 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · targeted board events · spend/workspace-settings/account-settings cache slices · GitHub-sync + fan-out-publisher parallelism · reuse-the-loaded-list batch across autoStart/initiative-spawn/blueprint-reconcile/block-delete · agent-context single frame-walk + parallel wave · password-reset-token expiry index · risk-policy merge-preset cache slice · board RAF loops driven by an activity pulse) · frontend deep re-audit 2026-08-14, after the task-swimlanes rework (#1777): items 5/10/19/20 re-verified and refreshed, PR links backfilled, items 25-30 added · **Owner:** core · **Started:** 2026-07-09
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -49,30 +49,36 @@ symmetric" (CLAUDE.md).
 
 | #   | Pri | Area         | Finding (short)                                                                                                                     | Status  | PR                                                        |
 | --- | --- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------------------------- |
-| 1   | P1  | engine       | `emitInstance` runs LLM-metrics GROUP BY on every emit (incl. progress ticks)                                                       | ✅ done | branch `claude/performance-tracker-next-phase-cvbcmh`     |
+| 1   | P1  | engine       | `emitInstance` runs LLM-metrics GROUP BY on every emit (incl. progress ticks)                                                       | ✅ done | [#1002](https://github.com/kibertoad/cat-factory/pull/1002) |
 | 2   | P1  | gateways     | Gate polls: uncached `repoId()` + PAT re-resolved per `request()` + `listCommits` head lookup                                       | ✅ done | [#993](https://github.com/kibertoad/cat-factory/pull/993) |
 | 3   | P1  | persistence  | Execution lists `SELECT *` (incl. `detail` JSON) + JS status filter on dispatch guard; missing `(workspace_id, kind, status)` index | ✅ done | [#996](https://github.com/kibertoad/cat-factory/pull/996) |
-| 4   | P1  | dispatch     | `buildJobBody` serializes ~6 independent I/O steps per dispatch                                                                     | ✅ done | branch `claude/perf-tracker-next-phase-3wg1gq`            |
-| 5   | P1  | frontend     | Board snapshot embeds full step outputs the board never reads                                                                       | ⬜ todo |                                                           |
-| 6   | P1  | frontend     | Coarse `board` event forces full-snapshot refresh; payload already carries `blockId`                                                | ✅ done | branch `feat/targeted-board-events`                       |
-| 7   | P2  | caching      | `SpendService` three banned TTL `Map`s (pricing / account / user limits)                                                            | ✅ done | branch `claude/performance-tracker-next-phase-hcdba4`     |
-| 8   | P2  | caching      | `AccountSettingsService` legacy 30s `Map` (the named anti-pattern)                                                                  | ✅ done | branch `claude/performance-initiative-next-phase-i3mtxw`  |
-| 9   | P2  | caching      | `WorkspaceSettingsService.get` uncached; read per recorded LLM call                                                                 | ✅ done | branch `claude/performance-tracker-next-phase-hcdba4`     |
-| 10  | P2  | frontend     | Shared `useBlockQueries` index invalidates ALL BlockNodes on every execution event                                                  | ⬜ todo |                                                           |
-| 11  | P2  | frontend     | Two unconditional 60fps RAF loops doing DOM measurement while idle                                                                  | ✅ done | branch `claude/frontend-performance-iteration-mal14b`     |
-| 12  | P2  | integrations | `GitHubSyncService`: serial per-workspace fan-out + serial resource syncs                                                           | ✅ done | branch `claude/performance-tracker-next-phase-kky9ny`     |
-| 13  | P2  | engine       | `AgentContextBuilder` re-walks block ancestry per resolver, sequentially                                                            | ✅ done | branch `claude/performance-initiative-next-phase-exeew1`  |
-| 14  | P2  | events       | `FanOutEventPublisher` forwards to N mounted workspaces serially                                                                    | ✅ done | branch `claude/performance-tracker-next-phase-kky9ny`     |
-| 15  | P3  | engine       | `autoStartDependents`: per-dependent pipeline point-read in loop                                                                    | ✅ done | branch `claude/performance-tracker-next-phase-caz67j`     |
-| 16  | P3  | engine       | `InitiativeLoopService.spawnItem`: per-item pipeline point-read in loop                                                             | ✅ done | branch `claude/performance-tracker-next-phase-caz67j`     |
-| 17  | P3  | board        | `BoardScanService` reconcile: `addModule` re-lists whole board per module                                                           | ✅ done | branch `claude/performance-tracker-next-phase-caz67j`     |
-| 18  | P3  | board        | Block delete: teardown + remove each re-list the whole board                                                                        | ✅ done | branch `claude/performance-tracker-next-phase-caz67j`     |
+| 4   | P1  | dispatch     | `buildJobBody` serializes ~6 independent I/O steps per dispatch                                                                     | ✅ done | [#1051](https://github.com/kibertoad/cat-factory/pull/1051) |
+| 5   | P1  | frontend     | Board snapshot embeds full step outputs the board never reads (re-verified 2026-08-14: unstarted, refs refreshed)                   | ⬜ todo |                                                           |
+| 6   | P1  | frontend     | Coarse `board` event forces full-snapshot refresh; payload already carries `blockId`                                                | ✅ done | [#1759](https://github.com/kibertoad/cat-factory/pull/1759) |
+| 7   | P2  | caching      | `SpendService` three banned TTL `Map`s (pricing / account / user limits)                                                            | ✅ done | [#1060](https://github.com/kibertoad/cat-factory/pull/1060) |
+| 8   | P2  | caching      | `AccountSettingsService` legacy 30s `Map` (the named anti-pattern)                                                                  | ✅ done | [#1068](https://github.com/kibertoad/cat-factory/pull/1068) |
+| 9   | P2  | caching      | `WorkspaceSettingsService.get` uncached; read per recorded LLM call                                                                 | ✅ done | [#1060](https://github.com/kibertoad/cat-factory/pull/1060) |
+| 10  | P2  | frontend     | One event re-classifies + re-sorts every frame's swimlanes; no structural sharing (rewritten post-#1777)                            | ⬜ todo |                                                           |
+| 11  | P2  | frontend     | Two unconditional 60fps RAF loops doing DOM measurement while idle                                                                  | ✅ done | [#1914](https://github.com/kibertoad/cat-factory/pull/1914) |
+| 12  | P2  | integrations | `GitHubSyncService`: serial per-workspace fan-out + serial resource syncs                                                           | ✅ done | [#1085](https://github.com/kibertoad/cat-factory/pull/1085) |
+| 13  | P2  | engine       | `AgentContextBuilder` re-walks block ancestry per resolver, sequentially                                                            | ✅ done | [#1143](https://github.com/kibertoad/cat-factory/pull/1143) |
+| 14  | P2  | events       | `FanOutEventPublisher` forwards to N mounted workspaces serially                                                                    | ✅ done | [#1085](https://github.com/kibertoad/cat-factory/pull/1085) |
+| 15  | P3  | engine       | `autoStartDependents`: per-dependent pipeline point-read in loop                                                                    | ✅ done | [#1078](https://github.com/kibertoad/cat-factory/pull/1078) |
+| 16  | P3  | engine       | `InitiativeLoopService.spawnItem`: per-item pipeline point-read in loop                                                             | ✅ done | [#1078](https://github.com/kibertoad/cat-factory/pull/1078) |
+| 17  | P3  | board        | `BoardScanService` reconcile: `addModule` re-lists whole board per module                                                           | ✅ done | [#1078](https://github.com/kibertoad/cat-factory/pull/1078) |
+| 18  | P3  | board        | Block delete: teardown + remove each re-list the whole board                                                                        | ✅ done | [#1078](https://github.com/kibertoad/cat-factory/pull/1078) |
 | 19  | P3  | persistence  | `notifications.listOpen` unbounded `SELECT *` (body+payload) on snapshot                                                            | ⬜ todo |                                                           |
-| 20  | P3  | frontend     | `board.hydrate` JSON.stringifies every block per refresh; global decision/approval maps rebuilt per event; no node virtualization   | ⬜ todo |                                                           |
-| 21  | P3  | persistence  | `password_reset_tokens.deleteExpired` full-table scan (no `expires_at` index)                                                       | ✅ done | branch `claude/performance-initiative-next-phase-exeew1`  |
+| 20  | P3  | frontend     | Hydrate stringify (now WeakMap-cached), gate-map rebuilds per event, no viewport culling, z-index in `nodes` computed               | ⬜ todo |                                                           |
+| 21  | P3  | persistence  | `password_reset_tokens.deleteExpired` full-table scan (no `expires_at` index)                                                       | ✅ done | [#1143](https://github.com/kibertoad/cat-factory/pull/1143) |
 | 22  | P3  | spend        | `isOverBudget`: up to 3 live SUM aggregates per proxied LLM call (design decision)                                                  | ⬜ todo |                                                           |
-| 23  | P3  | engine       | `resolveRiskPolicy` re-reads merge preset per gate evaluation (optional slice)                                                      | ✅ done | branch `claude/performance-initiative-next-phase-exeew1`  |
+| 23  | P3  | engine       | `resolveRiskPolicy` re-reads merge preset per gate evaluation (optional slice)                                                      | ✅ done | [#1143](https://github.com/kibertoad/cat-factory/pull/1143) |
 | 24  | P2  | gateways     | Dispatch GH client: no single-flight / throttle; concurrent same-run steps duplicate token mint + branch probe                      | ⬜ todo |                                                           |
+| 25  | P1  | frontend     | `execution.getByBlock` full scan per call on the card/lane/measurement paths; cards scan global gate lists                          | ⬜ todo |                                                           |
+| 26  | P2  | frontend     | Activity pulse re-wakes the DOM-measuring loops on every card re-render, so a busy board never parks them                           | ⬜ todo |                                                           |
+| 27  | P2  | frontend     | Observability/kaizen stores grow unbounded per session and survive board switches                                                   | ⬜ todo |                                                           |
+| 28  | P2  | frontend     | ~35 direct `refresh()` call sites + starvable trailing-only debounce + stacking retry chains                                        | ⬜ todo |                                                           |
+| 29  | P3  | frontend     | Deep reactivity over `execution.instances` (shallowRef viable) and `board.blocks` (blocked by in-place writes)                      | ⬜ todo |                                                           |
+| 30  | P3  | frontend     | Identity churn, uncached derived counts, per-invocation timers, drag/viewport listener leaks (grouped)                              | ⬜ todo |                                                           |
 
 ## Detailed findings
 
@@ -238,6 +244,23 @@ The finding also under-counts what is heavy: `prReview`, `judge`, `ralph`, `vali
 `reproduction` all carry histories or captured output, while `outputHistory` is on the INSTANCE
 rather than the step. `step.metrics` must stay out of scope (live-only, never persisted; see item 1).
 
+**Re-verified 2026-08-14: entirely unstarted, and every part of the premise correction still
+holds.** Refreshed references: the execution schemas moved out of `entities.ts` into
+`contracts/src/execution.ts` (step fields: `judge` :739, `ralph` :748, `validation` :758,
+`reproduction` :784, `prReview` :801, `rework` :826, `output` :936, `custom` :958; instance
+`outputHistory` :1324), `snapshot.ts:72` still embeds the full `executionInstanceSchema`, and
+`verdicts` now sits one level deeper, under `step.testerQuality` (:284). There is still no by-id
+instance endpoint on either runtime (`ExecutionController` registers mutations and telemetry reads
+only) and the SPA's `getInstance` is still a cache lookup that every overlay reads synchronously
+(`stores/ui/resultViews.ts:56,70`, `ResultWindowShell.vue:134` and siblings). Item 3's lean
+projection landed only as `listLive`; the snapshot path still rides `listByWorkspace`'s `SELECT *`
+with `detail` (`D1ExecutionRepository.ts:39-48`), so "couples with item 3" remains future work.
+One helpful narrowing from the swimlanes rework: the board's only remaining `output` read is the
+truthiness icon in `TaskPipelineMini.vue:123` (TaskCard itself no longer touches it, and contracts'
+`composeRunOutcome` reads no `output`), so the projection owes exactly one `hasOutput` boolean plus
+the fields the mini pipeline really renders (`state`, `agentKind`, `subtasks`, `approval`,
+`prReview` phase).
+
 ### 6. Coarse `board` events force full refreshes the payload could avoid (P1) — LANDED
 
 `useWorkspaceStream.ts:92-93`: every `board`-type event collapses to
@@ -382,22 +405,33 @@ read on any replica. Pass-through on the Worker's isolate-safe profile. Pinned b
 per-workspace scoping) and a new conformance cache-coherence assertion (warm GET → PUT → GET
 reflects) on both runtimes.
 
-### 10. Shared block index fans one event out to every BlockNode (P2)
+### 10. One event re-assembles every frame's swimlanes (P2, rewritten 2026-08-14)
 
-`frontend/app/app/composables/useBlockQueries.ts:18-36`: the single `index` computed
-(id→block, parent→children, epic→members) full-scans `blocks` and underlies nearly every
-getter. Any `board.upsert` (fired per `execution` event, `useWorkspaceStream.ts:91`)
-invalidates it, which invalidates every frame's `directTasks`/`allTasks`/`taskStats`/
-`frameStatus` computeds in `BlockNode.vue`; one step-progress event triggers
-O(frames × children) recompute across all cards.
+As originally written this finding named `BlockNode`'s `directTasks`/`taskStats` computeds; the
+task-swimlanes rework (#1777) replaced that render path, and two halves of the fix have since
+landed: the single-pass block index (`useBlockQueries.ts:19-37`) and the per-block gate maps
+(`decisionsByBlock`/`approvalsByBlock`, `stores/execution/pendingGates.ts:76-91`) that `BlockNode`
+reads with O(1) lookups (`BlockNode.vue:108-135`). What remains is the same fan-out through the
+new path: `useFrameLanes` (one instance per frame) derives `byLane`/`lanes` from the blocks
+index, both gate maps, `agentRuns.byBlock` (a Record rebuilt over all runs + bootstrap jobs per
+event, `stores/agentRuns.ts:130-158`) and `notifications.open`, so ONE step-progress event
+re-classifies, re-sorts and re-groups all four lanes of every mounted frame.
 
-**Fix:** preserve identity for untouched entries (patch the changed block in place and
-keep `childrenByParent` entries for unchanged parents referentially stable), or memoize
-per-frame derivations keyed by the frame's own child set. At minimum apply structural
-sharing so progress-only changes short-circuit downstream `===` checks. Also incremental
-maintenance for the global `openDecisions`/`approvalsByBlock` maps
-(`stores/execution.ts:137-197`) and `agentRuns.byBlock` (`stores/agentRuns.ts:139-167`),
-which rebuild over all runs × steps per event (kept in item 20 if split).
+Breadth found in the re-audit, all in the same recompute:
+
+- `waitingSinceByBlock` derives `collectReviewDebt(notifications.open)` once per FRAME instance
+  (`useFrameLanes.ts:63-65`): O(frames × open notifications) where one store-level computed would
+  serve every frame.
+- The `title` and `task_type` comparators call `localeCompare` with no cached `Intl.Collator`
+  (`utils/laneSort.ts:183,191-192`, the second twice per comparison).
+- The lane output has no structural sharing, so an unchanged lane hands `TaskLane`/`LaneGroup` a
+  fresh array every recompute and every card diff re-runs.
+
+**Fix:** hoist the review-debt map to a store-level computed shared by all frames; cache one
+`Intl.Collator`; preserve identity for unchanged lanes/groups (compare member ids + the entry
+fields the comparators read) so a progress-only event short-circuits downstream `===` checks.
+The `getByBlock` scans inside `classify` are item 25 and should land first, since they dominate
+the recompute this item makes rarer.
 
 ### 11. Two unconditional 60fps DOM-measuring RAF loops (P2)
 
@@ -443,6 +477,9 @@ board. `commitSegments` publishes only a list that actually moved, and the four 
 
 Not caught by the pulse, and accepted: a reflow with no mutation and no gesture (a late-loading
 image or font resizing a card) leaves an arrow stale until the next pulse of any kind.
+
+**Follow-up surfaced 2026-08-14:** the pulse's breadth means a busy board re-wakes the loops on
+every card re-render, so under a steady event stream they effectively never park: item 26.
 
 ### 12. `GitHubSyncService` serial fan-out and serial resource syncs (P2)
 
@@ -600,27 +637,36 @@ re-list for the mounted (home-mismatch) case, and the unchanged default (no-opts
 
 ### 19. `notifications.listOpen` unbounded `SELECT *` on the snapshot (P3)
 
-`backend/runtimes/cloudflare/src/infrastructure/repositories/D1NotificationRepository.ts:74-84`
-and `backend/runtimes/node/src/repositories/notifications.ts:65-72`: no `LIMIT`, pulls
+`backend/runtimes/cloudflare/src/infrastructure/repositories/D1NotificationRepository.ts:75-85`
+and `backend/runtimes/node/src/repositories/notifications.ts:67-74`: no `LIMIT`, pulls
 `body` + `payload` JSON for every open notification into the polled board snapshot. The
 predicate is indexed (`idx_notifications_open`); the issue is over-fetch + unbounded
-growth.
+growth. Re-verified 2026-08-14: unchanged on both runtimes.
 
 **Fix:** add a LIMIT (+ pagination) and project away `body`/`payload` if the inbox list
-renders only title/severity/type until a card opens. Both runtimes + conformance.
+renders only title/severity/type until a card opens. Both runtimes + conformance. One
+consumer constrains the projection: the snapshot controller reuses the SAME list for the
+`infra_unreachable` fold (`WorkspaceController.ts:648-653`), so `type`/`status`/`payload`
+must survive for that read (or it gets its own narrow query). The SPA-side derivation over
+the list is item 10's `collectReviewDebt` hoist and item 30's `byBlock` churn.
 
-### 20. Frontend hydrate/derived-state costs (grouped, P3)
+### 20. Frontend hydrate/derived-state costs (grouped, P3; states refreshed 2026-08-14)
 
-- `frontend/app/app/stores/board.ts:105-122`: `hydrate` `JSON.stringify`s every incoming
-  block per full refresh to preserve identity. Fix: compare a server-stamped
-  revision/`updatedAt` per block instead (cheap once item 6 sends deltas).
-- `frontend/app/app/stores/execution.ts:137-197` + `stores/agentRuns.ts:139-167`: global
-  decision/approval/run maps rebuilt over all instances × steps on every upsert. Fix:
-  incremental maintenance patching only the changed instance's entries.
-- `frontend/app/app/components/board/BoardCanvas.vue:65-91`: no viewport culling (all
-  frames mount), and `frameZIndex` in the `nodes` computed rebuilds the whole array on
-  every hover/drag. Fix: cull off-viewport frames via Vue Flow viewport bounds +
-  `containerSize`; move z-index to a class binding so hover doesn't reallocate all nodes.
+- `frontend/app/app/stores/board.ts:90-123`: `hydrate`'s stringify compare is now WeakMap-cached
+  (a kept block is serialized once, and a live-upsert baseline stops a stale refresh clobbering),
+  so the remaining cost is one `JSON.stringify` per INCOMING snapshot block per refresh. The
+  server-stamped per-block revision is still the real fix, but refreshes are rarer post-#1759,
+  so this half has dropped in urgency.
+- `frontend/app/app/stores/execution/pendingGates.ts:14-99` + `stores/agentRuns.ts:130-158`:
+  the decision/approval/run projections are still rebuilt over all instances × steps on every
+  upsert. Since the extraction they are Map-grouped, so CONSUMERS are O(1) (that was the
+  expensive half); what remains is incremental maintenance patching only the changed instance's
+  entries, worthwhile only after items 25/10 remove the bigger per-event work.
+- `frontend/app/app/components/board/BoardCanvas.vue:73-99`: unchanged. No viewport culling (all
+  frames mount), and `frameZIndex` is still read inside the `nodes` computed, so every
+  hover/drag (`hoveredFrameId`/`draggingId`) rebuilds the whole nodes array. Fix: cull
+  off-viewport frames via Vue Flow viewport bounds + `containerSize`; move z-index to a class
+  binding so hover doesn't reallocate all nodes.
 
 ### 21. `password_reset_tokens.deleteExpired` full-table scan (P3)
 
@@ -714,6 +760,148 @@ duration). Keep the runtimes symmetric: the client + its cache slice land for bo
 once. Join-batching does NOT apply: the wave members hit heterogeneous endpoints, not a
 loop of point-reads over a list.
 
+### 25. No per-block execution index: `getByBlock` is a full scan per call (P1)
+
+`execution.getByBlock` (`frontend/app/app/stores/execution.ts:182-190`) filters the WHOLE
+`instances` array on every call. Its hot callers, all re-run per execution event:
+
+- `TaskPipelineMini.vue:29`: a computed per task card (the mini pipeline is mounted on every
+  card), so O(cards × runs) per event.
+- `useFrameLanes.ts:83`: `classify` calls it per task, so the swimlane assembly (item 10) is
+  O(tasks × runs) per frame per recompute. This contradicts the composable's own header comment
+  ("every cross-block lookup below is a Map read off an index the stores already maintain"): the
+  gate lookups are Map reads, `getByBlock` is the one that is not.
+- `useTaskExpansion.ts:83,117`: per measurement pass while the board is awake (hover probe), and
+  per task when deep-zoomed.
+
+The same event also invalidates `byId` (`execution.ts:134-138`), so every card's
+`outcomeReadable` (`TaskCard.vue:123-129`, running contracts' `composeRunOutcome`, six passes
+over the run's steps) recomputes per event regardless of which run changed.
+
+`TaskCard` additionally scans GLOBAL lists although per-block maps exist for exactly this:
+`openDecisions.find` / `openApprovals.find` (`TaskCard.vue:236,253`; the maps are
+`decisionsByBlock`/`approvalsByBlock`, `pendingGates.ts:76-91`, whose docstring names this very
+pattern as what they replace). Same shape at smaller N: `recurring.byBlock` is a `schedules.find`
+per card (`stores/recurringPipelines.ts:36-38`) and `defaultPipeline` re-scans the pipeline list
+per card (`TaskCard.vue:82-102`, `stores/pipelines.ts:129-148`).
+
+**Fix:** one `byBlockLive` computed Map on the execution store beside `byId`, collapsing to the
+live-preferred run with the SAME rule `getByBlock` applies today (stated once; the stale terminal
+predecessor beside a live successor is the case to pin in a store test), and `getByBlock` reads
+it. Switch `TaskCard`'s two finds to the existing byBlock maps; index `recurring.byBlock` and the
+pipeline-default lookup the same way. Pure SPA change, PR-sized, and it multiplies with item 10:
+each removes a factor of the O(frames × tasks × runs) product.
+
+### 26. The activity pulse re-wakes the DOM-measuring loops on every card re-render (P2)
+
+Item 11's follow-up. The canvas MutationObserver is deliberately broad
+(`useBoardActivity.ts:73-78`: `childList` + `subtree` + `style`/`class` attributes), which is
+what lets it catch every geometry change without enumerating causes. The cost: every Vue-driven
+card re-render (each execution event on a busy board) fires `pulse()`, and each wake runs the
+settle tail of ≥ 4 frames (`utils/settlingLoop.ts:44`), so under a steady event stream the two
+loops never actually park. Each expansion recompute does `document.elementFromPoint` plus a
+`getByBlock` (hover probe, any zoom) and, when deep-zoomed, a `querySelector` +
+`getBoundingClientRect` per task plus an O(k²) overlap pass (`useTaskExpansion.ts:76-159`); the
+edge overlay re-measures every link (`TaskDependencyEdges.vue:144-164`). `useTaskExpansion` also
+registers a second capture-phase `pointermove` on the same canvas the pulse already listens to
+(`useTaskExpansion.ts:172-177`).
+
+**Fix sketch (measure first):** the loops are cheap while parked, so the question is how often a
+live board actually parks. Options that keep item 11's settle-tail insight intact: have the
+observer ignore mutations inside subtrees the overlays own AND rate-limit re-wakes while no
+gesture/camera/geometry-affecting change happened (a card's text-content churn does not move
+cards); or split the hover probe (cheap, per-frame) from the deep-zoom sweep (expensive, only
+needed on real geometry change). Fold the duplicate `pointermove` into the pulse's listener.
+
+### 27. Observability/kaizen stores grow unbounded per session and survive board switches (P2)
+
+- `observability.appendCall` (`stores/observability.ts:127-144`): per `llmCall` event, a linear
+  dedupe over the run's whole call list plus a spread of BOTH the run-keyed record and the entire
+  array. The opened-panel gate is real (an unopened run accumulates nothing), but an opened run's
+  list is never trimmed, so a long watched run accumulates quadratically.
+- The observability store is absent from `resetPerBoardCaches`
+  (`stores/workspace/hydrate.ts:38-50`), so `callsByExecution`, `contextByExecution`,
+  `searchQueriesByExecution` and the tool-call sinks (`stores/observability/toolCalls.ts:55-81`)
+  persist across every board the session visits; no execution id is ever evicted.
+- `kaizen.upsert` (`stores/kaizen.ts:117-128`) prepends every stream-pushed grading into
+  `history` UNCONDITIONALLY (its own comment says "if it's been loaded", but the else-branch
+  prepends regardless), with no opened-screen gate like `appendCall`'s; kaizen is also absent
+  from `resetPerBoardCaches`, and `byExecution` grows a key per run forever.
+- `notifications.liveWrites` (`stores/notifications.ts:43`) is trimmed only inside `hydrate`, so
+  a long stream period carrying only targeted events grows it one entry per notification id.
+
+**Fix:** cap the per-run call log (ring buffer, and per Degrade loudly the cap states what it
+dropped), gate kaizen's history fold on the screen having loaded, add observability + kaizen to
+`resetPerBoardCaches`, trim `liveWrites` on upsert too. The e2e live-update specs are the guard
+that an eviction doesn't blank an open panel.
+
+### 28. Full-refresh fan-out: direct `refresh()` call sites, a starvable debounce, stacking retries (P2)
+
+One `workspace.refresh()` is the client's heaviest operation: the ~20-read snapshot aggregate
+plus 31 hydrate calls into 24 stores (`stores/workspace/hydrate.ts:67-144`). Three shapes
+multiply it:
+
+- **~35 call sites bypass the stream's debouncer** with a direct `await ws.refresh()`: 11 in
+  `stores/execution/commands.ts`, 7 in `stores/riskPolicies.ts`, 4 in
+  `stores/recurringPipelines.ts`, 3 each in `sharedStacks.ts` / `consensusGroups.ts` /
+  `board/mutations.ts`, plus notifications/bootstrap/documents/BudgetSettings. A mutation that
+  also triggers a server-side coarse `board` event pays the snapshot twice (once directly, once
+  debounced).
+- **`debouncedBoardRefresh` is trailing-only with no max-wait** (`useWorkspaceStream.ts:81-86`):
+  a sustained sub-300ms coarse-event stream re-arms the timer forever, so the board stops
+  resyncing exactly when the workspace is busiest.
+- **Retry chains stack**: `refreshWithRetry` (up to 4 fetches with backoff,
+  `useWorkspaceStream.ts:69-79`) is never aborted when a newer debounce fires; the `refreshSeq`
+  guard (`stores/workspace.ts:207,226`) discards the stale HYDRATE but every request is still
+  issued. Related: `environmentTest.hydrate` fires a best-effort point-read per preserved
+  still-running run per refresh with no in-flight tracking (`stores/environmentTest.ts:57-73`),
+  so overlapping refreshes duplicate the same GET.
+
+**Fix:** one refresh funnel (single-flight + max-wait debounce) that the stream AND the mutation
+call sites go through; where a mutation's own response already carries the authoritative entity,
+hydrate that store directly instead of refetching the world; an in-flight map for
+`reconcileRun`. Must respect the live-push coherence rules: the funnel keeps the
+capture-baseline-then-hydrate ordering `refresh()` already does.
+
+### 29. Deep reactivity over the two biggest arrays (P3)
+
+`execution.instances` (`stores/execution.ts:24`) is a deep-proxied `ref` over every
+run → steps → subtasks → items, and the swimlane assembly + cards read step fields constantly.
+The store only ever whole-array replaces, index-assigns or pushes (no in-place property
+mutation), so `shallowRef` plus an explicit trigger on the two write sites is viable and removes
+proxy overhead from every step-level read. `board.blocks` (`stores/board.ts:32`) is NOT a
+drop-in: optimistic updates mutate blocks in place (`stores/board/placement.ts:65-183`,
+`board/mutations.ts:125-129`, `board/removal.ts:56-81`); convert those to object replacement
+first or leave it. Reactivity regressions are silent, so the store unit suites plus an e2e pass
+are the bar.
+
+### 30. Store/composable hygiene: identity churn, uncached derived counts, listener leaks (grouped, P3)
+
+- **Whole-record clones to write one key**: the review-family stores (`requirements.ts:97-99`,
+  `clarity.ts:86-88`, `brainstorm.ts:83-85`, `consensus.ts:30-32`, `docInterview.ts:30`,
+  `initiatives.ts` upsert) and `notifications.byBlock` (`notifications.ts:84-91`, fresh array
+  per block per event): every consumer keyed on an UNCHANGED id re-runs. Patch per key or share
+  structure.
+- **Derived counts as plain re-filtering functions**, composing into 5+ passes per render
+  (`requirements.ts:77-95` and siblings); `requirements.backgroundStage` (`:61-65`), on the
+  per-card path, scans the recommendation list per call. Make them computeds/Maps.
+- **`useUpsertList` has no id→index map** (`useUpsertList.ts:31-50`); `environmentTest`
+  hand-rolls the same linear lookups (`environmentTest.ts:82-94`).
+- **`useNowTick` ticks for the mounted lifetime** whether or not anything is running
+  (`useStepTimer.ts:63-74`; `isRunning` gates the render, not the tick), and `useStepTimer`
+  creates one PER invocation (`:87`) against its own one-interval intent (`:57-62`): N mounted
+  `StepRunMeta`s means N independent 1s intervals.
+- **`useBlockDrag` window listeners leak on a cancelled drag**: `pointermove`/`pointerup` are
+  removed only inside `onUp` (`useBlockDrag.ts:68-70,81-82`); no `pointercancel`, no unmount
+  cleanup, so a touch interruption strands both listeners and a stuck `draggingId`.
+- **`useViewport` is not the singleton its docstring claims** (`useViewport.ts:22-27`): three
+  media-query listeners per calling component. `createSharedComposable` shape.
+- **Missing single-flight on panel loads** (two concurrent openers fire two requests):
+  `observability.load`/`loadContext`/`loadSearchQueries`/the tool-call loads,
+  `kaizen.loadForExecution`, `consensus.load`, `docInterview.load`. The
+  requirements/clarity/brainstorm per-key in-flight-promise maps (`requirements.ts:132-150`) are
+  the model; `docInterview.load` also lacks a result-ordering ticket.
+
 ## Conventions & gotchas (carry between slices)
 
 - **Every persistence change lands on BOTH runtimes in the same PR** (D1 migration ⇄
@@ -744,7 +932,14 @@ loop of point-reads over a list.
   retention sweeps (indexed, projected), per-poll writes (CAS-guarded, idle-skipping),
   poll payloads (lean, no transcript), local transport (no per-poll shell-outs), LLM proxy
   telemetry (deferred via `waitUntil`, delta-stored prompts), prompt/fragment composition
-  (cached at the expensive layer). Don't re-churn these.
+  (cached at the expensive layer). Don't re-churn these. The 2026-08-14 frontend re-audit
+  adds: the capabilities-manifest signature (`modular/capabilities.ts`, a canonicalize +
+  stringify per refresh) is a documented, deliberate tradeoff buying skip-reprojection and
+  its docstring explains why a field list is the wrong fix; `appendCall`'s opened-panel
+  gate is correct (the cap in item 27 is about AFTER opening); the lane pure functions
+  (`laneSort.ts`/`swimlanes.ts`) are linear or n·log n with a stable final tiebreak;
+  `useTaskExpansion` prunes its height map every pass; `board.getBlock`/`unmetDeps`/
+  `epicMembers` all ride the single-pass index. Don't re-churn these either.
 - **Measure before/after where cheap**: for engine slices, the per-tick query count in the
   conformance/durable-execution tests is the honest signal; for frontend slices, the e2e
   suite plus a `--repeat-each` run under load.
@@ -763,10 +958,13 @@ loop of point-reads over a list.
 7. Item 12 (GitHub sync parallelism) + 14 (fan-out publisher).
    7b. Item 24 (dispatch GH client single-flight + throttle): natural pairing with item 2's
    `branchHeadSha` cache; both runtimes + conformance.
-8. Frontend: 6 first (targeted board upserts, with store unit tests), then 5 (snapshot
-   projection, coupled contracts change), then 10/11, then 20.
-9. Items 19, 21 as small both-runtime persistence PRs.
-10. Items 22, 23 last; each needs a short design note before code.
+8. Frontend, re-sequenced 2026-08-14 (6 and 11 have landed): 25 first (the per-block
+   execution index plus the card map reads: small, pure SPA, and the biggest per-event
+   win), then 10 (lane-assembly breadth; multiplies with 25), then 5 (now three parts:
+   by-id endpoint, store carry-forward, projection with `hasOutput`), then 26/27/28 in
+   any order, then 20/29/30.
+9. Items 19, 21 as small both-runtime persistence PRs (19 pairs naturally with 5).
+10. Items 22, 24 last among backend; each needs a short design note before code.
 
 ## Out of scope
 
