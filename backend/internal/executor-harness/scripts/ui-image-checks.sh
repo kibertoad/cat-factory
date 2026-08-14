@@ -76,7 +76,23 @@ check "serve answered on 127.0.0.1:4173"
 # page. A `playwright --version` alone passes on an image whose browser download never happened,
 # which is exactly the state a broken install layer leaves behind.
 cat > /tmp/drive.mjs <<'MJS'
-import { chromium } from 'playwright'
+import { createRequire } from 'node:module'
+
+// `playwright` is installed GLOBALLY in the image, so it is not resolvable from this script's
+// directory. It is reached through the CommonJS global paths, which is what NODE_PATH feeds, and
+// that has to be a `require`: ESM resolution ignores NODE_PATH entirely, so a plain
+// `import 'playwright'` fails with ERR_MODULE_NOT_FOUND however NODE_PATH is set.
+const require = createRequire(import.meta.url)
+let chromium
+try {
+  ;({ chromium } = require('playwright'))
+} catch (cause) {
+  throw new Error(
+    `Could not load playwright from the image's global modules (NODE_PATH=${process.env.NODE_PATH}). ` +
+      `The install layer in Dockerfile.ui did not land it.`,
+    { cause },
+  )
+}
 
 const browser = await chromium.launch()
 try {
@@ -97,8 +113,8 @@ try {
   await browser.close()
 }
 MJS
-# `playwright` is installed globally in the image, so resolve it from the global root rather than
-# a node_modules the checkout would have supplied.
+# The global module root, which is where the image's `npm install -g playwright` put it; a real
+# job resolves it the same way, since a frontend checkout does not ship the harness's browser.
 NODE_PATH="$(npm root -g)" node /tmp/drive.mjs || fail "Playwright could not drive Chromium against the served page"
 
 echo "== WireMock (the mocked upstreams) =="
