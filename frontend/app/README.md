@@ -287,6 +287,13 @@ The seams, and what a new feature should use rather than reading the store ad ho
   each one's reason, so adding a fourth forces the claim to be written down. The `fullSurface` gate
   rides the same reactive `NavGates` service as `advancedMode`, so a role switch re-gates all three
   shells with no reload; all three axes (role, tier, `gate`) must pass.
+- **A deployment's own external tool** declares the same flag, and defaults the same way. The three
+  axes live on one `NavGatedContribution` that both `NavContribution` and `ExternalToolContribution`
+  extend, and `navSlotFilter` runs the one `navItemVisible` over both slots, because a tool is
+  projected onto a nav contribution downstream. A tool filtered by any other expression is a
+  registered application that outlives the narrowing every destination beside it obeys, which is how
+  the role axis first shipped; `nav-contributions.spec.ts` pins the two slots' verdicts in lockstep
+  across the axes rather than trusting the two spellings to stay equal.
 - **A surface that narrows inline** reads `useUiRoleStore().fullSurface` (the frame header's bug-hunt
   button, the palette's per-connection integration commands). Same rule as the tier: what remains
   must be exactly what the full surface would have shown, only less of it.

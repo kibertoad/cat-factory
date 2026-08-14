@@ -1,5 +1,4 @@
 import { defineModule } from '@modular-vue/core'
-import { filterExternalTools } from './external-tools'
 import type { AppSlots } from './slots'
 
 // Re-exported for the slice-1 importers that reach `AppSlots` through this
@@ -223,21 +222,18 @@ export const NAV_ACTIONS = [
 
 export type NavActionId = (typeof NAV_ACTIONS)[number]
 
-/** One destination, declared once and rendered per surface. */
-export interface NavContribution {
-  id: string
-  /** Default (sidebar) label i18n key. */
-  labelKey: string
-  /**
-   * Literal label, winning over {@link labelKey} when present. For a contribution whose copy is
-   * DATA rather than catalog text — an external tool's registered title, the same class as a
-   * custom agent kind's `presentation.label`. A first-party destination always uses `labelKey`.
-   */
-  label?: string
-  /** Literal one-line description, rendered as the item's tooltip. Data, like {@link label}. */
-  description?: string
-  icon: string
-  surfaces: readonly NavSurface[]
+/**
+ * The axes a rendered destination answers to, and the whole of what {@link navItemVisible}
+ * reads. Extended by {@link NavContribution} and by an external tool
+ * (`modular/external-tools.ts`), which is projected onto a nav item downstream.
+ *
+ * Shared as an interface rather than restated per contribution kind, so the two cannot declare
+ * different axes. That is not hypothetical: the role axis first landed on `NavContribution`
+ * alone, and external tools went on rendering for a role every first-party destination was
+ * hidden from. A fourth axis added here is one a tool must answer too, and the typecheck plus
+ * the single predicate are what say so.
+ */
+export interface NavGatedContribution {
   /** Reactive predicate over {@link NavGates}; absent = always visible. */
   gate?: (g: NavGates) => boolean
   /**
@@ -256,8 +252,28 @@ export interface NavContribution {
    * the cost of getting it wrong is one flag, where the other default is a persona that stopped
    * being simple without anyone deciding to un-simplify it. Independent of {@link advanced} and
    * of {@link gate}: all three must pass.
+   *
+   * A deployment's own external tool declares it the same way, and defaults the same way: a
+   * registered application is platform surface until somebody says it is intake surface.
    */
   intake?: boolean
+}
+
+/** One destination, declared once and rendered per surface. */
+export interface NavContribution extends NavGatedContribution {
+  id: string
+  /** Default (sidebar) label i18n key. */
+  labelKey: string
+  /**
+   * Literal label, winning over {@link labelKey} when present. For a contribution whose copy is
+   * DATA rather than catalog text — an external tool's registered title, the same class as a
+   * custom agent kind's `presentation.label`. A first-party destination always uses `labelKey`.
+   */
+  label?: string
+  /** Literal one-line description, rendered as the item's tooltip. Data, like {@link label}. */
+  description?: string
+  icon: string
+  surfaces: readonly NavSurface[]
   /**
    * First-party action id, resolved to a `run()` against the host `ui` store by
    * `useNavContributions`. A consumer module that has its own stores instead
@@ -699,15 +715,15 @@ export const navigationModule = defineModule({
  * a narrowed role, and every item still answers to its own `gate`. Order doesn't matter (it's a
  * conjunction) but the two flag reads come first, since they're the cheaper ones.
  *
- * Named rather than inlined in {@link navSlotFilter} because a second reader has to agree with
+ * Named rather than inlined in {@link navSlotFilter} because other readers have to agree with
  * it exactly: a tutorial tour whose step CLICKS a nav entry declares the requirement that
  * renders it, and `tutorial-tours.spec.ts` pairs the two through this function. Spelling the
- * conjunction out there instead would be a copy that keeps passing while this one changes —
+ * conjunction out anywhere else would be a copy that keeps passing while this one changes —
  * and the drift it would miss (an entry gaining a gate clause, or being marked `advanced` and
  * so leaving the DEFAULT interface tier) is precisely a tour offered to a user who then finds
  * no such control.
  */
-export function navItemVisible(item: NavContribution, gates: NavGates): boolean {
+export function navItemVisible(item: NavGatedContribution, gates: NavGates): boolean {
   return (
     (item.advanced ? gates.advancedMode : true) &&
     (gates.fullSurface || item.intake === true) &&
@@ -740,10 +756,12 @@ export function navSlotFilter(slots: AppSlots, deps: { gates?: NavGates }): AppS
     // richer value than a thinned list, so tour resolution lives in `resolveTourCatalogue`
     // (pure, gates-nullable) and runs once in `useTutorialTours`, whose `tours` is the same
     // gated set the launch prompt and the overlay always saw.
-    // External tools gate on the same two axes as `nav` — they become nav items downstream
-    // (`useNavContributions` projects them), so gating them anywhere else would let a tool the
-    // caller can't use reach the palette while its sidebar twin was correctly hidden.
-    externalTools: filterExternalTools(externalTools, gates),
+    // A deployment's external tools run through the SAME predicate as `nav`, on the same line
+    // shape, because they become nav items downstream (`useNavContributions` projects them):
+    // gating them by any other expression lets a tool reach the palette while its first-party
+    // neighbours are correctly hidden. That is exactly what a separate `filterExternalTools`
+    // spelling its own conjunction did when the role axis landed.
+    externalTools: gates ? externalTools.filter((t) => navItemVisible(t, gates)) : externalTools,
   }
 }
 

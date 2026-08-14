@@ -37,7 +37,13 @@ export const useUiModeStore = defineStore(
     // whatever the env pin or the stored choice says, so every `isAdvanced` reader in the app
     // agrees with the narrowed nav without restating the role.
     const uiRole = useUiRoleStore()
-    const mode = computed<UiMode>(() => resolveUiMode(envMode, storedMode.value, uiRole.surface))
+    // The restored value goes through `parseUiMode` for the same reason the env string does, and
+    // for the reason `railCollapsed` is read defensively just below: `storedMode`'s type says
+    // what `setMode` writes, not what the persistence plugin rehydrated. An unrecognised tier
+    // would otherwise pass straight through `resolveUiMode` and render as neither tier.
+    const mode = computed<UiMode>(() =>
+      resolveUiMode(envMode, parseUiMode(storedMode.value), uiRole.surface),
+    )
     const isAdvanced = computed(() => mode.value === 'advanced')
     /** Pinned by the deployment: the switcher is read-only, since a write would be ignored. */
     const envPinned = computed(() => envMode !== null)

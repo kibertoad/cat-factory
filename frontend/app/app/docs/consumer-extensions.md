@@ -61,18 +61,29 @@ export default defineNuxtPlugin(() => {
 | Run-detail windows                  | `resultViews`             | `{ id: '<ns>:<name>', component }`                                                                        | `StepResultViewHost` via `dispatchStepView`                               |
 | Agent kinds (palette data)          | `agentKinds`              | `{ kind, container, presentation: { label, icon, color, description, category?, resultView? } }`          | agents store merge → `agentKindMeta`                                      |
 | Custom task types                   | `taskTypes`               | `{ taskType: '<ns>:<name>', presentation, fields?, defaultPipelineId?, defaultFragmentIds?, formPanel? }` | `AddTaskModal` picker/fields + `TaskCard` badge (via `taskTypeMeta`)      |
-| Sidebar / command-palette / toolbar | `nav`                     | `{ id, labelKey, icon, surfaces, gate?, advanced?, run, sidebar?, command?, toolbar? }`                   | the three shells via `useNavContributions`                                |
+| Sidebar / command-palette / toolbar | `nav`                     | `{ id, labelKey, icon, surfaces, gate?, advanced?, intake?, run, sidebar?, command?, toolbar? }`          | the three shells via `useNavContributions`                                |
 | Inspector body panels               | `inspectorPanels`         | `{ id, component, when(block), order }` (`PanelEntry<Block>`)                                             | `<PanelsOutlet>` in `InspectorPanel`                                      |
 | Top-level overlays                  | `appOverlays`             | `{ id: '<ns>:<name>', component }`                                                                        | `<AppOverlayHost>` via `useAppOverlays().open(id)`                        |
-| External tools                      | `externalTools`           | `{ id, title, icon, url, description?, requiredMetadata?, gate?, advanced?, order? }`                     | the "External tools" sidebar section + palette, via `useNavContributions` |
+| External tools                      | `externalTools`           | `{ id, title, icon, url, description?, requiredMetadata?, gate?, advanced?, intake?, order? }`            | the "External tools" sidebar section + palette, via `useNavContributions` |
 | Custom workspace metadata fields    | `workspaceMetadataFields` | `{ key, label, description?, placeholder?, type?, options?, order? }`                                     | the Metadata tab of Workspace settings                                    |
 | Multi-step wizards                  | (journeys)                | `registerJourney` + step modules                                                                          | `<JourneyHost>` / `<JourneyOutlet>`                                       |
 | Locale strings                      | (i18n)                    | `i18n/locales/*.json` in the deployment                                                                   | `@nuxtjs/i18n` layer deep-merge                                           |
 
-A `nav` entry may also declare `advanced: true`, which hides it in **basic** interface mode
-(the shipped default) exactly as it does for the first-party destinations: see
+Beyond `gate`, a destination answers to two narrowing axes, both applied to your entries exactly
+as they are to the first-party ones. All three are independent, and all three must pass.
+
+`advanced: true` hides an entry in **basic** interface mode, the shipped default: see
 [the layer README](../../README.md#interface-modes-basic--advanced). Use it for a power-user
-destination; the flag is independent of `gate`, so both must pass for the item to render.
+destination.
+
+`intake: true` keeps an entry for a role narrowed to the intake surface, today `designer`: see
+[Roles](../../README.md#roles-engineer--product-manager--designer). This one is opt-IN, so an
+entry that says nothing is offered to the full-surface roles only. Declare it where your
+destination is somewhere work comes IN from rather than somewhere the platform is configured; a
+design-handoff console qualifies, an admin panel does not.
+
+Both flags live on `NavGatedContribution`, which an external tool extends too, so a tool answers
+the same axes as a `nav` entry and there is one predicate (`navItemVisible`) deciding both.
 
 ### Run-detail windows (`resultViews` + `agentKinds`)
 
@@ -153,7 +164,10 @@ workspaceMetadataFields: [{ key: 'gameId', label: 'Game id', placeholder: 'zork'
   reason (`resolver-failed`) with the cause logged to the console: the sidebar, the palette and
   the toolbar all render from one catalog, so an uncaught throw would otherwise blank all three.
   Do not rely on it: `requiredMetadata` is how you say a field must be there.
-- **`gate` and `advanced`** work exactly as on a `nav` entry; both must pass.
+- **`gate`, `advanced` and `intake`** work exactly as on a `nav` entry, and for the same reason:
+  a tool is projected onto a nav contribution and filtered by the same predicate. All must pass,
+  and `intake` defaults the same way, so a registered application is dropped for a narrowed role
+  until you say it belongs there.
 
 **The metadata half** is a deployment-declared FIELD list (here) whose VALUES are per workspace,
 typed in under _Workspace settings → Metadata_ and persisted on the workspace settings row. The

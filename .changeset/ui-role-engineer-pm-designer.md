@@ -26,3 +26,15 @@ deployment env pin**, unlike `NUXT_PUBLIC_UI_MODE`: which tier a fleet shows is 
 but which job the person at the keyboard does is not something a build can know. It is not
 authorization either, and never becomes one: workspace RBAC still gates everything the surface offers,
 which is why the switcher out of a narrowed role is reachable from inside it.
+
+The axes a destination answers to (`gate`, `advanced`, `intake`) now live on one
+`NavGatedContribution` that a deployment's own external tools extend as well, and `navSlotFilter`
+runs the single `navItemVisible` over both slots. A registered external tool therefore obeys the
+role narrowing like every other destination, and can opt into the intake surface with `intake: true`
+where it is somewhere work comes in from. Deployments that register external tools should expect
+them to disappear for a narrowed role until they declare that flag.
+
+Both browser-persisted view preferences (`uiRole`, `uiMode`) also coerce what they restore rather
+than trusting it. A stored value is a JSON blob an older build wrote or somebody hand-edited, so an
+unrecognised one falls back to the default and, for the role, leaves the first-run question
+unanswered so it can be asked again.

@@ -38,17 +38,33 @@ describe('useUiRoleStore role resolution', () => {
     expect(role.storedRole).toBe('designer')
   })
 
-  it('falls back to the default when the restored value is not a known role', () => {
-    // A persisted blob written by an older build (or hand-edited) is untrusted input: an
-    // unrecognised role must resolve to the full surface, never to a narrowed one.
+  it('coerces an unknown persisted value on the way IN, not at the call sites', () => {
+    // What the persistence plugin restores is a JSON blob an older build wrote or somebody hand
+    // edited, so an unknown string arrives typed as a `UiRole` and nothing downstream is
+    // forgiving: `ROLE_SURFACES[role]` is `undefined` (the nav narrows to intake without a
+    // word) and `ROLE_PRESENTATION[role].labelKey` throws in the switcher. Writing the raw
+    // value onto `storedRole` is exactly what hydration does, which is why this drives the
+    // STORE rather than calling `parseUiRole` by hand: a guard nothing calls looks identical to
+    // a guard that works.
+    const role = useUiRoleStore()
+    role.storedRole = 'architect' as UiRole
+
+    expect(role.role).toBe('engineer')
+    expect(role.surface).toBe('full')
+    expect(role.fullSurface).toBe(true)
+    // An unrecognised value is not an ANSWER, so the first-run prompt asks again and the person
+    // can replace it. Reading `storedRole !== null` instead pins the browser to the default with
+    // the one question that would fix it already marked settled.
+    expect(role.chosen).toBe(false)
+    // The resolved role indexes both catalogs, which is the property the switcher relies on.
+    expect(ROLE_PRESENTATION[role.role].labelKey).toBeTruthy()
+    expect(ROLE_SURFACES[role.role]).toBe('full')
+  })
+
+  it('parses a raw value the way the store consumes it', () => {
     expect(parseUiRole('lead-designer')).toBeNull()
     expect(parseUiRole(undefined)).toBeNull()
     expect(parseUiRole(' Designer ')).toBe('designer')
-
-    const role = useUiRoleStore()
-    role.storedRole = parseUiRole('architect')
-    expect(role.role).toBe('engineer')
-    expect(role.fullSurface).toBe(true)
   })
 })
 

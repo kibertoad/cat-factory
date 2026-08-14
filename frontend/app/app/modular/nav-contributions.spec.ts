@@ -10,7 +10,8 @@ import {
   SIDEBAR_GROUP_ORDER,
   sortToolbar,
 } from './nav-contributions'
-import type { AppSlots, NavGates } from './nav-contributions'
+import type { AppSlots, NavGatedContribution, NavGates } from './nav-contributions'
+import type { ExternalToolContribution } from './external-tools'
 
 /** Prove every referenced key resolves in the layer's base catalog (see `test/i18nKeys`). */
 const hasKey = hasI18nKey
@@ -299,26 +300,107 @@ describe('navSlotFilter', () => {
 })
 
 describe('navSlotFilter external tools', () => {
-  const tools = [
-    { id: 'acme:a', title: 'A', icon: 'i-lucide-link', url: 'https://a.dev' },
-    {
-      id: 'acme:b',
-      title: 'B',
-      icon: 'i-lucide-link',
-      url: 'https://b.dev',
-      gate: (g: NavGates) => g.canManageIntegrations,
-    },
+  const tool = (id: string, axes: NavGatedContribution = {}): ExternalToolContribution => ({
+    id,
+    title: id,
+    icon: 'i-lucide-link',
+    url: `https://${id}.dev`,
+    ...axes,
+  })
+  const tools: ExternalToolContribution[] = [
+    tool('acme:open'),
+    tool('acme:permissioned', { gate: (g: NavGates) => g.canManageIntegrations }),
+    tool('acme:power-user', { advanced: true }),
+    tool('acme:intake', { intake: true }),
   ]
+  const withTools = (): AppSlots => ({ ...slots(), externalTools: [...tools] })
   const toolIds = (s: unknown) => (s as AppSlots).externalTools.map((t) => t.id)
 
   it('gates registered tools in the SAME filter as the nav catalog', () => {
     // They become nav items downstream (`useNavContributions` projects them), so gating them
     // anywhere else would let a tool the caller can't use reach the palette while its sidebar
     // twin was correctly hidden.
-    const withTools = (): AppSlots => ({ ...slots(), externalTools: [...tools] })
-    expect(toolIds(navSlotFilter(withTools(), { gates: ALL_GATES }))).toEqual(['acme:a', 'acme:b'])
-    expect(toolIds(navSlotFilter(withTools(), { gates: NO_GATES }))).toEqual(['acme:a'])
-    expect(toolIds(navSlotFilter(withTools(), {}))).toEqual(['acme:a', 'acme:b'])
+    expect(toolIds(navSlotFilter(withTools(), { gates: ALL_GATES }))).toEqual(
+      tools.map((t) => t.id),
+    )
+    expect(toolIds(navSlotFilter(withTools(), { gates: NO_GATES }))).toEqual([
+      'acme:open',
+      'acme:power-user',
+      'acme:intake',
+    ])
+    // No gates service wired (tests, a bare install): everything passes, matching the dev-open
+    // "absent access allows all" parity the nav half keeps.
+    expect(toolIds(navSlotFilter(withTools(), {}))).toEqual(tools.map((t) => t.id))
+  })
+
+  it('drops a tool that has not opted into the intake surface', () => {
+    // The axis a separate external-tools filter used to miss entirely: a `designer` kept the
+    // deployment's whole External tools section while every first-party destination around it
+    // was hidden, which inverts the opt-in default rather than merely leaking one entry.
+    const narrowed: NavGates = { ...ALL_GATES, fullSurface: false }
+    expect(toolIds(navSlotFilter(withTools(), { gates: narrowed }))).toEqual(['acme:intake'])
+  })
+
+  it('keeps a tool and a nav entry declaring the same axes in lockstep', () => {
+    // The structural half, and the one a per-slot case cannot make: both slots run the same
+    // predicate today, so assert the PROPERTY that makes that worth keeping. A future axis
+    // wired into one slot and not the other fails here, whatever the axis turns out to be.
+    const AXES: NavGatedContribution[] = [
+      {},
+      { advanced: true },
+      { intake: true },
+      { gate: (g: NavGates) => g.canManageIntegrations },
+      { advanced: true, intake: true },
+      { advanced: true, gate: (g: NavGates) => g.canManageIntegrations },
+      { intake: true, gate: (g: NavGates) => g.canManageIntegrations },
+      { advanced: true, intake: true, gate: (g: NavGates) => g.canManageIntegrations },
+    ]
+
+    for (const [index, axes] of AXES.entries()) {
+      const id = `twin-${index}`
+      const paired = (gates: NavGates) => {
+        const filtered = navSlotFilter(
+          {
+            ...slots(),
+            nav: [
+              {
+                id,
+                labelKey: 'nav.kaizen',
+                icon: 'i-lucide-link',
+                surfaces: ['command'] as const,
+                ...axes,
+              },
+            ],
+            externalTools: [tool(id, axes)],
+          },
+          { gates },
+        ) as AppSlots
+        return {
+          nav: filtered.nav.some((i) => i.id === id),
+          tool: filtered.externalTools.some((t) => t.id === id),
+        }
+      }
+
+      // Every setting of the three gate fields these axes read; the rest of `NavGates` is
+      // invariant here, so varying it would only restate the same eight verdicts.
+      for (const advancedMode of [true, false]) {
+        for (const fullSurface of [true, false]) {
+          for (const canManageIntegrations of [true, false]) {
+            const gates: NavGates = {
+              ...ALL_GATES,
+              advancedMode,
+              fullSurface,
+              canManageIntegrations,
+            }
+            const verdict = paired(gates)
+            expect(
+              verdict.tool,
+              `${JSON.stringify(axes)} under ${JSON.stringify({ advancedMode, fullSurface, canManageIntegrations })}`,
+            ).toBe(verdict.nav)
+          }
+        }
+      }
+    }
   })
 })
 
