@@ -837,6 +837,7 @@ export {
   isCloudMetadataHost,
   isBlockedPrivateHost,
   isLoopbackHost,
+  isLocalMachineHost,
 } from './shared/ip-host.logic.js'
 export {
   isSecretShapedFilename,

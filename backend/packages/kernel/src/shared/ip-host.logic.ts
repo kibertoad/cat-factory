@@ -111,6 +111,45 @@ export function isLoopbackHost(hostname: string): boolean {
 }
 
 /**
+ * Hostnames that reach the machine this process runs on without being loopback ADDRESSES: the
+ * wildcard bind addresses a tool writes into a config when it listened on every interface, and
+ * the aliases a container runtime publishes for its host.
+ */
+const LOCAL_MACHINE_ALIASES = new Set([
+  // What k3d writes into the kubeconfig by default, and what Docker publishes for a port bound
+  // to every interface. It is not dialable as written, and it names this machine.
+  '0.0.0.0',
+  '::',
+  // Docker Desktop / Rancher Desktop publish these inside containers for the host; the second is
+  // the alias its bundled Kubernetes uses in the kubeconfig it installs.
+  'host.docker.internal',
+  'kubernetes.docker.internal',
+  'gateway.docker.internal',
+])
+
+/**
+ * Whether a hostname names THIS machine, over any of the spellings a local toolchain produces.
+ *
+ * Wider than {@link isLoopbackHost} and for a different question. That one asks whether the
+ * ADDRESS is loopback, which is what a URL policy needs. This asks whether the thing on the
+ * other end is the developer's own machine, which is also true of the wildcard bind address a
+ * local cluster writes into its kubeconfig and of the host aliases a container runtime
+ * publishes. A caller relaxing a rule for a developer's own throwaway cluster wants this one:
+ * gating on the narrow answer silently excludes the default k3d and Docker Desktop setups, which
+ * is most of the population the relaxation exists for.
+ *
+ * Still narrower than {@link isBlockedPrivateHost}: a shared staging cluster on 10.x is somebody
+ * else's machine however private its address, and RFC1918 stays out.
+ */
+export function isLocalMachineHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  if (isLoopbackHost(host)) return true
+  if (LOCAL_MACHINE_ALIASES.has(host)) return true
+  // RFC 6761 reserves the whole `.localhost` tree to loopback.
+  return host.endsWith('.localhost')
+}
+
+/**
  * Reject hostnames that point at the local network rather than a public host: blocks
  * loopback, link-local (incl. cloud metadata), `.localhost`/`.internal`/`.local`, the
  * RFC1918 private ranges, and the obfuscated numeric encodings. The STRICT policy

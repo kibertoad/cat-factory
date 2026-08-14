@@ -622,16 +622,38 @@ describe('KubernetesEnvironmentProvider registry auth', () => {
     expect(lastRegistryWrite).toBeLessThan(deploymentApply)
   })
 
-  it('leaves a remote cluster alone, credential or not', async () => {
+  it('leaves a remote cluster alone, and says so rather than passing over in silence', async () => {
     // The gate that keeps this a local-dev convenience: pushing a git credential into every
     // per-PR namespace is right for a cluster that gets thrown away and is not a decision to
-    // make implicitly against a shared one.
+    // make implicitly against a shared one. It still earns a log line, because a silent skip and
+    // a wired credential look identical from an ImagePullBackOff.
     const calls = stubFetch(() => ({ status: 200 }))
+    const steps: RecipeStepLog[] = []
     await provisionLocal({
       // The shared-cluster shape: `config` reaches its apiserver at cluster.test, not loopback.
       config: { ...config, imageTemplate: 'ghcr.io/{{repoOwner}}/web:pr-{{pullNumber}}' },
+      recordStep: async (log) => void steps.push(log),
     })
     expect(registryWrites(calls)).toEqual([])
+    expect(steps).toHaveLength(1)
+    expect(steps[0]!.detail).toContain('cluster.test')
+    expect(steps[0]!.detail).toContain('not on this machine')
+  })
+
+  it('does not mint a git token for a provision no image could use one for', async () => {
+    // The port documents the clone thunk as LAZY so only a provider that needs a checkout pays
+    // the mint. Resolving it before knowing whether any image names a registry made every local
+    // provision mint one, including the ones that then wire nothing.
+    let mints = 0
+    stubFetch(() => ({ status: 200 }))
+    await provisionLocal({
+      config: { ...localConfig, imageTemplate: 'postgres:16' },
+      clone: async () => {
+        mints += 1
+        return clone
+      },
+    })
+    expect(mints).toBe(0)
   })
 
   it('writes nothing, and says so, when no credential covers the image', async () => {
@@ -697,34 +719,127 @@ describe('KubernetesEnvironmentProvider registry auth', () => {
     expect(accounts).toEqual(['default', 'web-sa'])
   })
 
-  it('prepares the namespace and its credential before handing over a container render', async () => {
-    // Both render paths must behave the same way about a private registry. The container cannot
-    // do this for itself: it holds no platform credential to create a Secret with.
+  it('folds the secret into an account the manifests DECLARE, rather than racing their apply', async () => {
+    // `ServiceAccount.imagePullSecrets` is an ATOMIC list: server-side apply gives the whole list
+    // to one field manager, so a separate-manager patch beside the manifests' own apply is not a
+    // merge, it is a race that `force=true` settles for whoever writes last. The account the
+    // manifests declare therefore carries the entry inside THEIR body, applied once, and this
+    // module patches only what nothing else writes.
     const calls = stubFetch(() => ({ status: 200 }))
-    const steps: RecipeStepLog[] = []
-    const job = await new KubernetesEnvironmentProvider().asyncProvision!.buildProvisionJob({
+    await new KubernetesEnvironmentProvider().provision({
       manifest: kubernetesConfigToManifest({
         ...localConfig,
-        manifestSource: { type: 'colocated', path: 'k8s/overlays/preview', renderer: 'kustomize' },
-        images: [{ name: 'app', newNameTemplate: 'ghcr.io/acme/web' }],
-      } as KubernetesProvisionConfig),
+        imageTemplate: 'ghcr.io/acme/web:pr-{{pullNumber}}',
+      }),
+      inputs: localInputs,
+      resolveSecret,
+      runRepo: runRepo({
+        'k8s/app.yaml':
+          `apiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: web-sa\n` +
+          `imagePullSecrets:\n  - name: vendor-creds\n---` +
+          DEPLOY_YAML.replace('    spec:\n', '    spec:\n      serviceAccountName: web-sa\n'),
+      }),
+      clone: async () => clone,
+    })
+
+    // Nothing under this module's manager touches the declared account: that write is the one
+    // the manifests' later apply would have erased.
+    const patched = registryWrites(calls)
+      .filter((c) => c.url.includes('/serviceaccounts/'))
+      .map((c) => c.url.split('/serviceaccounts/')[1]!.split('?')[0])
+    expect(patched).toEqual(['default'])
+
+    // The manifests' own apply carries the union, with the credential the repo already declared
+    // kept: replacing it would trade one broken pull for another.
+    const declaredApply = calls.find(
+      (c) =>
+        c.url.includes('/serviceaccounts/web-sa') && c.url.includes('fieldManager=cat-factory&'),
+    )
+    expect(JSON.parse(declaredApply!.body!).imagePullSecrets).toEqual([
+      { name: 'vendor-creds' },
+      { name: 'cat-factory-registry-auth' },
+    ])
+  })
+
+  /** A container-render provision, whose manifests the backend never sees. */
+  function buildContainerJob(cfg: Partial<KubernetesProvisionConfig>, steps: RecipeStepLog[]) {
+    const base: KubernetesProvisionConfig = {
+      ...localConfig,
+      manifestSource: { type: 'colocated', path: 'k8s/overlays/preview', renderer: 'kustomize' },
+      images: [{ name: 'app', newNameTemplate: 'ghcr.io/acme/web' }],
+      ...cfg,
+    } as KubernetesProvisionConfig
+    // An overlay that keeps its own namespace is spelled by the ABSENCE of the template, so the
+    // fixture's default has to come off rather than be overridden with undefined.
+    if (cfg.namespaceTemplate === undefined)
+      delete (base as { namespaceTemplate?: string }).namespaceTemplate
+    return new KubernetesEnvironmentProvider().asyncProvision!.buildProvisionJob({
+      manifest: kubernetesConfigToManifest(base),
       inputs: localInputs,
       resolveSecret,
       deploy: { ref: { runId: 'run-1', jobId: 'job-1' }, clone },
       clone: async () => clone,
       recordStep: async (log) => void steps.push(log),
     })
+  }
+
+  it('prepares the namespace and its credential before handing over a container render', async () => {
+    // Both render paths must behave the same way about a private registry. The container cannot
+    // do this for itself: it holds no platform credential to create a Secret with. The namespace
+    // template is what makes the destination knowable before dispatch.
+    const calls = stubFetch(() => ({ status: 200 }))
+    const steps: RecipeStepLog[] = []
+    const job = await buildContainerJob({ namespaceTemplate: 'preview-{{pullNumber}}' }, steps)
 
     expect(job).not.toBeNull()
     expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/api/v1/namespaces'))).toBe(
       true,
     )
     expect(registryWrites(calls).map((c) => c.url.split('?')[0])).toEqual([
-      'https://127.0.0.1:6443/api/v1/namespaces/cf-env-42/secrets/cat-factory-registry-auth',
-      'https://127.0.0.1:6443/api/v1/namespaces/cf-env-42/serviceaccounts/default',
+      'https://127.0.0.1:6443/api/v1/namespaces/preview-42/secrets/cat-factory-registry-auth',
+      'https://127.0.0.1:6443/api/v1/namespaces/preview-42/serviceaccounts/default',
     ])
     // The honest limit of this path, stated where an operator reads it: the manifests render in
     // the container, so the accounts they declare cannot be enumerated here.
-    expect(steps[0]!.detail).toContain('the default one only')
+    expect(steps[0]!.detail).toContain('default service account only')
+  })
+
+  it('writes nothing when the overlay, not the backend, chooses the namespace', async () => {
+    // A kustomize overlay with no namespace template keeps its OWN namespace, which the harness
+    // reads back from the built manifests inside the container. Pre-creating the backend's guess
+    // would leave an empty namespace nothing ever tears down, and put the credential where no
+    // pod reads it, under a log line reporting success.
+    const calls = stubFetch(() => ({ status: 200 }))
+    const steps: RecipeStepLog[] = []
+    const job = await buildContainerJob({}, steps)
+
+    expect(job).not.toBeNull()
+    expect(calls).toEqual([])
+    expect(steps).toHaveLength(1)
+    expect(steps[0]!.detail).toContain('declares its own namespace')
+  })
+
+  it('blames the remote cluster, not the overlay, when both would skip', async () => {
+    // Ordering between the two skips: on a shared cluster the namespace question never arises,
+    // so naming the overlay would send a reader to change a configuration detail that would not
+    // have made any difference.
+    stubFetch(() => ({ status: 200 }))
+    const steps: RecipeStepLog[] = []
+    await buildContainerJob({ apiServerUrl: 'https://cluster.test:6443' }, steps)
+    expect(steps[0]!.detail).toContain('not on this machine')
+  })
+
+  it('hands the render over even when the apiserver refuses the namespace', async () => {
+    // The regression this guards: creating the namespace early is a convenience for the
+    // credential, and the deploy container creates it itself either way. An apiserver blip, or a
+    // service account without namespace-create RBAC, must not fail a provision that succeeded
+    // before any of this existed.
+    stubFetch((c) => (c.url.endsWith('/api/v1/namespaces') ? { status: 403 } : { status: 200 }))
+    const steps: RecipeStepLog[] = []
+    const job = await buildContainerJob({ namespaceTemplate: 'preview-{{pullNumber}}' }, steps)
+
+    expect(job).not.toBeNull()
+    expect(steps[0]!.outcome).toBe('failure')
+    expect(steps[0]!.error).toContain('403')
   })
 })

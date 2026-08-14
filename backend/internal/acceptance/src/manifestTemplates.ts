@@ -94,9 +94,10 @@ export const MANIFEST_TEMPLATE_PREREQUISITES: readonly Prerequisite<ManifestTemp
         // reachable state of a correctly configured suite, and each presents as an environment
         // that provisions and never becomes ready, which reads like a cluster fault.
         //
-        // The PULL half used to be listed here as unfixable. It no longer is: against a loopback
-        // apiserver the platform now wires the workspace's own git credential into each per-PR
-        // namespace as a registry pull secret, so a private GHCR package pulls with no setup. What
+        // The PULL half used to be listed here as unfixable. It no longer is: against an
+        // apiserver on this machine the platform now wires the workspace's own git credential
+        // into each per-PR namespace as a registry pull secret, so a private GHCR package pulls
+        // with no setup. What
         // remains unreadable from here is whether THAT credential carries package-read scope,
         // because it is the deployment's sealed VCS connection and no `/api/v1` operation
         // publishes a token's scopes. A pass names it so the 403 has somewhere to point.

@@ -427,11 +427,16 @@ absorbs as an environment that took longer to become ready.
 
 **A private package needs no setup, and one thing about the token does.** A GHCR package published
 by Actions is private until somebody makes it public, and a kubelet with no credential answers 403
-for the whole life of the environment. The platform closes that itself: when the apiserver is a
-loopback address (which every local k3s, k3d, kind and Rancher Desktop cluster is), each per-PR
-namespace gets the workspace's own VCS credential written into it as a `dockerconfigjson` pull
-secret, attached to the service accounts the manifests run as, before the workloads are applied.
-Nothing is configured for this and nothing is asked of you.
+for the whole life of the environment. The platform closes that itself: when the apiserver names
+the machine the platform runs on (loopback, k3d's `0.0.0.0`, or a Docker Desktop host alias, which
+covers the default kubeconfig of every local k3s, k3d, kind and Rancher Desktop cluster), each
+per-PR namespace gets the workspace's own VCS credential written into it as a `dockerconfigjson`
+pull secret, attached to the service accounts the manifests run as, before the workloads are
+applied. Nothing is configured for this and nothing is asked of you.
+
+The credential is short-lived, about an hour, and nothing renews it. That covers the rollout a
+pass waits on. A pass that later restarts a workload long after provisioning gets a fresh
+`ImagePullBackOff` instead, and the fix is a re-provision rather than anything about the cluster.
 
 What it cannot supply is SCOPE. The credential is whatever token the workspace's VCS connection
 holds, so it must be allowed to read packages: a classic PAT needs `read:packages`, a fine-grained

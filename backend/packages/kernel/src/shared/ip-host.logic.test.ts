@@ -4,6 +4,8 @@ import {
   decodeIpv4,
   isBlockedPrivateHost,
   isCloudMetadataHost,
+  isLocalMachineHost,
+  isLoopbackHost,
   isPrivateV4,
   mappedV4,
 } from './ip-host.logic.js'
@@ -210,5 +212,59 @@ describe('isBlockedPrivateHost', () => {
     expect(isBlockedPrivateHost('2001:4860:4860::8888')).toBe(false)
     expect(isBlockedPrivateHost('example.com')).toBe(false)
     expect(isBlockedPrivateHost('sub.domain.example.co.uk')).toBe(false)
+  })
+})
+
+describe('isLocalMachineHost', () => {
+  // A different question from the two guards above, and the reason it is its own predicate: those
+  // ask what a URL may be allowed to REACH, this asks whether the thing on the other end is the
+  // developer's own machine. A caller relaxing a rule for a throwaway local cluster needs the
+  // second, and the first is not a usable stand-in in either direction.
+
+  it('accepts every loopback spelling', () => {
+    expect(isLocalMachineHost('localhost')).toBe(true)
+    expect(isLocalMachineHost('127.0.0.1')).toBe(true)
+    expect(isLocalMachineHost('127.1.2.3')).toBe(true)
+    expect(isLocalMachineHost('::1')).toBe(true)
+    expect(isLocalMachineHost('[::1]')).toBe(true)
+  })
+
+  it('accepts the wildcard bind address a local tool writes into its own config', () => {
+    // k3d's generated kubeconfig names the apiserver this way. It is not dialable as written and
+    // it unambiguously means this machine, so a gate reading it as remote excludes the default
+    // setup of the very toolchain it is meant to serve.
+    expect(isLocalMachineHost('0.0.0.0')).toBe(true)
+    expect(isLocalMachineHost('::')).toBe(true)
+  })
+
+  it('accepts the host aliases a container runtime publishes', () => {
+    expect(isLocalMachineHost('host.docker.internal')).toBe(true)
+    expect(isLocalMachineHost('kubernetes.docker.internal')).toBe(true)
+    expect(isLocalMachineHost('gateway.docker.internal')).toBe(true)
+    expect(isLocalMachineHost('anything.localhost')).toBe(true)
+  })
+
+  it('refuses a private address, which is somebody else’s machine', () => {
+    // The line that keeps this from widening a credential's reach: RFC1918 is private, and a
+    // shared staging cluster on 10.x is still not ours to write into.
+    expect(isLocalMachineHost('10.4.1.9')).toBe(false)
+    expect(isLocalMachineHost('192.168.1.20')).toBe(false)
+    expect(isLocalMachineHost('172.16.0.1')).toBe(false)
+    expect(isLocalMachineHost('169.254.169.254')).toBe(false)
+    expect(isLocalMachineHost('cluster.internal')).toBe(false)
+    expect(isLocalMachineHost('api.k8s.example.com')).toBe(false)
+  })
+
+  it('stays strictly between the two neighbouring predicates', () => {
+    // Derived rather than restated, so the relationship survives a change to any of the three:
+    // everything loopback is this machine, and everything this machine is private-or-blocked.
+    for (const host of ['localhost', '127.0.0.1', '::1', '0.0.0.0', 'host.docker.internal']) {
+      if (isLoopbackHost(host)) expect([host, isLocalMachineHost(host)]).toEqual([host, true])
+      expect([host, isBlockedPrivateHost(host)]).toEqual([host, true])
+    }
+    // ...and the containment is strict in both places: a private LAN address is blocked without
+    // being this machine, and the wildcard address is this machine without being loopback.
+    expect(isBlockedPrivateHost('10.4.1.9') && !isLocalMachineHost('10.4.1.9')).toBe(true)
+    expect(isLocalMachineHost('0.0.0.0') && !isLoopbackHost('0.0.0.0')).toBe(true)
   })
 })

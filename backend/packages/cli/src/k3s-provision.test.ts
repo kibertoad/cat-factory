@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { isLocalMachineHost } from '@cat-factory/kernel'
 import { type CliOptions } from './args.js'
 import {
   COMMAND_NOT_FOUND,
@@ -254,6 +255,20 @@ describe('pure planners', () => {
     expect(looksLocalCluster('prod', 'https://127.0.0.1:6443')).toBe(true)
     expect(looksLocalCluster(undefined, 'https://host.docker.internal:6443')).toBe(true)
     expect(looksLocalCluster('prod', 'https://api.k8s.example.com:6443')).toBe(false)
+  })
+
+  it('reads its apiserver hosts from the shared predicate, not a second list', () => {
+    // These were a hand-kept copy beside the environment provider's own copy, and the two
+    // drifted: the copy missing k3d's wildcard bind address silently withheld a behaviour from
+    // the default local setup. Both now compose kernel's `isLocalMachineHost`, so a host added
+    // there is local to both, and this pins the ones a local kubeconfig actually contains.
+    for (const host of ['0.0.0.0', '127.0.0.1', 'localhost', 'kubernetes.docker.internal']) {
+      expect([host, looksLocalCluster('prod', `https://${host}:6443`)]).toEqual([host, true])
+      expect([host, isLocalMachineHost(host)]).toEqual([host, true])
+    }
+    // And a shared cluster on a private address stays remote through both.
+    expect(looksLocalCluster('prod', 'https://10.4.1.9:6443')).toBe(false)
+    expect(isLocalMachineHost('10.4.1.9')).toBe(false)
   })
 })
 

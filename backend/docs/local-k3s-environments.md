@@ -33,9 +33,9 @@ third-party adapter uses (registered by reference via `createBackendRegistries()
   `{{namespace}}`/`{{image}}`/`{{repoOwner}}`/`{{repoName}}`, force each resource into the
   namespace, and apply via server-side apply (`PATCH …?fieldManager=cat-factory`). Returns
   `provisioning`; readiness converges through the status poll.
-- **Registry auth (loopback clusters only)**: between the parse and the apply, write the run's own
-  git credential into the namespace as a `dockerconfigjson` Secret and attach it to `default` plus
-  every ServiceAccount the manifests declare or name. Details + the gate below.
+- **Registry auth (clusters on this machine only)**: between the parse and the apply, write the
+  run's own git credential into the namespace as a `dockerconfigjson` Secret and attach it to
+  `default` plus every ServiceAccount the manifests declare or name. Details + the gate below.
 - **Status**: aggregate the namespace's Deployments (`availableReplicas` vs desired) and resolve
   the URL (ingress-template host, or read-back of an applied Service/Ingress LoadBalancer).
 - **Teardown**: delete the namespace (cascades), tolerant of a 404.
@@ -224,35 +224,63 @@ against the VCS host's own registry. So `ensureRegistryAuth` writes it into the 
 `dockerconfigjson` Secret and attaches it to the service accounts, and nothing is configured,
 asked for, or stored.
 
-Four decisions in it are worth keeping:
+Five decisions in it are worth keeping:
 
-- **The gate is the APISERVER being loopback, not the handler's declared engine.** A public-API
-  caller cannot choose between `local-k3s` and `remote-kubernetes` (`KUBERNETES_ENGINE` in
-  `PublicProvisioningController` pins every API-registered connection to the remote name, and that
-  split is deliberately not a public fact), so gating on the engine would give two
+- **The gate is the APISERVER naming THIS MACHINE, not the handler's declared engine.** A
+  public-API caller cannot choose between `local-k3s` and `remote-kubernetes` (`KUBERNETES_ENGINE`
+  in `PublicProvisioningController` pins every API-registered connection to the remote name, and
+  that split is deliberately not a public fact), so gating on the engine would give two
   identically-configured clusters different behaviour depending on which door connected them, and
-  would miss the acceptance suite entirely. Loopback rather than "private": a shared staging
-  cluster on 10.x is somebody else's machine however private its address.
-- **A different FIELD MANAGER from the manifest apply.** Server-side apply treats each apply from
-  one manager as that manager's complete desired state, so patching a ServiceAccount under
-  `cat-factory` would have the manifests' own later apply of that account strip the
-  `imagePullSecrets` it does not mention. `REGISTRY_AUTH_FIELD_MANAGER` keeps the two owning
-  disjoint fields.
-- **Before the workloads, and covering the accounts they NAME.** Pods are created moments after
-  their Deployment applies, and a pod that starts without the secret sits in `ImagePullBackOff`
-  until the kubelet retries; a workload setting `serviceAccountName` never reads `default`, so
-  attaching only there would miss exactly the manifests that bothered to have an identity.
+  would miss the acceptance suite entirely. The test is kernel's `isLocalMachineHost`, which is
+  wider than loopback and narrower than private: it covers the spellings a local kubeconfig
+  actually contains (`127.0.0.1`, `localhost`, `::1`, k3d's wildcard `0.0.0.0`, Docker Desktop's
+  `kubernetes.docker.internal` and `host.docker.internal`) and refuses RFC1918, because a shared
+  staging cluster on 10.x is somebody else's machine however private its address. The CLI's own
+  `looksLocalCluster` composes the same predicate: the two were separate lists once, and the copy
+  missing `0.0.0.0` withheld the whole behaviour from k3d's default kubeconfig.
+- **A different FIELD MANAGER for what this owns, and NO second manager on what the manifests
+  own.** Server-side apply treats each apply from one manager as that manager's complete desired
+  state, so the Secret and the `default`-account patch go in under
+  `REGISTRY_AUTH_FIELD_MANAGER`, out of reach of the manifests' own applies. That does not extend
+  to an account the manifests DECLARE: `ServiceAccount.imagePullSecrets` is an ATOMIC list, which
+  one manager owns whole, so a patch beside their apply is a race that `force=true` settles for
+  whoever writes last, silently, and only on manifests that declare their own account. Such an
+  account instead has the entry folded into the manifests' own body before it is applied
+  (`withPullSecretOnServiceAccounts`), preserving whatever pull secrets it already declared, and
+  `serviceAccountsNeedingOwnPatch` subtracts it from what gets patched separately.
+- **Before the workloads, and covering the accounts they NAME.** The ServiceAccount admission
+  controller copies an account's `imagePullSecrets` onto a pod when the pod is CREATED, so an
+  account patched after its Deployment applied does not reach the pods already admitted. A
+  workload setting `serviceAccountName` never reads `default`, so attaching only there would miss
+  exactly the manifests that bothered to have an identity; a CronJob hides its own under
+  `spec.jobTemplate.spec.template.spec`, where it fails on the first schedule rather than at
+  provision time.
 - **Best-effort, and never silent.** A deployment whose packages are already public pulls fine
   without any of this, so a refused write must not fail a provision that would otherwise succeed.
   Every outcome (wired, skipped and why, failed and why) goes to the provisioning log as a
   `registry-auth` step, because an unauthenticated pull and a private package look identical right
-  up until the 403.
+  up until the 403. "No credential" is FIVE distinct verdicts, not one, because each sends a
+  reader at a different fix: no image names a registry, no clone target, a clone with no token (a
+  public manifests repo), a registry the git host does not serve, and a remote cluster.
+- **The credential is not renewed.** It is the provision's own short-lived git token, so it lasts
+  about an hour, and the Secret keeps the value it was written with. Every pull inside that window
+  works; a later one (a rollout, a scale-up, a reschedule onto a node with no cached layer)
+  re-enters `ImagePullBackOff` with no new log entry, because nothing ran. Re-provisioning rewrites
+  it. Renewing would need something outliving the provision, a controller in the cluster or a
+  sweep over every live environment, which is a lot of machinery for a throwaway preview whose
+  images are pulled once at rollout; the window is NAMED in the recorded step instead.
 
 The container-render path (`buildProvisionJob`, hence its `Promise` return) does the same over the
 apiserver before dispatch, and reaches only `default`: the manifests render inside the container,
 so the accounts they declare cannot be enumerated. The recorded step says so rather than implying
-the coverage the raw path gets. What the credential cannot supply is SCOPE, which is the one
-remaining way a pull fails: the token needs package-read rights on its provider.
+the coverage the raw path gets. That path also has a case where it does nothing at all: a
+kustomize overlay with no `namespaceTemplate` keeps its OWN namespace, which the harness reads
+back from the built manifests inside the container (`deployTargetsBackendNamespace` is the shared
+answer, and `setNamespace` derives from it). The destination is genuinely unknown before dispatch,
+so writing anyway would create an empty namespace nothing tears down and put the credential where
+no pod reads it, under a log line reporting success. It records the reason and skips. What the
+credential cannot supply on any path is SCOPE, which is the one remaining way a pull fails: the
+token needs package-read rights on its provider.
 
 ## Running AGENTS on a local k3s (runner backend)
 

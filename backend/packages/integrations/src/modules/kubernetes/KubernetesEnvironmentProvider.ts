@@ -40,17 +40,23 @@ import {
 } from './kubernetes.logic.js'
 import {
   buildDeployJobSpec,
+  deployTargetsBackendNamespace,
   mapDeployOutcome,
   needsContainerRender,
 } from './kubernetes-deploy.logic.js'
 import {
+  apiServerHostname,
   buildPullSecret,
   buildServiceAccountPullSecretPatch,
+  describeRegistryAuthSkip,
+  describeRegistryAuthVerdict,
   isLocalThrowawayCluster,
   REGISTRY_AUTH_FIELD_MANAGER,
   registryAuthImageCandidates,
+  registriesNamedByImages,
   resolveRegistryAuth,
-  serviceAccountsNeedingPullSecret,
+  serviceAccountsNeedingOwnPatch,
+  withPullSecretOnServiceAccounts,
 } from './kubernetes-registry-auth.logic.js'
 import {
   deriveUrl,
@@ -90,8 +96,8 @@ const APPLY_TIMEOUT_MS = 30_000
 const READ_TIMEOUT_MS = 30_000
 /**
  * Field manager for the manifest applies. Exported so the registry-auth writes can be pinned as
- * using a DIFFERENT one: sharing it would make a later apply of a ServiceAccount silently strip
- * the `imagePullSecrets` this provider attached.
+ * using a DIFFERENT one: an apply is a manager's complete desired state, so sharing it would have
+ * the next manifest apply declare the pull Secret and its account patches gone.
  */
 export const FIELD_MANAGER = 'cat-factory'
 
@@ -192,12 +198,14 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     if (resources.length === 0) {
       throw new Error('No Kubernetes manifests were found at the configured source path')
     }
-    // Before the workloads, never after: a Deployment's pods are created moments after it
-    // applies, and a pod that starts without the pull secret sits in ImagePullBackOff until the
-    // kubelet's next retry. The accounts to attach it to are read off the parsed resources, so
-    // this has to sit between the parse and the apply.
-    await this.ensureRegistryAuth(client, config, namespace, resources, req, vars)
-    for (const resource of resources) {
+    // Before the workloads, never after, and the reason is stricter than "pods start quickly":
+    // the ServiceAccount admission controller copies an account's `imagePullSecrets` onto a pod
+    // when the pod is CREATED, so an account patched after its Deployment applied does not reach
+    // the pods already admitted. The accounts are read off the parsed resources, and the
+    // manifests come back with the secret folded into the ServiceAccounts they declare, so this
+    // has to sit between the parse and the apply.
+    const toApply = await this.ensureRegistryAuth(client, config, namespace, resources, req, vars)
+    for (const resource of toApply) {
       await this.apply(client, config, namespace, resource)
     }
 
@@ -468,8 +476,19 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
 
   /**
    * The container-render path's half of the registry wiring: ensure the namespace exists, then
-   * run the same best-effort credential wiring the inline path runs. Skipped entirely off a local
-   * cluster so a remote one's provision does not gain an apiserver round-trip it has no use for.
+   * run the same best-effort credential wiring the inline path runs, with no manifests to read.
+   *
+   * The namespace has to be created here because the credential needs somewhere to live and the
+   * render container holds no platform credential to make a Secret with. That write is only
+   * correct where the backend's namespace is the one the deploy lands in
+   * ({@link deployTargetsBackendNamespace}): a kustomize overlay that picks its own namespace is
+   * resolved inside the container, so pre-creating here would leave an empty namespace nothing
+   * tears down and a credential no pod reads, under a log line claiming success.
+   *
+   * Everything after the gate sits inside the best-effort envelope, the namespace create
+   * included: an apiserver blip or a service account without namespace-create RBAC must cost the
+   * convenience, never a provision that used to succeed without any of this (the deploy
+   * container creates the namespace itself either way).
    */
   private async prepareRegistryAuth(
     config: KubernetesProvisionConfig,
@@ -477,10 +496,17 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     req: ProvisionEnvironmentRequest,
     vars: Record<string, string>,
   ): Promise<void> {
-    if (!isLocalThrowawayCluster(config)) return
-    const client = this.makeClient(config, req.resolveSecret)
-    await this.ensureNamespace(client, config, namespace)
-    await this.ensureRegistryAuth(client, config, namespace, [], req, vars)
+    // The cluster gate is asked first, and by the method that owns it: on a remote cluster the
+    // namespace question never arises, and reporting the overlay's namespace as the reason would
+    // name a configuration detail in place of the actual one.
+    if (isLocalThrowawayCluster(config) && !deployTargetsBackendNamespace(config)) {
+      await this.recordRegistryAuth(req, Date.now(), {
+        outcome: 'success',
+        detail: describeRegistryAuthSkip({ kind: 'namespace-not-derivable' }),
+      })
+      return
+    }
+    await this.ensureRegistryAuth(null, config, namespace, [], req, vars)
   }
 
   /**
@@ -491,82 +517,101 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
    * registry, private until somebody makes it public. The credential that fixes it is already
    * resolved for the clone, so the whole thing needs no configuration and no operator step.
    *
-   * Three properties hold it together. It is gated on the apiserver being a LOOPBACK address
-   * (see {@link isLocalThrowawayCluster}), because pushing a git credential into every per-PR
-   * namespace is right for a cluster running on this machine and is not a decision to make
-   * implicitly against a shared one. It only ever fires when the image's registry is one the
-   * clone credential plausibly covers. And it is BEST-EFFORT: a deployment whose packages are
-   * already public pulls fine without it, so a refused write (missing RBAC on a hand-rolled
+   * Three properties hold it together. It is gated on the apiserver naming THIS MACHINE (see
+   * {@link isLocalThrowawayCluster}), because pushing a git credential into every per-PR
+   * namespace is right for a cluster running here and is not a decision to make implicitly
+   * against a shared one. It only ever fires when the image's registry is one the clone
+   * credential plausibly covers. And it is BEST-EFFORT: a deployment whose packages are already
+   * public pulls fine without it, so a refused write (missing RBAC on a hand-rolled
    * ServiceAccount) is reported and stepped over rather than failing a provision that would
    * otherwise have succeeded.
+   *
+   * Every path through it records a `registry-auth` step, the skips included. An unauthenticated
+   * pull is the normal case and is ALSO what a private package looks like right up until the
+   * kubelet 403s, so a silent skip is the one outcome that leaves a reader unable to tell which
+   * happened. `client` is null where the caller has none yet (the container-render path), so the
+   * apiserver client is built inside the envelope with everything else.
+   *
+   * @param resources the parsed manifests, MUTATED-BY-COPY through the returned array: the
+   *   caller applies what comes back, not what it passed in.
    */
   private async ensureRegistryAuth(
-    client: KubernetesApiClient,
+    client: KubernetesApiClient | null,
     config: KubernetesProvisionConfig,
     namespace: string,
     resources: KubernetesResource[],
     req: ProvisionEnvironmentRequest,
     vars: Record<string, string>,
-  ): Promise<void> {
-    if (!isLocalThrowawayCluster(config)) return
+  ): Promise<KubernetesResource[]> {
     const startedAt = Date.now()
+    if (!isLocalThrowawayCluster(config)) {
+      await this.recordRegistryAuth(req, startedAt, {
+        outcome: 'success',
+        detail: describeRegistryAuthSkip({
+          kind: 'not-local-cluster',
+          apiServerHost: apiServerHostname(config),
+        }),
+      })
+      return resources
+    }
     try {
-      const clone = await req.clone?.()
-      const auths = clone
-        ? resolveRegistryAuth({
-            images: registryAuthImageCandidates(config, vars),
-            cloneUrl: clone.cloneUrl,
-            token: clone.token,
-            repoOwner: req.inputs.repoOwner,
-          })
-        : []
-      if (auths.length === 0) {
-        // Said out loud rather than passed over in silence: an unauthenticated pull is the
-        // normal case (a public package), and it is ALSO what a private one looks like right up
-        // until the kubelet 403s. Someone reading this log next to an ImagePullBackOff needs to
-        // know which of the two happened, and no later observation can tell them.
-        const candidates = registryAuthImageCandidates(config, vars)
-          .filter((image) => !!image?.trim())
-          .join(', ')
+      // The clone thunk mints a short-lived token, so it is only pulled once an image is known
+      // to name a registry a credential could cover: the port documents the thunk as lazy
+      // precisely so a provision that needs no checkout never pays the mint.
+      const images = registryAuthImageCandidates(config, vars)
+      const clone = registriesNamedByImages(images).length > 0 ? await req.clone?.() : undefined
+      const verdict = resolveRegistryAuth({
+        images,
+        clone,
+        ...(req.inputs.repoOwner !== undefined ? { repoOwner: req.inputs.repoOwner } : {}),
+      })
+      if (verdict.kind !== 'wired') {
         await this.recordRegistryAuth(req, startedAt, {
           outcome: 'success',
-          detail: `No registry credential wired for [${candidates || 'no image reference'}]: ${
-            clone ? 'the clone credential does not cover that registry' : 'no clone credential'
-          }. A private image will fail to pull.`,
+          detail: describeRegistryAuthVerdict(verdict),
         })
-        return
+        return resources
       }
-      await this.applyResource(client, config, namespace, buildPullSecret(namespace, auths), {
+      const api = client ?? this.makeClient(config, req.resolveSecret)
+      if (!client) await this.ensureNamespace(api, config, namespace)
+      await this.applyResource(api, config, namespace, buildPullSecret(namespace, verdict.auths), {
         fieldManager: REGISTRY_AUTH_FIELD_MANAGER,
       })
-      const accounts = serviceAccountsNeedingPullSecret(resources)
-      for (const account of accounts) {
+      // Two disjoint halves, and the split is what keeps the secret attached. An account the
+      // manifests declare takes the entry inside their OWN body, because `imagePullSecrets` is
+      // an atomic list that one field manager owns whole. Everything else is patched here.
+      const patchedAccounts = serviceAccountsNeedingOwnPatch(resources)
+      for (const account of patchedAccounts) {
         await this.applyResource(
-          client,
+          api,
           config,
           namespace,
           buildServiceAccountPullSecretPatch(account, namespace),
           { fieldManager: REGISTRY_AUTH_FIELD_MANAGER },
         )
       }
-      // Names the registry and the username, never the token. The scope caveat is stated here
-      // because it is the one remaining way this fails: the credential is wired and correct, and
-      // the registry still refuses it because the token was never granted package reads.
+      const withSecret = withPullSecretOnServiceAccounts(resources)
       await this.recordRegistryAuth(req, startedAt, {
         outcome: 'success',
-        detail:
-          `Wired ${auths.map((a) => a.registry).join(', ')} pull credential ` +
-          `(user '${auths[0]!.username}') into ${accounts.length} service account(s)` +
-          `${resources.length === 0 ? ', the default one only (this render path resolves its manifests in the deploy container, so the accounts they declare are not visible here)' : ''}. ` +
-          `A 403 from here on means the git token lacks package-read scope.`,
+        detail: describeRegistryAuthVerdict(verdict, {
+          auths: verdict.auths,
+          patchedAccounts,
+          declaredAccounts: resources
+            .filter((r) => r.kind === 'ServiceAccount' && r.metadata.name)
+            .map((r) => r.metadata.name!),
+          manifestsVisible: resources.length > 0,
+        }),
       })
+      return withSecret
     } catch (error) {
-      // Best-effort by design (see above), so the cause is REPORTED and the provision continues.
+      // Best-effort by design (see above), so the cause is REPORTED and the provision continues
+      // with the manifests exactly as they were.
       await this.recordRegistryAuth(req, startedAt, {
         outcome: 'failure',
         error: getErrorMessage(error),
         detail: 'The environment will still provision; a private image will fail to pull.',
       })
+      return resources
     }
   }
 
