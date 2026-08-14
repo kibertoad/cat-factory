@@ -220,6 +220,7 @@
         "bug": "Bug",
         "document": "Document",
         "spike": "Spike",
+        "media": "Média",
         "recurring": "Récurrent",
         "review": "Revue",
         "ralph": "Boucle Ralph"
@@ -3644,7 +3645,8 @@
         "document": "document",
         "spike": "spike",
         "review": "revue",
-        "ralph": "Boucle Ralph"
+        "ralph": "Boucle Ralph",
+        "media": "média"
       },
       "reviewFriction": {
         "heading": "Friction de dette de revue",
@@ -4962,7 +4964,8 @@
         "document": "Documentation",
         "review": "Revue",
         "research": "Recherche",
-        "planning": "Planification"
+        "planning": "Planification",
+        "media": "Média"
       },
       "strategyOption": {
         "specialist-panel": "Panel de spécialistes",
@@ -6688,6 +6691,14 @@
       "automatic": "{total} candidat a été généré et conservé automatiquement, sans examen.",
       "chosen": "{kept} des {total} candidats générés ont été conservés.",
       "awaiting": "{total} candidats ont été générés et attendent d’être comparés."
+    },
+    "asset": {
+      "loading": "Chargement du fichier…",
+      "loadFailed": "Le fichier stocké n’a pas pu être chargé.",
+      "retry": "Réessayer",
+      "open": "Ouvrir",
+      "download": "Enregistrer une copie",
+      "unknownType": "Fichier stocké"
     }
   },
   "sandbox": {

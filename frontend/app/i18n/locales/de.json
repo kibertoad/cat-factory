@@ -1077,7 +1077,8 @@
         "document": "Dokument",
         "spike": "Spike",
         "review": "Review",
-        "ralph": "Ralph-Schleife"
+        "ralph": "Ralph-Schleife",
+        "media": "Medien"
       },
       "reviewFriction": {
         "heading": "Review-Rückstau-Bremse",
@@ -2982,6 +2983,7 @@
         "bug": "Bug",
         "document": "Dokument",
         "spike": "Spike",
+        "media": "Medien",
         "recurring": "Wiederkehrend",
         "review": "Review",
         "ralph": "Ralph-Schleife"
@@ -4498,7 +4500,8 @@
         "document": "Dokumentation",
         "review": "Review",
         "research": "Recherche",
-        "planning": "Planung"
+        "planning": "Planung",
+        "media": "Medien"
       },
       "strategyOption": {
         "specialist-panel": "Spezialisten-Panel",
@@ -5396,6 +5399,14 @@
       "automatic": "{total} Kandidat wurde erzeugt und ohne Prüfung automatisch behalten.",
       "chosen": "{kept} von {total} erzeugten Kandidaten wurden behalten.",
       "awaiting": "{total} Kandidaten wurden erzeugt und warten auf den Vergleich."
+    },
+    "asset": {
+      "loading": "Datei wird geladen …",
+      "loadFailed": "Die gespeicherte Datei konnte nicht geladen werden.",
+      "retry": "Erneut versuchen",
+      "open": "Öffnen",
+      "download": "Kopie speichern",
+      "unknownType": "Gespeicherte Datei"
     }
   },
   "brainstorm": {

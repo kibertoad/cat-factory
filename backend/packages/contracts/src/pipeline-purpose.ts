@@ -157,6 +157,11 @@ const PURPOSE_SUGGESTED_CATEGORIES: Record<
   // Decomposes an initiative: no code, no repo documentation of its own (the plan is the
   // in-repo tracker its own steps commit) and no pull request, so nothing to gate either.
   planning: { review: true, design: true, build: false, test: false, docs: false, gates: false },
+  // Produces binary assets: the generating kinds group under `design`, and a human checkpoint
+  // is the whole point of a candidate comparison, so `gates` stays. Nothing here writes code,
+  // runs a suite or authors a document, and a `review` kind judges a diff this purpose never
+  // produces, so those four are off.
+  media: { review: false, design: true, build: false, test: false, docs: false, gates: true },
 }
 
 /**
@@ -300,6 +305,8 @@ const FEATURE_PURPOSES: readonly PipelinePurpose[] = BUG_PURPOSES.filter((p) => 
  *
  *  - `document` → only `document` pipelines (it authors a document; nothing else applies).
  *  - `review` → only `review` pipelines (it reviews an existing PR and opens none).
+ *  - `media` → only `media` pipelines (its deliverable is generated binaries stored through an
+ *    asset store; a code, document or review preset would produce none of them).
  *  - `bug` → everything EXCEPT `document` / `review` / `planning` ({@link BUG_PURPOSES}). It ships
  *    code, so offering it a document-authoring or PR-review preset was noise in the one picker
  *    people use most.
@@ -312,10 +319,10 @@ const FEATURE_PURPOSES: readonly PipelinePurpose[] = BUG_PURPOSES.filter((p) => 
  * the classifier this build can NAME ({@link classifierFor}), which is the only thing left for the
  * two to disagree about now that every pipeline carries one:
  *
- *  - `document` / `review` require the explicit member, because a build pipeline on a document
- *    task is actively wrong — running it would author no document and open a code PR nobody asked
- *    for. A purpose this build cannot name is hidden there: guessing costs more than an absence
- *    the user resolves by picking a preset the build does know.
+ *  - `document` / `review` / `media` require the explicit member, because a build pipeline on a
+ *    document task is actively wrong: running it would author no document and open a code PR
+ *    nobody asked for. A purpose this build cannot name is hidden there: guessing costs more than
+ *    an absence the user resolves by picking a preset the build does know.
  *  - `feature` / `bug` merely EXCLUDE the known purposes that do not fit, so an unnameable one
  *    stays visible. It is not known-wrong for a feature, and hiding it would take a deployment's
  *    own pipeline out of the picker people use most the moment its classifier outlives the bundle
@@ -329,6 +336,7 @@ export function pipelineAllowedForTaskType(
 ): boolean {
   if (taskType === 'document') return pipeline.purpose === 'document'
   if (taskType === 'review') return pipeline.purpose === 'review'
+  if (taskType === 'media') return pipeline.purpose === 'media'
   if (taskType === 'feature' || taskType === 'bug') {
     const own = classifierFor(pipeline.purpose)
     const offered = taskType === 'bug' ? BUG_PURPOSES : FEATURE_PURPOSES

@@ -23,6 +23,17 @@ export function useArtifactBlobs() {
 
   /** artifactId → object URL (reactive so templates re-render when a blob resolves). */
   const urls = reactive<Record<string, string>>({})
+  /**
+   * artifactId → the media type the SERVER served these bytes as.
+   *
+   * The one a surface may decide from. A stored artifact also carries a DECLARED content type,
+   * which for an asset is the agent's own claim about the file it uploaded and is optional; the
+   * serve path meanwhile clamps anything outside the inline-image list to
+   * `application/octet-stream`. So a row deciding picture-versus-file from the declaration gets it
+   * wrong in both directions: an undeclared PNG renders as a generic file, and a mis-declared
+   * bundle renders as a broken `<img>` with the load reported as successful.
+   */
+  const types = reactive<Record<string, string>>({})
   /** artifactId → fetch status, drives loading / error / retry affordances. */
   const status = reactive<Record<string, ArtifactBlobStatus>>({})
   /** In-flight promises, so concurrent `resolve(id)` calls share one fetch + one blob. */
@@ -43,6 +54,11 @@ export function useArtifactBlobs() {
     return id ? (status[id] ?? 'idle') : 'idle'
   }
 
+  /** The media type the server served this artifact as, once its bytes are in hand. */
+  function typeFor(id: string | null | undefined): string | undefined {
+    return id ? types[id] : undefined
+  }
+
   /** Resolve an artifact to an object URL (cached + deduped). Returns null on failure. */
   function resolve(id: string | null | undefined): Promise<string | null> {
     if (!id || disposed) return Promise.resolve(null)
@@ -53,19 +69,22 @@ export function useArtifactBlobs() {
 
     status[id] = 'loading'
     const p = api
-      .fetchArtifactBlobUrl(ws.requireId(), id)
-      .then((url) => {
+      .fetchArtifactBlob(ws.requireId(), id)
+      .then(({ url, contentType }) => {
         // The owner unmounted while this was in flight: revoke the freshly-minted URL
         // instead of stranding it in the cleared cache.
         if (disposed) {
           try {
             URL.revokeObjectURL(url)
           } catch {
-            // Already revoked / unsupported environment — nothing to do.
+            // Already revoked / unsupported environment, nothing to do.
           }
           return null
         }
         urls[id] = url
+        // Written BEFORE the status flips to `ready`, so a watcher reacting to the status never
+        // reads a resolved artifact whose served type has not landed yet.
+        if (contentType) types[id] = contentType
         status[id] = 'ready'
         return url
       })
@@ -91,6 +110,7 @@ export function useArtifactBlobs() {
       }
     }
     delete urls[id]
+    delete types[id]
     status[id] = 'idle'
     inFlight.delete(id)
     return resolve(id)
@@ -110,11 +130,12 @@ export function useArtifactBlobs() {
       }
     }
     for (const k of Object.keys(urls)) delete urls[k]
+    for (const k of Object.keys(types)) delete types[k]
     for (const k of Object.keys(status)) delete status[k]
     inFlight.clear()
   }
 
-  return { urls, status, urlFor, statusFor, resolve, retry, revokeAll }
+  return { urls, types, status, urlFor, statusFor, typeFor, resolve, retry, revokeAll }
 }
 
 export type ArtifactBlobs = ReturnType<typeof useArtifactBlobs>

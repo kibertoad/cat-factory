@@ -959,6 +959,12 @@ export const TASK_TYPE_META: Record<string, TaskTypeMeta> = {
     color: '#a78bfa',
     labelKey: 'board.addTask.types.ralph',
   },
+  media: {
+    taskType: 'media',
+    icon: 'i-lucide-image-plus',
+    color: '#f472b6',
+    labelKey: 'board.addTask.types.media',
+  },
   recurring: {
     taskType: 'recurring',
     icon: 'i-lucide-repeat',

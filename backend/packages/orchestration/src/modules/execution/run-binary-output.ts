@@ -125,6 +125,28 @@ export async function dispatchBinaryGeneratorsFor(input: {
 }
 
 /**
+ * The catalog service this dispatch is storing THROUGH, for the `AgentRunContext`.
+ *
+ * The brief already names it to the AGENT; what needs it in structured form is the container
+ * executor, which has to decide whether to hand the job an upload seam into the platform's own
+ * asset storage. That decision cannot be made from the brief (prose) or from the kind (a
+ * deployment's generator kind may store anywhere), so the id travels beside the resolved
+ * integrations as the other non-secret fact about the selection.
+ *
+ * Gated on the SAME condition as both halves above (the EFFECTIVE kind carries the trait)
+ * because a step whose brief was never injected was never told to store anything, and handing it
+ * an upload endpoint would be a capability with no instructions attached.
+ */
+export function dispatchBinaryStorageFor(input: {
+  agentKind: AgentKind
+  agentKindRegistry: AgentKindRegistry
+  step: PipelineStep
+}): string | undefined {
+  if (!hasTrait(input.agentKind, BINARY_OUTPUT_TRAIT, input.agentKindRegistry)) return undefined
+  return input.step.stepOptions?.binaryOutput?.storageServiceId
+}
+
+/**
  * Whether a SETTLED step may carry a binary-output declaration worth reading back — the
  * read-back's counterpart to {@link resolveBinaryOutputContext}'s trait check.
  *

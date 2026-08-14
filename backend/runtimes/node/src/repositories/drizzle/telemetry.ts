@@ -38,6 +38,7 @@ import type {
 } from '@cat-factory/kernel'
 import {
   LLM_WARNING_FINISH_REASONS,
+  RETAINED_BINARY_ARTIFACT_KINDS,
   dedupeDocumentRefs,
   escapeLikePattern,
 } from '@cat-factory/kernel'
@@ -1298,13 +1299,14 @@ export class DrizzleBinaryArtifactMetadataStore implements BinaryArtifactMetadat
   /**
    * The age sweep's scope, shared by its list and its delete so the two cannot drift: run debris
    * past the window, EXCLUDING a document's renders, which expire with their document rather than
-   * on a clock (see the port).
+   * on a clock, and every kind the port marks as retained (see the port).
    */
   private agedScope(workspaceId: string, olderThan: number) {
     return and(
       eq(binaryArtifacts.workspace_id, workspaceId),
       lt(binaryArtifacts.created_at, olderThan),
       isNull(binaryArtifacts.document_source),
+      notInArray(binaryArtifacts.kind, RETAINED_BINARY_ARTIFACT_KINDS as string[]),
     )
   }
 

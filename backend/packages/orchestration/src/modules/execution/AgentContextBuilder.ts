@@ -580,6 +580,9 @@ export class AgentContextBuilder {
       ...(catalogSlice.binaryGenerators.length
         ? { binaryGenerators: catalogSlice.binaryGenerators }
         : {}),
+      ...(catalogSlice.binaryStorageServiceId
+        ? { binaryStorageServiceId: catalogSlice.binaryStorageServiceId }
+        : {}),
       ...runImages,
       priorOutputs,
       decisions: instance.steps

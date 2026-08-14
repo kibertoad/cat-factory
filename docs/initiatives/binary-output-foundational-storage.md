@@ -1093,6 +1093,152 @@ is the same argument `forkDecision` / `followUps` make. The one surface that doe
 the snapshot's `binaryGenerators.capabilities` projection, and it is built in the shared
 controller both facades mount.
 
+## The built-in Media task type, and the storage the platform ships for it
+
+Everything above is reachable only by a deployment that writes code: it registers a generator
+KIND, registers an object store as a foundational SERVICE with an OpenAPI document for it, and
+builds a pipeline. That is the right shape for an org with an asset estate, and it made the
+platform's most demonstrable capability the one nothing shipped could exercise. `media` closes
+that: a task type, one agent kind, one preset, and a storage target that exists on every
+deployment.
+
+### What ships
+
+- **`media`**, a built-in task type (`BUILTIN_TASK_TYPES`), defaulting to **`pl_media`**
+  (`defaultPipelineIdForTaskType`) exactly as `document` defaults to `pl_document`.
+- **`media`**, a `PipelinePurpose`, so a media task is offered media presets and NOTHING else
+  (`pipelineAllowedForTaskType`), and the builder's palette narrows to the kinds that suit one.
+  Its own member rather than a flavour of `build`: nothing here ships code, so every
+  code-shipping surface (the implementation and testing palette rows, the merge tail) is wrong
+  for it.
+- **`media-generator`**, the FIRST built-in kind to carry `BINARY_OUTPUT_TRAIT`. Read-only over
+  the checkout, opens no pull request, declares no `structuredOutput` (its deliverable is the
+  fenced block in its reply), and declares `purposes: ['media']` so it appears nowhere else.
+- **`pl_media`**, one step, shipping a `binaryOutput` selection rather than a blank one. That is
+  forced rather than convenient: `assertValidBinaryOutputSteps` refuses a generating step with no
+  storage service at SAVE and at run start, so an unconfigured preset would be one nobody could
+  start until they had opened the builder. It ships `comparison` on, because generating one
+  picture and keeping it is the case that never needed a pipeline.
+
+### The storage: the platform's own, as a `builtin`-tier service
+
+`defaultFoundationalServiceRegistry()` returned an EMPTY registry for as long as the tier
+existed, on the ground that no shared business capability is universal. That reasoning holds for
+an org's estate and does not cover the platform's own storage, which every deployment already
+runs for run evidence and which is the one thing a generating step cannot be configured without.
+So the default now holds exactly one service, `platform-assets`, carrying
+`ASSET_STORAGE_CAPABILITY` and an OpenAPI contract for an ingest API.
+
+Nothing about it is special-cased downstream. It is selected, validated, briefed, refused and
+suppressed like any other catalog id: a deployment that stores assets in its own bucket registers
+that service and tombstones this one at either stored tier.
+
+Three things are worth stating because each was a decision:
+
+- **The bytes land in the account's binary-artifact store**, the same one screenshots use, which
+  is what makes "at least one binary storage configured" the precondition rather than a new
+  subsystem. A local deployment defaults that store to the FILESYSTEM
+  (`contentStorageDefaultBackend: 'fs'`), so an unconfigured laptop can run the whole flow. On a
+  deployment with no store at all the run is refused UP FRONT, because `media-generator` also
+  carries `BINARY_STORAGE_TRAIT`: the `binary_storage_unconfigured` conflict names the fix, where
+  the alternative is an agent discovering it at the end of a paid generation.
+- **The endpoint is an ENVIRONMENT VARIABLE, not an OpenAPI `servers` entry.** It is per-run and
+  per-transport, so a base URL written into the document would be a fact kernel cannot know and
+  every deployment would read as wrong. The contract names `ARTIFACT_UPLOAD_URL` /
+  `ARTIFACT_UPLOAD_TOKEN` instead, which are the harness's own variables, restated in kernel and
+  pinned against it (`artifact-upload.conformity.test.ts`) because the image can import no
+  workspace package. Drift there is silent in the worst way: a contract naming a variable nothing
+  sets reads, through the trait guidance's own wording, as a storage outage on a deployment whose
+  storage is fine.
+- **The upload seam is gated on WHERE THE STEP POINTS, never on the kind.** `AgentRunContext`
+  gained `binaryStorageServiceId` for exactly this: only a step storing through `platform-assets`
+  is handed a credential for our ingest route, so a deployment's own generator delivering into its
+  own object store never sees one. Gating on the kind or the trait would hand every generating
+  step an endpoint its brief never mentioned. ONE variable carries the endpoint, and the screenshot
+  seam keys off the kind's declared `ui` image, so a kind answering to both descriptions has to
+  pick one: the STEP'S SELECTION wins, because the image is an inference and the selection is the
+  contract the agent was actually briefed on. The other order is silent both ways, storing the
+  deliverables as `kind: 'screenshot'` (which the sweep then reclaims, the exemption being per
+  kind) and answering in a shape the declaration block cannot use.
+- **The contract has TWO operations, and the second is what the exemption makes necessary.** A
+  candidate pass STAGES several files per subject and a person keeps one; the rest are ordinary
+  stored assets, and nothing reclaims an asset on a clock. Without a discard the shipped preset
+  would accumulate every rejected render for the life of the workspace, and the second-phase
+  brief's "remove the staged files where the storage service allows it" would resolve, on the one
+  service every deployment has, to "it does not". So `DELETE /{location}` reclaims what THIS RUN
+  stored: idempotent, because the brief hands the agent a list that is replayed across passes, and
+  a 404 for anything else, because telling an agent it cleaned up something it did not is the one
+  outcome worse than a refusal it can report.
+- **A per-file ceiling is sized by the tightest runtime, not by what a generator would like to
+  send.** The `BinaryArtifactStore` port takes bytes, so an ingest materialises the whole file and
+  holds TWO copies at peak (the multipart body the parser keeps, and the `arrayBuffer()` read off
+  the part). The Worker facade runs that inside a workerd isolate with a fixed 128 MB ceiling
+  shared with everything else the invocation holds, so a limit near it does not answer 413, it
+  kills the isolate mid-upload, and a Node-only test cannot tell the difference. `MAX_ASSET_BYTES`
+  is 24 MiB for that reason and the budget is asserted rather than commented; raising it means
+  giving the port a STREAM and every blob backend behind it one.
+
+`asset` is its own `BinaryArtifactKind`, and the reason is RETENTION rather than taxonomy: the
+age sweep is sized for run DEBRIS, and an asset is the thing the run was started to produce. A
+swept one takes its step's report with it in the worst possible form, since the report goes on
+naming a location, so the loss reads as a broken link rather than as a reclaim. The exemption is
+`RETAINED_BINARY_ARTIFACT_KINDS`, stated as what the sweep KEEPS so a kind added later is swept
+by default and has to be named to be exempted; both metadata stores build their predicate from
+it, and the conformance suite asserts it at the store, which is where they can differ.
+
+### The park a shipped preset finally made visible
+
+`pl_media` is the first built-in whose step parks on a candidate comparison, and public-API
+admission could not see it. `parkSurfacesOf` had four checks and all four read the step CHAIN,
+where a comparison lives in a step's OPTIONS: `pl_media` is one `media-generator` step with no
+gate flag, no parking kind, no human-wait gate and no interview trait, so every check said it
+never stops. A plain `write` key was therefore admitted to START a run that then parked with
+nothing on `/api/v1` able to answer it. That is the same hole `human-review` and the interview
+gate each opened once before, and the lesson repeating a third time: an enumeration written
+against the mechanisms somebody thought of misses the ones they did not.
+
+So the comparison is the FIFTH mechanism, and the first that derives from what a deployment
+AUTHORS rather than from what it registers. `AdmissiblePipelineShape` grew a `stepOptions` leg
+narrowed to exactly the one field admission reads, so a future option cannot look like something
+this module might also consult. PRESENCE of `comparison` is the whole test: authoring already
+refuses one that cannot produce two candidates, so a saved comparison parks.
+
+Answering it is a separate question from admitting it, and only the answer half is deferred. The
+keep-decision has a real route, it is simply not projected onto `/api/v1`, so
+`BINARY_CANDIDATE_PARK_SURFACE` stays out of `PUBLICLY_ANSWERABLE_PARK_SURFACES` and the refusal
+points at the cancel path. That is the opposite reason `human-review` is absent from that set:
+its answer is a person approving a pull request on the VCS host, which no API here could offer.
+
+### What the platform holding the bytes buys, and why it is the point
+
+An artifact in an org's private bucket is a location string: the report records it, and a reader
+copies it somewhere else to find out what it is. The `binary-candidates` window has always had
+the same limit, rendering whatever `previewUrl` the storage service happened to issue and saying
+so when there was none.
+
+Ours issues none either, deliberately (the bytes sit behind the workspace's own authenticated
+blob route), and it does not need to: the platform can SERVE them. `platformAssetIdOf` makes the
+join in the read model, from the row's own two fields, and answers null for both "stored
+elsewhere" and "stored here, with a location that is not an artifact id". A location is
+model-authored prose, and a paraphrased one costs the row its preview, never its record. On that
+id, `StoredAssetView` renders the artifact, opens it, and hands it over to be saved elsewhere, in
+the comparison window BEFORE the choice and in the step's report AFTER it.
+
+Whether a row renders as a picture is `rendersInlineAsImage`, in `@cat-factory/contracts` and not
+in either half: the server clamps its own blob responses to that list (everything else comes back
+`application/octet-stream` + `attachment` + `nosniff`, which is what makes the wide upload gate
+safe), and the SPA decides from it what to point an `<img>` at. Two copies disagree in both
+directions, and each direction is invisible from the other end.
+
+What it is applied TO is the media type the server SERVED, carried back beside the object URL by
+`useArtifactBlobs`, never the one the producing agent declared. A stored asset has both, and only
+one of them is a fact: the declaration is optional model-authored text about a file, where the
+served type is the judgement the server already made about these bytes. Deciding from the
+declaration is wrong in both directions, and neither shows up as an error: an undeclared PNG
+renders as a generic file, and a mis-declared bundle renders a broken `<img>` reporting itself as
+loaded, because the fetch genuinely succeeded. The declaration keeps the job it is good for,
+labelling a non-image row with the agent's own account of what the file is.
+
 ## Remaining work
 
 - [ ] **A worked example generator** in `backend/internal/example-custom-agent`. The harness path it
@@ -1118,16 +1264,24 @@ controller both facades mount.
       predicate and its own refusal payload; worth landing beside the first deployment that
       actually holds two reference-capable integrations with different ceilings.
 - [ ] **A `publicDecision` kind for the candidate park.** Every other dedicated park is projected
-      onto `/api/v1` as its own decision kind, so a headless caller currently sees a `blocked` run
-      with no decision to answer. It is deliberately NOT added here, because `publicDecisionKindSchema`'s
-      own rule is that a member ships with its routes: the kind needs a `keep-candidates` verb, an
-      entry in `PUBLICLY_ANSWERABLE_PARK_SURFACES`, a `scripts/sdk/surface.mjs` row and a
-      regeneration of all four SDKs plus the MCP projection. Until then the park is an in-app
-      surface, and this line is the record of that.
+      onto `/api/v1` as its own decision kind, and this one is not. It is deliberately NOT added
+      here, because `publicDecisionKindSchema`'s own rule is that a member ships with its routes:
+      the kind needs a `keep-candidates` verb, an entry in `PUBLICLY_ANSWERABLE_PARK_SURFACES`, a
+      `scripts/sdk/surface.mjs` row and a regeneration of all four SDKs plus the MCP projection.
+      Until then the park is an in-app surface, and this line is the record of that. Only the
+      ANSWER half is deferred: admission already refuses the start (see "The park a shipped
+      preset finally made visible" above), so nothing reaches a park it cannot answer.
+
 - [ ] **An e2e spec for the candidate park**, driving generate → park → compare → keep through the
       live pushed UI. It is the assembled-product half the unit tests cannot reach (the window is
       opened by the park classifier and settled over the stream), and it needs a fake generating
-      kind in the e2e stack.
+      kind in the e2e stack. The built-in `media` task type is now the cheapest way to write it:
+      the stack no longer has to register a kind, a service or a pipeline of its own.
+- [ ] **A per-workspace ceiling on stored assets**, beside the per-run one. `MAX_ASSETS_PER_RUN`
+      bounds one container's writes, which is the runaway it exists to stop; assets are exempt
+      from the age sweep, so a board generating every day accumulates without bound and only the
+      account's own storage bill says so. The shape is the retention settings', not the cap's:
+      it is a policy a human sets, not a number the ingest route enforces.
 
 When that lands, convert this tracker into a numbered ADR under `backend/docs/adr/` and `git rm`
 it in the same PR.

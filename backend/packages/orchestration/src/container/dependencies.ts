@@ -1064,10 +1064,11 @@ export interface CoreDependencies {
   /**
    * The app-owned registry of foundational services a DEPLOYMENT ships in CODE — the `builtin`
    * tier of the catalog merge, mirroring `pipelineRegistry` / `taskTypeRegistry`. Optional +
-   * defaulted to `defaultFoundationalServiceRegistry()` (EMPTY — the platform ships no built-in
-   * foundational services), so existing construction sites resolve the stored tiers exactly as
-   * before; a facade injects the SAME instance it registers its estate on, and boot validation
-   * reads it back so a malformed definition fails the deployment rather than a design dispatch.
+   * defaulted to `defaultFoundationalServiceRegistry()`, which ships exactly ONE service: the
+   * platform's own asset storage, so a binary-output step has a target on a deployment that runs
+   * no object store of its own. A facade injects the SAME instance it registers its estate on,
+   * and boot validation reads it back so a malformed definition fails the deployment rather than
+   * a design dispatch.
    */
   foundationalServiceRegistry?: FoundationalServiceRegistry
   /**

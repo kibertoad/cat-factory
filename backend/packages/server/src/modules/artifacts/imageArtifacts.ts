@@ -1,3 +1,5 @@
+import { INLINE_IMAGE_MEDIA_TYPES } from '@cat-factory/contracts'
+
 // Shared validation + safe-serving helpers for binary-artifact images (UI screenshots +
 // reference design images). Used by BOTH the workspace-scoped upload/serve controller and
 // the container-token-authed harness ingest route, so the security posture can't drift
@@ -8,13 +10,13 @@
  * designs are uploaded images; anything else (HTML, SVG — which can carry script and would
  * execute when served inline same-origin) is rejected at the write boundary so the blob
  * endpoint can never become a stored-XSS vector. SVG is deliberately excluded.
+ *
+ * The MEMBERS come from `@cat-factory/contracts`, because the SPA has to make the same
+ * judgement about the same bytes (does this row render as a picture, or as a download?) and two
+ * copies of it disagree silently in both directions. What stays here is the second USE of that
+ * list (the upload gate), which is this package's alone.
  */
-export const ALLOWED_IMAGE_CONTENT_TYPES: ReadonlySet<string> = new Set([
-  'image/png',
-  'image/jpeg',
-  'image/webp',
-  'image/gif',
-])
+export const ALLOWED_IMAGE_CONTENT_TYPES: ReadonlySet<string> = new Set(INLINE_IMAGE_MEDIA_TYPES)
 
 /** A hard ceiling on a single artifact's bytes, enforced at every ingest point. */
 export const MAX_UPLOAD_BYTES = 16 * 1024 * 1024

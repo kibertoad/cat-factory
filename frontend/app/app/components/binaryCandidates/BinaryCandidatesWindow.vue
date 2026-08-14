@@ -26,6 +26,7 @@ import {
   binaryCandidateView,
 } from '~/utils/binaryCandidates'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
+import StoredAssetView from '~/components/binaryOutput/StoredAssetView.vue'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -194,8 +195,19 @@ async function onKeep() {
             data-testid="binary-candidate-card"
             @click="toggle(row.id)"
           >
+            <!-- Staged through the platform's OWN asset storage: we hold the bytes, so the card
+                 renders them (and offers to open or save one) rather than waiting for a public
+                 link the shipped storage never issues. Checked first because a candidate can
+                 carry both, and ours is the one that is definitely still there. -->
+            <StoredAssetView
+              v-if="row.assetId"
+              :asset-id="row.assetId"
+              :content-type="row.contentType"
+              :label="row.label ?? row.subject"
+              class="mb-2"
+            />
             <img
-              v-if="row.previewUrl"
+              v-else-if="row.previewUrl"
               :src="row.previewUrl"
               :alt="row.label ?? row.id"
               class="mb-2 max-h-56 w-full rounded object-contain"

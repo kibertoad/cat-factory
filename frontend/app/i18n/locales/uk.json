@@ -220,6 +220,7 @@
         "bug": "Помилка",
         "document": "Документ",
         "spike": "Spike",
+        "media": "Медіа",
         "recurring": "Періодичне",
         "review": "Огляд",
         "ralph": "Цикл Ralph"
@@ -3644,7 +3645,8 @@
         "document": "документ",
         "spike": "spike",
         "review": "огляд",
-        "ralph": "Цикл Ralph"
+        "ralph": "Цикл Ralph",
+        "media": "медіа"
       },
       "reviewFriction": {
         "heading": "Тертя через борг рев’ю",
@@ -4962,7 +4964,8 @@
         "document": "Документація",
         "review": "Рецензування",
         "research": "Дослідження",
-        "planning": "Планування"
+        "planning": "Планування",
+        "media": "Медіа"
       },
       "strategyOption": {
         "specialist-panel": "Панель фахівців",
@@ -6688,6 +6691,14 @@
       "automatic": "Створено {total} кандидата й залишено автоматично, без перегляду.",
       "chosen": "Залишено {kept} із {total} створених кандидатів.",
       "awaiting": "Створено {total} кандидатів, які очікують на порівняння."
+    },
+    "asset": {
+      "loading": "Завантаження файлу…",
+      "loadFailed": "Не вдалося завантажити збережений файл.",
+      "retry": "Спробувати ще раз",
+      "open": "Відкрити",
+      "download": "Зберегти копію",
+      "unknownType": "Збережений файл"
     }
   },
   "sandbox": {

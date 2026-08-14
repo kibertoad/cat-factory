@@ -256,6 +256,7 @@
         "bug": "Bug",
         "document": "Document",
         "spike": "Spike",
+        "media": "Media",
         "recurring": "Recurring",
         "review": "Review",
         "ralph": "Ralph loop"
@@ -3929,7 +3930,8 @@
         "document": "document",
         "spike": "spike",
         "review": "review",
-        "ralph": "Ralph loop"
+        "ralph": "Ralph loop",
+        "media": "media"
       },
       "reviewFriction": {
         "heading": "Review-debt friction",
@@ -5132,7 +5134,8 @@
         "document": "Documentation",
         "review": "Review",
         "research": "Research",
-        "planning": "Planning"
+        "planning": "Planning",
+        "media": "Media"
       },
       "strategyOption": {
         "specialist-panel": "Specialist panel",
@@ -6999,6 +7002,14 @@
       "automatic": "{total} candidate was generated and kept automatically, without review.",
       "chosen": "{kept} of {total} generated candidates were kept.",
       "awaiting": "{total} candidates were generated and are waiting to be compared."
+    },
+    "asset": {
+      "loading": "Loading the file…",
+      "loadFailed": "The stored file could not be loaded.",
+      "retry": "Try again",
+      "open": "Open",
+      "download": "Save a copy",
+      "unknownType": "Stored file"
     }
   },
   "sandbox": {

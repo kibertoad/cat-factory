@@ -17,6 +17,12 @@ import * as v from 'valibot'
  *   - `research`   timeboxed investigation / analysis that delivers findings (a spike, an
  *                  environment analysis).
  *   - `planning`   decomposes and plans an initiative (no code, no repo write of its own).
+ *   - `media`      produces BINARY deliverables (images, 3D models, audio) through the
+ *                  generative integrations its step selects, stored through the step's asset
+ *                  storage; a `media` task offers ONLY these. Its own member rather than a
+ *                  flavour of `build` because none of the code-shipping machinery applies: it
+ *                  opens no pull request, has nothing to test and nothing to merge, and the
+ *                  palette it wants is the one nothing else asks for.
  *
  * The gating predicates that read it live in `pipeline-purpose.ts`, which re-exports this
  * module. The vocabulary sits apart from them because `agent-presentation.ts` has to name a
@@ -32,6 +38,7 @@ export const PIPELINE_PURPOSES = [
   'review',
   'research',
   'planning',
+  'media',
 ] as const
 export const pipelinePurposeSchema = v.picklist(PIPELINE_PURPOSES)
 export type PipelinePurpose = v.InferOutput<typeof pipelinePurposeSchema>

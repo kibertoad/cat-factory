@@ -220,6 +220,7 @@
         "bug": "Błąd",
         "document": "Dokument",
         "spike": "Spike",
+        "media": "Multimedia",
         "recurring": "Cykliczne",
         "review": "Przegląd",
         "ralph": "Pętla Ralph"
@@ -3644,7 +3645,8 @@
         "document": "dokument",
         "spike": "spike",
         "review": "przegląd",
-        "ralph": "Pętla Ralph"
+        "ralph": "Pętla Ralph",
+        "media": "multimedia"
       },
       "reviewFriction": {
         "heading": "Hamulec długu przeglądów",
@@ -4962,7 +4964,8 @@
         "document": "Dokumentacja",
         "review": "Przegląd",
         "research": "Badania",
-        "planning": "Planowanie"
+        "planning": "Planowanie",
+        "media": "Multimedia"
       },
       "strategyOption": {
         "specialist-panel": "Panel specjalistów",
@@ -6688,6 +6691,14 @@
       "automatic": "Wygenerowano {total} kandydata i zachowano go automatycznie, bez przeglądu.",
       "chosen": "Zachowano {kept} z {total} wygenerowanych kandydatów.",
       "awaiting": "Wygenerowano {total} kandydatów i czekają na porównanie."
+    },
+    "asset": {
+      "loading": "Wczytywanie pliku…",
+      "loadFailed": "Nie udało się wczytać zapisanego pliku.",
+      "retry": "Spróbuj ponownie",
+      "open": "Otwórz",
+      "download": "Zapisz kopię",
+      "unknownType": "Zapisany plik"
     }
   },
   "sandbox": {

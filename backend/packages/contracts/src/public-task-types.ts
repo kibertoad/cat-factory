@@ -111,6 +111,13 @@ export const BUILTIN_PUBLIC_TASK_FIELDS: Readonly<Record<string, readonly Descri
   ],
   feature: [],
   ralph: [],
+  // A media task takes its title and description and nothing else: what to generate, through
+  // which integrations, into which storage, in which formats, is the STEP'S configuration
+  // (`stepOptions.binaryOutput`), authored once on the pipeline and reused by every task pinned
+  // to it. Listed explicitly rather than left out, because an absent entry and an empty one read
+  // the same to `builtinPublicTaskFields` and the opposite to a person: this says "no per-case
+  // fields", where silence would say "nobody has looked at this type yet".
+  media: [],
 }
 
 /**

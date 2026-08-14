@@ -220,6 +220,7 @@
         "bug": "バグ",
         "document": "ドキュメント",
         "spike": "スパイク",
+        "media": "メディア",
         "recurring": "繰り返し",
         "review": "レビュー",
         "ralph": "Ralph ループ"
@@ -3786,7 +3787,8 @@
         "document": "ドキュメント",
         "spike": "スパイク",
         "review": "レビュー",
-        "ralph": "Ralph ループ"
+        "ralph": "Ralph ループ",
+        "media": "メディア"
       },
       "reviewFriction": {
         "heading": "レビュー滞留の摩擦",
@@ -4962,7 +4964,8 @@
         "document": "ドキュメント",
         "review": "レビュー",
         "research": "調査",
-        "planning": "計画"
+        "planning": "計画",
+        "media": "メディア"
       },
       "strategyOption": {
         "specialist-panel": "専門家パネル",
@@ -6688,6 +6691,14 @@
       "automatic": "候補が {total} 件生成され、確認なしで自動的に採用されました。",
       "chosen": "生成された {total} 件の候補のうち {kept} 件が採用されました。",
       "awaiting": "{total} 件の候補が生成され、比較を待っています。"
+    },
+    "asset": {
+      "loading": "ファイルを読み込んでいます…",
+      "loadFailed": "保存されたファイルを読み込めませんでした。",
+      "retry": "再試行",
+      "open": "開く",
+      "download": "コピーを保存",
+      "unknownType": "保存されたファイル"
     }
   },
   "sandbox": {

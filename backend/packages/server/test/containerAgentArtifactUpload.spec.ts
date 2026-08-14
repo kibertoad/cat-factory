@@ -1,5 +1,6 @@
 import type { AgentRunContext, RunnerJobRef, RunnerTransport } from '@cat-factory/kernel'
 import type { AgentRouting } from '@cat-factory/agents'
+import { PLATFORM_ASSET_STORAGE_SERVICE_ID } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   ContainerAgentExecutor,
@@ -145,5 +146,51 @@ describe('ContainerAgentExecutor artifact-upload seam', () => {
     const { executor, bodies } = makeExecutor({ proxyBaseUrl: undefined })
     await executor.startJob(context('tester-ui'))
     expect(bodies[0]!.artifactUpload).toBeUndefined()
+  })
+
+  it('points a step storing through the PLATFORM’s asset service at the asset route', async () => {
+    // The second producer of bytes, and the one whose endpoint differs: an asset ingest has its
+    // own content types, size ceiling and (the load-bearing one) a row the retention sweep never
+    // reclaims, so it may not share the screenshot route.
+    const { executor, bodies } = makeExecutor()
+    await executor.startJob(
+      context('media-generator', { binaryStorageServiceId: PLATFORM_ASSET_STORAGE_SERVICE_ID }),
+    )
+    expect(bodies[0]!.artifactUpload).toEqual({
+      url: 'https://proxy.test/v1/assets/ingest',
+      token: 'SESSION-TOKEN',
+    })
+  })
+
+  it('withholds it from a generating step storing through the org’s OWN service', async () => {
+    // The gate is where the step POINTS, never the kind: a deployment's generator delivering into
+    // its own object store has no use for our endpoint, and handing it a credential for ours would
+    // be a capability nothing in its brief told it about.
+    const { executor, bodies } = makeExecutor()
+    await executor.startJob(context('media-generator', { binaryStorageServiceId: 'acme-assets' }))
+    expect(bodies[0]!.artifactUpload).toBeUndefined()
+  })
+
+  it('withholds it from a step that was never briefed to store anything', async () => {
+    const { executor, bodies } = makeExecutor()
+    await executor.startJob(context('media-generator'))
+    expect(bodies[0]!.artifactUpload).toBeUndefined()
+  })
+
+  it('lets the STEP’s storage selection beat the kind’s browser image', async () => {
+    // One variable carries the endpoint, so a kind that answers to both descriptions has to pick
+    // one. The image is an inference about what the kind probably does; the selection is a
+    // decision about THIS step, and it is the one the agent read a contract for. The other order
+    // is silent in both directions: the deliverables land as `kind: 'screenshot'` (which the
+    // retention sweep reclaims, since the exemption is per kind) and the ingest answers in a
+    // shape the binary-output declaration block cannot use.
+    const { executor, bodies } = makeExecutor()
+    await executor.startJob(
+      context('tester-ui', { binaryStorageServiceId: PLATFORM_ASSET_STORAGE_SERVICE_ID }),
+    )
+    expect(bodies[0]!.artifactUpload).toEqual({
+      url: 'https://proxy.test/v1/assets/ingest',
+      token: 'SESSION-TOKEN',
+    })
   })
 })

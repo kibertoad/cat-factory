@@ -16,6 +16,7 @@ import type { PipelineStep } from '~/types/execution'
 import { BINARY_OUTPUT_STATE_KEYS, binaryOutputView } from '~/utils/binaryOutput'
 import { binaryCandidateView } from '~/utils/binaryCandidates'
 import CopyButton from '~/components/common/CopyButton.vue'
+import StoredAssetView from '~/components/binaryOutput/StoredAssetView.vue'
 
 // Two callers, one renderer — the same split `StepEffortReport` makes: the generic step-detail
 // panel drops it in as a `card` (its own heading + border, among the other detail sections),
@@ -135,7 +136,13 @@ const state = computed(() => {
 
     <!-- The artifacts. `location` is the service's OWN addressing — an object key, a path, a
          URL — recorded verbatim and never interpreted, so it renders as copyable text and
-         never as a link. -->
+         never as a link.
+         The ONE exception is an artifact stored through the platform's own asset storage, where
+         the location is an id for bytes WE hold: there the row also shows the thing itself, and
+         offers to open or save it. That is not a reinterpretation of the location, it is the
+         join `binaryOutputView` already made (`row.assetId` is null unless the service is ours
+         AND the location is a well-formed id), and it is the difference between a report that
+         says where the work went and one that shows it. -->
     <ul v-if="view.rows.length" class="space-y-1.5">
       <li
         v-for="(row, i) in view.rows"
@@ -144,6 +151,13 @@ const state = computed(() => {
         data-testid="binary-output-artifact"
       >
         <CopyButton :text="row.location" class="absolute end-1 top-1" />
+        <StoredAssetView
+          v-if="row.assetId"
+          :asset-id="row.assetId"
+          :content-type="row.contentType"
+          :label="row.entity ?? row.description"
+          class="mb-2 pe-8"
+        />
         <code class="block break-all pe-8 font-mono text-[11px] text-slate-200">{{
           row.location
         }}</code>

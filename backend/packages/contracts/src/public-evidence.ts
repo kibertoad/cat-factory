@@ -25,11 +25,22 @@ import * as v from 'valibot'
 // ---------------------------------------------------------------------------
 
 /**
- * What an artifact IS, which is what pairs a captured screenshot with the design it is
- * reviewed against: `screenshot` is machine-captured during a run, `reference` is the image a
- * human uploaded for the run to be judged against.
+ * What an artifact IS.
+ *
+ * `screenshot` and `reference` are the EVIDENCE pair, and pairing them is what the vocabulary
+ * was for: `screenshot` is machine-captured during a run, `reference` is the image a human
+ * uploaded for the run to be judged against.
+ *
+ * `asset` is a third thing and not a third kind of evidence: it is a DELIVERABLE a binary-output
+ * step generated and stored through the platform's own asset storage, so it is what the run
+ * produced rather than proof of what it did. It is listed here because a caller enumerating a
+ * run's artifacts is entitled to the bytes the run made, and because the alternative (projecting
+ * it as a `screenshot`) would put a generated sprite into the set a visual-confirmation consumer
+ * pairs against reference designs. An added enum member is the additive change the public API
+ * makes freely; a consumer that branches on the two it knows treats this one as unrecognised,
+ * which is the correct reading for it.
  */
-export const publicArtifactKindSchema = v.picklist(['screenshot', 'reference'])
+export const publicArtifactKindSchema = v.picklist(['screenshot', 'reference', 'asset'])
 export type PublicArtifactKind = v.InferOutput<typeof publicArtifactKindSchema>
 
 /**

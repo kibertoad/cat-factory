@@ -812,3 +812,24 @@ without an explicit type filter starts receiving it.
 Its `act` retries the run, which puts it in the class the individual-usage credential guard refuses
 headlessly: a workspace whose runs resolve to an individual-usage model gets a 409
 (`individual_model_unsupported`) here, exactly as it already does for `ci_failed` and `test_failed`.
+
+## 1.56.0, not 1.55.0
+
+One additive enum member, `asset`, in the run-artifact kind vocabulary
+(`GET /api/v1/runs/{runId}/artifacts`, and the artifact rows the blob endpoint is addressed from).
+Nothing existing changes shape or meaning, and the SDKs tolerate unknown enum values by design, so
+a consumer built against 1.55.0 keeps parsing.
+
+The number moved because main reached 1.55.0 with `deploy_blocked` while this branch was in
+flight: the collision this file's header warns about, arriving exactly as described. Both sides
+wrote `const API_VERSION = '1.55.0'`, so the version line itself auto-merged clean and only the
+paragraph beside it conflicted.
+
+**What a consumer NOTICES is a new population in a list it already reads.** The two members that
+existed are an EVIDENCE pair: a `screenshot` is what a run captured, a `reference` is the design a
+human uploaded for it to be judged against, and pairing them by `view` is what the vocabulary was
+for. An `asset` is neither half of that pair: it is a DELIVERABLE a media-generating step produced
+and stored through the platform's own asset storage, so a caller that pairs screenshots against
+references must filter it out rather than treat it as an unmatched capture. It also does not
+expire: assets are exempt from the retention sweep that reclaims a run's screenshots, so a run's
+artifact list can stay non-empty long after its evidence is gone.

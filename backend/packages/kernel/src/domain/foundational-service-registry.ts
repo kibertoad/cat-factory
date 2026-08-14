@@ -4,6 +4,7 @@ import type {
   CreateFoundationalServiceInput,
 } from '@cat-factory/contracts'
 import { summarizeContract } from './foundational-services.js'
+import { platformAssetStorageService } from './platform-asset-service.js'
 
 // App-owned registry of foundational services a DEPLOYMENT ships in code, mirroring the
 // agent-kind / gate / pipeline / task-type registries: the composition root news one instance
@@ -135,10 +136,19 @@ export class FoundationalServiceRegistry {
 }
 
 /**
- * A fresh, EMPTY foundational-service registry. Each facade news one and a deployment registers
- * its estate on it; the platform ships no built-in foundational services (there is no shared
- * capability every organisation runs), so the default catalog stays empty.
+ * A fresh foundational-service registry holding the ONE service the platform ships: its own
+ * asset storage ({@link platformAssetStorageService}). Each facade news one and a deployment
+ * registers its estate on top.
+ *
+ * There is no shared BUSINESS capability every organisation runs, which is why the default
+ * catalog held nothing for as long as the tier existed. The platform's own asset store is a
+ * different claim: it is a capability every deployment of THIS platform runs, it is the target a
+ * binary-output step must select before it can be configured at all, and a deployment that
+ * prefers its own store registers that one and suppresses this id at either stored tier, exactly
+ * as it can any other `builtin`.
  */
 export function defaultFoundationalServiceRegistry(): FoundationalServiceRegistry {
-  return new FoundationalServiceRegistry()
+  const registry = new FoundationalServiceRegistry()
+  registry.register(platformAssetStorageService())
+  return registry
 }

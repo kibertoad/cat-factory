@@ -319,6 +319,22 @@ export interface AgentRunContext {
    * its agent already has, and the brief says so.
    */
   binaryGenerators?: ResolvedBinaryGenerator[]
+  /**
+   * The catalog service this step stores its generated binaries THROUGH
+   * (`stepOptions.binaryOutput.storageServiceId`), resolved only for a dispatch whose effective
+   * kind carries the `binary-output` trait.
+   *
+   * The AGENT learns this from the injected brief, which names the service and carries its API
+   * contract; this field exists for the container EXECUTOR, which has one decision to make from
+   * it: whether the target is the platform's own asset storage, and therefore whether this job
+   * gets the in-container upload seam that reaches it. Neither the kind nor the brief can answer
+   * that (a deployment's own generator kind stores wherever its step points it), and the id is
+   * non-secret, so it rides here beside {@link binaryGenerators} rather than becoming a second
+   * copy of the selection somewhere else.
+   *
+   * Absent ⇒ this dispatch was not briefed to store anything.
+   */
+  binaryStorageServiceId?: string
   block: {
     /** Stable block id (set by the engine; used by repo-aware executors). */
     id?: string

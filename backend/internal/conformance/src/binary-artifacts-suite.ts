@@ -320,6 +320,50 @@ export function defineBinaryArtifactsSuite(
       expect(await store.getBlob(ws, render.id)).toBeNull()
     })
 
+    it('pruneOlderThan EXEMPTS a generated ASSET, however old it is', async () => {
+      // The same argument as the document renders above, one axis over: the retention window is
+      // sized for run DEBRIS, and an asset is the thing the run was started to produce. A swept
+      // one takes its step's report with it, in the worst possible form: the report goes on
+      // naming a location, so the loss reads as a broken link rather than as a reclaim.
+      //
+      // Asserted at the STORE, not at either facade's SQL, because that is where the two
+      // implementations can differ: the predicate is a `NOT IN` on D1 and a `notInArray` on
+      // Drizzle, and the list and the delete build it separately on both.
+      const store = makeStore()
+      const { ws, e1, blk } = ids()
+      const debris = await store.store({
+        meta: {
+          workspaceId: ws,
+          executionId: e1,
+          blockId: blk,
+          kind: 'screenshot',
+          view: 'v',
+          contentType: 'image/png',
+        },
+        blob: png(31),
+      })
+      const asset = await store.store({
+        meta: {
+          workspaceId: ws,
+          executionId: e1,
+          blockId: null,
+          kind: 'asset',
+          view: 'anvil sprite',
+          contentType: 'image/png',
+        },
+        blob: png(32),
+      })
+
+      expect(await store.pruneOlderThan(ws, Date.now() + 60_000)).toBe(1)
+      expect(await store.getMetadata(ws, debris.id)).toBeNull()
+      expect(await store.getMetadata(ws, asset.id)).not.toBeNull()
+      // The bytes survive too: a metadata row kept beside a reclaimed blob would be the same
+      // broken link with an extra step.
+      expect(await store.getBlob(ws, asset.id)).not.toBeNull()
+      // It is still listed as the run's, which is what the report's read-back resolves against.
+      expect((await store.listByExecution(ws, e1)).map((r) => r.id)).toEqual([asset.id])
+    })
+
     it('deleteByWorkspace reclaims every artifact (rows + bytes) and scopes by workspace', async () => {
       // Drives the workspace-delete purge: on a board delete the retention sweep never sees the
       // (now-gone) workspace again, so every artifact — regardless of age, run or block — must be

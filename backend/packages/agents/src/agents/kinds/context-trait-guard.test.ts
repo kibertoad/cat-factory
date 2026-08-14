@@ -12,6 +12,7 @@ import {
   TESTER_AGENT_KIND,
 } from './built-in-container.js'
 import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
+import { MEDIA_GENERATOR_AGENT_KIND } from './media.js'
 
 // Only `code-aware` and `doc-aware` actually FOLD the task's selected fragments into the agent's
 // system prompt (`AgentContextBuilder.resolveFragments` gates on exactly those two: technical
@@ -65,6 +66,14 @@ const FRAGMENT_FOLD_OPT_OUT = new Set<string>([
   // not a side effect of registering the kinds. Revisit deliberately.
   BUSINESS_DOCUMENTER_AGENT_KIND,
   ANALYSIS_AGENT_KIND,
+  // Generates BINARY deliverables through a vendor API and stores them through a storage contract:
+  // it writes no code and authors no prose, so neither fold has anything to give it. A technical
+  // best-practice fragment says how code should be WRITTEN and a writing-style one how prose should
+  // READ, and a rendered image is neither. It clones a repo for SCOPE alone (which subjects exist,
+  // which of them lack an asset), never to contribute to it, and the trait guidance is explicit
+  // that it commits no binaries. The same distinction `merger` is exempt on: this kind's output is
+  // not a text the standards could describe.
+  MEDIA_GENERATOR_AGENT_KIND,
 ])
 
 describe('registered container kinds fold the task fragments', () => {
