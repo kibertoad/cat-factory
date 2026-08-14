@@ -325,6 +325,7 @@ export {
   REVIEW_PIPELINE_ID,
   SPIKE_PIPELINE_ID,
   RALPH_PIPELINE_ID,
+  MEDIA_PIPELINE_ID,
 } from '@cat-factory/kernel'
 // The options {@link createWorker} takes — re-exported from the root so a deployment can name the
 // type of what it passes without reaching for the `@cat-factory/worker/app` subpath.

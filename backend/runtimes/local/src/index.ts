@@ -228,6 +228,7 @@ export {
   REVIEW_PIPELINE_ID,
   SPIKE_PIPELINE_ID,
   RALPH_PIPELINE_ID,
+  MEDIA_PIPELINE_ID,
 } from '@cat-factory/kernel'
 // The built-in model-preset ids + the catalog fallback default, re-exported so a local deploy-app
 // wrapper can name a preset when passing `startLocal({ defaultModelPresetId })` without a direct
