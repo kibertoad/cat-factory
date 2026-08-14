@@ -668,3 +668,98 @@ describe('LocalContainerRunnerTransport — reaping and start-up failures', () =
     expect(runCall).toContain('HARNESS_CLEAN_KEEP=node_modules,.venv')
   })
 })
+
+describe('LocalContainerRunnerTransport — image variants', () => {
+  /** A docker fake plus a fetch that answers health + /jobs, the shape every dispatch needs. */
+  function dispatchable() {
+    const { exec, calls } = fakeDocker()
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+      if (url.endsWith('/jobs')) return jsonResponse({ jobId: 'job-1', state: 'running' }, 202)
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    return { exec, calls, fetchImpl: fetchImpl as unknown as typeof fetch }
+  }
+
+  it('runs a ui job on the UI image, in its own container beside the run’s ordinary one', async () => {
+    const { exec, calls, fetchImpl } = dispatchable()
+    const transport = mkTransport({
+      image: 'harness:test',
+      imageUi: 'harness-ui:test',
+      exec,
+      fetchImpl,
+    })
+
+    await transport.dispatch({ runId: 'run-1', jobId: 'coder' }, {}, 'agent')
+    await transport.dispatch({ runId: 'run-1', jobId: 'tester', image: 'ui' }, {}, 'agent')
+
+    // TWO containers for one run: a per-run container cannot change image mid-run, so the
+    // browser step gets its own, addressed by the variant-qualified key.
+    const runs = calls.filter((c) => c[0] === 'run')
+    expect(runs).toHaveLength(2)
+    expect(runs[0]).toContain('harness:test')
+    expect(runs[0]).toContain('cat-factory.runId=run-1')
+    expect(runs[1]).toContain('harness-ui:test')
+    expect(runs[1]).toContain('cat-factory.runId=ui:run-1')
+  })
+
+  it('re-attaches a second ui step to the SAME ui container rather than starting another', async () => {
+    const { exec, calls, fetchImpl } = dispatchable()
+    const transport = mkTransport({
+      image: 'harness:test',
+      imageUi: 'harness-ui:test',
+      exec,
+      fetchImpl,
+    })
+
+    await transport.dispatch({ runId: 'run-1', jobId: 'tester', image: 'ui' }, {}, 'agent')
+    await transport.dispatch({ runId: 'run-1', jobId: 'tester-retry', image: 'ui' }, {}, 'agent')
+
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(1)
+  })
+
+  // The whole point of the variant. Serving this job the default image gives the browser-driven
+  // tester no browser, and it finds out only after the checkout, the install and the model's
+  // first turns, then reports an `abort` that reads like an app which would not start.
+  it('refuses a ui job when no UI image is configured, starting nothing', async () => {
+    const { exec, calls, fetchImpl } = dispatchable()
+    const transport = mkTransport({ image: 'harness:test', exec, fetchImpl })
+
+    await expect(
+      transport.dispatch({ runId: 'run-1', jobId: 'tester', image: 'ui' }, {}, 'agent'),
+    ).rejects.toThrow(/LOCAL_HARNESS_IMAGE_UI/)
+
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(0)
+    // Nor did it clear the way for one: a refusal must not remove a container either.
+    expect(calls.filter((c) => c[0] === 'rm')).toHaveLength(0)
+  })
+
+  it('releases the ui container for the ui ref and the ordinary one for the plain ref', async () => {
+    const { exec, calls, fetchImpl } = dispatchable()
+    const transport = mkTransport({
+      image: 'harness:test',
+      imageUi: 'harness-ui:test',
+      exec,
+      fetchImpl,
+    })
+    await transport.dispatch({ runId: 'run-1', jobId: 'coder' }, {}, 'agent')
+    await transport.dispatch({ runId: 'run-1', jobId: 'tester', image: 'ui' }, {}, 'agent')
+    calls.length = 0
+
+    await transport.release({ runId: 'run-1', jobId: 'tester', image: 'ui' })
+
+    // A release is per CONTAINER, and a run whose browser step finished still has agent steps to
+    // run. Asserted by what each ref does next rather than by the `rm` count: the fake hands
+    // back one container id, so counting removals cannot tell the two apart. The ordinary ref
+    // re-attaches (no new container); the released ui ref has to start one.
+    calls.length = 0
+    await transport.dispatch({ runId: 'run-1', jobId: 'reviewer' }, {}, 'agent')
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(0)
+
+    await transport.dispatch({ runId: 'run-1', jobId: 'tester-2', image: 'ui' }, {}, 'agent')
+    const restarted = calls.filter((c) => c[0] === 'run')
+    expect(restarted).toHaveLength(1)
+    expect(restarted[0]).toContain('harness-ui:test')
+  })
+})

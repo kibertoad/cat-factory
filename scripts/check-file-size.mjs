@@ -155,7 +155,7 @@ const LEGACY_ALLOWANCES = new Map([
   // `github-deps.ts` already had (a per-integration selector reading `buildAppRegistry` back out
   // of this root). It moved because a fourth built-in source pushed the file over budget, and the
   // selector is where every future one lands too.
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1062],
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1014],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)
@@ -203,7 +203,7 @@ const LEGACY_ALLOWANCES = new Map([
   // the three resolvers it composes already live, when job-token scoping made the auxiliary
   // resolution a dispatch INPUT (the token is narrowed to the repos it produces) rather than a
   // tail step.
-  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1328],
+  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1289],
   // The two `/search/*` endpoints (issue + code search) and their response shapes moved to
   // `github/searchApi.ts` when the bug hunt needed the issue search to surface the extra
   // fields its response already carries — so the client ratchets DOWN.

@@ -9,6 +9,7 @@ import type {
 import { ENV_HELP, configProblem } from '@cat-factory/server'
 import type { TrackerWebhookEvent } from '@cat-factory/kernel'
 import type { DeployContainer } from './containers/DeployContainer'
+import type { UiTesterContainer } from './containers/UiTesterContainer'
 import type { ExecutionContainer } from './containers/ExecutionContainer'
 import type { CacheGenerationDirectory } from './durable-objects/CacheGenerationDirectory'
 import type { WorkspaceEventsHub } from './durable-objects/WorkspaceEventsHub'
@@ -209,6 +210,18 @@ export interface Env {
    * REST path is unaffected).
    */
   DEPLOY_CONTAINER?: DurableObjectNamespace<DeployContainer>
+  /**
+   * Durable Object namespace backing per-run UI-TESTER containers: the heavier image that
+   * layers Playwright + Chromium, pnpm/yarn, `serve` and a headless JRE + WireMock onto the
+   * executor harness, which the `image: 'ui'` dispatch variant routes to. A run gets one
+   * ALONGSIDE its `EXEC_CONTAINER` instance, because a per-run container cannot change image
+   * mid-run and a browser-driven step sits between ordinary agent steps.
+   *
+   * Absent ⇒ a step declaring that image is REFUSED at dispatch, naming this binding. It is not
+   * served on the executor image instead: that image has no browser, and the refusal is the
+   * whole reason the variant exists.
+   */
+  UI_CONTAINER?: DurableObjectNamespace<UiTesterContainer>
   /**
    * Optional shared secret authenticating the Worker → harness HTTP calls. When set,
    * it is injected into each per-run container's env (so the harness requires it) and

@@ -1,13 +1,21 @@
 import type { D1Database } from '@cloudflare/workers-types'
+import type { RunnerImageVariant } from '@cat-factory/kernel'
 import type {
   LiveContainerRecord,
   LiveContainerStore,
 } from '../containers/ContainerInstanceRegistry'
 
+/** The variants this build can resolve a container class for. */
+const IMAGE_VARIANTS: readonly RunnerImageVariant[] = ['default', 'ui', 'deploy']
+
+function isRunnerImageVariant(value: string | null): value is RunnerImageVariant {
+  return value != null && (IMAGE_VARIANTS as readonly string[]).includes(value)
+}
+
 /**
- * The live-container inventory over D1 (`live_containers`, migration 0022). `add`
- * uses `ON CONFLICT(container_key) DO NOTHING` so a replayed dispatch preserves the
- * first `started_at` — the container's true age the reaper keys off.
+ * The live-container inventory over D1 (`live_containers`, migration 0022; `image` added in
+ * 0094). `add` uses `ON CONFLICT(container_key) DO NOTHING` so a replayed dispatch preserves
+ * the first `started_at`, the container's true age the reaper keys off.
  */
 export class D1LiveContainerRepository implements LiveContainerStore {
   private readonly db: D1Database
@@ -19,11 +27,17 @@ export class D1LiveContainerRepository implements LiveContainerStore {
   async add(record: LiveContainerRecord): Promise<void> {
     await this.db
       .prepare(
-        `INSERT INTO live_containers (container_key, kind, workspace_id, started_at)
-         VALUES (?, ?, ?, ?)
+        `INSERT INTO live_containers (container_key, kind, workspace_id, image, started_at)
+         VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(container_key) DO NOTHING`,
       )
-      .bind(record.containerKey, record.kind, record.workspaceId ?? null, record.startedAt)
+      .bind(
+        record.containerKey,
+        record.kind,
+        record.workspaceId ?? null,
+        record.image ?? null,
+        record.startedAt,
+      )
       .run()
   }
 
@@ -37,7 +51,7 @@ export class D1LiveContainerRepository implements LiveContainerStore {
   async listStartedBefore(epochMs: number): Promise<LiveContainerRecord[]> {
     const { results } = await this.db
       .prepare(
-        `SELECT container_key, kind, workspace_id, started_at FROM live_containers
+        `SELECT container_key, kind, workspace_id, image, started_at FROM live_containers
          WHERE started_at < ?
          ORDER BY started_at`,
       )
@@ -46,12 +60,17 @@ export class D1LiveContainerRepository implements LiveContainerStore {
         container_key: string
         kind: string
         workspace_id: string | null
+        image: string | null
         started_at: number
       }>()
     return (results ?? []).map((r) => ({
       containerKey: r.container_key,
       kind: r.kind,
       ...(r.workspace_id != null ? { workspaceId: r.workspace_id } : {}),
+      // Narrowed against the variant vocabulary rather than cast: a row written by a build that
+      // knew a variant this one does not must not send the reaper to a namespace resolver that
+      // will throw on it, which would leave the leaked container alive AND the row behind.
+      ...(isRunnerImageVariant(r.image) ? { image: r.image } : {}),
       startedAt: r.started_at,
     }))
   }

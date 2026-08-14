@@ -1,0 +1,61 @@
+name: UI image smoketest
+
+# Builds the UI-tester image (Dockerfile.ui) and BOOTS it, then exercises every tool the
+# `tester-ui` flow depends on inside the running container: the harness health endpoint, the
+# pinned pnpm/yarn, `serve` answering, a real Chromium rendering and screenshotting the served
+# page, and WireMock standing up. See backend/internal/executor-harness/scripts/.
+#
+# Why it exists: this image is published but nothing in the repo's ordinary test lanes runs it.
+# `docker build` succeeding proves the layers ran, not that Chromium launches or that the harness
+# user can write its own npm cache, and both of those have failed silently: the corepack line the
+# image staged its package managers with had been unrunnable since the base moved to node:26,
+# and the build stayed green because a `RUN` that fails is only a failure when someone builds it.
+#
+# GATED on the image's own sources, so an ordinary backend or frontend change never pays for a
+# Chromium build. It is the PR-side counterpart of docker-publish.yml's pre-push smoketest: the
+# same script, so a red run here is reproducible with one command locally
+# (`pnpm --filter @cat-factory/executor-harness image:smoketest:ui`).
+
+on:
+  pull_request:
+    paths:
+      - 'backend/internal/executor-harness/Dockerfile'
+      - 'backend/internal/executor-harness/Dockerfile.ui'
+      - 'backend/internal/executor-harness/scripts/ui-image-checks.sh'
+      - 'backend/internal/executor-harness/scripts/smoketest-ui-image.sh'
+      - '.github/workflows/ui-image-smoketest.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ui-image-smoketest-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  smoketest:
+    name: Build & boot the UI image
+    runs-on: ubuntu-latest
+    # A cold base-image build plus Playwright's Chromium download plus the boot checks. Bounded
+    # so a hung container fails the job instead of holding a runner for the default six hours.
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      # The base image is built FROM SOURCE here rather than pulled. On a PR that touches the
+      # base Dockerfile too, the published `:latest` is the wrong base: it would smoketest the UI
+      # layer against an executor image this change replaces, which is how a break lands green.
+      # It costs one extra build on a workflow that runs only when the image itself changes.
+      - name: Build & boot the UI image, then run the in-container checks
+        working-directory: backend/internal/executor-harness
+        run: bash scripts/smoketest-ui-image.sh
+
+      # The container is torn down by the script's own trap; this only surfaces a build/boot
+      # failure's logs when the step above exited before printing them.
+      - name: Docker state on failure
+        if: failure()
+        run: docker ps -a && docker images

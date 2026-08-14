@@ -1,7 +1,6 @@
 import { getErrorMessage } from '@cat-factory/kernel'
-import type { Clock } from '@cat-factory/kernel'
-import type { DurableObjectNamespace } from '@cloudflare/workers-types'
-import type { ExecutionContainer } from './ExecutionContainer'
+import type { Clock, RunnerImageVariant } from '@cat-factory/kernel'
+import type { ResolveRunContainerNamespace } from './runContainerNamespace'
 import { logger } from '../observability/logger'
 
 // The instance-level reaping registry. Per-run Cloudflare Containers are addressed
@@ -14,12 +13,20 @@ import { logger } from '../observability/logger'
 
 /** One live per-run container, as the registry records it. */
 export interface LiveContainerRecord {
-  /** The idFromName() argument: the execution/bootstrap job id (also the run id). */
+  /** The idFromName() argument (kernel's `containerKeyForRef`): the run id, variant-qualified. */
   containerKey: string
   /** The dispatch kind ('run' | 'blueprint' | 'bootstrap'); diagnostic only. */
   kind: string
   /** Owning workspace, when known (the transport seam carries only the job id). */
   workspaceId?: string
+  /**
+   * The executor image variant, which is WHICH CONTAINER CLASS holds this instance. Not
+   * diagnostic: the reaper kills through a Durable Object namespace, and the key alone cannot
+   * say which one, so a leaked UI-tester container would be looked up in the executor namespace,
+   * where `idFromName` happily returns a stub for a container that never existed and the kill
+   * reads as a success. Absent ⇒ the default executor class.
+   */
+  image?: RunnerImageVariant
   /** Epoch ms of the FIRST dispatch = the container's true age. */
   startedAt: number
 }
@@ -44,7 +51,8 @@ export interface LiveContainerStore {
  */
 export class ContainerInstanceRegistry {
   constructor(
-    private readonly namespace: DurableObjectNamespace<ExecutionContainer>,
+    /** Resolves the container class an image variant lives in, shared with the transport. */
+    private readonly resolveNamespace: ResolveRunContainerNamespace,
     private readonly store: LiveContainerStore,
     private readonly clock: Clock,
   ) {}
@@ -54,13 +62,19 @@ export class ContainerInstanceRegistry {
    * failure must never break the dispatch it is bookkeeping for, and the earliest
    * `startedAt` is preserved across replayed dispatches (so age stays truthful).
    */
-  async register(containerKey: string, kind: string, workspaceId?: string): Promise<void> {
+  async register(record: {
+    containerKey: string
+    kind: string
+    workspaceId?: string
+    image?: RunnerImageVariant
+  }): Promise<void> {
     try {
-      await this.store.add({ containerKey, kind, workspaceId, startedAt: this.clock.now() })
+      await this.store.add({ ...record, startedAt: this.clock.now() })
     } catch (error) {
       logger.warn('container-registry: failed to record live container (continuing)', {
-        containerKey,
-        kind,
+        containerKey: record.containerKey,
+        kind: record.kind,
+        image: record.image,
         err: getErrorMessage(error),
       })
     }
@@ -73,8 +87,9 @@ export class ContainerInstanceRegistry {
    * SIGKILL resolves, so a (rare) transport-level failure leaves the row for the
    * reaper to retry rather than silently dropping a still-live container.
    */
-  async release(containerKey: string): Promise<void> {
-    await this.namespace.get(this.namespace.idFromName(containerKey)).shutdown()
+  async release(containerKey: string, image?: RunnerImageVariant): Promise<void> {
+    const namespace = this.resolveNamespace(image ?? 'default')
+    await namespace.get(namespace.idFromName(containerKey)).shutdown()
     await this.store.remove(containerKey)
   }
 
@@ -92,11 +107,12 @@ export class ContainerInstanceRegistry {
       logger.warn('container-reaper: killing leaked container past its max lifetime', {
         containerKey: record.containerKey,
         kind: record.kind,
+        image: record.image,
         workspaceId: record.workspaceId,
         ageMs: this.clock.now() - record.startedAt,
       })
       try {
-        await this.release(record.containerKey)
+        await this.release(record.containerKey, record.image)
         reaped++
       } catch (error) {
         // Leave the row in place so the next pass retries this one.

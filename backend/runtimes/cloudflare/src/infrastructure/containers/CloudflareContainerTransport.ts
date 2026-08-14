@@ -10,10 +10,11 @@ import {
   type RunnerJobStopOutcome,
   type RunnerJobView,
   type RunnerTransport,
+  containerKeyForRef,
 } from '@cat-factory/kernel'
-import type { DurableObjectNamespace } from '@cloudflare/workers-types'
-import type { DeployContainer } from './DeployContainer'
-import type { ExecutionContainer } from './ExecutionContainer'
+import type { DurableObjectId, DurableObjectStub } from '@cloudflare/workers-types'
+import type { RunContainer } from './RunContainer'
+import type { ResolveRunContainerNamespace, RunContainerNamespace } from './runContainerNamespace'
 import {
   type ContainerStopCause,
   describeContainerExit,
@@ -126,19 +127,30 @@ const STOP_TIMEOUT_MS = 30_000
 // call so a container that requires the secret accepts the Worker's dispatch/poll.
 const HARNESS_SECRET_HEADER = 'x-harness-secret'
 
+/**
+ * The resolver a transport DEDICATED to one container class is built with: the deploy adapter's,
+ * and every test that drives the transport over a single fake namespace. It ignores the variant
+ * because such a transport is chosen by its caller, not by the job.
+ *
+ * It lives beside the transport rather than beside the resolver TYPE because constructing one is
+ * its only purpose.
+ */
+export function fixedContainerNamespace(
+  namespace: RunContainerNamespace,
+): ResolveRunContainerNamespace {
+  return () => namespace
+}
+
 export class CloudflareContainerTransport implements RunnerTransport {
   /** Backend id recorded in run diagnostics (per-run Cloudflare Container). */
   readonly backend = 'cloudflare-container'
 
   constructor(
-    // Either per-run container class: `ExecutionContainer` (the agent harness, bound as
-    // `EXEC_CONTAINER`) or `DeployContainer` (the deploy harness, bound as `DEPLOY_CONTAINER`).
-    // Both expose the same `/jobs` HTTP contract on 8080 plus `recentStopObservation`/`shutdown`,
-    // so this transport drives either unchanged — a deploy-dedicated instance simply gets the
-    // deploy namespace.
-    private readonly namespace:
-      | DurableObjectNamespace<ExecutionContainer>
-      | DurableObjectNamespace<DeployContainer>,
+    // Which per-run container class serves a given image variant. Every class (executor, UI
+    // tester, deploy harness) exposes the same `/jobs` HTTP contract on 8080 plus
+    // `recentStopObservation`/`shutdown`, so this transport drives any of them unchanged: a
+    // deploy-dedicated instance is simply built over a resolver pinned to that one namespace.
+    private readonly resolveNamespace: ResolveRunContainerNamespace,
     /** Live-container inventory + reaper kill path; absent in tests (reaping off). */
     private readonly registry?: ContainerInstanceRegistry,
     /**
@@ -156,21 +168,44 @@ export class CloudflareContainerTransport implements RunnerTransport {
     return this.sharedSecret ? { [HARNESS_SECRET_HEADER]: this.sharedSecret } : {}
   }
 
-  // NB: the `RunnerDispatchOptions` (provisioning hints) the port allows are
-  // intentionally ignored here. A Cloudflare Container's instance type is fixed per
-  // container class by the wrangler `[[containers]] instance_type` — there is no
-  // per-DO/per-request sizing API — so a resolved instance-type id is meaningless on
-  // this backend. Per-service sizing applies only to the backends that can honour it
-  // (the self-hosted pool and the local Docker transport).
+  /**
+   * The Durable Object id addressing this job's container: the class that serves the ref's image
+   * variant, named by `containerKeyForRef`.
+   *
+   * Both halves of that come off the REF, which is why the variant rides there rather than only
+   * on the dispatch options: `poll`, `release` and `stopJob` get no options, and a run whose
+   * `tester-ui` step sits in its own container would otherwise be polled at the container its
+   * coder step is running in, reading as an evicted job while the browser one worked on.
+   */
+  private stubFor(ref: RunnerJobRef): {
+    id: DurableObjectId
+    stub: DurableObjectStub<RunContainer>
+  } {
+    const namespace = this.resolveNamespace(ref.image ?? 'default')
+    const id = namespace.idFromName(containerKeyForRef(ref))
+    return { id, stub: namespace.get(id) as DurableObjectStub<RunContainer> }
+  }
+
+  // NB: the SIZING hints in `RunnerDispatchOptions` are intentionally ignored here. A
+  // Cloudflare Container's instance type is fixed per container class by the wrangler
+  // `[[containers]] instance_type`, with no per-DO/per-request sizing API, so a resolved
+  // instance-type id is meaningless on this backend. Per-service sizing applies only to the
+  // backends that can honour it (the self-hosted pool and the local Docker transport).
+  //
+  // The `image` hint is NOT in that group: it selects the container class, which this backend
+  // does honour. It is read off the REF rather than the options, so `poll`/`release`/`stopJob`
+  // (which get no options) address the same container the dispatch started.
   async dispatch(
     ref: RunnerJobRef,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'agent',
   ): Promise<RunnerDispatchAck | undefined> {
-    // The container is per-RUN (one Durable Object per run id), so every step of a run
-    // dispatches to the same instance; the harness keys the job by `ref.jobId` (in the
-    // spec body), unique per step, so siblings never collide in its registries.
-    const stub = this.namespace.get(this.namespace.idFromName(ref.runId))
+    // The container is per-RUN AND per image variant, so every step of a run on the same image
+    // dispatches to the same instance; the harness keys the job by `ref.jobId` (in the spec
+    // body), unique per step, so siblings never collide in its registries. A step declaring a
+    // different image gets its own container, which is why the inventory key below is the
+    // variant-qualified one rather than the bare run id.
+    const { stub } = this.stubFor(ref)
     // One harness endpoint for every kind: POST /jobs with the kind in the body. The
     // harness reads `kind` to pick the validator + registry; the rest is the job spec.
     const res = await stub.fetch('http://container/jobs', {
@@ -193,7 +228,7 @@ export class CloudflareContainerTransport implements RunnerTransport {
     // the reaper can find it if its run record ever diverges from reality. Idempotent
     // across a run's steps — the store preserves the earliest startedAt for a key.
     // Best-effort — the registry swallows store errors.
-    await this.registry?.register(ref.runId, kind)
+    await this.registry?.register({ containerKey: containerKeyForRef(ref), kind, image: ref.image })
     // The harness's capability handshake rides the acceptance body. Read AFTER the registry
     // write so a malformed/absent body can never cost the reaper its record of a live container.
     return readRunnerDispatchAck(await safeJson(res))
@@ -228,8 +263,7 @@ export class CloudflareContainerTransport implements RunnerTransport {
     // the closest thing to a stable "container id" to surface in the run's details (a
     // Cloudflare Container has no public URL). Derived here so the executor can show WHICH
     // container the run is on. Cheap (no extra round-trip): `idFromName` is local.
-    const doId = this.namespace.idFromName(ref.runId)
-    const stub = this.namespace.get(doId)
+    const { id: doId, stub } = this.stubFor(ref)
     let res: Response
     try {
       res = await stub.fetch(`http://container/jobs/${encodeURIComponent(ref.jobId)}`, {
@@ -277,10 +311,10 @@ export class CloudflareContainerTransport implements RunnerTransport {
     // single step within it, so the whole run's container goes regardless).
     if (this.registry) {
       // The registry owns the single kill path (shutdown + inventory removal).
-      await this.registry.release(ref.runId)
+      await this.registry.release(containerKeyForRef(ref), ref.image)
       return
     }
-    const stub = this.namespace.get(this.namespace.idFromName(ref.runId))
+    const { stub } = this.stubFor(ref)
     await stub.shutdown()
   }
 
@@ -296,7 +330,7 @@ export class CloudflareContainerTransport implements RunnerTransport {
    * telling them to go and look.
    */
   async stopJob(ref: RunnerJobRef): Promise<RunnerJobStopOutcome> {
-    const stub = this.namespace.get(this.namespace.idFromName(ref.runId))
+    const { stub } = this.stubFor(ref)
     try {
       const res = await stub.fetch(`http://container/jobs/${encodeURIComponent(ref.jobId)}`, {
         method: 'DELETE',

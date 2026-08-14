@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/executor-harness",
-  "version": "1.122.0",
+  "version": "1.123.0",
   "description": "Container payload: a thin TypeScript wrapper that runs the Pi coding agent against a cloned repo and opens a PR. Runs in the Cloudflare Container (and, in local native mode, as a host process); carries no secrets.",
   "repository": {
     "type": "git",
@@ -32,7 +32,9 @@
     "test": "vitest run",
     "test:run": "vitest run",
     "test:acceptance": "vitest run --config vitest.acceptance.config.ts",
-    "image:publish": "bash scripts/publish-image.sh"
+    "image:publish": "bash scripts/publish-image.sh",
+    "image:publish:ui": "IMAGE_NAME=cat-factory-executor-ui DOCKERFILE=Dockerfile.ui bash scripts/publish-image.sh",
+    "image:smoketest:ui": "bash scripts/smoketest-ui-image.sh"
   },
   "devDependencies": {
     "@cat-factory/kernel": "workspace:*",

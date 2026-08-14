@@ -16,7 +16,16 @@ WORKDIR /app
 ENV CI=true
 ENV NODE_ENV=production
 ENV PORT=8787
-RUN corepack enable
+
+# pnpm straight from the registry, NOT via corepack: corepack runs every pnpm call through
+# an extra Node wrapper of its own. Not `@pnpm/exe` either — the self-contained build links
+# libatomic.so.1, which the slim base does not carry, and it would bundle a second Node
+# beside the one this image already runs on. The version is read out of the workspace's own
+# `packageManager` field (copied ahead of the tree so the layer caches independently of a
+# source change), so the image can never install a pnpm that did not write the lockfile it
+# installs from.
+COPY package.json ./
+RUN npm install -g "pnpm@$(node -p "require('./package.json').packageManager.split('@').pop().split('+')[0]")"
 
 # A .dockerignore (deploy/node/Dockerfile.dockerignore) keeps node_modules/dist/.git
 # out of the context so the install is reproducible from the lockfile.
