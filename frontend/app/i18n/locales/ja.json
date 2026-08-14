@@ -3861,7 +3861,8 @@
         "qwen": "Qwen (Alibaba)",
         "kimi": "Kimi (Moonshot)",
         "deepseek": "DeepSeek",
-        "glm": "GLM (Z.ai)"
+        "glm": "GLM (Z.ai)",
+        "grok": "Grok (xAI)"
       },
       "regions": {
         "usa": "アメリカ合衆国",
@@ -4136,6 +4137,11 @@
           "label": "Moonshot (Kimi API)",
           "step1": "platform.moonshot.ai → API Keys を開き、キーを作成します。",
           "step2": "キーをコピーします。OpenAI 互換の Moonshot エンドポイントを認証します。"
+        },
+        "xai": {
+          "label": "xAI (Grok API)",
+          "step1": "console.x.ai → API Keys を開き、キーを作成します。",
+          "step2": "キーをコピーします。OpenAI 互換の xAI エンドポイントを認証します。"
         },
         "openrouter": {
           "label": "OpenRouter",

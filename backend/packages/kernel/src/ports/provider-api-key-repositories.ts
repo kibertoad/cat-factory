@@ -22,6 +22,7 @@ export type ApiKeyProvider =
   | 'qwen'
   | 'deepseek'
   | 'moonshot'
+  | 'xai'
   | 'openrouter'
   | 'litellm'
 

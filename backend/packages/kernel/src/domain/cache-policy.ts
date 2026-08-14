@@ -26,6 +26,10 @@ export function providerCachePolicy(provider: string): CachePolicy {
     case 'openai':
     case 'deepseek':
     case 'qwen':
+    // xAI caches prompt prefixes automatically and bills the hits at its own published
+    // cached-input rate, with no per-request opt-in, so it belongs with the auto-prefix
+    // group rather than Anthropic's explicit `cache_control` breakpoints.
+    case 'xai':
       return 'auto-prefix'
     case 'anthropic':
       return 'explicit-anthropic'

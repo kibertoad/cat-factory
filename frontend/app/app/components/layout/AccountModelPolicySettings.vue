@@ -31,6 +31,7 @@ const FAMILIES = [
   'kimi',
   'deepseek',
   'glm',
+  'grok',
 ] as const satisfies readonly ModelFamily[]
 const REGIONS = ['usa', 'europe', 'china', 'other'] as const satisfies readonly AccountRegion[]
 const MODES = ['off', 'blocklist', 'allowlist'] as const satisfies readonly ModelPolicyMode[]
@@ -47,6 +48,7 @@ const familyLabels = computed<Record<ModelFamily, string>>(() => ({
   kimi: t('settings.modelPolicy.families.kimi'),
   deepseek: t('settings.modelPolicy.families.deepseek'),
   glm: t('settings.modelPolicy.families.glm'),
+  grok: t('settings.modelPolicy.families.grok'),
 }))
 const regionLabels = computed<Record<AccountRegion, string>>(() => ({
   usa: t('settings.modelPolicy.regions.usa'),
