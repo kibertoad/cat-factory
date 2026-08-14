@@ -63,6 +63,11 @@ export type WaitOptions<T> = {
    * clock. What a pass leaves behind and how one is resumed are facts about the suite (its own
    * `SuiteIdentity` renders them through `leftInPlaceNote`), and a clock that spelled them out
    * would be telling every consumer's operator to set a variable that may not exist.
+   *
+   * Optional HERE and required on every wait a started run spends its hours in
+   * (`waitForDecisionOrSettled`, `DriveOptions`), because that is where the difference lies: a wait
+   * with nothing standing behind it has nothing to say about leftovers, and one that is watching a
+   * live run always does.
    */
   epilogue?: string
 }
@@ -179,14 +184,18 @@ export function formatExpiry(options: {
   epilogue?: string
 }): string {
   const { label, lastState, elapsedMs, budgetMs, silence, epilogue } = options
+  // Each optional clause carries its OWN separator. Written the other way round, with the newline on
+  // the line before it, an absent clause leaves the message ending on a blank line, and that message
+  // becomes an `Error.message` that rides into a scenario failure report and the journal's collapsed
+  // one-line phase summary.
   return (
     `Timed out waiting for ${label} after ${formatDuration(elapsedMs)} ` +
     `(budget ${formatDuration(budgetMs)}).\n` +
-    `Last observed: ${lastState}\n` +
+    `Last observed: ${lastState}` +
     (silence
-      ? `The budget ran out mid-outage, so that observation predates it: ${silence}\n`
+      ? `\nThe budget ran out mid-outage, so that observation predates it: ${silence}`
       : '') +
-    (epilogue ?? '')
+    (epilogue ? `\n${epilogue}` : '')
   )
 }
 
@@ -217,7 +226,8 @@ export function formatOutage(options: {
     `No answer since: ${outage}\n` +
     `Last observed: ${lastState}\n` +
     `The run itself may well be fine: a deployment that restarts re-drives it. Check that the ` +
-    `backend is up before reading anything into the run.\n${epilogue ?? ''}`
+    `backend is up before reading anything into the run.` +
+    (epilogue ? `\n${epilogue}` : '')
   )
 }
 

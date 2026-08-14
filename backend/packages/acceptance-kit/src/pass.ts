@@ -27,6 +27,7 @@ import {
   describeThrown,
   failureWithLocation,
   OperatorRefusal,
+  scrubbed,
 } from './operatorText.js'
 import {
   formatScenarioSummary,
@@ -43,7 +44,14 @@ const JOURNAL_FAILURE_CHARS = 300
 
 export type PassOptions<Facts extends LedgerFacts> = {
   identity: SuiteIdentity
-  /** The deployment this pass drives, for the banner. Scrub it if it may carry userinfo. */
+  /**
+   * The deployment this pass drives, for the banner. SCRUBBED here rather than by the caller.
+   *
+   * A base URL may legitimately carry userinfo (`https://svc:secret@backend.example.com`), which no
+   * URL policy rejects, and this value is the first line of the file an afternoon-long pass is piped
+   * into and then pasted into an issue. Left to the consumer it is a rule each one has to know: the
+   * scrub is idempotent, so a suite that already scrubbed loses nothing by it happening here too.
+   */
   target: string
   ledger: LedgerStore<Facts>
   journal: Journal
@@ -80,7 +88,7 @@ export async function runPass<Facts extends LedgerFacts>(
   // prints, and therefore the one that may least be spelled for a shell the operator is not
   // holding: `resumeCommand` renders it for the one that will receive it.
   log(
-    `\n${identity.name} run ${runId} against ${options.target}\n` +
+    `\n${identity.name} run ${runId} against ${scrubbed(options.target)}\n` +
       `  ledger:  ${ledger.path}\n` +
       `  journal: ${journal.path}\n` +
       (identity.statusCommand

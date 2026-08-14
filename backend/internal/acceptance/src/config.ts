@@ -1,5 +1,3 @@
-import { OperatorRefusal, resolveStateDir } from '@cat-factory/acceptance-kit'
-import { packageRoot } from './packageRoot.ts'
 // What the suite needs from the environment, resolved ONCE and reported as a whole.
 //
 // The resolution is a pure function over a plain record so it can be unit-tested with no
@@ -16,6 +14,9 @@ import { packageRoot } from './packageRoot.ts'
 // per-run budget. `reset` is why the seam exists rather than being tidy: an operator clearing a
 // half-built pass off a board is often doing it because the cluster it named is gone, and a cleanup
 // that refuses until the abandoned thing is configured again is a cleanup nobody can run.
+
+import { OperatorRefusal, resolveStateDir } from '@cat-factory/acceptance-kit'
+import { packageRoot } from './packageRoot.ts'
 
 /**
  * The two templates a pass falls back to, exported because the CHECKS offer them as the fix.

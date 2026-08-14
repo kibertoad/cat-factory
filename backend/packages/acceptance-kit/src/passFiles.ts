@@ -47,7 +47,8 @@ const LATEST_POINTER = 'latest.json'
  * chooses.
  *
  * Called ONCE, by whoever resolves the configuration, and every reader below then takes the
- * absolute answer. That is the seam that lets a suite anchor its state directory on its own package
+ * absolute answer (and REFUSES anything else: see {@link requireResolved}). That is the seam that
+ * lets a suite anchor its state directory on its own package
  * (which is where an operator's configuration file lives) while this kit, which has no package of
  * its own to speak of, stays out of the decision: resolved against the kit's install path, a
  * relative `.acceptance` would land inside `node_modules`.
@@ -59,9 +60,33 @@ export function resolveStateDir(stateDir: string, baseDir: string): string {
   return isAbsolute(stateDir) ? stateDir : join(baseDir, stateDir)
 }
 
+/**
+ * The state directory as every reader below requires it: ABSOLUTE, or a refusal naming the fix.
+ *
+ * The precondition used to be a sentence in the doc above, and a sentence is not what a relative
+ * path needs. `.acceptance` is the literal shape a suite's own default takes, and left to `join` it
+ * resolves against `process.cwd()`: a pass launched from the package writes `<package>/.acceptance`,
+ * the status command run from the repository root reads `<root>/.acceptance` and answers "no
+ * acceptance pass found" with the ledger sitting on disk, while `writeLatestPointer` has been
+ * claiming `latest` in whichever tree the writer happened to start in. Two directories, no error.
+ *
+ * A plain `Error` and not an `OperatorRefusal`: nothing an operator typed produces this, so what it
+ * owes its reader is the file and line of the wiring that did (see `operatorText.ts`).
+ */
+function requireResolved(stateDir: string): string {
+  if (isAbsolute(stateDir)) return stateDir
+  throw new Error(
+    `The state directory '${stateDir}' is relative, and a pass's files may not be addressed from ` +
+      `wherever a command happened to be started: it would resolve against the current directory, ` +
+      `so a pass and the command reporting on it can read different directories without either ` +
+      `failing. Resolve it ONCE with resolveStateDir(stateDir, <the suite's own base directory>) ` +
+      `and hand the result to the ledger, the journal and every reader.`,
+  )
+}
+
 /** Where the `latest` pointer lives, for the refusal that has to name the file it read. */
 export function latestPointerPath(stateDir: string): string {
-  return join(stateDir, LATEST_POINTER)
+  return join(requireResolved(stateDir), LATEST_POINTER)
 }
 
 /** One pass's files, resolved together so no caller re-spells a suffix. */
@@ -73,11 +98,12 @@ export type PassPaths = {
 }
 
 export function passPaths(stateDir: string, runId: string): PassPaths {
+  const dir = requireResolved(stateDir)
   return {
-    dir: stateDir,
+    dir,
     runId,
-    ledgerPath: join(stateDir, `${runId}${LEDGER_SUFFIX}`),
-    journalPath: join(stateDir, `${runId}${JOURNAL_SUFFIX}`),
+    ledgerPath: join(dir, `${runId}${LEDGER_SUFFIX}`),
+    journalPath: join(dir, `${runId}${JOURNAL_SUFFIX}`),
   }
 }
 
@@ -94,9 +120,10 @@ export type PassOnDisk = PassPaths & {
  * was pruned is still resumable.
  */
 export function listPasses(stateDir: string): readonly PassOnDisk[] {
+  const dir = requireResolved(stateDir)
   let entries: readonly string[]
   try {
-    entries = readdirSync(stateDir)
+    entries = readdirSync(dir)
   } catch {
     // silent-catch-ok: no state directory is the normal state before any pass has run.
     return []
@@ -114,7 +141,7 @@ export function listPasses(stateDir: string): readonly PassOnDisk[] {
     if (runId) runIds.add(runId)
   }
   return [...runIds].sort().map((runId) => {
-    const paths = passPaths(stateDir, runId)
+    const paths = passPaths(dir, runId)
     return {
       ...paths,
       lastWrittenAt: Math.max(mtimeOf(paths.ledgerPath), mtimeOf(paths.journalPath)),

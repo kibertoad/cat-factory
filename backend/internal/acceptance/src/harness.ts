@@ -115,7 +115,10 @@ export function buildHarness(options: {
     config,
     deployment: new DeploymentApi({ baseUrl: config.baseUrl }),
     world,
-    journal: new Journal(world.dir, runId),
+    // Named, so the one warning a journal prints (an unwritable state directory) quotes THIS suite's
+    // status command rather than telling an operator a pass is unwatchable and leaving them to guess
+    // which command would have watched it.
+    journal: new Journal(world.dir, runId, { identity: ACCEPTANCE_IDENTITY }),
     log,
   }
   // Named, because the gate closes over exactly these and the harness closes over the gate: taking

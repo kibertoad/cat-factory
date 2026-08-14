@@ -20,6 +20,7 @@ import { appendFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { describeThrown } from './operatorText.js'
 import { passPaths } from './passFiles.js'
+import { type SuiteIdentity, suiteCommand } from './suiteIdentity.js'
 
 /** What kind of thing happened. Bounded, because `status.ts` reduces on it. */
 export type JournalEventKind =
@@ -48,12 +49,32 @@ export type JournalEvent = {
  */
 export class Journal {
   readonly #path: string
+  /**
+   * How this suite says "watch that pass", or null when it has no such command.
+   *
+   * Rendered ONCE, at construction, because the one message this class prints is about the journal
+   * being unwritable and it may not go looking for anything else at that moment. Absent, the warning
+   * states the consequence without naming a command: a hard-coded `pnpm run status` was right for
+   * exactly one suite and is an instruction to run something that does not exist in every other,
+   * which is worse than no instruction because it is offered as the thing to do.
+   */
+  readonly #watchCommand: string | null
   #phase: string
   #broken = false
 
-  constructor(stateDir: string, runId: string, phase = 'suite') {
+  constructor(
+    stateDir: string,
+    runId: string,
+    options: {
+      phase?: string
+      /** Named so the "you cannot watch this pass" warning quotes the suite's OWN status command. */
+      identity?: SuiteIdentity
+    } = {},
+  ) {
     this.#path = passPaths(stateDir, runId).journalPath
-    this.#phase = phase
+    this.#phase = options.phase ?? 'suite'
+    const status = options.identity?.statusCommand
+    this.#watchCommand = status ? suiteCommand(status, runId) : null
   }
 
   get path(): string {
@@ -99,10 +120,18 @@ export class Journal {
     } catch (error) {
       // Deliberately not silent, and deliberately not fatal (see the header). Latched so a
       // read-only state directory reports once rather than once per poll for an hour.
+      //
+      // STDOUT, like every other line this kit emits: an afternoon-long pass is piped to a file and
+      // `tee` captures one stream, so a warning on stderr is the one thing missing from the log
+      // somebody keeps, and what it would be missing is the reason the journal that log's status
+      // report reduces is empty.
       this.#broken = true
-      console.warn(
-        `  warning: the progress journal at ${this.#path} could not be written, so this pass ` +
-          `will not be watchable with 'pnpm run status': ${describeThrown(error)}`,
+      const watch = this.#watchCommand
+        ? `so this pass will not be watchable with '${this.#watchCommand}'`
+        : 'so this pass will not be watchable from another window'
+      console.log(
+        `  warning: the progress journal at ${this.#path} could not be written, ${watch}: ` +
+          `${describeThrown(error)}`,
       )
     }
   }

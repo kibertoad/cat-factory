@@ -18,12 +18,7 @@
 // is re-attached to rather than restarted.
 
 import { type CatFactoryClient, CatFactoryNotFoundError, type PublicRun } from '@cat-factory/sdk'
-import {
-  type CredentialRetry,
-  describeRun,
-  isTerminal,
-  passThroughCredentialRetry,
-} from './client.js'
+import { type CredentialRetry, describeRun, isTerminal } from './client.js'
 import type { Journal } from './journal.js'
 import { type DriveResult, driveRun } from './runDriver.js'
 
@@ -72,13 +67,21 @@ export type FileAndDriveOptions = {
    * How a write refused for want of a PER-USER credential is retried (`start`, here). Passed down
    * rather than read from a module global, because an implementation of it holds a secret for the
    * life of the process and a global would put that secret one import away from every file.
+   *
+   * REQUIRED, and a suite whose models are all reached with the deployment's own keys names
+   * `passThroughCredentialRetry` explicitly. Optional, the omission was silent in the
+   * direction that costs the most: a scenario copied from a sibling and missing this field
+   * typechecks, passes every unit test, and then dies at the `start` a workspace answers `428` after
+   * an afternoon of real spend, having never asked for the password it was about to be handed. It is
+   * required for the reason `Scenario.gated` is: the decision is cheap to state and expensive to
+   * forget.
    */
-  credentials?: CredentialRetry
+  credentials: CredentialRetry
   /**
    * The suite's own "nothing was cleaned up" tail, passed through to the run's waits. See
-   * `DriveOptions.epilogue`.
+   * `DriveOptions.epilogue`, which is where the reason it is required lives.
    */
-  epilogue?: string
+  epilogue: string
 }
 
 export type FileAndDriveResult = DriveResult & {
@@ -208,9 +211,8 @@ async function startRun(options: FileAndDriveOptions, taskId: string): Promise<s
   // answers `428` naming the vendor, which is why the seam is a RETRY rather than something
   // resolved up front. A workspace whose models are reached with the deployment's own keys is
   // never asked for one at all.
-  const task = await (options.credentials ?? passThroughCredentialRetry)(
-    `Starting '${label}'`,
-    () => client.tasks.start(taskId, { pipelineId }),
+  const task = await options.credentials(`Starting '${label}'`, () =>
+    client.tasks.start(taskId, { pipelineId }),
   )
   if (!task.runId) {
     throw new Error(

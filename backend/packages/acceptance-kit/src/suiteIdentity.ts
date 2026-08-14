@@ -41,6 +41,18 @@ export type SuiteIdentity = {
   /** The variable naming the backend origin, quoted whenever an answer puts the ADDRESS in question. */
   baseUrlVariable: string
   /**
+   * The variable naming the WORKSPACE the suite is pointed at, for the one refusal that puts it in
+   * question: a domain 404, which the API deliberately answers alike for "no such resource" and "not
+   * in this key's workspace".
+   *
+   * Optional, unlike the two above, because a suite need not have one: a deployment whose key is
+   * bound to the only workspace it has configures no such value, and a kit that named one anyway
+   * would send that operator hunting for a variable their own suite does not read. Absent, the
+   * remedy says "the workspace the suite is configured for", which is true and one step further from
+   * a fix.
+   */
+  workspaceVariable?: string
+  /**
    * Where the operator's variables live, as a path they can open (`backend/internal/acceptance/.env`).
    *
    * A probe failure sends a reader to re-read one value, and "check your environment" is not that

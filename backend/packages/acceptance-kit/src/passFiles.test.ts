@@ -60,6 +60,23 @@ describe('passPaths', () => {
     expect(passPaths('/tmp/acc', 'run-1').dir).toBe('/tmp/acc')
   })
 
+  it('REFUSES a relative directory rather than resolving it against the current one', () => {
+    // `.acceptance` is the literal shape a suite's own default takes, and resolved against
+    // `process.cwd()` it splits a pass in two without either half failing: the pass writes under the
+    // package it was launched from, the status command run from the repository root reads a different
+    // directory and answers "no acceptance pass found", and the `latest` pointer has been claimed in
+    // whichever tree the writer happened to start in. So the precondition is enforced rather than
+    // documented, and the refusal names the function that resolves one.
+    for (const read of [
+      () => passPaths('.acceptance', 'run-1'),
+      () => listPasses('.acceptance'),
+      () => latestPointerPath('.acceptance'),
+    ]) {
+      expect(read).toThrow(/relative/)
+      expect(read).toThrow(/resolveStateDir/)
+    }
+  })
+
   it('names both files of a pass from one id, so no caller re-spells a suffix', () => {
     const paths = passPaths('/tmp/acc', 'run-1')
     expect(paths.journalPath).toBe(join('/tmp/acc', 'run-1.journal.jsonl'))

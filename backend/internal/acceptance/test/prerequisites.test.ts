@@ -36,7 +36,9 @@ function config(overrides: Partial<AcceptanceConfig> = {}): AcceptanceConfig {
       imageTemplate: 'ghcr.io/{{repoOwner}}/{{repoName}}:pr-{{pullNumber}}',
     },
     vcs: { token: 'reporter-token', apiBaseUrl: 'https://api.github.com' },
-    stateDir: '.acceptance',
+    // Absolute, as `resolveConfig` always resolves it: the kit refuses a relative state directory
+    // rather than resolving one against whatever directory a command was started in.
+    stateDir: '/state',
     runBudgetMs: 60_000,
     ...overrides,
   }

@@ -73,14 +73,25 @@ import type { SuiteIdentity } from './suiteIdentity.js'
  * copies drifting apart: `deployment-health` relays it for a `/health` that answered the wrong
  * WORD, and both answered-in-the-wrong-shape branches below relay it for one that answered the
  * wrong SHAPE.
+ *
+ * **Degrading drops the CLAUSES, not just their subjects.** With no identity there is no variable
+ * name and no file to name, and the precedence sentence ("a shell export of the same variable wins
+ * over the file") is then about two things the reader was never told: it sends them looking for a
+ * configuration file this message did not identify. So the diagnosis, which is what the step is
+ * actually for, stands alone.
  */
 export function baseUrlStep(target: string | undefined, identity?: SuiteIdentity): string {
-  const variable = identity?.baseUrlVariable ?? 'the backend origin'
-  const named = target ? `${variable} (${scrubbed(target)})` : variable
-  const where = identity?.configFile ? ` in ${identity.configFile}` : ''
+  const diagnosis = 'it names the BACKEND origin serving /api/v1, not the SPA'
+  if (!identity) {
+    const origin = target ? `the backend origin (${scrubbed(target)})` : 'the backend origin'
+    return `Re-read ${origin}: ${diagnosis}.`
+  }
+  const named = target
+    ? `${identity.baseUrlVariable} (${scrubbed(target)})`
+    : identity.baseUrlVariable
   return (
-    `Re-read ${named}${where}: it names the BACKEND origin serving /api/v1, not the SPA, and a ` +
-    `shell export of the same variable wins over the file.`
+    `Re-read ${named} in ${identity.configFile}: ${diagnosis}, and a shell export of the same ` +
+    `variable wins over the file.`
   )
 }
 
@@ -163,12 +174,17 @@ function apiSteps(
     ]
   }
   if (error.status === 404) {
+    // The workspace is NAMED where the suite has a variable for it: this remedy sends a reader to
+    // compare two values, and one of them is only comparable if they know which value it is. A
+    // paraphrase ("the workspace the suite is configured for") is what an identity without one gets,
+    // for the same reason every other sentence here degrades that way.
+    const configured = identity?.workspaceVariable ?? 'the workspace the suite is configured for'
     return [
       `The deployment refused with 404 '${error.code}', so a resource the check names does not ` +
         `exist, or lies outside this key's workspace (the API does not distinguish the two, by ` +
         `design).`,
-      'Check the workspace the suite is configured for against the one the key is actually bound ' +
-        'to, which `GET /api/v1/me` reports.',
+      `Check ${configured} against the workspace the key is actually bound to, which ` +
+        '`GET /api/v1/me` reports.',
     ]
   }
   if (error.status === 401 || error.status === 403) {

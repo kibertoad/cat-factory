@@ -210,15 +210,20 @@ export function waitForDecisionOrSettled(options: {
   taskId: string
   runId: string
   budgetMs: number
-  /** The suite's own "nothing was cleaned up" tail, printed under an expiry. */
-  epilogue?: string
+  /**
+   * The suite's own "nothing was cleaned up" tail, printed under an expiry.
+   *
+   * Required, like `DriveOptions.epilogue` and for the same reason: this is the wait a started run
+   * spends its hours in, so an expiry here always has leftovers to name.
+   */
+  epilogue: string
 }): Promise<{ run: PublicRun; decisions: PublicDecisionList }> {
   const { client, journal, taskId, runId, budgetMs, epilogue } = options
   return waitFor({
     label: `task ${taskId} to park on an answerable decision or settle`,
     budgetMs,
     tolerate: deploymentOutageTolerance(),
-    ...(epilogue === undefined ? {} : { epilogue }),
+    epilogue,
     probe: async () => {
       const run = await client.tasks.getRun(taskId)
       // Read decisions REGARDLESS of `parked`, as the contract instructs: a `follow-ups` entry

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   findPassesNaming,
   type LedgerFacts,
-  type LedgerSlot,
+  type LedgerSlots,
   LedgerStore,
   readLedger,
   recordsFacts,
@@ -26,7 +26,9 @@ type Facts = LedgerFacts & {
   startedAt: number | null
 }
 
-const SLOTS: Record<Exclude<keyof Facts, 'runId'>, LedgerSlot> = {
+// The type `recordsFacts` itself takes, so a slot left unclassified is a build failure rather than a
+// pass that reports having created nothing after adopting two services and opening three pull requests.
+const SLOTS: LedgerSlots<Facts> = {
   service: 'created',
   run: 'created',
   startedAt: 'bookkeeping',

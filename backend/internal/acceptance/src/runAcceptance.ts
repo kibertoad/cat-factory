@@ -50,12 +50,7 @@
 // separates them, because a boundary that guessed from its own position printed
 // `Cannot read properties of undefined` as one contentless sentence.
 
-import {
-  describeStartupFailure,
-  resolveRunId,
-  runPass,
-  scrubbed,
-} from '@cat-factory/acceptance-kit'
+import { describeStartupFailure, resolveRunId, runPass } from '@cat-factory/acceptance-kit'
 import { requireConfig, stateDirFrom } from './config.ts'
 import { envFile } from './envFile.ts'
 import { buildHarness, type Harness } from './harness.ts'
@@ -116,14 +111,14 @@ async function run(): Promise<number> {
  * What is left here is the wiring only. `runPass` owns the banner, the driver seams, the summary,
  * the closing words and the boundary that turns a bug in this suite into a report an operator can
  * still resume from; this file supplies the pieces none of that can know: the scenarios, the gate,
- * the ledger's own reading of whether anything was created, and the address to print (SCRUBBED,
- * because a base URL may legitimately carry userinfo and this banner heads the file an
- * afternoon-long pass is piped into).
+ * the ledger's own reading of whether anything was created, and the address to print. The address is
+ * handed over RAW: the kit scrubs it, because a base URL may legitimately carry userinfo and the
+ * banner heads the file an afternoon-long pass is piped into.
  */
 function runAcceptancePass(harness: Harness): Promise<number> {
   return runPass({
     identity: ACCEPTANCE_IDENTITY,
-    target: scrubbed(harness.config.baseUrl),
+    target: harness.config.baseUrl,
     ledger: harness.world,
     journal: harness.journal,
     scenarios: SCENARIOS.map((build) => build(harness)),

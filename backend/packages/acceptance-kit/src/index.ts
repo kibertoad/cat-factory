@@ -63,6 +63,7 @@ export { Journal, type JournalEvent, type JournalEventKind, readJournal } from '
 export {
   type LedgerFacts,
   type LedgerSlot,
+  type LedgerSlots,
   LedgerStore,
   type PassOwnership,
   findPassesNaming,

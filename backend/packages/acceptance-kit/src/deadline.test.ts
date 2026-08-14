@@ -266,6 +266,18 @@ describe('formatExpiry', () => {
     expect(message).toContain('Last observed: step 2 working')
     expect(message).toContain('ran out mid-outage')
   })
+
+  it('ends on its last clause when there is no epilogue, not on a blank line', () => {
+    // Each optional clause carries its own separator, because this string becomes an `Error.message`
+    // that rides into a scenario failure report and the journal's collapsed one-line phase summary.
+    const message = formatExpiry({
+      label: 'the run',
+      lastState: 'step 2 working',
+      elapsedMs: 1000,
+      budgetMs: 5000,
+    })
+    expect(message.endsWith('Last observed: step 2 working')).toBe(true)
+  })
 })
 
 describe('formatOutage', () => {
@@ -287,6 +299,18 @@ describe('formatOutage', () => {
     expect(message).toContain("Last observed: step 3 'coder' working")
     expect(message).toContain('run itself may well be fine')
     expect(message).toContain('Nothing was cleaned up')
+    expect(message.endsWith('re-run with ACME_RUN_ID set.')).toBe(true)
+  })
+
+  it('ends on its last clause when there is no epilogue, not on a blank line', () => {
+    const message = formatOutage({
+      label: 'the run to settle',
+      outage: 'the deployment did not answer (refused)',
+      lastState: "step 3 'coder' working",
+      outageMs: 130_000,
+      graceMs: 120_000,
+    })
+    expect(message.endsWith('before reading anything into the run.')).toBe(true)
   })
 })
 

@@ -12,7 +12,7 @@
 import {
   findPassesNaming as findPassesNamingIds,
   type LedgerFacts,
-  type LedgerSlot,
+  type LedgerSlots,
   LedgerStore,
   readLedger,
   recordsFacts as ledgerRecordsFacts,
@@ -117,8 +117,9 @@ export function emptyWorld(runId: string): World {
 /**
  * Every slot a ledger holds, classified, EXHAUSTIVE over `World` by construction.
  *
- * The `satisfies` is the point: a field added to `World` fails to compile until it is named here,
- * so the classification cannot silently acquire a third state ("we never decided"). Scanning the
+ * The `satisfies LedgerSlots<World>` is the point: a field added to `World` fails to compile until it
+ * is named here, so the classification cannot silently acquire a third state ("we never decided").
+ * `recordsFacts` takes the same type, so the guarantee holds at the kit boundary too. Scanning the
  * whole object instead read every non-null value as a created thing, which is right for today's
  * ledger and wrong the moment one carries something that is not one: a `startedAt` or a `notes`
  * would compile, pass every test, and from then on report EVERY pass (including a fresh attempt a
@@ -139,7 +140,7 @@ export const LEDGER_SLOTS = {
   bugfix: 'created',
   intakeIssue: 'created',
   issueDelivery: 'created',
-} satisfies Record<Exclude<keyof World, 'runId'>, LedgerSlot>
+} satisfies LedgerSlots<World>
 
 /** Whether this pass has recorded a FACT: anything at all on the deployment or the provider. */
 export function recordsFacts(world: World): boolean {

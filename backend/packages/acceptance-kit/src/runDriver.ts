@@ -20,7 +20,6 @@ import {
   describeDecisions,
   describeRun,
   isTerminal,
-  passThroughCredentialRetry,
   waitForDecisionOrSettled,
 } from './client.js'
 
@@ -33,22 +32,30 @@ export type DriveOptions = {
   steer: string
   budgetMs: number
   /**
-   * How a write that may be refused for want of a PER-USER credential is retried. Absent ⇒ the call
-   * is made once, which is right for a workspace whose models are all reached with the deployment's
-   * own keys.
+   * How a write that may be refused for want of a PER-USER credential is retried. A workspace whose
+   * models are all reached with the deployment's own keys passes `passThroughCredentialRetry`, which
+   * says in code that the call is deliberately made once.
    *
    * Needed HERE and not only at the start, because answering a park wakes the durable driver and the
    * deployment re-mints the run's credential activation on that call: a resumed pass that only ever
    * re-attaches to a live run and answers its gates never touches `start`, so this is the only place
    * it would be asked.
    */
-  credentials?: CredentialRetry
+  credentials: CredentialRetry
   /**
    * The suite's own "nothing was cleaned up" tail (`leftInPlaceNote`), printed under a wait that
-   * expires. Absent ⇒ the expiry states what it observed and offers no resume, which is the honest
-   * answer for a suite that has not declared how one is resumed.
+   * expires.
+   *
+   * REQUIRED, because by the time this function is called the pass HAS created something: a run is
+   * started, and on a pipeline that got as far as a pull request that too. An expiry ending on its
+   * last observation and nothing else leaves that operator unaware the run, its pull request and any
+   * provisioned namespace are all still standing, and they start a second pass which the leftovers
+   * then refuse. It is half of the clock's own rule (`deadline.ts`: a wait that expires states what
+   * it last saw, and what it left behind) rather than a courtesy, so it may not be a field a fifth
+   * call site can forget: a suite with nothing else to say renders `leftInPlaceNote(identity)`,
+   * which needs only the identity's run-id variable.
    */
-  epilogue?: string
+  epilogue: string
 }
 
 export type DriveResult = {
@@ -65,8 +72,7 @@ export type DriveResult = {
  * an interrupted pass re-ship the same feature.
  */
 export async function driveRun(options: DriveOptions & { runId: string }): Promise<DriveResult> {
-  const { client, journal, taskId, runId, steer, budgetMs } = options
-  const credentials = options.credentials ?? passThroughCredentialRetry
+  const { client, journal, taskId, runId, steer, budgetMs, credentials, epilogue } = options
   const startedAt = Date.now()
   const answered: AnsweredDecision[] = []
 
@@ -87,7 +93,7 @@ export async function driveRun(options: DriveOptions & { runId: string }): Promi
       taskId,
       runId,
       budgetMs: remainingMs,
-      ...(options.epilogue === undefined ? {} : { epilogue: options.epilogue }),
+      epilogue,
     })
     if (isTerminal(run.status)) return { run, answered }
 

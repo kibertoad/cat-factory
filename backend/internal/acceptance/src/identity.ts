@@ -41,6 +41,7 @@ export const ACCEPTANCE_IDENTITY: SuiteIdentity = {
   runCommand: ACCEPTANCE_INVOCATION,
   runIdVariable: 'ACCEPTANCE_RUN_ID',
   baseUrlVariable: 'CAT_FACTORY_BASE_URL',
+  workspaceVariable: 'ACCEPTANCE_WORKSPACE_ID',
   configFile: 'backend/internal/acceptance/.env',
   docs: 'backend/internal/acceptance/README.md#prerequisites',
   statusCommand: (runId) => `${STATUS_INVOCATION} ${runId}`,

@@ -53,6 +53,22 @@ export type LedgerFacts = {
 export type LedgerSlot = 'created' | 'bookkeeping'
 
 /**
+ * A suite's classification of its OWN ledger, exhaustive over it by construction.
+ *
+ * The type is the enforcement, and the whole point of naming it: a suite declares its table with
+ * `satisfies LedgerSlots<Facts>` and a field added to the ledger then fails to compile until it has
+ * been classified. Typed loosely (`Record<string, LedgerSlot>`) the omission is silent and lands on
+ * the reading that matters least often and costs most: an unclassified `created` slot makes a pass
+ * that adopted two services and opened three pull requests answer "created nothing", which is the
+ * closing words telling that operator there is nothing to inspect and nothing to resume.
+ *
+ * `runId` is excluded because it is the pass's own name rather than something the pass created.
+ */
+export type LedgerSlots<Facts extends LedgerFacts> = Readonly<
+  Record<Exclude<keyof Facts, 'runId'>, LedgerSlot>
+>
+
+/**
  * Whether a pass has recorded a FACT: anything at all on the deployment or on a provider.
  *
  * The one rule behind two answers that must never disagree. A status report uses it to decide
@@ -66,18 +82,21 @@ export type LedgerSlot = 'created' | 'bookkeeping'
  * the whole object instead reads every non-null value as a created thing. That is right for a ledger
  * of ids and wrong the moment one carries something that is not one: a `startedAt` or a `notes`
  * would compile, pass every test, and from then on report EVERY pass (a fresh attempt a prerequisite
- * refused included) as having created something. Declared with `satisfies Record<keyof …>` on the
- * suite's side, a field added to the ledger fails to compile until it is classified.
+ * refused included) as having created something. {@link LedgerSlots} is what makes that structural
+ * rather than a convention: a field added to the ledger fails to compile until it is classified.
  *
  * `!= null` rather than `!== null`: a slot a hand-edited ledger left `undefined` is an absent
  * record, and reading it as a present one is the same lie in the same direction.
  */
 export function recordsFacts<Facts extends LedgerFacts>(
   facts: Facts,
-  slots: Readonly<Record<string, LedgerSlot>>,
+  slots: LedgerSlots<Facts>,
 ): boolean {
-  return Object.entries(slots).some(
-    ([key, slot]) => slot === 'created' && facts[key as keyof Facts] != null,
+  // Read as a plain table in HERE: the parameter type is what makes the caller's classification
+  // exhaustive, and from inside a generic there are no known keys for TypeScript to narrow to.
+  const table = slots as Readonly<Record<string, LedgerSlot>>
+  return Object.keys(table).some(
+    (key) => table[key] === 'created' && facts[key as keyof Facts] != null,
   )
 }
 
@@ -179,6 +198,9 @@ export class LedgerStore<Facts extends LedgerFacts> {
   readonly #paths: PassPaths
   #facts: Facts
 
+  /** The suite, for the one message this store raises that offers a way forward: see `require`. */
+  readonly #identity: SuiteIdentity | undefined
+
   /**
    * Open this pass's ledger, or refuse when the file on disk belongs to a different pass.
    *
@@ -188,8 +210,6 @@ export class LedgerStore<Facts extends LedgerFacts> {
    * Adopting the contents files this pass's work under records another pass created; discarding them
    * overwrites a ledger somebody may be the last copy of.
    */
-  readonly #identity: SuiteIdentity | undefined
-
   constructor(options: {
     stateDir: string
     runId: string

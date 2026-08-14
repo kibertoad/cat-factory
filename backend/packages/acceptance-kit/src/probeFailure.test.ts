@@ -8,7 +8,7 @@ import {
 } from '@cat-factory/sdk'
 import { describe, expect, it } from 'vitest'
 import { DeploymentAnswerError } from './deploymentApi.js'
-import { describeProbeFailure, probeFailureVerdict } from './probeFailure.js'
+import { baseUrlStep, describeProbeFailure, probeFailureVerdict } from './probeFailure.js'
 import type { SuiteIdentity } from './suiteIdentity.js'
 
 // What is pinned here is the DIFFERENCE between the failures, because that is the whole reason this
@@ -37,6 +37,7 @@ const identity: SuiteIdentity = {
   runCommand: 'pnpm --filter @acme/acceptance run acceptance',
   runIdVariable: 'ACME_RUN_ID',
   baseUrlVariable: 'ACME_BASE_URL',
+  workspaceVariable: 'ACME_WORKSPACE_ID',
   configFile: 'acceptance/.env',
 }
 
@@ -105,6 +106,23 @@ function unmatchedRoute(): CatFactoryNotFoundError {
   })
 }
 
+/**
+ * A 404 the deployment STATED, which is the opposite reading of the same status.
+ *
+ * `handleError` always emits a `code`, so `not_found` is the evidence that the route matched and the
+ * resource did not: either it does not exist, or it lies outside the key's workspace, which the API
+ * deliberately does not distinguish.
+ */
+function domain404(): CatFactoryNotFoundError {
+  return new CatFactoryNotFoundError({
+    status: 404,
+    code: 'not_found',
+    message: 'no such workspace',
+    requestId: null,
+    body: {},
+  })
+}
+
 function revokedKey(): CatFactoryUnauthorizedError {
   return new CatFactoryUnauthorizedError({
     status: 401,
@@ -114,6 +132,37 @@ function revokedKey(): CatFactoryUnauthorizedError {
     body: {},
   })
 }
+
+describe('baseUrlStep', () => {
+  it("names the suite's own variable and the file it was typed into", () => {
+    expect(baseUrlStep('http://127.0.0.1:8787', identity)).toBe(
+      `Re-read ACME_BASE_URL (http://127.0.0.1:8787) in acceptance/.env: it names the BACKEND ` +
+        `origin serving /api/v1, not the SPA, and a shell export of the same variable wins over ` +
+        `the file.`,
+    )
+  })
+
+  it('drops the CLAUSES it can no longer support, not just their subjects', () => {
+    // The degraded path is documented and reachable (`PreflightOptions.identity` is optional), and it
+    // used to keep both trailing clauses: "a shell export of the same variable wins over the file"
+    // with no variable and no file named sends a reader hunting for a configuration file this
+    // message never identified. Asserted as the WHOLE string, since what is wrong with the old
+    // rendering is a phrase it CONTAINS.
+    expect(baseUrlStep('http://127.0.0.1:8787')).toBe(
+      `Re-read the backend origin (http://127.0.0.1:8787): it names the BACKEND origin serving ` +
+        `/api/v1, not the SPA.`,
+    )
+    expect(baseUrlStep(undefined)).toBe(
+      'Re-read the backend origin: it names the BACKEND origin serving /api/v1, not the SPA.',
+    )
+  })
+
+  it('scrubs the address, which may legitimately carry userinfo', () => {
+    expect(baseUrlStep('https://svc:hunter2@backend.example.com', identity)).not.toContain(
+      'hunter2',
+    )
+  })
+})
 
 describe('describeProbeFailure, when nothing answered', () => {
   it('names the real cause instead of the wrapper undici throws', () => {
@@ -296,19 +345,19 @@ describe('describeProbeFailure, when the deployment ANSWERED', () => {
   it('reads a 404 that DID carry our envelope as a missing resource instead', () => {
     // The two 404s need opposite fixes, and the envelope is the only evidence available: our own
     // `handleError` always emits a `code`, so its absence is what says the route never matched.
-    const rendered = describeProbeFailure(
-      new CatFactoryNotFoundError({
-        status: 404,
-        code: 'not_found',
-        message: 'no such workspace',
-        requestId: null,
-        body: {},
-      }),
-      probe,
-      identity,
-    ).remedy.steps.join('\n')
-    expect(rendered).toContain('the workspace the suite is configured for')
+    const rendered = describeProbeFailure(domain404(), probe, identity).remedy.steps.join('\n')
+    // The variable BY NAME, since the remedy asks the reader to compare two values and one of them
+    // is only comparable if they know which value it is.
+    expect(rendered).toContain('Check ACME_WORKSPACE_ID against the workspace')
     expect(rendered).not.toContain('Rebuild and restart it')
+  })
+
+  it('paraphrases the workspace for a suite that configures no variable for one', () => {
+    // Degrading by saying LESS, never by inventing a name: a deployment whose key is bound to its
+    // only workspace configures no such value, and a variable named at it is one to go hunting for.
+    const bare: SuiteIdentity = { ...identity, workspaceVariable: undefined }
+    const rendered = describeProbeFailure(domain404(), probe, bare).remedy.steps.join('\n')
+    expect(rendered).toContain('Check the workspace the suite is configured for against')
   })
 
   it('sends a rejected credential to a NEW token, since a scope cannot be raised', () => {
@@ -323,17 +372,7 @@ describe('describeProbeFailure, when the deployment ANSWERED', () => {
   })
 
   it('states no request id when the response carried none, rather than an empty one', () => {
-    const rendered = describeProbeFailure(
-      new CatFactoryNotFoundError({
-        status: 404,
-        code: 'not_found',
-        message: 'gone',
-        requestId: null,
-        body: {},
-      }),
-      probe,
-      identity,
-    ).remedy.steps.join('\n')
+    const rendered = describeProbeFailure(domain404(), probe, identity).remedy.steps.join('\n')
     expect(rendered).not.toContain('Quote request id')
   })
 

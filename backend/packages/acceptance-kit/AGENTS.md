@@ -36,24 +36,24 @@ what that loses is the tail, which is the failure and the summary. `runPass` ans
 
 **Where things live**
 
-| File                  | What                                                                                                            |
-| --------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `pass.ts`             | A whole pass, and the boundary that reports a bug in the suite without losing the run id or the resume.         |
-| `scenarioRunner.ts`   | The driver: order is the array, bail is the behaviour, the gate runs per gated scenario, no timeout of its own. |
-| `preflight.ts`        | Prerequisite vocabulary, the runner that evaluates every one, the refusal, and the gate.                        |
-| `probeFailure.ts`     | What a THROWN probe was, as three disjoint states with different remedies.                                      |
-| `deadline.ts`         | The clock. Every wait states its last observation; the outage tolerance is injected, never assumed.             |
-| `deploymentOutage.ts` | Which thrown poll is a restart worth sitting through, and for how long.                                         |
-| `ledger.ts`           | The resumable ledger, generic over a suite's own fact type. Identity rule, `latest` pointer, `recordsFacts`.    |
-| `passFiles.ts`        | Where a pass's files live and which passes a directory holds. Resolution of a relative state dir happens ONCE.  |
-| `journal.ts`          | The append-only progress record. A write here may never break a pass.                                           |
-| `client.ts`           | The two SDK clients, the run/decision descriptions, and the poll that returns on an ANSWERABLE decision.        |
-| `decisions.ts`        | The two kinds answered, what is answerable NOW, and the refusals. The most conservative module here.            |
-| `runDriver.ts`        | One started run to terminal, under ONE budget spanning every park.                                              |
-| `resume.ts`           | File or adopt; the four states a resumed pass can find.                                                         |
-| `evidence.ts`         | Report reductions: a `Check` per claim, so a failing pass reports every unmet one.                              |
-| `operatorText.ts`     | Describers, scrubbing, and the shell dialect table.                                                             |
-| `suiteIdentity.ts`    | Who is running, and the commands rendered from it.                                                              |
+| File                  | What                                                                                                                   |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `pass.ts`             | A whole pass, and the boundary that reports a bug in the suite without losing the run id or the resume.                |
+| `scenarioRunner.ts`   | The driver: order is the array, bail is the behaviour, the gate runs per gated scenario, no timeout of its own.        |
+| `preflight.ts`        | Prerequisite vocabulary, the runner that evaluates every one, the refusal, and the gate.                               |
+| `probeFailure.ts`     | What a THROWN probe was, as three disjoint states with different remedies.                                             |
+| `deadline.ts`         | The clock. Every wait states its last observation; the outage tolerance is injected, never assumed.                    |
+| `deploymentOutage.ts` | Which thrown poll is a restart worth sitting through, and for how long.                                                |
+| `ledger.ts`           | The resumable ledger, generic over a suite's own fact type. Identity rule, `latest` pointer, `recordsFacts`.           |
+| `passFiles.ts`        | Where a pass's files live and which passes a directory holds. A relative state dir is resolved ONCE, and REFUSED here. |
+| `journal.ts`          | The append-only progress record. A write here may never break a pass.                                                  |
+| `client.ts`           | The two SDK clients, the run/decision descriptions, and the poll that returns on an ANSWERABLE decision.               |
+| `decisions.ts`        | The two kinds answered, what is answerable NOW, and the refusals. The most conservative module here.                   |
+| `runDriver.ts`        | One started run to terminal, under ONE budget spanning every park.                                                     |
+| `resume.ts`           | File or adopt; the four states a resumed pass can find.                                                                |
+| `evidence.ts`         | Report reductions: a `Check` per claim, so a failing pass reports every unmet one.                                     |
+| `operatorText.ts`     | Describers, scrubbing, and the shell dialect table.                                                                    |
+| `suiteIdentity.ts`    | Who is running, and the commands rendered from it.                                                                     |
 
 **Tests** live beside the sources (`src/*.test.ts`) and need no infrastructure: everything here is
 pure over its seams, including the clients (a stubbed `globalThis.fetch`) and the ledger and journal

@@ -30,6 +30,7 @@ function passUnder(options: {
   created?: boolean
   gate?: () => Promise<void>
   recordsFacts?: () => boolean
+  target?: string
 }) {
   const dir = mkdtempSync(join(tmpdir(), 'cf-kit-pass-'))
   const ledger = new LedgerStore<Facts>({
@@ -47,7 +48,7 @@ function passUnder(options: {
     run: () =>
       runPass<Facts>({
         identity,
-        target: 'https://deployment.invalid',
+        target: options.target ?? 'https://deployment.invalid',
         ledger,
         journal,
         scenarios: options.scenarios,
@@ -68,6 +69,20 @@ describe('runPass', () => {
       expect(banner).toContain('ACME_RUN_ID')
       expect(banner).toContain('https://deployment.invalid')
     })
+  })
+
+  it('SCRUBS the target, since the banner heads a log that gets pasted into an issue', async () => {
+    // A base URL may legitimately carry userinfo and no URL policy rejects it. Scrubbing was the
+    // caller's job for one commit, which makes it a rule every consumer has to know rather than a
+    // property of the kit: an afternoon-long pass is piped to a file, and this is its first line.
+    const pass = passUnder({
+      scenarios: [],
+      target: 'https://svc:hunter2@backend.example.com',
+    })
+    await pass.run()
+    const banner = pass.lines[0] ?? ''
+    expect(banner).not.toContain('hunter2')
+    expect(banner).toContain('backend.example.com')
   })
 
   it('answers 0 only when every scenario passed, and files the failure in the journal', async () => {

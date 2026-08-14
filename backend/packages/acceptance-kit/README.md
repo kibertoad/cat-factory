@@ -87,9 +87,12 @@ it is rather than the obvious way.
    tests the model's phrasing; swap the model and it goes red having found nothing wrong.
 4. **Never auto-answer a decision the suite was not designed for, or one that is in FLIGHT.** A loop
    that settles whatever it finds produces a green suite that proves nothing.
-5. **A wait that expires states its last observation.** "Timed out after 5400000ms" is true and
-   useless; "step 3 `coder` was still working, 4/9 subtasks" separates a parked run from a wedged one
-   from a slow one.
+5. **A wait that expires states its last observation, and what the pass left standing.** "Timed out
+   after 5400000ms" is true and useless; "step 3 `coder` was still working, 4/9 subtasks" separates a
+   parked run from a wedged one from a slow one. The second half is the `epilogue`, required on every
+   wait a started run spends its hours in: without it an operator is not told the run, its pull
+   request and any provisioned namespace are still there, and they start a second pass that the
+   leftovers then refuse.
 6. **Report every failing claim, not just the first.** A pass costs an afternoon.
 
 ## Seams
@@ -102,6 +105,9 @@ Four things the kit deliberately does NOT decide, because only a suite can:
 - **`SuiteIdentity`**: the commands and variables a refusal quotes.
 - **`CredentialRetry`**: what to do when the deployment answers `428` because a model is a per-user
   subscription. The kit names the two writes where that can happen and never holds the credential.
+  Required on the drive path rather than defaulted, for the reason `gated` is: a suite whose models
+  all run on the deployment's own keys passes `passThroughCredentialRetry`, which says so in code,
+  where an omission says nothing and surfaces as a pass dying at a `428` after an afternoon of spend.
 
 ## Related
 
