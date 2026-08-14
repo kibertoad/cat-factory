@@ -1118,7 +1118,44 @@ deployment.
   forced rather than convenient: `assertValidBinaryOutputSteps` refuses a generating step with no
   storage service at SAVE and at run start, so an unconfigured preset would be one nobody could
   start until they had opened the builder. It ships `comparison` on, because generating one
-  picture and keeping it is the case that never needed a pipeline.
+  picture and keeping it is the case that never needed a pipeline. It also selects `nano-banana`,
+  the one generative integration the platform registers (see below); a workspace seeded before
+  that is offered the reseed by the ordinary catalog-version advisory.
+
+### The producer: the platform's own, as the one shipped integration
+
+`pl_media` shipped selecting a storage service and NO generative integration, which left the step
+with somewhere to put pictures and no API to make them with: the agent generated through whatever
+its own model could draw, or reported that it could not. `defaultBinaryGeneratorRegistry()` stayed
+empty on the ground that no image API is universal and every one of them is metered, and both
+halves of that are still true. Neither one decides the question the Media preset asked, which is
+whether the shipped path works at all with nothing configured.
+
+So the platform now ships ONE integration, `nano-banana` (Google's Gemini image models), in
+`@cat-factory/binary-generators`: kernel + contracts only, authored through the same public
+`BinaryGeneratorRegistry` seam a deployment uses, exactly as `@cat-factory/gates` is for gates.
+Every facade defaults its registry to `binaryGeneratorRegistryWithBuiltins()` (both entry points
+and, on the Worker, the override-less `resolveWorkerRegistries` a cron re-drive builds through),
+and `pl_media`'s step selects it.
+
+- **Metered is answered by the CREDENTIAL, not by the registry.** `GEMINI_API_KEY` resolves through
+  the ordinary capability-credential path; unresolved, the agent is told the integration is
+  unavailable and reports it as the reason an artifact is missing. A deployment that ignores the
+  entry pays nothing and sees one extra row in a picker.
+- **An INJECTED registry replaces the shipped set**, and a preset that names an id nothing answers
+  to is refused at admission (`binary_output_generator_invalid`). That is the sharp edge of
+  selecting by id in a shipped preset, and it is the right disposition: the alternative is a run
+  that dispatches an agent with no way to generate. The facades' doc comments and the package
+  README point a deployment at `binaryGeneratorRegistryWithBuiltins()` as the starting instance.
+- **The id lives in `@cat-factory/contracts`** (`NANO_BANANA_GENERATOR_ID`), because two layers must
+  agree about it: the definition, and kernel's seed catalog, which cannot import the package that
+  defines it.
+- **The rules `defineBinaryGenerator` runs are the BOOT rules**, moved into kernel
+  (`binaryGeneratorDetailIssues`, `binaryGeneratorInjectionCollisions`) and called by both the
+  authoring seam and `collectRegistrationProblems`. They lived inside orchestration's boot
+  validator, where a definitions package could not reach them: stefka's own package restated them
+  against the same leaf helpers and documented the copy as "a mirror and can drift", which is the
+  thing a growing rule set cannot survive.
 
 ### The storage: the platform's own, as a `builtin`-tier service
 

@@ -1,19 +1,11 @@
 import type { BinaryGeneratorRegistry } from '@cat-factory/kernel'
 import {
-  BINARY_GENERATING_HARNESSES,
-  describeFoundationalProblem,
-  harnessServesBinaryGeneration,
-  isAllowedMcpHttpUrl,
-  isHarnessKind,
-  validateFoundationalDefinition,
+  binaryGeneratorDetailIssues,
+  binaryGeneratorInjectionCollisions,
 } from '@cat-factory/kernel'
 import {
   type BinaryGeneratorDefinition,
-  binaryAcceptsWithoutCapability,
-  binaryCredentialInjectionName,
   binaryGeneratorDefinitionIssues,
-  comparableCredentialInjectionName,
-  modalitiesOfMediaType,
 } from '@cat-factory/contracts'
 // Type-only, so the pairing with the module this section was extracted from stays a compile-time
 // fact and no import cycle exists at runtime.
@@ -26,18 +18,21 @@ import type { RegistrationProblem } from './validateRegistrations.js'
  * Its own module rather than more of `validateRegistrations.ts` because the section is a cohesive
  * concern with a growing rule set, and its host had reached the file-size ratchet.
  *
- * Boot is the only place these can be caught. There is no write boundary that ever refused them
- * (they are code), and every failure below is silent at run time in the same expensive way: a
- * malformed definition or an unparseable contract becomes an integration the brief describes with
- * no operations, a credential key that is not a valid environment-variable name is dropped by the
- * harness's env validation and reappears as an unexplained 401 mid-run, and a cleartext endpoint
- * puts that credential on the wire from inside the run container. Each of those costs a run to
- * discover and names nothing that points back at the registration.
+ * Boot is the only place these can be caught for a deployment that registers in its own code.
+ * There is no write boundary that ever refused them, and every failure below is silent at run time
+ * in the same expensive way: a malformed definition or an unparseable contract becomes an
+ * integration the brief describes with no operations, a credential key that is not a valid
+ * environment-variable name is dropped by the harness's env validation and reappears as an
+ * unexplained 401 mid-run, and a cleartext endpoint puts that credential on the wire from inside
+ * the run container. Each of those costs a run to discover and names nothing that points back at
+ * the registration.
  *
- * A declared MEDIA TYPE that contradicts the declared modalities is an error too, not a warning:
- * both halves drive selection (a step's content-type coverage is checked against `modalities`,
- * while the brief tells the agent the `mediaTypes`), so an integration claiming `audio` while
- * listing `image/png` will be picked for one job and asked to do the other.
+ * The RULES are kernel's (`binaryGeneratorDetailIssues` / `binaryGeneratorInjectionCollisions`),
+ * not this module's, and that split is what makes them reusable: a definitions package
+ * (`@cat-factory/binary-generators`, and a deployment's own) runs the same functions at authoring
+ * time, so a definition that would fail this boot fails a test first. What stays here is the boot
+ * TAXONOMY: which severity each fault carries, and that a definition failing its parse is not
+ * asked the questions the parse just called meaningless.
  */
 export function checkBinaryGenerators(
   registry: BinaryGeneratorRegistry | undefined,
@@ -58,157 +53,20 @@ export function checkBinaryGenerators(
       continue
     }
     valid.push(definition)
-    problems.push(...checkBinaryGeneratorDetails(definition))
+    problems.push(...asProblems(binaryGeneratorDetailIssues(definition)))
   }
-  problems.push(...checkInjectionNameCollisions(valid))
+  // Only definitions that PARSED are compared: a malformed one has already been reported, and
+  // reading its credentials here would restate that fault as a second, more confusing one.
+  problems.push(...asProblems(binaryGeneratorInjectionCollisions(valid)))
   return problems
 }
 
 /**
- * The one check that spans DEFINITIONS: two integrations may not inject different values into one
- * environment variable.
- *
- * Within a definition the schema already refuses a repeated injection name. Across definitions the
- * same name is legitimate and common, because one vendor behind an image endpoint and a music
- * endpoint is one account: what makes that case safe is that both look the value up under the SAME
- * key, so whichever integration is resolved first sets the variable to exactly what the other
- * wanted. Different keys behind one name is the opposite, and there is no arbitration that makes
- * it right. Serving the first claimant sets the variable the second integration's brief tells the
- * agent to read, so the agent authenticates one vendor with another's key; withholding it (what
- * dispatch does, since a mothership node validates nothing) costs both integrations every run.
- *
- * Neither outcome is what the deployment meant, and the remedy is one `envName` on one definition,
- * which is why this is an error at boot rather than a warning nobody acts on. Only definitions
- * that PARSED are compared: a malformed one has already been reported, and reading its credentials
- * here would restate that fault as a second, more confusing one.
+ * Every rule in that module is an ERROR at boot, and each of them says why in its own doc: the
+ * deployment either starts having disabled an integration it paid for, or starts with a credential
+ * on a cleartext wire. A warning would be a line an operator reads once per boot and stops seeing,
+ * for faults whose remedy is one edit in the deployment's own code.
  */
-function checkInjectionNameCollisions(
-  definitions: readonly BinaryGeneratorDefinition[],
-): RegistrationProblem[] {
-  // Grouped by the COMPARABLE (case-folded) name and reported under the spelling the deployment
-  // wrote, because `ACME_KEY` and `acme_key` are one variable wherever the environment is
-  // case-insensitive and two everywhere else: the pair collides on exactly the platform where the
-  // operator has the least chance of noticing.
-  const claims = new Map<string, { spelling: string; byKey: Map<string, string[]> }>()
-  for (const definition of definitions) {
-    for (const credential of definition.credentials ?? []) {
-      const claim = claims.get(comparableCredentialInjectionName(credential)) ?? {
-        spelling: binaryCredentialInjectionName(credential),
-        byKey: new Map<string, string[]>(),
-      }
-      claim.byKey.set(credential.key, [...(claim.byKey.get(credential.key) ?? []), definition.id])
-      claims.set(comparableCredentialInjectionName(credential), claim)
-    }
-  }
-  const problems: RegistrationProblem[] = []
-  for (const [, { spelling: envName, byKey }] of claims) {
-    if (byKey.size < 2) continue
-    const described = [...byKey]
-      .map(([key, ids]) => `"${key}" (${ids.join(', ')})`)
-      .sort()
-      .join(' and ')
-    problems.push({
-      severity: 'error',
-      code: 'binary_generator_injection_name_collision',
-      message:
-        `Generative binary integrations disagree about environment variable "${envName}": it is ` +
-        `declared for lookup keys ${described}. One variable cannot hold both values, so an agent ` +
-        `told to read it for one integration would authenticate with the other's credential. Give ` +
-        `one of them a distinct \`envName\`, or point both at the same lookup key if they really ` +
-        `share an account.`,
-    })
-  }
-  return problems
-}
-
-/** The per-definition checks a valid PARSE cannot make: the endpoint, contracts, media types. */
-function checkBinaryGeneratorDetails(definition: BinaryGeneratorDefinition): RegistrationProblem[] {
-  const problems: RegistrationProblem[] = []
-  const invalid = (code: string, message: string): void => {
-    problems.push({ severity: 'error', code, message })
-  }
-  // The same rule an HTTP tool server's URL is held to, and for the same reason the helper
-  // states: a declared credential rides this request, so cleartext off loopback puts it on the
-  // wire. (The helper is MCP-named because that was its first caller; the rule is not.)
-  if (definition.endpoint && !isAllowedMcpHttpUrl(definition.endpoint)) {
-    invalid(
-      'insecure_binary_generator_endpoint',
-      `Generative binary integration "${definition.id}" has endpoint "${definition.endpoint}". Its ` +
-        `credential is sent with every request, so the endpoint must be https (plain http is ` +
-        `accepted only on loopback).`,
-    )
-  }
-  for (const problem of validateFoundationalDefinition({ contracts: definition.contracts })) {
-    invalid(
-      'binary_generator_invalid',
-      `Generative binary integration "${definition.id}": ${describeFoundationalProblem(problem)}`,
-    )
-  }
-  const declared = new Set(definition.modalities)
-  for (const mediaType of definition.mediaTypes ?? []) {
-    const consistent = modalitiesOfMediaType(mediaType)
-    // An UNRECOGNISED media type is not a fault: the platform's classifier is not a registry of
-    // every format that exists, and refusing one would make registering a new codec impossible.
-    // A recognised one that CONTRADICTS the declaration is, because both drive selection.
-    //
-    // Contradiction is an empty INTERSECTION, not an absent member, and for 3D that is the whole
-    // difference: a `.glb` is consistent with both `3d-model` and `3d-scene` because the container
-    // does not record which it holds, so requiring every member would refuse a scene generator
-    // for declaring the only format it can emit.
-    if (consistent.length > 0 && !consistent.some((modality) => declared.has(modality))) {
-      const names = consistent.join('/')
-      invalid(
-        'binary_generator_modality_mismatch',
-        `Generative binary integration "${definition.id}" declares media type "${mediaType}" ` +
-          `(${names}) but lists none of those among its modalities ` +
-          `(${definition.modalities.join(', ')}). A step selecting it for ${names} would be ` +
-          `refused, and one selecting it for the listed modalities would be told it can emit this.`,
-      )
-    }
-  }
-  // The transport's one rule that needs more than the definition: whether the named CLI actually
-  // carries a generation tool. Here rather than in the contracts schema because kernel owns both
-  // the harness list and which of them generate, and contracts (which kernel imports) can see
-  // neither.
-  //
-  // Judged against the GENERATING harnesses rather than every harness this build runs, because the
-  // two failures are indistinguishable downstream and both are silent: a definition naming `pi` or
-  // `claude-code` passes every structural check, admission resolves the step's model to that same
-  // CLI and admits it, the dispatch sets the generation flag, the runner ignores it, and the
-  // agent's brief tells it to collect output from a staging directory nothing created. The run
-  // then reports a model or vendor problem for what is one string in the deployment's own code.
-  //
-  // An error rather than a warning, and an early one, for that reason: boot validation is the only
-  // place this is cheap to fix.
-  if (definition.harness && !harnessServesBinaryGeneration(definition.harness)) {
-    const known = isHarnessKind(definition.harness)
-    invalid(
-      'binary_generator_unknown_harness',
-      `Generative binary integration "${definition.id}" is served by harness ` +
-        `"${definition.harness}", which ` +
-        (known
-          ? `this build runs but which carries no built-in generation tool`
-          : `is not one this build runs`) +
-        `. Only ${BINARY_GENERATING_HARNESSES.join(', ')} can serve a harness-transport ` +
-        `integration; a step selecting this one would dispatch and produce nothing.`,
-    )
-  }
-  // The same fault one axis finer: a declaration whose two halves contradict each other, where
-  // every reader believes a different half. An `accepts` set states which values the endpoint
-  // takes for an option its `capabilities` say it cannot be asked for at all, so the brief
-  // renders the set as fact while admission refuses every step that asks, and the value rule
-  // (judged over the capability's declarers) never sees the set at all. The accurate half is
-  // unreachable, which makes this an error rather than a warning: the remedy is one capability
-  // on one definition, and the deployment has already written down that the endpoint has it.
-  for (const { option, capability } of binaryAcceptsWithoutCapability(definition)) {
-    invalid(
-      'binary_generator_accepts_without_capability',
-      `Generative binary integration "${definition.id}" states the values it accepts for ` +
-        `\`${option}\` but does not declare the "${capability}" capability that option needs. ` +
-        `A step asking for it is refused as unsupported, so the accepted set is never consulted ` +
-        `while the agent's brief states it. Declare "${capability}", or drop the set if the ` +
-        `endpoint genuinely takes no such parameter.`,
-    )
-  }
-  return problems
+function asProblems(issues: readonly { code: string; message: string }[]): RegistrationProblem[] {
+  return issues.map((issue) => ({ severity: 'error', code: issue.code, message: issue.message }))
 }

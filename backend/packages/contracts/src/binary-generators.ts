@@ -32,6 +32,22 @@ import {
 // behaviour by building the same registry.
 // ---------------------------------------------------------------------------
 
+/**
+ * The registry id of the ONE integration the platform itself ships: Google's Gemini image models,
+ * defined in `@cat-factory/binary-generators` and installed by every facade's default registry.
+ *
+ * Here rather than beside the definition for the reason `PLATFORM_ASSET_STORAGE_SERVICE_ID` is
+ * here: more than one layer has to agree about the string, and this is the only one all of them
+ * can see. The definition package names it, and so does the built-in `pl_media` preset in kernel's
+ * seed catalog, which cannot import that package (it depends on kernel). A string literal in the
+ * seed would be a second source of truth for an id whose whole job is to resolve.
+ *
+ * A plain lower-kebab slug like every other, so nothing about it is special to admission, the
+ * picker or the brief: a deployment that prefers its own integrations registers those instead, and
+ * one that re-registers this id overrides the shipped definition with its own.
+ */
+export const NANO_BANANA_GENERATOR_ID = 'nano-banana'
+
 const slug = v.pipe(
   v.string(),
   v.trim(),

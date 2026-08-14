@@ -40,6 +40,7 @@
   },
   "dependencies": {
     "@cat-factory/agents": "workspace:*",
+    "@cat-factory/binary-generators": "workspace:*",
     "@cat-factory/caching": "workspace:*",
     "@cat-factory/consensus": "workspace:*",
     "@cat-factory/contracts": "workspace:*",

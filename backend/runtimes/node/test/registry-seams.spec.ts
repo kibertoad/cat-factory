@@ -221,7 +221,11 @@ const SEAM_CONSTRUCTORS = {
     'FoundationalServiceRegistry',
     'defaultFoundationalServiceRegistry',
   ],
-  binaryGeneratorRegistry: ['BinaryGeneratorRegistry', 'defaultBinaryGeneratorRegistry'],
+  binaryGeneratorRegistry: [
+    'BinaryGeneratorRegistry',
+    'defaultBinaryGeneratorRegistry',
+    'binaryGeneratorRegistryWithBuiltins',
+  ],
   binaryStoreRegistry: ['BinaryStoreRegistry', 'defaultBinaryStoreRegistry'],
   promptFragmentRegistry: [
     'PromptFragmentRegistry',

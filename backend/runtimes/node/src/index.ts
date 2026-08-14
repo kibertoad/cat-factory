@@ -124,16 +124,33 @@ export {
   defaultFoundationalServiceRegistry,
 } from '@cat-factory/kernel'
 // Installation-level extension point for GENERATIVE BINARY INTEGRATIONS (the same DI seam once
-// more): a deployment news a `defaultBinaryGeneratorRegistry()`, registers the image / music /
+// more): a deployment news a `binaryGeneratorRegistryWithBuiltins()`, registers the image / music /
 // video generation APIs it pays for on it, and passes it via the `binaryGeneratorRegistry`
 // option. A pipeline step whose kind carries the `binary-output` trait then SELECTS from them
 // (`stepOptions.binaryOutput.generatorIds`), and the engine briefs the agent on each one's
 // content types, contract and credential variable.
+//
+// `binaryGeneratorRegistryWithBuiltins()` is the one a deployment almost always wants, for the
+// reason the gate registry's twin says below and one more: a bare `defaultBinaryGeneratorRegistry()`
+// is EMPTY, and the shipped `pl_media` preset SELECTS `nano-banana`, so injecting one refuses that
+// pipeline's runs at admission rather than degrading. Start from the built-ins and register onto
+// the same instance unless dropping the shipped integration is the intent.
 export {
   BinaryGeneratorRegistry,
   type BinaryGeneratorDefinition,
   defaultBinaryGeneratorRegistry,
 } from '@cat-factory/kernel'
+export {
+  BUILTIN_BINARY_GENERATORS,
+  type BinaryGeneratorEntry,
+  type BinaryGeneratorInput,
+  NANO_BANANA_CREDENTIAL_KEY,
+  NANO_BANANA_GENERATOR_ID,
+  binaryGeneratorRegistryWithBuiltins,
+  defineBinaryGenerator,
+  openApiContract,
+  registerBuiltinBinaryGenerators,
+} from '@cat-factory/binary-generators'
 // Installation-level extension point for the deployment's OWN BINARY ARTIFACT STORES: a
 // deployment news a `defaultBinaryStoreRegistry()`, registers stores implementing the
 // `BinaryBlobBackend` port (GCS, Azure Blob, an internal object service) on it, and passes it via

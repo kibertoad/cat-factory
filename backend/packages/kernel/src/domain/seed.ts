@@ -1,4 +1,8 @@
-import { PLATFORM_ASSET_STORAGE_SERVICE_ID, hasApproverPolicy } from '@cat-factory/contracts'
+import {
+  NANO_BANANA_GENERATOR_ID,
+  PLATFORM_ASSET_STORAGE_SERVICE_ID,
+  hasApproverPolicy,
+} from '@cat-factory/contracts'
 import type { PipelineRegistry } from './pipeline-registry.js'
 import type { TaskTypeRegistry } from './task-type-registry.js'
 import type { Block, Pipeline, StepGateConfig, StepGating, StepOptions } from './types.js'
@@ -1024,6 +1028,17 @@ function buildMediaPipelines(): Pipeline[] {
     // own asset storage, which every deployment has once content storage is configured (the
     // local one defaults it to the filesystem).
     //
+    // BOTH HALVES are shipped now: the storage the artifacts go to, and `nano-banana`, the one
+    // generative integration the platform registers (`@cat-factory/binary-generators`, installed
+    // by every facade's default registry). Without it the step had a place to put pictures and no
+    // API to make them with, so the agent fell back to whatever its own model could draw. The
+    // selection is what makes the preset name an id, which is also its one sharp edge: a
+    // deployment that INJECTS a `binaryGeneratorRegistry` of its own replaces the shipped set
+    // rather than adding to it, and this preset's runs are then refused at admission
+    // (`binary_output_generator_invalid`) until it starts from `binaryGeneratorRegistryWithBuiltins()`
+    // or edits the step. A loud refusal naming the id beats a run that dispatches and generates
+    // nothing.
+    //
     // `comparison` is on by default with two candidates from each producer, because generating
     // one picture and keeping it is the case that did not need a pipeline: the reason to run
     // several image APIs at once is to look at what came back and keep what is good.
@@ -1040,6 +1055,10 @@ function buildMediaPipelines(): Pipeline[] {
       id: 'pl_media',
       name: 'Generate media',
       purpose: 'media',
+      // `version: 1` against the copies seeded before this preset selected an integration, which
+      // carry no version at all and read as 0: those workspaces are offered the reseed that adds
+      // the selection, rather than keeping a step that generates through nothing.
+      version: 1,
       description:
         'Generate images, 3D models or other binary assets through the generative integrations you select, compare what each one produced, and keep the ones you want.',
       steps: [
@@ -1048,6 +1067,7 @@ function buildMediaPipelines(): Pipeline[] {
           options: {
             binaryOutput: {
               storageServiceId: PLATFORM_ASSET_STORAGE_SERVICE_ID,
+              generatorIds: [NANO_BANANA_GENERATOR_ID],
               comparison: { perGenerator: 2, multiSelect: true },
             },
           },

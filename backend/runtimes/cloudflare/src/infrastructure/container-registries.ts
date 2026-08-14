@@ -6,6 +6,7 @@ import {
 } from '@cat-factory/kernel'
 import { defaultAgentKindRegistry, defaultInitiativePresetRegistry } from '@cat-factory/agents'
 import { createBackendRegistries } from '@cat-factory/integrations'
+import { binaryGeneratorRegistryWithBuiltins } from '@cat-factory/binary-generators'
 import { gateRegistryWithBuiltins } from '@cat-factory/gates'
 import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
 import { eksEnvironmentBackend, eksRunnerBackend } from '@cat-factory/eks'
@@ -28,6 +29,7 @@ export type WorkerRegistries = Required<
     | 'vcsRegistry'
     | 'providerRegistry'
     | 'promptFragmentRegistry'
+    | 'binaryGeneratorRegistry'
     | 'binaryStoreRegistry'
   >
 >
@@ -80,6 +82,14 @@ export function resolveWorkerRegistries(overrides: Partial<CoreDependencies>): W
   // standards into exactly the runs nobody is watching.
   const promptFragmentRegistry =
     overrides.promptFragmentRegistry ?? promptFragmentRegistryWithBuiltins()
+  // The app-owned generative binary integrations: the injected instance, else a fresh one carrying
+  // the shipped `@cat-factory/binary-generators` set. The default belongs HERE for the reason the
+  // standards pool's does, and the run it protects is the same kind: a container built directly (a
+  // cron re-drive, a Workflow step) takes no overrides, and the durable dispatch path is where a
+  // binary-output step's brief is composed. Defaulting only at `createWorker` would leave exactly
+  // those runs resolving no integration for a step the builder let a person select one on.
+  const binaryGeneratorRegistry =
+    overrides.binaryGeneratorRegistry ?? binaryGeneratorRegistryWithBuiltins()
   // The app-owned registry of the deployment's OWN binary artifact stores: the injected instance,
   // else the PROCESS-WIDE registration (empty when a deployment registered none; the platform's
   // R2 backend is this facade's own wiring, not an entry).
@@ -113,6 +123,7 @@ export function resolveWorkerRegistries(overrides: Partial<CoreDependencies>): W
     vcsRegistry,
     providerRegistry,
     promptFragmentRegistry,
+    binaryGeneratorRegistry,
     binaryStoreRegistry,
   }
 }

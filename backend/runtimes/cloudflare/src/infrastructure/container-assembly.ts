@@ -579,6 +579,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     initiativePresetRegistry,
     providerRegistry,
     promptFragmentRegistry,
+    binaryGeneratorRegistry,
     binaryStoreRegistry,
   } = registries
   // The Bedrock allow-list that gates `bedrock`-flavour selectability, derived from `env` here
@@ -649,6 +650,11 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // registered on the same instance). `createCore` wraps it in the default `PromptFragmentSource`
     // every prompt-assembly site and the catalog endpoint read through.
     promptFragmentRegistry,
+    // The app-owned generative binary integrations (the shipped set + whatever the deployment
+    // registered on the same instance). `createCore` wraps it in the default
+    // `BinaryGeneratorSource` a binary-output step's admission and brief resolve through, unless
+    // this is a mothership-mode node, which injects the remote source instead.
+    binaryGeneratorRegistry,
     // The app-owned registry of the deployment's OWN binary artifact stores. The per-account
     // resolver above was already composed from it; re-exposed on Core so what this build offers
     // is readable rather than only observable by storing something.

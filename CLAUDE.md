@@ -765,9 +765,9 @@ declaration", "empty declaration" and "unknown id" are three states needing diff
 **Binary-output steps**: a `binary-output`-trait kind generates artifacts, stored through a foundational
 service its step SELECTS; what MAKES them is `BinaryGeneratorRegistry`, read only via `BinaryGeneratorSource`
 (unreachable ⇒ 503, mothership rule), whose `capabilities` + `accepts` gate the options and, past two producers,
-a human CANDIDATE park. The `media` task type runs the shipped generator kind against `platform-assets`, the ONE
-service `defaultFoundationalServiceRegistry()` holds. Deadliest trap: content type is CLOSED and stops deciding
-at the SECOND producer, so overlaps are STATED and never ranked. Doc: [`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
+a human CANDIDATE park. `pl_media` runs the shipped kind against `platform-assets` + `nano-banana`, the one
+service and integration shipped (INJECTING a registry drops it, refusing that preset). Deadliest trap: content
+type is CLOSED and stops deciding at the SECOND producer, so overlaps are STATED, never ranked. Doc: [`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
 
 **Compose layers**: `StackRecipe` / `SharedStack` name an ORDERED list of `ComposeFileRef` layers
 (in-repo path, `inline`, or `repo`), letting a deployment declare infra dependencies in code. Traps: the

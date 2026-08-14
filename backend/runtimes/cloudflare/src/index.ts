@@ -88,12 +88,12 @@ import {
   sweepBinaryArtifactRetention,
   validateRegistrationsOnce,
 } from '@cat-factory/orchestration'
+import { binaryGeneratorRegistryWithBuiltins } from '@cat-factory/binary-generators'
 import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
 import { defaultAgentKindRegistry, defaultInitiativePresetRegistry } from '@cat-factory/agents'
 import { gateRegistryWithBuiltins } from '@cat-factory/gates'
 import {
   DEFAULT_WORKSPACE_SETTINGS,
-  defaultBinaryGeneratorRegistry,
   defaultBinaryStoreRegistry,
   defaultFoundationalServiceRegistry,
   defaultPipelineRegistry,
@@ -188,16 +188,33 @@ export {
   defaultFoundationalServiceRegistry,
 } from '@cat-factory/kernel'
 // Installation-level extension point for GENERATIVE BINARY INTEGRATIONS (the same DI seam once
-// more): a deployment news a `defaultBinaryGeneratorRegistry()`, registers the image / music /
+// more): a deployment news a `binaryGeneratorRegistryWithBuiltins()`, registers the image / music /
 // video generation APIs it pays for on it by reference, and injects it via the
 // `binaryGeneratorRegistry` override. A pipeline step whose kind carries the `binary-output`
 // trait then SELECTS from them (`stepOptions.binaryOutput.generatorIds`), and the engine briefs
 // the agent on each one's content types, contract and credential variable.
+//
+// `binaryGeneratorRegistryWithBuiltins()` is the one a deployment almost always wants, for the
+// reason the gate registry's twin says below and one more: a bare `defaultBinaryGeneratorRegistry()`
+// is EMPTY, and the shipped `pl_media` preset SELECTS `nano-banana`, so injecting one refuses that
+// pipeline's runs at admission rather than degrading. Start from the built-ins and register onto
+// the same instance unless dropping the shipped integration is the intent.
 export {
   BinaryGeneratorRegistry,
   type BinaryGeneratorDefinition,
   defaultBinaryGeneratorRegistry,
 } from '@cat-factory/kernel'
+export {
+  BUILTIN_BINARY_GENERATORS,
+  type BinaryGeneratorEntry,
+  type BinaryGeneratorInput,
+  NANO_BANANA_CREDENTIAL_KEY,
+  NANO_BANANA_GENERATOR_ID,
+  binaryGeneratorRegistryWithBuiltins,
+  defineBinaryGenerator,
+  openApiContract,
+  registerBuiltinBinaryGenerators,
+} from '@cat-factory/binary-generators'
 // The app-owned PROMPT-FRAGMENT registry (the same shape once more): a deployment news a
 // `promptFragmentRegistryWithBuiltins()` (or a bare `defaultPromptFragmentRegistry()` when it
 // wants only its own standards), registers its best-practice fragments and per-task-type default
@@ -371,10 +388,14 @@ function resolveEntryRegistries(overrides: Partial<CoreDependencies>) {
     // malformed contract document fails boot rather than a design dispatch.
     foundationalServiceRegistry:
       overrides.foundationalServiceRegistry ?? defaultFoundationalServiceRegistry(),
-    // Generative binary integrations (empty by default — the platform ships none). Registered
-    // ones are what a binary-generating step may produce with, and a malformed definition or a
-    // cleartext endpoint fails boot rather than a dispatch.
-    binaryGeneratorRegistry: overrides.binaryGeneratorRegistry ?? defaultBinaryGeneratorRegistry(),
+    // Generative binary integrations: the SHIPPED set (`nano-banana`) plus whatever a deployment
+    // registered onto the same instance. Defaulted to the built-ins by the FACADE (here and, for a
+    // container built with no overrides, in `resolveWorkerRegistries`) rather than by
+    // `createCore`, whose default is deliberately empty. Registered ones are what a
+    // binary-generating step may produce with, and a malformed definition or a cleartext endpoint
+    // fails boot rather than a dispatch.
+    binaryGeneratorRegistry:
+      overrides.binaryGeneratorRegistry ?? binaryGeneratorRegistryWithBuiltins(),
     // The deployment's own binary artifact stores. Resolved here so registration validation sees
     // the same instance the engine does; `createApp` then registers it PROCESS-WIDE, which is how
     // it reaches the builders that take no overrides at all (the durable driver, the queue
