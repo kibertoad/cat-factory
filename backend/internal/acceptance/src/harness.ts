@@ -13,18 +13,21 @@
 // write down what a pass created.
 
 import type { CatFactoryClient, PrReportRunProvider } from '@cat-factory/sdk'
-import { type AcceptanceConfig } from './config.ts'
-import { DeploymentApi } from './deploymentApi.ts'
-import { serviceTitles } from './instructions.ts'
-import { Journal } from './journal.ts'
-import type { PersonalUnlock } from './personalUnlock.ts'
 import {
   createPrerequisiteGate,
+  type CredentialRetry,
+  DeploymentApi,
   formatPreflightLine,
+  Journal,
+  leftInPlaceNote,
   type PreflightReport,
   type PrerequisiteGate,
   runPreflight,
-} from './preflight.ts'
+} from '@cat-factory/acceptance-kit'
+import { type AcceptanceConfig } from './config.ts'
+import { ACCEPTANCE_IDENTITY } from './identity.ts'
+import { serviceTitles } from './instructions.ts'
+import { type PersonalUnlock, withPersonalUnlock } from './personalUnlock.ts'
 import { PREREQUISITES } from './prerequisites.ts'
 import { createClient, createPassClient } from './publicApi.ts'
 import { type IssueApi, ISSUE_APIS } from './vcsIssues.ts'
@@ -34,7 +37,7 @@ export type Harness = {
   config: AcceptanceConfig
   /** The published SDK, pointed at the deployment. The suite's primary surface. */
   client: CatFactoryClient
-  /** The two deployment ROOT reads, which take no credential. See `src/deploymentApi.ts`. */
+  /** The two deployment ROOT reads, which take no credential. See the kit's `deploymentApi.ts`. */
   deployment: DeploymentApi
   world: WorldStore
   /** The pass's durable progress record. Every scenario's observations land here. */
@@ -46,6 +49,22 @@ export type Harness = {
    * empty (and lazy) otherwise.
    */
   unlock: PersonalUnlock
+  /**
+   * The unlock as the KIT asks for it: how a call the deployment refuses for want of a per-user
+   * credential is retried.
+   *
+   * Built once here rather than at each `fileAndDrive`, so no scenario has to remember that a
+   * `start` and an answered park are both such calls. The kit never holds the password; it only
+   * names the two writes where the platform can ask for one.
+   */
+  credentials: CredentialRetry
+  /**
+   * The tail every wait in this pass ends on: what is still standing, and how to pick it back up.
+   *
+   * Rendered from this suite's identity, because it names the variable a resume is set through. A
+   * wait that expired without it states its last observation and offers no way back in.
+   */
+  epilogue: string
   /**
    * The pass's prerequisite gate: the driver's refusal before every gated scenario, and the report
    * scenario's own evaluation. ONE object, so the two cannot come to evaluate different things.
@@ -72,7 +91,7 @@ type PrerequisiteInputs = Pick<Harness, 'config' | 'deployment' | 'world' | 'jou
    * The one field the gate does not share with a scenario, and the only reason this type is no
    * longer a plain `Pick`. A prerequisite runs before the pass has created anything, so a
    * deployment that is not answering is a verdict to print rather than an outage to sit through:
-   * `publicApi.ts` owns that argument and both halves of it.
+   * `publicApi.ts` (and the kit's `client.ts`) own that argument and both halves of it.
    */
   client: CatFactoryClient
 }
@@ -96,7 +115,10 @@ export function buildHarness(options: {
     config,
     deployment: new DeploymentApi({ baseUrl: config.baseUrl }),
     world,
-    journal: new Journal(world.dir, runId),
+    // Named, so the one warning a journal prints (an unwritable state directory) quotes THIS suite's
+    // status command rather than telling an operator a pass is unwatchable and leaving them to guess
+    // which command would have watched it.
+    journal: new Journal(world.dir, runId, { identity: ACCEPTANCE_IDENTITY }),
     log,
   }
   // Named, because the gate closes over exactly these and the harness closes over the gate: taking
@@ -105,12 +127,14 @@ export function buildHarness(options: {
   const inputs: PrerequisiteInputs = { ...shared, client: createClient(config, unlock) }
   return {
     ...shared,
+    credentials: (reason, call) => withPersonalUnlock(unlock, reason, call),
+    epilogue: leftInPlaceNote(ACCEPTANCE_IDENTITY),
     // The two clients differ only in how long a call waits on a deployment that is not answering,
     // and they are built here rather than shared because the answer differs by what is at stake:
     // an hour of agent work on this side, nothing at all on the gate's.
     client: createPassClient(config, unlock),
     unlock,
-    prerequisites: createPrerequisiteGate(() => evaluatePrerequisites(inputs)),
+    prerequisites: createPrerequisiteGate(() => evaluatePrerequisites(inputs), ACCEPTANCE_IDENTITY),
   }
 }
 
@@ -152,6 +176,9 @@ function evaluatePrerequisites(inputs: PrerequisiteInputs): Promise<PreflightRep
       issueApiFor: (provider) => issueApiFor(config, provider),
     },
     {
+      // Named so a thrown probe's remedy quotes THIS suite's variables and its resume, rather than
+      // stopping at the diagnosis (the kit's `probeFailure.ts` states each of those only when it is told).
+      identity: ACCEPTANCE_IDENTITY,
       // The DEPLOYMENT, so a thrown probe is described against it rather than as undici's `fetch
       // failed`. Even `cluster-connection` qualifies: it probes k3s THROUGH the backend, so its
       // transport failures are the backend's too. `issue-credential` also reaches the provider's own

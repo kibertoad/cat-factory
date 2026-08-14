@@ -1,7 +1,7 @@
 import { CatFactoryNotFoundError, type CatFactoryClient } from '@cat-factory/sdk'
 import { describe, expect, it, vi } from 'vitest'
+import { type Journal } from '@cat-factory/acceptance-kit'
 import { adoptRepoAsService, findRepo, isRepoUnreachable, repoBlocker } from '../src/adopt.ts'
-import type { Journal } from '../src/journal.ts'
 
 // The join between a configured repository name and a board service, and every way it can refuse.
 //

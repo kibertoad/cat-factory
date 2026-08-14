@@ -32,7 +32,7 @@
 // refuses a legitimate reset or empties something on a hunch. Recoverability is the protection.
 
 import { createHash } from 'node:crypto'
-import { describeThrown } from './operatorText.ts'
+import { describeThrown } from '@cat-factory/acceptance-kit'
 
 /** One repository, as both the provider's API and `GET /api/v1/repos` name it. */
 export type PurgeTarget = { owner: string; repo: string }

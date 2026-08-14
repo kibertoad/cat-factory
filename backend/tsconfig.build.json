@@ -20,6 +20,9 @@
     { "path": "packages/agents/tsconfig.build.json" },
     { "path": "packages/gates/tsconfig.build.json" },
     { "path": "packages/binary-generators/tsconfig.build.json" },
+    // The acceptance-suite building blocks. It depends on the published TypeScript SDK, which lives
+    // outside `backend/`, so its own reference reaches across into `sdk/typescript`.
+    { "path": "packages/acceptance-kit/tsconfig.build.json" },
     { "path": "packages/gitlab/tsconfig.build.json" },
     { "path": "packages/sandbox/tsconfig.build.json" },
     { "path": "packages/provider-bedrock/tsconfig.build.json" },

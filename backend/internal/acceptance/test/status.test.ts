@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { formatDuration } from '../src/deadline.ts'
-import type { JournalEvent } from '../src/journal.ts'
-import { resumeInvocation } from '../src/operatorText.ts'
+import { formatDuration, type JournalEvent } from '@cat-factory/acceptance-kit'
+import { resumeInvocation } from '../src/identity.ts'
 import { formatPassStatus, resolveStatusTarget, summarisePass } from '../src/status.ts'
 import { emptyWorld, type World } from '../src/world.ts'
 

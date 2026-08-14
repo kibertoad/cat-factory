@@ -2,7 +2,8 @@ import { copyFileSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { readLatestRunId } from '../src/passFiles.ts'
+import { readLatestRunId, resolveRunId } from '@cat-factory/acceptance-kit'
+import { ACCEPTANCE_IDENTITY } from '../src/identity.ts'
 import {
   coerceWorld,
   emptyWorld,
@@ -10,7 +11,6 @@ import {
   LEDGER_SLOTS,
   readWorld,
   recordsFacts,
-  resolveRunId,
   type World,
   WorldStore,
 } from '../src/world.ts'
@@ -25,28 +25,32 @@ function scratch(): string {
 
 describe('resolveRunId', () => {
   it('honours a pinned id, which is how a re-run resumes', () => {
-    expect(resolveRunId({ ACCEPTANCE_RUN_ID: '20260809T1200' }, scratch())).toBe('20260809T1200')
+    expect(
+      resolveRunId({ ACCEPTANCE_RUN_ID: '20260809T1200' }, scratch(), ACCEPTANCE_IDENTITY),
+    ).toBe('20260809T1200')
   })
 
   it('ignores a blank pin rather than minting an empty run id', () => {
-    expect(resolveRunId({ ACCEPTANCE_RUN_ID: '  ' }, scratch())).not.toBe('')
+    expect(resolveRunId({ ACCEPTANCE_RUN_ID: '  ' }, scratch(), ACCEPTANCE_IDENTITY)).not.toBe('')
   })
 
   it('mints an id usable in a filename', () => {
     // It names this pass's ledger and journal, so it has to be safe in a path on every platform.
-    expect(resolveRunId({}, scratch())).toMatch(/^[0-9]+$/)
+    expect(resolveRunId({}, scratch(), ACCEPTANCE_IDENTITY)).toMatch(/^[0-9]+$/)
   })
 
   it("resolves 'latest' through the pointer the previous pass wrote", () => {
     const dir = scratch()
     new WorldStore(dir, 'run-7').patch({ backend: emptyService() })
-    expect(resolveRunId({ ACCEPTANCE_RUN_ID: 'latest' }, dir)).toBe('run-7')
+    expect(resolveRunId({ ACCEPTANCE_RUN_ID: 'latest' }, dir, ACCEPTANCE_IDENTITY)).toBe('run-7')
   })
 
   it("refuses 'latest' when no pass has run, rather than silently starting one", () => {
     // The two intents are opposite: someone asking to continue must never be handed a fresh pass
     // that bootstraps two repositories and spends real money.
-    expect(() => resolveRunId({ ACCEPTANCE_RUN_ID: 'latest' }, scratch())).toThrow(/names no/)
+    expect(() =>
+      resolveRunId({ ACCEPTANCE_RUN_ID: 'latest' }, scratch(), ACCEPTANCE_IDENTITY),
+    ).toThrow(/names no/)
   })
 })
 
@@ -71,7 +75,9 @@ describe('the latest pointer, as WorldStore writes it', () => {
     new WorldStore(dir, 'run-with-work').patch({ backend: emptyService() })
     new WorldStore(dir, 'run-refused-at-preflight')
     expect(readLatestRunId(dir)).toBe('run-with-work')
-    expect(resolveRunId({ ACCEPTANCE_RUN_ID: 'latest' }, dir)).toBe('run-with-work')
+    expect(resolveRunId({ ACCEPTANCE_RUN_ID: 'latest' }, dir, ACCEPTANCE_IDENTITY)).toBe(
+      'run-with-work',
+    )
   })
 
   it('treats an absent or malformed pointer as no pass', () => {

@@ -14,8 +14,8 @@
 // before the one that populates that ledger had started. The numeric prefixes in the ids are now
 // only what they always claimed to be: a label for the reader, matching this list.
 
+import { type Scenario } from '@cat-factory/acceptance-kit'
 import type { Harness } from '../harness.ts'
-import type { Scenario } from '../scenarioRunner.ts'
 import { adoptAndScaffoldScenario } from './adoptAndScaffold.ts'
 import { featureWithDefectScenario } from './featureWithDefect.ts'
 import { investigateAndFixScenario } from './investigateAndFix.ts'
@@ -27,7 +27,7 @@ import { preflightScenario } from './preflight.ts'
  *
  * Built rather than declared, because a scenario closes over the client, the ledger and the journal
  * of THIS pass and the harness does not exist until the run id and the password are settled. It is
- * also what keeps the driver ignorant of the harness: `scenarioRunner.ts` sees a list of `Scenario`
+ * also what keeps the driver ignorant of the harness: the kit's `scenarioRunner.ts` sees a list of `Scenario`
  * and a gate seam, which is why it is unit-testable with no deployment.
  */
 export type ScenarioFactory = (harness: Harness) => Scenario

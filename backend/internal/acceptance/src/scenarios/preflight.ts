@@ -22,16 +22,17 @@
 // pays for is offered to the next `assert` and consumed by it (`createPrerequisiteGate`).
 
 import assert from 'node:assert/strict'
-import type { Harness } from '../harness.ts'
-import { scrubbed } from '../operatorText.ts'
 import {
   advisoryNotes,
   formatPreflightFailure,
   formatPreflightLine,
   formatPrerequisiteFailure,
-} from '../preflight.ts'
+  type Scenario,
+  scrubbed,
+} from '@cat-factory/acceptance-kit'
+import type { Harness } from '../harness.ts'
+import { ACCEPTANCE_IDENTITY } from '../identity.ts'
 import { PREREQUISITES } from '../prerequisites.ts'
-import type { Scenario } from '../scenarioRunner.ts'
 
 export function preflightScenario(harness: Harness): Scenario {
   const { config, journal, prerequisites } = harness
@@ -61,7 +62,7 @@ export function preflightScenario(harness: Harness): Scenario {
       // the pass: an operator with three red prerequisites paid a round trip per item, while the
       // terser gate seconds behind this scenario would have printed all three. The scenario written to
       // ADD granularity may not report less than the refusal it reports on.
-      const refusal = formatPreflightFailure(report)
+      const refusal = formatPreflightFailure(report, ACCEPTANCE_IDENTITY)
 
       // One step per prerequisite, named from the registry rather than restated here: a prerequisite
       // added to `PREREQUISITES` gains its own step with no second edit, which is what stops this

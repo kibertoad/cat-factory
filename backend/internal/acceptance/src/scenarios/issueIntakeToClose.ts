@@ -41,14 +41,19 @@
 
 import assert from 'node:assert/strict'
 import type { PrReportRunProvider } from '@cat-factory/sdk'
-import { assertChecks, checkCi, checkMergeDecision, checkNotTruncated } from '../evidence.ts'
+import {
+  assertChecks,
+  checkCi,
+  checkMergeDecision,
+  checkNotTruncated,
+  fileAndDrive,
+  requireRunDone,
+  type Scenario,
+} from '@cat-factory/acceptance-kit'
 import { type Harness, issueApiFor } from '../harness.ts'
 import { offsetValidationIssue } from '../instructions.ts'
 import { checkIssueWriteback, fileReporterIssue, waitForIssueSettled } from '../issueIntake.ts'
 import { filePinnedTask } from '../publicApi.ts'
-import { fileAndDrive } from '../resume.ts'
-import { requireRunDone } from '../runDriver.ts'
-import type { Scenario } from '../scenarioRunner.ts'
 import { ISSUE_SOURCE_BY_PROVIDER, issueTarget, slug } from '../vcsIssues.ts'
 
 const PIPELINE = 'pl_build'
@@ -68,7 +73,7 @@ const STEER =
 const WRITEBACK_BUDGET_MS = 3 * 60 * 1000
 
 export function issueIntakeToCloseScenario(harness: Harness): Scenario {
-  const { config, client, world, journal, unlock } = harness
+  const { config, client, world, journal, credentials, epilogue } = harness
 
   return {
     id: '04-issue-intake-to-close',
@@ -124,7 +129,8 @@ export function issueIntakeToCloseScenario(harness: Harness): Scenario {
           const { run, record } = await fileAndDrive({
             client,
             journal,
-            unlock,
+            credentials,
+            epilogue,
             existing: world.value.issueDelivery,
             label: `the delivery of ${slug(issue)}#${issue.number}`,
             // `ticket` is the whole point of this scenario. Supplied, the platform imports the issue,
