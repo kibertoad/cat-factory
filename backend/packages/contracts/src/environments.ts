@@ -238,13 +238,86 @@ export type ProvisionType = v.InferOutput<typeof provisionTypeSchema>
  * Machine-readable cause of an environment-provisioning failure, surfaced on the run's
  * {@link AgentFailure.reason} so the SPA can render precise, actionable guidance instead of
  * string-matching the provider prose (the failure analogue of {@link ConflictReason}).
+ *
+ * It is also what decides whether an automated `deploy-fixer` may be dispatched at all (see
+ * {@link isRepoFixableEnvironmentFailure}), which is the reason this vocabulary earns its keep
+ * rather than staying a single member beside a verbatim provider string. A coding agent handed a
+ * checkout will always find something to change; the classification is what stops it being asked
+ * to, for a cause no edit in that checkout could address.
+ *
  *  - `deploy_runner_unwired` — the service's provider needs a container-backed deploy (a real
  *    render/apply) but no deploy runner is wired on this deployment. The fix is deployment-level
  *    config (a runner pool / `LOCAL_DEPLOY_RUNTIME` / the Cloudflare DeployContainer binding), so
  *    the SPA gates its runtime-specific hint on this reason rather than on the prose.
+ *  - `config_incomplete` — the manifests are fine and the PLATFORM did not fill them in: a
+ *    `{{placeholder}}` the connection was meant to supply rendered empty, or a required handler
+ *    field is unset. The repository is not at fault and editing it is actively harmful, because
+ *    the only edit available is to hard-code the value the substitution exists to vary.
+ *  - `manifest_invalid` — the manifests the repo supplied were rejected on their own merits
+ *    (a malformed document, a missing required field, an unknown kind, a schema violation) with
+ *    every substitution resolved. The ONE cause a checkout edit can actually fix.
+ *  - `image_unavailable` — the workload's image could not be pulled (absent tag, private
+ *    registry, no pull secret). Not repo-fixable: the image is published by CI, so an agent
+ *    "fixing" this in the checkout is one step from editing the workflow that builds it.
+ *  - `workload_unhealthy` — the objects applied cleanly and the workload never became ready
+ *    (crash loop, OOM kill, unschedulable). This is the deployed CODE or the cluster's capacity,
+ *    which is the tester's subject and the operator's, not a manifest repair.
+ *  - `permission_denied` — the cluster refused the credentials (401/403, missing RBAC).
+ *  - `cluster_unreachable` — the provider could not be reached at all.
+ *  - `timeout` — the provision ran past its deadline with no terminal cause observed.
  */
-export const environmentFailureReasonSchema = v.picklist(['deploy_runner_unwired'])
+export const environmentFailureReasonSchema = v.picklist([
+  'deploy_runner_unwired',
+  'config_incomplete',
+  'manifest_invalid',
+  'image_unavailable',
+  'workload_unhealthy',
+  'permission_denied',
+  'cluster_unreachable',
+  'timeout',
+])
 export type EnvironmentFailureReason = v.InferOutput<typeof environmentFailureReasonSchema>
+
+/**
+ * Whether a failure of this cause could be fixed by editing the repository the run has checked
+ * out, and therefore whether an automated fixer may be dispatched against it.
+ *
+ * An exhaustive `Record` rather than a set membership test, so a new cause fails the build until
+ * somebody decides this about it. The default a new member would otherwise silently inherit is
+ * the dangerous one in both directions: `true` spends a container and invites a plausible-looking
+ * edit to code that was never wrong, and `false` quietly removes a class from remediation with
+ * nothing recording that anyone chose to.
+ *
+ * ONLY `manifest_invalid` is true, and the bar is deliberately that high. The motivating failure
+ * (`exec_194b231198454c7785f29589`) was a `Deployment` rejected for `spec.template.spec.
+ * containers[0].image: Required value` where the manifest correctly said `image: "{{image}}"`
+ * and the workspace connection carried no `imageTemplate` to fill it. An agent given that error
+ * and that checkout has exactly one move: hard-code an image. The run goes green, per-PR image
+ * substitution is permanently defeated, and the unwired connection the failure was reporting is
+ * hidden. Classification is what makes the difference between a repair and a plausible guess.
+ *
+ * An UNCLASSIFIED failure (no reason recorded at all) is not fixable either: the callers treat
+ * an absent reason as false, because "we could not tell what went wrong" is not evidence that a
+ * checkout edit would help.
+ */
+const REPO_FIXABLE_ENVIRONMENT_FAILURES: Record<EnvironmentFailureReason, boolean> = {
+  deploy_runner_unwired: false,
+  config_incomplete: false,
+  manifest_invalid: true,
+  image_unavailable: false,
+  workload_unhealthy: false,
+  permission_denied: false,
+  cluster_unreachable: false,
+  timeout: false,
+}
+
+/** See {@link REPO_FIXABLE_ENVIRONMENT_FAILURES}. An absent/unknown reason is never fixable. */
+export function isRepoFixableEnvironmentFailure(
+  reason: string | null | undefined,
+): reason is EnvironmentFailureReason {
+  if (!reason) return false
+  return REPO_FIXABLE_ENVIRONMENT_FAILURES[reason as EnvironmentFailureReason] === true
+}
 
 /**
  * The engine a workspace/user handler uses to stand up / connect to an environment for a

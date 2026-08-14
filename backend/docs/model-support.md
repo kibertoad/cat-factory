@@ -321,7 +321,7 @@ how a container step authenticates and reaches the model:
 - **`pi`** (default): the repo-operating agent kinds (`coder`, `mocker`,
   `playwright`, `blueprints`, `ci-fixer`, `conflict-resolver`, `merger`) run inside a
   per-run container and reach models through the **LLM proxy**. The proxy can only
-  serve **proxyable providers**: `workers-ai`, `qwen`, `deepseek`, `moonshot`,
+  serve **proxyable providers**: `workers-ai`, `qwen`, `deepseek`, `moonshot`, `xai`,
   `openai` (`isProxyableProvider`). A Pi step pinned to a non-proxyable provider fails
   loudly at dispatch ("…needs a model the LLM proxy can serve…").
 - **`claude-code` / `codex`** (subscription harnesses): talk **direct to the vendor**
@@ -447,8 +447,8 @@ website renders for operators. What is worth stating HERE is which of them chang
 outcome, because that is what a change to this layer can break:
 
 - **A provider key does not select a model; it makes a route USABLE.** `QWEN_API_KEY`,
-  `DEEPSEEK_API_KEY` and `MOONSHOT_API_KEY` upgrade a dual-mode entry to its `direct` flavour by
-  entering the capability set, not by being read at resolution time.
+  `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY` and `XAI_API_KEY` upgrade a dual-mode entry to its
+  `direct` flavour by entering the capability set, not by being read at resolution time.
 - **`AGENT_DEFAULT_*` and `AGENT_MODELS` are the LAST step of §3**, reached only when neither a
   block pin nor a workspace default answered.
 - **`BEDROCK_REGION` registers the resolver; `BEDROCK_MODELS` is both its allow-list and the

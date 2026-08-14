@@ -32,6 +32,25 @@
     "switchTo": "Cambiar a {mode}",
     "pinned": "Definido por este despliegue"
   },
+  "uiRole": {
+    "switcher": "Tu rol",
+    "roles": {
+      "engineer": "Ingeniero",
+      "productManager": "Gestor de producto",
+      "designer": "Diseñador"
+    },
+    "hints": {
+      "engineer": "Todo: planificar el trabajo, ejecutarlo, revisarlo y fusionarlo, y configurar la plataforma que lo ejecuta.",
+      "productManager": "Las mismas superficies que un ingeniero: planificar el trabajo, ejecutarlo y seguirlo hasta la fusión.",
+      "designer": "Un tablero más sencillo: los servicios que ya están en él, el trabajo en curso y tareas nuevas desde un diseño o una incidencia."
+    },
+    "prompt": {
+      "title": "¿En qué trabajas?",
+      "intro": "Elige la opción más parecida y la app se abrirá en las superficies que necesita ese trabajo. Esto cambia lo que VES, nunca lo que puedes hacer.",
+      "change": "Puedes cambiarlo cuando quieras desde la parte superior de la barra lateral.",
+      "later": "Ahora no"
+    }
+  },
   "common": {
     "loading": "Cargando…",
     "save": "Guardar",
@@ -2205,6 +2224,7 @@
         "pipeline_complete": "Confirmar y fusionar",
         "ci_failed": "Reintentar ejecución",
         "test_failed": "Reintentar ejecución",
+        "deploy_blocked": "Reintentar ejecución",
         "requirement_review": "Marcar como leída",
         "clarity_review": "Marcar como leída",
         "release_regression": "Confirmar recepción",
@@ -2387,6 +2407,7 @@
         "shortcuts": "Atajos de teclado",
         "bugHunt": "Caza de errores",
         "toggleUiMode": "Cambiar el modo de interfaz",
+        "chooseRole": "Cambiar tu rol",
         "foundationalServices": "Servicios fundamentales",
         "notificationSettings": "Gestionar el enrutamiento de notificaciones"
       },
@@ -2411,6 +2432,7 @@
         "shortcuts": "atajos teclado teclas ayuda",
         "bugHunt": "error bug caza triaje backlog incidencias sin asignar",
         "toggleUiMode": "interfaz modo básico avanzado mostrar ocultar",
+        "chooseRole": "rol ingeniero gestor de producto diseñador perfil vista sencilla",
         "tutorial": "tutorial recorrido guía ayuda aprender introducción",
         "foundationalServices": "capacidad compartida plataforma servicio api contrato openapi catálogo",
         "notificationSettings": "notificaciones correo enrutamiento canales bandeja"
@@ -3863,7 +3885,8 @@
         "qwen": "Qwen (Alibaba)",
         "kimi": "Kimi (Moonshot)",
         "deepseek": "DeepSeek",
-        "glm": "GLM (Z.ai)"
+        "glm": "GLM (Z.ai)",
+        "grok": "Grok (xAI)"
       },
       "regions": {
         "usa": "Estados Unidos",
@@ -4139,6 +4162,11 @@
           "step1": "Abre platform.moonshot.ai → API Keys y crea una clave.",
           "step2": "Copia la clave; autentica el endpoint de Moonshot compatible con OpenAI."
         },
+        "xai": {
+          "label": "xAI (API de Grok)",
+          "step1": "Abre console.x.ai → API Keys y crea una clave.",
+          "step2": "Copia la clave; autentica el endpoint de xAI compatible con OpenAI."
+        },
         "openrouter": {
           "label": "OpenRouter",
           "step1": "Abre openrouter.ai → Keys y crea una clave de API.",
@@ -4385,6 +4413,7 @@
       "pipeline_complete": "Pipeline completado",
       "ci_failed": "CI fallido",
       "test_failed": "Pruebas fallidas",
+      "deploy_blocked": "Despliegue bloqueado",
       "requirement_review": "Revision de requisitos",
       "clarity_review": "Revision de claridad",
       "release_regression": "Regresion de version",
@@ -4448,6 +4477,7 @@
       "pipeline_complete": "Pipeline completado",
       "ci_failed": "CI fallido",
       "test_failed": "Pruebas fallidas",
+      "deploy_blocked": "Despliegue bloqueado",
       "requirement_review": "Revision de requisitos",
       "clarity_review": "Revision de claridad",
       "release_regression": "Regresion de version",
@@ -7455,6 +7485,7 @@
       "failedRun": "Una ejecución que ha fallado",
       "infrastructure": "Un backend de ejecución conectado a este espacio de trabajo",
       "advancedTier": "El modo de interfaz avanzado",
+      "fullSurface": "El rol de Ingeniero o Gestor de producto",
       "designSource": "Una fuente de diseño conectada"
     },
     "overlay": {
@@ -7495,6 +7526,10 @@
           "toolbar": {
             "title": "Controles del tablero",
             "body": "Con estos controles acercas, alejas o ajustas todo el tablero a la vista."
+          },
+          "role": {
+            "title": "Tu rol",
+            "body": "El tablero se adapta al trabajo que haces: los ingenieros y los gestores de producto ven todas las superficies; los diseñadores, una más sencilla que trae trabajo nuevo y lo sigue. Puedes cambiarlo aquí cuando quieras."
           },
           "interfaceTier": {
             "title": "Básico y avanzado",

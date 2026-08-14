@@ -14,6 +14,7 @@ const NO_GATES: NavGates = {
   accountsEnabled: false,
   isAccountAdmin: false,
   advancedMode: false,
+  fullSurface: false,
   boardHasService: false,
   boardHasTask: false,
   boardHasRun: false,

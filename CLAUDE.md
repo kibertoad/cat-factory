@@ -164,8 +164,8 @@ Command failed` with no vitest summary is a CANCELLED sibling. Recipe, including
 - **ALWAYS format/lint-fix the ENTIRE tree, never a subset.** `pnpm lint:fix` from the root (or
   `pnpm exec oxfmt .`); the only correct argument to `oxfmt`/`oxlint` is `.`, for any reason. On Windows
   the whole-tree run rewrites line endings across hundreds of files: expected, and git's normalization
-  absorbs it at commit time. Run it ONCE at the end and trust the result: do not diff, stash, or
-  investigate why an untouched file was reformatted (it sweeps up pre-existing drift).
+  absorbs it at commit time. Run it ONCE at the end and trust the result: never diff or stash it, ask
+  why an untouched file changed (it sweeps up drift), or RE-RUN tests/typecheck: whitespace is inert.
 
 ## Keep the runtimes symmetric
 
@@ -979,23 +979,23 @@ faked. Spec-writing mechanics and the Specs table:
   refreshes, the optimistic-echo trap and `execution.echoAfter`) plus the store-level unit tests that
   pin them live in [`frontend/app/README.md`](./frontend/app/README.md#real-time-store-coherence-avoid-the-full-refresh-clobber).
 
-## Basic vs advanced interface mode (frontend)
+## Role, then interface mode: how much of the SPA is shown (frontend)
 
-The SPA renders at one of two tiers: `basic` (the shipped default) and `advanced` (everything), resolved
-in `stores/uiMode.ts`. Full model, including the nav-contribution axis and the tier-scoped authoring
-rules: [`frontend/app/README.md`](./frontend/app/README.md#interface-modes-basic--advanced). The rules
-that bite from outside the SPA:
+Two narrowings, both applied in `navSlotFilter`. The ROLE is the job the person picked at first launch
+(`stores/uiRole.ts`): `engineer` / `product-manager` see everything, `designer` gets the `intake` surface (the
+board's services, the work in flight, the three ways to bring work IN) and is CAPPED at the basic tier. The TIER
+is `basic` (the shipped default) vs `advanced` (`stores/uiMode.ts`); both axes and their seams: [`frontend/app/README.md`](./frontend/app/README.md#roles-engineer--product-manager--designer).
 
-- **A new user-facing surface must decide its tier, and the answer is never "ignore this".** The bar is
-  whether the EVERYDAY DELIVERY LOOP needs it, not how advanced the surface feels.
+- **A new user-facing surface must decide BOTH, and neither answer is "ignore this"**: the tier bar is whether
+  the EVERYDAY DELIVERY LOOP needs it, the role bar whether an `intake` persona (which never configures the
+  platform) does. `intake` is opt-IN, so silence there narrows nothing by accident.
 - **HIDE, never disable, and only ever hide an OVERRIDE**: what remains must be exactly the default the
   hidden field would have shown. Gate override controls on `showOverrideField(isAdvanced, ...values)`,
   NOT on `isAdvanced` alone, because an EXISTING entity can already carry an override.
-- **Never mark the way BACK as `advanced`.**
-- **Agent tiers are a SEPARATE axis** (`presentation.tier`, cumulative, vocabulary in
-  `@cat-factory/contracts`): the interface mode decides which SURFACES exist, the tier decides how much
-  of one surface's catalog is LISTED. A new BUILT-IN kind declares its tier in `utils/catalog.ts`
-  (`catalog.spec.ts` fails otherwise).
+- **Never mark the way BACK as `advanced`, nor hide it from a narrowed role.** Neither axis is AUTHORIZATION
+  (workspace RBAC is, server-side), so both hide destinations the caller is allowed to open.
+- **Agent tiers are a SEPARATE axis** (`presentation.tier`, cumulative, vocabulary in `@cat-factory/contracts`):
+  those two decide which SURFACES exist, this how much of one surface's catalog is LISTED; a new BUILT-IN kind declares its tier in `utils/catalog.ts` (`catalog.spec.ts` fails otherwise).
 
 ## Internationalization (i18n)
 

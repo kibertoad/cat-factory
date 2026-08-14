@@ -18,6 +18,7 @@ import type {
 import type { AcceptanceConfig } from './config.ts'
 import { waitFor } from './deadline.ts'
 import { isActionable } from './decisions.ts'
+import { deploymentOutageTolerance } from './deploymentOutage.ts'
 import type { Journal } from './journal.ts'
 import type { PersonalUnlock } from './personalUnlock.ts'
 import { type PinnedPreset, pinnedModel } from './presets.ts'
@@ -25,7 +26,48 @@ import { type PinnedPreset, pinnedModel } from './presets.ts'
 export type { PublicDecisionList, PublicIdentity, PublicRun, PublicService }
 
 /**
- * Build the client, optionally carrying the operator's personal-subscription unlock.
+ * How many times a call made DURING a pass may be replayed. See {@link createPassClient}.
+ *
+ * Sized against a supervisor relaunch rather than picked round. The SDK's backoff is full jitter on
+ * a doubling base capped at 8s, so eight attempts average about sixteen seconds and cannot exceed
+ * about thirty-two: enough for a kill, a reap and a boot that runs its migrations before it binds.
+ * A longer absence is what the poll's two-minute grace is for, and the two are deliberately an
+ * order of magnitude apart.
+ */
+const PASS_RETRY_BUDGET = 8
+
+function buildClient(
+  config: Pick<AcceptanceConfig, 'baseUrl' | 'apiKey'>,
+  unlock: PersonalUnlock | undefined,
+  maxRetries: number | undefined,
+): CatFactoryClient {
+  return new CatFactoryClient({
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    ...(maxRetries === undefined ? {} : { maxRetries }),
+    ...(unlock
+      ? {
+          fetch: ((input, init) =>
+            globalThis.fetch(input, {
+              ...init,
+              headers: { ...(init?.headers as Record<string, string>), ...unlock.headers() },
+            })) satisfies typeof globalThis.fetch,
+        }
+      : {}),
+  })
+}
+
+/**
+ * The client for anything that runs BEFORE a pass has spent something: preflight, and `reset`.
+ *
+ * On the SDK's own retry default, which is the point of it. Every check in `prerequisites.ts`
+ * reaches the deployment, they run in sequence and NONE of them bails early (collecting every
+ * problem in one report is what the gate is for), so a budget raised here multiplies across a
+ * dozen probes. Against the commonest setup failure of all, a deployment that is simply not
+ * running, that turns the clearest refusal this suite can produce into minutes of silence before
+ * it prints: the exact outcome `probeFailure.ts` exists to prevent, arriving by a different route.
+ * Nothing has been created at that point and a re-run costs nothing, so refusing fast is strictly
+ * better than sitting through a restart.
  *
  * The password rides through the `fetch` seam rather than the client's `headers` option, and that
  * is forced by what the password IS: `headers` is snapshotted at construction, while this one is
@@ -37,26 +79,44 @@ export type { PublicDecisionList, PublicIdentity, PublicRun, PublicService }
  * Absent unlock ⇒ the plain client, byte for byte: a workspace on a provider API key sends no such
  * header and is never asked for a password.
  *
- * Takes the two fields it addresses rather than the whole config, so a command that holds only the
- * BOARD half (`reset`) drives the same client the scenarios do instead of a second one built beside it.
+ * Takes the two fields it addresses rather than the whole config, which is what lets a command
+ * holding only the BOARD half (`reset`) build its client through this door rather than stand up a
+ * second one beside it. `reset` belongs on this budget for the same reason preflight does: it runs
+ * before a pass, and its whole job is to report and clear leftover state.
  */
 export function createClient(
   config: Pick<AcceptanceConfig, 'baseUrl' | 'apiKey'>,
   unlock?: PersonalUnlock,
 ): CatFactoryClient {
-  return new CatFactoryClient({
-    baseUrl: config.baseUrl,
-    apiKey: config.apiKey,
-    ...(unlock
-      ? {
-          fetch: ((input, init) =>
-            globalThis.fetch(input, {
-              ...init,
-              headers: { ...(init?.headers as Record<string, string>), ...unlock.headers() },
-            })) satisfies typeof globalThis.fetch,
-        }
-      : {}),
-  })
+  return buildClient(config, unlock, undefined)
+}
+
+/**
+ * The client a SCENARIO BODY drives, where a restart costs an afternoon rather than a re-run.
+ *
+ * **This is where a deployment restart is absorbed for every ONE-SHOT call.** The polls have their
+ * own tolerance (`deploymentOutage.ts`), but a pass makes dozens of reads between them
+ * (`tasks.getRun`, `evidence.getReport`, `services.list`) and a restart landing on one of those
+ * threw straight out with no observation, which is the failure the poll tolerance was written for
+ * arriving one call to the left. The SDK's OWN rule decides what may be replayed: `GET`/`HEAD`/
+ * `DELETE` only, never a `POST`, so answering a decision is still exactly-once.
+ *
+ * **It replays more than a restart, and that is a trade rather than an oversight.** The SDK's
+ * budget is one number over its own retriable set, which is every transport failure plus 429, 502,
+ * 503 and 504. So a certificate that expired, a DNS entry that stopped resolving and a 503 naming
+ * an unwired capability are each replayed too, and `deploymentOutage.ts` refuses all three by name.
+ * The two policies differ because their failure modes do: a poll's tolerance REPLACES what the
+ * expiry reports, so waiting through evidence there ends in the wrong message, while a retry here
+ * rethrows the SDK's own typed error with its status and request id intact. What it costs is time,
+ * and tens of seconds against a budget sized for a pipeline is worth paying to keep an hour of
+ * work. Against preflight, where nothing has been spent yet, it is not, which is why that half
+ * runs on {@link createClient}.
+ */
+export function createPassClient(
+  config: Pick<AcceptanceConfig, 'baseUrl' | 'apiKey'>,
+  unlock?: PersonalUnlock,
+): CatFactoryClient {
+  return buildClient(config, unlock, PASS_RETRY_BUDGET)
 }
 
 /**
@@ -218,6 +278,13 @@ function kinds(decisions: PublicDecisionList['decisions']): string {
  * acceptance test, the one failure mode nobody can afford here. A poll re-asks the point read,
  * which is authoritative by construction and carries every step's whole output (the stream
  * clips them; see `truncated` on the run-step contract).
+ *
+ * **This is the wait that carries the outage tolerance**, because it is where a pass spends its
+ * hours and therefore where a long outage lands (see `deploymentOutage.ts`). It is not the only
+ * cover: the one-shot calls around it ride the client's raised retry budget, which absorbs a
+ * restart on any READ (see {@link createClient}). What neither covers is a restart landing exactly
+ * on a write, and deliberately so: replaying `decisions.answer` is not a decision this suite may
+ * make on the deployment's behalf.
  */
 export function waitForDecisionOrSettled(options: {
   client: CatFactoryClient
@@ -230,6 +297,7 @@ export function waitForDecisionOrSettled(options: {
   return waitFor({
     label: `task ${taskId} to park on an answerable decision or settle`,
     budgetMs,
+    tolerate: deploymentOutageTolerance(),
     probe: async () => {
       const run = await client.tasks.getRun(taskId)
       // Read decisions REGARDLESS of `parked`, as the contract instructs: a `follow-ups` entry

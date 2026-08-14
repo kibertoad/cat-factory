@@ -129,7 +129,12 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // recorded against it must keep costing correctly.
   'anthropic:claude-opus-5': { inputPerMillion: 4.6, outputPerMillion: 23 },
   'anthropic:claude-opus-4-8': { inputPerMillion: 4.6, outputPerMillion: 23 },
-  'anthropic:claude-sonnet-5': { inputPerMillion: 1.84, outputPerMillion: 9.2 },
+  // Sonnet 5 carries Sonnet-tier LIST price ($3 in / $15 out per 1M), not the $2 / $10
+  // introductory rate Anthropic is running until 2026-08-31. Same rule as the Gemini 3.7
+  // Flash launch discount below: an intro rate is temporary and the budget gate may not
+  // undercount once it lapses, so the table holds the price that outlives the promotion.
+  // The derived cache tiers land on Anthropic's own published rates at this base.
+  'anthropic:claude-sonnet-5': { inputPerMillion: 2.76, outputPerMillion: 13.8 },
   'anthropic:claude-sonnet-4-6': { inputPerMillion: 2.76, outputPerMillion: 13.8 },
   'anthropic:claude-haiku-4-5': { inputPerMillion: 0.92, outputPerMillion: 4.6 },
   anthropic: { inputPerMillion: 2.76, outputPerMillion: 13.8 },
@@ -157,16 +162,34 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // these explicit entries a Cloudflare-Kimi run (the default coder) would fall back to
   // 0.1/0.1 and meter as ~0.00. Cloudflare lists K2.6/K2.7 at $0.95 in / $4.00 out and the
   // older K2.5 at $0.60 in / $3.00 out per 1M (USD→EUR ~0.92); these are Cloudflare's
-  // marked-up rates, above Moonshot's direct list (`moonshot:kimi-k2.6`). Cloudflare
-  // publishes no separate cached-input rate for these, so they take the derived tiers. See
+  // marked-up rates, above Moonshot's direct list (`moonshot:kimi-k2.6`). See
   // workers-ai/platform/pricing.
+  //
+  // Cloudflare now DOES publish a cached-input rate for the K2.6/K2.7 pair ($0.16 and $0.19
+  // per 1M), and both sit above the 0.1x floor these entries would otherwise derive
+  // ($0.087). Named here for that reason: deriving the cheaper number under-meters every
+  // cache read on the default coder route, which is the one direction the budget gate may
+  // not err in. K2.5 has no published cached rate and keeps the derived tier.
   'workers-ai:@cf/moonshotai/kimi-k2.5': { inputPerMillion: 0.55, outputPerMillion: 2.76 },
-  'workers-ai:@cf/moonshotai/kimi-k2.6': { inputPerMillion: 0.87, outputPerMillion: 3.68 },
-  'workers-ai:@cf/moonshotai/kimi-k2.7-code': { inputPerMillion: 0.87, outputPerMillion: 3.68 },
+  'workers-ai:@cf/moonshotai/kimi-k2.6': {
+    inputPerMillion: 0.87,
+    outputPerMillion: 3.68,
+    cacheReadPerMillion: 0.15,
+  },
+  'workers-ai:@cf/moonshotai/kimi-k2.7-code': {
+    inputPerMillion: 0.87,
+    outputPerMillion: 3.68,
+    cacheReadPerMillion: 0.17,
+  },
   // The remaining per-token-billed Workers AI models the catalog exposes. GLM-5.2 is the
   // default architect/reviewer routing and the R1 distill is the DeepSeek Cloudflare
-  // fallback, so both were metering at the near-free neuron rate above.
-  'workers-ai:@cf/zai-org/glm-5.2': { inputPerMillion: 1.29, outputPerMillion: 4.05 },
+  // fallback, so both were metering at the near-free neuron rate above. GLM-5.2's published
+  // cached-input rate ($0.26/M) is likewise ~1.9x the derived floor, so it is named too.
+  'workers-ai:@cf/zai-org/glm-5.2': {
+    inputPerMillion: 1.29,
+    outputPerMillion: 4.05,
+    cacheReadPerMillion: 0.24,
+  },
   'workers-ai:@cf/zai-org/glm-4.7-flash': { inputPerMillion: 0.06, outputPerMillion: 0.37 },
   'workers-ai:@cf/openai/gpt-oss-120b': { inputPerMillion: 0.32, outputPerMillion: 0.69 },
   'workers-ai:@cf/meta/llama-4-scout-17b-16e-instruct': {
@@ -181,10 +204,24 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // DeepSeek API. The `deepseek-chat` / `deepseek-reasoner` aliases were retired in July
   // 2026 in favour of the V4 pair; the old key is kept so historical spend rows recorded
   // against it keep costing correctly. (USD→EUR ~0.92.)
-  'deepseek:deepseek-v4-flash': { inputPerMillion: 0.13, outputPerMillion: 0.26 },
-  'deepseek:deepseek-v4-pro': { inputPerMillion: 0.4, outputPerMillion: 0.8 },
+  //
+  // PRICED AT THE PEAK RATE, not the flat rate DeepSeek charged until 2026-08-16. From that
+  // date the V4 family bills peak/off-peak (peak 01:00-04:00 and 06:00-10:00 UTC, off-peak
+  // exactly half), so one model has two prices and this table has one slot. Peak is the
+  // right slot to fill for the same reason the `bedrock` entry errs high: the budget gate
+  // must never UNDERCOUNT, and a run that straddles a peak window would otherwise meter at
+  // up to half its real cost. Off-peak runs are over-metered by 2x as the accepted cost of
+  // that: an approximate budget tolerates being early, not being wrong in the unsafe
+  // direction. Peak list is $0.44 in / $1.32 out (Flash) and $1.32 in / $3.96 out (Pro).
+  //
+  // Neither cache tier is named: DeepSeek's post-increase cache-hit rate is not published,
+  // and the derived 0.1x floor ($0.04/M Flash, $0.13/M Pro) sits well ABOVE the pre-increase
+  // hit rate ($0.0028 / $0.003625), so deriving stays on the safe side of the same rule. Set
+  // an explicit `cacheReadPerMillion` here only once DeepSeek publishes one.
+  'deepseek:deepseek-v4-flash': { inputPerMillion: 0.4, outputPerMillion: 1.21 },
+  'deepseek:deepseek-v4-pro': { inputPerMillion: 1.21, outputPerMillion: 3.64 },
   'deepseek:deepseek-chat': { inputPerMillion: 0.26, outputPerMillion: 1.01 },
-  deepseek: { inputPerMillion: 0.4, outputPerMillion: 0.8 },
+  deepseek: { inputPerMillion: 1.21, outputPerMillion: 3.64 },
   // Alibaba DashScope (approximate qwen3.7-max list prices, USD→EUR ~0.92).
   'qwen:qwen3.7-max': { inputPerMillion: 2.3, outputPerMillion: 6.9 },
   'qwen:qwen3-max': { inputPerMillion: 1.1, outputPerMillion: 5.5 },
@@ -193,6 +230,27 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   'moonshot:kimi-k3': { inputPerMillion: 2.76, outputPerMillion: 13.8 },
   'moonshot:kimi-k2.6': { inputPerMillion: 0.55, outputPerMillion: 2.3 },
   moonshot: { inputPerMillion: 0.55, outputPerMillion: 2.3 },
+  // Z.ai direct, the provider the GLM coding-plan subscription refs carry (`zai:glm-5.2`,
+  // `zai:glm-5.3`). Those refs previously matched NO key here and fell through to
+  // `defaultPrice` (0.14/0.55), which meters a GLM subscription run at roughly a tenth of
+  // the tokens' list value. A flat-rate plan makes the figure informational rather than
+  // billed, but the spend rollup is what an operator reads to compare a plan against
+  // pay-as-you-go, so it has to carry the list price rather than an unrelated default.
+  // Z.ai lists GLM-5.2 at $1.40 in / $0.26 cached / $4.40 out per 1M (USD→EUR ~0.92).
+  //
+  // GLM-5.3 has no published price yet (it shipped 2026-08-14 with no model card), so it
+  // takes GLM-5.2's rate: same base model, same vendor, and the nearest defensible figure.
+  // Revisit when Z.ai publishes one.
+  'zai:glm-5.3': { inputPerMillion: 1.29, outputPerMillion: 4.05, cacheReadPerMillion: 0.24 },
+  'zai:glm-5.2': { inputPerMillion: 1.29, outputPerMillion: 4.05, cacheReadPerMillion: 0.24 },
+  zai: { inputPerMillion: 1.29, outputPerMillion: 4.05, cacheReadPerMillion: 0.24 },
+  // xAI direct. Grok 4.6 bills in two bands: $2 in / $0.50 cached / $6 out per 1M below a
+  // 200K-token prompt, and DOUBLE that for the whole request once the prompt crosses 200K.
+  // Priced at the LONG band, because the budget gate must not undercount and this table has
+  // no way to express a threshold that depends on the prompt actually sent. A short-prompt
+  // run is over-metered by 2x as the accepted cost of that. (USD→EUR ~0.92.)
+  'xai:grok-4.6': { inputPerMillion: 3.68, outputPerMillion: 11.04, cacheReadPerMillion: 0.92 },
+  xai: { inputPerMillion: 3.68, outputPerMillion: 11.04, cacheReadPerMillion: 0.92 },
   // OpenRouter — a passthrough gateway billed at the underlying provider's rates (no
   // per-token markup), so each curated model carries the upstream vendor's list price
   // (USD→EUR ~0.92). Keyed by the OpenRouter `vendor/model` slug. The bare `openrouter`
@@ -201,18 +259,33 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   'openrouter:anthropic/claude-opus-5': { inputPerMillion: 4.6, outputPerMillion: 23 },
   'openrouter:anthropic/claude-opus-4.8': { inputPerMillion: 4.6, outputPerMillion: 23 },
   'openrouter:google/gemini-3.1-pro-preview': { inputPerMillion: 1.84, outputPerMillion: 11.04 },
-  'openrouter:google/gemini-3.6-flash': { inputPerMillion: 1.38, outputPerMillion: 6.9 },
+  'openrouter:google/gemini-3.6-flash': { inputPerMillion: 0.69, outputPerMillion: 3.45 },
+  // Priced at Google's $0.75 / $3.75 list, NOT the $0.375 / $1.875 OpenRouter is running as
+  // a launch discount. The discount is temporary and the budget gate may not undercount
+  // when it lapses; over-metering by 2x while it holds is the accepted cost.
+  'openrouter:google/gemini-3.7-flash': { inputPerMillion: 0.69, outputPerMillion: 3.45 },
   'openrouter:openai/gpt-5.6-sol': { inputPerMillion: 4.6, outputPerMillion: 27.6 },
   'openrouter:openai/gpt-5.6-terra': { inputPerMillion: 0.92, outputPerMillion: 5.52 },
   'openrouter:openai/gpt-5.6-luna': { inputPerMillion: 0.09, outputPerMillion: 0.55 },
   'openrouter:openai/gpt-5.5': { inputPerMillion: 4.6, outputPerMillion: 27.6 },
   'openrouter:openai/gpt-oss-120b': { inputPerMillion: 0.03, outputPerMillion: 0.16 },
   'openrouter:deepseek/deepseek-v4-flash': { inputPerMillion: 0.13, outputPerMillion: 0.26 },
-  'openrouter:deepseek/deepseek-v4-pro': { inputPerMillion: 0.4, outputPerMillion: 0.8 },
-  'openrouter:moonshotai/kimi-k2.7-code': { inputPerMillion: 0.67, outputPerMillion: 3.22 },
+  // The unpinned `deepseek-v4-pro` slug is a moving alias, and OpenRouter's blended rate for
+  // it now sits well above DeepSeek's own first-party list ($1.168 in / $2.336 out vs
+  // $0.435 / $0.87). The catalog routes to the alias deliberately (it follows the newest GA
+  // build), so the price has to track the alias rather than the cheapest provider behind it.
+  'openrouter:deepseek/deepseek-v4-pro': { inputPerMillion: 1.07, outputPerMillion: 2.15 },
+  'openrouter:moonshotai/kimi-k2.7-code': { inputPerMillion: 0.62, outputPerMillion: 3.13 },
   'openrouter:moonshotai/kimi-k3': { inputPerMillion: 2.76, outputPerMillion: 13.8 },
-  'openrouter:z-ai/glm-5.2': { inputPerMillion: 1.09, outputPerMillion: 3.44 },
-  'openrouter:z-ai/glm-4.7-flash': { inputPerMillion: 0.06, outputPerMillion: 0.37 },
+  'openrouter:z-ai/glm-5.2': { inputPerMillion: 0.58, outputPerMillion: 1.82 },
+  // OpenRouter's published cache-read rate ($0.01/M) is ABOVE the 0.1x derived floor this
+  // model's cheap input implies ($0.006/M), so it is named rather than derived.
+  'openrouter:z-ai/glm-4.7-flash': {
+    inputPerMillion: 0.06,
+    outputPerMillion: 0.37,
+    cacheReadPerMillion: 0.01,
+  },
+  'openrouter:x-ai/grok-4.6': { inputPerMillion: 1.84, outputPerMillion: 5.52 },
   'openrouter:qwen/qwen3.7-max': { inputPerMillion: 1.36, outputPerMillion: 4.07 },
   openrouter: { inputPerMillion: 1.84, outputPerMillion: 11.04 },
   // LiteLLM — an operator-hosted gateway whose true cost depends entirely on the backend

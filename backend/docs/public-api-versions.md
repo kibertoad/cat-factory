@@ -797,10 +797,33 @@ command killing the harness process). A dashboard that counts `evicted` will see
 
 ## 1.55.0
 
+One additive enum member, `deploy_blocked`, in the notification-type vocabulary
+(`GET /api/v1/notifications`, `POST /api/v1/notifications/{id}/act`, and the outbound
+notification-webhook delivery contract). Nothing existing changes shape or meaning, and the SDKs
+tolerate unknown enum values by design, so a consumer built against 1.54.0 keeps parsing.
+
+**What a consumer NOTICES is a new card in an existing population, with an existing action.** It is
+the `ci_failed` shape one step earlier in the pipeline: the machine gave up, the run failed, and
+`act` retries it. A caller that branches exhaustively on notification type will meet a value it does
+not know; one that treats unknown types as informational will simply leave the card open, which is
+the safe reading. It is also in `DEFAULT_NOTIFICATION_WEBHOOK_TYPES`, so an endpoint registered
+without an explicit type filter starts receiving it.
+
+Its `act` retries the run, which puts it in the class the individual-usage credential guard refuses
+headlessly: a workspace whose runs resolve to an individual-usage model gets a 409
+(`individual_model_unsupported`) here, exactly as it already does for `ci_failed` and `test_failed`.
+
+## 1.56.0, not 1.55.0
+
 One additive enum member, `asset`, in the run-artifact kind vocabulary
 (`GET /api/v1/runs/{runId}/artifacts`, and the artifact rows the blob endpoint is addressed from).
 Nothing existing changes shape or meaning, and the SDKs tolerate unknown enum values by design, so
-a consumer built against 1.54.0 keeps parsing.
+a consumer built against 1.55.0 keeps parsing.
+
+The number moved because main reached 1.55.0 with `deploy_blocked` while this branch was in
+flight: the collision this file's header warns about, arriving exactly as described. Both sides
+wrote `const API_VERSION = '1.55.0'`, so the version line itself auto-merged clean and only the
+paragraph beside it conflicted.
 
 **What a consumer NOTICES is a new population in a list it already reads.** The two members that
 existed are an EVIDENCE pair: a `screenshot` is what a run captured, a `reference` is the design a

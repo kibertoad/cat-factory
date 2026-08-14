@@ -1,6 +1,7 @@
 import type {
   ConnectionTestResult,
   EnvironmentAccessHandle,
+  EnvironmentFailureReason,
   EnvironmentManifest,
   EnvironmentStatus,
   PreflightRef,
@@ -275,6 +276,19 @@ export interface ProvisionedEnvironment {
    * (and on a throw, where the thrown error is the root cause instead).
    */
   error?: string | null
+  /**
+   * The MACHINE-READABLE cause beside {@link error}, and the non-throwing half of the
+   * classification contract in `domain/environment-failure.ts`. A provider that throws states its
+   * cause on the `DomainError`'s `details.reason`; one that reports `status: 'failed'` instead has
+   * no error to carry it, and this is where it goes.
+   *
+   * It has to be stated HERE rather than re-derived downstream. The engine reads the class to
+   * decide whether an automated fixer may be dispatched at the failure, and by the time a failed
+   * environment reaches that decision the only thing left is prose, which is exactly the evidence
+   * that is not good enough to spend a container on. So a provider that cannot classify leaves
+   * this absent, and absent means unclassified, which is never repo-fixable.
+   */
+  reason?: EnvironmentFailureReason | null
 }
 
 /**

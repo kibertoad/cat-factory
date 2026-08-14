@@ -24,6 +24,7 @@ const documents = useDocumentsStore()
 const tasks = useTasksStore()
 const library = useFragmentLibraryStore()
 const access = useWorkspaceAccess()
+const uiRole = useUiRoleStore()
 
 // The static destination catalog + its RBAC/availability gating now comes from
 // the shared nav manifest (backend/docs/adr/0049-modular-vue-adoption.md, slice 1),
@@ -44,8 +45,14 @@ const activeIndex = ref(0)
 // carry: their label (connect vs manage) and set (one per document/task source)
 // depend on live connection state. Gated by `integrations.manage`, they render
 // under the palette's Integrations group.
+//
+// Also gated on the ROLE's surface, which the manifest entries get for free from `navSlotFilter`
+// (see `NavGates.fullSurface`): these are the platform-configuration half: connecting a source,
+// managing a connection, importing across the whole board. A narrowed role that happens to
+// hold `integrations.manage` would otherwise reach through the palette exactly the surfaces its
+// sidebar dropped. What it keeps is on the board: a frame's own from-ticket / from-design buttons.
 const dynamicIntegrationCommands = computed<Command[]>(() => {
-  if (!access.canManageIntegrations.value) return []
+  if (!access.canManageIntegrations.value || !uiRole.fullSurface) return []
   const groupIntegrations = t('layout.commandBar.groups.integrations')
   const list: Command[] = []
   if (github.available) {

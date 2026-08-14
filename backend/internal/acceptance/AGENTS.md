@@ -255,7 +255,15 @@ failed`), with the SDK's own deadline corrected to `timeout` since its abort mar
    and still ends `done`.
 3. **A wait that expires states its last observation.** `src/deadline.ts` is the suite's only
    clock, and the runner introduces no timeout of its own (the vitest one was disabled for the same
-   reason).
+   reason). A THROWN poll obeys the same rule: the deployment this suite polls restarts by design
+   (a supervisor repairs it, `node --watch` cycles it), and one such restart killed a 41-minute
+   pass on a single `ECONNREFUSED` while the run it was watching carried on. `src/deploymentOutage.ts`
+   makes an unanswered poll an observation for two minutes and journals the recovery; an ANSWER is
+   never waited through, because a refusal is evidence, and it is rethrown untouched so the SDK's
+   status and request id survive. Two corollaries bite: only the four transport causes shaped like
+   a restart are waited through (a DNS or TLS failure is its own diagnosis, and delaying it two
+   minutes to then blame a restart is worse than reporting it), and an outage is journalled but
+   never becomes the last OBSERVATION, since "it did not answer" is not evidence about the run.
 4. **Report every failing claim, not just the first.** A pass costs an afternoon.
 
 **The defect scenario 03 hunts is planted in the SPECIFICATION, not the code.** The two briefs in
@@ -265,6 +273,17 @@ way a real integration bug does. A defect planted in the implementation would be
 `pl_build`'s `reviewer` step and scenario 03 would find nothing. **So scenario 02 asserts the delivery
 machinery worked, never that the product is correct**. That claim is scenario 03's, and it is settled
 by fixing the bug.
+
+**Two values reach the agents through the BRIEFS as well as the engine**, and a brief that names a
+literal instead is the whole failure. The ingress host template and the image template are both
+holes the platform fills at provision time, so `k3s.ts` threads each into `instructions.ts` and a
+prerequisite renders each before a pass spends anything (`src/manifestTemplates.ts`). The image half
+is what a lost pass taught: the briefs make `{{image}}` mandatory, the platform substitutes it from
+the CONNECTION's `imageTemplate`, and an unfilled hole renders as the empty string, so a suite that
+configured no template deployed `image: ""` and the apiserver refused the Deployment three agents
+and one pull request in. The gate also STATES what it did not check: nothing here can see whether
+anything published that reference, or whether the cluster may pull it, and both present as an
+environment that provisions and never becomes ready.
 
 **Changing a brief means re-checking the symptom.** The briefs, the bug report and
 `test/evidence.test.ts` describe one specific off-by-one (page 2 repeats item 10, last page short).

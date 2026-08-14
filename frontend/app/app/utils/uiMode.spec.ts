@@ -29,6 +29,18 @@ describe('resolveUiMode', () => {
     expect(resolveUiMode(null, null)).toBe(DEFAULT_UI_MODE)
     expect(DEFAULT_UI_MODE).toBe('basic')
   })
+
+  it('caps an intake role at basic, above BOTH the env pin and the stored choice', () => {
+    // The role is a ceiling rather than another preference: an `intake` surface is offered the
+    // delivery loop and none of the platform configuration behind it, which is what the advanced
+    // tier is made of. So it wins over the env pin too, the one layer nothing else overrides.
+    expect(resolveUiMode('advanced', 'advanced', 'intake')).toBe('basic')
+    expect(resolveUiMode(null, 'advanced', 'intake')).toBe('basic')
+    // A full-surface role changes nothing, which is what the default argument encodes for every
+    // caller that has no role to hand (the pure-logic callers and the specs above).
+    expect(resolveUiMode('advanced', null, 'full')).toBe('advanced')
+    expect(resolveUiMode(null, 'advanced', 'full')).toBe('advanced')
+  })
 })
 
 describe('showOverrideField', () => {

@@ -1,5 +1,68 @@
 # @cat-factory/worker
 
+## 0.190.2
+
+### Patch Changes
+
+- Updated dependencies [7f990ea]
+  - @cat-factory/contracts@0.314.0
+  - @cat-factory/kernel@0.302.0
+  - @cat-factory/integrations@0.163.0
+  - @cat-factory/agents@0.132.0
+  - @cat-factory/orchestration@0.273.0
+  - @cat-factory/server@0.288.0
+  - @cat-factory/consensus@0.16.23
+  - @cat-factory/eks@0.1.327
+  - @cat-factory/gates@0.10.54
+  - @cat-factory/gitlab@0.20.24
+  - @cat-factory/observability-otel@0.21.2
+  - @cat-factory/prompt-fragments@1.0.78
+  - @cat-factory/spend@0.15.96
+  - @cat-factory/caching@0.20.23
+  - @cat-factory/observability-langfuse@0.10.98
+  - @cat-factory/provider-cloudflare@0.7.476
+
+## 0.190.1
+
+### Patch Changes
+
+- 409238f: Add GLM-5.3, Gemini 3.7 Flash and Grok 4.6 to the model catalog, and re-baseline the spend
+  price table against what the providers currently charge.
+
+  New catalog entries: `glm-5.3` (subscription-only, GLM Coding Plan), `gemini-3.7-flash`
+  (OpenRouter) and `grok` (Grok 4.6, direct via a new `xai` provider or OpenRouter). GLM-4.7
+  Flash gains a Bedrock flavour (`zai.glm-4.7-flash`).
+
+  `xai` is a new direct provider: `XAI_API_KEY` joins the poolable key providers and the
+  reserved-env-key list, `XAI_BASE_URL` overrides the endpoint, and `grok` joins the model
+  family vocabulary the account model policy allows or blocks. A policy in `allowlist` mode
+  does not admit the new family until an admin adds it, which is the intended default.
+
+  Price corrections, several of which were metering runs BELOW their real cost: DeepSeek's V4
+  pair moves to the peak rates its 2026-08-16 peak/off-peak switch introduces, the OpenRouter
+  `deepseek/deepseek-v4-pro` alias nearly triples, and Cloudflare's now-published cached-input
+  rates for GLM-5.2 and the Kimi pair replace a derived floor that was ~1.9x too low. GLM-5.2
+  and Gemini 3.6 Flash on OpenRouter were overpriced and come down. Z.ai subscription refs
+  (`zai:*`) were falling through to the generic default price and now carry Z.ai's list rate.
+
+- Updated dependencies [409238f]
+  - @cat-factory/kernel@0.301.0
+  - @cat-factory/contracts@0.313.0
+  - @cat-factory/agents@0.131.0
+  - @cat-factory/spend@0.15.95
+  - @cat-factory/caching@0.20.22
+  - @cat-factory/consensus@0.16.22
+  - @cat-factory/eks@0.1.326
+  - @cat-factory/gates@0.10.53
+  - @cat-factory/gitlab@0.20.23
+  - @cat-factory/integrations@0.162.1
+  - @cat-factory/observability-langfuse@0.10.97
+  - @cat-factory/observability-otel@0.21.1
+  - @cat-factory/orchestration@0.272.1
+  - @cat-factory/prompt-fragments@1.0.77
+  - @cat-factory/provider-cloudflare@0.7.475
+  - @cat-factory/server@0.287.1
+
 ## 0.190.0
 
 ### Minor Changes

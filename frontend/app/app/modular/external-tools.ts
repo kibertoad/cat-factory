@@ -1,5 +1,5 @@
 import { metadataValue } from './workspace-metadata'
-import type { NavContribution, NavGates } from './nav-contributions'
+import type { NavContribution, NavGatedContribution } from './nav-contributions'
 
 /**
  * EXTERNAL TOOLS — a deployment's own web applications, registered programmatically and
@@ -56,8 +56,17 @@ export interface ExternalToolContext {
  */
 export type ExternalToolUrlResolver = (context: ExternalToolContext) => string | null
 
-/** One registered external tool. */
-export interface ExternalToolContribution {
+/**
+ * One registered external tool.
+ *
+ * The visibility axes are INHERITED from {@link NavGatedContribution} rather than redeclared:
+ * a tool is projected onto a nav contribution and filtered by the same `navItemVisible`, so
+ * every axis a first-party destination answers to (the interface tier, the role's surface, the
+ * RBAC/availability predicate) is one this answers to as well. `intake` defaults the same way
+ * it does there, which for a registered application means the full-surface roles only until
+ * the deployment says otherwise.
+ */
+export interface ExternalToolContribution extends NavGatedContribution {
   /** Namespaced id (`<ns>:<name>`), like every other consumer contribution. */
   id: string
   /** Display name. Literal copy, not an i18n key: a tool's name is deployment DATA (the same
@@ -83,10 +92,6 @@ export interface ExternalToolContribution {
   requiredMetadata?: readonly string[]
   /** Sidebar/palette order within the External tools section. Defaults to 0. */
   order?: number
-  /** Reactive RBAC/availability predicate, exactly as on a {@link NavContribution}. */
-  gate?: (gates: NavGates) => boolean
-  /** Show only in advanced interface mode. */
-  advanced?: boolean
   /** Stable selector for e2e. Defaults to `nav-external-tool-<id>`. */
   testId?: string
 }
@@ -246,20 +251,4 @@ export function projectExternalTools(
       }
       return { tool, resolution, contribution }
     })
-}
-
-/**
- * Drop the tools the caller may not see, on the same two independent axes as `navSlotFilter`
- * applies to `nav`: the interface tier, then the item's own RBAC/availability predicate. With
- * no gates service wired (tests, a bare install) everything passes, matching the dev-open
- * "absent access allows all" parity the nav filter keeps.
- */
-export function filterExternalTools(
-  tools: readonly ExternalToolContribution[],
-  gates: NavGates | undefined,
-): ExternalToolContribution[] {
-  if (!gates) return [...tools]
-  return tools.filter(
-    (t) => (t.advanced ? gates.advancedMode : true) && (t.gate ? t.gate(gates) : true),
-  )
 }

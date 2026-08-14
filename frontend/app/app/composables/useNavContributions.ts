@@ -66,6 +66,9 @@ export function useNavContributions() {
     // No-op under an env pin (`setMode` refuses), so the palette entry matches the sidebar
     // switcher's read-only state rather than pretending to flip a tier the resolver fixes.
     toggleUiMode: () => useUiModeStore().toggleMode(),
+    // The QUESTION, not a toggle: with three roles there is no unambiguous "next one", and the
+    // prompt is the one surface that states what each role gives you before you pick it.
+    chooseRole: () => useUiRoleStore().openPrompt(),
   }
 
   /** Run a contribution's action (consumer `run` closure wins over the id map). */

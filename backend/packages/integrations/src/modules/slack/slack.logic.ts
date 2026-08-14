@@ -19,6 +19,8 @@ export const SLACK_ROUTABLE_TYPES: NotificationType[] = [
   'merge_review',
   'pipeline_complete',
   'ci_failed',
+  // Routable for the same reason `ci_failed` is: the machine gave up on a branch somebody owns.
+  'deploy_blocked',
   'requirement_review',
   'release_regression',
   'human_test_ready',
@@ -62,6 +64,10 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   merge_tag_request: { roles: [], includeCreator: true },
   ci_failed: { roles: [], includeCreator: true },
   test_failed: { roles: [], includeCreator: true },
+  // The creator's, exactly as `ci_failed` is. Classification keeps every cause outside the
+  // repository out of this loop, so what is left when the fixer gives up is a defect in the
+  // deployment files on their own branch, not something an infrastructure role would take.
+  deploy_blocked: { roles: [], includeCreator: true },
   requirement_review: { roles: ['product'], includeCreator: true },
   clarity_review: { roles: ['product'], includeCreator: true },
   // A post-release regression is an operational event: tell the on-call engineers and
@@ -182,6 +188,7 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   merge_tag_request: ':label: Tag review effort',
   ci_failed: ':rotating_light: CI failed',
   test_failed: ':rotating_light: Tests failed',
+  deploy_blocked: ':construction: Deployment blocked',
   requirement_review: ':memo: Requirement review',
   clarity_review: ':mag: Bug-report triage',
   release_regression: ':rotating_light: Release regression',

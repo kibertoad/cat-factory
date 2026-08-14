@@ -1,5 +1,62 @@
 # @cat-factory/kernel
 
+## 0.302.0
+
+### Minor Changes
+
+- 7f990ea: Classify environment provisioning failures by cause, and repair the one class a checkout edit can
+  actually fix. A provision whose `{{placeholder}}` cannot be filled by the environment CONNECTION is
+  now refused BEFORE the apply, naming the field that fills it, rather than rendering an empty string
+  and letting the platform reject the result and blame the file. A placeholder the RUN supplies keeps
+  the documented lenient substitution, so a template folding an optional value into its output is
+  unaffected. Adds a provider-neutral seam (`environmentFailure`, `unresolvedPlaceholders`,
+  `describeUnfilledConfigPlaceholders`, and `ProvisionedEnvironment.reason` for a provider that
+  reports a failure without throwing) so a deployment-registered environment backend participates in
+  the same classification as the built-ins.
+
+  On a `manifest_invalid` failure the `deployer` step now escalates to a new `deploy-fixer` agent,
+  which pushes a fix onto the pull-request branch, and re-provisions against it (twice by default,
+  configurable per step via `stepOptions.deployFix`). Every other cause takes the previous terminal
+  path unchanged. When the budget is spent the run fails and raises a new `deploy_blocked`
+  notification whose act retries the run, the `ci_failed` shape.
+
+  The public API gains one additive notification type (`deploy_blocked`), so the OpenAPI surface moves
+  to 1.55.0 and the four SDK clients regenerate. It is in the default webhook type set, and its act
+  takes the same individual-usage-credential refusal `ci_failed` and `test_failed` already take.
+
+### Patch Changes
+
+- Updated dependencies [7f990ea]
+  - @cat-factory/contracts@0.314.0
+
+## 0.301.0
+
+### Minor Changes
+
+- 409238f: Add GLM-5.3, Gemini 3.7 Flash and Grok 4.6 to the model catalog, and re-baseline the spend
+  price table against what the providers currently charge.
+
+  New catalog entries: `glm-5.3` (subscription-only, GLM Coding Plan), `gemini-3.7-flash`
+  (OpenRouter) and `grok` (Grok 4.6, direct via a new `xai` provider or OpenRouter). GLM-4.7
+  Flash gains a Bedrock flavour (`zai.glm-4.7-flash`).
+
+  `xai` is a new direct provider: `XAI_API_KEY` joins the poolable key providers and the
+  reserved-env-key list, `XAI_BASE_URL` overrides the endpoint, and `grok` joins the model
+  family vocabulary the account model policy allows or blocks. A policy in `allowlist` mode
+  does not admit the new family until an admin adds it, which is the intended default.
+
+  Price corrections, several of which were metering runs BELOW their real cost: DeepSeek's V4
+  pair moves to the peak rates its 2026-08-16 peak/off-peak switch introduces, the OpenRouter
+  `deepseek/deepseek-v4-pro` alias nearly triples, and Cloudflare's now-published cached-input
+  rates for GLM-5.2 and the Kimi pair replace a derived floor that was ~1.9x too low. GLM-5.2
+  and Gemini 3.6 Flash on OpenRouter were overpriced and come down. Z.ai subscription refs
+  (`zai:*`) were falling through to the generic default price and now carry Z.ai's list rate.
+
+### Patch Changes
+
+- Updated dependencies [409238f]
+  - @cat-factory/contracts@0.313.0
+
 ## 0.300.0
 
 ### Minor Changes

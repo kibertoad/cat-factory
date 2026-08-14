@@ -44,6 +44,19 @@ export const TESTER_AGENT_KIND = 'tester-api'
 export const DEPLOYER_AGENT_KIND = 'deployer'
 
 /**
+ * The agent kind that REPAIRS a failed deployment: it clones the pull-request head, fixes the
+ * deployment description there and pushes back onto the same branch, so the environment is stood
+ * up again against the fix (the `ci-fixer` shape, one step earlier in the pipeline).
+ *
+ * It is dispatched ONLY for a failure classified `manifest_invalid`
+ * (`isRepoFixableEnvironmentFailure`). That gate is not a refinement, it is the feature: every
+ * other cause of a failed provision is something no edit in this checkout can address, and a
+ * coding agent asked to address one anyway will hard-code the value the platform was supposed to
+ * substitute, turn the run green, and hide the misconfiguration the failure was reporting.
+ */
+export const DEPLOY_FIXER_AGENT_KIND = 'deploy-fixer'
+
+/**
  * The agent kind that RECLAIMS them again, the deployer's counterpart at the other end of the
  * lifecycle. It tears down by the environment ids the deployer RECORDED on its own step, so it
  * has nothing whatsoever to do without one earlier in the chain.

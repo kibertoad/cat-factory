@@ -423,6 +423,14 @@ export {
   registerEnvironmentAnalystAgent,
 } from './agents/kinds/environment-analyst.js'
 export {
+  DEPLOY_FIXER_AGENT_KIND,
+  DEPLOY_FIXER_AGENT_KINDS,
+  DEPLOY_FIXER_ROLE_PROMPT,
+  DEPLOY_FIXER_DIRECTIVES,
+  DEPLOY_FAILURE_PRIOR_KIND,
+  registerDeployFixerAgent,
+} from './agents/kinds/deploy-fixer.js'
+export {
   REPRO_TEST_KIND,
   REPRO_TEST_AGENT_KINDS,
   reproTestOutcome,

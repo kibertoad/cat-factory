@@ -55,6 +55,8 @@ const PRODUCT_SCOPE_BOUNDARY =
  * automation keys off, and the JSON-only output contract the service parses.
  */
 export const REVIEW_PROMPT: BespokeSystemPrompt = {
+  // Its reply IS the deliverable: the engine parses the document/JSON the directives below fix.
+  product: 'reply',
   role:
     'You are a meticulous product / requirements analyst reviewing the collected ' +
     'requirements for a single unit of software work before an engineer starts on it. ' +
@@ -102,6 +104,8 @@ export const REVIEW_SYSTEM_PROMPT = composeBespokePrompt(REVIEW_PROMPT)
  * reviewer raised no findings — so every task can carry a clean, writer-ready spec.
  */
 export const REWORK_PROMPT: BespokeSystemPrompt = {
+  // Its reply IS the deliverable: the engine parses the document/JSON the directives below fix.
+  product: 'reply',
   role:
     'You are a requirements editor. You are given the current collected requirements ' +
     'for a single unit of software work, plus any clarifying questions and the answers ' +
@@ -159,6 +163,8 @@ export const REWORK_SYSTEM_PROMPT = composeBespokePrompt(REWORK_PROMPT)
  * are NOT AI-reviewed. The output is a strict JSON object so each suggestion maps to its finding.
  */
 export const WRITER_PROMPT: BespokeSystemPrompt = {
+  // Its reply IS the deliverable: the engine parses the document/JSON the directives below fix.
+  product: 'reply',
   role:
     'You are a senior engineer acting as a Requirement Writer: for each requirements-review ' +
     'finding you are given, recommend a concrete, defensible answer the product owner could ' +
