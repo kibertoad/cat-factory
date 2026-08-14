@@ -14,7 +14,9 @@ else imports its **ports** and domain types from here.
   `RepoFiles`, so a caller that resolved a run's repo can RECORD which repo it was and later
   correlate an inbound webhook, which names a repository by exactly that id.
 - `domain/`: domain types (`types.ts`, re-exporting contracts), pure logic + constants
-  (`seed.ts`, `catalog.ts`, `models.ts`, `subtasks.logic.ts`, `change-class.ts`, the
+  (`seed.ts`, `catalog.ts`, `models.ts` + its data half `model-catalog.ts` — the
+  `MODEL_CATALOG` entries live there and are re-exported from `models.ts`, so add a model in
+  the first and a resolution RULE in the second, `subtasks.logic.ts`, `change-class.ts`, the
   deterministic changed-file → change-class classifier + its risk ranking; what a preset then DOES
   with a class lives in `@cat-factory/contracts` beside the rule maps, because the SPA has to
   reach the same verdict), and the **public extension

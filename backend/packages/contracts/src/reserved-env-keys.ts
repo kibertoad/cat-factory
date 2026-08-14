@@ -156,6 +156,10 @@ export const PLATFORM_RESERVED_ENV_KEYS: readonly string[] = [
   'QWEN_API_KEY',
   'REALTIME_NODE_ID',
   'WORKER_PUBLIC_URL',
+  // Exact name rather than an `XAI_` family, for the same reason as `ADVANCE_TIMEOUT`: the
+  // platform owns one variable in that namespace, and reserving the family would newly
+  // refuse a credential key a deployment may already hold under it.
+  'XAI_API_KEY',
 ]
 
 const RESERVED = new Set(PLATFORM_RESERVED_ENV_KEYS.map((key) => key.toUpperCase()))

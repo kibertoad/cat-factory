@@ -110,6 +110,13 @@ const DIRECT_PROVIDERS = computed<ProviderMeta[]>(() => [
       t('providers.apiKeys.providers.moonshot.step2'),
     ],
   },
+  {
+    value: 'xai',
+    label: t('providers.apiKeys.providers.xai.label'),
+    url: 'https://console.x.ai/',
+    steps: [t('providers.apiKeys.providers.xai.step1'), t('providers.apiKeys.providers.xai.step2')],
+    caches: true,
+  },
 ])
 
 /** Proxies / gateways: one key fronts many vendors. These are intermediaries, not vendors. */
