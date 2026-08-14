@@ -34,14 +34,6 @@ import type { ClusterConfig } from './config.ts'
 export const MANIFEST_DIR = 'deploy/k8s'
 
 /**
- * The doc that owns the cluster half of this setup.
- *
- * Here rather than in each file that cites it: `prerequisites.ts` and `manifestTemplates.ts` both
- * end k3s remedies on it, and two copies of a path is one of them surviving a rename.
- */
-export const K3S_DOC = 'backend/docs/local-k3s-environments.md'
-
-/**
  * The two configured templates a scaffold brief has to state, so it asks for manifests the engine
  * this suite registers can actually render. Threaded rather than re-read, so the pair travels
  * together: a brief holding one of them and a literal for the other is the drift they exist to
@@ -107,15 +99,35 @@ export function buildServiceProvisioning(): PublicServiceProvisioning {
 }
 
 /**
+ * The placeholder syntax, which is the PLATFORM's and not this suite's to choose.
+ *
+ * Byte for byte `renderTemplate`'s in `kubernetes-environment.logic.ts`, including the `\s*` either
+ * side of the key: `{{ namespace }}` is a hole the platform fills, so a gate here that reads only
+ * `{{namespace}}` refuses a template that would have worked, before the pass starts, in the name of
+ * rendering exactly as the platform does. The two renderers below share it for the same reason they
+ * exist at all, which is that a second spelling of this rule is a second thing to drift.
+ *
+ * Safe as one shared `/g` value because both uses are `String.replace`, which resets `lastIndex`.
+ * A `.test()` against it would not be.
+ */
+const PLACEHOLDER = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g
+
+/**
  * The environment URL a namespace will answer on, for a scenario that wants to state the expectation
  * before the run produces it.
  *
  * Renders the same `{{namespace}}` hole the backend renders, and ONLY that one: the other
  * provision vars (`{{branch}}`, `{{pullNumber}}`) are not known to this suite before a run opens
  * its pull request, so a template using them is reported as unrenderable rather than guessed at.
+ *
+ * An unfilled hole is left VERBATIM rather than emptied, so the brace check below catches it. That
+ * is what makes "this suite cannot render it" and "the platform would render it to nothing" the same
+ * answer here, where the image sibling has to tell them apart because only it grades a REFERENCE.
  */
 export function renderEnvironmentHost(hostTemplate: string, namespace: string): string | null {
-  const rendered = hostTemplate.replaceAll('{{namespace}}', namespace)
+  const rendered = hostTemplate.replace(PLACEHOLDER, (hole, key: string) =>
+    key === 'namespace' ? namespace : hole,
+  )
   return rendered.includes('{{') || rendered.includes('}}') ? null : rendered
 }
 
@@ -209,7 +221,7 @@ export function renderEnvironmentImage(
 ): ImageTemplateVerdict {
   const unfilled = new Set<string>()
   const fill = (part: string): string =>
-    part.replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (_match, key: string) => {
+    part.replace(PLACEHOLDER, (_match, key: string) => {
       // `Object.hasOwn`, never a nullish read: `{{toString}}` and `{{constructor}}` both match the
       // hole charset and both find a FUNCTION up the prototype chain, so an optional read reports
       // them as filled and splices `function toString() { [native code] }` into the reference.

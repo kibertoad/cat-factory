@@ -30,6 +30,18 @@ export const DEFAULT_INGRESS_HOST_TEMPLATE = '{{namespace}}.127.0.0.1.nip.io'
 
 export const DEFAULT_IMAGE_TEMPLATE = 'ghcr.io/{{repoOwner}}/{{repoName}}:pr-{{pullNumber}}'
 
+/**
+ * The doc that owns the cluster half of this setup, for the same reason the two defaults above are
+ * here: four places cite it and one of them is a REMEDY an operator is told to open.
+ *
+ * `prerequisites.ts` and `manifestTemplates.ts` end their k3s refusals on it, `k3s.ts` cites it for
+ * the kustomize path it does not cover, and the `ACCEPTANCE_K3S_TOKEN` requirement below points at
+ * the RBAC it documents. Nothing joins a path in a string to a file on disk, and no guard here
+ * covers this one, so a rename is caught by nothing: what keeps the four honest is that there is
+ * one of them.
+ */
+export const K3S_DOC = 'backend/docs/local-k3s-environments.md'
+
 /** A k3s/Kubernetes apiserver the `deployer` step provisions per-PR namespaces against. */
 export type ClusterConfig = {
   apiServerUrl: string
@@ -218,7 +230,7 @@ const RUN_REQUIRED: readonly Requirement[] = [
   { name: 'ACCEPTANCE_K3S_API_SERVER', purpose: 'kube-apiserver URL, e.g. https://127.0.0.1:6443' },
   {
     name: 'ACCEPTANCE_K3S_TOKEN',
-    purpose: 'ServiceAccount bearer token with the RBAC in backend/docs/local-k3s-environments.md',
+    purpose: `ServiceAccount bearer token with the RBAC in ${K3S_DOC}`,
   },
 ]
 

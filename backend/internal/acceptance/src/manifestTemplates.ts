@@ -18,13 +18,8 @@
 // of these the default is a working answer.
 
 import type { AcceptanceConfig } from './config.ts'
-import { DEFAULT_IMAGE_TEMPLATE, DEFAULT_INGRESS_HOST_TEMPLATE } from './config.ts'
-import {
-  imageTemplateSample,
-  K3S_DOC,
-  renderEnvironmentHost,
-  renderEnvironmentImage,
-} from './k3s.ts'
+import { DEFAULT_IMAGE_TEMPLATE, DEFAULT_INGRESS_HOST_TEMPLATE, K3S_DOC } from './config.ts'
+import { imageTemplateSample, renderEnvironmentHost, renderEnvironmentImage } from './k3s.ts'
 import { envAssignment } from './operatorText.ts'
 import { type Prerequisite, satisfied, unsatisfied } from './preflight.ts'
 

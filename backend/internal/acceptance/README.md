@@ -848,9 +848,17 @@ separate clause. Otherwise both expiry messages report the silence, while the ou
 still telling its reader the run may well be fine, having discarded the only evidence about it.
 
 Between the waits, a restart is absorbed by the SDK client's raised retry budget
-(`createClient`), which covers every READ a scenario makes one-shot. A write is deliberately not
-retried: replaying an answered decision is not a call this suite may make on the deployment's
+(`createPassClient`), which covers every READ a scenario makes one-shot. A write is deliberately
+not retried: replaying an answered decision is not a call this suite may make on the deployment's
 behalf.
+
+**Preflight runs on the SDK's default budget instead (`createClient`), and the asymmetry is the
+point.** The dozen prerequisite checks each reach the deployment, run in sequence and never bail
+early, so a budget raised there multiplies across all of them: against a deployment that is simply
+not running, the commonest setup mistake of all, that buries the clearest refusal this suite can
+produce under minutes of silence. Nothing has been created yet at that stage and a re-run costs
+nothing, so preflight refuses fast. Once a scenario is an hour deep, the same tens of seconds buy
+back the whole pass.
 
 **4. Every failing claim is reported, not just the first.** A run that both skipped its environment
 and failed CI is one story, and learning the second half on tomorrow's re-run wastes a day per bug.

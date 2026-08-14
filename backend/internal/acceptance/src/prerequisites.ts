@@ -47,6 +47,7 @@ import {
 } from './adopt.ts'
 import type { DeploymentApi } from './deploymentApi.ts'
 import type { AcceptanceConfig } from './config.ts'
+import { K3S_DOC } from './config.ts'
 import { buildK3sConnection, buildK3sSecrets } from './k3s.ts'
 import { MANIFEST_TEMPLATE_PREREQUISITES } from './manifestTemplates.ts'
 import {
@@ -109,8 +110,6 @@ export type PreflightContext = {
    */
   issueApiFor: (provider: PrReportRunProvider) => IssueApi | null
 }
-
-const K3S_DOC = 'backend/docs/local-k3s-environments.md'
 
 /**
  * A read-only `curl` through `/api/v1`, which is key-authed: reads `CAT_FACTORY_API_KEY` from the

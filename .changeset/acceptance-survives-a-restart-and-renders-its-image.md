@@ -29,10 +29,13 @@ observation: "the deployment did not answer" says nothing about the run, so both
 still print the last thing the deployment actually said, with the silence beside it rather than in
 its place.
 
-Between the waits, the same restart is absorbed by the SDK client's retry budget, raised once where
-the client is built. That covers every read a scenario makes one-shot, on the SDK's own rule about
-what may be replayed: a `GET` is retried, a `POST` never, so answering a decision stays
-exactly-once.
+Between the waits, the same restart is absorbed by the SDK client's retry budget, raised where the
+client a SCENARIO drives is built. That covers every read a scenario makes one-shot, on the SDK's
+own rule about what may be replayed: a `GET` is retried, a `POST` never, so answering a decision
+stays exactly-once. Preflight keeps the SDK default, because the trade inverts before a pass has
+spent anything: a dozen checks run in sequence and none bails early, so a raised budget there
+multiplies across all of them and buries the report that a deployment is not running under minutes
+of silence, which is the failure the suite's probe classification exists to prevent.
 
 The second failure is why that pass would have failed anyway, and it had never been reached before:
 every previous attempt stopped in preflight, so the deployer step ran for the first time. It failed

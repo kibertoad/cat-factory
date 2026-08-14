@@ -1,3 +1,4 @@
+import { CatFactoryApiError } from '@cat-factory/sdk'
 import { describe, expect, it } from 'vitest'
 import { formatDuration, formatExpiry, formatOutage, waitFor } from '../src/deadline.ts'
 import { deploymentOutageTolerance } from '../src/deploymentOutage.ts'
@@ -20,6 +21,23 @@ function refusedConnection(): Error {
 /** The same shape, for a cause that is a CONFIGURATION fault rather than a restart. */
 function transportFailure(code: string, message: string): Error {
   return new TypeError('fetch failed', { cause: Object.assign(new Error(message), { code }) })
+}
+
+/**
+ * A refusal in the shape the SDK actually throws, which is the whole point of building one here.
+ *
+ * A plain `Error` carrying a `status` property does NOT reach the answered branch: nothing
+ * classifies it, so it lands in `unanswered`/`unknown` and is rethrown by the excluded-cause arm.
+ * That still rejects, so a test written that way passes while the branch it names goes unrun.
+ */
+function apiRefusal(status: number, code: string, message: string): CatFactoryApiError {
+  return new CatFactoryApiError({
+    status,
+    code,
+    message,
+    requestId: 'req_19312e8862264172b1fa1051',
+    body: { error: { code, message } },
+  })
 }
 
 describe('waitFor', () => {
@@ -157,11 +175,12 @@ describe('waitFor', () => {
     expect(value).toBe('settled')
   })
 
-  it('rethrows a throw the tolerance does not own, untouched', async () => {
+  it('rethrows an ANSWERED refusal untouched, rather than sitting through evidence', async () => {
     // An ANSWER is evidence, and sitting through evidence turns a revoked key into a two-minute
     // silence followed by the wrong message. Untouched, because callers read the SDK error's own
-    // status and request id off it.
-    const refusal = Object.assign(new Error('boom'), { status: 401 })
+    // status and request id off it, and `toBe` is what pins that: a re-wrapped equivalent would
+    // satisfy any looser assertion while dropping both.
+    const refusal = apiRefusal(401, 'unauthorized', 'The API key has been revoked.')
     await expect(
       waitFor({
         label: 'x',
@@ -173,6 +192,41 @@ describe('waitFor', () => {
         },
       }),
     ).rejects.toBe(refusal)
+  })
+
+  it('rethrows a 503, because that status IS the deployment speaking', async () => {
+    // The one exclusion from the tolerated statuses, and the one most easily "fixed" back in by a
+    // reader who sees 502 and 504 waited through and assumes 5xx was the rule. It is not: our own
+    // `handleError` emits 503 for a capability this deployment has not wired, so waiting for it to
+    // change its mind is waiting for nothing, while 502 and 504 it cannot emit at all.
+    const unavailable = apiRefusal(503, 'unavailable', 'No model provider is configured.')
+    await expect(
+      waitFor({
+        label: 'x',
+        budgetMs: 60_000,
+        intervalMs: 1,
+        tolerate: deploymentOutageTolerance(60_000),
+        probe: async () => {
+          throw unavailable
+        },
+      }),
+    ).rejects.toBe(unavailable)
+  })
+
+  it('waits through a 502, which can only be something in front of the deployment', async () => {
+    let calls = 0
+    const value = await waitFor<string>({
+      label: 'x',
+      budgetMs: 1000,
+      intervalMs: 1,
+      tolerate: deploymentOutageTolerance(500),
+      probe: async () => {
+        calls += 1
+        if (calls === 1) throw apiRefusal(502, 'internal', 'Bad gateway')
+        return { done: true, value: 'settled' }
+      },
+    })
+    expect(value).toBe('settled')
   })
 
   it('reports progress so a long wait is not silent', async () => {
@@ -243,10 +297,25 @@ describe('renderEnvironmentHost', () => {
     )
   })
 
+  it('renders a padded hole, because the platform does', () => {
+    // `renderTemplate` matches `{{\s*key\s*}}`, so `{{ namespace }}` is a template that WORKS in
+    // production. Reading only the unpadded spelling refused it here, in the name of rendering
+    // exactly as the platform does, before the pass had spent anything.
+    expect(renderEnvironmentHost('{{ namespace }}.127.0.0.1.nip.io', 'cf-acc-7')).toBe(
+      'cf-acc-7.127.0.0.1.nip.io',
+    )
+  })
+
   it('reports a template it cannot fully render rather than emitting a broken host', () => {
     // `{{pullNumber}}` is not known before a run opens its pull request, so guessing at it would
     // produce a host nothing resolves and a preflight that passed.
     expect(renderEnvironmentHost('{{branch}}-{{namespace}}.example', 'ns')).toBeNull()
+  })
+
+  it('still refuses a hole that is not hole-SHAPED, on either spelling', () => {
+    // A placeholder is `{{someName}}` with no punctuation inside, so `{{repo-owner}}` matches the
+    // substitution on neither side and survives verbatim into a host nothing resolves.
+    expect(renderEnvironmentHost('{{ repo-owner }}.example', 'ns')).toBeNull()
   })
 })
 

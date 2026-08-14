@@ -26,7 +26,7 @@ import {
   runPreflight,
 } from './preflight.ts'
 import { PREREQUISITES } from './prerequisites.ts'
-import { createClient } from './publicApi.ts'
+import { createClient, createPassClient } from './publicApi.ts'
 import { type IssueApi, ISSUE_APIS } from './vcsIssues.ts'
 import { findPassesNaming, WorldStore } from './world.ts'
 
@@ -65,10 +65,17 @@ export type Harness = {
 }
 
 /** Everything an evaluation of the prerequisites reads. The harness, minus what only a scenario needs. */
-type PrerequisiteInputs = Pick<
-  Harness,
-  'config' | 'client' | 'deployment' | 'world' | 'journal' | 'log'
->
+type PrerequisiteInputs = Pick<Harness, 'config' | 'deployment' | 'world' | 'journal' | 'log'> & {
+  /**
+   * The FAST-REFUSING client, deliberately not `Harness.client`.
+   *
+   * The one field the gate does not share with a scenario, and the only reason this type is no
+   * longer a plain `Pick`. A prerequisite runs before the pass has created anything, so a
+   * deployment that is not answering is a verdict to print rather than an outage to sit through:
+   * `publicApi.ts` owns that argument and both halves of it.
+   */
+  client: CatFactoryClient
+}
 
 /**
  * Build the pass's harness.
@@ -85,19 +92,23 @@ export function buildHarness(options: {
 }): Harness {
   const { config, runId, unlock, log } = options
   const world = new WorldStore(config.stateDir, runId)
-  // Named, because the gate closes over exactly these and the harness closes over the gate: taking
-  // the whole `Harness` would be a cycle, and `PrerequisiteInputs` says which half an evaluation
-  // actually reads.
-  const inputs: PrerequisiteInputs = {
+  const shared = {
     config,
-    client: createClient(config, unlock),
     deployment: new DeploymentApi({ baseUrl: config.baseUrl }),
     world,
     journal: new Journal(world.dir, runId),
     log,
   }
+  // Named, because the gate closes over exactly these and the harness closes over the gate: taking
+  // the whole `Harness` would be a cycle, and `PrerequisiteInputs` says which half an evaluation
+  // actually reads.
+  const inputs: PrerequisiteInputs = { ...shared, client: createClient(config, unlock) }
   return {
-    ...inputs,
+    ...shared,
+    // The two clients differ only in how long a call waits on a deployment that is not answering,
+    // and they are built here rather than shared because the answer differs by what is at stake:
+    // an hour of agent work on this side, nothing at all on the gate's.
+    client: createPassClient(config, unlock),
     unlock,
     prerequisites: createPrerequisiteGate(() => evaluatePrerequisites(inputs)),
   }
