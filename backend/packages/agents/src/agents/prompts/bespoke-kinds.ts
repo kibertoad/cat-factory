@@ -3,6 +3,7 @@ import type { AgentKindRegistry } from '../kinds/registry.js'
 import { baseSystemPromptFor } from '../catalog.js'
 import type { BespokeSystemPrompt } from './bespoke.js'
 import { INLINE_ENGINE_SYSTEM_PROMPTS } from './inline-engine.js'
+import { DEPLOY_FIXER_DIRECTIVES, DEPLOY_FIXER_ROLE_PROMPT } from '../kinds/deploy-fixer.js'
 import { FINAL_ANSWER_IN_REPLY } from './shared.js'
 
 // The two bespoke CONTAINER prompts (`merger`, `on-call`) and the map that collects every kind
@@ -111,6 +112,11 @@ export const BESPOKE_SYSTEM_PROMPTS: Partial<Record<AgentKind, BespokeSystemProm
   ...INLINE_ENGINE_SYSTEM_PROMPTS,
   merger: { role: MERGER_ROLE_PROMPT, directives: MERGER_DIRECTIVES },
   'on-call': { role: ON_CALL_ROLE_PROMPT, directives: ON_CALL_DIRECTIVES },
+  // The deploy-fixer's directives are its WRITE SCOPE (deployment description only, never CI
+  // configuration) and the two repairs that look like progress and are not. Those are guardrails
+  // on a machine-authored commit that a pipeline may then merge, not editorial content, so they
+  // sit on the half a workspace override cannot delete.
+  'deploy-fixer': { role: DEPLOY_FIXER_ROLE_PROMPT, directives: DEPLOY_FIXER_DIRECTIVES },
 }
 
 /**

@@ -20,6 +20,7 @@ export const HEADLESS_ACTIONABLE_NOTIFICATION_TYPES: ReadonlySet<NotificationTyp
   'pipeline_complete',
   'ci_failed',
   'test_failed',
+  'deploy_blocked',
 ])
 
 /** Why a headless `act` on this card is refused, or null when it is admissible. */
@@ -69,7 +70,8 @@ export function headlessActRefusal(
  *
  *   - `merge_review` / `pipeline_complete` → confirm + merge the PR for real (the block
  *     flips `pr_ready` → `done`).
- *   - `ci_failed` / `test_failed` → retry the failed run once CI / the tests are fixed.
+ *   - `ci_failed` / `test_failed` / `deploy_blocked` → retry the failed run once CI, the tests
+ *     or the deployment files are fixed.
  *   - every other (informational) type → no side-effect; `act` just marks it read.
  *
  * The merge runs under the acting user's ambient initiator context so their per-user PAT
@@ -112,6 +114,7 @@ export function notificationActEffect(
         break
       case 'ci_failed':
       case 'test_failed':
+      case 'deploy_blocked':
         if (notification.executionId) {
           await container.executionService.retry(workspaceId, notification.executionId)
         }

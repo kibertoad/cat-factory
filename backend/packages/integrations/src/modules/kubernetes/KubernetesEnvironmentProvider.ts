@@ -23,9 +23,16 @@ import type {
 import {
   connectionFailureResult,
   describeConnectionFailure,
+  describeUnresolvedPlaceholders,
+  environmentFailure,
   getErrorMessage,
+  unresolvedPlaceholders,
 } from '@cat-factory/kernel'
 import { KubernetesApiClient, safeText } from './KubernetesApiClient.js'
+import {
+  classifyApplyFailure,
+  KUBERNETES_CONFIG_PLACEHOLDERS,
+} from './environment-failure.logic.js'
 import {
   apiBase,
   apiServerConnectionFailureMessage,
@@ -155,6 +162,13 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     await this.ensureNamespace(client, config, namespace)
 
     const texts = await this.readManifests(req, config)
+    // Refuse BEFORE applying when a placeholder the manifests reference has no value: rendering
+    // it to the empty string and applying anyway produces an apiserver rejection that describes
+    // the RESULT and blames the file, which is how a correct `image: "{{image}}"` was reported as
+    // a Deployment missing a required image. See `describeUnresolvedPlaceholders`.
+    const missing = unresolvedPlaceholders(texts.join('\n'), vars, KUBERNETES_CONFIG_PLACEHOLDERS)
+    const refusal = describeUnresolvedPlaceholders(missing)
+    if (refusal) throw environmentFailure(refusal, 'config_incomplete')
     const resources: KubernetesResource[] = []
     for (const text of texts) {
       resources.push(...parseManifests(text, vars, namespace, req.inputs.blockId, config.labels))
@@ -440,8 +454,14 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
       'application/apply-patch+yaml',
     )
     if (!res.ok) {
-      throw new Error(
-        `Failed to apply ${resource.kind}/${name} (HTTP ${res.status}): ${await safeText(res)}`,
+      const body = await safeText(res)
+      // Classified, not just reported. The verbatim apiserver text is what a person reads, and
+      // the `reason` is what decides whether an automated fixer may be dispatched at this
+      // failure at all: only a document the apiserver rejected on its own merits is something a
+      // checkout edit can address. See `classifyApplyFailure`.
+      throw environmentFailure(
+        `Failed to apply ${resource.kind}/${name} (HTTP ${res.status}): ${body}`,
+        classifyApplyFailure(res.status, body),
       )
     }
   }

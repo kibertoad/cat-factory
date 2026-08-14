@@ -22,6 +22,7 @@ import type {
 import { deployDispatchEpoch, deployJobId, orderProvisionTargets } from './deployer.logic.js'
 import { type ContainerFailureView, containerShutdownFailure } from './job.logic.js'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
+import type { DeployFixController } from './DeployFixController.js'
 import { TESTER_AGENT_KIND, UI_TESTER_AGENT_KIND } from './ci.logic.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
@@ -135,6 +136,11 @@ export interface DeployerStepControllerDeps {
     onBeforeRedispatch?: () => Promise<void>,
   ) => Promise<AdvanceResult | null>
   /**
+   * The remediation loop a failed PRIMARY-frame provision is offered to before it is reported as
+   * terminal. Absent means every provisioning failure is terminal exactly as before.
+   */
+  deployFix?: DeployFixController
+  /**
    * Where the two provisioning-lease releases below report a failure. Both are best-effort by
    * design, so without this a leaked lease (billed-but-useless compute, or a permanently held
    * self-hosted pool slot) is invisible. Absent ⇒ `noopLogger`.
@@ -160,6 +166,7 @@ export class DeployerStepController {
   private readonly applyContainerRunning: DeployerStepControllerDeps['applyContainerRunning']
   private readonly applySubtaskProgress: DeployerStepControllerDeps['applySubtaskProgress']
   private readonly recoverContainerEviction: DeployerStepControllerDeps['recoverContainerEviction']
+  private readonly deployFix?: DeployFixController
   private readonly log: Logger
 
   constructor(deps: DeployerStepControllerDeps) {
@@ -171,6 +178,7 @@ export class DeployerStepController {
     this.applyContainerRunning = deps.applyContainerRunning
     this.applySubtaskProgress = deps.applySubtaskProgress
     this.recoverContainerEviction = deps.recoverContainerEviction
+    this.deployFix = deps.deployFix
     this.log = (deps.logger ?? noopLogger).child({ scope: 'deployerStep' })
   }
 
@@ -552,6 +560,26 @@ export class DeployerStepController {
       },
     }
     if (target.isPrimary) {
+      // Offer the failure to the remediation loop before reporting it as terminal. It escalates
+      // ONLY for a cause the provider classified as fixable in the checkout; every other cause
+      // (an unset connection setting, an unpublished image, a refused credential) answers `null`
+      // and takes the terminal path below byte-for-byte as it did before the loop existed. That
+      // precondition is the feature, not a refinement: see `DeployFixController`.
+      const remediated = await this.deployFix?.escalate({
+        workspaceId,
+        instance,
+        step,
+        block: ctx.block,
+        isFinalStep: ctx.isFinalStep,
+        failure: {
+          frameId: target.frameId,
+          frameTitle: target.frame.title,
+          provisioning: target.provisioning,
+          error,
+          reason,
+        },
+      })
+      if (remediated) return remediated
       return this.failDeployerStep(workspaceId, instance, step, target.frameId, {
         message: error,
         reason,

@@ -17,6 +17,7 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   merge_tag_request: 'Tag review effort',
   ci_failed: 'CI failed',
   test_failed: 'Tests failed',
+  deploy_blocked: 'Deployment blocked',
   requirement_review: 'Requirement review',
   clarity_review: 'Bug-report triage',
   release_regression: 'Release regression',

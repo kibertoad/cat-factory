@@ -102,8 +102,8 @@ describe('notificationActEffect', () => {
     expect(noEffort.tag).not.toHaveBeenCalled()
   })
 
-  it('retries the run for ci_failed / test_failed', async () => {
-    for (const type of ['ci_failed', 'test_failed'] as const) {
+  it('retries the run for ci_failed / test_failed / deploy_blocked', async () => {
+    for (const type of ['ci_failed', 'test_failed', 'deploy_blocked'] as const) {
       const { container, mergePr, retry } = containerWith()
       await notificationActEffect(
         container,
@@ -144,7 +144,7 @@ describe('notificationActEffect', () => {
 
   it('the actionable set is exactly the types with a side-effect case', () => {
     expect(new Set(HEADLESS_ACTIONABLE_NOTIFICATION_TYPES)).toEqual(
-      new Set(['merge_review', 'pipeline_complete', 'ci_failed', 'test_failed']),
+      new Set(['merge_review', 'pipeline_complete', 'ci_failed', 'test_failed', 'deploy_blocked']),
     )
   })
 })

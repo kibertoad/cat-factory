@@ -596,6 +596,16 @@ export {
   renderReleaseEvidence,
 } from './domain/gate-logic.js'
 
+// Environment-failure classification, shared by every environment provider (the built-in backends
+// and any a deployment registers). See `domain/environment-failure.ts` for why it lives here
+// rather than beside the Kubernetes provider.
+export {
+  environmentFailure,
+  unresolvedPlaceholders,
+  describeUnresolvedPlaceholders,
+  type UnresolvedPlaceholder,
+} from './domain/environment-failure.js'
+
 // Per-step human-gate approval: who may resolve a gate and when a quorum is met. The rule lives in
 // `@cat-factory/contracts` because the SPA must agree about the answer (it disables the approve
 // button and renders the tally), and is re-exported here so the engine reaches it alongside the

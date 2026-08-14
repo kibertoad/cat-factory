@@ -32,6 +32,9 @@ const META: Record<Notification['type'], { icon: string; color: Accent }> = {
   merge_tag_request: { icon: 'i-lucide-tag', color: 'primary' },
   ci_failed: { icon: 'i-lucide-triangle-alert', color: 'error' },
   test_failed: { icon: 'i-lucide-flask-conical', color: 'error' },
+  // The deploy-fixer gave up on an environment that would not come up. Same disposition as
+  // `ci_failed`: the run failed, and "act" retries it once the files are fixed.
+  deploy_blocked: { icon: 'i-lucide-server-off', color: 'error' },
   // Clicking the title opens the review window for the task (see `reveal`); "act" just marks
   // it read (the server performs no side-effect for this type).
   requirement_review: { icon: 'i-lucide-clipboard-list', color: 'primary' },
@@ -97,6 +100,7 @@ const ACTION_KEYS: Record<Notification['type'], string> = {
   merge_tag_request: 'layout.notifications.action.merge_tag_request',
   ci_failed: 'layout.notifications.action.ci_failed',
   test_failed: 'layout.notifications.action.test_failed',
+  deploy_blocked: 'layout.notifications.action.deploy_blocked',
   requirement_review: 'layout.notifications.action.requirement_review',
   clarity_review: 'layout.notifications.action.clarity_review',
   release_regression: 'layout.notifications.action.release_regression',
