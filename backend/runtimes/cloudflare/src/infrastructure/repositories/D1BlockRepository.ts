@@ -3,7 +3,13 @@ import type { Block, BlockStatus } from '@cat-factory/contracts'
 import { tryDecodeRows } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
-import { type BlockRow, blockInsertValues, blockPatchToColumns, rowToBlock } from './mappers'
+import {
+  type BlockRow,
+  blockCompletionStamp,
+  blockInsertValues,
+  blockPatchToColumns,
+  rowToBlock,
+} from './mappers'
 
 const blockContext = (row: BlockRow) => ({ table: 'blocks', id: row.id })
 
@@ -116,12 +122,25 @@ export class D1BlockRepository implements BlockRepository {
 
   async update(workspaceId: string, id: string, patch: BlockPatch): Promise<void> {
     const set = blockPatchToColumns(patch)
-    const columns = Object.keys(set)
-    if (columns.length === 0) return
-    const assignments = columns.map((c) => `${c} = ?`).join(', ')
+    const assignments = Object.keys(set).map((c) => `${c} = ?`)
+    const binds = Object.values(set)
+
+    // `completed_at` is derived here rather than at the call sites that mark a task done
+    // (see `blockCompletionStamp`). `COALESCE` is what makes the stamp first-write-wins
+    // against a replaying durable driver: SQLite evaluates the right-hand side against the
+    // row's PRE-update value, so a second `done` write keeps the original date.
+    const stamp = blockCompletionStamp(patch, Date.now())
+    if (stamp.kind === 'stampIfUnset') {
+      assignments.push(`completed_at = COALESCE(completed_at, ?)`)
+      binds.push(stamp.at)
+    } else if (stamp.kind === 'clear') {
+      assignments.push(`completed_at = NULL`)
+    }
+
+    if (assignments.length === 0) return
     await this.db
-      .prepare(`UPDATE blocks SET ${assignments} WHERE workspace_id = ? AND id = ?`)
-      .bind(...Object.values(set), workspaceId, id)
+      .prepare(`UPDATE blocks SET ${assignments.join(', ')} WHERE workspace_id = ? AND id = ?`)
+      .bind(...binds, workspaceId, id)
       .run()
   }
 

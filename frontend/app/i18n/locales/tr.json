@@ -509,6 +509,71 @@
       "label": "Epik",
       "activeCount": "{count} etkin",
       "noTasksYet": "Henüz görev yok"
+    },
+    "lanes": {
+      "viewTitle": "Düzenle",
+      "resetView": "Varsayılanlara sıfırla",
+      "notStarted": {
+        "label": "Başlamadı",
+        "empty": "Ele alınmayı bekleyen bir şey yok."
+      },
+      "inProgress": {
+        "label": "Sürüyor",
+        "empty": "Devam eden çalıştırma yok."
+      },
+      "needsYou": {
+        "label": "Seni bekliyor",
+        "empty": "Seni bekleyen bir şey yok."
+      },
+      "done": {
+        "label": "Tamamlandı",
+        "empty": "Henüz tamamlanan bir şey yok.",
+        "hiddenByCap": "+{count} gösterilmiyor",
+        "hiddenByAge": "+{count} saklama penceresinin dışında",
+        "undated": "{count} kayıtlı tarihi yok",
+        "allWithheld": "Tamamlanan görevler burada sayılır ancak bu panonun ayarları gereği listelenmez."
+      },
+      "reason": {
+        "unstarted": "Başlamaya hazır",
+        "dependencies": "Bir bağımlılığı bekliyor",
+        "running": "Çalışıyor",
+        "backgroundReview": "Arka planda inceleniyor",
+        "decision": "Karar gerekiyor",
+        "approval": "Onay gerekiyor",
+        "failed": "Çalıştırma başarısız",
+        "budgetPaused": "Harcama bütçesi nedeniyle duraklatıldı",
+        "prAwaitingMerge": "Pull request birleştirilmeyi bekliyor",
+        "parked": "Bir kişiyi bekliyor",
+        "unclassified": "Tanınmayan durum",
+        "merged": "Birleştirildi"
+      },
+      "sort": {
+        "heading": "Sıralama",
+        "smart": "Her kolon için önerilen",
+        "title": "Başlık (A–Z)",
+        "oldest_activity": "En sessizler önce",
+        "newest_activity": "En son etkin olanlar",
+        "longest_wait": "En uzun bekleyenler",
+        "severity_desc": "Önem (en yüksekten)",
+        "impact_desc": "Tahmini etki (en yüksekten)",
+        "task_type": "Görev türü"
+      },
+      "group": {
+        "heading": "Gruplama",
+        "none": "Gruplama yok",
+        "module": "Modül",
+        "task_type": "Görev türü",
+        "initiative": "Girişim",
+        "epic": "Epik",
+        "blocking_reason": "Neye ihtiyacı var",
+        "catchAll": {
+          "module": "Modül yok",
+          "task_type": "Tür yok",
+          "initiative": "Bir girişimde değil",
+          "epic": "Bir epikte değil",
+          "blocking_reason": "Sınıflandırılmadı"
+        }
+      }
     }
   },
   "contextAttachments": {
@@ -1143,11 +1208,12 @@
       "title": "Yapı",
       "hint": "Bu görevin servisi içinde nerede bulunduğu ve ajanlarının hangi kod standartlarını izlediği.",
       "module": "Modül",
-      "modulePlaceholder": "örn. Sessions (yeniyse uygulama sırasında oluşturulur)",
-      "moduleHint": "Bu görevin ait olduğu servis modülü. Bir ad yazın; henüz var olmayan bir modül, görev uygulanırken oluşturulur.",
+      "modulePlaceholder": "Bir modül seç veya yaz",
+      "moduleHint": "Bu görevin ait olduğu servis modülü; pano kolonları buna göre gruplar. Henüz var olmayan bir modül, görev uygulandığında oluşturulur.",
       "bestPractices": "En iyi uygulamalar",
       "bestPracticesEmpty": "Yok. Ajanlar varsayılan yönergelerini izler.",
-      "bestPracticesHint": "Servis düzeyindeki standartlara ek olarak bu görevin ajanlarının prompt'larına eklenen en iyi uygulama parçaları."
+      "bestPracticesHint": "Servis düzeyindeki standartlara ek olarak bu görevin ajanlarının prompt'larına eklenen en iyi uygulama parçaları.",
+      "moduleNone": "Modül yok"
     },
     "runSettings": {
       "title": "Çalıştırma ayarları",
@@ -3806,6 +3872,15 @@
           "advisory": "Bilgilendirici (kaydet, asla bekletme)",
           "off": "Kapalı (denetimi atla)"
         }
+      },
+      "doneLane": {
+        "heading": "«Tamamlandı» kolonu",
+        "body": "Her servis çerçevesinin «Tamamlandı» kolonunun ne kadar bitmiş işi görünür tuttuğu. İki sınır da yalnızca kartları gizler: gizlenen bir görev panoda kalır, aranabilir kalır ve kolonun toplamına dahil kalır.",
+        "maxItems": "Gösterilen kartlar",
+        "zeroHint": "Tamamlanan görevler sayılacak ama hiç listelenmeyecek.",
+        "ageToggle": "Uzun süre önce tamamlanan görevleri de gizle",
+        "days": "Sakla (gün)",
+        "hidesOnlyHint": "Hiçbir şey silinmez. Tamamlanma tarihi kayıtlı olmayan görevler yaşları nedeniyle asla gizlenmez."
       }
     },
     "localModelEndpoints": {

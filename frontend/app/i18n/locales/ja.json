@@ -509,6 +509,71 @@
       "label": "エピック",
       "activeCount": "{count} 件アクティブ",
       "noTasksYet": "タスクはまだありません"
+    },
+    "lanes": {
+      "viewTitle": "並べ替え",
+      "resetView": "既定に戻す",
+      "notStarted": {
+        "label": "未着手",
+        "empty": "着手待ちのものはありません。"
+      },
+      "inProgress": {
+        "label": "進行中",
+        "empty": "実行中のものはありません。"
+      },
+      "needsYou": {
+        "label": "対応が必要",
+        "empty": "あなたの対応を待っているものはありません。"
+      },
+      "done": {
+        "label": "完了",
+        "empty": "まだ完了したものはありません。",
+        "hiddenByCap": "+{count} 件は非表示",
+        "hiddenByAge": "+{count} 件は保持期間より前",
+        "undated": "{count} 件は日付の記録なし",
+        "allWithheld": "このボードの設定により、完了タスクはここで集計されますが一覧表示されません。"
+      },
+      "reason": {
+        "unstarted": "開始可能",
+        "dependencies": "依存関係を待機中",
+        "running": "実行中",
+        "backgroundReview": "バックグラウンドでレビュー中",
+        "decision": "判断が必要",
+        "approval": "承認が必要",
+        "failed": "実行が失敗",
+        "budgetPaused": "支出予算により一時停止",
+        "prAwaitingMerge": "プルリクエストがマージ待ち",
+        "parked": "人の対応を待機中",
+        "unclassified": "未知のステータス",
+        "merged": "マージ済み"
+      },
+      "sort": {
+        "heading": "並び順",
+        "smart": "レーンごとの推奨",
+        "title": "タイトル（A–Z）",
+        "oldest_activity": "動きの少ないものから",
+        "newest_activity": "最近動いたものから",
+        "longest_wait": "待機が長いものから",
+        "severity_desc": "重大度（高い順）",
+        "impact_desc": "推定インパクト（高い順）",
+        "task_type": "タスク種別"
+      },
+      "group": {
+        "heading": "グループ化",
+        "none": "グループ化しない",
+        "module": "モジュール",
+        "task_type": "タスク種別",
+        "initiative": "イニシアチブ",
+        "epic": "エピック",
+        "blocking_reason": "必要なこと",
+        "catchAll": {
+          "module": "モジュールなし",
+          "task_type": "種別なし",
+          "initiative": "イニシアチブ外",
+          "epic": "エピック外",
+          "blocking_reason": "未分類"
+        }
+      }
     }
   },
   "contextAttachments": {
@@ -1143,11 +1208,12 @@
       "title": "構造",
       "hint": "このタスクがサービス内のどこに属し、エージェントがどのコーディング標準に従うか。",
       "module": "モジュール",
-      "modulePlaceholder": "例: Sessions (新規の場合は実装時に作成)",
-      "moduleHint": "このタスクが属するサービスのモジュール。名前を入力してください。まだ存在しないモジュールはタスクの実装時に作成されます。",
+      "modulePlaceholder": "モジュールを選択または入力",
+      "moduleHint": "このタスクが属するサービスモジュールです。ボードはこれでレーンをグループ化します。まだ存在しないモジュールは、タスクの実装時に作成されます。",
       "bestPractices": "ベストプラクティス",
       "bestPracticesEmpty": "なし。エージェントは既定のガイダンスに従います。",
-      "bestPracticesHint": "サービスレベルの標準に加えて、このタスクのエージェントのプロンプトに組み込まれるベストプラクティスフラグメント。"
+      "bestPracticesHint": "サービスレベルの標準に加えて、このタスクのエージェントのプロンプトに組み込まれるベストプラクティスフラグメント。",
+      "moduleNone": "モジュールなし"
     },
     "runSettings": {
       "title": "実行設定",
@@ -3806,6 +3872,15 @@
           "advisory": "参考（記録するが保留しない）",
           "off": "オフ（チェックしない）"
         }
+      },
+      "doneLane": {
+        "heading": "完了レーン",
+        "body": "各サービスフレームの「完了」レーンに表示し続ける完了済み作業の量です。どちらの上限もカードを隠すだけで、隠れたタスクはボードに残り、検索でき、レーンの合計にも含まれます。",
+        "maxItems": "表示するカード数",
+        "zeroHint": "完了タスクは集計されますが、一覧表示はされません。",
+        "ageToggle": "完了から時間が経ったタスクも隠す",
+        "days": "保持期間（日）",
+        "hidesOnlyHint": "削除は行われません。完了日が記録されていないタスクが期間によって隠されることはありません。"
       }
     },
     "localModelEndpoints": {

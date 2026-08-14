@@ -9,10 +9,14 @@
 // on the plan-approval gate (or on an agent-raised decision) offers the button that
 // opens the window resolving it, instead of leaving the card on a spinning "Run
 // planning" whose only route in was the inspector's execution panel.
-// The tracker button opens the dedicated window directly. Draggable within its
-// frame like a task card.
+// The tracker button opens the dedicated window directly.
+//
+// Laid out in a wrapping band above the frame's task swimlanes, not at coordinates. It used to be
+// free-positioned inside the frame's canvas beside the task cards, and lost that along with them
+// when tasks moved into lanes: with the canvas gone there is nothing left for an initiative's
+// coordinates to be relative to, and its drag handle only ever moved it within a canvas nothing
+// renders now. An initiative is still a first-class board block with its own inspector.
 import type { InitiativeStatus } from '~/types/domain'
-import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
 import {
   INITIATIVE_ATTENTION_ICONS,
@@ -27,7 +31,6 @@ const board = useBoardStore()
 const initiatives = useInitiativesStore()
 const ui = useUiStore()
 const { t } = useI18n()
-const { draggingId, startDrag } = useBlockDrag()
 
 const block = computed(() => board.getBlock(props.blockId))
 const initiative = computed(() => initiatives.forBlock(props.blockId))
@@ -56,36 +59,14 @@ const {
 function select() {
   ui.select(props.blockId)
 }
-function onHandle(e: PointerEvent) {
-  if (block.value) startDrag(block.value, e)
-}
 </script>
 
 <template>
-  <div
-    v-if="block"
-    class="absolute w-[230px]"
-    :style="{
-      left: block.position.x + 'px',
-      top: block.position.y + 'px',
-      zIndex: draggingId === blockId ? 60 : 10,
-      pointerEvents: draggingId === blockId ? 'none' : undefined,
-    }"
-  >
-    <div
-      class="nodrag nopan flex cursor-grab touch-none items-center justify-center rounded-t-lg border border-b-0 border-indigo-800/60 bg-indigo-950/60 py-px active:cursor-grabbing pointer-coarse:py-2"
-      :title="t('board.frame.dragTask')"
-      @pointerdown="onHandle"
-    >
-      <UIcon
-        name="i-lucide-grip-horizontal"
-        class="h-3 w-3 text-indigo-400/60 pointer-coarse:h-5 pointer-coarse:w-5"
-      />
-    </div>
+  <div v-if="block" class="w-[230px]">
     <div
       data-testid="initiative-card"
       :data-status="status"
-      class="cursor-pointer rounded-b-lg border border-indigo-800/60 bg-indigo-950/40 p-3 transition hover:border-indigo-600"
+      class="cursor-pointer rounded-lg border border-indigo-800/60 bg-indigo-950/40 p-3 transition hover:border-indigo-600"
       :class="[
         selected ? 'ring-2 ring-indigo-400/60' : '',
         awaitingAnswers || attention ? 'board-pulse' : '',

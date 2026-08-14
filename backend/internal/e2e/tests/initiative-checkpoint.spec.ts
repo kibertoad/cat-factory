@@ -153,8 +153,8 @@ test.describe('initiative phase checkpoint', () => {
 
     // Re-arm the one-shot decision gate BEFORE resuming, so phase two's spawned run PARKS at its
     // first step. This is what makes the card assertion below deterministic rather than a race the
-    // timeout can never win: a `done` task deliberately stops rendering as a work card (see
-    // `DraggableTask` — a merged task becomes architecture, not a unit of work), and this pipeline's
+    // timeout can never win: a `done` task deliberately stops rendering as a work card (it moves
+    // to the frame's Done swimlane, collapsed by default), and this pipeline's
     // fake agents settle in milliseconds with `confidence: 1` ⇒ auto-merge ⇒ `done`. On a loaded
     // machine the whole phase-two run therefore reached `done` BEFORE the browser painted its card,
     // so the card never appeared and never would — the wait then burned its full budget on an

@@ -219,6 +219,22 @@ export const blockSchema = v.object({
    */
   size: v.optional(sizeSchema),
   status: blockStatusSchema,
+  /**
+   * Epoch ms the block last entered `done`.
+   *
+   * Stamped by the block repository itself, at the single `update` funnel every
+   * status write goes through, rather than at the several call sites that set
+   * `done` (the merge resolver, the run state machine, the initiative loop) —
+   * one of which would eventually forget. First write wins while the block stays
+   * `done`, and leaving `done` clears it, so a reset-and-rerun is stamped afresh
+   * rather than keeping the first attempt's date.
+   *
+   * Absent means "no recorded completion date", NOT "completed long ago": every
+   * block merged before this column existed reads that way. Anything ageing a
+   * completed task (the board's Done swimlane) must therefore treat absence as
+   * unknown and exempt it, never infer an age from it.
+   */
+  completedAt: v.optional(v.nullable(v.number())),
   progress: v.number(),
   dependsOn: v.array(v.string()),
   executionId: v.nullable(v.string()),

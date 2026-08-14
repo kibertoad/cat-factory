@@ -3,6 +3,8 @@ import { setActivePinia, createPinia } from 'pinia'
 import type { Block, BlockStatus } from '~/types/domain'
 import { useBoardStore } from '~/stores/board'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { EMPTY_FRAME_SIZE } from '~/utils/framePlacement'
+import { frameContentSize, laneBodyHeightIn, LANE_GEOMETRY } from '~/utils/laneGeometry'
 
 /** Minimal Block factory — only the fields the read getters care about. */
 function block(id: string, over: Partial<Block> = {}): Block {
@@ -27,6 +29,8 @@ const moduleBlock = (id: string, parentId: string, over: Partial<Block> = {}) =>
   block(id, { level: 'module', parentId, ...over })
 const task = (id: string, parentId: string, over: Partial<Block> = {}) =>
   block(id, { level: 'task', parentId, ...over })
+const initiativeBlock = (id: string, parentId: string, over: Partial<Block> = {}) =>
+  block(id, { level: 'initiative', parentId, ...over })
 
 describe('board store read getters', () => {
   let store: ReturnType<typeof useBoardStore>
@@ -212,29 +216,77 @@ describe('board store read getters', () => {
   })
 
   describe('containerSize', () => {
-    it('returns base dimensions for an empty service', () => {
+    // A frame's size is now a function of the LANE GEOMETRY, not of its contents. That is the
+    // point of the swimlanes: each lane scrolls, so a service accumulating work no longer grows
+    // a taller and taller frame until it dwarfs its neighbours. These tests pin the INVARIANT
+    // (size independent of task count and task position) rather than the pixel arithmetic, which
+    // belongs to `LANE_GEOMETRY` and would otherwise be restated here to no purpose.
+    it('sizes a service with nothing in it to the panel it actually renders', () => {
+      // An empty service shows one "add the first task" panel, not lanes, so it reserves the
+      // panel's footprint. Reserving the lanes' would leave the frame more than twice as tall as
+      // its own contents — and, since a placement clears frames by their reserved size, would
+      // push its neighbours that much further away for a frame holding nothing.
       store.hydrate([frame('f1')])
-      expect(store.containerSize('f1')).toEqual({ w: 360, h: 220 })
+      expect(store.containerSize('f1')).toEqual(
+        frameContentSize({ hasChildren: false, initiatives: 0 }),
+      )
     })
 
-    it('grows to fit a task and adds the module header height for modules', () => {
+    it('reserves the same footprint for a new frame that a new frame will render at', () => {
+      // The drift this caught: `EMPTY_FRAME_SIZE` is what a placement decision reserves BEFORE the
+      // block exists, so it cannot measure the frame and has to predict it. A hand-copied pair
+      // went stale when the floor changed underneath it, and every new service was then dropped
+      // on top of a neighbour it had been placed to clear.
+      store.hydrate([frame('f1')])
+      expect(store.containerSize('f1')).toEqual(EMPTY_FRAME_SIZE)
+    })
+
+    it('does not grow with task count, however many tasks and wherever they sat', () => {
+      store.hydrate([frame('f1'), task('t1', 'f1')])
+      const oneTask = store.containerSize('f1')
+
       store.hydrate([
         frame('f1'),
-        moduleBlock('m1', 'f1', { position: { x: 0, y: 0 } }),
+        moduleBlock('m1', 'f1', { position: { x: 400, y: 300 } }),
         task('t1', 'm1', { position: { x: 300, y: 200 } }),
+        // A position far outside the old content extent: it used to stretch the frame to reach
+        // it, and now means nothing at all, because a task no longer renders at coordinates.
+        task('t2', 'f1', { position: { x: 4000, y: 9000 } }),
       ])
-      // module inner width/height fit the task, plus the 30px module header.
-      const size = store.containerSize('m1')
-      expect(size.w).toBe(300 + 210 + 12)
-      expect(size.h).toBe(200 + 160 + 12 + 30)
+      expect(store.containerSize('f1')).toEqual(oneTask)
     })
 
-    it('expands a service to enclose its nested modules', () => {
-      store.hydrate([frame('f1'), moduleBlock('m1', 'f1', { position: { x: 400, y: 300 } })])
-      const mod = store.containerSize('m1')
-      const svc = store.containerSize('f1')
-      expect(svc.w).toBe(400 + mod.w + 12)
-      expect(svc.h).toBe(300 + mod.h + 12)
+    it('makes room for the initiative band above the lanes', () => {
+      // Initiatives are the one child still laid out by the frame itself (in a wrapping band),
+      // so they are the one thing the frame's height still has to account for.
+      store.hydrate([frame('f1'), task('t1', 'f1')])
+      const withoutBand = store.containerSize('f1').h
+      store.hydrate([frame('f1'), task('t1', 'f1'), initiativeBlock('i1', 'f1')])
+      expect(store.containerSize('f1').h).toBe(withoutBand + LANE_GEOMETRY.initiativeHeight)
+    })
+
+    it('sizes a frame holding only an initiative for lanes, since that is what it renders', () => {
+      // `BlockNode` gates the lanes on having ANY child — tasks, modules or initiatives — so a
+      // frame with an initiative and no tasks renders three (empty) lanes. A size that disagreed
+      // with what rendered is the clipping this geometry exists to prevent.
+      store.hydrate([frame('f1'), initiativeBlock('i1', 'f1')])
+      expect(store.containerSize('f1')).toEqual(
+        frameContentSize({ hasChildren: true, initiatives: 1 }),
+      )
+    })
+
+    it('a module reports no canvas of its own, since it is no longer drawn as a box', () => {
+      store.hydrate([frame('f1'), moduleBlock('m1', 'f1'), task('t1', 'm1')])
+      expect(store.containerSize('m1').h).toBe(0)
+    })
+
+    it('keeps an explicitly resized frame at the size the user dragged it to', () => {
+      // The geometry is a FLOOR, not a fixed size: dragging the border still gives a reader more
+      // room, and a lane grows its scroll viewport into it rather than leaving dead canvas below.
+      store.hydrate([frame('f1', { size: { w: 2000, h: 1500 } }), task('t1', 'f1')])
+      const size = store.containerSize('f1')
+      expect(size).toEqual({ w: 2000, h: 1500 })
+      expect(laneBodyHeightIn(size, 0)).toBeGreaterThan(LANE_GEOMETRY.laneBodyHeight)
     })
   })
 
@@ -421,6 +473,59 @@ describe('board store optimistic rollback', () => {
     })
     // the undo move is itself non-undoable, so no second toast is queued
     expect(actions).toHaveLength(1)
+  })
+
+  it('reparentBlock predicts the declared module the server will re-stamp', async () => {
+    // The board reads a task's PARENT for its module and falls back to the name it DECLARES (a
+    // task can name a module before the engine materialises the block on merge). So a card
+    // dragged out of a module and left still declaring it re-groups under the module it was just
+    // dragged out of. The server re-stamps the name on every reparent; the optimistic write here
+    // has to predict the same answer or the card visibly jumps when the response lands.
+    //
+    // The request never settles, so what is asserted is strictly what this store put on screen
+    // BEFORE hearing back — the window the card would otherwise spend in the wrong group.
+    vi.stubGlobal('useApi', () => ({ reparentBlock: () => new Promise(() => {}) }))
+    vi.stubGlobal('useToast', () => ({ add: () => {} }))
+    setActivePinia(createPinia())
+    useWorkspaceStore().workspaceId = 'ws1'
+    const store = useBoardStore()
+    store.hydrate([
+      frame('f1'),
+      moduleBlock('m1', 'f1', { title: 'Sessions' }),
+      task('t1', 'm1', { moduleName: 'Sessions' }),
+      task('t2', 'f1'),
+    ])
+
+    // Out to the service frame: the declared name goes with it, as the empty string the store
+    // maps to NULL. Left behind, it is what files the card straight back into "Sessions".
+    void store.reparentBlock('t1', 'f1', { x: 0, y: 0 })
+    expect(store.getBlock('t1')?.moduleName).toBe('')
+
+    // And in: the destination module's title, whatever the task declared before.
+    void store.reparentBlock('t2', 'm1', { x: 0, y: 0 })
+    expect(store.getBlock('t2')?.moduleName).toBe('Sessions')
+  })
+
+  it('reparentBlock restores the declared module when the move is rejected', async () => {
+    // The same rollback contract the parent and position already had: a refused move must not
+    // leave the card grouped somewhere the server never put it.
+    vi.stubGlobal('useApi', () => ({
+      reparentBlock: async () => {
+        throw new Error('nope')
+      },
+    }))
+    vi.stubGlobal('useToast', () => ({ add: () => {} }))
+    setActivePinia(createPinia())
+    useWorkspaceStore().workspaceId = 'ws1'
+    const store = useBoardStore()
+    store.hydrate([
+      frame('f1'),
+      moduleBlock('m1', 'f1', { title: 'Sessions' }),
+      task('t1', 'm1', { moduleName: 'Sessions' }),
+    ])
+
+    await store.reparentBlock('t1', 'f1', { x: 0, y: 0 })
+    expect(store.getBlock('t1')).toMatchObject({ parentId: 'm1', moduleName: 'Sessions' })
   })
 })
 

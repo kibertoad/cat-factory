@@ -31,6 +31,10 @@ function fullBlock(): Block {
     description: 'do the thing',
     position: { x: 12, y: 34 },
     status: 'in_progress',
+    // The repository DERIVES this on a status patch rather than accepting it from a caller, so
+    // it is absent from `BlockPatch` — but it is a real column that has to survive
+    // insert → row → domain like any other, which is what this fixture is for.
+    completedAt: 1_770_000_000_000,
     progress: 0.5,
     dependsOn: ['blk_0'],
     executionId: 'exec_1',

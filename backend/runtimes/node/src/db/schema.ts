@@ -75,6 +75,12 @@ export const blocks = pgTable(
     width: doublePrecision('width'),
     height: doublePrecision('height'),
     status: text('status').notNull(),
+    // Epoch ms the block last entered `done`. Derived by the repository at its `update`
+    // funnel (first-write-wins, cleared when the block leaves `done`); null means "no
+    // recorded completion date", which is every block merged before this column existed.
+    // `bigint`-free on purpose: epoch ms fits a double exactly, and the rest of the row's
+    // numeric columns are already doubles.
+    completed_at: doublePrecision('completed_at'),
     progress: doublePrecision('progress').notNull().default(0),
     depends_on: text('depends_on').notNull().default('[]'),
     execution_id: text('execution_id'),

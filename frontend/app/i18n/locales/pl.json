@@ -509,6 +509,71 @@
       "label": "Epik",
       "activeCount": "{count} aktywnych",
       "noTasksYet": "Brak zadań"
+    },
+    "lanes": {
+      "viewTitle": "Uporządkuj",
+      "resetView": "Przywróć ustawienia domyślne",
+      "notStarted": {
+        "label": "Nierozpoczęte",
+        "empty": "Nic nie czeka na podjęcie."
+      },
+      "inProgress": {
+        "label": "W toku",
+        "empty": "Brak trwających uruchomień."
+      },
+      "needsYou": {
+        "label": "Czeka na ciebie",
+        "empty": "Nic na ciebie nie czeka."
+      },
+      "done": {
+        "label": "Ukończone",
+        "empty": "Nic jeszcze nie zostało ukończone.",
+        "hiddenByCap": "+{count} niewyświetlonych",
+        "hiddenByAge": "+{count} poza okresem przechowywania",
+        "undated": "{count} bez zapisanej daty",
+        "allWithheld": "Ukończone zadania są tu liczone, ale nie wypisywane, zgodnie z ustawieniami tej tablicy."
+      },
+      "reason": {
+        "unstarted": "Gotowe do rozpoczęcia",
+        "dependencies": "Czeka na zależność",
+        "running": "W trakcie",
+        "backgroundReview": "Przegląd w tle",
+        "decision": "Potrzebna decyzja",
+        "approval": "Potrzebna zgoda",
+        "failed": "Uruchomienie nie powiodło się",
+        "budgetPaused": "Wstrzymane przez budżet wydatków",
+        "prAwaitingMerge": "Pull request czeka na scalenie",
+        "parked": "Czeka na człowieka",
+        "unclassified": "Nierozpoznany status",
+        "merged": "Scalone"
+      },
+      "sort": {
+        "heading": "Sortuj według",
+        "smart": "Zalecane dla każdej kolumny",
+        "title": "Tytuł (A–Z)",
+        "oldest_activity": "Najcichsze najpierw",
+        "newest_activity": "Ostatnio aktywne",
+        "longest_wait": "Najdłużej czekające",
+        "severity_desc": "Waga (od najwyższej)",
+        "impact_desc": "Szacowany wpływ (od najwyższego)",
+        "task_type": "Typ zadania"
+      },
+      "group": {
+        "heading": "Grupuj według",
+        "none": "Bez grupowania",
+        "module": "Moduł",
+        "task_type": "Typ zadania",
+        "initiative": "Inicjatywa",
+        "epic": "Epik",
+        "blocking_reason": "Czego wymaga",
+        "catchAll": {
+          "module": "Bez modułu",
+          "task_type": "Bez typu",
+          "initiative": "Poza inicjatywą",
+          "epic": "Poza epikiem",
+          "blocking_reason": "Niesklasyfikowane"
+        }
+      }
     }
   },
   "contextAttachments": {
@@ -1143,11 +1208,12 @@
       "title": "Struktura",
       "hint": "Gdzie w usłudze znajduje się to zadanie i jakich standardów kodu przestrzegają jego agenci.",
       "module": "Moduł",
-      "modulePlaceholder": "np. Sesje (tworzone przy implementacji, jeśli nowy)",
-      "moduleHint": "Moduł usługi, do którego należy to zadanie. Wpisz nazwę; moduł, który jeszcze nie istnieje, zostanie utworzony przy implementacji zadania.",
+      "modulePlaceholder": "Wybierz lub wpisz moduł",
+      "moduleHint": "Moduł usługi, do którego należy to zadanie; tablica grupuje po nim kolumny. Moduł, który jeszcze nie istnieje, powstaje w chwili wdrożenia zadania.",
       "bestPractices": "Dobre praktyki",
       "bestPracticesEmpty": "Brak. Agenci stosują swoje domyślne wytyczne.",
-      "bestPracticesHint": "Fragmenty dobrych praktyk dołączane do promptów agentów tego zadania, oprócz standardów na poziomie usługi."
+      "bestPracticesHint": "Fragmenty dobrych praktyk dołączane do promptów agentów tego zadania, oprócz standardów na poziomie usługi.",
+      "moduleNone": "Bez modułu"
     },
     "runSettings": {
       "title": "Ustawienia uruchamiania",
@@ -3664,6 +3730,15 @@
           "advisory": "Informacyjny (zapisuj, nigdy nie wstrzymuj)",
           "off": "Wyłączone (pomiń kontrolę)"
         }
+      },
+      "doneLane": {
+        "heading": "Kolumna „Ukończone”",
+        "body": "Ile ukończonej pracy pozostaje widoczne w kolumnie „Ukończone” każdej usługi. Oba limity tylko ukrywają karty: ukryte zadanie zostaje na tablicy, nadal da się je wyszukać i nadal liczy się do sumy kolumny.",
+        "maxItems": "Wyświetlane karty",
+        "zeroHint": "Ukończone zadania będą liczone, ale nigdy wypisywane.",
+        "ageToggle": "Ukryj także zadania ukończone dawno temu",
+        "days": "Przechowuj (dni)",
+        "hidesOnlyHint": "Nic nie jest usuwane. Zadania bez zapisanej daty ukończenia nigdy nie są ukrywane z powodu wieku."
       }
     },
     "localModelEndpoints": {

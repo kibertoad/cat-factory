@@ -1163,6 +1163,15 @@
           "advisory": "Hinweis (erfassen, nie anhalten)",
           "off": "Aus (Prüfung überspringen)"
         }
+      },
+      "doneLane": {
+        "heading": "Spalte „Fertig“",
+        "body": "Wie viel abgeschlossene Arbeit die Spalte „Fertig“ jedes Service-Rahmens sichtbar hält. Beide Grenzen verbergen nur Karten: eine ausgeblendete Aufgabe bleibt auf dem Board, bleibt durchsuchbar und bleibt in der Gesamtzahl der Spalte.",
+        "maxItems": "Angezeigte Karten",
+        "zeroHint": "Abgeschlossene Aufgaben werden gezählt, aber nie aufgeführt.",
+        "ageToggle": "Außerdem länger abgeschlossene Aufgaben verbergen",
+        "days": "Aufbewahren (Tage)",
+        "hidesOnlyHint": "Es wird nichts gelöscht. Aufgaben ohne erfasstes Abschlussdatum werden nie wegen ihres Alters verborgen."
       }
     },
     "localModelEndpoints": {
@@ -1791,11 +1800,12 @@
       "title": "Struktur",
       "hint": "Wo diese Aufgabe in ihrem Service liegt und welchen Coding-Standards ihre Agents folgen.",
       "module": "Modul",
-      "modulePlaceholder": "z. B. Sessions (bei Implementierung erstellt, wenn neu)",
-      "moduleHint": "Das Service-Modul, zu dem diese Aufgabe gehört. Gib einen Namen ein; ein noch nicht existierendes Modul wird erstellt, wenn die Aufgabe implementiert wird.",
+      "modulePlaceholder": "Modul wählen oder eingeben",
+      "moduleHint": "Das Service-Modul, zu dem diese Aufgabe gehört; das Board gruppiert die Spalten danach. Ein noch nicht vorhandenes Modul wird bei der Umsetzung der Aufgabe erstellt.",
       "bestPractices": "Best Practices",
       "bestPracticesEmpty": "Keine. Agents folgen ihren Standardvorgaben.",
-      "bestPracticesHint": "Best-Practice-Fragmente, die zusätzlich zu den Standards auf Service-Ebene in die Prompts der Agents dieser Aufgabe eingearbeitet werden."
+      "bestPracticesHint": "Best-Practice-Fragmente, die zusätzlich zu den Standards auf Service-Ebene in die Prompts der Agents dieser Aufgabe eingearbeitet werden.",
+      "moduleNone": "Kein Modul"
     },
     "runSettings": {
       "title": "Lauf-Einstellungen",
@@ -3261,6 +3271,71 @@
       "label": "Epic",
       "activeCount": "{count} aktiv",
       "noTasksYet": "Noch keine Aufgaben"
+    },
+    "lanes": {
+      "viewTitle": "Anordnen",
+      "resetView": "Auf Standard zurücksetzen",
+      "notStarted": {
+        "label": "Nicht begonnen",
+        "empty": "Nichts wartet auf Bearbeitung."
+      },
+      "inProgress": {
+        "label": "In Arbeit",
+        "empty": "Keine laufenden Durchläufe."
+      },
+      "needsYou": {
+        "label": "Wartet auf dich",
+        "empty": "Nichts wartet auf dich."
+      },
+      "done": {
+        "label": "Fertig",
+        "empty": "Noch nichts abgeschlossen.",
+        "hiddenByCap": "+{count} nicht angezeigt",
+        "hiddenByAge": "+{count} außerhalb des Aufbewahrungszeitraums",
+        "undated": "{count} ohne erfasstes Datum",
+        "allWithheld": "Abgeschlossene Aufgaben werden hier gezählt, aber laut Board-Einstellungen nicht aufgeführt."
+      },
+      "reason": {
+        "unstarted": "Startbereit",
+        "dependencies": "Wartet auf eine Abhängigkeit",
+        "running": "Läuft",
+        "backgroundReview": "Prüfung im Hintergrund",
+        "decision": "Entscheidung erforderlich",
+        "approval": "Freigabe erforderlich",
+        "failed": "Durchlauf fehlgeschlagen",
+        "budgetPaused": "Vom Ausgabenbudget angehalten",
+        "prAwaitingMerge": "Pull Request wartet auf Merge",
+        "parked": "Wartet auf einen Menschen",
+        "unclassified": "Unbekannter Status",
+        "merged": "Zusammengeführt"
+      },
+      "sort": {
+        "heading": "Sortieren nach",
+        "smart": "Pro Spalte empfohlen",
+        "title": "Titel (A–Z)",
+        "oldest_activity": "Stillste zuerst",
+        "newest_activity": "Zuletzt aktiv",
+        "longest_wait": "Am längsten wartend",
+        "severity_desc": "Schweregrad (höchster zuerst)",
+        "impact_desc": "Geschätzte Wirkung (höchste zuerst)",
+        "task_type": "Aufgabentyp"
+      },
+      "group": {
+        "heading": "Gruppieren nach",
+        "none": "Keine Gruppierung",
+        "module": "Modul",
+        "task_type": "Aufgabentyp",
+        "initiative": "Initiative",
+        "epic": "Epic",
+        "blocking_reason": "Was benötigt wird",
+        "catchAll": {
+          "module": "Kein Modul",
+          "task_type": "Kein Typ",
+          "initiative": "Nicht in einer Initiative",
+          "epic": "Nicht in einem Epic",
+          "blocking_reason": "Nicht klassifiziert"
+        }
+      }
     }
   },
   "contextAttachments": {

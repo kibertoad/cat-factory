@@ -12,6 +12,10 @@ const DEFAULTS: WorkspaceSettings = {
   storeAgentContext: true,
   publishPrVerificationReport: true,
   artifactRetentionDays: 14,
+  // The board's Done swimlane keeps two weeks and 20 cards. Both cap what is RENDERED; a
+  // task aged out of the lane is still on the board's data and still counted in its total.
+  doneLaneMaxItems: 20,
+  doneLaneRetentionDays: 14,
   kaizenEnabled: true,
   delegateAgentsToRunnerPool: false,
   inputGateMode: 'standard',

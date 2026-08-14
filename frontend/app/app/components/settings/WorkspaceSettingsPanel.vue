@@ -197,6 +197,9 @@ const draft = reactive({
   storeAgentContext: true,
   publishPrVerificationReport: true,
   artifactRetentionDays: 14,
+  doneLaneMaxItems: 20,
+  doneLaneRetentionEnabled: true,
+  doneLaneRetentionDays: 14 as number,
   kaizenEnabled: true,
   allowInitiatorPat: true,
   inputGateMode: 'standard' as InputGateMode,
@@ -218,6 +221,12 @@ function hydrate() {
   draft.storeAgentContext = s.storeAgentContext
   draft.publishPrVerificationReport = s.publishPrVerificationReport
   draft.artifactRetentionDays = s.artifactRetentionDays
+  draft.doneLaneMaxItems = s.doneLaneMaxItems
+  // Nullable (null ⇒ no age cap), so a checkbox is derived from whether a value is stored
+  // and the number input keeps a sensible starting value to switch back on with — the same
+  // shape the nullable review-friction triggers below use.
+  draft.doneLaneRetentionEnabled = s.doneLaneRetentionDays != null
+  draft.doneLaneRetentionDays = s.doneLaneRetentionDays ?? 14
   draft.kaizenEnabled = s.kaizenEnabled
   draft.allowInitiatorPat = s.allowInitiatorPat
   draft.inputGateMode = s.inputGateMode
@@ -276,6 +285,8 @@ async function save() {
       storeAgentContext: draft.storeAgentContext,
       publishPrVerificationReport: draft.publishPrVerificationReport,
       artifactRetentionDays: draft.artifactRetentionDays,
+      doneLaneMaxItems: draft.doneLaneMaxItems,
+      doneLaneRetentionDays: draft.doneLaneRetentionEnabled ? draft.doneLaneRetentionDays : null,
       kaizenEnabled: draft.kaizenEnabled,
       allowInitiatorPat: draft.allowInitiatorPat,
       inputGateMode: draft.inputGateMode,
@@ -538,6 +549,54 @@ async function save() {
                   size="sm"
                 />
               </label>
+            </section>
+
+            <!-- What the board's Done swimlane keeps in view -->
+            <section class="space-y-2">
+              <h3 class="text-sm font-semibold text-slate-200">
+                {{ t('settings.workspaceSettings.doneLane.heading') }}
+              </h3>
+              <p class="text-[11px] text-slate-400">
+                {{ t('settings.workspaceSettings.doneLane.body') }}
+              </p>
+              <label class="block w-48">
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                  {{ t('settings.workspaceSettings.doneLane.maxItems') }}
+                </span>
+                <UInput
+                  v-model.number="draft.doneLaneMaxItems"
+                  type="number"
+                  :min="0"
+                  :max="500"
+                  size="sm"
+                  data-testid="done-lane-max-items"
+                />
+              </label>
+              <p v-if="draft.doneLaneMaxItems === 0" class="text-[11px] text-slate-500">
+                {{ t('settings.workspaceSettings.doneLane.zeroHint') }}
+              </p>
+              <label class="flex items-center gap-2">
+                <UCheckbox v-model="draft.doneLaneRetentionEnabled" size="sm" />
+                <span class="text-[11px] text-slate-300">{{
+                  t('settings.workspaceSettings.doneLane.ageToggle')
+                }}</span>
+              </label>
+              <label v-if="draft.doneLaneRetentionEnabled" class="block w-48">
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                  {{ t('settings.workspaceSettings.doneLane.days') }}
+                </span>
+                <UInput
+                  v-model.number="draft.doneLaneRetentionDays"
+                  type="number"
+                  :min="1"
+                  :max="3650"
+                  size="sm"
+                  data-testid="done-lane-retention-days"
+                />
+              </label>
+              <p class="text-[11px] text-slate-500">
+                {{ t('settings.workspaceSettings.doneLane.hidesOnlyHint') }}
+              </p>
             </section>
 
             <!-- Run credential: the App installation vs. the initiator's own token -->

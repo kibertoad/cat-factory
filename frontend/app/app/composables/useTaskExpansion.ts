@@ -75,7 +75,7 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>, activity: B
   //
   // Blocks with no pipeline to show are filtered out here rather than left to the card:
   // a frame, a module, or a task with no run expands to nothing, and granting it would
-  // still lift an empty card over its neighbours (see DraggableTask's z-index).
+  // still lift an empty card over its neighbours (see LaneTask's z-index).
   function hoveredTaskId(): string | null {
     if (!pointer) return null
     const hit = document.elementFromPoint(pointer.x, pointer.y)

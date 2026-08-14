@@ -28,6 +28,7 @@ import type {
 } from '@cat-factory/kernel'
 import { WORKSPACE_SCOPED_TABLES } from '@cat-factory/kernel'
 import {
+  blockCompletionStamp,
   blockInsertValues,
   blockPatchToColumns,
   rowToBlock,
@@ -437,7 +438,20 @@ export class DrizzleBlockRepository implements BlockRepository {
   }
 
   async update(workspaceId: string, id: string, patch: BlockPatch): Promise<void> {
-    const set = blockPatchToColumns(patch)
+    const set: Record<string, unknown> = blockPatchToColumns(patch)
+
+    // `completed_at` is derived here rather than at the call sites that mark a task done
+    // (see `blockCompletionStamp`). `COALESCE` against the column itself is what makes the
+    // stamp first-write-wins against a replaying durable driver: Postgres evaluates the
+    // right-hand side against the row's PRE-update value, so a second `done` write keeps
+    // the original date.
+    const stamp = blockCompletionStamp(patch, Date.now())
+    if (stamp.kind === 'stampIfUnset') {
+      set.completed_at = sql`COALESCE(${blocks.completed_at}, ${stamp.at})`
+    } else if (stamp.kind === 'clear') {
+      set.completed_at = null
+    }
+
     if (Object.keys(set).length === 0) return
     await this.db
       .update(blocks)
