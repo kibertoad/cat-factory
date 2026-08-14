@@ -9,6 +9,7 @@ import { createBackendRegistries } from '@cat-factory/integrations'
 import { gateRegistryWithBuiltins } from '@cat-factory/gates'
 import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
 import { eksEnvironmentBackend, eksRunnerBackend } from '@cat-factory/eks'
+import { registeredBinaryGeneratorRegistry } from './binaryGenerators'
 import { registeredBinaryStoreRegistry } from './binaryStores'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 
@@ -28,6 +29,7 @@ export type WorkerRegistries = Required<
     | 'vcsRegistry'
     | 'providerRegistry'
     | 'promptFragmentRegistry'
+    | 'binaryGeneratorRegistry'
     | 'binaryStoreRegistry'
   >
 >
@@ -80,6 +82,19 @@ export function resolveWorkerRegistries(overrides: Partial<CoreDependencies>): W
   // standards into exactly the runs nobody is watching.
   const promptFragmentRegistry =
     overrides.promptFragmentRegistry ?? promptFragmentRegistryWithBuiltins()
+  // The app-owned generative binary integrations: the injected instance, else the PROCESS-WIDE
+  // registration, else a fresh one carrying the shipped `@cat-factory/binary-generators` set.
+  //
+  // Two fallbacks rather than one, because two different builds are wrong without them and only
+  // the second is a platform concern. A container built directly (a cron re-drive, a Workflow
+  // step) takes no overrides, and the durable dispatch path is where a binary-output step's brief
+  // is composed: defaulting only at `createWorker` would leave those runs composing a brief with
+  // no integration in it at all. Defaulting to the SHIPPED set there fixes that for the platform's
+  // own integration and leaves a deployment's own absent on the same paths, which is why the
+  // registration exists. `infrastructure/binaryGenerators.ts` holds it, with the store registry's
+  // reasoning and the one way this differs from it.
+  const binaryGeneratorRegistry =
+    overrides.binaryGeneratorRegistry ?? registeredBinaryGeneratorRegistry()
   // The app-owned registry of the deployment's OWN binary artifact stores: the injected instance,
   // else the PROCESS-WIDE registration (empty when a deployment registered none; the platform's
   // R2 backend is this facade's own wiring, not an entry).
@@ -113,6 +128,7 @@ export function resolveWorkerRegistries(overrides: Partial<CoreDependencies>): W
     vcsRegistry,
     providerRegistry,
     promptFragmentRegistry,
+    binaryGeneratorRegistry,
     binaryStoreRegistry,
   }
 }

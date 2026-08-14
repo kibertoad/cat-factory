@@ -28,7 +28,10 @@ else imports its **ports** and domain types from here.
   GENERATIVE binary integrations a deployment declares in code: an image / music / video API a
   `binary-output` step selects to PRODUCE its artifacts, with the pure selection validation and
   agent-facing rendering beside it; deliberately NOT the foundational catalog, which is what a
-  DESIGN consumes), `binary-store-registry.ts` (the binary artifact STORES a deployment defines in
+  DESIGN consumes) plus `binary-generator-registration.ts` (what a registered definition must
+  satisfy beyond its parse, with TWO callers: the boot validator, and the authoring seam in
+  `@cat-factory/binary-generators` that runs the same rules at import so a bad definition fails a
+  test rather than a deploy), `binary-store-registry.ts` (the binary artifact STORES a deployment defines in
   code: its own `BinaryBlobBackend` implementations, offered per account beside the platform's own
   backends; per-process rather than port-read, because a store is a live client only the process
   writing the bytes can build), `service-registration.ts`. Two of those registries are also READ through a

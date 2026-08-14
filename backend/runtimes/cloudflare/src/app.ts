@@ -22,6 +22,7 @@ import {
 } from './infrastructure/config/cors'
 import { buildContainer } from './infrastructure/container'
 import { registerToolSecretPolicy } from './infrastructure/toolSecretResolver'
+import { registerBinaryGeneratorRegistry } from './infrastructure/binaryGenerators'
 import { registerBinaryStoreRegistry } from './infrastructure/binaryStores'
 import { handleError } from './infrastructure/http/errorHandler'
 import type { AppEnv } from './infrastructure/http/types'
@@ -141,6 +142,14 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   // driver and the reclaims from the cron. See `infrastructure/binaryStores.ts`.
   if (options.overrides?.binaryStoreRegistry) {
     registerBinaryStoreRegistry(options.overrides.binaryStoreRegistry)
+  }
+
+  // The deployment's own generative binary integrations, for the same reason again. This one hid
+  // behind a platform default rather than behind an empty registry: an override-less build already
+  // resolved the SHIPPED set, so the brief a durable wake composed looked populated while carrying
+  // none of the deployment's integrations. See `infrastructure/binaryGenerators.ts`.
+  if (options.overrides?.binaryGeneratorRegistry) {
+    registerBinaryGeneratorRegistry(options.overrides.binaryGeneratorRegistry)
   }
 
   // Correlation FIRST — before CORS and before the container build — so a CORS denial and the

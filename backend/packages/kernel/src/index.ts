@@ -305,6 +305,7 @@ export {
   type FoundationalServiceDefinition,
   type FoundationalServiceRegistryEntry,
   FoundationalServiceRegistry,
+  PLATFORM_FOUNDATIONAL_SERVICES,
   defaultFoundationalServiceRegistry,
 } from './domain/foundational-service-registry.js'
 
@@ -419,6 +420,18 @@ export {
   dispatchNeedsHarnessGeneration,
   resolveBinaryGeneratorSelection,
 } from './domain/binary-generators.js'
+
+// What a REGISTERED integration must satisfy beyond its parse, as pure rules with two callers:
+// the boot validator (`collectRegistrationProblems`, which maps each issue onto a registration
+// problem) and a definitions package's authoring seam, which runs them at import so a bad
+// definition is a failing test rather than a deploy that rolls back. See
+// `domain/binary-generator-registration.ts`.
+export {
+  type BinaryGeneratorRegistrationIssue,
+  type BinaryGeneratorRegistrationIssueCode,
+  binaryGeneratorDetailIssues,
+  binaryGeneratorInjectionCollisions,
+} from './domain/binary-generator-registration.js'
 
 // SIDE-BY-SIDE CANDIDATE COMPARISON on a binary-output step: the two-phase brief (generate
 // comparable candidates → deliver what a human kept, under the alternate ids they assigned) and

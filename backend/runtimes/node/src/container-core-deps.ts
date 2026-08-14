@@ -29,6 +29,7 @@ import {
   DEFAULT_MODEL_PRESET_ID,
 } from '@cat-factory/kernel'
 import { type CoreDependencies } from '@cat-factory/orchestration'
+import { binaryGeneratorRegistryWithBuiltins } from '@cat-factory/binary-generators'
 import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
 import {
   type AppConfig,
@@ -319,7 +320,13 @@ function selectNodeRegistryDeps(bundle: NodeCoreDepsBundle) {
     // threads the first into the execution service; the second is read by the per-account store
     // resolver in `buildNodeAccountDeps`. Both are re-exposed on Core, for boot validation and to
     // make a boot's offered set readable.
-    binaryGeneratorRegistry: options.binaryGeneratorRegistry,
+    // The generative half defaults to the SHIPPED integrations (`@cat-factory/binary-generators`),
+    // for the reason the prompt-fragment registry below does: the engine's own default is
+    // deliberately empty, so a facade must SAY it wants the platform's own set, through the same
+    // public seam a deployment registers on. Without it the shipped `pl_media` preset selects an
+    // id nothing answers to and its runs are refused at admission.
+    binaryGeneratorRegistry:
+      options.binaryGeneratorRegistry ?? binaryGeneratorRegistryWithBuiltins(),
     binaryStoreRegistry: options.binaryStoreRegistry,
     // …and where those integrations are READ from when it is not the registry above (mothership
     // mode), for the same reason its foundational sibling exists.
