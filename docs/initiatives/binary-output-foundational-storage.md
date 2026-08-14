@@ -1241,12 +1241,22 @@ labelling a non-image row with the agent's own account of what the file is.
       predicate and its own refusal payload; worth landing beside the first deployment that
       actually holds two reference-capable integrations with different ceilings.
 - [ ] **A `publicDecision` kind for the candidate park.** Every other dedicated park is projected
-      onto `/api/v1` as its own decision kind, so a headless caller currently sees a `blocked` run
-      with no decision to answer. It is deliberately NOT added here, because `publicDecisionKindSchema`'s
-      own rule is that a member ships with its routes: the kind needs a `keep-candidates` verb, an
-      entry in `PUBLICLY_ANSWERABLE_PARK_SURFACES`, a `scripts/sdk/surface.mjs` row and a
-      regeneration of all four SDKs plus the MCP projection. Until then the park is an in-app
-      surface, and this line is the record of that.
+      onto `/api/v1` as its own decision kind, and this one is not. It is deliberately NOT added
+      here, because `publicDecisionKindSchema`'s own rule is that a member ships with its routes:
+      the kind needs a `keep-candidates` verb, an entry in `PUBLICLY_ANSWERABLE_PARK_SURFACES`, a
+      `scripts/sdk/surface.mjs` row and a regeneration of all four SDKs plus the MCP projection.
+      Until then the park is an in-app surface, and this line is the record of that.
+
+      What DID have to land with `pl_media` is the admission half, because the two are not the
+          same question. Leaving the park unprojected means a headless caller cannot ANSWER it;
+          leaving it out of `parkSurfacesOf` meant a plain `write` key was admitted to START a run
+          that would park there, which is the hole `human-review` and the interview gate each opened
+          once before. `BINARY_CANDIDATE_PARK_SURFACE` closes it: the comparison is the FIFTH park
+          mechanism and the first that lives in a step's OPTIONS rather than in its kind, its gate
+          flag or a registered trait, so `AdmissiblePipelineShape` grew a narrow `stepOptions` leg to
+          see it. Landing the decision kind later is then one move: add it to the answerable set and
+          the refusal starts naming the route instead of the cancel path.
+
 - [ ] **An e2e spec for the candidate park**, driving generate → park → compare → keep through the
       live pushed UI. It is the assembled-product half the unit tests cannot reach (the window is
       opened by the park classifier and settled over the stream), and it needs a fake generating

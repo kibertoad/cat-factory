@@ -43,7 +43,16 @@ candidate pass stages several files per subject and a person keeps one, and with
 reclaiming an asset on a clock, the rejected renders would accumulate for the life of the
 workspace. `DELETE` on a location reclaims what the same run stored, idempotently.
 
-Three things to watch for. `GET /api/v1/runs/{runId}/artifacts` gains an `asset` member in its kind
+`pl_media` is also the first shipped pipeline whose step parks on a binary-candidate comparison,
+which public-API admission could not see: its four park checks read the step CHAIN, and a
+comparison lives in a step's OPTIONS. So a plain `write` key was admitted to start a run that then
+parked on a surface `/api/v1` cannot answer. `parkSurfacesOf` gains that fifth mechanism. Note the
+narrowing: a deployment that authored its own binary-output step with `comparison` and started it
+with a `write` key now gets `pipeline_requires_decide_scope` instead. That is the same disposition
+the human-wait gate and the interview gate each shipped with, and the behaviour it replaces is a
+run that hangs with nothing able to answer it.
+
+Four things to watch for. `GET /api/v1/runs/{runId}/artifacts` gains an `asset` member in its kind
 enum (public API 1.56.0, additive): a caller pairing screenshots against reference designs must
 filter it out rather than treat it as an unmatched capture. The foundational-services catalog is
 no longer empty by default, so a surface or test that assumed an unregistered deployment resolves

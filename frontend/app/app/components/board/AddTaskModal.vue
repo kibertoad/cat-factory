@@ -401,16 +401,20 @@ const selectablePipelines = computed(() =>
 // must appear in the form BEFORE creation:
 //   - `ralph` needs its preset so the per-task validation command + iteration budget the `ralph`
 //     agent contributes surface for editing ("choose at run time" would be a dead end);
-//   - a `document` task defaults to `pl_document` and a `review` task to `pl_review` so their
-//     purpose-narrowed picker (the `purpose` gate hides every non-document / non-review pipeline)
-//     is never rendered empty.
+//   - a `document` task defaults to `pl_document`, a `review` task to `pl_review` and a `media`
+//     task to `pl_media` so their purpose-narrowed picker (the `purpose` gate hides every pipeline
+//     of another purpose) is never rendered empty.
 // The other typed default (spike) carries no up-front config and doesn't narrow its picker, so the
 // modal leaves `pipelineId` unset and `BoardService` applies the backend type-default at creation.
-// Keep these ids in step with the backend helper.
+// Keep these ids in step with the backend helper. The test for membership is the NARROWING, not the
+// config: a type whose picker `pipelineAllowedForTaskType` reduces to one purpose has to name its
+// default here, because every fallback below is a BUILD-purpose pipeline the narrowed picker then
+// rejects, leaving the form open on an empty selection.
 const DEFAULT_PIPELINE_FOR_TYPE: Partial<Record<TaskTypeChoice, string>> = {
   ralph: 'pl_ralph',
   document: 'pl_document',
   review: 'pl_review',
+  media: 'pl_media',
 }
 /**
  * The pipeline a task type opens with: a custom type's registered `defaultPipelineId`, else the
