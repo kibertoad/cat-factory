@@ -58,7 +58,7 @@ symmetric" (CLAUDE.md).
 | 7   | P2  | caching      | `SpendService` three banned TTL `Map`s (pricing / account / user limits)                                                            | ✅ done | [#1060](https://github.com/kibertoad/cat-factory/pull/1060) |
 | 8   | P2  | caching      | `AccountSettingsService` legacy 30s `Map` (the named anti-pattern)                                                                  | ✅ done | [#1068](https://github.com/kibertoad/cat-factory/pull/1068) |
 | 9   | P2  | caching      | `WorkspaceSettingsService.get` uncached; read per recorded LLM call                                                                 | ✅ done | [#1060](https://github.com/kibertoad/cat-factory/pull/1060) |
-| 10  | P2  | frontend     | One event re-classifies + re-sorts every frame's swimlanes; no structural sharing (rewritten post-#1777)                            | ✅ done | PR_LINK                                                     |
+| 10  | P2  | frontend     | One event re-classifies + re-sorts every frame's swimlanes; no structural sharing (rewritten post-#1777)                            | ✅ done | [#2023](https://github.com/kibertoad/cat-factory/pull/2023) |
 | 11  | P2  | frontend     | Two unconditional 60fps RAF loops doing DOM measurement while idle                                                                  | ✅ done | [#1914](https://github.com/kibertoad/cat-factory/pull/1914) |
 | 12  | P2  | integrations | `GitHubSyncService`: serial per-workspace fan-out + serial resource syncs                                                           | ✅ done | [#1085](https://github.com/kibertoad/cat-factory/pull/1085) |
 | 13  | P2  | engine       | `AgentContextBuilder` re-walks block ancestry per resolver, sequentially                                                            | ✅ done | [#1143](https://github.com/kibertoad/cat-factory/pull/1143) |
@@ -73,10 +73,10 @@ symmetric" (CLAUDE.md).
 | 22  | P3  | spend        | `isOverBudget`: up to 3 live SUM aggregates per proxied LLM call (design decision)                                                  | ⬜ todo |                                                             |
 | 23  | P3  | engine       | `resolveRiskPolicy` re-reads merge preset per gate evaluation (optional slice)                                                      | ✅ done | [#1143](https://github.com/kibertoad/cat-factory/pull/1143) |
 | 24  | P2  | gateways     | Dispatch GH client: no single-flight / throttle; concurrent same-run steps duplicate token mint + branch probe                      | ⬜ todo |                                                             |
-| 25  | P1  | frontend     | `execution.getByBlock` full scan per call on the card/lane/measurement paths; cards scan global gate lists                          | ✅ done | PR_LINK                                                     |
+| 25  | P1  | frontend     | `execution.getByBlock` full scan per call on the card/lane/measurement paths; cards scan global gate lists                          | ✅ done | [#2023](https://github.com/kibertoad/cat-factory/pull/2023) |
 | 26  | P2  | frontend     | Activity pulse re-wakes the DOM-measuring loops on every card re-render, so a busy board never parks them                           | ⬜ todo |                                                             |
 | 27  | P2  | frontend     | Observability/kaizen stores grow unbounded per session and survive board switches                                                   | ⬜ todo |                                                             |
-| 28  | P2  | frontend     | ~35 direct `refresh()` call sites + starvable trailing-only debounce + stacking retry chains                                        | ✅ done | PR_LINK                                                     |
+| 28  | P2  | frontend     | ~35 direct `refresh()` call sites + starvable trailing-only debounce + stacking retry chains                                        | ✅ done | [#2023](https://github.com/kibertoad/cat-factory/pull/2023) |
 | 29  | P3  | frontend     | Deep reactivity over `execution.instances` (shallowRef viable) and `board.blocks` (blocked by in-place writes)                      | ⬜ todo |                                                             |
 | 30  | P3  | frontend     | Identity churn, uncached derived counts, per-invocation timers, drag/viewport listener leaks (grouped)                              | ⬜ todo |                                                             |
 
@@ -433,7 +433,7 @@ fields the comparators read) so a progress-only event short-circuits downstream 
 The `getByBlock` scans inside `classify` are item 25 and should land first, since they dominate
 the recompute this item makes rarer.
 
-**Landed (with items 25 and 28):** `collectReviewDebt` moved onto the notifications store as
+**Landed ([#2023](https://github.com/kibertoad/cat-factory/pull/2023), with items 25 and 28):** `collectReviewDebt` moved onto the notifications store as
 `reviewDebtByBlock`, so the workspace-wide reduction is derived once instead of once per mounted
 frame; `laneSort` compares text through one lazily built `Intl.Collator` (no options, so the
 collation is byte-for-byte what `localeCompare` performed); and the assembled output passes through
@@ -804,7 +804,7 @@ it. Switch `TaskCard`'s two finds to the existing byBlock maps; index `recurring
 pipeline-default lookup the same way. Pure SPA change, PR-sized, and it multiplies with item 10:
 each removes a factor of the O(frames × tasks × runs) product.
 
-**Landed:** `byBlockLive` is a single pass stating the preference rule as "replace whatever is held
+**Landed ([#2023](https://github.com/kibertoad/cat-factory/pull/2023)):** `byBlockLive` is a single pass stating the preference rule as "replace whatever is held
 whenever it is TERMINAL", which is the array form (`find(live) ?? at(-1)`) exactly: the first live
 run wins and is never displaced, and with no live run the last terminal one wins. `getByBlock` is
 now a Map read, so `TaskPipelineMini`, `useFrameLanes.classify` and `useTaskExpansion` all pay O(1).
@@ -884,7 +884,7 @@ hydrate that store directly instead of refetching the world; an in-flight map fo
 `reconcileRun`. Must respect the live-push coherence rules: the funnel keeps the
 capture-baseline-then-hydrate ordering `refresh()` already does.
 
-**Landed (`stores/workspace/refreshFunnel.ts`):** the funnel IS `refresh()`, so the ~35 direct call
+**Landed ([#2023](https://github.com/kibertoad/cat-factory/pull/2023), `stores/workspace/refreshFunnel.ts`):** the funnel IS `refresh()`, so the ~35 direct call
 sites needed no edit and a new mutation has nothing to opt into. It is deliberately NOT plain
 single-flight: a caller that mutated and then refreshed is entitled to a snapshot read AFTER its
 call, so a call arriving mid-fetch joins a single QUEUED follow-up rather than the in-flight
