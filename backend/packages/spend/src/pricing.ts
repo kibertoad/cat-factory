@@ -129,7 +129,12 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // recorded against it must keep costing correctly.
   'anthropic:claude-opus-5': { inputPerMillion: 4.6, outputPerMillion: 23 },
   'anthropic:claude-opus-4-8': { inputPerMillion: 4.6, outputPerMillion: 23 },
-  'anthropic:claude-sonnet-5': { inputPerMillion: 1.84, outputPerMillion: 9.2 },
+  // Sonnet 5 carries Sonnet-tier LIST price ($3 in / $15 out per 1M), not the $2 / $10
+  // introductory rate Anthropic is running until 2026-08-31. Same rule as the Gemini 3.7
+  // Flash launch discount below: an intro rate is temporary and the budget gate may not
+  // undercount once it lapses, so the table holds the price that outlives the promotion.
+  // The derived cache tiers land on Anthropic's own published rates at this base.
+  'anthropic:claude-sonnet-5': { inputPerMillion: 2.76, outputPerMillion: 13.8 },
   'anthropic:claude-sonnet-4-6': { inputPerMillion: 2.76, outputPerMillion: 13.8 },
   'anthropic:claude-haiku-4-5': { inputPerMillion: 0.92, outputPerMillion: 4.6 },
   anthropic: { inputPerMillion: 2.76, outputPerMillion: 13.8 },
