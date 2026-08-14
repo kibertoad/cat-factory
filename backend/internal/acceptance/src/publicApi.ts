@@ -79,8 +79,10 @@ function buildClient(
  * Absent unlock ⇒ the plain client, byte for byte: a workspace on a provider API key sends no such
  * header and is never asked for a password.
  *
- * Takes the two fields it addresses rather than the whole config, so a command that holds only the
- * BOARD half (`reset`) drives the same client the scenarios do instead of a second one built beside it.
+ * Takes the two fields it addresses rather than the whole config, which is what lets a command
+ * holding only the BOARD half (`reset`) build its client through this door rather than stand up a
+ * second one beside it. `reset` belongs on this budget for the same reason preflight does: it runs
+ * before a pass, and its whole job is to report and clear leftover state.
  */
 export function createClient(
   config: Pick<AcceptanceConfig, 'baseUrl' | 'apiKey'>,
