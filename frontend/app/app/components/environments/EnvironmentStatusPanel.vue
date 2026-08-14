@@ -6,7 +6,18 @@
 import type { InfraEngine, ProvisionType } from '@cat-factory/contracts'
 import type { RunEnvironment, HumanTestEnvironmentStatus } from '~/types/execution'
 
-const props = defineProps<{ environment: RunEnvironment | null; degradedReason?: string | null }>()
+const props = defineProps<{
+  environment: RunEnvironment | null
+  /**
+   * Whether the enclosing run is still being driven (`runIsActive`). A transitional status
+   * (`provisioning` / `tearing_down`) keeps its label once the run stops, because that is the
+   * last thing the provider reported, but its icon stops spinning: nothing is standing this
+   * environment up any more. Required rather than defaulted so a new call site has to say which
+   * run it is rendering, instead of silently inheriting a perpetual spinner.
+   */
+  runActive: boolean
+  degradedReason?: string | null
+}>()
 
 const { t, d } = useI18n()
 
@@ -74,6 +85,13 @@ const ENV_STATUS_META = computed<
     icon: 'i-lucide-circle-off',
   },
 }))
+
+// The two statuses that describe a transition IN FLIGHT. Only these ever animate, and only
+// while the run driving the transition is still being driven itself.
+const envInTransition = computed(
+  () =>
+    props.environment?.status === 'provisioning' || props.environment?.status === 'tearing_down',
+)
 </script>
 
 <template>
@@ -88,10 +106,7 @@ const ENV_STATUS_META = computed<
           class="h-3.5 w-3.5"
           :class="[
             ENV_STATUS_META[environment.status].color,
-            {
-              'animate-spin':
-                environment.status === 'provisioning' || environment.status === 'tearing_down',
-            },
+            { 'animate-spin': runActive && envInTransition },
           ]"
         />
         <span :class="ENV_STATUS_META[environment.status].color">{{

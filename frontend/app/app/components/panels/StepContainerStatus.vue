@@ -8,7 +8,18 @@ import { containerPhaseLabel } from '~/utils/pipelineRender'
 // making calls), and the container's id + reachable URL once up. Shared by the generic
 // step detail (StepMetadataCard) and the dedicated Tester window so both surface WHAT the
 // container is doing and WHERE it lives instead of a bare "working" — identical parity.
-const props = defineProps<{ step: PipelineStep; runFailed: boolean }>()
+const props = defineProps<{
+  step: PipelineStep
+  runFailed: boolean
+  /**
+   * Whether the enclosing run is still being driven (`runIsActive`). Distinct from
+   * {@link runFailed}, which answers whether the container was RECLAIMED: a run parked on a
+   * human decision or a spend budget has reclaimed nothing, so its container keeps whatever
+   * status it stopped at. A `starting` one is no longer cold-booting, though, so it must not
+   * keep spinning as though it were.
+   */
+  runActive: boolean
+}>()
 
 const { t, te } = useI18n()
 
@@ -59,6 +70,14 @@ const CONTAINER_STATUS_META: Record<
   },
 }
 
+// Whether the status icon animates: only a cold-boot genuinely in flight, i.e. one whose run is
+// still being driven. A `starting` container on a parked or terminated run keeps its label and
+// freezes, the same way a mid-flight subtask item does (`subtaskIconClass`).
+const spinIcon = computed(
+  () =>
+    props.runActive && !!containerStatus.value && CONTAINER_STATUS_META[containerStatus.value].spin,
+)
+
 // The friendly phase label (clone → "Preparing workspace", …); only meaningful while up.
 const phaseLabel = computed(() => containerPhaseLabel(props.step.container?.phase, { t, te }))
 
@@ -82,7 +101,7 @@ const { copy: copyText } = useCopyToClipboard()
         <UIcon
           :name="CONTAINER_STATUS_META[containerStatus].icon"
           class="h-4 w-4 shrink-0"
-          :class="CONTAINER_STATUS_META[containerStatus].spin ? 'animate-spin' : ''"
+          :class="spinIcon ? 'animate-spin' : ''"
         />
         <span class="font-medium">{{ t(CONTAINER_STATUS_KEYS[containerStatus]) }}</span>
         <template v-if="phaseLabel && containerStatus === 'up'">
