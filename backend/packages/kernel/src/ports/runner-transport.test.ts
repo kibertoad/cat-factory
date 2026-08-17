@@ -72,6 +72,59 @@ describe('runIdFromContainerKey', () => {
   })
 })
 
+describe('the container-key invariant', () => {
+  // What the shape test above CANNOT decide, and therefore does not: a prefix that is slug-shaped
+  // and was never a variant. `bootstrap:ws1` is the fixture that names it: a plausible future run
+  // id whose leading segment is a perfectly legal variant name. Read alone it splits to `ws1`,
+  // a run that does not exist, which is what makes the orphan sweep kill a live container. Nothing
+  // in the reader can tell it apart from a real `ui:run-1`, so the PRODUCER decides: it refuses to
+  // mint a key it cannot read back.
+
+  it('refuses to mint a key for a run id that would read back as variant-qualified', () => {
+    expect(() => containerKeyForRef({ runId: 'bootstrap:ws1', jobId: 'j' })).toThrow(
+      /does not read back/,
+    )
+    // And the same run id under an explicit variant: the key would be `ui:bootstrap:ws1`, which
+    // recovers `bootstrap:ws1` correctly (only the FIRST separator is the variant), so this one is
+    // fine. The refusal is about ambiguity, not about colons.
+    expect(containerKeyForRef({ runId: 'bootstrap:ws1', jobId: 'j', image: 'ui' })).toBe(
+      'ui:bootstrap:ws1',
+    )
+  })
+
+  it('mints keys for every run-id shape the platform actually uses', () => {
+    // The guard must not refuse the present. These are the id schemes in the tree: execution ids,
+    // bootstrap job ids, the synthetic inline id, and a pool member id.
+    for (const runId of ['exec_1', 'run-1', 'bootstrap_ws1', 'inline-9f2ac1', 'member_3']) {
+      for (const image of [undefined, 'ui', 'pixel-tools']) {
+        const key = containerKeyForRef({ runId, jobId: 'j', ...(image ? { image } : {}) })
+        expect(parseContainerKey(key)).toEqual(image ? { runId, image } : { runId })
+      }
+    }
+  })
+
+  it('refuses a variant name no declaring boundary would have accepted', () => {
+    // `checkAgentImageVariants` refuses these at boot and both backend variant maps refuse them on
+    // the way in, so one arriving here means it got past every declaring boundary. Minting the key
+    // anyway is the silent case: `Bootstrap:run-1` reads back as an unqualified run id, so the
+    // step's own container and the run's ordinary one become the same container.
+    expect(() => containerKeyForRef({ runId: 'run-1', jobId: 'j', image: 'Bootstrap' })).toThrow(
+      /lower-kebab/,
+    )
+    expect(() => containerKeyForRef({ runId: 'run-1', jobId: 'j', image: 'pixel_tools' })).toThrow(
+      /does not read back/,
+    )
+  })
+
+  it('round-trips a key whose RUN ID is spelled exactly like a qualified one', () => {
+    // The inverse's hardest case, and the one the shape test gets wrong on its own: a run id that
+    // IS `ui:run-1`. There is no encoding that recovers it, so it is refused rather than mis-read.
+    expect(() => containerKeyForRef({ runId: 'ui:run-1', jobId: 'j' })).toThrow(
+      /does not read back/,
+    )
+  })
+})
+
 describe('parseContainerKey', () => {
   it('reports the variant a key was qualified with, and none for a bare run id', () => {
     expect(parseContainerKey('ui:run-1')).toEqual({ runId: 'run-1', image: 'ui' })

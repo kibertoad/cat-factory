@@ -495,6 +495,12 @@ function renderScopeSection(input: BinaryOutputBriefInput): string[] {
   for (const service of input.contextServices) {
     lines.push(`- \`${service.id}\` — ${service.name}: ${service.summary}`)
     lines.push(`  ${contractPointer(service).join(' ')}`)
+    // How to AUTHENTICATE to it, from the same helper the storage section and the injected
+    // contract document use, so all three name the variable the dispatch resolver actually sets.
+    // Stated in the BRIEF and not only in the contract file, because a context service with no
+    // registered contract gets no file at all: its credential would then be resolved into the job
+    // env with nothing anywhere naming it, which is the failure this seam exists to end.
+    lines.push(...indented(renderServiceCredentials(service.credentials)))
   }
   if (input.unresolvedContextIds.length > 0) {
     lines.push(
@@ -532,6 +538,14 @@ function renderStorageSection(input: BinaryOutputBriefInput): string[] {
   // failure a storage service could not previously express.
   lines.push('', ...renderServiceCredentials(input.storage.credentials), '')
   return lines
+}
+
+/**
+ * Nest rendered lines under the list item above them, leaving blank lines bare so the markdown
+ * still breaks into paragraphs rather than becoming one indented code block.
+ */
+function indented(lines: readonly string[]): string[] {
+  return lines.map((line) => (line ? `  ${line}` : line))
 }
 
 /** Where a service's API contract was injected, or the explicit statement that none exists. */

@@ -300,7 +300,7 @@ not claim). Anything else is a DEPLOYMENT's variant, mapped to an image by its r
 | backend               | where the name is mapped                                                                                                                                                            |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Kubernetes / EKS pool | the runner config's `imageVariants` (`{ "pixel-tools": "ghcr.io/acme/pixel:2" }`)                                                                                                   |
-| local Docker          | `LOCAL_HARNESS_IMAGE_VARIANTS=pixel-tools=ghcr.io/acme/pixel:2,fonts=…`                                                                                                             |
+| local Docker          | `LOCAL_HARNESS_IMAGE_VARIANTS=pixel-tools=ghcr.io/acme/pixel:2,fonts=…` (each name held to the same slug shape a declaration is; a rejected entry is named in a boot warning)       |
 | Cloudflare            | a `[[containers]]` class (subclass the exported `RunContainer`) plus a durable-object binding named `RUNNER_CONTAINER_PIXEL_TOOLS`, because a Container's image is pinned per CLASS |
 | manifest-driven pool  | forwarded verbatim as `{{input.image}}`; the pool maps it                                                                                                                           |
 
@@ -315,6 +315,13 @@ from the persisted step alone, in another process after a durable replay. Keyed 
 alone, a later step re-attached to whatever the run's first step created: a browser-driven tester
 running on an image with no browser.
 
+Because the key is two facts in one string, `containerKeyForRef` REFUSES to mint one it cannot read
+back (`container_key_not_reversible`). Only the producer can check that: the reader holds no ref, so
+it cannot tell a run id that merely looks variant-qualified from one that is, and a key it splits
+wrongly names a run that does not exist, which is what makes the orphan sweep delete a live
+container. No run-id scheme in the platform can trip it today; a future one that wants a `:` finds
+out at the first dispatch instead of weeks later.
+
 **A backend with no image for a variant REFUSES the dispatch** (`runner_image_unwired`) rather than
 falling back to its default. The platform's own variants say what a deployment loses by leaving
 them unwired; a deployment's own gets the shared message, because nothing here knows what the image
@@ -323,6 +330,13 @@ after paying for a checkout, an install and the model's first turns, and an unwi
 costs a tool nothing in the platform can even name, so the job would report a missing result with
 no cause anywhere. The one deliberate fallback left is `deploy`, whose harness preflights for its
 own CLIs and reports them.
+
+Which half a name falls in is asked through `isPlatformImageVariant`, never by respelling the
+platform's names, and each backend's platform half is an EXHAUSTIVE switch over
+`PlatformImageVariant`. So publishing a fourth platform image fails every backend's build until it
+says which image serves it: a backend that respelled the names would instead route the new image
+into the deployment half and refuse it as unwired on the one runtime that ships it, and nothing
+would fail at compile time.
 
 Boot refuses a kind that declares `default` or `deploy`, or a name that is not a lower-kebab slug
 (the name is a map key and half a container's identity, so it is held to the shape every other

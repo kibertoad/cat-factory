@@ -1,12 +1,13 @@
 import type { CloudProvider, InstanceSize, StepSubtasks } from '../domain/types.js'
 import type { HarnessFailureCause } from '../domain/harness-failure.js'
 import type { LlmToolSpan } from './llm-trace-sink.js'
-import type { AgentEffortReport } from '@cat-factory/contracts'
+import type { AgentEffortReport, PlatformImageVariant } from '@cat-factory/contracts'
 import {
   isImageVariantName,
   isPlatformImageVariant,
   PLATFORM_IMAGE_VARIANTS,
 } from '@cat-factory/contracts'
+import { UnavailableError, ValidationError } from '../domain/errors.js'
 
 // Port for "where a repo-operating coding job actually runs". The
 // ContainerAgentExecutor dispatches each job and polls it through this transport
@@ -311,6 +312,29 @@ export type RunnerImageVariant = string
 // a runner backend's variant map is edited in the SPA and an agent kind's declaration is written
 // by a deployment: both must be held to one list of names the platform has already claimed.
 export { PLATFORM_IMAGE_VARIANTS, isPlatformImageVariant, isImageVariantName }
+export type { PlatformImageVariant }
+
+/**
+ * The `default:` arm of a backend's exhaustive switch over {@link PlatformImageVariant}: it takes
+ * `never`, so publishing a fourth platform image fails the BUILD in every backend until each
+ * decides what to do with it, and it still refuses honestly at RUN time for the case the type
+ * cannot see, a value an older job body or a stored step still carries after this build retired it.
+ *
+ * The compile-time half is the load-bearing one, because the alternative is silent in the worst
+ * direction: a backend that fell through would run the job on its default image, and nothing
+ * downstream can say what the variant was supposed to carry. The DEPLOYMENT-owned half of the
+ * vocabulary is open and gets {@link deploymentImageVariantMessage} instead; this arm is only ever
+ * reached by a name the platform itself claimed.
+ */
+export function unservablePlatformImageVariant(variant: never): never {
+  throw new UnavailableError(
+    `This step declared the '${String(variant)}' executor image, which this backend does not ` +
+      'serve. It is a platform image this build does not know: re-pick the executor image on the ' +
+      "agent kind's registration.",
+    RUNNER_IMAGE_UNWIRED_REASON,
+    { image: String(variant) },
+  )
+}
 
 /**
  * The refusal a DEPLOYMENT-named image variant earns when the resolved runner backend maps it to
@@ -670,7 +694,36 @@ export interface RunnerJobRef {
  * a reap from a cron all land on the same container with nothing passed between them.
  */
 export function containerKeyForRef(ref: RunnerJobRef): string {
-  return ref.image && ref.image !== 'default' ? `${ref.image}:${ref.runId}` : ref.runId
+  const key = ref.image && ref.image !== 'default' ? `${ref.image}:${ref.runId}` : ref.runId
+  // The two must be EXACT inverses, and the PRODUCER is the only side that can check it:
+  // `parseContainerKey` reads keys with no ref in hand, so it cannot tell a run id that merely
+  // LOOKS variant-qualified from one that is (see its own doc for why the test it makes is a shape
+  // and not a lookup). Checking here converts the one input class that would break the inverse into
+  // a refused dispatch that NAMES the cause, instead of a key the reaper later maps to no run and
+  // kills a live container for.
+  //
+  // Unreachable for every run-id scheme the platform mints today (all `[A-Za-z0-9_-]`, which cannot
+  // contain the separator), which is exactly why this is a guard and not an escaping scheme: the
+  // invariant the pair rests on is "a run id carries no `:`", and it was previously assumed rather
+  // than stated anywhere. A future scheme that wants one has to pick a different separator, and this
+  // is where it finds out: at the first dispatch, in one place, rather than as a sweep deleting
+  // containers weeks later.
+  const parsed = parseContainerKey(key)
+  if (parsed.runId !== ref.runId || (parsed.image ?? 'default') !== (ref.image || 'default')) {
+    throw new ValidationError(
+      `Cannot address a container for run "${ref.runId}"${ref.image ? ` on the "${ref.image}" executor image` : ''}: ` +
+        `the container key "${key}" does not read back as the run and image it was built from, so ` +
+        `every reader of it (the dispatch, the poll, the orphan sweep) would disagree about which ` +
+        `run owns the container. A run id may not put a variant-shaped segment before a ":", and a ` +
+        `variant name must be a lower-kebab slug.`,
+      {
+        reason: 'container_key_not_reversible',
+        runId: ref.runId,
+        ...(ref.image ? { image: ref.image } : {}),
+      },
+    )
+  }
+  return key
 }
 
 /**
@@ -690,11 +743,13 @@ export function containerKeyForRef(ref: RunnerJobRef): string {
  * at boot, the backends' variant-map schemas), so a prefix this rejects is one no registration
  * could have produced.
  *
- * What that leaves is a prefix which IS slug-shaped and was never a variant. Open names make it
- * unknowable here, and this reads keys the inventory holds, every one of them written by
- * {@link containerKeyForRef} from a ref whose variant a registration declared. So the guard is
- * what it can still be, a refusal of anything unshaped, and a key scheme that wants to put a
- * colon in a run id has to stay outside the slug shape to survive it.
+ * What that leaves is a prefix which IS slug-shaped and was never a variant. Open names make that
+ * case unknowable HERE, so it is not decided here: {@link containerKeyForRef} refuses to mint a key
+ * this function would read back differently, which is what makes the pair exact rather than merely
+ * careful. Every key the inventory holds was written by that producer, so a prefix reaching this
+ * point and passing the shape test came from a variant a registration declared. The split of
+ * responsibility is the point: the reader refuses anything UNSHAPED, and the writer refuses
+ * anything AMBIGUOUS, because only one of them holds the ref to compare against.
  */
 export function parseContainerKey(containerKey: string): {
   runId: string

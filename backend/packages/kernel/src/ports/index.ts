@@ -619,7 +619,9 @@ export {
   PLATFORM_IMAGE_VARIANTS,
   RUNNER_IMAGE_UNWIRED_REASON,
   runIdFromContainerKey,
+  unservablePlatformImageVariant,
 } from './runner-transport.js'
+export type { PlatformImageVariant } from './runner-transport.js'
 export type { PreviewRef, PreviewTransport, PreviewView } from './preview-transport.js'
 export { PREVIEW_HARNESS_JOB_ID, PREVIEW_PROVISION_TYPE } from './preview-transport.js'
 export type {

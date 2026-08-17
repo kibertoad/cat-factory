@@ -105,57 +105,10 @@ describe('generative binary integration registry validation', () => {
     ).toHaveLength(1)
   })
 
-  it('fails boot when two INTEGRATIONS want one variable to hold different values', () => {
-    // Within a definition the schema already refuses this. Across definitions there is no
-    // arbitration that can be right: serving the first claimant sets the variable the second
-    // integration's brief tells the agent to read, so it authenticates one vendor with the other's
-    // key, and withholding it (what dispatch does) costs both integrations every run. The remedy
-    // is one `envName` on one definition, which is why boot is where it is said.
-    const problems = problemsFor([
-      {
-        ...valid,
-        id: 'retro-diffusion',
-        credentials: [{ key: 'RD_TOKEN', envName: 'VENDOR_KEY' }],
-      },
-      { ...valid, id: 'studio-music', credentials: [{ key: 'STUDIO_KEY', envName: 'VENDOR_KEY' }] },
-    ])
-    expect(problems).toHaveLength(1)
-    expect(problems[0]?.code).toBe('binary_generator_injection_name_collision')
-    expect(problems[0]?.message).toContain('VENDOR_KEY')
-    expect(problems[0]?.message).toContain('retro-diffusion')
-    expect(problems[0]?.message).toContain('studio-music')
-    // Compared case-folded: the pair below is one variable wherever the environment ignores case,
-    // so an exact comparison would pass the collision on the platform nobody would see it on.
-    expect(
-      problemsFor([
-        { ...valid, id: 'retro-diffusion', credentials: [{ key: 'RD', envName: 'VENDOR_KEY' }] },
-        { ...valid, id: 'studio-music', credentials: [{ key: 'SK', envName: 'vendor_key' }] },
-      ]).map((problem) => problem.code),
-    ).toEqual(['binary_generator_injection_name_collision'])
-  })
-
-  it('accepts two integrations SHARING one account, which is the same name over the same key', () => {
-    // One vendor behind an image endpoint and a music endpoint is one credential, and the shared
-    // variable is the point rather than a collision: whichever resolves first sets it to exactly
-    // what the other wanted. A check keyed on the NAME alone would refuse the working case.
-    expect(
-      problemsFor([
-        { ...valid, id: 'retro-diffusion', credentials: [{ key: 'RD_TOKEN' }] },
-        { ...valid, id: 'retro-music', credentials: [{ key: 'RD_TOKEN' }] },
-      ]),
-    ).toEqual([])
-  })
-
-  it('compares only definitions that PARSED, so one fault is never restated as two', () => {
-    const problems = problemsFor([
-      { ...valid, id: 'retro-diffusion', credentials: [{ key: 'ENCRYPTION_KEY' }] },
-      { ...valid, id: 'studio-music', credentials: [{ key: 'ENCRYPTION_KEY' }] },
-    ])
-    expect(problems.map((problem) => problem.code)).toEqual([
-      'binary_generator_invalid',
-      'binary_generator_invalid',
-    ])
-  })
+  // A collision ACROSS definitions is graded by section 11 rather than here, over every capability
+  // registry at once, so its cases live in `validateCredentialInjection.test.ts`. This section keeps
+  // only what is true of ONE definition: two of ITS OWN credentials arriving as one variable, which
+  // the schema refuses at the parse above.
 
   it('fails boot on a cleartext endpoint off loopback, because the credential rides it', () => {
     const problems = problemsFor([{ ...valid, endpoint: 'http://api.example.com/v1' }])

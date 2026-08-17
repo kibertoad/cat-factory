@@ -408,9 +408,10 @@ what the other wanted. Different keys behind one name is the opposite and has no
 Serving the first claimant sets the variable the SECOND integration's brief tells the agent to
 read, so it authenticates one vendor with the other's key, and a pair loses a half the same way
 while the brief still says the two names belong together. So boot refuses it
-(`binary_generator_injection_name_collision`), and dispatch, which a mothership node reaches with
-definitions it never boot-validated, withholds the value from every claimant rather than picking
-one. Unset is the only state the brief already describes truthfully.
+(`capability_injection_name_collision`, graded over every capability registry at once, since a
+foundational service claims variables the generator registry cannot see), and dispatch, which a
+mothership node reaches with definitions it never boot-validated, withholds the value from every
+claimant rather than picking one. Unset is the only state the brief already describes truthfully.
 
 **The multi-credential set line states its joint rule over the REQUIRED members alone.** "Never
 call the integration with a subset of them" is right for a Basic pair and contradicts an optional
@@ -1169,8 +1170,10 @@ identical reason, and `resolveWorkerRegistries` reads it ahead of the shipped de
   agree about it: the definition, and kernel's seed catalog, which cannot import the package that
   defines it.
 - **The rules `defineBinaryGenerator` runs are the BOOT rules**, moved into kernel
-  (`binaryGeneratorDetailIssues`, `binaryGeneratorInjectionCollisions`) and called by both the
-  authoring seam and `collectRegistrationProblems`. They lived inside orchestration's boot
+  (`binaryGeneratorDetailIssues`) and called by both the authoring seam and
+  `collectRegistrationProblems`. The one fault that spans DEFINITIONS is not among them: an injection
+  name is claimed across registries too, so it is graded once for all of them by contracts'
+  `credentialInjectionCollisions`. They lived inside orchestration's boot
   validator, where a definitions package could not reach them: stefka's own package restated them
   against the same leaf helpers and documented the copy as "a mirror and can drift", which is the
   thing a growing rule set cannot survive.

@@ -223,11 +223,25 @@ export const KUBERNETES_RUNNER_TOKEN_SECRET_KEY = 'apiToken'
  * kind naming its own variant, and an operator fills in a backend's variant map in the SPA.
  * Kernel re-exports it, so a backend and a registration are held to one list.
  */
-export const PLATFORM_IMAGE_VARIANTS: readonly string[] = ['default', 'ui', 'deploy']
+export const PLATFORM_IMAGE_VARIANTS = ['default', 'ui', 'deploy'] as const
+
+/**
+ * One of the variants the platform publishes, as a CLOSED union derived from the picklist above.
+ *
+ * A literal tuple rather than `readonly string[]` so the members are a type and not just data.
+ * That is what lets a backend switch over them exhaustively: each platform image needs its own
+ * arm (its own image setting, its own refusal naming what an operator loses by leaving it
+ * unwired), so a fourth published image is a decision every backend has to make, and the only
+ * thing that can make it make it is a build failure. Read through
+ * {@link isPlatformImageVariant}, never by respelling the names: a branch that restated them
+ * routes a newly published image into the deployment-owned half and refuses it as unwired on the
+ * one runtime that ships it, with nothing failing at compile time.
+ */
+export type PlatformImageVariant = (typeof PLATFORM_IMAGE_VARIANTS)[number]
 
 /** Whether `variant` is one the platform publishes, rather than a deployment's own. */
-export function isPlatformImageVariant(variant: string): boolean {
-  return PLATFORM_IMAGE_VARIANTS.includes(variant)
+export function isPlatformImageVariant(variant: string): variant is PlatformImageVariant {
+  return (PLATFORM_IMAGE_VARIANTS as readonly string[]).includes(variant)
 }
 
 /** The shape every image-variant name is held to: a bounded lower-kebab slug. */

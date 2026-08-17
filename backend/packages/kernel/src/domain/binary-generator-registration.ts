@@ -1,8 +1,6 @@
 import {
   type BinaryGeneratorDefinition,
   binaryAcceptsWithoutCapability,
-  credentialInjectionName,
-  comparableCredentialInjectionName,
   modalitiesOfMediaType,
 } from '@cat-factory/contracts'
 import {
@@ -24,6 +22,13 @@ import { isHarnessKind } from '../ports/model-provider.js'
 // each needing something only kernel holds: the URL policy a credential-bearing endpoint is held
 // to, the contract-set rules the catalog renderer imposes, the media-type classifier, the list of
 // harnesses that carry a generation tool, and the capability↔accepted-value pairing.
+//
+// Every rule here grades ONE definition. The one fault that spans definitions, two capabilities
+// claiming one environment variable for different lookup keys, is NOT here: it spans REGISTRIES
+// too (a generative integration and a foundational service cannot see each other), so scoping it
+// to this module's definition type would grade the same collision once per registry and hand an
+// operator two remediations for one variable. It lives beside the injection-name fallback it is
+// about, as contracts' `credentialInjectionCollisions`.
 //
 // They live in kernel rather than in the boot validator that used to own them because they have
 // TWO callers with the same question. `collectRegistrationProblems` asks it at boot, where the
@@ -53,7 +58,6 @@ export type BinaryGeneratorRegistrationIssueCode =
   | 'binary_generator_modality_mismatch'
   | 'binary_generator_unknown_harness'
   | 'binary_generator_accepts_without_capability'
-  | 'binary_generator_injection_name_collision'
 
 /** One fault, in the words the deployment reads at boot. */
 export interface BinaryGeneratorRegistrationIssue {
@@ -161,61 +165,6 @@ export function binaryGeneratorDetailIssues(
         `while the agent's brief states it. Declare "${capability}", or drop the set if the ` +
         `endpoint genuinely takes no such parameter.`,
     )
-  }
-  return issues
-}
-
-/**
- * The one rule that spans DEFINITIONS: two integrations may not inject different values into one
- * environment variable.
- *
- * Within a definition the schema already refuses a repeated injection name. Across definitions the
- * same name is legitimate and common, because one vendor behind an image endpoint and a music
- * endpoint is one account: what makes that case safe is that both look the value up under the SAME
- * key, so whichever integration is resolved first sets the variable to exactly what the other
- * wanted. Different keys behind one name is the opposite, and there is no arbitration that makes
- * it right. Serving the first claimant sets the variable the second integration's brief tells the
- * agent to read, so the agent authenticates one vendor with another's key; withholding it (what
- * dispatch does, since a mothership node validates nothing) costs both integrations every run.
- *
- * Takes the definitions that PARSED. Reading a malformed one's credentials here would restate a
- * fault already reported as a second, more confusing one.
- */
-export function binaryGeneratorInjectionCollisions(
-  definitions: readonly BinaryGeneratorDefinition[],
-): BinaryGeneratorRegistrationIssue[] {
-  // Grouped by the COMPARABLE (case-folded) name and reported under the spelling the deployment
-  // wrote, because `ACME_KEY` and `acme_key` are one variable wherever the environment is
-  // case-insensitive and two everywhere else: the pair collides on exactly the platform where the
-  // operator has the least chance of noticing.
-  const claims = new Map<string, { spelling: string; byKey: Map<string, string[]> }>()
-  for (const definition of definitions) {
-    for (const credential of definition.credentials ?? []) {
-      const comparable = comparableCredentialInjectionName(credential)
-      const claim = claims.get(comparable) ?? {
-        spelling: credentialInjectionName(credential),
-        byKey: new Map<string, string[]>(),
-      }
-      claim.byKey.set(credential.key, [...(claim.byKey.get(credential.key) ?? []), definition.id])
-      claims.set(comparable, claim)
-    }
-  }
-  const issues: BinaryGeneratorRegistrationIssue[] = []
-  for (const [, { spelling: envName, byKey }] of claims) {
-    if (byKey.size < 2) continue
-    const described = [...byKey]
-      .map(([key, ids]) => `"${key}" (${ids.join(', ')})`)
-      .sort()
-      .join(' and ')
-    issues.push({
-      code: 'binary_generator_injection_name_collision',
-      message:
-        `Generative binary integrations disagree about environment variable "${envName}": it is ` +
-        `declared for lookup keys ${described}. One variable cannot hold both values, so an agent ` +
-        `told to read it for one integration would authenticate with the other's credential. Give ` +
-        `one of them a distinct \`envName\`, or point both at the same lookup key if they really ` +
-        `share an account.`,
-    })
   }
   return issues
 }

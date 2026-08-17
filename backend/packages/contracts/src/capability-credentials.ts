@@ -375,3 +375,82 @@ export function uniqueCredentialInjectionNames(
   const names = credentials.map(comparableCredentialInjectionName)
   return new Set(names).size === names.length
 }
+
+/** One capability that claims environment variables, as {@link credentialInjectionCollisions} reads it. */
+export interface CredentialInjectionClaimant {
+  /**
+   * How this claimant is NAMED in the fault message, qualified by what it is: `integration "x"`,
+   * `service "y"`. The rule spans registries, so an id alone would leave an operator hunting for
+   * which registry to edit.
+   */
+  owner: string
+  credentials?: readonly CapabilityCredentialNames[]
+}
+
+/** One environment variable two or more claimants want to hold different values. */
+export interface CredentialInjectionCollision {
+  /** The variable, in the spelling the deployment wrote (comparison is case-folded; injection is not). */
+  envName: string
+  message: string
+}
+
+/**
+ * The rule that spans DECLARATIONS: two capabilities may not inject different values into one
+ * environment variable.
+ *
+ * The across-declaration twin of {@link uniqueCredentialInjectionNames}, and stated over CLAIMANTS
+ * rather than over any one registry's definition type because the variable is the shared resource
+ * and the registries cannot see each other. A generative integration, a foundational service and
+ * an MCP tool server are registered independently, and the pair only meets when a step selects
+ * both, so a rule scoped to one registry answers a question narrower than the fault: the same
+ * collision graded twice, once per registry, produces two remediations for one variable.
+ *
+ * A SHARED name is legitimate and common, because one vendor behind an image endpoint and a music
+ * endpoint is one account: what makes that safe is that both look the value up under the SAME key,
+ * so whichever resolves first sets the variable to exactly what the other wanted. Different keys
+ * behind one name is the opposite, and there is no arbitration that makes it right. Serving the
+ * first claimant sets the variable the second capability's brief tells the agent to read, so the
+ * agent authenticates one thing with another's credential; withholding it (what dispatch does,
+ * since a mothership node validates nothing) costs both capabilities every run. Only a
+ * disagreement about the VALUE is reported.
+ *
+ * Takes the claimants that PARSED. Reading a malformed definition's credentials would restate a
+ * fault already reported as a second, more confusing one.
+ */
+export function credentialInjectionCollisions(
+  claimants: readonly CredentialInjectionClaimant[],
+): CredentialInjectionCollision[] {
+  // Grouped by the COMPARABLE (case-folded) name and reported under the spelling the deployment
+  // wrote, because `ACME_KEY` and `acme_key` are one variable wherever the environment ignores case
+  // and two everywhere else: the pair collides on exactly the platform where the operator has the
+  // least chance of noticing it.
+  const claims = new Map<string, { spelling: string; byKey: Map<string, string[]> }>()
+  for (const claimant of claimants) {
+    for (const credential of claimant.credentials ?? []) {
+      const comparable = comparableCredentialInjectionName(credential)
+      const claim = claims.get(comparable) ?? {
+        spelling: credentialInjectionName(credential),
+        byKey: new Map<string, string[]>(),
+      }
+      claim.byKey.set(credential.key, [...(claim.byKey.get(credential.key) ?? []), claimant.owner])
+      claims.set(comparable, claim)
+    }
+  }
+  const collisions: CredentialInjectionCollision[] = []
+  for (const [, { spelling, byKey }] of claims) {
+    if (byKey.size < 2) continue
+    const described = [...byKey]
+      .map(([key, owners]) => `"${key}" (${owners.join(', ')})`)
+      .sort()
+      .join(' and ')
+    collisions.push({
+      envName: spelling,
+      message:
+        `Registered capabilities disagree about environment variable "${spelling}": it is declared ` +
+        `for lookup keys ${described}. One variable cannot hold both values, so every dispatch ` +
+        `carrying both withholds it from BOTH of them. Give one a distinct \`envName\`, or point ` +
+        `both at the same lookup key if they really share an account.`,
+    })
+  }
+  return collisions
+}

@@ -1,9 +1,11 @@
 import {
   deploymentImageVariantMessage,
+  isPlatformImageVariant,
   RUNNER_IMAGE_UNWIRED_REASON as UNWIRED_REASON,
   UnavailableError,
+  unservablePlatformImageVariant,
 } from '@cat-factory/kernel'
-import type { RunnerImageVariant } from '@cat-factory/kernel'
+import type { PlatformImageVariant, RunnerImageVariant } from '@cat-factory/kernel'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { DeployContainer } from './DeployContainer'
 import type { ExecutionContainer } from './ExecutionContainer'
@@ -75,19 +77,50 @@ export function agentContainerNamespace(bindings: {
   deployment?: Record<string, RunContainerNamespace>
 }): ResolveRunContainerNamespace {
   return (variant) => {
-    if (variant && variant !== 'default' && variant !== 'ui' && variant !== 'deploy') {
-      const bound = bindings.deployment?.[variant]
+    // An absent variant is `default` spelled by omission (`containerKeyForRef` and the kind
+    // registry both read it that way), normalised HERE so the split below has one thing to ask
+    // about and the platform half needs no arm for the empty case.
+    const declared = variant || 'default'
+    // A DEPLOYMENT's own variant is everything the platform does not publish, asked through the
+    // shared predicate rather than by respelling the platform names here. Respelling them is silent
+    // in the direction that matters: a fourth platform image would fall into this branch and be
+    // refused as unwired on the one runtime that ships it, with nothing failing at compile time.
+    // Asking through the predicate also NARROWS, which is what makes the switch below exhaustive.
+    if (!isPlatformImageVariant(declared)) {
+      const bound = bindings.deployment?.[declared]
       if (bound) return bound
       throw new UnavailableError(
         deploymentImageVariantMessage(
-          variant,
-          `a \`[[containers]]\` class plus its ${deploymentContainerBinding(variant)} durable-object binding`,
+          declared,
+          `a \`[[containers]]\` class plus its ${deploymentContainerBinding(declared)} durable-object binding`,
         ),
         RUNNER_IMAGE_UNWIRED_REASON,
-        { image: variant, binding: deploymentContainerBinding(variant) },
+        { image: declared, binding: deploymentContainerBinding(declared) },
       )
     }
-    if (variant === 'ui') {
+    return platformContainerNamespace(declared, bindings)
+  }
+}
+
+/**
+ * The platform half of {@link agentContainerNamespace}: one arm per image THIS repo publishes.
+ *
+ * Exhaustive over {@link PlatformImageVariant}, so publishing a fourth platform image fails this
+ * build until the Worker says which class serves it. That failure is the point: each arm below is a
+ * different fact (a class that exists, a class an operator must bind, a path this transport does not
+ * serve at all), so there is no default a new image could safely inherit.
+ */
+function platformContainerNamespace(
+  variant: PlatformImageVariant,
+  bindings: {
+    exec: DurableObjectNamespace<ExecutionContainer>
+    ui?: DurableObjectNamespace<UiTesterContainer>
+  },
+): RunContainerNamespace {
+  switch (variant) {
+    case 'default':
+      return bindings.exec
+    case 'ui':
       if (bindings.ui) return bindings.ui
       throw new UnavailableError(
         'This step runs on the UI-tester executor image (Playwright + a browser), but this ' +
@@ -99,8 +132,7 @@ export function agentContainerNamespace(bindings: {
         RUNNER_IMAGE_UNWIRED_REASON,
         { image: variant, binding: 'UI_CONTAINER' },
       )
-    }
-    if (variant === 'deploy') {
+    case 'deploy':
       throw new UnavailableError(
         'An agent step declared the `deploy` executor image, which the agent runner path does ' +
           'not serve: deploy jobs run through the environment-provisioning adapter and its own ' +
@@ -108,8 +140,8 @@ export function agentContainerNamespace(bindings: {
         RUNNER_IMAGE_UNWIRED_REASON,
         { image: variant, binding: 'DEPLOY_CONTAINER' },
       )
-    }
-    return bindings.exec
+    default:
+      return unservablePlatformImageVariant(variant)
   }
 }
 

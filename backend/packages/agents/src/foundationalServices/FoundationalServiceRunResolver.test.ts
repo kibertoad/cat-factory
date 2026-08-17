@@ -262,4 +262,53 @@ describe('FoundationalServiceRunResolver credentials', () => {
     const files = await resolver.contextFilesFor('ws', { declared: ['file-storage'], unknown: [] })
     expect(files[1]?.content).toContain('$FILE_STORAGE_TOKEN')
   })
+
+  // The selection resolves credentials for BOTH its id sets (`briefedServiceIds` unions the storage
+  // id with the context ids), so a context service's value is in the job env exactly as storage's
+  // is. Storage was named in two places and a context service in neither: the brief's scope section
+  // rendered no credentials and its contract file was built without them, which is a live secret in
+  // an agent's process with no layer naming the variable that holds it.
+  const catalogued: ResolvedFoundationalService = {
+    ...entry('asset-index'),
+    name: 'Asset Index',
+    tier: 'builtin',
+    credentials: [
+      { key: 'ASSET_INDEX_TOKEN', envName: 'INDEX_TOKEN', usage: 'the X-Index header' },
+    ],
+  }
+
+  it('names a CONTEXT service’s credential in its contract file', async () => {
+    const resolver = new FoundationalServiceRunResolver(
+      catalog(
+        [authenticated, catalogued],
+        new Map([
+          ['file-storage', [document]],
+          ['asset-index', [document]],
+        ]),
+      ),
+    )
+    const files = await resolver.binaryOutputContextFilesFor('ws', {
+      storageServiceId: 'file-storage',
+      contextServiceIds: ['asset-index'],
+    })
+    const contract = files.find((file) => file.path === binaryContextFileFor('asset-index'))
+    expect(contract?.content).toContain('$INDEX_TOKEN')
+    expect(contract?.content).toContain('the X-Index header')
+  })
+
+  it('names it in the BRIEF as well, so a service with no contract still names its variable', async () => {
+    // The half a contract file cannot cover: a service with no registered contract gets no file at
+    // all, so the brief is the only surface left. Storage has always been briefed this way; this is
+    // the same statement for the scope half.
+    const resolver = new FoundationalServiceRunResolver(
+      catalog([authenticated, catalogued], new Map([['file-storage', [document]]])),
+    )
+    const files = await resolver.binaryOutputContextFilesFor('ws', {
+      storageServiceId: 'file-storage',
+      contextServiceIds: ['asset-index'],
+    })
+    expect(files.map((file) => file.path)).not.toContain(binaryContextFileFor('asset-index'))
+    const brief = files.find((file) => file.path === BINARY_OUTPUT_BRIEF_FILE)
+    expect(brief?.content).toContain('$INDEX_TOKEN')
+  })
 })

@@ -9,6 +9,7 @@ import {
   isPlatformImageVariant,
   RUNNER_IMAGE_UNWIRED_REASON,
   UnavailableError,
+  unservablePlatformImageVariant,
   ValidationError,
 } from '@cat-factory/kernel'
 import { KUBERNETES_RUNNER_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
@@ -228,30 +229,44 @@ export function resolveImage(
   config: KubernetesRunnerConfig,
   options?: RunnerDispatchOptions,
 ): string {
-  if (options?.image === 'ui') {
-    if (config.imageUi) return config.imageUi
+  const declared = options?.image || 'default'
+  if (!isPlatformImageVariant(declared)) {
+    // A DEPLOYMENT's own variant. Unlike `deploy` below, which falls back to the executor image so
+    // the deploy harness's own preflight reports the missing CLIs, nothing here knows what this one
+    // carries: running the default would produce a job silently missing it.
+    const mapped = config.imageVariants?.[declared]
+    if (mapped) return mapped
     throw new UnavailableError(
-      'This step runs on the UI-tester executor image (Playwright + a browser), but this ' +
-        "runner pool configures no UI-tester image. Set the pool's `imageUi` to a published " +
-        'cat-factory-executor-ui tag. Until then, drop the `tester-ui` step from the pipeline: ' +
-        'the visual-confirmation gate still runs on screenshots a person uploads.',
+      deploymentImageVariantMessage(declared, "the runner backend's `imageVariants`"),
       RUNNER_IMAGE_UNWIRED_REASON,
-      { image: options.image, setting: 'imageUi' },
+      { image: declared, setting: 'imageVariants' },
     )
   }
-  if (options?.image === 'deploy' && config.imageDeploy) return config.imageDeploy
-  const variant = options?.image
-  if (!variant || isPlatformImageVariant(variant)) return config.image
-  // A DEPLOYMENT's own variant. Unlike `deploy` above, which falls back to the executor image so
-  // the deploy harness's own preflight reports the missing CLIs, nothing here knows what this one
-  // carries: running the default would produce a job silently missing it.
-  const mapped = config.imageVariants?.[variant]
-  if (mapped) return mapped
-  throw new UnavailableError(
-    deploymentImageVariantMessage(variant, "the runner backend's `imageVariants`"),
-    RUNNER_IMAGE_UNWIRED_REASON,
-    { image: variant, setting: 'imageVariants' },
-  )
+  // EXHAUSTIVE over the platform's own images, so a fourth published one fails this build until
+  // the pool says which image serves it. Falling through to `config.image` is what that would
+  // otherwise do, and it is the silent failure the whole seam exists to refuse: nothing downstream
+  // can say what the variant was meant to carry.
+  switch (declared) {
+    case 'default':
+      return config.image
+    case 'ui':
+      if (config.imageUi) return config.imageUi
+      throw new UnavailableError(
+        'This step runs on the UI-tester executor image (Playwright + a browser), but this ' +
+          "runner pool configures no UI-tester image. Set the pool's `imageUi` to a published " +
+          'cat-factory-executor-ui tag. Until then, drop the `tester-ui` step from the pipeline: ' +
+          'the visual-confirmation gate still runs on screenshots a person uploads.',
+        RUNNER_IMAGE_UNWIRED_REASON,
+        { image: declared, setting: 'imageUi' },
+      )
+    case 'deploy':
+      // Deliberately NOT symmetric with `ui`: an unconfigured deploy image keeps the pod on the
+      // executor image, whose own preflight then fails loudly naming the missing k8s CLIs (see the
+      // doc above). `ui` has no such backstop, which is why only it refuses here.
+      return config.imageDeploy ?? config.image
+    default:
+      return unservablePlatformImageVariant(declared)
+  }
 }
 
 /** Resolve the pod resource block for a dispatch (per-size override, else the default). */

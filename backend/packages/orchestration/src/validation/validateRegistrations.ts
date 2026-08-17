@@ -25,11 +25,11 @@ import {
   validateFoundationalDefinition,
 } from '@cat-factory/kernel'
 import {
-  type CapabilityCredential,
+  type CredentialInjectionClaimant,
   type CustomTaskType,
   type DescriptorField,
-  comparableCredentialInjectionName,
-  credentialInjectionName,
+  binaryGeneratorDefinitionIssues,
+  credentialInjectionCollisions,
   descriptorConditionHasPredicate,
   duplicatedDescriptorSectionCaptions,
   isDeploymentScopedSource,
@@ -312,8 +312,8 @@ export function collectRegistrationProblems(
   // 10. Deployment-registered PROMPT FRAGMENTS (only when a registry is supplied).
   problems.push(...checkPromptFragments(opts))
 
-  // 11. CROSS-REGISTRY credential collisions: two capabilities from DIFFERENT registries claiming
-  //     one environment variable for different lookup keys.
+  // 11. CREDENTIAL injection-name collisions, over every capability registry at once: two
+  //     capabilities claiming one environment variable for different lookup keys.
   problems.push(...checkCredentialInjectionNames(opts))
 
   return problems
@@ -423,64 +423,48 @@ function checkFoundationalServices(opts: ValidateRegistrationsOptions): Registra
 }
 
 /**
- * Section 11 of {@link collectRegistrationProblems}: two capabilities registered on DIFFERENT
- * registries that want one environment variable to hold different values.
+ * Section 11 of {@link collectRegistrationProblems}: two registered capabilities that want one
+ * environment variable to hold different values.
  *
- * Each registry already refuses this within itself (`binaryGeneratorInjectionCollisions`), and
- * neither can see the other: a generative integration and a foundational service are registered
- * independently, so the pair only meets when a step selects both. Dispatch handles that safely by
- * withholding the variable from BOTH — the one disposition the briefs describe truthfully — but
- * safely is not the same as visibly. Left to the runtime, the symptom is two capabilities reported
- * unavailable on every run of one step, with a warning in the log and nothing at the boundary
- * where the declaration was written.
+ * The ONE place that fault is graded, over EVERY capability registry at once. It used to be graded
+ * per registry as well, and that is the trap the shape avoids: a generative integration and a
+ * foundational service are registered independently and neither can see the other, so a rule scoped
+ * to one registry answers a question narrower than the fault. Running both meant a
+ * generator-vs-generator pair was reported twice, under two codes, with two remediations for one
+ * variable; running only the per-registry ones meant a cross-registry pair was reported nowhere.
  *
- * Same shape as the within-registry rule, and the same reason it is a rule at all: serving the
- * first claimant sets the variable the second capability's brief tells the agent to read, so the
- * agent authenticates one thing with another's credential. A SHARED key behind one name is
- * legitimate and common (an org running its own storage and its own generation endpoint off one
- * token), so only a disagreement about the VALUE is reported.
+ * Dispatch already handles the collision safely by withholding the variable from BOTH claimants,
+ * the one disposition the briefs describe truthfully, but safely is not the same as visibly. Left to
+ * the runtime the symptom is two capabilities reported unavailable on every run of one step, with a
+ * warning in the log and nothing at the boundary where the declaration was written.
+ *
+ * The RULE is contracts' `credentialInjectionCollisions`, beside the injection-name fallback it is
+ * about; what stays here is the boot taxonomy (severity + code) and WHICH claimants are graded.
  */
 function checkCredentialInjectionNames(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
   const { binaryGeneratorRegistry, foundationalServiceRegistry } = opts.registries
-  if (!binaryGeneratorRegistry || !foundationalServiceRegistry) return []
-  // Keyed by the CASE-FOLDED name and reported under the spelling the deployment wrote, because
-  // the pair is one variable exactly where the operator is least likely to notice.
-  const claims = new Map<string, { spelling: string; byKey: Map<string, string[]> }>()
-  const claim = (owner: string, credentials: readonly CapabilityCredential[] | undefined) => {
-    for (const credential of credentials ?? []) {
-      const comparable = comparableCredentialInjectionName(credential)
-      const entry = claims.get(comparable) ?? {
-        spelling: credentialInjectionName(credential),
-        byKey: new Map<string, string[]>(),
-      }
-      entry.byKey.set(credential.key, [...(entry.byKey.get(credential.key) ?? []), owner])
-      claims.set(comparable, entry)
+  const claimants: CredentialInjectionClaimant[] = []
+  // Only definitions that PARSED are compared, in both registries: a malformed one is already
+  // reported by its own section, and reading its credentials here would restate that fault as a
+  // second, more confusing one.
+  for (const definition of binaryGeneratorRegistry?.all() ?? []) {
+    if (binaryGeneratorDefinitionIssues(definition).length === 0) {
+      claimants.push({
+        owner: `integration "${definition.id}"`,
+        credentials: definition.credentials,
+      })
     }
   }
-  for (const definition of binaryGeneratorRegistry.all()) {
-    claim(`integration "${definition.id}"`, definition.credentials)
+  for (const definition of foundationalServiceRegistry?.all() ?? []) {
+    if (foundationalServiceDefinitionIssues(definition).length === 0) {
+      claimants.push({ owner: `service "${definition.id}"`, credentials: definition.credentials })
+    }
   }
-  for (const definition of foundationalServiceRegistry.all()) {
-    claim(`service "${definition.id}"`, definition.credentials)
-  }
-  const problems: RegistrationProblem[] = []
-  for (const [, { spelling, byKey }] of claims) {
-    if (byKey.size < 2) continue
-    const described = [...byKey]
-      .map(([key, owners]) => `"${key}" (${owners.join(', ')})`)
-      .sort()
-      .join(' and ')
-    problems.push({
-      severity: 'error',
-      code: 'capability_injection_name_collision',
-      message:
-        `Registered capabilities disagree about environment variable "${spelling}": it is declared ` +
-        `for lookup keys ${described}. One variable cannot hold both values, so every dispatch ` +
-        `carrying both withholds it from BOTH of them. Give one a distinct \`envName\`, or point ` +
-        `both at the same lookup key if they really share an account.`,
-    })
-  }
-  return problems
+  return credentialInjectionCollisions(claimants).map((collision) => ({
+    severity: 'error' as const,
+    code: 'capability_injection_name_collision',
+    message: collision.message,
+  }))
 }
 
 /**

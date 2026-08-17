@@ -439,7 +439,6 @@ export {
   type BinaryGeneratorRegistrationIssue,
   type BinaryGeneratorRegistrationIssueCode,
   binaryGeneratorDetailIssues,
-  binaryGeneratorInjectionCollisions,
 } from './domain/binary-generator-registration.js'
 
 // SIDE-BY-SIDE CANDIDATE COMPARISON on a binary-output step: the two-phase brief (generate

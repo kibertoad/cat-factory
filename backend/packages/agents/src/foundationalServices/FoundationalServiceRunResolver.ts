@@ -237,7 +237,8 @@ export class FoundationalServiceRunResolver {
         body: doc.body,
       }))
       // A service with no registered contract gets no file — the brief already states that
-      // apart, and an empty document would read as an API with no operations.
+      // apart, and an empty document would read as an API with no operations. Its credentials are
+      // named in the brief rather than here, which is why dropping the file costs nothing.
       if (contracts.length === 0) continue
       files.push({
         path: binaryContextFileFor(service.id),
@@ -247,6 +248,12 @@ export class FoundationalServiceRunResolver {
           summary: service.summary,
           description: service.description,
           contracts,
+          // Beside the contract they authenticate, the same way `contextFilesFor` does it. Omitting
+          // them here left a CONTEXT service in the state this seam exists to end: its value is
+          // injected into the job env (`briefedServiceIds` resolves the selection's context ids
+          // too), the contract says every route wants a bearer token, and no layer named the
+          // variable holding one. Storage escaped it only because the brief names its credentials.
+          ...(service.credentials?.length ? { credentials: service.credentials } : {}),
         }),
       })
     }

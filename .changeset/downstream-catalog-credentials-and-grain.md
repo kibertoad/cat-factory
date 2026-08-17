@@ -71,3 +71,46 @@ would produce a job silently missing whatever it carried.
 **Bug fix**: the Kubernetes runner pool keyed its pod by run id alone, so a `tester-ui` step
 re-attached to the pod an earlier step created on the base image and ran browser work without a
 browser. It now keys by `containerKeyForRef`, like the Cloudflare and local backends.
+
+**The open variant name keeps its compile-time guard.** `PLATFORM_IMAGE_VARIANTS` is a literal tuple
+exporting a `PlatformImageVariant` union, `isPlatformImageVariant` narrows to it, and all three
+backends split on that predicate and then switch EXHAUSTIVELY over the platform half. Opening the
+type cost the `never` arm that used to make a new variant fail the build, and the three backends had
+respelled the platform names inline: a fourth published image would have routed into the
+deployment-owned half and been refused as unwired on the one runtime that ships it (the Kubernetes
+pool would have served it the DEFAULT image silently), with nothing failing at compile time.
+
+**A container key is refused if it cannot be read back** (`container_key_not_reversible`), and the
+Apple `container` adapter refuses a container NAME the same way. Recovering the run behind a key is a
+shape test, because variant names are open and the reader holds no config, so it cannot decide a run
+id whose leading segment is itself a legal variant name: it splits to a run that does not exist, and
+the orphan sweep then deletes a live container. Only the producer can compare against the ref, so
+that is where the check lives. Nothing the platform mints today can trip it; on Apple it also catches
+the name sanitiser collapsing two distinct keys onto one name.
+
+**A credential injection-name collision is reported ONCE, over every capability registry.** The rule
+moved to contracts (`credentialInjectionCollisions`, beside the injection-name fallback it is about)
+and boot grades it in one section. It was graded per registry as well, so a generator-vs-generator
+pair produced two problems under two codes with two remediations for one variable, while a
+service-vs-service pair was graded by neither, and the cross-registry rule needed BOTH registries
+wired to run at all.
+
+**Internal break**: the boot-diagnostic code `binary_generator_injection_name_collision` is retired,
+along with kernel's `binaryGeneratorInjectionCollisions`. Every collision is now
+`capability_injection_name_collision`. These are boot log diagnostics, nothing persists or parses
+them, and the message names the same variable and claimants as before.
+
+**A CONTEXT service's credentials are named to the agent**, in the binary-output brief's scope
+section and in its injected contract file, the way storage's already were. `briefedServiceIds`
+resolves credentials for both id sets, so a context service's value was in the job env while no
+layer named the variable holding it: a bearer-authenticated contract the agent could not call.
+
+**Fixes** the local facade's harness pins, which stayed at 1.124.0 while the harness went to 1.125.0
+and the job body's `generatorSecrets` became `capabilitySecrets`, so a local install on the default
+pin ran an image that ignored the field and dropped every capability credential. The tag guard now
+verifies EVERY pin location in `scripts/runner-images.mjs`, not just the two under `deploy/backend`.
+
+**`LOCAL_HARNESS_IMAGE_VARIANTS` names are held to the slug shape** every declaring boundary
+enforces, and a rejected entry is named in a boot warning. `Pixel-Tools=…` parsed into the map,
+matched no declaration a kind could have made, and the dispatch was then refused pointing at the
+variable the operator had already set it in.

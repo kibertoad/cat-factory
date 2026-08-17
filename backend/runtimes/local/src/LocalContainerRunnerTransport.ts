@@ -16,10 +16,12 @@ import {
   deploymentImageVariantMessage,
   describeError,
   getErrorMessage,
+  isPlatformImageVariant,
   runBestEffort,
   RUNNER_IMAGE_UNWIRED_REASON,
   runIdFromContainerKey,
   UnavailableError,
+  unservablePlatformImageVariant,
 } from '@cat-factory/kernel'
 import { resolveDockerResources } from '@cat-factory/contracts'
 import type { LocalSettings } from '@cat-factory/contracts'
@@ -407,44 +409,54 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
    * A DEPLOYMENT's own variant is worse than either, because nothing here can even name what the
    * image carried. One refused dispatch, naming what to correct, is the cheaper answer to all
    * three.
+   *
+   * The two halves are split by `isPlatformImageVariant` and the platform half is an EXHAUSTIVE
+   * switch, so a fourth published platform image fails this build rather than falling into the
+   * deployment branch and earning a refusal that names `LOCAL_HARNESS_IMAGE_VARIANTS` for an image
+   * no operator could have put there.
    */
   private imageFor(ref: RunnerJobRef): string {
-    const variant = ref.image
-    if (!variant || variant === 'default') return this.image
-    if (variant === 'ui') {
-      // Unreachable via `createLocalContainerTransportFromEnv`, which always resolves the
-      // backend-matched UI tag: a local deployment CAN serve this variant, it just pays for the
-      // pull on first dispatch. It fires for a transport constructed without one.
-      if (this.imageUi) return this.imageUi
+    const declared = ref.image || 'default'
+    if (!isPlatformImageVariant(declared)) {
+      // A DEPLOYMENT's own variant, named by one of its agent kinds and mapped here. The message
+      // is the shared one because this is the case the platform can say nothing specific about: it
+      // does not know what the image carries, only where the mapping goes.
+      const mapped = this.imageVariants[declared]
+      if (mapped) return mapped
       throw new UnavailableError(
-        'This step runs on the UI-tester executor image (Playwright + a browser), which this ' +
-          'transport was built without. Set LOCAL_HARNESS_IMAGE_UI to a published ' +
-          'cat-factory-executor-ui tag (or a locally built one) and restart. Until then, drop ' +
-          'the `tester-ui` step from the pipeline: the visual-confirmation gate still runs on ' +
-          'screenshots a person uploads.',
+        deploymentImageVariantMessage(declared, 'LOCAL_HARNESS_IMAGE_VARIANTS'),
         RUNNER_IMAGE_UNWIRED_REASON,
-        { image: variant, variable: 'LOCAL_HARNESS_IMAGE_UI' },
+        { image: declared, variable: 'LOCAL_HARNESS_IMAGE_VARIANTS' },
       )
     }
-    if (variant === 'deploy') {
-      throw new UnavailableError(
-        'An agent step declared the `deploy` executor image, which the agent runner path does ' +
-          'not serve: deploy jobs run through the environment-provisioning adapter and its own ' +
-          'deploy-harness transport. Correct the agent kind’s registration.',
-        RUNNER_IMAGE_UNWIRED_REASON,
-        { image: variant },
-      )
+    switch (declared) {
+      case 'default':
+        return this.image
+      case 'ui':
+        // Unreachable via `createLocalContainerTransportFromEnv`, which always resolves the
+        // backend-matched UI tag: a local deployment CAN serve this variant, it just pays for the
+        // pull on first dispatch. It fires for a transport constructed without one.
+        if (this.imageUi) return this.imageUi
+        throw new UnavailableError(
+          'This step runs on the UI-tester executor image (Playwright + a browser), which this ' +
+            'transport was built without. Set LOCAL_HARNESS_IMAGE_UI to a published ' +
+            'cat-factory-executor-ui tag (or a locally built one) and restart. Until then, drop ' +
+            'the `tester-ui` step from the pipeline: the visual-confirmation gate still runs on ' +
+            'screenshots a person uploads.',
+          RUNNER_IMAGE_UNWIRED_REASON,
+          { image: declared, variable: 'LOCAL_HARNESS_IMAGE_UI' },
+        )
+      case 'deploy':
+        throw new UnavailableError(
+          'An agent step declared the `deploy` executor image, which the agent runner path does ' +
+            'not serve: deploy jobs run through the environment-provisioning adapter and its own ' +
+            'deploy-harness transport. Correct the agent kind’s registration.',
+          RUNNER_IMAGE_UNWIRED_REASON,
+          { image: declared },
+        )
+      default:
+        return unservablePlatformImageVariant(declared)
     }
-    // A DEPLOYMENT's own variant, named by one of its agent kinds and mapped here. The message
-    // is the shared one because this is the case the platform can say nothing specific about: it
-    // does not know what the image carries, only where the mapping goes.
-    const mapped = this.imageVariants[variant]
-    if (mapped) return mapped
-    throw new UnavailableError(
-      deploymentImageVariantMessage(variant, 'LOCAL_HARNESS_IMAGE_VARIANTS'),
-      RUNNER_IMAGE_UNWIRED_REASON,
-      { image: variant, variable: 'LOCAL_HARNESS_IMAGE_VARIANTS' },
-    )
   }
 
   async dispatch(
@@ -1235,6 +1247,17 @@ export function createLocalContainerTransportFromEnv(
   const image = resolveHarnessImage(env)
   const pool = settings?.pool
   const extraEnv = checkoutExtraEnv(settings)
+  // An entry this facade cannot use is stated HERE, at boot, rather than left to surface as a
+  // refused dispatch naming the variable the operator can already see the variant in. Boot is also
+  // the only moment the whole variable is in view, so a typo is one line to fix instead of a run to
+  // spend discovering.
+  const imageVariants = resolveHarnessImageVariants(env)
+  for (const { entry, reason } of imageVariants.rejected) {
+    logger.warn(
+      `local mode: ignoring LOCAL_HARNESS_IMAGE_VARIANTS entry "${entry}": ${reason}. Any agent ` +
+        `kind declaring that image will be refused at dispatch until the entry is corrected.`,
+    )
+  }
   return new LocalContainerRunnerTransport({
     image,
     // Same rule as the base image, with one difference: the UI image is NOT pre-pulled at boot
@@ -1242,7 +1265,7 @@ export function createLocalContainerTransportFromEnv(
     // most deployments never dispatch to). It is pulled by the runtime on the first `image: 'ui'
     // dispatch, which is the first moment anything needs it.
     imageUi: resolveUiHarnessImage(env),
-    imageVariants: resolveHarnessImageVariants(env),
+    imageVariants: imageVariants.variants,
     adapter: createRuntimeAdapter(env),
     sharedSecret: requireHarnessSharedSecret(env),
     network: env.LOCAL_DOCKER_NETWORK?.trim() || undefined,

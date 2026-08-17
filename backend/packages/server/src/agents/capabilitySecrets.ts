@@ -220,10 +220,10 @@ function planLookups(
  *
  * So the value is withheld from everyone, which is the one disposition the briefs already describe
  * truthfully: an unset variable means the platform could not provide the credential, and both
- * capabilities are reported unavailable rather than one being quietly wrong. Registration refuses
- * this WITHIN a registry (`binary_generator_injection_name_collision`); ACROSS two registries
- * nothing can, because a generator and a foundational service are registered independently and
- * only a dispatch knows which pair ever meets.
+ * capabilities are reported unavailable rather than one being quietly wrong. Boot refuses the pair
+ * over every capability registry at once (`capability_injection_name_collision`), so a deployment
+ * that registers both in code hears about it before serving; this guard still stands because a
+ * mothership node validates nothing, and because only a dispatch knows which pair ever meets.
  */
 function contestedInjectionNames(
   input: ResolveCapabilitySecretsInput,
