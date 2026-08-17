@@ -52,6 +52,29 @@ browser redirect entirely: the SPA posts credentials to `/auth/signup` or
 3. The SPA pulls the token out of the fragment, persists it, and replays it as a
    bearer header. **`GET /auth/me`** validates a stored token on boot.
 
+### Where a login lands
+
+Step 2 hands the session token to a landing URL, which makes that URL's choice a
+**token-exfiltration decision** rather than a convenience: a login link carrying
+`?redirect=https://evil.example` would deliver the victim's own session to whoever
+sent the link. `pickPostLoginRedirect` (`modules/auth/loginFlow.ts`) is the one
+place it is made, shared by every provider that redirects, and it honours a
+requested target only when it is same-origin, on `AUTH_ALLOWED_REDIRECT_ORIGINS`,
+or a **loopback** host; anything else is replaced by the request origin. A set
+`AUTH_SUCCESS_REDIRECT_URL` short-circuits the whole choice.
+
+Loopback is not a hole: capturing a fragment there means already running a server
+on the victim's machine, and admitting it is what lets a mothership-mode local
+node (`http://localhost:PORT`) finish a sign-in through the mothership without an
+operator listing every dev port.
+
+An `AUTH_ALLOWED_REDIRECT_ORIGINS` entry is normalized to an origin at config load
+(`resolveAllowedRedirectOrigins`), and one that is not an http(s) URL **refuses the
+boot** with a `ConfigValidationError` naming it. Kept verbatim it would be a
+string no `URL.origin` can equal, so a missing scheme disabled the allowance with
+nothing to see: the SPA simply stopped receiving sessions. Operator-facing setup
+lives on the site: [Where a login lands](https://www.catfactory.ai/deploy/configuration.html#where-a-login-lands).
+
 Sessions are **stateless**: the token is `base64url(JSON).base64url(HMAC)` with
 an absolute expiry, verified per request (see `infrastructure/auth/signing.ts`).
 There is no server-side session store: logout is a client-side token drop, and

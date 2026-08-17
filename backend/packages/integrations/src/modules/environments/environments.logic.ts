@@ -10,8 +10,8 @@ import type {
 } from '@cat-factory/kernel'
 import type { EnvironmentRecord, UrlSafetyPolicy } from '@cat-factory/kernel'
 import { connectionFailureResult, STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
-import { safeFetch } from '../shared/safe-fetch.js'
 import { assertSafePublicUrl } from '../shared/url-guard.js'
+import { safeFetch } from '../shared/safe-fetch.js'
 
 // Pure helpers for the ephemeral-environment integration: SSRF validation of the
 // URLs we fetch/expose, `{{var}}` interpolation over a bounded scope, dot-path

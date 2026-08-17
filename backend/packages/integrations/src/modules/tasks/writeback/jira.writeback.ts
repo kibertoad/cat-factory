@@ -1,10 +1,10 @@
 import {
   ConflictError,
-  atlassianLogic,
   type TaskCredentials,
   type TaskSourceWritebackAdapter,
   type TaskWritebackContext,
 } from '@cat-factory/kernel'
+import * as atlassianLogic from '../../shared/atlassian.logic.js'
 import {
   buildJiraCommentPayload,
   pickTransitionByCategory,

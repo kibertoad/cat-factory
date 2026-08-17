@@ -1,6 +1,5 @@
 import {
   ValidationError,
-  atlassianLogic,
   getErrorMessage,
   type BugCandidate,
   type IssueIntakeQuery,
@@ -13,6 +12,7 @@ import {
   type TrackerBoard,
   type NormalizedTaskConnection,
 } from '@cat-factory/kernel'
+import * as atlassianLogic from '../shared/atlassian.logic.js'
 import { JIRA_DESCRIPTOR } from './jira.logic.js'
 import * as jiraLogic from './jira.logic.js'
 import { jiraWebhookAdapter } from './webhook/adapters.js'

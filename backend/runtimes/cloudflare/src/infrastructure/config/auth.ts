@@ -1,5 +1,9 @@
 import type { AuthConfig, SsoConfig } from '@cat-factory/server'
-import { resolveMachineTokenTtlMs, resolveSsoConfig } from '@cat-factory/server'
+import {
+  resolveAllowedRedirectOrigins,
+  resolveMachineTokenTtlMs,
+  resolveSsoConfig,
+} from '@cat-factory/server'
 import type { Env } from '../env'
 import { num } from './utils'
 
@@ -141,16 +145,6 @@ export function loadAuthConfig(env: Env): AuthConfig {
       .split(',')
       .map((org) => org.trim().toLowerCase())
       .filter(Boolean),
-    allowedRedirectOrigins: (env.AUTH_ALLOWED_REDIRECT_ORIGINS ?? '')
-      .split(',')
-      .map((origin) => origin.trim())
-      .filter(Boolean)
-      .map((origin) => {
-        try {
-          return new URL(origin).origin
-        } catch {
-          return origin
-        }
-      }),
+    allowedRedirectOrigins: resolveAllowedRedirectOrigins(env.AUTH_ALLOWED_REDIRECT_ORIGINS),
   }
 }

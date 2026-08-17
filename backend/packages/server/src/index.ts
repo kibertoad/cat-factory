@@ -519,6 +519,7 @@ export type {
 // Enterprise SSO (generic OIDC): the shared env resolver both facades call, and the pieces a
 // facade or a test needs to reach the flow without going through the HTTP routes.
 export { resolveSsoConfig, type SsoEnv } from './config/sso.js'
+export { resolveAllowedRedirectOrigins } from './config/redirectOrigins.js'
 export { OidcProviderDirectory, readProviderMetadata } from './auth/oidc/discovery.js'
 export { OidcClient, OidcFlowError, createPkcePair, type PkcePair } from './auth/oidc/OidcClient.js'
 export {

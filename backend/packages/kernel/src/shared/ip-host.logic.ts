@@ -1,12 +1,29 @@
-// Shared, dependency-free IPv4-literal decoding + internal/metadata host
+// Shared, dependency-free IP-literal decoding + internal/metadata host
 // classification for the SSRF guards. Every provider that stores and later fetches an
 // org-supplied URL (Atlassian sites, ephemeral-environment management APIs, the
 // Kubernetes apiserver) validates the host against the local network first. The
 // decoding + classification primitives live here so each guard composes ONE vetted
-// implementation rather than copying it. Host-literal defence-in-depth only — it does
-// not stop DNS rebinding — but it blocks the obvious internal targets including the
-// obfuscated IPv4 encodings (bare integer, hex/octal octets, IPv4-mapped IPv6) that
-// trivially bypass a naive dotted-decimal match.
+// implementation rather than copying it. Host-literal defence-in-depth only: it does
+// not stop DNS rebinding, but it blocks the obvious internal targets including the
+// spellings that trivially bypass a naive dotted-decimal match. Every one of those is
+// DECODED rather than pattern-matched, because a bypass and a false refusal are the two
+// halves of the same mistake: the obfuscated IPv4 encodings (bare integer, hex/octal
+// octets), the IPv6 forms (compressed, expanded, mapped/compatible/NAT64), and the
+// trailing DNS root dot that makes `localhost.` miss a `=== 'localhost'` test.
+
+/**
+ * The comparable form of a hostname: lowercased, with an IPv6 literal's brackets removed and
+ * with the DNS ROOT LABEL (a single trailing dot) dropped.
+ *
+ * The trailing dot is the part that is easy to miss and is a bypass on its own. `localhost.` is
+ * a fully-qualified name for the same host `localhost` names, and both `fetch` and the resolver
+ * treat it that way, but it matches neither `host === 'localhost'` nor a `.localhost` suffix. Every
+ * classifier below starts here so a guard cannot be walked past with one keystroke.
+ */
+function comparableHost(hostname: string): string {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  return host.endsWith('.') ? host.slice(0, -1) : host
+}
 
 /** Whether a decoded IPv4 address is loopback / link-local (metadata) / RFC1918. */
 export function isPrivateV4(parts: [number, number, number, number]): boolean {
@@ -30,26 +47,82 @@ export function decimalV4(host: string): [number, number, number, number] | null
   return [a, b, c, d]
 }
 
+/**
+ * Decode an IPv6 literal to its eight 16-bit groups, or null when it is not one.
+ *
+ * Written out rather than matched by prefix because the SAME address has many spellings and only
+ * the decoded groups compare honestly: `::1`, `0:0:0:0:0:0:0:1` and `[::1]` are one host, and a
+ * `startsWith('fc')` test that reads the TEXT calls the first of those public while refusing a
+ * site legitimately named `fc…`. Accepts the compressed `::` run, the trailing dotted-quad form
+ * (`::ffff:1.2.3.4`), and brackets.
+ */
+export function decodeIpv6(hostname: string): number[] | null {
+  let text = comparableHost(hostname)
+  if (!text.includes(':') || !/^[0-9a-f.:]+$/.test(text)) return null
+
+  // A trailing dotted-quad stands for the last two groups; rewrite it to hex so one parse covers
+  // every form. `::ffff:1.2.3.4` becomes `::ffff:102:304`.
+  if (text.includes('.')) {
+    const cut = text.lastIndexOf(':')
+    const quad = decimalV4(text.slice(cut + 1))
+    if (!quad) return null
+    const hi = ((quad[0] << 8) | quad[1]).toString(16)
+    const lo = ((quad[2] << 8) | quad[3]).toString(16)
+    text = `${text.slice(0, cut + 1)}${hi}:${lo}`
+  }
+
+  const halves = text.split('::')
+  if (halves.length > 2) return null
+  const head = parseGroups(halves[0]!)
+  if (!head) return null
+  if (halves.length === 1) return head.length === 8 ? head : null
+  const tail = parseGroups(halves[1]!)
+  if (!tail) return null
+  // `::` must stand for at least one zero group, or the address is over-long.
+  const zeros = 8 - head.length - tail.length
+  if (zeros < 1) return null
+  return [...head, ...(Array(zeros).fill(0) as number[]), ...tail]
+}
+
+/** The colon-separated hex groups of one half of an IPv6 literal, or null if any is malformed. */
+function parseGroups(part: string): number[] | null {
+  if (part === '') return []
+  const groups: number[] = []
+  for (const group of part.split(':')) {
+    if (!/^[0-9a-f]{1,4}$/.test(group)) return null
+    groups.push(parseInt(group, 16))
+  }
+  return groups
+}
+
+/** The IPv4 address carried in the low 32 bits of an IPv6 address. */
+function lowV4(groups: number[]): [number, number, number, number] {
+  const hi = groups[6]!
+  const lo = groups[7]!
+  return [(hi >> 8) & 0xff, hi & 0xff, (lo >> 8) & 0xff, lo & 0xff]
+}
+
+/**
+ * The IPv4 address an IPv6 literal EMBEDS, or null when it carries none: the IPv4-mapped form
+ * (`::ffff:a.b.c.d`), the deprecated IPv4-compatible form (`::a.b.c.d`, which `::` and `::1` are
+ * members of), and the well-known NAT64 prefix `64:ff9b::/96`. All three reach the embedded
+ * address through some translator, so a guard that decoded only the mapped form would pass
+ * `::7f00:1` to a stack that dials 127.0.0.1.
+ */
+function embeddedV4(groups: number[]): [number, number, number, number] | null {
+  const zeroHead = groups.slice(0, 5).every((g) => g === 0)
+  if (zeroHead && (groups[5] === 0xffff || groups[5] === 0)) return lowV4(groups)
+  const nat64 =
+    groups[0] === 0x64 && groups[1] === 0xff9b && groups.slice(2, 6).every((g) => g === 0)
+  return nat64 ? lowV4(groups) : null
+}
+
 /** Extract the embedded IPv4 of an IPv4-mapped IPv6 literal (`::ffff:…`), or null. */
 export function mappedV4(host: string): [number, number, number, number] | null {
-  // ::ffff:a.b.c.d
-  const dotted = host.match(/^::ffff:(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
-  if (dotted) {
-    const a = Number(dotted[1])
-    const b = Number(dotted[2])
-    const c = Number(dotted[3])
-    const d = Number(dotted[4])
-    if (a > 255 || b > 255 || c > 255 || d > 255) return null
-    return [a, b, c, d]
-  }
-  // ::ffff:hhhh:hhhh (the form `new URL` normalizes `::ffff:1.2.3.4` to).
-  const hex = host.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/)
-  if (hex) {
-    const hi = parseInt(hex[1] ?? '0', 16)
-    const lo = parseInt(hex[2] ?? '0', 16)
-    return [(hi >> 8) & 0xff, hi & 0xff, (lo >> 8) & 0xff, lo & 0xff]
-  }
-  return null
+  const groups = decodeIpv6(host)
+  if (!groups) return null
+  if (!groups.slice(0, 5).every((g) => g === 0) || groups[5] !== 0xffff) return null
+  return lowV4(groups)
 }
 
 /**
@@ -80,10 +153,13 @@ export function decodeIpv4(host: string): [number, number, number, number] | nul
  * Kubernetes apiserver URL) that ALLOW private hosts but must still block metadata.
  */
 export function isCloudMetadataHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  const host = comparableHost(hostname)
   if (host === 'metadata.google.internal') return true
-  // AWS IPv6 IMDS.
-  if (host === 'fd00:ec2::254') return true
+  // AWS IPv6 IMDS, compared as DECODED groups so the expanded spellings match too.
+  const v6 = decodeIpv6(host)
+  if (v6 && v6[0] === 0xfd00 && v6[1] === 0x0ec2 && v6.slice(2, 7).every((g) => g === 0)) {
+    if (v6[7] === 0x254) return true
+  }
   const v4 = decodeIpv4(host)
   if (v4) {
     const [a, b, c, d] = v4
@@ -106,7 +182,7 @@ export function isCloudMetadataHost(hostname: string): boolean {
  * cluster on 10.x is somebody else's, however private its address.
  */
 export function isLoopbackHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  const host = comparableHost(hostname)
   return host === 'localhost' || host === '::1' || /^127\.\d+\.\d+\.\d+$/.test(host)
 }
 
@@ -142,7 +218,7 @@ const LOCAL_MACHINE_ALIASES = new Set([
  * else's machine however private its address, and RFC1918 stays out.
  */
 export function isLocalMachineHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  const host = comparableHost(hostname)
   if (isLoopbackHost(host)) return true
   if (LOCAL_MACHINE_ALIASES.has(host)) return true
   // RFC 6761 reserves the whole `.localhost` tree to loopback.
@@ -156,17 +232,24 @@ export function isLocalMachineHost(hostname: string): boolean {
  * behind the guards that require a public host (Atlassian sites, environment URLs).
  */
 export function isBlockedPrivateHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  const host = comparableHost(hostname)
   if (host === '') return true
   if (host === 'localhost' || host.endsWith('.localhost')) return true
   if (host.endsWith('.internal') || host.endsWith('.local')) return true
 
-  // IPv6 literals (contain a colon).
+  // IPv6 literals (contain a colon). Classified from the DECODED groups: the same address has
+  // several spellings, and a text prefix test answers differently for each. Reading the text also
+  // refused every hostname that merely STARTS with `fc`/`fd` (`fdgroup.atlassian.net`), which is
+  // a public site being told it is a private address.
   if (host.includes(':')) {
-    if (host === '::1' || host === '::') return true
-    if (host.startsWith('fe80:') || host.startsWith('fc') || host.startsWith('fd')) return true
-    const mapped = mappedV4(host)
-    if (mapped) return isPrivateV4(mapped)
+    const groups = decodeIpv6(host)
+    // A colon-bearing host that is not a decodable literal is not a name we can vouch for.
+    if (!groups) return true
+    if ((groups[0]! & 0xffc0) === 0xfe80) return true // fe80::/10 link-local
+    if ((groups[0]! & 0xfe00) === 0xfc00) return true // fc00::/7 unique-local
+    const embedded = embeddedV4(groups)
+    // `::`, `::1` and the mapped/compat/NAT64 forms all land here as the address they reach.
+    if (embedded) return isPrivateV4(embedded)
     return false
   }
 

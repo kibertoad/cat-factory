@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { resolveAllowedRedirectOrigins } from '../src/config/redirectOrigins.js'
+import { isConfigValidationError } from '../src/config/problems.js'
 import { pickPostLoginRedirect } from '../src/modules/auth/loginFlow.js'
 
 // pickPostLoginRedirect guards a token-exfiltration primitive: the session token is
@@ -64,5 +66,46 @@ describe('pickPostLoginRedirect', () => {
     expect(pickPostLoginRedirect('https://127.0.0.1.evil.example/x', ORIGIN, cfg)).toBe(
       `${ORIGIN}/`,
     )
+  })
+})
+
+// The other half of the same knob: what the allow-list above is BUILT from. The two belong in one
+// file because the failure they share is invisible from either side alone: a list the parse
+// mangled is a list `pickPostLoginRedirect` compares against and never matches.
+describe('resolveAllowedRedirectOrigins', () => {
+  it('normalizes each entry to the exact origin a redirect is compared against', () => {
+    expect(resolveAllowedRedirectOrigins('https://app.example.com')).toEqual([
+      'https://app.example.com',
+    ])
+    // A path, a default port and stray whitespace all reduce to the same origin.
+    expect(
+      resolveAllowedRedirectOrigins(' https://app.example.com:443/board , http://dev.local:5173 '),
+    ).toEqual(['https://app.example.com', 'http://dev.local:5173'])
+  })
+
+  it('treats unset and empty as no allowance', () => {
+    expect(resolveAllowedRedirectOrigins(undefined)).toEqual([])
+    expect(resolveAllowedRedirectOrigins('')).toEqual([])
+    expect(resolveAllowedRedirectOrigins(' , ')).toEqual([])
+  })
+
+  it('refuses an entry that could never match an origin, naming it', () => {
+    // The whole point: kept verbatim, `app.example.com` is a string no `URL.origin` ever equals,
+    // so the deployment's cross-origin SPA silently stops receiving its session. A boot that
+    // names the typo is the only outcome an operator can act on.
+    for (const raw of [
+      'app.example.com',
+      'https://app.example.com,not a url',
+      'ftp://files.corp',
+    ]) {
+      let thrown: unknown
+      try {
+        resolveAllowedRedirectOrigins(raw)
+      } catch (err) {
+        thrown = err
+      }
+      expect([raw, isConfigValidationError(thrown)]).toEqual([raw, true])
+      expect(String(thrown)).toContain('AUTH_ALLOWED_REDIRECT_ORIGINS')
+    }
   })
 })

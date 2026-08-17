@@ -442,9 +442,16 @@ export {
 export { assertSafeNotificationWebhookUrl } from './modules/notificationWebhook/webhookUrl.js'
 
 // The provider-neutral SSRF host/scheme guard behind every operator-supplied-URL integration
-// (environments, runner pools, notification webhooks). One implementation, so a bypass found in
-// any of them is fixed for all of them; each caller supplies only its wording + its own policy.
+// (environments, runner pools, notification webhooks, the Atlassian sites). One implementation, so
+// a bypass found in any of them is fixed for all of them; each caller supplies only its wording +
+// its own policy. It sits in this package rather than kernel because it parses with the WHATWG
+// `URL`, which kernel's web-global-free lib cannot see.
 export { assertSafePublicUrl, type PublicUrlGuardOptions } from './modules/shared/url-guard.js'
+export * as atlassianLogic from './modules/shared/atlassian.logic.js'
+export {
+  normalizeAtlassianBaseUrl,
+  assertSafeAtlassianBaseUrl,
+} from './modules/shared/atlassian.logic.js'
 
 // Slack: an additional delivery transport for the existing notification mechanism
 // (the `SlackNotificationChannel` implements the same `NotificationChannel` port),

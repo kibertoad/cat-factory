@@ -117,6 +117,13 @@ export const ENV_HELP = {
       'Set AUTH_SESSION_SECRET to a random string of at least 32 characters. Generate one with `pnpm secrets` (deploy/local) or `openssl rand -hex 32`. It must stay STABLE across restarts — a fresh value forces every user to re-login.',
     docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.authentication),
   },
+  AUTH_ALLOWED_REDIRECT_ORIGINS: {
+    summary:
+      'Origins a post-login redirect may land on, beyond the API origin itself and the loopback hosts. A deployment whose SPA is served from a DIFFERENT origin has to set it.',
+    remedy:
+      'Set AUTH_ALLOWED_REDIRECT_ORIGINS to a comma-separated list of full origins, e.g. `https://app.example.com,https://staging.example.com` (scheme included, no path). A deployment with ONE fixed landing page can set AUTH_SUCCESS_REDIRECT_URL instead, which short-circuits the choice.',
+    docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.authentication),
+  },
   AUTH_PROVIDER: {
     summary:
       'A remote deployment has no anonymous tier, so at least one login provider must be configured or every protected route fails closed.',

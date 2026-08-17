@@ -1,5 +1,4 @@
-import { jiraLogic, tasksLogic } from '@cat-factory/integrations'
-import { atlassianLogic } from '@cat-factory/kernel'
+import { atlassianLogic, jiraLogic, tasksLogic } from '@cat-factory/integrations'
 import { describe, expect, it } from 'vitest'
 
 // Pure-logic unit tests for the Jira provider's source-specific helpers (ref

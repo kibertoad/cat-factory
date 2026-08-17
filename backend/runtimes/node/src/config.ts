@@ -30,6 +30,7 @@ import {
   parseNumericEnv,
   requireEncryptionKey,
   requireGitHubAppPrivateKey,
+  resolveAllowedRedirectOrigins,
   resolveDurationEnv,
   resolveMachineTokenTtlMs,
   resolveSsoConfig,
@@ -534,13 +535,7 @@ function buildAuthConfig(env: NodeJS.ProcessEnv): AppConfig['auth'] {
     allowedEmailDomains: csv(env.AUTH_ALLOWED_EMAIL_DOMAINS).map((d) => d.toLowerCase()),
     allowedLogins: csv(env.AUTH_ALLOWED_LOGINS).map((l) => l.toLowerCase()),
     allowedOrgs: csv(env.AUTH_ALLOWED_ORGS).map((o) => o.toLowerCase()),
-    allowedRedirectOrigins: csv(env.AUTH_ALLOWED_REDIRECT_ORIGINS).map((o) => {
-      try {
-        return new URL(o).origin
-      } catch {
-        return o
-      }
-    }),
+    allowedRedirectOrigins: resolveAllowedRedirectOrigins(env.AUTH_ALLOWED_REDIRECT_ORIGINS),
   }
 }
 

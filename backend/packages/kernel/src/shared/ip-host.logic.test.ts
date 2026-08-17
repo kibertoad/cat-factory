@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   decimalV4,
   decodeIpv4,
+  decodeIpv6,
   isBlockedPrivateHost,
   isCloudMetadataHost,
   isLocalMachineHost,
@@ -90,6 +91,40 @@ describe('mappedV4', () => {
     expect(mappedV4('127.0.0.1')).toBeNull()
     expect(mappedV4('::ffff:zzzz:1')).toBeNull()
     expect(mappedV4('2001:4860:4860::8888')).toBeNull()
+  })
+})
+
+describe('decodeIpv6', () => {
+  it('decodes the compressed, expanded and bracketed spellings of one address alike', () => {
+    expect(decodeIpv6('::1')).toEqual([0, 0, 0, 0, 0, 0, 0, 1])
+    expect(decodeIpv6('0:0:0:0:0:0:0:1')).toEqual([0, 0, 0, 0, 0, 0, 0, 1])
+    expect(decodeIpv6('[::1]')).toEqual([0, 0, 0, 0, 0, 0, 0, 1])
+    expect(decodeIpv6('::')).toEqual([0, 0, 0, 0, 0, 0, 0, 0])
+    expect(decodeIpv6('2001:4860:4860::8888')).toEqual([0x2001, 0x4860, 0x4860, 0, 0, 0, 0, 0x8888])
+  })
+
+  it('decodes a trailing dotted-quad into the low two groups', () => {
+    expect(decodeIpv6('::ffff:127.0.0.1')).toEqual([0, 0, 0, 0, 0, 0xffff, 0x7f00, 1])
+    expect(decodeIpv6('::127.0.0.1')).toEqual([0, 0, 0, 0, 0, 0, 0x7f00, 1])
+    expect(decodeIpv6('64:ff9b::10.0.0.1')).toEqual([0x64, 0xff9b, 0, 0, 0, 0, 0x0a00, 1])
+  })
+
+  it('refuses a malformed literal rather than guessing at it', () => {
+    expect(decodeIpv6('1:2:3:4:5:6:7')).toBeNull() // too few groups, no `::`
+    expect(decodeIpv6('1:2:3:4:5:6:7:8:9')).toBeNull() // too many
+    expect(decodeIpv6('1::2::3')).toBeNull() // two compressions is ambiguous
+    expect(decodeIpv6('::ffff:zzzz:1')).toBeNull()
+    expect(decodeIpv6('::ffff:256.0.0.1')).toBeNull()
+    expect(decodeIpv6('::12345')).toBeNull()
+    expect(decodeIpv6('example.com')).toBeNull()
+    expect(decodeIpv6('127.0.0.1')).toBeNull()
+  })
+
+  it('refuses a `::` that stands for no groups at all', () => {
+    // `1:2:3:4:5:6:7::8` names nine groups; a parser that let `::` mean zero of them would
+    // silently drop one and compare the wrong address.
+    expect(decodeIpv6('1:2:3:4:5:6:7::8')).toBeNull()
+    expect(decodeIpv6('1:2:3:4:5:6:7::')).toEqual([1, 2, 3, 4, 5, 6, 7, 0])
   })
 })
 
@@ -212,6 +247,40 @@ describe('isBlockedPrivateHost', () => {
     expect(isBlockedPrivateHost('2001:4860:4860::8888')).toBe(false)
     expect(isBlockedPrivateHost('example.com')).toBe(false)
     expect(isBlockedPrivateHost('sub.domain.example.co.uk')).toBe(false)
+  })
+
+  it('sees through the DNS root dot, which names the same host', () => {
+    // `https://localhost./` and `https://127.0.0.1./` are fetched exactly as their dotless
+    // spellings, so one trailing keystroke must not walk past the guard.
+    expect(isBlockedPrivateHost('localhost.')).toBe(true)
+    expect(isBlockedPrivateHost('127.0.0.1.')).toBe(true)
+    expect(isBlockedPrivateHost('svc.cluster.internal.')).toBe(true)
+    expect(isBlockedPrivateHost('example.com.')).toBe(false)
+  })
+
+  it('classifies an IPv6 literal by its ADDRESS, not by how it is spelled', () => {
+    // Each of these is a spelling of a local address that no prefix test on the text catches.
+    expect(isBlockedPrivateHost('0:0:0:0:0:0:0:1')).toBe(true)
+    expect(isBlockedPrivateHost('[0:0:0:0:0:0:0:1]')).toBe(true)
+    expect(isBlockedPrivateHost('0:0:0:0:0:ffff:127.0.0.1')).toBe(true)
+    expect(isBlockedPrivateHost('::127.0.0.1')).toBe(true) // IPv4-compatible
+    expect(isBlockedPrivateHost('64:ff9b::169.254.169.254')).toBe(true) // NAT64 to IMDS
+    expect(isBlockedPrivateHost('febf::1')).toBe(true) // the top of fe80::/10
+    expect(isBlockedPrivateHost('fdff::1')).toBe(true) // the top of fc00::/7
+  })
+
+  it('does not read a HOSTNAME as an IPv6 prefix', () => {
+    // The mirror of the case above: `fc00::/7` is a rule about addresses, and applying it to
+    // text refused these customers' own public sites outright.
+    expect(isBlockedPrivateHost('fdgroup.atlassian.net')).toBe(false)
+    expect(isBlockedPrivateHost('fcbarcelona.example.com')).toBe(false)
+    expect(isBlockedPrivateHost('fe80.example.com')).toBe(false)
+  })
+
+  it('refuses a colon-bearing host it cannot decode', () => {
+    // Not a name we can vouch for: fail closed rather than pass an unclassifiable literal.
+    expect(isBlockedPrivateHost('1:2:3:4:5:6:7')).toBe(true)
+    expect(isBlockedPrivateHost('::zzzz')).toBe(true)
   })
 })
 

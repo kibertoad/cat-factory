@@ -831,7 +831,6 @@ export {
 export { normalizeWorkspaceMetadata } from './domain/workspace-metadata.js'
 
 export { MapSourceRegistry } from './shared/source-registry.logic.js'
-export * as atlassianLogic from './shared/atlassian.logic.js'
 export {
   markdownToText,
   buildExcerpt,
@@ -857,13 +856,13 @@ export type { FragmentBriefResolution, StoredFragmentBrief } from './domain/frag
  * crossing it is, where a bare `prose(...)` reads like formatting.
  */
 export * as hostMarkdown from './shared/host-markdown.logic.js'
-export { normalizeAtlassianBaseUrl, assertSafeAtlassianBaseUrl } from './shared/atlassian.logic.js'
 export { normalizeUrl, urlMatchCandidates } from './shared/url.logic.js'
 export {
   isPrivateV4,
   decimalV4,
   mappedV4,
   decodeIpv4,
+  decodeIpv6,
   isCloudMetadataHost,
   isBlockedPrivateHost,
   isLoopbackHost,

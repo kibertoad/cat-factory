@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { UrlSafetyPolicy } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
-import { assertSafeAtlassianBaseUrl } from '@cat-factory/kernel'
+import { assertSafeAtlassianBaseUrl } from '../shared/atlassian.logic.js'
 import { frontendOriginsForService } from '@cat-factory/contracts'
 import {
   assertSafeEnvironmentUrl,
