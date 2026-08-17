@@ -102,15 +102,38 @@ describe('ContainerAgentExecutor image variant', () => {
     expect(dispatched[0]!.ref.image).toBeUndefined()
   })
 
-  it('re-derives the variant when polling and releasing the handle', async () => {
-    const { executor, polled, released } = makeExecutor()
+  it('re-derives the variant when polling the handle', async () => {
+    const { executor, polled } = makeExecutor()
     const handle = await executor.startJob(context('tester-ui'))
 
     await executor.pollJob(handle)
-    await executor.stopJob(handle)
 
     expect(polled[0]!.image).toBe('ui')
-    expect(released[0]!.image).toBe('ui')
+  })
+
+  it('reclaims BOTH of a run’s containers when a step ran on another image', async () => {
+    // The reclaim is run-level, and a run that dispatched a `tester-ui` step holds two
+    // containers. Releasing one ref reclaimed exactly one, and the browser container ran on to
+    // its maximum lifetime — the reason `reclaimRun` takes the run's kinds rather than a handle.
+    const { executor, released } = makeExecutor()
+    await executor.reclaimRun({
+      runId: 'ex_1',
+      jobId: 'ex_1-tester-ui',
+      workspaceId: 'ws_1',
+      agentKinds: ['coder', 'tester-ui'],
+    })
+
+    expect(released.map((ref) => ref.image)).toEqual([undefined, 'ui'])
+    expect(released.every((ref) => ref.runId === 'ex_1')).toBe(true)
+  })
+
+  it('reclaims the ordinary container for a run that dispatched no variant kinds', async () => {
+    // Including a run that dispatched nothing at all: the kinds only ever ADD containers, so an
+    // empty list must still reclaim the one every run has.
+    const { executor, released } = makeExecutor()
+    await executor.reclaimRun({ runId: 'ex_1', jobId: 'ex_1-coder', agentKinds: [] })
+
+    expect(released.map((ref) => ref.image)).toEqual([undefined])
   })
 
   it('re-derives it from the kind alone, as a replayed poll does', async () => {

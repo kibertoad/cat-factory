@@ -218,6 +218,7 @@ export type {
   AgentTokenUsage,
   AsyncAgentExecutor,
   ReviewedPoint,
+  RunReclaimTarget,
 } from './agent-executor.js'
 export { isAsyncAgentExecutor } from './agent-executor.js'
 export type {
@@ -612,7 +613,9 @@ export {
   containerKeyForRef,
   deploymentImageVariantMessage,
   HARNESS_SHUTDOWN_ERROR,
+  isImageVariantName,
   isPlatformImageVariant,
+  parseContainerKey,
   PLATFORM_IMAGE_VARIANTS,
   RUNNER_IMAGE_UNWIRED_REASON,
   runIdFromContainerKey,

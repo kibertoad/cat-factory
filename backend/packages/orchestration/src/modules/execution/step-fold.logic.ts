@@ -98,6 +98,24 @@ export function recordDispatchAttribution(
 }
 
 /**
+ * Every agent kind this run has DISPATCHED, read off the same `step.dispatches` counter
+ * {@link recordDispatchAttribution} writes and {@link dispatchEpochFor} counts.
+ *
+ * It answers the run-level reclaim's question ("which containers does this run hold"), which
+ * `step.agentKind` cannot: a gate escalates to its helper and a Tester hands off to the fixer, so
+ * the kind a step DECLARES is routinely not the one that opened a container. Reading the persisted
+ * counter also means a reclaim after a durable replay, in a process that saw none of those
+ * dispatches, still names them all.
+ */
+export function dispatchedAgentKinds(instance: { steps: readonly PipelineStep[] }): string[] {
+  const kinds = new Set<string>()
+  for (const step of instance.steps) {
+    for (const entry of step.dispatches ?? []) kinds.add(entry.agentKind)
+  }
+  return [...kinds]
+}
+
+/**
  * The dispatch epoch for the NEXT job of `dispatchedKind` in this run: how many jobs of that kind
  * the run has already dispatched (see `AgentRunContext.dispatchEpoch`). The container
  * executor suffixes its harness job id with it, so `<runId>-<agentKind>[-epoch]` names the n-th

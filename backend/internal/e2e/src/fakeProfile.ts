@@ -128,6 +128,7 @@ export interface FakeProfile {
 // direct `@cat-factory/kernel` dependency (it isn't one) — mirrors `testServer.ts`.
 type AgentCtx = Parameters<AsyncFakeAgentExecutor['run']>[0]
 type JobHandle = Awaited<ReturnType<AsyncFakeAgentExecutor['startJob']>>
+type ReclaimTarget = Parameters<AsyncFakeAgentExecutor['reclaimRun']>[0]
 type FakeOptions = ConstructorParameters<typeof AsyncFakeAgentExecutor>[0] & {}
 type BootstrapRequest = Parameters<FakeRepoBootstrapper['startBootstrap']>[0]
 type BootstrapHandle = Parameters<FakeRepoBootstrapper['pollBootstrap']>[0]
@@ -300,8 +301,8 @@ export class E2eFakeAgentExecutor implements WorkspaceScopedFakes {
     return this.forWorkspace(handle.workspaceId).pollJob(handle)
   }
 
-  stopJob(handle: JobHandle) {
-    return this.forWorkspace(handle.workspaceId).stopJob(handle)
+  reclaimRun(target: ReclaimTarget) {
+    return this.forWorkspace(target.workspaceId).reclaimRun(target)
   }
 }
 

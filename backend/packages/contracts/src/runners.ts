@@ -230,6 +230,23 @@ export function isPlatformImageVariant(variant: string): boolean {
   return PLATFORM_IMAGE_VARIANTS.includes(variant)
 }
 
+/** The shape every image-variant name is held to: a bounded lower-kebab slug. */
+export const IMAGE_VARIANT_NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/
+const IMAGE_VARIANT_NAME_MAX_LENGTH = 64
+
+/**
+ * Whether `value` is SHAPED like an image-variant name, membership aside.
+ *
+ * The names are open, so this is the only question askable about one without a backend's
+ * variant map in hand: a reader recovering a variant out of a container key holds no config,
+ * and a registration is checked at boot before any pool is resolved. Stated once here because
+ * both boundaries that ACCEPT a name (an agent kind's declaration, a backend's variant map)
+ * must agree with the reader that recovers it.
+ */
+export function isImageVariantName(value: string): boolean {
+  return value.length <= IMAGE_VARIANT_NAME_MAX_LENGTH && IMAGE_VARIANT_NAME_PATTERN.test(value)
+}
+
 export const kubernetesRunnerConfigSchema = v.object({
   /** Human label for the connection (shown in the UI). */
   label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
@@ -276,8 +293,8 @@ export const kubernetesRunnerConfigSchema = v.object({
         v.pipe(
           v.string(),
           v.trim(),
-          v.maxLength(64),
-          v.regex(/^[a-z0-9][a-z0-9-]*$/, 'must be a lower-kebab slug'),
+          v.maxLength(IMAGE_VARIANT_NAME_MAX_LENGTH),
+          v.regex(IMAGE_VARIANT_NAME_PATTERN, 'must be a lower-kebab slug'),
         ),
         v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
       ),

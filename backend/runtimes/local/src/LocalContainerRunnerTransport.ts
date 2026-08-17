@@ -396,26 +396,43 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   }
 
   /**
-   * The image a job runs on, refusing a variant this deployment has not configured.
+   * The image a job runs on, refusing a variant this transport cannot serve.
    *
-   * The refusal is deliberate. Serving a `ui` job the default image gives a browser-driven
-   * tester no browser, which it discovers only after the checkout, the install and the model's
-   * first turns, and then reports as an `abort` a reader cannot tell apart from an app that
-   * would not start. One refused dispatch, naming the variable, is the cheaper answer.
+   * Each unservable case is refused SEPARATELY, because they need different fixes and a
+   * fall-through gave all of them the default image. A `ui` job on it has no browser, which it
+   * discovers only after the checkout, the install and the model's first turns, and then reports
+   * as an `abort` a reader cannot tell apart from an app that would not start. A `deploy` job on
+   * it has no `kubectl`, and is a mistake in a kind's registration rather than a missing pin,
+   * which is what makes it a distinct refusal here and on the Worker's `agentContainerNamespace`.
+   * A DEPLOYMENT's own variant is worse than either, because nothing here can even name what the
+   * image carried. One refused dispatch, naming what to correct, is the cheaper answer to all
+   * three.
    */
   private imageFor(ref: RunnerJobRef): string {
     const variant = ref.image
     if (!variant || variant === 'default') return this.image
     if (variant === 'ui') {
+      // Unreachable via `createLocalContainerTransportFromEnv`, which always resolves the
+      // backend-matched UI tag: a local deployment CAN serve this variant, it just pays for the
+      // pull on first dispatch. It fires for a transport constructed without one.
       if (this.imageUi) return this.imageUi
       throw new UnavailableError(
         'This step runs on the UI-tester executor image (Playwright + a browser), which this ' +
-          'deployment has not configured. Set LOCAL_HARNESS_IMAGE_UI to a published ' +
+          'transport was built without. Set LOCAL_HARNESS_IMAGE_UI to a published ' +
           'cat-factory-executor-ui tag (or a locally built one) and restart. Until then, drop ' +
           'the `tester-ui` step from the pipeline: the visual-confirmation gate still runs on ' +
           'screenshots a person uploads.',
         RUNNER_IMAGE_UNWIRED_REASON,
         { image: variant, variable: 'LOCAL_HARNESS_IMAGE_UI' },
+      )
+    }
+    if (variant === 'deploy') {
+      throw new UnavailableError(
+        'An agent step declared the `deploy` executor image, which the agent runner path does ' +
+          'not serve: deploy jobs run through the environment-provisioning adapter and its own ' +
+          'deploy-harness transport. Correct the agent kind’s registration.',
+        RUNNER_IMAGE_UNWIRED_REASON,
+        { image: variant },
       )
     }
     // A DEPLOYMENT's own variant, named by one of its agent kinds and mapped here. The message
@@ -440,14 +457,15 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     // image and reused across runs, so a leased member is by construction the wrong container
     // for a job that asked for a different one. Checked BEFORE the lease/cache lookups, which
     // key off the run and would otherwise hand a `tester-ui` job the run's ordinary container.
-    const containerKey = containerKeyForRef(ref)
-    if (ref.image && ref.image !== 'default') return this.dispatchPerRun(ref, spec, kind, options)
+    if (!isDefaultImage(ref)) return this.dispatchPerRun(ref, spec, kind, options)
     // Route a run to the backend it ALREADY holds, regardless of the CURRENT pool mode
     // (settings can flip pooling on/off live): a leased pool member re-attaches to the
     // pool; an existing per-run container stays per-run. Only a BRAND-NEW run picks its
     // mode from `poolingEnabled` — so a live resize never strands an in-flight run.
     if (this.hasLeasedMember(ref.runId)) return this.dispatchPooled(ref, spec, kind)
-    if (this.cache.has(containerKey)) return this.dispatchPerRun(ref, spec, kind, options)
+    // Past the guard above the container key IS the run id, so the pooled branches address
+    // the run directly.
+    if (this.cache.has(ref.runId)) return this.dispatchPerRun(ref, spec, kind, options)
     if (this.poolingEnabled) return this.dispatchPooled(ref, spec, kind)
     return this.dispatchPerRun(ref, spec, kind, options)
   }
@@ -474,7 +492,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
       // first so it can't shadow the fresh one in later lookups.
       await this.adapter.removeRun(this.exec, containerKey)
       const containerId = await this.adapter.run(this.exec, {
-        runId: containerKey,
+        containerKey,
         image,
         sharedSecret: this.sharedSecret,
         // The Tester stands its infra up with `docker compose` INSIDE the job container
@@ -505,9 +523,9 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
     // A pooled member never serves a non-default image (dispatch routes those per-run), so the
     // lease lookup is skipped for one: the run's leased member is a different container.
-    const containerKey = containerKeyForRef(ref)
-    if (containerKey === ref.runId && this.hasLeasedMember(ref.runId)) return this.pollPooled(ref)
+    if (isDefaultImage(ref) && this.hasLeasedMember(ref.runId)) return this.pollPooled(ref)
 
+    const containerKey = containerKeyForRef(ref)
     const resolved = await this.resolve(containerKey)
     // No container for this run at all → it was evicted/reaped (or never started).
     if (!resolved) return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
@@ -552,10 +570,9 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
    * member instead RETURNS it to the pool (or removes a transient/over-capacity one).
    */
   async release(ref: RunnerJobRef): Promise<void> {
-    const containerKey = containerKeyForRef(ref)
-    if (containerKey === ref.runId && this.hasLeasedMember(ref.runId))
-      return this.releasePooled(ref)
+    if (isDefaultImage(ref) && this.hasLeasedMember(ref.runId)) return this.releasePooled(ref)
 
+    const containerKey = containerKeyForRef(ref)
     const containerId =
       this.cache.get(containerKey)?.containerId ??
       (await this.adapter.find(this.exec, containerKey))
@@ -580,8 +597,9 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
    */
   async stopJob(ref: RunnerJobRef): Promise<RunnerJobStopOutcome> {
     const containerKey = containerKeyForRef(ref)
-    const member =
-      containerKey === ref.runId ? this.members.find((m) => m.leasedTo === ref.runId) : undefined
+    const member = isDefaultImage(ref)
+      ? this.members.find((m) => m.leasedTo === ref.runId)
+      : undefined
     const endpoint = member ?? (await this.resolve(containerKey))
     // Nothing is serving this run: there is no job left to stop, which IS the stopped state.
     if (!endpoint) return 'stopped'
@@ -609,7 +627,10 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         this.dropMember(member)
         await this.adapter.remove(this.exec, member.containerId)
       } else {
-        this.cache.delete(ref.runId)
+        // Evict the entry for the container just destroyed, which for a non-default image is
+        // NOT the run id: `resolve` hands a cached handle back without probing liveness, so an
+        // entry left pointing at a removed container is served to the next poll as a live one.
+        this.cache.delete(containerKey)
         await this.adapter.remove(this.exec, endpoint.containerId)
       }
       return 'stopped'
@@ -644,13 +665,15 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   async reapOrphanedRuns(liveRunIds: (ids: string[]) => Promise<string[]>): Promise<number> {
     const running = await this.adapter.listRunContainers(this.exec)
     if (running.length === 0) return 0
-    // The adapter's `runId` is the CONTAINER KEY, which for a non-default image is the run id
-    // qualified by the variant. Ask about the RUN: passing the key through would report "no such
-    // run" for every UI-tester container and sweep one out from under a live run.
-    const live = new Set(await liveRunIds(running.map((c) => runIdFromContainerKey(c.runId))))
-    const orphans = running.filter((c) => !live.has(runIdFromContainerKey(c.runId)))
+    // The adapter reports CONTAINER KEYS, which for a non-default image is the run id qualified
+    // by the variant. Ask about the RUN: passing the key through would report "no such run" for
+    // every UI-tester container and sweep one out from under a live run.
+    const live = new Set(
+      await liveRunIds(running.map((c) => runIdFromContainerKey(c.containerKey))),
+    )
+    const orphans = running.filter((c) => !live.has(runIdFromContainerKey(c.containerKey)))
     for (const c of orphans) {
-      this.cache.delete(c.runId)
+      this.cache.delete(c.containerKey)
       await this.adapter.remove(this.exec, c.containerId).catch(() => undefined)
     }
     return orphans.length
@@ -855,7 +878,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   private async startMember(transient: boolean): Promise<PoolMember> {
     const id = `pool-${randomBytes(6).toString('hex')}`
     const containerId = await this.adapter.run(this.exec, {
-      runId: id,
+      containerKey: id,
       image: this.image,
       sharedSecret: this.sharedSecret,
       // Pooled members are reused across runs (incl. Tester runs), so they run privileged
@@ -1166,6 +1189,20 @@ function checkoutExtraEnv(settings?: LocalSettings): Record<string, string> {
     env.HARNESS_CLEAN_KEEP = checkout.cleanKeep.join(',')
   }
   return env
+}
+
+/**
+ * Whether a ref runs on the DEFAULT executor image, which on this transport is the same question
+ * as "is this ref's container the run's ordinary one" (`containerKeyForRef` qualifies every other
+ * variant's key).
+ *
+ * Named once because four pooled branches ask it: a warm pool member is started on one image and
+ * re-leased across runs, so it can only ever serve this variant, and each branch spelling the test
+ * out as `containerKeyForRef(ref) === ref.runId` stated the rule by way of a coincidence and let
+ * the four drift apart.
+ */
+function isDefaultImage(ref: RunnerJobRef): boolean {
+  return !ref.image || ref.image === 'default'
 }
 
 /** The `owner/name` repo-affinity key from a dispatched job spec, when present. */

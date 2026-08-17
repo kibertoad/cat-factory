@@ -34,6 +34,7 @@ import {
   duplicatedDescriptorSectionCaptions,
   isDeploymentScopedSource,
   foundationalServiceDefinitionIssues,
+  isImageVariantName,
   isNamespacedId,
   isValidResultViewId,
   RESULT_VIEW_ID_SET,
@@ -520,7 +521,7 @@ function checkAgentImageVariants(registry: AgentKindRegistry): RegistrationProbl
       })
       continue
     }
-    if (!/^[a-z0-9][a-z0-9-]*$/.test(variant) || variant.length > 64) {
+    if (!isImageVariantName(variant)) {
       problems.push({
         severity: 'error',
         code: 'agent_image_variant_invalid',

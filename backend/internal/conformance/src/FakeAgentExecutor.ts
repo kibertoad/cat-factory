@@ -8,6 +8,7 @@ import type {
   HarnessFailureCause,
   PullRequestRef,
   PeerPullRequest,
+  RunReclaimTarget,
   TestReport,
 } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
@@ -256,7 +257,7 @@ export interface FakeAgentOptions {
    *  - jobs are keyed by the SAME identity the real {@link ContainerAgentExecutor} uses —
    *    `run + agentKind + dispatchEpoch` — rather than the step index, and
    *  - a re-dispatch RE-ATTACHES to an existing entry and replays its STORED result (the
-   *    harness never re-runs a job it already has), and `stopJob` does NOT clear it.
+   *    harness never re-runs a job it already has), and `reclaimRun` does NOT clear it.
    * This reproduces the Tester→Fixer bug where a re-test silently replayed the first
    * round's report: it loops/“passes regardless” WITHOUT the per-round `dispatchEpoch`
    * fix, and re-runs correctly WITH it. Default false (per-run container, fresh each round).
@@ -802,7 +803,7 @@ function greenReport(): TestReport {
  * the durable driver's `awaiting_job` poll loop (Cloudflare Workflows / pg-boss) on BOTH
  * runtimes, so that path can't silently drift between them. Kept as a SEPARATE class so the
  * default fake stays a plain (non-async) `AgentExecutor` — flipping `isAsyncAgentExecutor`
- * for every test would change the CI-fixer / conflict-resolver / stopJob gates.
+ * for every test would change the CI-fixer / conflict-resolver / reclaim gates.
  */
 export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAgentExecutor {
   private readonly jobs = new Map<
@@ -888,18 +889,19 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
   }
 
   /**
-   * Release the run's jobs — the deterministic analogue of reclaiming the per-run
-   * container. The engine releases by run id (executionId) between Tester→Fixer loop
+   * Release the run's jobs — the deterministic analogue of reclaiming the run's
+   * containers. The engine releases by run id (executionId) between Tester→Fixer loop
    * iterations so the next job runs fresh; clearing every slot for the run lets the
    * re-dispatched job re-run (and the `testReports` sequence advance) rather than
-   * re-attaching to a finished result.
+   * re-attaching to a finished result. Image variants have no analogue here: this fake
+   * models one job registry, so the reclaim is total whatever the run dispatched.
    */
-  async stopJob(handle: AgentJobHandle): Promise<void> {
+  async reclaimRun(target: RunReclaimTarget): Promise<void> {
     // A pooled member is RETURNED to the pool, not destroyed, so its harness JobRegistry
     // survives — modelled by NOT clearing the run's jobs. (This is the whole point of the
     // mode: the re-dispatch must rely on a fresh dispatch epoch, not on container teardown.)
     if (this.pooledContainer) return
-    const prefix = `fakejob:${handle.jobId}:`
+    const prefix = `fakejob:${target.jobId}:`
     for (const id of this.jobs.keys()) if (id.startsWith(prefix)) this.jobs.delete(id)
   }
 

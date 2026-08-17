@@ -2,7 +2,11 @@ import type { CloudProvider, InstanceSize, StepSubtasks } from '../domain/types.
 import type { HarnessFailureCause } from '../domain/harness-failure.js'
 import type { LlmToolSpan } from './llm-trace-sink.js'
 import type { AgentEffortReport } from '@cat-factory/contracts'
-import { isPlatformImageVariant, PLATFORM_IMAGE_VARIANTS } from '@cat-factory/contracts'
+import {
+  isImageVariantName,
+  isPlatformImageVariant,
+  PLATFORM_IMAGE_VARIANTS,
+} from '@cat-factory/contracts'
 
 // Port for "where a repo-operating coding job actually runs". The
 // ContainerAgentExecutor dispatches each job and polls it through this transport
@@ -306,7 +310,7 @@ export type RunnerImageVariant = string
 // The reserved-name half of the vocabulary lives on the WIRE (`@cat-factory/contracts`), because
 // a runner backend's variant map is edited in the SPA and an agent kind's declaration is written
 // by a deployment: both must be held to one list of names the platform has already claimed.
-export { PLATFORM_IMAGE_VARIANTS, isPlatformImageVariant }
+export { PLATFORM_IMAGE_VARIANTS, isPlatformImageVariant, isImageVariantName }
 
 /**
  * The refusal a DEPLOYMENT-named image variant earns when the resolved runner backend maps it to
@@ -670,7 +674,43 @@ export function containerKeyForRef(ref: RunnerJobRef): string {
 }
 
 /**
- * The run a container key belongs to, the inverse of {@link containerKeyForRef}.
+ * The parts a container key encodes, the exact inverse of {@link containerKeyForRef}.
+ *
+ * The prefix is stripped ONLY when it is SHAPED like a variant name. A bare "everything before
+ * the first colon is a variant" split is lossy in the direction that destroys data: a key
+ * carrying a colon for any OTHER reason (a job-id scheme, an operator-created label) would be
+ * truncated to a run id that matches no run, and the orphan sweep below then kills a live
+ * container for being unrecognised, the very misread this inverse exists to prevent. A prefix
+ * that is not variant-shaped therefore answers "the whole key is the run id", which at worst
+ * leaves a container for the next sweep.
+ *
+ * SHAPE rather than membership, because variant names are open: a deployment's own is a slug
+ * only its runner backend can map, and this function is read by a reaper that holds no backend
+ * config. The rule is the one every declaring boundary already enforces (`checkAgentImageVariants`
+ * at boot, the backends' variant-map schemas), so a prefix this rejects is one no registration
+ * could have produced.
+ *
+ * What that leaves is a prefix which IS slug-shaped and was never a variant. Open names make it
+ * unknowable here, and this reads keys the inventory holds, every one of them written by
+ * {@link containerKeyForRef} from a ref whose variant a registration declared. So the guard is
+ * what it can still be, a refusal of anything unshaped, and a key scheme that wants to put a
+ * colon in a run id has to stay outside the slug shape to survive it.
+ */
+export function parseContainerKey(containerKey: string): {
+  runId: string
+  image?: RunnerImageVariant
+} {
+  const separator = containerKey.indexOf(':')
+  if (separator <= 0) return { runId: containerKey }
+  const prefix = containerKey.slice(0, separator)
+  // `default` is never a prefix (`containerKeyForRef` emits the bare run id for it), so a key
+  // spelling it out is not one this function produced and is left whole.
+  if (prefix === 'default' || !isImageVariantName(prefix)) return { runId: containerKey }
+  return { runId: containerKey.slice(separator + 1), image: prefix }
+}
+
+/**
+ * The run a container key belongs to (see {@link parseContainerKey}).
  *
  * A backend that reaps by asking "is this run still live?" has to ask about the RUN, not the
  * key: a `tester-ui` container is keyed `ui:<runId>`, which matches no run, so an orphan sweep
@@ -678,8 +718,7 @@ export function containerKeyForRef(ref: RunnerJobRef): string {
  * kills the browser out from under it.
  */
 export function runIdFromContainerKey(containerKey: string): string {
-  const separator = containerKey.indexOf(':')
-  return separator > 0 ? containerKey.slice(separator + 1) : containerKey
+  return parseContainerKey(containerKey).runId
 }
 
 /**

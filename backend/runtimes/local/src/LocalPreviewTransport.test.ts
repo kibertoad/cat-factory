@@ -7,11 +7,13 @@ import { LocalPreviewTransport } from './LocalPreviewTransport.js'
 function fakeAdapter(overrides: Partial<ContainerRuntimeAdapter> = {}): {
   adapter: ContainerRuntimeAdapter
   removed: string[]
-  runs: Array<{ runId: string; publishPorts?: Array<{ container: number; host?: number }> }>
+  runs: Array<{ containerKey: string; publishPorts?: Array<{ container: number; host?: number }> }>
 } {
   const removed: string[] = []
-  const runs: Array<{ runId: string; publishPorts?: Array<{ container: number; host?: number }> }> =
-    []
+  const runs: Array<{
+    containerKey: string
+    publishPorts?: Array<{ container: number; host?: number }>
+  }> = []
   const adapter: ContainerRuntimeAdapter = {
     id: 'docker',
     binary: 'docker',
@@ -19,8 +21,8 @@ function fakeAdapter(overrides: Partial<ContainerRuntimeAdapter> = {}): {
     hostAlias: 'host.docker.internal',
     publishesToLocalhost: true,
     async run(_exec, spec) {
-      runs.push({ runId: spec.runId, publishPorts: spec.publishPorts })
-      return `cid-${spec.runId}`
+      runs.push({ containerKey: spec.containerKey, publishPorts: spec.publishPorts })
+      return `cid-${spec.containerKey}`
     },
     async find(_exec, runId) {
       return `cid-${runId}`
@@ -91,7 +93,7 @@ describe('LocalPreviewTransport', () => {
     const transport = makeTransport(adapter, okFetch())
     await transport.start(ref, { jobId: 'preview', mode: 'preview' }, 4173)
     expect(runs).toHaveLength(1)
-    expect(runs[0]!.runId).toBe('preview-blk_fe')
+    expect(runs[0]!.containerKey).toBe('preview-blk_fe')
     // On a localhost-publishing runtime the host port is PINNED to the serve port (deterministic origin).
     expect(runs[0]!.publishPorts).toEqual([{ container: 4173, host: 4173 }])
   })

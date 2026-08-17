@@ -2,6 +2,7 @@ import type {
   RunnerDispatchAck,
   RunnerDispatchKind,
   RunnerDispatchOptions,
+  RunnerImageVariant,
   RunnerJobRef,
   RunnerJobStopOutcome,
   RunnerJobView,
@@ -72,6 +73,32 @@ export class RunnerJobClient {
   async release(workspaceId: string | undefined, ref: RunnerJobRef): Promise<void> {
     const transport = await this.resolveTransport(workspaceId)
     await transport.release?.(ref)
+  }
+
+  /**
+   * Reclaim EVERY container a run holds: one `release` per executor image the run started a
+   * container on, all against the same backend.
+   *
+   * A per-run container backend hosts a whole run in ONE container UNLESS a step declared a
+   * different image, and then there are two — so a reclaim addressing a single ref leaves the
+   * other running until its maximum lifetime elapses. The images are resolved by the caller (only
+   * it knows which agent kinds declared what); this owns the fan-out, which is transport
+   * mechanics like every other method here.
+   *
+   * Concurrent, and one failure does not skip the rest: `Promise.all` starts them all, so a
+   * caller treating this as best-effort still gets every container it can. The first rejection
+   * propagates.
+   */
+  async releaseRun(
+    workspaceId: string | undefined,
+    run: { runId: string; jobId: string; images: readonly (RunnerImageVariant | undefined)[] },
+  ): Promise<void> {
+    const transport = await this.resolveTransport(workspaceId)
+    await Promise.all(
+      run.images.map((image) =>
+        transport.release?.({ runId: run.runId, jobId: run.jobId, ...(image ? { image } : {}) }),
+      ),
+    )
   }
 
   /**

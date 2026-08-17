@@ -18,6 +18,7 @@ import {
   type ModelProvider,
   type ModelProviderResolver,
   type ModelRef,
+  type RunReclaimTarget,
 } from '@cat-factory/kernel'
 import type { DispatchToolServers } from '@cat-factory/contracts'
 import {
@@ -443,9 +444,9 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
     return this.deps.standard.pollJob(handle)
   }
 
-  async stopJob(handle: AgentJobHandle): Promise<void> {
-    if (isAsyncAgentExecutor(this.deps.standard) && this.deps.standard.stopJob) {
-      await this.deps.standard.stopJob(handle)
+  async reclaimRun(target: RunReclaimTarget): Promise<void> {
+    if (isAsyncAgentExecutor(this.deps.standard) && this.deps.standard.reclaimRun) {
+      await this.deps.standard.reclaimRun(target)
     }
   }
 }

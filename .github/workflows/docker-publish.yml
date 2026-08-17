@@ -78,8 +78,8 @@ jobs:
               - '.github/actions/**'
             # The UI image is the executor image plus tooling, so ANY executor source change
             # republishes it too: they carry one version, and a UI image left behind on an older
-            # base would be a pairing the tag says is impossible. Kept in step with the
-            # `executor-ui` descriptor in scripts/runner-images.mjs.
+            # base would be a pairing the tag says is impossible. Every list here is held to its
+            # `scripts/runner-images.mjs` descriptor by `scripts/check-runner-image-paths.mjs`.
             executorUi:
               - 'backend/internal/executor-harness/src/**'
               - 'backend/internal/executor-harness/Dockerfile'

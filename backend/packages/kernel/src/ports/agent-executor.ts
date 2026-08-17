@@ -1283,14 +1283,46 @@ export interface AsyncAgentExecutor extends AgentExecutor {
   /** Poll a previously-started job for its current state. */
   pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate>
   /**
-   * Best-effort: stop a running job and reclaim its backing resources (e.g. kill
-   * the per-run container), so a user cancel / block delete / orphan sweep does not
-   * leak a container that idles until its watchdog. Optional — backends with
-   * nothing to reclaim may omit it; callers must treat it as best-effort and must
-   * not let a failure here derail their own teardown. Idempotent: stopping an
-   * already-gone job is a no-op.
+   * Best-effort: reclaim EVERY runner resource the run holds (e.g. kill its per-run
+   * containers), so a user cancel / block delete / orphan sweep does not leak one that idles
+   * until its watchdog. Optional — backends with nothing to reclaim may omit it; callers must
+   * treat it as best-effort and must not let a failure here derail their own teardown.
+   * Idempotent: reclaiming an already-gone run is a no-op.
+   *
+   * It takes a {@link RunReclaimTarget} rather than a job handle because a run is NOT one
+   * container: a step declaring a different executor image runs in its own, beside the
+   * ordinary one, and a reclaim addressing a single job leaves the other alive until its
+   * maximum lifetime elapses (a `tester-ui` step leaks a whole browser container that way).
    */
-  stopJob?(handle: AgentJobHandle): Promise<void>
+  reclaimRun?(target: RunReclaimTarget): Promise<void>
+}
+
+/**
+ * What a run-level reclaim addresses (see {@link AsyncAgentExecutor.reclaimRun}).
+ *
+ * `agentKinds` is the load-bearing field and the reason this is not a job handle: only the
+ * ENGINE knows which kinds a run dispatched (it holds the steps), and only the EXECUTOR knows
+ * which executor image each kind declared, so neither can name the run's containers alone.
+ * Passing the kinds lets the executor map them to the distinct images the run actually
+ * started, rather than either reclaiming one container or waking every image variant a
+ * deployment could serve.
+ */
+export interface RunReclaimTarget {
+  /** The run (execution) whose resources are being reclaimed. */
+  runId: string
+  /** The workspace, so an executor picking a per-workspace backend resolves the same one. */
+  workspaceId?: string
+  /**
+   * The in-flight step's job id, for a per-JOB backend (a self-hosted pool) that cancels
+   * exactly that job. A per-run container backend ignores it and reclaims by run.
+   */
+  jobId: string
+  /**
+   * Every agent kind this run DISPATCHED, in no particular order and free of duplicates or
+   * not. Empty is a valid answer (a run that never dispatched), and still reclaims the run's
+   * ordinary container: the kinds only ever ADD the containers a non-default image opened.
+   */
+  agentKinds: readonly string[]
 }
 
 /** Narrow an executor to the async-capable interface. */

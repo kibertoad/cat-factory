@@ -771,6 +771,60 @@ describe('LocalContainerRunnerTransport — image variants', () => {
     expect(calls.filter((c) => c[0] === 'run')).toHaveLength(0)
   })
 
+  it('refuses a deploy job on the agent path, naming the registration rather than running it', async () => {
+    // The agent runner path does not serve `deploy` — those go through the provisioning
+    // adapter's own transport — so a `deploy` ref arriving here is a mistake in a kind's
+    // registration. Falling through to the default image would start an AGENT-image container
+    // with no `kubectl` in it and no diagnosis at all, which is the opposite of what the
+    // Worker's `agentContainerNamespace` answers for the same input.
+    const { exec, calls, fetchImpl } = dispatchable()
+    const transport = mkTransport({
+      image: 'harness:test',
+      imageUi: 'harness-ui:test',
+      exec,
+      fetchImpl,
+    })
+
+    await expect(
+      transport.dispatch({ runId: 'run-1', jobId: 'deployer', image: 'deploy' }, {}, 'agent'),
+    ).rejects.toThrow(/agent runner path does not serve/)
+
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(0)
+  })
+
+  it('evicts the CACHE ENTRY of the container it destroyed when a ui job stop escalates', async () => {
+    // `stopJob`'s fallback destroys the container it resolved, and for a `ui` ref that is NOT
+    // keyed by the run id. Deleting the run's entry instead left the ui entry pointing at a
+    // removed container — which `resolve()` hands straight back, since it never probes liveness
+    // — and evicted the ordinary container's handle for nothing.
+    const { exec, calls, fetchImpl } = dispatchable()
+    const transport = mkTransport({
+      image: 'harness:test',
+      imageUi: 'harness-ui:test',
+      exec,
+      fetchImpl,
+    })
+    await transport.dispatch({ runId: 'run-1', jobId: 'coder' }, {}, 'agent')
+    await transport.dispatch({ runId: 'run-1', jobId: 'tester', image: 'ui' }, {}, 'agent')
+
+    // The graceful abort fails (the fake answers no DELETE), so the stop escalates to destroying
+    // the container — and still reports the stop it made true.
+    expect(await transport.stopJob({ runId: 'run-1', jobId: 'tester', image: 'ui' })).toBe(
+      'stopped',
+    )
+
+    // The ordinary container's handle survives: a later step re-attaches with no `docker run`.
+    calls.length = 0
+    await transport.dispatch({ runId: 'run-1', jobId: 'reviewer' }, {}, 'agent')
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(0)
+
+    // The destroyed ui container's handle is gone: the next ui step starts a fresh one rather
+    // than fetching a container that no longer exists.
+    calls.length = 0
+    await transport.dispatch({ runId: 'run-1', jobId: 'tester-2', image: 'ui' }, {}, 'agent')
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(1)
+  })
+
   it('releases the ui container for the ui ref and the ordinary one for the plain ref', async () => {
     const { exec, calls, fetchImpl } = dispatchable()
     const transport = mkTransport({
