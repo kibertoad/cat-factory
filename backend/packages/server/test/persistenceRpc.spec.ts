@@ -161,10 +161,8 @@ describe('persistence RPC round-trip', () => {
 
 describe('member-display read surface (co-membership scoped)', () => {
   function remoteUsers(accountIds = [ACCOUNT]) {
-    const { registry, ...resolvers } = makeRegistry()
     const client = inProcessClient({
-      registry,
-      ...resolvers,
+      registry: makeRegistry(),
       scope: { accountIds, userId: USER },
     })
     return createRemoteRepositoryRegistry(client) as unknown as {
@@ -279,10 +277,8 @@ describe('per-user profile + visibility writes (selfUser scoped)', () => {
 
 describe('createRemoteRepositoryRegistry (full-surface, drift-proof)', () => {
   function registryClient() {
-    const { registry, ...resolvers } = makeRegistry()
     return inProcessClient({
-      registry,
-      ...resolvers,
+      registry: makeRegistry(),
       scope: { accountIds: [ACCOUNT], userId: USER },
     })
   }

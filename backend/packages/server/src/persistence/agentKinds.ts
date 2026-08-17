@@ -22,9 +22,16 @@ import { UnavailableError, describeError } from '@cat-factory/kernel'
  * reaching that path is the existing contract, not a new one; the tool-server side states an
  * unreachable layer to the agent the same way it states any capability it could not honour.
  *
- * There is no cache here on purpose, the same answer its three siblings give: the read happens once
- * per dispatch, behind the same per-dispatch resolution as the skills it feeds, and a second copy
- * of a value with no invalidation path is the homebrew cache the caching seam exists to keep out.
+ * There is no cache here, and the reason is NOT the one its three siblings give. Theirs is that a
+ * cache already sits in front of them (the per-workspace foundational catalog) and bounds the call
+ * volume; this read has nothing in front of it, so it is one round trip on EVERY dispatch. It stays
+ * uncached because that is the right size for what it costs: a dispatch starts a container agent
+ * that runs for minutes, the payload is the deployment's assignment table (bounded by the kinds a
+ * deployment registers capabilities for, not by tenants or runs), and the value has no invalidation
+ * path (it changes when the mothership is redeployed), so a TTL'd copy would be the homebrew cache
+ * the caching seam exists to keep out while buying a saving nothing can measure. If a caller ever
+ * puts this on a path that runs per STEP rather than per dispatch, it earns a real entry on the
+ * `AppCaches` seam, not a memo here.
  */
 export class HttpAgentKindSource implements AgentKindSource {
   constructor(

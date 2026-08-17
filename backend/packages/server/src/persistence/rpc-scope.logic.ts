@@ -5,6 +5,9 @@ import type { DispatchOptions, DispatchResult, LibrarySourceEntity } from './rpc
  * taking one answer with a SUBSET of the list, so binding the INPUT bounds the output: an
  * out-of-scope candidate fails closed rather than being quietly filtered, which would turn the read
  * into a probe for which boards link a repo. An empty list is a no-op read.
+ *
+ * ONE batched read resolves the whole list: a point read per id is the N+1 this layer bans, and
+ * the list a caller sends is unbounded by anything but its own request.
  */
 export async function checkWorkspaceListScope(
   ids: unknown,
@@ -13,10 +16,10 @@ export async function checkWorkspaceListScope(
   denied: DispatchResult,
 ): Promise<DispatchResult | undefined> {
   if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) return denied
-  for (const id of ids as string[]) {
-    if (!inScope(await opts.resolveAccountId(id))) return denied
-  }
-  return undefined
+  if (ids.length === 0) return undefined
+  const accounts = await opts.resolveAccountIds(ids as string[])
+  // A board absent from the map does not exist, which `inScope(undefined)` refuses.
+  return (ids as string[]).every((id) => inScope(accounts.get(id))) ? undefined : denied
 }
 
 /**
@@ -26,6 +29,9 @@ export async function checkWorkspaceListScope(
  * An id WITH a binding must be in scope; an id with NO binding is admitted, because refusing it
  * would make the read unusable for its only purpose and it discloses nothing the caller did not
  * send. An unreadable table still fails closed, as does a missing resolver.
+ *
+ * The whole list resolves in one batched read: the ids come straight off a provider's installation
+ * list, so a point read per id is an N+1 sized by someone else's org.
  */
 export async function checkInstallationListScope(
   ids: unknown,
@@ -35,13 +41,17 @@ export async function checkInstallationListScope(
 ): Promise<DispatchResult | undefined> {
   if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'number')) return denied
   if (ids.length === 0) return undefined
-  if (!opts.resolveInstallationOwner) return denied
-  for (const id of ids as number[]) {
-    const owner = await opts.resolveInstallationOwner(id)
-    if (owner.status === 'absent') continue
-    if (owner.status !== 'found' || !inScope(owner.accountId)) return denied
-  }
-  return undefined
+  if (!opts.resolveInstallationOwners) return denied
+  const owners = await opts.resolveInstallationOwners(ids as number[])
+  return (ids as number[]).every((id) => {
+    // An id the batch did not answer for at all is treated as `unreadable`, not as the `absent`
+    // that would admit it: only the resolver may report an id as unbound.
+    const owner = owners.get(id) ?? { status: 'unreadable' as const }
+    if (owner.status === 'absent') return true
+    return owner.status === 'found' && inScope(owner.accountId)
+  })
+    ? undefined
+    : denied
 }
 
 /**
@@ -109,51 +119,6 @@ export async function checkServiceUpdateScope(
   if (!Object.hasOwn(patch, 'accountId')) return undefined
   const { accountId } = patch as { accountId?: unknown }
   return typeof accountId === 'string' && inScope(accountId) ? undefined : denied
-}
-
-/**
- * The `installationUpsert` record write (App connect / PAT connect). Bind the connector
- * `workspaceId`, the DECLARED `accountId` when the row carries one, and the STORED row's owner.
- *
- * The stored half is the one that is not optional. The write conflicts on `installationId` alone, so
- * naming another org's installation id would repoint its binding at a board the caller controls — the
- * account-takeover `GitHubInstallationService.connect` refuses in the service layer this RPC bypasses.
- * The declared-account half closes the mirror image: an installation row is shared with every board of
- * the account it names, so stamping a foreign account hands that org this connection's credentials.
- */
-export async function checkInstallationUpsertScope(
-  record: unknown,
-  opts: DispatchOptions,
-  inScope: (accountId: string | null | undefined) => boolean,
-  denied: DispatchResult,
-): Promise<DispatchResult | undefined> {
-  if (!record || typeof record !== 'object') return denied
-  const { workspaceId, accountId, installationId } = record as {
-    workspaceId?: unknown
-    accountId?: unknown
-    installationId?: unknown
-  }
-  if (typeof workspaceId !== 'string') return denied
-  if (!inScope(await opts.resolveAccountId(workspaceId))) return denied
-  // A PAT connection stores no account (it binds one board); an App connection stores the
-  // connector workspace's, so anything else is a caller stamping an org it does not own.
-  if (accountId != null && (typeof accountId !== 'string' || !inScope(accountId))) return denied
-  if (typeof installationId !== 'number' || !opts.resolveInstallationOwner) return denied
-  const stored = await opts.resolveInstallationOwner(installationId)
-  switch (stored.status) {
-    case 'found':
-      return inScope(stored.accountId) ? undefined : denied
-    case 'absent':
-      // No binding yet: a connect, already bound by the two declared halves above.
-      return undefined
-    case 'unreadable':
-      return denied
-    default: {
-      const _exhaustive: never = stored
-      void _exhaustive
-      return denied
-    }
-  }
 }
 
 /**

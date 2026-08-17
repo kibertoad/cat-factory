@@ -8,20 +8,15 @@ import type {
 } from '../../persistence/rpc.js'
 
 /**
- * The per-request SCOPE RESOLUTION half of `POST /internal/persistence`: the entity readers the
- * dispatcher binds a call through (block → workspace → account, service → account, a library
- * source's owner pair, an installation's owner, an account's roster), plus the per-request memo
- * that keeps a resolver's read and the DISPATCHED read of the same row to one query.
+ * The per-request READ MEMO, plus the one registry substitution it earns.
  *
- * Split out of `PersistenceController` when the surface completion pushed the handler past its
- * function-size budget. It is the half that grows: every new entity-keyed scope rule adds a
- * resolver here, while the controller's own job (gate, parse, dispatch, relay) does not change.
+ * Every entity-keyed scope rule resolves a row to bind the call, and for a handful of methods that
+ * row IS what the call then dispatches. Memoising each read per request keeps those to one query,
+ * and the `memoOverrides` table points the dispatched method at the same memo. Extracted from
+ * {@link buildDispatchScope} when the batched resolvers pushed it past its function-size budget:
+ * this half is about READING ONCE, the other about what a read MEANS for scope.
  */
-export function buildDispatchScope(
-  registry: PersistenceRegistry,
-  request: PersistenceRpcRequest,
-  scope: { accountIds: string[]; userId: string },
-): DispatchOptions {
+function buildRequestReaders(registry: PersistenceRegistry, request: PersistenceRpcRequest) {
   const workspaceRepository = registry.workspaceRepository
   const blockRepository = registry.blockRepository
   const serviceRepository = registry.serviceRepository
@@ -38,6 +33,13 @@ export function buildDispatchScope(
   const resolveAccountId = (workspaceId: string) =>
     (workspaceRepository?.accountOf?.(workspaceId) as Promise<string | null | undefined>) ??
     Promise.resolve(undefined)
+  // The BATCHED account read every list-shaped rule binds through. A registry that does not wire
+  // it answers an empty map, which fails every id closed rather than admitting one: the same
+  // disposition an unresolvable `accountOf` already has.
+  const readAccountIds = async (workspaceIds: string[]): Promise<Record<string, string | null>> =>
+    ((await workspaceRepository?.accountIdsOf?.(workspaceIds)) as
+      | Record<string, string | null>
+      | undefined) ?? {}
 
   // The `block`/`serviceList`/`service` scope checks resolve the owning account by reading the
   // entity (`blockRepository.findById` / `serviceRepository.listByIds`). When the request ALSO
@@ -69,6 +71,12 @@ export function buildDispatchScope(
       ? memoizeRead((id) => installationRepository.getByInstallationId!(id as number))
       : undefined
   const blockFindByIds = memoizeRead((ids) => blockRepository?.findByIds?.(ids as string[]))
+  // One memo per requested SET of workspace ids, shared by the resolver and (via the override
+  // below) the dispatched `accountIdsOf`, exactly as the other self-keyed reads do.
+  const accountIdsOf = memoizeRead((ids) => readAccountIds(ids as string[]))
+  const installationListByIds = memoizeRead((ids) =>
+    installationRepository?.listByInstallationIds?.(ids as number[]),
+  )
   const serviceListByIds = memoizeRead((ids) => serviceRepository?.listByIds?.(ids as string[]))
   const skillSourceGet = memoizeRead((id) => skillSourceRepository?.get?.(id as string))
   // One memo per source TABLE, keyed by entity: the resolver and the dispatched `get` of the same
@@ -99,6 +107,13 @@ export function buildDispatchScope(
     'blockRepository.findByIds': { blockRepository: { findByIds: blockFindByIds } },
     'serviceRepository.listByIds': { serviceRepository: { listByIds: serviceListByIds } },
     'serviceRepository.get': { serviceRepository: { get: serviceGetViaMemo } },
+    // The two batched self-keyed reads: the `workspaceList` rule resolves the accounts of exactly
+    // the ids `accountIdsOf` is being asked for, and `installationList` resolves the owners of
+    // exactly the ids `listByInstallationIds` is being asked for.
+    'workspaceRepository.accountIdsOf': { workspaceRepository: { accountIdsOf } },
+    'githubInstallationRepository.listByInstallationIds': {
+      githubInstallationRepository: { listByInstallationIds: installationListByIds },
+    },
     // The `skillSource` scope resolves a source's account by reading the source; when the
     // dispatched call IS that read (the sync service's `get`), reuse the resolver's result.
     'skillSourceRepository.get': { skillSourceRepository: { get: skillSourceGet } },
@@ -146,29 +161,81 @@ export function buildDispatchScope(
   const registryForDispatch = override ? { ...registry, ...override } : registry
 
   return {
+    registryForDispatch,
+    blockRepository,
+    installationRepository,
+    resolveAccountId,
+    accountIdsOf,
+    blockFindById,
+    blockFindByIds,
+    serviceListByIds,
+    skillSourceGet,
+    librarySourceGets,
+    installationGet,
+    installationListByIds,
+  }
+}
+
+/**
+ * The per-request SCOPE RESOLUTION half of `POST /internal/persistence`: the entity readers the
+ * dispatcher binds a call through (block → workspace → account, service → account, a library
+ * source's owner pair, an installation's owner, an account's roster), over the per-request memo
+ * {@link buildRequestReaders} builds.
+ *
+ * Split out of `PersistenceController` when the surface completion pushed the handler past its
+ * function-size budget. It is the half that grows: every new entity-keyed scope rule adds a
+ * resolver here, while the controller's own job (gate, parse, dispatch, relay) does not change.
+ */
+export function buildDispatchScope(
+  registry: PersistenceRegistry,
+  request: PersistenceRpcRequest,
+  scope: { accountIds: string[]; userId: string },
+): DispatchOptions {
+  const {
+    registryForDispatch,
+    blockRepository,
+    installationRepository,
+    resolveAccountId,
+    accountIdsOf,
+    blockFindById,
+    blockFindByIds,
+    serviceListByIds,
+    skillSourceGet,
+    librarySourceGets,
+    installationGet,
+    installationListByIds,
+  } = buildRequestReaders(registry, request)
+
+  return {
     registry: registryForDispatch,
     scope,
     resolveAccountId,
+    resolveAccountIds: async (workspaceIds) => {
+      const accounts = (await accountIdsOf(workspaceIds)) as Record<string, string | null>
+      return new Map(Object.entries(accounts))
+    },
     // A block is keyed only by its id; resolve its home workspace, then that workspace's account.
     resolveBlockAccountId: async (blockId) => {
       const found = (await blockFindById(blockId)) as { workspaceId?: string } | null | undefined
       const workspaceId = found?.workspaceId
       return typeof workspaceId === 'string' ? resolveAccountId(workspaceId) : undefined
     },
-    // The batched form: one findByIds resolves every block's home workspace, then each
-    // (deduped) workspace's account. A block absent from the read is absent from the map.
+    // The batched form, in exactly two reads however long the list: one `findByIds` resolves every
+    // block's home workspace, then ONE `accountIdsOf` over the deduped workspaces. A block absent
+    // from either read is absent from the map.
     resolveBlockAccountIds: async (blockIds) => {
       const found = (await blockFindByIds(blockIds)) as
         | Array<{ workspaceId: string; block: { id: string } }>
         | undefined
-      const accountByWorkspace = memoizeRead((workspaceId) =>
-        resolveAccountId(workspaceId as string),
-      )
+      const entries = found ?? []
+      const accounts = (await accountIdsOf([
+        ...new Set(entries.map((entry) => entry.workspaceId)),
+      ])) as Record<string, string | null>
       const map = new Map<string, string | null | undefined>()
-      for (const entry of found ?? []) {
+      for (const entry of entries) {
         map.set(
           entry.block.id,
-          (await accountByWorkspace(entry.workspaceId)) as string | null | undefined,
+          Object.hasOwn(accounts, entry.workspaceId) ? accounts[entry.workspaceId] : undefined,
         )
       }
       return map
@@ -210,8 +277,8 @@ export function buildDispatchScope(
     // A VCS installation binds either an ACCOUNT (a GitHub App installation, shared with every
     // board of that account) or just its connector WORKSPACE (a per-workspace PAT, which stores
     // no account). Resolve the effective owner so both bind the same way, and keep "no such
-    // binding" apart from "this deployment cannot read the table": the upsert rule admits the
-    // first as a connect and must refuse the second.
+    // binding" apart from "this deployment cannot read the table": the batched annotation read
+    // admits the first and must refuse the second.
     resolveInstallationOwner: async (installationId): Promise<EntityOwnerLookup> => {
       if (!installationGet) return { status: 'unreadable' }
       const row = (await installationGet(installationId)) as
@@ -225,6 +292,47 @@ export function buildDispatchScope(
         status: 'found',
         accountId: typeof workspaceId === 'string' ? await resolveAccountId(workspaceId) : null,
       }
+    },
+    // The batched form: one `listByInstallationIds` plus one `accountIdsOf` over the connector
+    // workspaces of the PAT bindings that store no account. Ids with no binding are absent from
+    // the read, so the rule sees them as `absent` (the admission the annotation read needs) while
+    // an UNWIRED repository yields no map at all, which the rule fails closed on.
+    resolveInstallationOwners: async (installationIds) => {
+      const owners = new Map<number, EntityOwnerLookup>()
+      if (typeof installationRepository?.listByInstallationIds !== 'function') {
+        for (const id of installationIds) owners.set(id, { status: 'unreadable' })
+        return owners
+      }
+      const rows = ((await installationListByIds(installationIds)) ?? []) as Array<{
+        installationId: number
+        accountId?: string | null
+        workspaceId?: string
+      }>
+      const patWorkspaces = rows
+        .filter((row) => typeof row.accountId !== 'string' && typeof row.workspaceId === 'string')
+        .map((row) => row.workspaceId as string)
+      const accounts = (await accountIdsOf([...new Set(patWorkspaces)])) as Record<
+        string,
+        string | null
+      >
+      for (const row of rows) {
+        if (typeof row.accountId === 'string') {
+          owners.set(row.installationId, { status: 'found', accountId: row.accountId })
+          continue
+        }
+        const workspaceId = row.workspaceId
+        owners.set(row.installationId, {
+          status: 'found',
+          accountId:
+            typeof workspaceId === 'string' && Object.hasOwn(accounts, workspaceId)
+              ? accounts[workspaceId]
+              : null,
+        })
+      }
+      for (const id of installationIds) {
+        if (!owners.has(id)) owners.set(id, { status: 'absent' })
+      }
+      return owners
     },
     // A service's frame block, as the three states `serviceInsert` needs: the row is written
     // BEFORE its block, so `absent` is the ordinary create and only `found` binds.

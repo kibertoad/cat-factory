@@ -123,6 +123,22 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
     return row ? row.account : undefined
   }
 
+  async accountIdsOf(ids: string[]): Promise<Record<string, string | null>> {
+    const found: Record<string, string | null> = {}
+    if (ids.length === 0) return found
+    const unique = [...new Set(ids)]
+    // Chunked to match the D1 twin's parameter ceiling, so both stores issue the same shape of
+    // query for the same input rather than one of them degrading on a long list.
+    for (let i = 0; i < unique.length; i += 90) {
+      const rows = await this.db
+        .select({ id: workspaces.id, account: workspaces.account_id })
+        .from(workspaces)
+        .where(inArray(workspaces.id, unique.slice(i, i + 90)))
+      for (const row of rows) found[row.id] = row.account
+    }
+    return found
+  }
+
   async accessRowOf(id: string): Promise<WorkspaceAccessRow | undefined> {
     const [row] = await this.db
       .select({

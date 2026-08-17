@@ -391,6 +391,17 @@ path is logged through a bare message read**: every one is bound with kernel's `
 `redactSecrets` runs over it first. This is the one surface whose SUBJECT is a credential, and a
 driver or WebCrypto error routinely echoes back the value it choked on.
 
+**A machine token scopes ACCOUNTS, never ROLES, and that is what keeps admin-tier writes off the
+persistence RPC.** A node's token is minted from a completed login and carries the accounts that
+user belongs to, at any role: a plain member running a laptop node holds one. The RPC dispatches
+over the raw repository, below the service layer that enforces `requirePermission`, so an
+admin-gated mutation reached through it would be performed with no role check at all. Membership
+and account-lifecycle writes, the session-revocation bump, the machine-node roster and the VCS
+connect/disconnect writes are therefore excluded rather than scope-bound, and the drift guard
+records each under the `admin` reason. A scope rule can bind WHICH row a call touches; it cannot
+supply an authorization tier the token never carried, so "add a rule for it" is not an alternative
+to that exclusion.
+
 So the honest statement of the blast radius is: **a stolen machine token reads the org credentials
 of the accounts it is scoped to, for the sources in that table.** That is strictly more than the
 same token could read before, and strictly less than the mothership's `ENCRYPTION_KEY`, which still

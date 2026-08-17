@@ -877,7 +877,7 @@ describe('advanced review / session management surface (workspace-scoped)', () =
   // analogue of the `echoed` reads above.
   it('forwards the workspaceId + payload to a write in order', async () => {
     const calls: unknown[][] = []
-    const { registry, ...resolvers } = makeRegistry()
+    const registry = makeRegistry()
     const capturing: PersistenceRegistry = {
       ...registry,
       consensusSessionRepository: {
@@ -891,7 +891,6 @@ describe('advanced review / session management surface (workspace-scoped)', () =
     }
     const client = inProcessClient({
       registry: capturing,
-      ...resolvers,
       scope: { accountIds: [ACCOUNT], userId: USER },
     })
     const remote = createRemoteRepositoryRegistry(client) as unknown as Record<

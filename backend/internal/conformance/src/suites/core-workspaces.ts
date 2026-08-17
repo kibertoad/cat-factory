@@ -62,6 +62,24 @@ export function defineCoreWorkspacesConformance(harness: ConformanceHarness): vo
       expect(res.body.executions).toHaveLength(0)
     })
 
+    it('resolves a batch of board accounts identically to the point read (D1 ⇄ Postgres)', async () => {
+      // `accountIdsOf` is what the persistence RPC binds a LIST of boards through, so the two
+      // stores must agree on all three of its answers: an account-scoped board, an accountless
+      // one, and a board that does not exist (NO KEY, never a null one, since null is the
+      // accountless board's own answer).
+      const app = harness.makeApp()
+      const { workspace: org } = await app.createOrgWorkspace()
+      const { workspace: legacy } = await app.createWorkspace({ seed: false })
+      const repo = app.workspaceRepository()
+
+      const batch = await repo.accountIdsOf([org.id, legacy.id, 'ws_missing'])
+      expect(batch[org.id]).toBe(await repo.accountOf(org.id))
+      expect(batch[legacy.id]).toBe(await repo.accountOf(legacy.id))
+      expect(Object.hasOwn(batch, 'ws_missing')).toBe(false)
+      // Empty input is a no-op read on both stores rather than an unbounded scan.
+      expect(Object.keys(await repo.accountIdsOf([]))).toEqual([])
+    })
+
     it('computes the infra-setup status projection on the snapshot (both create + read)', async () => {
       // The shared controller derives `infraSetup` from whatever THIS deployment wired, so its
       // per-area values legitimately differ across runtimes (e.g. the Worker binds R2 →

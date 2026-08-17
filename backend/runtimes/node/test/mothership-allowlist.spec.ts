@@ -542,8 +542,17 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // was DELETED rather than classified: nothing has written that column since the App token cache
   // moved in-process. `listActive` is the cron's every-tenant read, which takes no argument and so
   // can be bound by no rule — `listActiveForAccount` exists beside it for that reason.
+  // The binding READS are remote (the run path's `getByWorkspace`, the installation-keyed
+  // annotation/redirect-recovery reads, the sync fan-out). `listActive` is the cron's every-tenant
+  // read, and connect/disconnect are `integrations.manage` in the service layer: the machine token
+  // scopes ACCOUNTS not roles, so a plain member holding one could otherwise rebind or tear down
+  // the org's VCS connection. A node also cannot compose the row either connect path writes (the
+  // App probe is an app-JWT call its token source refuses; a GitLab PAT would be sealed under the
+  // LOCAL key), so this is permanent rather than a backlog.
   githubInstallationRepository: {
     listActive: 'sweeper',
+    upsert: 'admin',
+    softDelete: 'admin',
   },
   // The whole self-hosted runner-backend connection surface is now remote (the runner-pool
   // settings panel's connect/rotate/disconnect): getByWorkspace/softDelete via the `workspace`

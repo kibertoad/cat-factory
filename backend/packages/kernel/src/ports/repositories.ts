@@ -71,6 +71,19 @@ export interface WorkspaceRepository {
    */
   accountOf(id: string): Promise<string | null | undefined>
   /**
+   * The batched form of {@link accountOf}: the owning account of each named board, in one
+   * (chunked) query, keyed by workspace id. A board that does not exist has NO KEY rather than a
+   * null one, which is the same distinction `accountOf` draws with its two nullish answers: null
+   * is the accountless (legacy) board, so read the absence with `Object.hasOwn`.
+   *
+   * Exists because several callers bind a LIST of boards to the token scope at once (the
+   * persistence RPC's `workspaceList` rule, its block-list resolver, the installation owner
+   * lookups behind a PAT binding), each a point read per id before. A plain object rather than a
+   * `Map` because this crosses the mothership-mode persistence RPC, whose envelope is JSON: the
+   * same shape `WorkspaceMemberRepository.getRolesForUserInWorkspaces` answers with.
+   */
+  accountIdsOf(ids: string[]): Promise<Record<string, string | null>>
+  /**
    * The narrow access row workspace-RBAC resolution reads in one hot-path query
    * (replacing the gate's separate `accountOf`): the owning account, the legacy owner,
    * and the board's access mode. `undefined` when the board does not exist.

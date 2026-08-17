@@ -28,7 +28,7 @@ import type {
 } from '../domain/types.js'
 import type { LocalModelDeclarations } from '../domain/local-model-declarations.js'
 import type {
-  McpServerDefinition,
+  DeclaredToolServers,
   ResolvedSkill,
   ResolvedToolServer,
   UnavailableToolServer,
@@ -315,10 +315,15 @@ export interface AgentRunContext {
    * credential's KEY, never its value, which is the same bar {@link toolServers} already meets for
    * the telemetry snapshot.
    *
+   * Both halves ride, not only the resolved servers: an id the MOTHERSHIP could not resolve is a
+   * typo in the org's own package, and the node's dispatch warn is the only place an operator
+   * running locally sees it. Dropping it here would leave that typo reported nowhere, since a node
+   * boot-validates nothing it reads from the mothership.
+   *
    * Absent ⇒ no deployment-level source is wired, and the executor reads its own registry exactly
    * as before.
    */
-  orgToolServers?: McpServerDefinition[]
+  orgToolServers?: DeclaredToolServers
   /**
    * Tool servers the kind declared that were NOT wired for this dispatch, with the reason. The
    * prompt states them so the agent plans around a tool it does not have rather than discovering

@@ -14,6 +14,12 @@ const ISSUES: McpServerDefinition = {
   transport: { kind: 'stdio', command: 'npx', args: ['-y', 'issue-mcp'] },
 }
 
+const ORG_TRACKER: McpServerDefinition = {
+  id: 'org.tracker',
+  label: 'Org tracker',
+  transport: { kind: 'stdio', command: 'tracker-mcp', args: [] },
+}
+
 function context(over: Partial<AgentRunContext> = {}): AgentRunContext {
   return {
     agentKind: 'architect',
@@ -55,6 +61,44 @@ describe('panelToolServerCeiling', () => {
     // Never the AVAILABLE half: a panel wires nothing, so advertising anything here would be the
     // exact "told about a tool it cannot call" failure the vocabulary exists to prevent.
     expect(ceiling.section).not.toContain('are connected for this run')
+  })
+
+  it('withholds the ORG layer’s servers too, not only this build’s registry', () => {
+    // The deployment-level layer (a mothership-mode node reads it per dispatch) is exactly the half
+    // this node's own registry cannot see. A ceiling composed from the registry alone would state a
+    // withheld set missing every server the org assigned, which reads as a kind that never had them.
+    const ceiling = panelToolServerCeiling(
+      context({ orgToolServers: { servers: [ORG_TRACKER], unknown: ['org.typo'] } }),
+      registryWith(ISSUES),
+      undefined,
+    )
+    expect(ceiling.record?.unavailable.map((entry) => entry.id)).toEqual(['issues', 'org.tracker'])
+    expect(ceiling.section).toContain('Org tracker')
+  })
+
+  it('logs an id the ORG layer could not resolve, the only channel that can name it', () => {
+    const logger = createRecordingLogger()
+    const ceiling = panelToolServerCeiling(
+      context({ orgToolServers: { servers: [], unknown: ['org.typo'] } }),
+      new AgentKindRegistry(),
+      logger,
+    )
+    expect(ceiling.record).toBeUndefined()
+    expect(
+      logger.lines.filter((l) => l.level === 'warn' && l.fields.toolServerId === 'org.typo'),
+    ).toHaveLength(1)
+  })
+
+  it('keeps the LOCAL definition when both halves declare the same server id', () => {
+    const ceiling = panelToolServerCeiling(
+      context({
+        orgToolServers: { servers: [{ ...ISSUES, label: 'From the org' }], unknown: [] },
+      }),
+      registryWith(ISSUES),
+    )
+    expect(ceiling.record?.unavailable).toEqual([
+      { id: 'issues', label: 'Issue tracker', reason: 'consensus_panel' },
+    ])
   })
 
   it('labels a server that declared no label with its id', () => {

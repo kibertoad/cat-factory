@@ -9,7 +9,6 @@ import {
 import { REMOTE_PERSISTENCE_METHODS } from './rpc-allowlist.js'
 import {
   checkInstallationListScope,
-  checkInstallationUpsertScope,
   checkLibrarySourceScope,
   checkOwnerFieldUpsertScope,
   checkOwnerPairScope,
@@ -251,19 +250,6 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *                       of the ids GitHub offered are already bound, and refusing an unbound one
  *                       would make the read unusable for its only purpose. Nothing is disclosed by
  *                       that: a row absent from the answer is the same value the caller sent in.
- *   - `installationUpsert`
- *                     — `args[arg]` is a `GitHubInstallation` record (the App-connect / PAT-connect
- *                       write). Binds THREE things, and each closes a different hole: the connector
- *                       `workspaceId` FIELD (the row is read back through it), the DECLARED
- *                       `accountId` when non-null (the row is shared with every board of that
- *                       account, so stamping a foreign one hands that org this node's connection),
- *                       and — when a row with the same `installationId` already EXISTS — the STORED
- *                       row's account, because the write conflicts on the installation id alone. An
- *                       absent row is a CREATE and passes on the declared halves. Without the third,
- *                       an in-scope caller could name another org's installation id and repoint its
- *                       binding at a board it controls, which is the account-takeover primitive
- *                       `GitHubInstallationService.connect` refuses in the service layer the RPC
- *                       bypasses.
  *   - `serviceInsert` — `args[arg]` is a `Service` record (`registerServiceForFrame`'s insert, run on
  *                       EVERY top-level frame creation). Binds the DECLARED `accountId` and the
  *                       `frameBlockId`: an EXISTING frame block must resolve to the same in-scope
@@ -314,7 +300,6 @@ export type ScopeRule =
   | { kind: 'serviceUpdate'; arg: number; patchArg: number }
   | { kind: 'installation'; arg: number }
   | { kind: 'installationList'; arg: number }
-  | { kind: 'installationUpsert'; arg: number }
   | { kind: 'skillSource'; arg: number }
   // `entity` names the resolver that binds the STORED row. Skills live in ONE tier, so theirs is
   // the account-keyed form; a library owned by an `(ownerKind, ownerId)` PAIR takes
@@ -407,6 +392,15 @@ export interface DispatchOptions {
   /** Resolve a workspace's owning account id (the mothership's `WorkspaceRepository.accountOf`). */
   resolveAccountId(workspaceId: string): Promise<string | null | undefined>
   /**
+   * The batched form (`WorkspaceRepository.accountIdsOf`), keyed by workspace id: one query for a
+   * whole list rather than a point read per id. A board that does not exist is ABSENT from the
+   * map, which fails the scope check exactly like the `undefined` {@link resolveAccountId} answers
+   * for the same board. Required by the `workspaceList` kind and by every resolver that maps a set
+   * of boards to their accounts; a deployment whose registry lacks the method answers an empty map,
+   * so the call fails closed.
+   */
+  resolveAccountIds(workspaceIds: string[]): Promise<Map<string, string | null | undefined>>
+  /**
    * Resolve a block's owning account id (block → home workspace → account). Required for the
    * `block` scope kind; a call hitting that kind with no resolver fails closed (404).
    */
@@ -447,11 +441,18 @@ export interface DispatchOptions {
    * Resolve a VCS installation row's owning account (`github_installations`), as a three-state
    * lookup: an App binding answers its own `accountId`, a per-workspace PAT binding (which stores
    * none) answers its connector workspace's account, and a row this deployment cannot read answers
-   * `unreadable` rather than the `absent` an id-keyed upsert would be entitled to read as a create.
-   * Required for the `installation` / `installationList` / `installationUpsert` kinds; a call
-   * hitting one with no resolver fails closed (404), like the other entity resolvers.
+   * `unreadable` rather than an `absent` a caller could be entitled to read as an admission.
+   * Required for the `installation` kind; a call hitting it with no resolver fails closed (404),
+   * like the other entity resolvers.
    */
   resolveInstallationOwner?(installationId: number): Promise<EntityOwnerLookup>
+  /**
+   * The batched form, keyed by installation id: `listByInstallationIds` plus ONE account read for
+   * the PAT bindings that store none, rather than a point read per id. Required for the
+   * `installationList` kind (the connect page annotates a whole provider list at once); a call
+   * hitting it with no resolver fails closed (404).
+   */
+  resolveInstallationOwners?(installationIds: number[]): Promise<Map<number, EntityOwnerLookup>>
   /**
    * Resolve a FRAME BLOCK's owning account (block → home workspace → account), as a three-state
    * lookup. Distinct from {@link resolveBlockAccountId} precisely because of the third state: the
@@ -890,7 +891,6 @@ async function checkEntityCallScope(
         | 'serviceUpdate'
         | 'installation'
         | 'installationList'
-        | 'installationUpsert'
         | 'skillSource'
         | 'accountFieldUpsert'
         | 'usageRecord'
@@ -949,10 +949,6 @@ async function checkEntityCallScope(
     case 'serviceUpdate':
       // Binds the STORED service's account AND the account a patch would re-home it into.
       return checkServiceUpdateScope(args[rule.arg], args[rule.patchArg], opts, inScope, denied)
-    case 'installationUpsert':
-      // Binds the connector workspace, the declared account and the STORED row together; see the
-      // rule's entry on `ScopeRule` for the takeover the third half closes.
-      return checkInstallationUpsertScope(args[rule.arg], opts, inScope, denied)
     case 'owner':
       // A tenant-library row keyed by an (ownerKind, ownerId) PAIR, positionally.
       return checkOwnerPairScope(args[rule.kindArg], args[rule.idArg], opts, inScope, denied)

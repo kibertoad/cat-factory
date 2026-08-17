@@ -28,33 +28,41 @@ import type { PersistenceMethodTable } from './rpc.js'
  *
  * Scope rules: everything workspace-keyed takes the plain `workspace` rule on arg0, which is what
  * the projections are indexed by. The installation-keyed methods take the `installation` rule
- * (installation id → the binding's account, resolved server-side), `linkedWorkspaces` binds its
- * CANDIDATE list (`workspaceList`), and the connect write takes `installationUpsert` — see that
- * rule's entry on `ScopeRule` for the takeover its stored-row half closes.
+ * (installation id → the binding's account, resolved server-side) and `linkedWorkspaces` binds its
+ * CANDIDATE list (`workspaceList`).
  */
 export const VCS_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // --- Installation bindings -------------------------------------------------------
   // `getByWorkspace` is the run path's first read: `resolveRepoTarget` runs it on EVERY
   // container-agent dispatch (installation → then the `github_repos` projection). The
-  // installation-keyed reads back the connect surface a mothership-mode node now serves for real:
-  // its SPA runs the connect page, so `listAvailableInstallations` annotates the provider's
-  // installation list (`listByInstallationIds`), `resolveBoundWorkspace` recovers GitHub's
-  // stateless setup redirect (`getByInstallationId`), and connect/disconnect write the binding.
-  //
+  // installation-keyed reads back the binding surface around it: `listByInstallationIds` annotates
+  // a list of candidate ids, `getByInstallationId` recovers GitHub's stateless setup redirect, and
   // `listWorkspacesForInstallation` is the sync fan-out's "which boards does this installation
-  // reach": bound by the installation's own account, and it answers with workspace ids of that
-  // account only, so it discloses nothing the account's roster does not.
+  // reach" (bound by the installation's own account, and it answers with workspace ids of that
+  // account only, so it discloses nothing the account's roster does not).
   //
-  // Still OFF: `listActive`, the cron's every-tenant read. It takes no argument, so no rule can
-  // bind it, which is exactly why `listActiveForAccount` exists beside it.
+  // Still OFF, and permanently:
+  //
+  // - `listActive`, the cron's every-tenant read. It takes no argument, so no rule can bind it,
+  //   which is exactly why `listActiveForAccount` exists beside it.
+  // - `upsert` / `softDelete`, the connect and disconnect WRITES. Both are `integrations.manage`
+  //   in the service layer (`GitHubController` / `GitLabController` mount that permission), and
+  //   the machine token scopes ACCOUNTS, not roles: a plain member of an account holds one, so
+  //   opening these would let them rebind or tear down the org's VCS connection. That is the same
+  //   reason `emailConnectionRepository.upsert`/`softDelete` and the invitation writes are
+  //   excluded, and no scope rule can substitute for the role check the RPC bypasses.
+  //
+  //   The binding they would write is also not something a node can compose. App connect probes
+  //   the installation through an app-JWT call, and a node's `DelegatedAppTokenSource` refuses
+  //   every app-JWT path by design (the App key never leaves the mothership); the GitLab PAT
+  //   connect seals its token with the LOCAL `SecretCipher`, so a node-sealed row is one the
+  //   mothership cannot open. Connect stays where the App and the key are.
   githubInstallationRepository: {
     getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     listActiveForAccount: { scope: { kind: 'account', arg: 0 } },
     getByInstallationId: { scope: { kind: 'installation', arg: 0 } },
     listByInstallationIds: { scope: { kind: 'installationList', arg: 0 } },
     listWorkspacesForInstallation: { scope: { kind: 'installation', arg: 0 } },
-    upsert: { scope: { kind: 'installationUpsert', arg: 0 } },
-    softDelete: { scope: { kind: 'installation', arg: 0 } },
   },
   // --- Repo projection -------------------------------------------------------------
   // `list` is the SPA's repos panel and the run path's projection walk. `get` is the repo-WRITE

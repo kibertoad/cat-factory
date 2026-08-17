@@ -8,8 +8,8 @@ import { ACCOUNT, OTHER_ACCOUNT, remoteRegistry } from './persistenceRpc.harness
 // Split from `persistenceRpcSurfaces.spec.ts` when the completed surface pushed that file past
 // its size budget. These belong together: both are about state a node WRITES on behalf of an org
 // rather than reads for a panel, and both introduced a scope rule whose second half exists to stop
-// a caller reaching another tenant's row (`serviceInsert`'s frame block, `installationUpsert`'s
-// stored binding).
+// a caller reaching another tenant's row (`serviceInsert`'s frame block, `serviceUpdate`'s stored
+// service).
 
 describe('service CRUD surface (the frame-creation write path)', () => {
   // `registerServiceForFrame` runs `insert` on EVERY top-level frame creation, so until this
@@ -382,49 +382,22 @@ describe('VCS / GitHub projection read surface (workspace-scoped)', () => {
     ).rejects.toMatchObject({ code: 'not_found' })
   })
 
-  // The `installationUpsert` rule's three halves.
-  it('forwards a connect for a new installation in an in-scope workspace', async () => {
+  it('refuses the connect/disconnect WRITES outright (admin-tier, not scope-bound)', async () => {
+    // `upsert`/`softDelete` are `integrations.manage` in the service layer, and the machine token
+    // scopes accounts rather than roles: no scope rule can stand in for the role check the RPC
+    // bypasses, so the methods are simply not callable. `not callable` rather than the 404 a scope
+    // denial gives, because the refusal is about the METHOD, not about which row was named.
+    const repos = remoteRegistry()
     await expect(
-      remoteRegistry().githubInstallationRepository!.upsert!({
+      repos.githubInstallationRepository!.upsert!({
         installationId: 777,
         workspaceId: 'ws_in',
         accountId: ACCOUNT,
       }),
-    ).resolves.toBeUndefined()
-  })
-
-  it('rejects a connect that stamps an account the token does not hold (404)', async () => {
-    // The row is shared with every board of the account it names, so a foreign one hands that org
-    // this connection.
-    await expect(
-      remoteRegistry().githubInstallationRepository!.upsert!({
-        installationId: 778,
-        workspaceId: 'ws_in',
-        accountId: OTHER_ACCOUNT,
-      }),
-    ).rejects.toMatchObject({ code: 'not_found' })
-  })
-
-  it("rejects repointing ANOTHER org's installation at an in-scope board (404)", async () => {
-    // The takeover the stored-row half exists for: the upsert conflicts on the installation id
-    // alone, so without it this would rebind installation 33 (OTHER_ACCOUNT) to ws_in.
-    await expect(
-      remoteRegistry().githubInstallationRepository!.upsert!({
-        installationId: 33,
-        workspaceId: 'ws_in',
-        accountId: ACCOUNT,
-      }),
-    ).rejects.toMatchObject({ code: 'not_found' })
-  })
-
-  it('rejects a connect naming a workspace the token does not hold (404)', async () => {
-    await expect(
-      remoteRegistry().githubInstallationRepository!.upsert!({
-        installationId: 779,
-        workspaceId: 'ws_out',
-        accountId: OTHER_ACCOUNT,
-      }),
-    ).rejects.toMatchObject({ code: 'not_found' })
+    ).rejects.toThrow(/not callable/)
+    await expect(repos.githubInstallationRepository!.softDelete!(11, 0)).rejects.toThrow(
+      /not callable/,
+    )
   })
 
   // `linkedWorkspaces` binds its CANDIDATE list, not the repo id: the answer is a subset of the

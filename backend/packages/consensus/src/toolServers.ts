@@ -1,7 +1,7 @@
 import type { AgentKind, AgentRunContext, Logger, UnavailableToolServer } from '@cat-factory/kernel'
 import type { DispatchToolServers } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { toolServersSection } from '@cat-factory/agents'
+import { mergeDeclaredToolServers, toolServersSection } from '@cat-factory/agents'
 
 // ---------------------------------------------------------------------------
 // The tool-server (MCP) CEILING of a consensus panel.
@@ -47,6 +47,11 @@ const NONE: PanelToolServerCeiling = { section: '' }
  * them would resolve credentials for a dispatch that has nowhere to send them. That is also why
  * this reads the DECLARATIONS rather than calling the container executor's resolution.
  *
+ * What the kind declared is the same union the container dispatch resolves: this build's registry
+ * PLUS the deployment-level layer the engine put on the context. A panel that read the registry
+ * alone would state a withheld ceiling missing exactly the servers an org assigned, which is the
+ * half a mothership-mode node cannot see for itself.
+ *
  * Ids a kind declared with no matching registration are skipped rather than listed: there is no
  * definition to name a label from, and boot validation already reported the typo as an error, so
  * inventing a chip for it would put a registry fault in front of the agent as a missing capability.
@@ -64,7 +69,10 @@ export function panelToolServerCeiling(
   registry: AgentKindRegistry,
   logger?: Logger,
 ): PanelToolServerCeiling {
-  const { servers: declared, unknown } = registry.toolServersFor(context.agentKind as AgentKind)
+  const { servers: declared, unknown } = mergeDeclaredToolServers(
+    registry.toolServersFor(context.agentKind as AgentKind),
+    context.orgToolServers,
+  )
   for (const id of unknown) {
     logger?.warn('agent kind declares an unregistered tool server id; skipping it', {
       agentKind: context.agentKind,

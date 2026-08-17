@@ -55,6 +55,7 @@ export {
   type AgentKindCapabilityView,
   type AgentKindSource,
   agentKindCapabilityViews,
+  mergeDeclaredToolServers,
   mergeKindCapabilities,
   registryAgentKindSource,
 } from './agents/kinds/source.js'

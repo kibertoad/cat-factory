@@ -21,21 +21,36 @@ import {
   createRemoteRepositoryRegistry,
   type PersistenceRpcClient,
 } from '../src/persistence/remoteRepositories.js'
-import {
-  type DispatchOptions,
-  type LibrarySourceEntity,
-  type PersistenceRegistry,
-  dispatchPersistenceCall,
-} from '../src/persistence/rpc.js'
+import { type PersistenceRegistry, dispatchPersistenceCall } from '../src/persistence/rpc.js'
+import { buildDispatchScope } from '../src/modules/persistence/dispatchScope.js'
 
 // The mothership-mode persistence RPC: drive the client-side remote-repository proxy through
 // an in-process transport that runs the real server-side dispatcher over in-memory fakes —
 // so the round-trip (scope, allow-list, undefined/null, rev write-back, DomainError) is
 // exercised exactly as it will be over HTTP, with no network.
 
-/** A transport that runs the dispatcher in-process (the controller minus HTTP). */
-export function inProcessClient(opts: DispatchOptions): PersistenceRpcClient {
-  return { call: async (request) => (await dispatchPersistenceCall(request, opts)).body }
+/**
+ * A transport that runs the dispatcher in-process (the controller minus HTTP), over the SAME
+ * `buildDispatchScope` the controller builds its resolvers with.
+ *
+ * That is the point of taking a registry plus a scope rather than a ready-made `DispatchOptions`:
+ * the resolvers are where a rule's binding is actually decided, and a harness that re-implements
+ * them "exactly as the controller does" is a copy that can silently stop matching. Every scope
+ * table in the specs below therefore asserts against production resolution, not a lookalike.
+ */
+export function inProcessClient(opts: {
+  registry: PersistenceRegistry
+  scope: { accountIds: string[]; userId: string }
+}): PersistenceRpcClient {
+  return {
+    call: async (request) =>
+      (
+        await dispatchPersistenceCall(
+          request,
+          buildDispatchScope(opts.registry, request, opts.scope),
+        )
+      ).body,
+  }
 }
 
 export const ACCOUNT = 'acc_1'
@@ -115,6 +130,12 @@ function buildScopeAnchorRepos(fx: RegistryFixtures) {
       get: async (id: string) => workspaces.get(id) ?? null,
       accountOf: async (id: string) =>
         workspaces.has(id) ? workspaces.get(id)!.accountId : undefined,
+      // The batched form every list-shaped rule binds through. A board that does not exist has no
+      // KEY (not a null one), so the rule can tell "no such board" from the accountless board.
+      accountIdsOf: async (ids: string[]) =>
+        Object.fromEntries(
+          ids.filter((id) => workspaces.has(id)).map((id) => [id, workspaces.get(id)!.accountId]),
+        ),
       // For an in-scope board: return undefined (not null) so the envelope's `undef` flag is
       // exercised — the trap is that JSON would otherwise coerce a top-level undefined to null.
       ownerOf: async (_id: string) => undefined,
@@ -881,139 +902,23 @@ function buildLibraryAndCommsRepos() {
 }
 
 /** A registry whose workspaces live under `ACCOUNT` (so scope binding can resolve them). */
-export function makeRegistry(): {
-  registry: PersistenceRegistry
-  resolveAccountId: DispatchOptions['resolveAccountId']
-  resolveBlockAccountId: NonNullable<DispatchOptions['resolveBlockAccountId']>
-  resolveBlockAccountIds: NonNullable<DispatchOptions['resolveBlockAccountIds']>
-  resolveServiceAccountIds: NonNullable<DispatchOptions['resolveServiceAccountIds']>
-  resolveSkillSourceAccountId: NonNullable<DispatchOptions['resolveSkillSourceAccountId']>
-  resolveInstallationOwner: NonNullable<DispatchOptions['resolveInstallationOwner']>
-  resolveFrameBlockOwner: NonNullable<DispatchOptions['resolveFrameBlockOwner']>
-  resolveLibrarySourceOwner: NonNullable<DispatchOptions['resolveLibrarySourceOwner']>
-  resolveAccountMemberIds: NonNullable<DispatchOptions['resolveAccountMemberIds']>
-} {
+export function makeRegistry(): PersistenceRegistry {
   const fx = makeFixtures()
-  const registry = {
+  return {
     ...buildScopeAnchorRepos(fx),
     ...buildBoardConfigRepos(),
     ...buildReviewAndIntegrationRepos(),
     ...buildLibraryAndCommsRepos(),
     ...buildPerUserRepos(),
   } as unknown as PersistenceRegistry
-
-  const resolveAccountId = (id: string) =>
-    registry.workspaceRepository!.accountOf!(id) as Promise<string | null | undefined>
-  return {
-    registry,
-    resolveAccountId,
-    // Built exactly as the controller builds them, so the round-trip exercises the real
-    // server-side resolution shape (block → home workspace → account; serviceId → account).
-    resolveBlockAccountId: async (blockId) => {
-      const found = (await registry.blockRepository!.findById!(blockId)) as {
-        workspaceId?: string
-      } | null
-      const ws = found?.workspaceId
-      return typeof ws === 'string' ? resolveAccountId(ws) : undefined
-    },
-    // The batched form (the `blockList` scope): one `findByIds` resolves every frame block's home
-    // workspace, then each workspace's account. A block absent from the read is absent from the map,
-    // so the rule fails closed on it.
-    resolveBlockAccountIds: async (blockIds) => {
-      const found = (await registry.blockRepository!.findByIds!(blockIds)) as Array<{
-        workspaceId: string
-        block: { id: string }
-      }>
-      const map = new Map<string, string | null | undefined>()
-      for (const entry of found) map.set(entry.block.id, await resolveAccountId(entry.workspaceId))
-      return map
-    },
-    resolveServiceAccountIds: async (ids) => {
-      const services = (await registry.serviceRepository!.listByIds!(ids)) as Array<{
-        id: string
-        accountId: string | null
-      }>
-      const map = new Map<string, string | null | undefined>()
-      for (const service of services) map.set(service.id, service.accountId)
-      return map
-    },
-    // Built exactly as the controller builds them. The installation owner falls back to the
-    // connector workspace's account when the row carries none (the PAT-connect shape), and the
-    // frame-block owner answers `absent` for a block that does not exist yet — which is the
-    // ordinary case a service insert relies on.
-    resolveInstallationOwner: async (installationId) => {
-      const row = (await registry.githubInstallationRepository!.getByInstallationId!(
-        installationId,
-      )) as { accountId?: string | null; workspaceId?: string } | null
-      if (!row) return { status: 'absent' }
-      if (typeof row.accountId === 'string') return { status: 'found', accountId: row.accountId }
-      const ws = row.workspaceId
-      return {
-        status: 'found',
-        accountId: typeof ws === 'string' ? await resolveAccountId(ws) : null,
-      }
-    },
-    resolveFrameBlockOwner: async (frameBlockId) => {
-      const found = (await registry.blockRepository!.findById!(frameBlockId)) as {
-        workspaceId?: string
-      } | null
-      if (!found) return { status: 'absent' }
-      const ws = found.workspaceId
-      return {
-        status: 'found',
-        accountId: typeof ws === 'string' ? await resolveAccountId(ws) : null,
-      }
-    },
-    // Built exactly as the controller builds it (source row → its `accountId`), so the round-trip
-    // exercises the real server-side resolution for the `skillSource` scope. A source that does not
-    // exist yields undefined, which the rule fails closed on.
-    resolveSkillSourceAccountId: async (sourceId) => {
-      const source = (await registry.skillSourceRepository!.get!(sourceId)) as {
-        accountId?: string
-      } | null
-      return source?.accountId
-    },
-    // Built exactly as the controller builds it (source row → its owner PAIR), keyed by the same
-    // `LibrarySourceEntity` the rule names, so an id from one library never resolves against the
-    // other's table. A LOOKUP keyed off a total map, not a ternary: under a ternary a third library
-    // would silently resolve against the foundational-service table, so the cross-table refusal
-    // this harness is the oracle for would pass while binding the wrong rows.
-    resolveLibrarySourceOwner: async (entity, sourceId) => {
-      const repos: Record<LibrarySourceEntity, PersistenceRegistry[string] | undefined> = {
-        fragmentSource: registry.fragmentSourceRepository,
-        foundationalServiceSource: registry.foundationalServiceSourceRepository,
-      }
-      const repo = repos[entity]
-      if (typeof repo?.get !== 'function') return { status: 'unreadable' }
-      const source = (await repo.get(sourceId)) as {
-        ownerKind?: unknown
-        ownerId?: unknown
-      } | null
-      return source
-        ? { status: 'found', owner: { ownerKind: source.ownerKind, ownerId: source.ownerId } }
-        : { status: 'absent' }
-    },
-    // Built exactly as the controller builds it (roster → userIds), so the round-trip exercises the
-    // real server-side co-membership resolution for the `user`/`userList` scope.
-    resolveAccountMemberIds: async (accountId) => {
-      const memberships = (await registry.membershipRepository!.listByAccount!(
-        accountId,
-      )) as Array<{
-        userId: string
-      }>
-      return memberships.map((m) => m.userId)
-    },
-  }
 }
 
 // Exercise the round-trip through the SAME full-surface registry production uses (a
 // mothership-mode node builds `createRemoteRepositoryRegistry`), cast to the typed ports the
 // assertions below touch.
 export function remote(accountIds = [ACCOUNT]) {
-  const { registry, ...resolvers } = makeRegistry()
   const client = inProcessClient({
-    registry,
-    ...resolvers,
+    registry: makeRegistry(),
     scope: { accountIds, userId: USER },
   })
   return createRemoteRepositoryRegistry(client) as unknown as {
@@ -1030,8 +935,7 @@ export function remote(accountIds = [ACCOUNT]) {
  * port, so naming each repository's interface would only obscure the table.
  */
 export function remoteRegistry(accountIds = [ACCOUNT], userId = USER) {
-  const { registry, ...resolvers } = makeRegistry()
-  const client = inProcessClient({ registry, ...resolvers, scope: { accountIds, userId } })
+  const client = inProcessClient({ registry: makeRegistry(), scope: { accountIds, userId } })
   return createRemoteRepositoryRegistry(client) as unknown as Record<
     string,
     Record<string, (...args: unknown[]) => Promise<unknown>>

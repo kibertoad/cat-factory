@@ -5,7 +5,7 @@ import type {
   McpServerDefinition,
   ToolSecretResolver,
 } from '@cat-factory/kernel'
-import { TOOL_SERVER_BUDGET } from '@cat-factory/kernel'
+import { TOOL_SERVER_BUDGET, createRecordingLogger } from '@cat-factory/kernel'
 import { AgentKindRegistry } from '@cat-factory/agents'
 import { describe, expect, it } from 'vitest'
 import {
@@ -63,7 +63,10 @@ describe('resolveToolServers', () => {
     // nothing about it. The ENGINE reads that layer (one round trip per dispatch) and carries the
     // declarations here; the EXECUTOR still decides servability, which is the split ADR 0029 states.
     const result = await resolveToolServers({
-      context: { ...context(), orgToolServers: [STDIO] } as AgentRunContext,
+      context: {
+        ...context(),
+        orgToolServers: { servers: [STDIO], unknown: [] },
+      } as AgentRunContext,
       agentKindRegistry: new AgentKindRegistry(),
       harness: 'claude-code',
       workspaceId: 'ws1',
@@ -78,7 +81,10 @@ describe('resolveToolServers', () => {
     const result = await resolveToolServers({
       context: {
         ...context(),
-        orgToolServers: [{ ...STDIO, label: 'From the org', secretKeys: [] }],
+        orgToolServers: {
+          servers: [{ ...STDIO, label: 'From the org', secretKeys: [] }],
+          unknown: [],
+        },
       } as AgentRunContext,
       agentKindRegistry: registryWith(STDIO),
       harness: 'claude-code',
@@ -87,6 +93,28 @@ describe('resolveToolServers', () => {
     })
     expect(result.toolServers).toHaveLength(1)
     expect(result.toolServers[0]!.label).toBe('Issue tracker')
+  })
+
+  it('reports an id the ORG layer could not resolve, which nothing else on a node can', async () => {
+    // A node boot-validates nothing it reads from the mothership, so this warn is the only place
+    // the org's typo surfaces. The dispatch itself still runs on what did resolve.
+    const logger = createRecordingLogger()
+    const result = await resolveToolServers({
+      context: {
+        ...context(),
+        orgToolServers: { servers: [], unknown: ['org.typo'] },
+      } as AgentRunContext,
+      agentKindRegistry: new AgentKindRegistry(),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      logger,
+    })
+    expect(result.toolServers).toEqual([])
+    expect(
+      logger.lines.some(
+        (line) => line.level === 'warn' && line.fields?.toolServerId === 'org.typo',
+      ),
+    ).toBe(true)
   })
 
   it('splits a wired server into a non-secret projection and a secret-bearing job spec', async () => {

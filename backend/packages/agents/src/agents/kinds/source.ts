@@ -1,4 +1,4 @@
-import type { AgentKind, McpServerDefinition } from '@cat-factory/kernel'
+import type { AgentKind, DeclaredToolServers } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from './registry.js'
 import type { normalizeSkillRefs } from './capabilities.js'
 
@@ -39,7 +39,7 @@ export interface AgentKindCapabilityView {
    */
   skills: ReturnType<typeof normalizeSkillRefs>
   /** The kind's tool servers, resolved to definitions and deduplicated by server id. */
-  toolServers: { servers: McpServerDefinition[]; unknown: string[] }
+  toolServers: DeclaredToolServers
 }
 
 /**
@@ -89,7 +89,6 @@ export function mergeKindCapabilities(
   if (!org) return local
   const bundledIds = new Set(local.skills.bundled.map((s) => s.id))
   const catalogIds = new Set(local.skills.catalog.map((s) => s.skillId))
-  const serverIds = new Set(local.toolServers.servers.map((s) => s.id))
   return {
     kind: local.kind,
     skills: {
@@ -106,12 +105,30 @@ export function mergeKindCapabilities(
       // it. Deduplicated so a kind registered on both sides reports it once.
       unknown: [...new Set([...local.skills.unknown, ...org.skills.unknown])],
     },
-    toolServers: {
-      servers: [
-        ...local.toolServers.servers,
-        ...org.toolServers.servers.filter((s) => !serverIds.has(s.id)),
-      ],
-      unknown: [...new Set([...local.toolServers.unknown, ...org.toolServers.unknown])],
-    },
+    toolServers: mergeDeclaredToolServers(local.toolServers, org.toolServers),
+  }
+}
+
+/**
+ * Union a kind's LOCAL tool-server declarations with the deployment-level layer, deduplicated by
+ * server id with the local definition winning (the same precedence `toolServersFor` gives a kind's
+ * own declaration over one assigned to it). No org layer ⇒ the local answer, unchanged.
+ *
+ * Extracted because a DISPATCH performs this union too, at two sites that resolve tool servers
+ * independently (the container executor, and a consensus panel's withheld-server ceiling), and
+ * each one that re-derived it drifted: one dropped the `unknown` half, the other never looked at
+ * the org layer at all. The union is one rule, so it has one implementation.
+ */
+export function mergeDeclaredToolServers(
+  local: DeclaredToolServers,
+  org: DeclaredToolServers | undefined,
+): DeclaredToolServers {
+  if (!org) return local
+  const serverIds = new Set(local.servers.map((server) => server.id))
+  return {
+    servers: [...local.servers, ...org.servers.filter((server) => !serverIds.has(server.id))],
+    // Reported, not merged away: an id the resolving registry could not resolve is a typo in the
+    // package that declared it, and this is the only channel that can name it.
+    unknown: [...new Set([...local.unknown, ...org.unknown])],
   }
 }

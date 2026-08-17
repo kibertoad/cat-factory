@@ -56,6 +56,10 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     get: { scope: { kind: 'workspace', arg: 0 } },
     ownerOf: { scope: { kind: 'workspace', arg: 0 } },
     accountOf: { scope: { kind: 'workspace', arg: 0 } },
+    // The batched form, which the `workspaceList` rule binds the same way it binds every other
+    // list read: each named board must resolve to an in-scope account, so the answer can only
+    // ever be a subset of what the caller already holds.
+    accountIdsOf: { scope: { kind: 'workspaceList', arg: 0 } },
     // The workspace-RBAC authorization read (the narrow access row that replaces `accountOf`
     // in the gate); workspace-scoped and secret-free, exactly like `accountOf`/`ownerOf`.
     accessRowOf: { scope: { kind: 'workspace', arg: 0 } },

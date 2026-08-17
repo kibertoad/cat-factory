@@ -37,8 +37,8 @@
 > Every slice is a server-only allow-list change (symmetric by construction: the dispatcher
 > reflects over each facade's registry), with round-trip + cross-account-scope tests in
 > `packages/server/test/persistenceRpc.spec.ts` and the static drift guard
-> (`runtimes/node/test/mothership-allowlist.spec.ts`) moving the methods out of `pending`, unless
-> noted otherwise.
+> (`runtimes/node/test/mothership-allowlist.spec.ts`) classifying each method, unless noted
+> otherwise.
 
 **Spine & durability (PR 0–2)**
 
@@ -435,7 +435,7 @@
     refresh. That is an argument for opening the two TOGETHER, which is what happened: token
     delegation gave a node a real GitHub client, so create-branch / open-PR / merge / comment
     already ran there and only their projection refresh was still failing. Allow-listed: the whole
-    installation surface (the connect page's id-keyed reads, connect/disconnect), the repo
+    installation surface's id-keyed READS, the repo
     projection's `get`/`upsertMany`/`tombstoneMissing`/`setMonorepo`/`linkedWorkspaces` and the
     incremental-sync cursors, and reads + `upsertMany` on all five entity projections. Still off:
     `listStale` (the reconcile cron, cross-tenant) and `listByInstallation` (the delegation mint's
@@ -444,17 +444,18 @@
     The allow-list outgrew its file, so the VCS block moved to `rpc-allowlist-vcs.ts` and the
     content libraries to `rpc-allowlist-libraries.ts`; the merged table is what every reader sees.
 
-  - **`installationUpsert` is the rule to copy, and the hole it closes is an account takeover.**
-    The installation upsert conflicts on `installation_id` alone and re-`SET`s `workspace_id` /
-    `account_id` from the record, so binding the declared workspace alone would let an in-scope
-    caller name ANOTHER org's installation id and repoint its binding at a board it controls. That
-    is exactly what `GitHubInstallationService.connect` refuses in the service layer the RPC
-    bypasses. The rule binds three things: the connector `workspaceId`, the declared `accountId`
-    when non-null (the row is shared with every board of that account, so a foreign one hands that
-    org this connection), and the STORED row's owner. Same `absent ⇒ create` shape as
-    `accountFieldUpsert`. A PAT connection stores NO account, so the resolver falls back to the
-    connector workspace's: without that, every per-workspace GitLab connection would be unreadable
-    from the node that made it.
+  - **The installation CONNECT/DISCONNECT writes stay mothership-internal, and the reasons compose.**
+    They were briefly allow-listed behind a record rule binding the connector workspace, the declared
+    account and the stored row. The rule was the wrong instrument: `upsert`/`softDelete` are
+    `integrations.manage` in the service layer, a machine token scopes ACCOUNTS not roles, and a plain
+    member of an account holds one, so no amount of row binding substitutes for the role check the RPC
+    bypasses. It also bound nothing a node could use: App connect probes the installation through an
+    app-JWT call `DelegatedAppTokenSource` refuses by design (the App key never leaves the mothership),
+    and the GitLab PAT connect seals its token with the LOCAL `SecretCipher`, so a node-sealed row is
+    one the mothership cannot open. The id-keyed READS stay (the annotation read, the setup-redirect
+    recovery, the sync fan-out), each bound by the installation's own account: a PAT binding stores
+    none, so the resolver falls back to the connector workspace's, without which every per-workspace
+    GitLab connection would be unreadable from the node that made it.
   - **Service CRUD, which a mothership-mode node needed to create a service frame AT ALL.** The
     previous entry recorded why it could not ride an allow-list line, and the new `serviceInsert`
     rule is the resolution: bind the declared `accountId` AND the `frameBlockId` the row claims,
@@ -1351,8 +1352,8 @@ never remotely invocable (mothership-internal cron).
 > **This table is reconciled against the ground truth**: the server-side allow-list
 > (`REMOTE_PERSISTENCE_METHODS` in `backend/packages/server/src/persistence/rpc.ts`) and the
 > coverage-independent drift guard (`backend/runtimes/node/test/mothership-allowlist.spec.ts`,
-> which classifies EVERY Drizzle repository method as `remote` / `pending` / `local` / `telemetry` /
-> `admin` / `sweeper` / `onboarding` / `helper`). When in doubt, trust those two files over this
+> which classifies EVERY Drizzle repository method as `remote` / `local` / `telemetry` / `admin` /
+> `sweeper` / `onboarding` / `preauth` / `inbound` / `helper`). When in doubt, trust those two files over this
 > table. Every org method is now either allow-listed or PERMANENTLY classified: the guard has no
 > `pending` state left, so a new repository method must pick its bucket in the PR that adds it.
 
@@ -1419,7 +1420,7 @@ never remotely invocable (mothership-internal cron).
 | `taskSourceSettingsRepository`           | ✅ done | the per-workspace source on/off toggles (no secrets)                                                                |
 | `reviewQuestionPostRepository`           | ✅ done | engine-written park writeback markers: claim/settle/get on `workspaceField`                                         |
 | `trackerCommentIngestRepository`         | n/a     | inbound webhook dedupe: written where a delivery ARRIVES, which is never a node                                     |
-| `githubInstallationRepository`           | ✅ done | run-path + connect-page reads + connect/disconnect (`installationUpsert`); cron `listActive` internal               |
+| `githubInstallationRepository`           | ✅ done | run-path + id-keyed reads; `upsert`/`softDelete` admin (`integrations.manage`), cron `listActive` internal          |
 | `repoProjectionRepository`               | ✅ done | reads + sync/repo-write writes + cursors; `listStale`/`listByInstallation` internal                                 |
 | `branchProjectionRepository`             | ✅ done | read + sync ingest                                                                                                  |
 | `pullRequestProjectionRepository`        | ✅ done | both reads + sync ingest                                                                                            |
@@ -1634,8 +1635,8 @@ backend, asserted by `mothership-integration.spec.ts` (green). The three parts o
    `serviceList` / `service` / `serviceMount` / `usageRecord` / `owner` / `ownerField` /
    `visibility` / `selfUser` / `user` / `userList`). The
    boundary is security-sensitive: a machine token scopes ACCOUNTS not roles, so admin-gated mutations
-   and global sweeper reads stay excluded. Ongoing surface-completion is the follow-up slices + the
-   `pending` entries in the drift guard.
+   and global sweeper reads stay excluded. Ongoing surface-completion is the follow-up slices; the
+   drift guard is what forces each new method to pick a bucket.
 3. **Expose those repos in the mothership-side registry** (the dispatcher reflects over it) with
    round-trip + cross-account-scope tests + the fake-mothership integration test (slice 4).
 

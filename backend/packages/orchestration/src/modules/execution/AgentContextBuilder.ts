@@ -29,7 +29,7 @@ import type {
   PipelineStep,
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
-  McpServerDefinition,
+  DeclaredToolServers,
   ResolvedSkill,
   SkillVersionPin,
   TaskRepository,
@@ -350,14 +350,20 @@ export interface BuildContextOptions {
  * One helper for both because they are one answer (`resolveKindCapabilities`), and because each is
  * omitted rather than sent empty: an absent `orgToolServers` means no deployment-level source is
  * wired, which is what tells the executor to read its own registry exactly as before.
+ *
+ * The tool-server half travels WHOLE. Its `unknown` ids are the deployment's own typos, reported
+ * nowhere else on a mothership-mode node (which boot-validates nothing it reads remotely), so a
+ * layer carrying servers but no unresolvable ids is a layer that silently swallowed them. That is
+ * also why a layer with unresolvable ids and no servers still rides.
  */
 function capabilityContextFields(resolved: {
   skills: ResolvedSkill[]
-  toolServers: McpServerDefinition[]
-}): { skills?: ResolvedSkill[]; orgToolServers?: McpServerDefinition[] } {
+  toolServers?: DeclaredToolServers
+}): { skills?: ResolvedSkill[]; orgToolServers?: DeclaredToolServers } {
+  const org = resolved.toolServers
   return {
     ...(resolved.skills.length ? { skills: resolved.skills } : {}),
-    ...(resolved.toolServers.length ? { orgToolServers: resolved.toolServers } : {}),
+    ...(org && (org.servers.length || org.unknown.length) ? { orgToolServers: org } : {}),
   }
 }
 
@@ -1229,7 +1235,7 @@ export class AgentContextBuilder {
   ): Promise<{
     skills: ResolvedSkill[]
     versions: SkillVersionPin[]
-    toolServers: McpServerDefinition[]
+    toolServers?: DeclaredToolServers
   }> {
     // ONE capability resolution per dispatch, feeding both halves: the skills the engine resolves
     // here, and the tool-server DECLARATIONS the executor resolves for servability. Resolving them
@@ -1248,7 +1254,7 @@ export class AgentContextBuilder {
     // the same answer, and sending it would be a second copy of it on every context.
     return {
       ...resolved,
-      toolServers: this.deps.agentKindSource ? capabilities.toolServers.servers : [],
+      ...(this.deps.agentKindSource ? { toolServers: capabilities.toolServers } : {}),
     }
   }
 

@@ -1,6 +1,7 @@
 import type {
   AgentKind,
   AgentRunContext,
+  DeclaredToolServers,
   HarnessKind,
   Logger,
   McpSecretRef,
@@ -27,6 +28,7 @@ import {
   reservedEnvKeyMessage,
 } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
+import { mergeDeclaredToolServers } from '@cat-factory/agents'
 
 // ---------------------------------------------------------------------------
 // Tool servers (MCP) for one container dispatch: take the running agent kind's declared servers,
@@ -119,21 +121,16 @@ const EMPTY: ResolvedToolServers = {
  * with the deployment-level layer the engine resolved onto the context when a source is wired (a
  * mothership-mode node reads the mothership's over `GET /internal/agent-kinds`).
  *
- * The union is deduplicated by server id with the LOCAL definition winning, matching the
- * precedence `toolServersFor` gives a kind's own declaration over one assigned to it. Absent
- * `orgToolServers` ⇒ the registry answers alone, byte-for-byte the previous behaviour.
+ * The union itself is `mergeDeclaredToolServers`, the same one the capability layer performs, so
+ * both halves cross: an id the MOTHERSHIP could not resolve joins this build's own unresolvable
+ * ids and is reported by `reportUnknown` below. Absent `orgToolServers` ⇒ the registry answers
+ * alone, byte-for-byte the previous behaviour.
  */
-function declaredToolServers(
-  input: ResolveToolServersInput,
-): ReturnType<AgentKindRegistry['toolServersFor']> {
-  const local = input.agentKindRegistry.toolServersFor(input.context.agentKind as AgentKind)
-  const org = input.context.orgToolServers ?? []
-  if (!org.length) return local
-  const ids = new Set(local.servers.map((server) => server.id))
-  return {
-    ...local,
-    servers: [...local.servers, ...org.filter((server) => !ids.has(server.id))],
-  }
+function declaredToolServers(input: ResolveToolServersInput): DeclaredToolServers {
+  return mergeDeclaredToolServers(
+    input.agentKindRegistry.toolServersFor(input.context.agentKind as AgentKind),
+    input.context.orgToolServers,
+  )
 }
 
 /**
