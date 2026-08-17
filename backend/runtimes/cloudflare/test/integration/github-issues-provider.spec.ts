@@ -43,7 +43,6 @@ function installationsRepo(active: GitHubInstallation[]): GitHubInstallationRepo
       active.find((i) => i.workspaceId === workspaceId) ?? null,
     listWorkspacesForInstallation: async () => [],
     upsert: async () => {},
-    updateCachedToken: async () => {},
     softDelete: async () => {},
   }
 }

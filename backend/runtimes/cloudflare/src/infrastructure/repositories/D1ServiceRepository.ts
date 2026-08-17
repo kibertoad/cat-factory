@@ -87,14 +87,6 @@ export class D1ServiceRepository implements ServiceRepository {
     return out
   }
 
-  async getByRepo(installationId: number, repoGithubId: number): Promise<Service | null> {
-    const row = await this.db
-      .prepare(`SELECT * FROM services WHERE installation_id = ? AND repo_github_id = ?`)
-      .bind(installationId, repoGithubId)
-      .first<ServiceRow>()
-    return row ? rowToService(row) : null
-  }
-
   async insert(service: Service): Promise<void> {
     await this.db
       .prepare(

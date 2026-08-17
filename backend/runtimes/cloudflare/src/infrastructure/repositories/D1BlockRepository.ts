@@ -29,14 +29,6 @@ export class D1BlockRepository implements BlockRepository {
     return tryDecodeRows(results, rowToBlock, blockContext)
   }
 
-  async listByService(serviceId: string): Promise<Block[]> {
-    const { results } = await this.db
-      .prepare('SELECT * FROM blocks WHERE service_id = ? ORDER BY rowid')
-      .bind(serviceId)
-      .all<BlockRow>()
-    return tryDecodeRows(results, rowToBlock, blockContext)
-  }
-
   async listByServices(serviceIds: string[]): Promise<Block[]> {
     if (serviceIds.length === 0) return []
     const out: Block[] = []

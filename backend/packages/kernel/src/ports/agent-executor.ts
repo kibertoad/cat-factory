@@ -28,6 +28,7 @@ import type {
 } from '../domain/types.js'
 import type { LocalModelDeclarations } from '../domain/local-model-declarations.js'
 import type {
+  DeclaredToolServers,
   ResolvedSkill,
   ResolvedToolServer,
   UnavailableToolServer,
@@ -302,6 +303,27 @@ export interface AgentRunContext {
    * telemetry snapshot). Absent ⇒ the kind declared none.
    */
   toolServers?: ResolvedToolServer[]
+  /**
+   * The tool servers the DEPLOYMENT declares for this kind, resolved by the engine from a source
+   * that is not this process's registry: a mothership-mode node reads the mothership's capability
+   * layer over `GET /internal/agent-kinds`, because a playbook or MCP server the org assigned to a
+   * BUILT-IN kind is data its own build may be one release behind on.
+   *
+   * Carried on the context because the ENGINE owns the read (one per dispatch) while the EXECUTOR
+   * owns whether each server is SERVABLE here (the resolved harness, the facade-wired credential
+   * resolver) — the split ADR 0029 states. Non-secret by construction: a definition names a
+   * credential's KEY, never its value, which is the same bar {@link toolServers} already meets for
+   * the telemetry snapshot.
+   *
+   * Both halves ride, not only the resolved servers: an id the MOTHERSHIP could not resolve is a
+   * typo in the org's own package, and the node's dispatch warn is the only place an operator
+   * running locally sees it. Dropping it here would leave that typo reported nowhere, since a node
+   * boot-validates nothing it reads from the mothership.
+   *
+   * Absent ⇒ no deployment-level source is wired, and the executor reads its own registry exactly
+   * as before.
+   */
+  orgToolServers?: DeclaredToolServers
   /**
    * Tool servers the kind declared that were NOT wired for this dispatch, with the reason. The
    * prompt states them so the agent plans around a tool it does not have rather than discovering

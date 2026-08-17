@@ -772,6 +772,7 @@ export {
   type McpTransport,
   type ResolvedSkill,
   type ResolvedSkillResource,
+  type DeclaredToolServers,
   type ResolvedToolServer,
   type SkillVersionPin,
   type UnavailableToolServer,

@@ -71,6 +71,19 @@ export interface WorkspaceRepository {
    */
   accountOf(id: string): Promise<string | null | undefined>
   /**
+   * The batched form of {@link accountOf}: the owning account of each named board, in one
+   * (chunked) query, keyed by workspace id. A board that does not exist has NO KEY rather than a
+   * null one, which is the same distinction `accountOf` draws with its two nullish answers: null
+   * is the accountless (legacy) board, so read the absence with `Object.hasOwn`.
+   *
+   * Exists because several callers bind a LIST of boards to the token scope at once (the
+   * persistence RPC's `workspaceList` rule, its block-list resolver, the installation owner
+   * lookups behind a PAT binding), each a point read per id before. A plain object rather than a
+   * `Map` because this crosses the mothership-mode persistence RPC, whose envelope is JSON: the
+   * same shape `WorkspaceMemberRepository.getRolesForUserInWorkspaces` answers with.
+   */
+  accountIdsOf(ids: string[]): Promise<Record<string, string | null>>
+  /**
    * The narrow access row workspace-RBAC resolution reads in one hot-path query
    * (replacing the gate's separate `accountOf`): the owning account, the legacy owner,
    * and the board's access mode. `undefined` when the board does not exist.
@@ -120,16 +133,10 @@ export type BlockPatch = Partial<Omit<Block, 'id' | 'completedAt'>>
 export interface BlockRepository {
   listByWorkspace(workspaceId: string): Promise<Block[]>
   /**
-   * Every block belonging to a service (its frame + modules + tasks), regardless of
-   * which workspace created them. Backs the board composition that renders a service
-   * mounted from another workspace in the same org. Returns the blocks whose
-   * `service_id` column matches (set at insert time when the service repos are wired).
-   */
-  listByService(serviceId: string): Promise<Block[]>
-  /**
-   * Every block belonging to ANY of the given services, in a single (chunked) query — the
-   * batched form of {@link BlockRepository.listByService} used to compose a board from all the
-   * services it mounts without one round-trip per service. Empty input → empty result.
+   * Every block belonging to ANY of the given services (its frame + modules + tasks), in a
+   * single (chunked) query — the board composition that renders every service a workspace
+   * mounts, without one round-trip per service. Matches the `service_id` column stamped at
+   * insert time. Empty input → empty result.
    */
   listByServices(serviceIds: string[]): Promise<Block[]>
   get(workspaceId: string, id: string): Promise<Block | null>
@@ -361,16 +368,9 @@ export interface ExecutionRepository {
    */
   countActiveByWorkspace(workspaceId: string): Promise<number>
   /**
-   * Every execution belonging to a service, regardless of which workspace it ran under.
-   * Backs the board snapshot for a service mounted from another workspace in the same org,
-   * so its run progress/status renders identically on every board that mounts it (not just
-   * on its home workspace). Matches the `service_id` column stamped at insert time.
-   */
-  listByService(serviceId: string): Promise<ExecutionInstance[]>
-  /**
-   * Every execution belonging to ANY of the given services, in a single (chunked) query — the
-   * batched form of {@link ExecutionRepository.listByService} used to compose a board's runs
-   * from all the services it mounts without one round-trip per mount. Empty input → empty.
+   * Every execution belonging to ANY of the given services, in a single (chunked) query, so a
+   * shared service's run progress renders identically on every board that mounts it. Matches
+   * the `service_id` column stamped at insert time. Empty input → empty.
    */
   listByServices(serviceIds: string[]): Promise<ExecutionInstance[]>
   /**

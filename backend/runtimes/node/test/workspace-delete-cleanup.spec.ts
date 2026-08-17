@@ -67,15 +67,15 @@ describe('DrizzleWorkspaceRepository.delete reclaims the workspace services', ()
       createdAt: 0,
     })
 
-    // Sanity: the repo is linked before the board is deleted.
-    expect(await repos.serviceRepository.getByRepo(4242, 9999)).not.toBeNull()
+    // Sanity: the service (carrying the repo link) exists before the board is deleted.
+    expect(await repos.serviceRepository.getByFrameBlock(frameId)).not.toBeNull()
 
     await repos.workspaceRepository.delete(wsId)
 
     // The service + its mount are gone, so the repo is re-addable elsewhere in the account.
-    expect(await repos.serviceRepository.getByRepo(4242, 9999)).toBeNull()
     expect(await repos.serviceRepository.getByFrameBlock(frameId)).toBeNull()
-    expect(await repos.workspaceMountRepository.listByService(service.id)).toEqual([])
+    expect(await repos.serviceRepository.listByIds([service.id])).toEqual([])
+    expect(await repos.workspaceMountRepository.listByServiceIds([service.id])).toEqual([])
   })
 
   it('re-homes a shared service to a surviving board instead of deleting it', async () => {
@@ -139,7 +139,9 @@ describe('DrizzleWorkspaceRepository.delete reclaims the workspace services', ()
     expect(moved.map((b) => b.id).sort()).toEqual([frameId, taskId].sort())
     expect(await repos.blockRepository.listByWorkspace(home)).toEqual([])
     expect(
-      (await repos.workspaceMountRepository.listByService(service.id)).map((m) => m.workspaceId),
+      (await repos.workspaceMountRepository.listByServiceIds([service.id])).map(
+        (m) => m.workspaceId,
+      ),
     ).toEqual([other])
   })
 })

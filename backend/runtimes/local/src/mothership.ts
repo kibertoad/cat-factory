@@ -8,6 +8,7 @@ import {
   HttpBinaryGeneratorSource,
   HttpFoundationalBuiltinSource,
   HttpDeploymentDocumentResolver,
+  HttpAgentKindSource,
   HttpPromptFragmentSource,
   HttpPersistenceRpcClient,
   HttpSecretDelegate,
@@ -134,6 +135,16 @@ export interface MothershipComposition {
    * machine token as the persistence RPC.
    */
   promptFragments: HttpPromptFragmentSource
+  /**
+   * The deployment's AGENT-KIND CAPABILITY layer (the skills and tool servers it assigns to kinds,
+   * built-in ones included), read from the MOTHERSHIP over `GET /internal/agent-kinds`. The fourth
+   * of the same family, and the only one that MERGES with this node's own registry rather than
+   * replacing it: a kind's executable half cannot cross a wire, so the catalog stays local and a
+   * step naming an unknown kind still fails loudly at admission, while the deployment's
+   * assignments are pure data whose absence here is silent — the agent just works without the
+   * org's playbook. Reads the SAME per-request machine token as the persistence RPC.
+   */
+  agentKinds: HttpAgentKindSource
   /**
    * How a code-registered fragment's `documentRef` resolves on a node: over
    * `POST /internal/prompt-fragments/document-bodies`, because the credentials that authenticate
@@ -279,6 +290,11 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
   // …and the standards pool, on the same base URL + per-request token, for the same reason once
   // more (see the boot warning in `server.ts` when a registry is nonetheless registered here).
   const promptFragments = new HttpPromptFragmentSource({ baseUrl, token: machineToken })
+  // …and the capability layer the deployment assigns to agent kinds, on the same base URL +
+  // per-request token. Unlike the three above it is MERGED with this node's own registry, because
+  // the half that cannot cross (a kind's prompts, hooks and output parser) is the half its own
+  // build owns.
+  const agentKinds = new HttpAgentKindSource({ baseUrl, token: machineToken })
   // …and the living documents those standards may name. No `configuredSources` here: a node cannot
   // see the mothership's environment, so it assumes every deployment-scopable source may be served
   // and lets the read decide. That direction costs one round trip that resolves nothing; the
@@ -335,6 +351,7 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
     foundationalBuiltins,
     binaryGenerators,
     promptFragments,
+    agentKinds,
     deploymentDocuments,
     realtimeAdapter,
     realtimeSubscriber,

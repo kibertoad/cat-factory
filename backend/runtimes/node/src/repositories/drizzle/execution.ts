@@ -357,19 +357,6 @@ export class DrizzleExecutionRepository implements ExecutionRepository {
     )
   }
 
-  async listByService(serviceId: string): Promise<ExecutionInstance[]> {
-    const rows = await this.db
-      .select()
-      .from(agentRuns)
-      .where(and(eq(agentRuns.service_id, serviceId), this.isExecution))
-      .orderBy(agentRuns.created_at)
-    return tryDecodeRows(
-      rows,
-      (r) => rowToExecution(r as ExecutionRow),
-      (r) => ({ table: 'agent_runs', id: (r as ExecutionRow).id }),
-    )
-  }
-
   async listByServices(serviceIds: string[]): Promise<ExecutionInstance[]> {
     if (serviceIds.length === 0) return []
     const out: ExecutionInstance[] = []
@@ -1203,15 +1190,6 @@ export class DrizzlePipelineScheduleRepository implements PipelineScheduleReposi
       .select()
       .from(pipelineSchedules)
       .where(eq(pipelineSchedules.workspace_id, workspaceId))
-      .orderBy(pipelineSchedules.created_at)
-    return rows.map(rowToSchedule)
-  }
-
-  async listByService(serviceId: string): Promise<PipelineSchedule[]> {
-    const rows = await this.db
-      .select()
-      .from(pipelineSchedules)
-      .where(eq(pipelineSchedules.service_id, serviceId))
       .orderBy(pipelineSchedules.created_at)
     return rows.map(rowToSchedule)
   }

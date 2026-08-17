@@ -57,7 +57,7 @@ import type {
   WorkspaceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import type { AgentKindRegistry } from '@cat-factory/agents'
+import type { AgentKindRegistry, AgentKindSource } from '@cat-factory/agents'
 import type { ResolvedValidationChecks } from '@cat-factory/contracts'
 import type {
   BugIntakeService,
@@ -326,6 +326,12 @@ export interface ExecutionServiceDependencies {
    * configured; a skill step dispatched with this unwired fails loudly rather than running blank.
    */
   skillResolver?: SkillResolver
+  /**
+   * The DEPLOYMENT's agent-kind capability layer, when that is not this process's own registry —
+   * a mothership-mode node reads the mothership's over `GET /internal/agent-kinds`. Absent ⇒ the
+   * local registry answers alone (every other deployment shape, unchanged).
+   */
+  agentKindSource?: AgentKindSource
   /**
    * Optional: the FOUNDATIONAL SERVICES catalog seam (backend/docs/adr/0031-foundational-services.md).
    * Supplies a design kind its catalog and a consumer kind the API contracts of the services that

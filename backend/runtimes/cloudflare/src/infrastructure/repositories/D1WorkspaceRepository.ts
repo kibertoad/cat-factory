@@ -8,6 +8,7 @@ import { WORKSPACE_SCOPED_TABLES } from '@cat-factory/kernel'
 import type { Workspace, WorkspaceAccessMode } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 import { type WorkspaceRow, rowToWorkspace } from './mappers'
+import { chunkForIn } from './chunk'
 
 // Cloudflare-only workspace-scoped tables that have no Node/Drizzle analogue (Durable-Object
 // tracking), appended to the shared cascade list for this facade. Kept here — not in the
@@ -94,6 +95,21 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
       .first<{ account_id: string | null }>()
     // Row absent → undefined (missing); present → the (possibly null) account id.
     return row ? row.account_id : undefined
+  }
+
+  async accountIdsOf(ids: string[]): Promise<Record<string, string | null>> {
+    const found: Record<string, string | null> = {}
+    if (ids.length === 0) return found
+    for (const chunk of chunkForIn([...new Set(ids)])) {
+      const { results } = await this.db
+        .prepare(
+          `SELECT id, account_id FROM workspaces WHERE id IN (${chunk.map(() => '?').join(', ')})`,
+        )
+        .bind(...chunk)
+        .all<{ id: string; account_id: string | null }>()
+      for (const row of results) found[row.id] = row.account_id
+    }
+    return found
   }
 
   async accessRowOf(id: string): Promise<WorkspaceAccessRow | undefined> {

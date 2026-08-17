@@ -9,6 +9,7 @@
 
 import type {
   AgentKindRegistry,
+  AgentKindSource,
   ResolveFragmentInstallationId,
   ResolveSkillInstallationId,
 } from '@cat-factory/agents'
@@ -1154,6 +1155,21 @@ export interface CoreDependencies {
    * the drift the source exists to remove.
    */
   promptFragmentSource?: PromptFragmentSource
+  /**
+   * Where the deployment's AGENT-KIND CAPABILITY layer is read from, when that is not this
+   * process's own registry. Overridden by ONE caller: a mothership-mode node, over
+   * `GET /internal/agent-kinds`.
+   *
+   * The fourth of the same family, and the only one that MERGES rather than replaces. Its three
+   * siblings serve a set the node also registers, so a merge would let a stale local copy win by
+   * id. Here the halves are different things: a KIND's own declarations belong to the code that
+   * implements it (which cannot cross a wire, so the kind CATALOG stays node-local, exactly like
+   * task types and pipelines, and a step naming an unknown kind still fails loudly at admission),
+   * while `assignSkills`/`assignToolServers` are the DEPLOYMENT's layer on top — pure data whose
+   * absence on a node one build behind is silent, since the agent simply works without the org's
+   * playbook. Absent ⇒ the local registry answers alone.
+   */
+  agentKindSource?: AgentKindSource
   /**
    * Enqueues a targeted foundational-source resync onto the runtime's GitHub-sync queue — the
    * push-webhook freshness fan-out, the twin of {@link CoreDependencies.enqueueSkillResync}.

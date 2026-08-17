@@ -303,6 +303,22 @@ export interface McpServerDefinition {
 }
 
 /**
+ * What a kind DECLARED, resolved against the registry that holds the definitions: the servers that
+ * resolved, plus the ids that matched no registration.
+ *
+ * The two halves travel together, always, because they are one answer. An id with no registration
+ * is a typo in the declaring package, and the only channels that can report it are the ones
+ * resolving the declaration; drop `unknown` on the way somewhere and that surface silently stops
+ * reporting it. That is why this is a named type rather than a shape each site restates: a caller
+ * carrying half of it fails to typecheck.
+ */
+export interface DeclaredToolServers {
+  servers: McpServerDefinition[]
+  /** Declared ids that matched no registration on the resolving side. */
+  unknown: string[]
+}
+
+/**
  * The prompt-facing projection of a tool server that was actually wired for this dispatch. Carried
  * on `AgentRunContext` (so it IS captured in the agent-context snapshot) and therefore free of
  * every credential.

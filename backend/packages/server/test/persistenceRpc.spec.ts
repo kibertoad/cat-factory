@@ -161,10 +161,8 @@ describe('persistence RPC round-trip', () => {
 
 describe('member-display read surface (co-membership scoped)', () => {
   function remoteUsers(accountIds = [ACCOUNT]) {
-    const { registry, ...resolvers } = makeRegistry()
     const client = inProcessClient({
-      registry,
-      ...resolvers,
+      registry: makeRegistry(),
       scope: { accountIds, userId: USER },
     })
     return createRemoteRepositoryRegistry(client) as unknown as {
@@ -249,12 +247,38 @@ describe('per-user tutorial progress (selfUser scoped)', () => {
   })
 })
 
+describe('per-user profile + visibility writes (selfUser scoped)', () => {
+  const OTHER_USER = 'usr_co'
+
+  it("forwards the profile edit and the caller's own board visibility", async () => {
+    const repos = remoteRegistry([ACCOUNT], USER)
+    await expect(repos.userRepository!.update!(USER, { name: 'New' })).resolves.toMatchObject({
+      id: USER,
+    })
+    await expect(repos.workspaceMemberRepository!.listWorkspaceIdsForUser!(USER)).resolves.toEqual([
+      USER,
+    ])
+  })
+
+  it("refuses both for a CO-MEMBER's id (404), unlike the display reads", async () => {
+    // `usr_co` is a co-member, so the looser `user` rule ADMITS them for the display read — which
+    // is exactly why these two take `selfUser` instead. A profile write bound by co-membership
+    // would let a node rename any teammate in its account.
+    const repos = remoteRegistry([ACCOUNT], USER)
+    await expect(repos.userRepository!.get!(OTHER_USER)).resolves.toMatchObject({ id: OTHER_USER })
+    await expect(
+      repos.userRepository!.update!(OTHER_USER, { name: 'Hijacked' }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+    await expect(
+      repos.workspaceMemberRepository!.listWorkspaceIdsForUser!(OTHER_USER),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+})
+
 describe('createRemoteRepositoryRegistry (full-surface, drift-proof)', () => {
   function registryClient() {
-    const { registry, ...resolvers } = makeRegistry()
     return inProcessClient({
-      registry,
-      ...resolvers,
+      registry: makeRegistry(),
       scope: { accountIds: [ACCOUNT], userId: USER },
     })
   }

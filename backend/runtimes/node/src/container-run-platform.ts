@@ -39,6 +39,7 @@ import type { NodeContainerOptions } from './container-options.js'
 import type { resolveNodeContainerFoundation } from './container-foundation.js'
 import type { buildNodeModelDeps } from './container-model-deps.js'
 import { selectNodeGitHubDeps } from './container-github-deps.js'
+import type { DrizzleDb } from './db/client.js'
 import { buildNodeRunServices } from './container-run-services-deps.js'
 import { buildNodeBootstrapper, buildNodeTransportDeploy } from './container-transport-deps.js'
 import {
@@ -49,7 +50,14 @@ import {
   DrizzleGitHubInstallationRepository,
   DrizzleRunnerPoolConnectionRepository,
 } from './repositories/containerExecution.js'
-import { DrizzleRepoProjectionRepository } from './repositories/github.js'
+import {
+  DrizzleBranchProjectionRepository,
+  DrizzleCheckRunProjectionRepository,
+  DrizzleCommitProjectionRepository,
+  DrizzleIssueProjectionRepository,
+  DrizzlePullRequestProjectionRepository,
+  DrizzleRepoProjectionRepository,
+} from './repositories/github.js'
 
 /**
  * The workspace-spanning GitHub App registry, built once and shared by everything that
@@ -106,6 +114,41 @@ export interface NodeRunPlatformInput {
  * so the root spreads it wholesale rather than re-listing it — the same reason the per-run
  * `runServices` bundle (spread in here) is kept as one value.
  */
+
+/**
+ * The four VCS entity projections + the check-run one, sourced through the same remote ⇄ Drizzle
+ * seam as their repo/installation siblings.
+ *
+ * Sourced HERE rather than inside the GitHub module because the mothership reflects them on its
+ * persistence registry whether or not it wires a GitHub App of its own: a mothership-mode node
+ * projects what its OWN delegated client just wrote, so the module's "only when configured" gate
+ * would leave that node's sync answering `... is not wired`.
+ */
+function sourceEntityProjections(sourced: <T>(name: string, build: (d: DrizzleDb) => T) => T) {
+  return {
+    branchProjectionRepository: sourced(
+      'branchProjectionRepository',
+      (d) => new DrizzleBranchProjectionRepository(d),
+    ),
+    pullRequestProjectionRepository: sourced(
+      'pullRequestProjectionRepository',
+      (d) => new DrizzlePullRequestProjectionRepository(d),
+    ),
+    issueProjectionRepository: sourced(
+      'issueProjectionRepository',
+      (d) => new DrizzleIssueProjectionRepository(d),
+    ),
+    commitProjectionRepository: sourced(
+      'commitProjectionRepository',
+      (d) => new DrizzleCommitProjectionRepository(d),
+    ),
+    checkRunProjectionRepository: sourced(
+      'checkRunProjectionRepository',
+      (d) => new DrizzleCheckRunProjectionRepository(d),
+    ),
+  }
+}
+
 /**
  * The three repo resolvers, built together off the ONE dependency set they share.
  *
@@ -179,6 +222,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     'repoProjectionRepository',
     (d) => new DrizzleRepoProjectionRepository(d),
   )
+  const entityProjectionRepositories = sourceEntityProjections(sourced)
 
   const appRegistry = buildNodeAppRegistry(env, config, clock, githubInstallationRepository)
 
@@ -332,6 +376,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     resolveRepoOrigin: options.resolveRepoOrigin,
     githubInstallationRepository,
     repoProjectionRepository,
+    entityProjectionRepositories,
     blockRepository: repos.blockRepository,
     trackerSettingsRepository: repos.trackerSettingsRepository,
     workspaceRepository: repos.workspaceRepository,
@@ -360,6 +405,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     runnerPoolConnectionRepository,
     githubInstallationRepository,
     repoProjectionRepository,
+    entityProjectionRepositories,
     appRegistry,
     resolveRepoTarget,
     listWorkspaceRunRepos,

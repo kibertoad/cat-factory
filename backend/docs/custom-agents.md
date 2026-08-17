@@ -366,6 +366,15 @@ still the cheaper answer and needs no variant at all.
   - **A deployment can attach a capability to any built-in.** `assignSkills('coder', …)` and
     `assignToolServers('merger', …)` reach the prompt of every kind, where `merger` and
     `on-call` used to bypass the shared prompt chain and silently drop them.
+
+    In MOTHERSHIP mode those assignments are read from the mothership over
+    `GET /internal/agent-kinds` and MERGED with this node's own registry, because they are pure
+    data (a `SKILL.md` payload; a transport plus a credential's NAME) while the kind's executable
+    half is not. So the kind CATALOG stays node-local, exactly like task types and pipelines, and a
+    step naming a kind this build lacks still fails loudly at admission; what would otherwise be
+    silent — a node one build behind dispatching `coder` without the org's playbook — is not.
+    Design: [`docs/initiatives/mothership-mode.md`](../../docs/initiatives/mothership-mode.md).
+
   - **A new kind is a registration, not an image bump.** The clone/PR/infra vocabulary the
     built-ins use is the public one: `clone.requirePr` and `clone.prFallback` (an in-place
     fixer with no PR to fix), `clone.mergeBase` (a resolver that merges base in first),

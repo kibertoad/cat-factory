@@ -123,6 +123,10 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     // with, as the catalog above is where the product GOES. In-process composition data, so it is
     // threaded unconditionally (empty by default) rather than gated on a configured module.
     binaryGeneratorSource: runtime.binaryGenerators,
+    // The deployment's agent-kind capability layer, when a node reads it from elsewhere. Absent on
+    // every deployment but a mothership-mode node, whose runs would otherwise silently drop the
+    // playbooks and tool servers the org assigned to the built-in kinds.
+    agentKindSource: runtime.agentKinds,
     // Canonicalise a URL pasted into a block description to the document's stable
     // (source, externalId) via the providers' parseRef, so a Figma/Notion/etc. link
     // auto-matches its imported page even with a title segment or tracking params the

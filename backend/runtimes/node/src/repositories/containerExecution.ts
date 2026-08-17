@@ -3,12 +3,10 @@ import type {
   GitHubInstallationRepository,
   RunnerPoolConnectionRecord,
   RunnerPoolConnectionRepository,
-  Service,
-  ServiceRepository,
 } from '@cat-factory/kernel'
 import { and, eq, inArray, isNull, or } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
-import { githubInstallations, runnerPoolConnections, services, workspaces } from '../db/schema.js'
+import { githubInstallations, runnerPoolConnections, workspaces } from '../db/schema.js'
 
 // Drizzle/Postgres adapters for the persistence the container-agent execution path
 // needs on the Node facade: a workspace's self-hosted runner-pool binding, its
@@ -231,44 +229,10 @@ export class DrizzleGitHubInstallationRepository implements GitHubInstallationRe
       .onConflictDoUpdate({ target: githubInstallations.installation_id, set: values })
   }
 
-  async updateCachedToken(installationId: number, token: string, expiresAt: number): Promise<void> {
-    await this.db
-      .update(githubInstallations)
-      .set({ cached_token: token, token_expires_at: expiresAt })
-      .where(eq(githubInstallations.installation_id, installationId))
-  }
-
   async softDelete(installationId: number, at: number): Promise<void> {
     await this.db
       .update(githubInstallations)
       .set({ deleted_at: at })
       .where(eq(githubInstallations.installation_id, installationId))
-  }
-}
-
-/**
- * Minimal read adapter the shared `buildResolveRepoTarget` needs to resolve a frame's
- * service (and, for a monorepo, its pinned subdirectory). Only `getByFrameBlock` is
- * implemented — the full account-owned service store lives in `drizzle.ts`.
- */
-export class DrizzleServiceFrameRepository implements Pick<ServiceRepository, 'getByFrameBlock'> {
-  constructor(private readonly db: DrizzleDb) {}
-
-  async getByFrameBlock(frameBlockId: string): Promise<Service | null> {
-    const [row] = await this.db
-      .select()
-      .from(services)
-      .where(eq(services.frame_block_id, frameBlockId))
-    return row
-      ? {
-          id: row.id,
-          accountId: row.account_id,
-          frameBlockId: row.frame_block_id,
-          installationId: row.installation_id,
-          repoGithubId: row.repo_github_id,
-          directory: row.directory,
-          createdAt: row.created_at,
-        }
-      : null
   }
 }

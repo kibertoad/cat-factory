@@ -30,7 +30,6 @@ function fakeInstallations(seed: GitHubInstallation[] = []): GitHubInstallationR
     listActiveForAccount: async (accountId: string) =>
       [...rows.values()].filter((r) => !r.deletedAt && r.accountId === accountId),
     upsert: async (i) => void rows.set(i.installationId, i),
-    updateCachedToken: async () => {},
     softDelete: async (id, at) => {
       const row = rows.get(id)
       if (row) rows.set(id, { ...row, deletedAt: at })

@@ -19,6 +19,11 @@ import type {
   ProviderRegistry,
   RateLimitRepository,
   RateLimitSnapshot,
+  BranchProjectionRepository,
+  CheckRunProjectionRepository,
+  CommitProjectionRepository,
+  IssueProjectionRepository,
+  PullRequestProjectionRepository,
   RepoProjectionRepository,
   TaskConnectionStore,
   TaskSourceProvider,
@@ -60,13 +65,6 @@ import {
 import { buildNodeGitHubIssueFiler } from './container-executor-deps.js'
 import type { DrizzleDb } from './db/client.js'
 import { DrizzleDocumentRepository } from './repositories/documents.js'
-import {
-  DrizzleBranchProjectionRepository,
-  DrizzleCheckRunProjectionRepository,
-  DrizzleCommitProjectionRepository,
-  DrizzleIssueProjectionRepository,
-  DrizzlePullRequestProjectionRepository,
-} from './repositories/github.js'
 import {
   DrizzleTaskConnectionRepository,
   DrizzleTaskRepository,
@@ -220,6 +218,18 @@ export interface NodeGitHubDepsInput {
   resolveRepoOrigin?: ResolveRepoOrigin
   githubInstallationRepository: GitHubInstallationRepository
   repoProjectionRepository: RepoProjectionRepository
+  /**
+   * The four entity projections + the check-run one, sourced once by the run platform (remote in
+   * mothership mode, else Drizzle) so the mothership's persistence registry and this module share
+   * ONE instance each.
+   */
+  entityProjectionRepositories: {
+    branchProjectionRepository: BranchProjectionRepository
+    pullRequestProjectionRepository: PullRequestProjectionRepository
+    issueProjectionRepository: IssueProjectionRepository
+    commitProjectionRepository: CommitProjectionRepository
+    checkRunProjectionRepository: CheckRunProjectionRepository
+  }
   blockRepository: BlockRepository
   trackerSettingsRepository: TrackerSettingsRepository
   /** Needed by the per-workspace GitLab PAT connect service (workspace existence guard). */
@@ -516,14 +526,8 @@ function buildNodeGitHubModuleDeps(args: {
   gitlabConnect: ReturnType<typeof selectVcsConnectDeps>
 }): Partial<CoreDependencies> {
   const { input, githubClient, gitlabConnect } = args
-  const {
-    config,
-    db,
-    sourced,
-    appRegistry,
-    githubInstallationRepository,
-    repoProjectionRepository,
-  } = input
+  const { config, db, appRegistry, githubInstallationRepository, repoProjectionRepository } = input
+  const { entityProjectionRepositories } = input
 
   // GitHub installation + projections + sync/webhook module: wired when the App is
   // configured (a real githubClient), mirroring the Worker's selectGitHubDeps. This
@@ -563,27 +567,10 @@ function buildNodeGitHubModuleDeps(args: {
         githubInstallationRepository,
         repoProjectionRepository,
         // The five GitHub projection repos share one shape (remote in mothership mode, else
-        // Drizzle over `db`), routed through the shared `sourced` helper.
-        branchProjectionRepository: sourced(
-          'branchProjectionRepository',
-          (d) => new DrizzleBranchProjectionRepository(d),
-        ),
-        pullRequestProjectionRepository: sourced(
-          'pullRequestProjectionRepository',
-          (d) => new DrizzlePullRequestProjectionRepository(d),
-        ),
-        issueProjectionRepository: sourced(
-          'issueProjectionRepository',
-          (d) => new DrizzleIssueProjectionRepository(d),
-        ),
-        commitProjectionRepository: sourced(
-          'commitProjectionRepository',
-          (d) => new DrizzleCommitProjectionRepository(d),
-        ),
-        checkRunProjectionRepository: sourced(
-          'checkRunProjectionRepository',
-          (d) => new DrizzleCheckRunProjectionRepository(d),
-        ),
+        // Drizzle over `db`). Sourced ONCE in `container-run-platform.ts` and passed in, because
+        // the mothership's persistence registry reflects the same instances whether or not this
+        // module is wired.
+        ...entityProjectionRepositories,
         // Per-user PAT-reachable repo projection (picker expansion + redaction); Postgres-only,
         // so absent in a no-DB mothership node (the picker keeps its App-only behaviour there).
         userRepoAccessRepository: db ? new DrizzleUserRepoAccessRepository(db) : undefined,

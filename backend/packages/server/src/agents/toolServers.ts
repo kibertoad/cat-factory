@@ -1,6 +1,7 @@
 import type {
   AgentKind,
   AgentRunContext,
+  DeclaredToolServers,
   HarnessKind,
   Logger,
   McpSecretRef,
@@ -27,6 +28,7 @@ import {
   reservedEnvKeyMessage,
 } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
+import { mergeDeclaredToolServers } from '@cat-factory/agents'
 
 // ---------------------------------------------------------------------------
 // Tool servers (MCP) for one container dispatch: take the running agent kind's declared servers,
@@ -115,6 +117,23 @@ const EMPTY: ResolvedToolServers = {
 }
 
 /**
+ * What this dispatch DECLARES, before any servability question: this build's registry, unioned
+ * with the deployment-level layer the engine resolved onto the context when a source is wired (a
+ * mothership-mode node reads the mothership's over `GET /internal/agent-kinds`).
+ *
+ * The union itself is `mergeDeclaredToolServers`, the same one the capability layer performs, so
+ * both halves cross: an id the MOTHERSHIP could not resolve joins this build's own unresolvable
+ * ids and is reported by `reportUnknown` below. Absent `orgToolServers` ⇒ the registry answers
+ * alone, byte-for-byte the previous behaviour.
+ */
+function declaredToolServers(input: ResolveToolServersInput): DeclaredToolServers {
+  return mergeDeclaredToolServers(
+    input.agentKindRegistry.toolServersFor(input.context.agentKind as AgentKind),
+    input.context.orgToolServers,
+  )
+}
+
+/**
  * Resolve the tool servers for one dispatch. Never throws: a server that cannot be wired is
  * reported as unavailable (which the prompt states) rather than failing the run — an agent told
  * a tool is missing does useful degraded work, while a run that refuses to start does none.
@@ -122,7 +141,7 @@ const EMPTY: ResolvedToolServers = {
 export async function resolveToolServers(
   input: ResolveToolServersInput,
 ): Promise<ResolvedToolServers> {
-  const declared = input.agentKindRegistry.toolServersFor(input.context.agentKind as AgentKind)
+  const declared = declaredToolServers(input)
   if (!declared.servers.length) {
     reportUnknown(input, declared.unknown)
     return EMPTY

@@ -52,7 +52,6 @@ function makeService(
     listActive: async () => [...rows.values()],
     listActiveForAccount: async () => [],
     upsert: async (i) => void rows.set(i.installationId, i),
-    updateCachedToken: async () => {},
     softDelete: async () => {},
   }
   return new GitHubInstallationService({

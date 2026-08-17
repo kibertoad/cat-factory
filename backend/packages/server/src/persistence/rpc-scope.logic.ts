@@ -1,6 +1,127 @@
 import type { DispatchOptions, DispatchResult, LibrarySourceEntity } from './rpc'
 
 /**
+ * The `workspaceList` kind: every named workspace must resolve to an in-scope account. The reads
+ * taking one answer with a SUBSET of the list, so binding the INPUT bounds the output: an
+ * out-of-scope candidate fails closed rather than being quietly filtered, which would turn the read
+ * into a probe for which boards link a repo. An empty list is a no-op read.
+ *
+ * ONE batched read resolves the whole list: a point read per id is the N+1 this layer bans, and
+ * the list a caller sends is unbounded by anything but its own request.
+ */
+export async function checkWorkspaceListScope(
+  ids: unknown,
+  opts: DispatchOptions,
+  inScope: (accountId: string | null | undefined) => boolean,
+  denied: DispatchResult,
+): Promise<DispatchResult | undefined> {
+  if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) return denied
+  if (ids.length === 0) return undefined
+  const accounts = await opts.resolveAccountIds(ids as string[])
+  // A board absent from the map does not exist, which `inScope(undefined)` refuses.
+  return (ids as string[]).every((id) => inScope(accounts.get(id))) ? undefined : denied
+}
+
+/**
+ * The `installationList` kind: the connect page's batched annotation read, "which of the ids the
+ * provider just offered are already bound here".
+ *
+ * An id WITH a binding must be in scope; an id with NO binding is admitted, because refusing it
+ * would make the read unusable for its only purpose and it discloses nothing the caller did not
+ * send. An unreadable table still fails closed, as does a missing resolver.
+ *
+ * The whole list resolves in one batched read: the ids come straight off a provider's installation
+ * list, so a point read per id is an N+1 sized by someone else's org.
+ */
+export async function checkInstallationListScope(
+  ids: unknown,
+  opts: DispatchOptions,
+  inScope: (accountId: string | null | undefined) => boolean,
+  denied: DispatchResult,
+): Promise<DispatchResult | undefined> {
+  if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'number')) return denied
+  if (ids.length === 0) return undefined
+  if (!opts.resolveInstallationOwners) return denied
+  const owners = await opts.resolveInstallationOwners(ids as number[])
+  return (ids as number[]).every((id) => {
+    // An id the batch did not answer for at all is treated as `unreadable`, not as the `absent`
+    // that would admit it: only the resolver may report an id as unbound.
+    const owner = owners.get(id) ?? { status: 'unreadable' as const }
+    if (owner.status === 'absent') return true
+    return owner.status === 'found' && inScope(owner.accountId)
+  })
+    ? undefined
+    : denied
+}
+
+/**
+ * The `serviceInsert` record write (`registerServiceForFrame`). Bind the DECLARED `accountId` (the
+ * row lands there and is later listed from it) AND the `frameBlockId` the service claims.
+ *
+ * The frame-block half is what stops a service being planted on another org's frame: `resolveRepoTarget`
+ * walks frame block → service on every dispatch, and `getByFrameBlock` resolves by frame block id alone,
+ * so a foreign row could redirect that org's runs at a repo the caller controls. It is a THREE-state
+ * lookup rather than a nullable read because the ordinary case is an absent block: the service row is
+ * written BEFORE its frame block exists, so `absent` is the create this rule must admit, while
+ * `unreadable` must not be spent as that admission (the same reason `ownerFieldUpsert` gives). Block ids
+ * are server-minted, so admitting an unknown one grants nothing: a caller cannot name the id another
+ * tenant will later be given.
+ */
+export async function checkServiceInsertScope(
+  record: unknown,
+  opts: DispatchOptions,
+  inScope: (accountId: string | null | undefined) => boolean,
+  denied: DispatchResult,
+): Promise<DispatchResult | undefined> {
+  if (!record || typeof record !== 'object') return denied
+  const { accountId, frameBlockId } = record as { accountId?: unknown; frameBlockId?: unknown }
+  if (typeof accountId !== 'string' || !inScope(accountId)) return denied
+  if (typeof frameBlockId !== 'string' || !opts.resolveFrameBlockOwner) return denied
+  const frame = await opts.resolveFrameBlockOwner(frameBlockId)
+  switch (frame.status) {
+    case 'found':
+      // An existing frame must belong to the SAME account the service declares. Equality, not
+      // merely in-scope: a token spanning several accounts would otherwise be able to cross them.
+      return frame.accountId === accountId ? undefined : denied
+    case 'absent':
+      // The frame block has not been written yet — the ordinary creation order.
+      return undefined
+    case 'unreadable':
+      return denied
+    default: {
+      const _exhaustive: never = frame
+      void _exhaustive
+      return denied
+    }
+  }
+}
+
+/**
+ * The `serviceUpdate` pair (`serviceRepository.update(id, patch)`). Bind the STORED service's owning
+ * account, and the account a patch would re-home the service INTO.
+ *
+ * `ServicePatch` may carry an `accountId`, and a service's account decides which org's catalog offers
+ * it for mounting, so an unbound patch would let a caller push an attacker-authored frame into another
+ * org's mountable set. An explicit null is refused rather than admitted: an account-less service is the
+ * legacy/unscoped row, which no scoped token may create.
+ */
+export async function checkServiceUpdateScope(
+  serviceId: unknown,
+  patch: unknown,
+  opts: DispatchOptions,
+  inScope: (accountId: string | null | undefined) => boolean,
+  denied: DispatchResult,
+): Promise<DispatchResult | undefined> {
+  if (typeof serviceId !== 'string' || !opts.resolveServiceAccountIds) return denied
+  const stored = await opts.resolveServiceAccountIds([serviceId])
+  if (!inScope(stored.get(serviceId))) return denied
+  if (!patch || typeof patch !== 'object') return denied
+  if (!Object.hasOwn(patch, 'accountId')) return undefined
+  const { accountId } = patch as { accountId?: unknown }
+  return typeof accountId === 'string' && inScope(accountId) ? undefined : denied
+}
+
+/**
  * Token-scope checks for the record/owner-pair {@link ScopeRule} kinds, split out of `rpc.ts` so the
  * dispatch module stays under its size budget. Pure code motion — each function keeps the exact
  * contract it had inline: returns a `DispatchResult` (always the 404 `denied`, per the existence-

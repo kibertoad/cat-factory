@@ -170,9 +170,10 @@ clean and shipped the deployment's master sealing key to a third party. So:
   reason (`process.env` lookup is case-insensitive on Windows). Refused where the declaration is
   made (the generative-integration credential schema; boot validation for a tool server) AND at
   dispatch, because a **mothership-mode node boot-validates none of the definitions it resolves**:
-  they arrive per dispatch over `/internal/binary-generators` and
-  `/internal/foundational-services`, authored by a process one build ahead of it, against an
-  environment that is a developer's own laptop. `ENCRYPTION_KEY` and
+  they arrive per dispatch over `/internal/binary-generators`, `/internal/foundational-services`
+  and `/internal/agent-kinds` (the tool servers a deployment ASSIGNS to a kind, which name their
+  credential the same way), authored by a process one build ahead of it, against an environment
+  that is a developer's own laptop. `ENCRYPTION_KEY` and
   `HARNESS_SHARED_SECRET` are the keys to the boundary BETWEEN those two processes, held by the
   side meant to keep them; that is what the floor protects, with no configuration.
 - **The injection name carries a narrower rule, not the floor** (`isToolchainEnvName`): not `PATH`,
@@ -389,6 +390,17 @@ that seals its own agent credentials, sealing rows the org can never open. And *
 path is logged through a bare message read**: every one is bound with kernel's `describeError`, so
 `redactSecrets` runs over it first. This is the one surface whose SUBJECT is a credential, and a
 driver or WebCrypto error routinely echoes back the value it choked on.
+
+**A machine token scopes ACCOUNTS, never ROLES, and that is what keeps admin-tier writes off the
+persistence RPC.** A node's token is minted from a completed login and carries the accounts that
+user belongs to, at any role: a plain member running a laptop node holds one. The RPC dispatches
+over the raw repository, below the service layer that enforces `requirePermission`, so an
+admin-gated mutation reached through it would be performed with no role check at all. Membership
+and account-lifecycle writes, the session-revocation bump, the machine-node roster and the VCS
+connect/disconnect writes are therefore excluded rather than scope-bound, and the drift guard
+records each under the `admin` reason. A scope rule can bind WHICH row a call touches; it cannot
+supply an authorization tier the token never carried, so "add a rule for it" is not an alternative
+to that exclusion.
 
 So the honest statement of the blast radius is: **a stolen machine token reads the org credentials
 of the accounts it is scoped to, for the sources in that table.** That is strictly more than the

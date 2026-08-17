@@ -7,7 +7,7 @@
 // beside it is the code. Re-exported from `container.ts`, so no call site changed. (The same move
 // `ExecutionService.ts` made with `ExecutionServiceDependencies`.)
 
-import { type AgentKindRegistry } from '@cat-factory/agents'
+import { type AgentKindRegistry, type AgentKindSource } from '@cat-factory/agents'
 import {
   type BackendRegistries,
   type DeployJobClient,
@@ -459,6 +459,14 @@ export interface NodeContainerOptions {
    * {@link foundationalBuiltinSource}, alternatives never a merge.
    */
   promptFragmentSource?: PromptFragmentSource
+  /**
+   * Where the deployment's AGENT-KIND CAPABILITY layer is read from: set only by a MOTHERSHIP-MODE
+   * node, over `GET /internal/agent-kinds`. The one member of this family that MERGES with the
+   * local registry rather than replacing it, because a kind's executable half cannot cross a wire
+   * (so the catalog stays local) while the skills and tool servers a deployment ASSIGNS to a
+   * built-in kind are data whose absence here is silent.
+   */
+  agentKindSource?: AgentKindSource
   /**
    * Where the catalog's `builtin` tier is READ from, when it is not this process's own registry
    * above. Set by exactly one caller, the local facade booting in MOTHERSHIP mode, which reads

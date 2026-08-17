@@ -62,6 +62,24 @@ export function defineCoreWorkspacesConformance(harness: ConformanceHarness): vo
       expect(res.body.executions).toHaveLength(0)
     })
 
+    it('resolves a batch of board accounts identically to the point read (D1 ⇄ Postgres)', async () => {
+      // `accountIdsOf` is what the persistence RPC binds a LIST of boards through, so the two
+      // stores must agree on all three of its answers: an account-scoped board, an accountless
+      // one, and a board that does not exist (NO KEY, never a null one, since null is the
+      // accountless board's own answer).
+      const app = harness.makeApp()
+      const { workspace: org } = await app.createOrgWorkspace()
+      const { workspace: legacy } = await app.createWorkspace({ seed: false })
+      const repo = app.workspaceRepository()
+
+      const batch = await repo.accountIdsOf([org.id, legacy.id, 'ws_missing'])
+      expect(batch[org.id]).toBe(await repo.accountOf(org.id))
+      expect(batch[legacy.id]).toBe(await repo.accountOf(legacy.id))
+      expect(Object.hasOwn(batch, 'ws_missing')).toBe(false)
+      // Empty input is a no-op read on both stores rather than an unbounded scan.
+      expect(Object.keys(await repo.accountIdsOf([]))).toEqual([])
+    })
+
     it('computes the infra-setup status projection on the snapshot (both create + read)', async () => {
       // The shared controller derives `infraSetup` from whatever THIS deployment wired, so its
       // per-area values legitimately differ across runtimes (e.g. the Worker binds R2 →
@@ -374,6 +392,17 @@ function defineMachineApiGate(harness: ConformanceHarness): void {
       const res = await call('POST', '/internal/github/installation-token', {
         installationId: 1,
       })
+      expect(res.status).toBe(403)
+    })
+
+    it('serves /internal/agent-kinds with the machine-token gate active', async () => {
+      const { call } = harness.makeApp()
+      // The AGENT-KIND CAPABILITY layer (the skills and tool servers a deployment assigns to its
+      // kinds, which a mothership-mode node merges with its own registry so a run does not
+      // silently drop the org's playbook). Mounted by the shared controller on both facades and
+      // machine-gated FIRST, so an unauthenticated call is a 403 everywhere — including on a
+      // deployment that assigns none, where the answer would otherwise be a legitimate empty set.
+      const res = await call('GET', '/internal/agent-kinds')
       expect(res.status).toBe(403)
     })
 

@@ -1,5 +1,13 @@
-import type { AgentKindRegistry } from '@cat-factory/agents'
-import { bundledSkillToResolved, SKILL_AGENT_KIND } from '@cat-factory/agents'
+import type {
+  AgentKindCapabilityView,
+  AgentKindRegistry,
+  AgentKindSource,
+} from '@cat-factory/agents'
+import {
+  bundledSkillToResolved,
+  mergeKindCapabilities,
+  SKILL_AGENT_KIND,
+} from '@cat-factory/agents'
 import type { PipelineStep } from '@cat-factory/contracts'
 import type { AgentKind, Logger, ResolvedSkill, SkillVersionPin } from '@cat-factory/kernel'
 import { ValidationError, noopLogger, runBestEffort } from '@cat-factory/kernel'
@@ -22,6 +30,13 @@ export interface ResolveRunSkillsInput {
   /** The step being dispatched; its `skillVersions` pin is written here. */
   step: PipelineStep
   agentKindRegistry: AgentKindRegistry
+  /**
+   * This dispatch's already-resolved capability declarations (see {@link resolveKindCapabilities}).
+   * Passed IN rather than resolved here because the tool-server half of the same answer travels to
+   * the executor, and resolving twice would mean two reads of a deployment-level source that
+   * crosses a network. Absent ⇒ resolved from `agentKindRegistry` alone.
+   */
+  capabilities?: AgentKindCapabilityView
   /** Wired only when the skill library is configured; absent ⇒ no catalog skill can resolve. */
   skillResolver?: SkillResolver
   logger?: Logger
@@ -48,7 +63,8 @@ export interface ResolveRunSkillsInput {
 export async function resolveRunSkills(
   input: ResolveRunSkillsInput,
 ): Promise<{ skills: ResolvedSkill[]; versions: SkillVersionPin[] }> {
-  const declared = input.agentKindRegistry.skillsFor(input.agentKind)
+  const declared = (input.capabilities ?? (await resolveKindCapabilities(input.agentKind, input)))
+    .skills
   const pickedSkillId =
     input.agentKind === SKILL_AGENT_KIND ? input.step.stepOptions?.skillId?.trim() : undefined
   if (!declared.bundled.length && !declared.catalog.length && !pickedSkillId) {
@@ -95,6 +111,38 @@ export async function resolveRunSkills(
   // round's pin, which reads as "this run executed that version" when it did not.
   input.step.skillVersions = versions.length ? versions : undefined
   return { skills, versions }
+}
+
+/**
+ * The capability declarations one dispatch applies: this build's registry MERGED with the
+ * deployment's layer when a source is wired (a mothership-mode node reads the mothership's).
+ *
+ * A merge, not a replacement, and that is the difference from the three sibling sources
+ * (foundational services, binary generators, prompt fragments), which forbid one. Those replace a
+ * set the node also registers, so a merge would let a stale local copy win by id. Here the halves
+ * are different things: a KIND's own declarations belong to the code implementing it and stay with
+ * that code, while the deployment's `assignSkills`/`assignToolServers` are a layer on top. This is
+ * the same union `skillsFor` already performs in-process, with the deployment's half read from the
+ * process that owns it.
+ *
+ * Exported because the TOOL-SERVER half of the same answer is resolved here too and rides the
+ * dispatch context to the executor, which is what keeps this to ONE read per dispatch.
+ */
+export async function resolveKindCapabilities(
+  agentKind: AgentKind,
+  deps: { agentKindRegistry: AgentKindRegistry; agentKindSource?: AgentKindSource },
+): Promise<AgentKindCapabilityView> {
+  const local: AgentKindCapabilityView = {
+    kind: agentKind,
+    skills: deps.agentKindRegistry.skillsFor(agentKind),
+    toolServers: deps.agentKindRegistry.toolServersFor(agentKind),
+  }
+  if (!deps.agentKindSource) return local
+  // A failed read THROWS out of the source and is NOT swallowed here: an empty layer and an
+  // unreachable mothership are the same value and opposite facts, and a dispatch that quietly
+  // dropped the org's playbook is the exact failure this seam exists to remove.
+  const org = (await deps.agentKindSource.capabilities()).find((view) => view.kind === agentKind)
+  return mergeKindCapabilities(local, org)
 }
 
 /**

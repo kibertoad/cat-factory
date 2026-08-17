@@ -33,6 +33,9 @@
   answer for a built-in that declares nothing, so setting the field to `false` on a registration
   SHADOWS them. A kind is NOT gatable by default; the set's comments say why
   each exclusion (`merger`, `deployer`, `conflicts`/`ci`, `bug-intake`) would break a run.
+  `kinds/source.ts` is where the deployment's capability LAYER is read from when that is not this
+  process's own registry (mothership mode: the node merges the mothership's assignments with its
+  own, since a kind's executable half cannot cross a wire).
   `kinds/companions.ts` holds the COMPANION pairing vocabulary: a companion grades the
   immediately-preceding producer and loops it back for automatic rework below the step's
   threshold. Same shape as `gatable.ts`: a `COMPANIONS` built-in catalog beside

@@ -123,6 +123,22 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
     return row ? row.account : undefined
   }
 
+  async accountIdsOf(ids: string[]): Promise<Record<string, string | null>> {
+    const found: Record<string, string | null> = {}
+    if (ids.length === 0) return found
+    const unique = [...new Set(ids)]
+    // Chunked to match the D1 twin's parameter ceiling, so both stores issue the same shape of
+    // query for the same input rather than one of them degrading on a long list.
+    for (let i = 0; i < unique.length; i += 90) {
+      const rows = await this.db
+        .select({ id: workspaces.id, account: workspaces.account_id })
+        .from(workspaces)
+        .where(inArray(workspaces.id, unique.slice(i, i + 90)))
+      for (const row of rows) found[row.id] = row.account
+    }
+    return found
+  }
+
   async accessRowOf(id: string): Promise<WorkspaceAccessRow | undefined> {
     const [row] = await this.db
       .select({
@@ -350,15 +366,6 @@ export class DrizzleBlockRepository implements BlockRepository {
       .where(eq(blocks.workspace_id, workspaceId))
       .orderBy(blocks.seq)
     // Snapshot-facing list read: drop a corrupt block rather than failing the whole board load.
-    return tryDecodeRows(rows, rowToBlock, (r) => ({ table: 'blocks', id: r.id }))
-  }
-
-  async listByService(serviceId: string): Promise<Block[]> {
-    const rows = await this.db
-      .select()
-      .from(blocks)
-      .where(eq(blocks.service_id, serviceId))
-      .orderBy(blocks.seq)
     return tryDecodeRows(rows, rowToBlock, (r) => ({ table: 'blocks', id: r.id }))
   }
 
@@ -636,19 +643,6 @@ export class DrizzleServiceRepository implements ServiceRepository {
     return out
   }
 
-  async getByRepo(installationId: number, repoGithubId: number): Promise<Service | null> {
-    const [row] = await this.db
-      .select()
-      .from(services)
-      .where(
-        and(
-          eq(services.installation_id, installationId),
-          eq(services.repo_github_id, repoGithubId),
-        ),
-      )
-    return row ? rowToService(row) : null
-  }
-
   async insert(service: Service): Promise<void> {
     await this.db.insert(services).values({
       id: service.id,
@@ -704,15 +698,6 @@ export class DrizzleWorkspaceMountRepository implements WorkspaceMountRepository
       .select()
       .from(workspaceServices)
       .where(eq(workspaceServices.workspace_id, workspaceId))
-      .orderBy(workspaceServices.created_at)
-    return rows.map(rowToMount)
-  }
-
-  async listByService(serviceId: string): Promise<WorkspaceMount[]> {
-    const rows = await this.db
-      .select()
-      .from(workspaceServices)
-      .where(eq(workspaceServices.service_id, serviceId))
       .orderBy(workspaceServices.created_at)
     return rows.map(rowToMount)
   }

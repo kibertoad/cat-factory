@@ -111,6 +111,7 @@ import { secretDelegationController } from './modules/persistence/SecretDelegati
 import { foundationalBuiltinsController } from './modules/foundationalServices/FoundationalBuiltinsController.js'
 import { binaryGeneratorsController } from './modules/binaryGenerators/BinaryGeneratorsController.js'
 import { promptFragmentsInternalController } from './modules/promptFragments/PromptFragmentsInternalController.js'
+import { agentKindsController } from './modules/agentKinds/AgentKindsController.js'
 import { publicApiController } from './modules/publicApi/PublicApiController.js'
 import { publicBoardController } from './modules/publicApi/PublicBoardController.js'
 import { publicProvisioningController } from './modules/publicApi/PublicProvisioningController.js'
@@ -296,6 +297,15 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // gated; never 503s (a deployment registering none is legitimately empty). Mounted on both
   // facades so either can be a mothership.
   app.route('/', promptFragmentsInternalController())
+  // Mothership-mode AGENT-KIND CAPABILITIES (`GET /internal/agent-kinds`): the fourth of the same
+  // family, and the one that serves a SLICE of its registry rather than all of it. A kind's
+  // executable half (prompts as functions, `preOps`/`postOps`, its output parser) cannot cross a
+  // wire, so the catalog stays node-local and a step naming an unknown kind still fails loudly at
+  // admission; what crosses is the deployment's capability LAYER (the house playbook or MCP server
+  // it assigns to a built-in kind), whose absence on a node one build behind is silent. Machine-
+  // token gated; never 503s (a deployment assigning none is legitimately empty). Mounted on both
+  // facades so either can be a mothership.
+  app.route('/', agentKindsController())
   // Mothership-mode real-time upstream (`/internal/events/publish`): a mothership-mode local node
   // POSTs its engine events here so the mothership's own realtime fan-out (hosted teammates on the
   // shared board) sees the local node's activity live. Machine-token gated like the persistence

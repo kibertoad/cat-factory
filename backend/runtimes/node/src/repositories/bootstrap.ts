@@ -291,15 +291,6 @@ export class DrizzleBootstrapJobRepository implements BootstrapJobRepository {
     return rows.map(rowToBootstrapJob)
   }
 
-  async listByService(serviceId: string): Promise<BootstrapJobRecord[]> {
-    const rows = await this.db
-      .select()
-      .from(agentRuns)
-      .where(and(eq(agentRuns.service_id, serviceId), eq(agentRuns.kind, 'bootstrap')))
-      .orderBy(desc(agentRuns.created_at))
-    return rows.map(rowToBootstrapJob)
-  }
-
   async listByServices(serviceIds: string[]): Promise<BootstrapJobRecord[]> {
     if (serviceIds.length === 0) return []
     const rows = await this.db

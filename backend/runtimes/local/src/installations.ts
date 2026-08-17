@@ -110,10 +110,6 @@ export class AutoProvisioningInstallationRepository implements GitHubInstallatio
     return this.inner.upsert(installation)
   }
 
-  updateCachedToken(installationId: number, token: string, expiresAt: number): Promise<void> {
-    return this.inner.updateCachedToken(installationId, token, expiresAt)
-  }
-
   softDelete(installationId: number, at: number): Promise<void> {
     return this.inner.softDelete(installationId, at)
   }

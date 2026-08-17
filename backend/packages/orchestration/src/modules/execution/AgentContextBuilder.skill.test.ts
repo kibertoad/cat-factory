@@ -143,6 +143,63 @@ describe('AgentContextBuilder skill resolution', () => {
     expect(s.skillVersions).toBeUndefined()
   })
 
+  it('applies a skill the DEPLOYMENT assigned, read from a source this build does not hold', async () => {
+    // Mothership mode: the org attached its house playbook to a BUILT-IN kind, and this node's
+    // build knows nothing about it. Before the source, the dispatch simply went without — the
+    // agent did the work its own way, which reads exactly like an agent that considered the
+    // standard and moved on. The MERGE is the point: the kind's executable half stays local.
+    const ORG_SKILL = {
+      id: 'org.playbook',
+      name: 'org-playbook',
+      description: 'The org playbook',
+      instructions: 'Follow the house pattern.',
+    }
+    const ORG_SERVER = {
+      id: 'org.tracker',
+      transport: { kind: 'stdio' as const, command: 'tracker-mcp', args: [] },
+    }
+    const s = step({ agentKind: 'coder' })
+    const context = await makeBuilder({
+      agentKindSource: {
+        capabilities: async () => [
+          {
+            kind: 'coder',
+            skills: { bundled: [ORG_SKILL], catalog: [], unknown: [] },
+            toolServers: { servers: [ORG_SERVER], unknown: [] },
+          },
+        ],
+      },
+    }).buildContext('ws1', instance([s]), s, true, TASK)
+    expect(context.skills?.map((skill) => skill.skillId)).toEqual([ORG_SKILL.id])
+    // The tool-server half rides the context to the executor, which owns servability.
+    expect(context.orgToolServers?.servers.map((server) => server.id)).toEqual([ORG_SERVER.id])
+  })
+
+  it('carries the org layer’s UNRESOLVABLE tool-server ids too, with no servers of its own', async () => {
+    // An id the MOTHERSHIP could not resolve is a typo in the org's own package, and a node
+    // boot-validates nothing it reads remotely: the dispatch warn is the only place it can be
+    // reported, so the layer has to arrive even when it resolved no server at all.
+    const s = step({ agentKind: 'coder' })
+    const context = await makeBuilder({
+      agentKindSource: {
+        capabilities: async () => [
+          {
+            kind: 'coder',
+            skills: { bundled: [], catalog: [], unknown: [] },
+            toolServers: { servers: [], unknown: ['org.typo'] },
+          },
+        ],
+      },
+    }).buildContext('ws1', instance([s]), s, true, TASK)
+    expect(context.orgToolServers).toEqual({ servers: [], unknown: ['org.typo'] })
+  })
+
+  it('carries no org tool servers when no source is wired (byte-for-byte the prior behaviour)', async () => {
+    const s = step({ agentKind: 'coder' })
+    const context = await makeBuilder().buildContext('ws1', instance([s]), s, true, TASK)
+    expect(context.orgToolServers).toBeUndefined()
+  })
+
   it('a kind’s REQUIRED catalog skill fails the dispatch when it cannot resolve', async () => {
     const registry = defaultAgentKindRegistry()
     registry.register({
