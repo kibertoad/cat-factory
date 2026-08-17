@@ -33,6 +33,7 @@ import type {
   UnavailableToolServer,
 } from '../domain/agent-capabilities.js'
 import type { ResolvedBinaryGenerator } from '../domain/binary-generators.js'
+import type { ResolvedServiceCredentials } from '../domain/foundational-services.js'
 import type { DesignImageDelivery } from '../domain/design-image-delivery.js'
 import type { DocumentFreshness } from '../domain/document-freshness.js'
 import type { OwnServiceContext } from '../domain/block-tree.js'
@@ -335,6 +336,25 @@ export interface AgentRunContext {
    * Absent ⇒ this dispatch was not briefed to store anything.
    */
   binaryStorageServiceId?: string
+  /**
+   * The FOUNDATIONAL SERVICES this dispatch was briefed on that declare a credential, as the
+   * non-secret projection (id, name, and each credential's two NAMES) the container executor
+   * resolves values for onto the job body.
+   *
+   * The twin of {@link binaryGenerators}, one layer over: that one authenticates what MAKES an
+   * artifact, this one what the run READS and WRITES it through. Before it existed the platform
+   * had a credential seam for the first and none for the second, so an agent handed a storage
+   * contract whose every route is bearer-authenticated had no way to satisfy one, and the
+   * service's own description had to say so as a caveat.
+   *
+   * Resolved only for services this dispatch is actually briefed on (a binary-output step's
+   * storage and context selection; a `foundational-contracts` kind's declared set), because a
+   * credential delivered for a service the agent was never told about is a secret in a process
+   * with no instructions attached.
+   *
+   * Non-secret: key NAMES only, never values, so the agent-context snapshot may record it.
+   */
+  foundationalCredentials?: ResolvedServiceCredentials[]
   block: {
     /** Stable block id (set by the engine; used by repo-aware executors). */
     id?: string

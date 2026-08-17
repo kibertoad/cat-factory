@@ -116,6 +116,7 @@ import type {
   BinaryGeneratorRegistry,
   BinaryGeneratorSource,
   BinaryStoreRegistry,
+  FoundationalBuiltinSource,
   FoundationalServiceRegistry,
   GateRegistry,
   JudgeRegistry,
@@ -403,6 +404,15 @@ export interface CoreSpine {
    * drift this seam exists to remove — just moved one surface along.
    */
   binaryGenerators: BinaryGeneratorSource
+  /**
+   * Where the foundational catalog's `builtin` tier is READ from — this process's own registry,
+   * unless a mothership-mode node injected the remote source. Re-exposed for the reason
+   * {@link binaryGenerators} is: the credential CHECKLIST projects the key names a deployment's
+   * registered capabilities declare, and only a code-registered service may declare one, so a
+   * checklist reading this process's registry on a mothership node would offer a different set
+   * from the one a run resolves against. Same seam, one surface along.
+   */
+  foundationalBuiltins: FoundationalBuiltinSource
   /**
    * The app-owned prompt-fragment registry the engine resolved (the facade's injected instance,
    * else the empty default). Re-exposed for the same reason its neighbours are: the facade passes
@@ -907,6 +917,7 @@ export function createCore(injected: CoreDependencies): Core {
     promptFragments,
     deploymentDocumentResolver: injected.deploymentDocumentResolver,
     binaryGenerators,
+    foundationalBuiltins,
     initiativePresetRegistry,
     executionEventPublisher,
     ...modules.assemble(),

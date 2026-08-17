@@ -128,7 +128,7 @@ export const capabilityCredentialStatusSchema = v.object({
   /** Which capabilities want it — id + label, so the UI can say who a key is for. */
   declaredBy: v.array(
     v.object({
-      subject: v.picklist(['tool-server', 'binary-generator']),
+      subject: v.picklist(['tool-server', 'binary-generator', 'foundational-service']),
       id: v.string(),
       label: v.string(),
       /** The definition's own note on how the value is presented, when it states one. */
@@ -222,4 +222,235 @@ export function capabilityCredentialsSummary(
   updatedAt: number,
 ): CapabilityCredentialRef[] {
   return entries.map((entry) => ({ key: entry.key, updatedAt }))
+}
+
+// ---------------------------------------------------------------------------
+// The DECLARATION half of the same subject: how a capability a DEPLOYMENT registers in code says
+// which secrets it needs, which is what turns the store above from a blank form into a checklist.
+//
+// It lives beside the store rather than in each registry's own module because the two names a
+// credential carries, and the floors over them, are properties of the injection CHANNEL (a value
+// resolved through `ToolSecretResolver` and set as a variable of one job's agent process) rather
+// than of what declared it. It was the generative integrations' own schema until a foundational
+// STORAGE service needed the same declaration: the platform had a credential seam applied to what
+// MAKES an artifact and not to where it GOES, and a second copy of the shape would have been the
+// first place two declarers could disagree about a reserved key.
+//
+// WHO may declare one is a separate question, and the registries answer it differently: see
+// `createFoundationalServiceSchema`, where only the code-registered tier may.
+// ---------------------------------------------------------------------------
+
+/**
+ * ONE credential a registered capability needs, declared by NAME only, never a value.
+ *
+ * The value is resolved per dispatch through the facade-wired `ToolSecretResolver` port (the
+ * same port a tool server's credentials go through) and written straight onto the job body,
+ * where the harness injects it into THIS JOB's agent environment. It never reaches
+ * `AgentRunContext`, a prompt, or the telemetry snapshot: only the key NAME does, because the
+ * agent has to know which variable to read.
+ *
+ * A declarer states a LIST of these, because a vendor's account is not always one string. HTTP Basic over a
+ * key/secret pair is the ordinary case that breaks a single field, and it is common enough to be
+ * a shape rather than one vendor's eccentricity. Under one field the two halves have to be
+ * colon-joined into a single variable, which rotates them together, hands the operator one
+ * checklist row where their vendor console shows two values, and turns a mis-joined value into a
+ * 401 indistinguishable from a wrong key.
+ */
+export const capabilityCredentialSchema = v.object({
+  /**
+   * The credential's LOOKUP key: what the secret resolver is asked for, and what a workspace
+   * stores its own value under. Also the ENVIRONMENT VARIABLE the agent reads it from unless
+   * {@link envName} says otherwise, so it must be a valid POSIX variable name either way: a
+   * generator declaring `x-rd-token` would resolve fine and then be dropped by the harness's env
+   * validation, which is a silent "the integration just 401s" at run time.
+   *
+   * It may NOT name a variable the platform's own configuration owns
+   * ({@link isReservedPlatformEnvKey}). The resolver reads the key off the deployment's
+   * environment and the value is injected into an agent process, so an integration declaring
+   * `ENCRYPTION_KEY` would hand a prompt-injectable agent the deployment's master sealing key.
+   * Refused here so a deployment learns at boot, and again at dispatch, since a mothership-mode
+   * node boot-validates none of the definitions it resolves.
+   */
+  key: v.pipe(
+    v.string(),
+    v.trim(),
+    v.minLength(1),
+    v.maxLength(128),
+    v.regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'must be a valid environment variable name'),
+    v.check(
+      (key) => !isReservedPlatformEnvKey(key),
+      (issue) => reservedEnvKeyMessage(String(issue.input)),
+    ),
+  ),
+  /**
+   * The environment variable the value is injected as, when that differs from {@link key}. This
+   * is the name the agent is told to read, and it is what a vendor SDK that auto-reads its own
+   * documented variable needs.
+   *
+   * Held to the toolchain rule rather than the reserved-platform one, because it reads nothing:
+   * the floor above is about what may be READ off the deployment's environment, and an injection
+   * name only decides what a variable is called inside this job's agent process. That is what lets
+   * a declaration keep a vendor's documented name even when a platform prefix family covers it.
+   */
+  envName: v.optional(
+    v.pipe(
+      v.string(),
+      v.trim(),
+      v.minLength(1),
+      v.maxLength(128),
+      v.regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'must be a valid environment variable name'),
+      v.check(
+        (name) => !isToolchainEnvName(name),
+        (issue) => toolchainEnvNameMessage(String(issue.input)),
+      ),
+    ),
+  ),
+  /**
+   * How the capability expects the credential to be presented (`X-RD-Token: <value>`,
+   * `Authorization: Bearer <value>`). Folded into the brief verbatim: the agent writes the
+   * request itself, and a key with no stated header is a key it has to guess the use of.
+   */
+  usage: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(400))),
+  /**
+   * When true (the default), a capability whose credential does not resolve is reported to
+   * the agent as UNAVAILABLE rather than offered. Set false only for an endpoint that genuinely
+   * works unauthenticated — an agent handed an API whose first call 401s burns a run
+   * discovering it.
+   */
+  required: v.optional(v.boolean()),
+})
+export type CapabilityCredential = v.InferOutput<typeof capabilityCredentialSchema>
+
+/**
+ * The two names a credential carries, which is all the fallback below reads.
+ *
+ * Structural rather than {@link CapabilityCredential} itself, because the DISPATCH projection
+ * carries a narrower shape (kernel's `ResolvedBinaryGeneratorCredential`, which drops `usage` and
+ * every other prose field the container executor has no use for) and would otherwise have to
+ * either widen or re-spell the fallback. A parameter type nothing outside the two names can
+ * satisfy is what makes the "one place" claim below enforceable rather than aspirational.
+ */
+export interface CapabilityCredentialNames {
+  key: string
+  envName?: string
+}
+
+/**
+ * The environment variable one credential arrives as: its {@link CapabilityCredential.envName}
+ * when it declares one, else its lookup key.
+ *
+ * The ONE place that fallback is written, because three layers apply it (the schemas' uniqueness
+ * checks, the dispatch-time resolvers that key the job body, and the briefs that tell the
+ * agent which variable to read) and a copy that drifted would name a variable that is never set:
+ * a capability reported as unavailable on every run, with nothing to see at either end.
+ */
+export function credentialInjectionName(credential: CapabilityCredentialNames): string {
+  return credential.envName ?? credential.key
+}
+
+/**
+ * The form an injection name is COMPARED in, which is not the form it is injected under.
+ *
+ * Case-folded, the same way {@link isReservedPlatformEnvKey} folds the lookup key it screens, and
+ * for the reason that floor has: environment lookup is case-insensitive on Windows, so `ACME_KEY`
+ * and `acme_key` are two variables in the declaration and one variable in the process that reads
+ * them. A rule comparing them exactly would call that pair distinct and let one value overwrite
+ * the other on the one platform where it matters.
+ */
+export function comparableCredentialInjectionName(credential: CapabilityCredentialNames): string {
+  return credentialInjectionName(credential).toUpperCase()
+}
+
+/**
+ * Whether every credential in a declaration arrives as its own variable.
+ *
+ * Exported so the boot checks and the schemas share one implementation rather than agreeing by
+ * hand. Duplicate LOOKUP keys are deliberately allowed: a capability wanting one stored value
+ * delivered under two names is odd but honest, and nothing is lost. A duplicate INJECTION name
+ * loses a value, which is why only that one is refused.
+ */
+export function uniqueCredentialInjectionNames(
+  credentials: readonly CapabilityCredentialNames[],
+): boolean {
+  const names = credentials.map(comparableCredentialInjectionName)
+  return new Set(names).size === names.length
+}
+
+/** One capability that claims environment variables, as {@link credentialInjectionCollisions} reads it. */
+export interface CredentialInjectionClaimant {
+  /**
+   * How this claimant is NAMED in the fault message, qualified by what it is: `integration "x"`,
+   * `service "y"`. The rule spans registries, so an id alone would leave an operator hunting for
+   * which registry to edit.
+   */
+  owner: string
+  credentials?: readonly CapabilityCredentialNames[]
+}
+
+/** One environment variable two or more claimants want to hold different values. */
+export interface CredentialInjectionCollision {
+  /** The variable, in the spelling the deployment wrote (comparison is case-folded; injection is not). */
+  envName: string
+  message: string
+}
+
+/**
+ * The rule that spans DECLARATIONS: two capabilities may not inject different values into one
+ * environment variable.
+ *
+ * The across-declaration twin of {@link uniqueCredentialInjectionNames}, and stated over CLAIMANTS
+ * rather than over any one registry's definition type because the variable is the shared resource
+ * and the registries cannot see each other. A generative integration, a foundational service and
+ * an MCP tool server are registered independently, and the pair only meets when a step selects
+ * both, so a rule scoped to one registry answers a question narrower than the fault: the same
+ * collision graded twice, once per registry, produces two remediations for one variable.
+ *
+ * A SHARED name is legitimate and common, because one vendor behind an image endpoint and a music
+ * endpoint is one account: what makes that safe is that both look the value up under the SAME key,
+ * so whichever resolves first sets the variable to exactly what the other wanted. Different keys
+ * behind one name is the opposite, and there is no arbitration that makes it right. Serving the
+ * first claimant sets the variable the second capability's brief tells the agent to read, so the
+ * agent authenticates one thing with another's credential; withholding it (what dispatch does,
+ * since a mothership node validates nothing) costs both capabilities every run. Only a
+ * disagreement about the VALUE is reported.
+ *
+ * Takes the claimants that PARSED. Reading a malformed definition's credentials would restate a
+ * fault already reported as a second, more confusing one.
+ */
+export function credentialInjectionCollisions(
+  claimants: readonly CredentialInjectionClaimant[],
+): CredentialInjectionCollision[] {
+  // Grouped by the COMPARABLE (case-folded) name and reported under the spelling the deployment
+  // wrote, because `ACME_KEY` and `acme_key` are one variable wherever the environment ignores case
+  // and two everywhere else: the pair collides on exactly the platform where the operator has the
+  // least chance of noticing it.
+  const claims = new Map<string, { spelling: string; byKey: Map<string, string[]> }>()
+  for (const claimant of claimants) {
+    for (const credential of claimant.credentials ?? []) {
+      const comparable = comparableCredentialInjectionName(credential)
+      const claim = claims.get(comparable) ?? {
+        spelling: credentialInjectionName(credential),
+        byKey: new Map<string, string[]>(),
+      }
+      claim.byKey.set(credential.key, [...(claim.byKey.get(credential.key) ?? []), claimant.owner])
+      claims.set(comparable, claim)
+    }
+  }
+  const collisions: CredentialInjectionCollision[] = []
+  for (const [, { spelling, byKey }] of claims) {
+    if (byKey.size < 2) continue
+    const described = [...byKey]
+      .map(([key, owners]) => `"${key}" (${owners.join(', ')})`)
+      .sort()
+      .join(' and ')
+    collisions.push({
+      envName: spelling,
+      message:
+        `Registered capabilities disagree about environment variable "${spelling}": it is declared ` +
+        `for lookup keys ${described}. One variable cannot hold both values, so every dispatch ` +
+        `carrying both withholds it from BOTH of them. Give one a distinct \`envName\`, or point ` +
+        `both at the same lookup key if they really share an account.`,
+    })
+  }
+  return collisions
 }

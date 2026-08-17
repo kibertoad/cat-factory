@@ -1,4 +1,4 @@
-import { isRunnerImageVariant, parseContainerKey } from '@cat-factory/kernel'
+import { isImageVariantName, parseContainerKey, ValidationError } from '@cat-factory/kernel'
 import {
   type ContainerEndpoint,
   type ContainerExec,
@@ -163,22 +163,42 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
     // Container names allow [a-zA-Z0-9][a-zA-Z0-9_.-]*; run ids are already in that set,
     // but sanitise defensively so an unusual id can't produce an invalid name.
     const sanitised = runId.replace(/[^a-zA-Z0-9_.-]/g, '-')
-    return `${this.namePrefix}${image ? `${image}.${sanitised}` : sanitised}`
+    const name = `${this.namePrefix}${image ? `${image}.${sanitised}` : sanitised}`
+    // The same producer-side check kernel's `containerKeyForRef` makes, in this runtime's own
+    // alphabet, and needed for its own reason: the name IS the only place the key is stored here, so
+    // `listRunContainers` recovers it by decoding the name and the orphan sweep asks about the run
+    // behind it. A name this adapter cannot decode back names no run, and the sweep then deletes a
+    // live container. TWO things break the round trip and neither is visible afterwards: a run id
+    // whose leading dot-segment is variant-shaped (indistinguishable from the `<variant>.` prefix
+    // this writes), and one the sanitiser above had to rewrite (`ui:run@1` and `ui:run-1` collapse
+    // onto one name). Refusing at creation says which, once, instead of paying for it later.
+    if (this.containerKeyFromName(name) !== containerKey) {
+      throw new ValidationError(
+        `Cannot name a container for "${containerKey}" on the Apple \`container\` runtime: the name ` +
+          `"${name}" does not decode back to that key, so the orphan sweep would read it as ` +
+          `belonging to another run (or to no run at all) and could delete it mid-step. A run id ` +
+          `here must be [a-zA-Z0-9_.-] and must not put a variant-shaped segment before a ".".`,
+        { reason: 'container_name_not_reversible', containerKey, name },
+      )
+    }
+    return name
   }
 
   /**
    * The inverse of {@link runName}: the container key a managed container's name encodes.
    *
    * A leading `<variant>.` segment is decoded back to the `<variant>:` prefix
-   * `containerKeyForRef` produced, and ONLY when it names a variant this build knows — a run id
-   * that happened to contain a dot is left whole rather than split at it.
+   * `containerKeyForRef` produced, and ONLY when it is SHAPED like a variant name: a run id that
+   * happened to contain a dot is left whole rather than split at it. Shape rather than
+   * membership for the reason `parseContainerKey` gives: the names are open, so a deployment's
+   * own variant is one no build can enumerate and every one must still reap.
    */
   private containerKeyFromName(name: string): string {
     const rest = name.slice(this.namePrefix.length)
     const dot = rest.indexOf('.')
     if (dot <= 0) return rest
     const prefix = rest.slice(0, dot)
-    return isRunnerImageVariant(prefix) && prefix !== 'default'
+    return isImageVariantName(prefix) && prefix !== 'default'
       ? `${prefix}:${rest.slice(dot + 1)}`
       : rest
   }

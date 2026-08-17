@@ -3516,7 +3516,8 @@
       "noneDeclared": "このデプロイに登録された機能で認証情報を要求するものはありません。",
       "subject": {
         "toolServer": "ツールサーバー",
-        "binaryGenerator": "生成系インテグレーション"
+        "binaryGenerator": "生成系インテグレーション",
+        "foundationalService": "基盤サービス"
       },
       "incomplete": {
         "title": "この一覧は不完全な可能性があります",
@@ -6690,6 +6691,7 @@
       "unknownGenerators": "このデプロイメントが登録していない生成統合が指定されました: {ids}。エントリは申告どおり保持されます。統合はこのワークスペースではなくデプロイメントのコードで登録します。",
       "generatorsUnverified": "ステップの完了時にこのデプロイメントの生成系インテグレーションを読み取れなかったため、以下に記載されたインテグレーションは照合されていません。エントリは申告どおり保持されます。"
     },
+    "processedBy": "その後 {tool}",
     "unknownGeneratorBadge": "未登録",
     "missizedBadge": "サイズ不一致",
     "candidates": {

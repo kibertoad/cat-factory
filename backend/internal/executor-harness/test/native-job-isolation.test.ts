@@ -43,7 +43,7 @@ describe('testSecretEnv', () => {
   })
 })
 
-describe('generative integration credentials (generatorSecrets)', () => {
+describe('generative integration credentials (capabilitySecrets)', () => {
   it("keeps two concurrent jobs' generator credentials in separate envs", () => {
     // The same rule the tester's secrets follow, and it matters more here: a generation API key
     // is per-DEPLOYMENT config resolved per dispatch, so on the shared native host process two

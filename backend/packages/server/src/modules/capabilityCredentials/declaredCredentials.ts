@@ -1,4 +1,4 @@
-import type { BinaryGeneratorSource, Logger } from '@cat-factory/kernel'
+import type { BinaryGeneratorSource, FoundationalBuiltinSource, Logger } from '@cat-factory/kernel'
 import { noopLogger, runBestEffort } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type {
@@ -25,7 +25,7 @@ import type {
 
 /** One capability's declaration of a credential it needs, flattened for the join below. */
 export interface DeclaredCapabilityCredential {
-  subject: 'tool-server' | 'binary-generator'
+  subject: 'tool-server' | 'binary-generator' | 'foundational-service'
   id: string
   label: string
   key: string
@@ -37,10 +37,13 @@ export interface DeclaredCapabilityCredential {
 export interface DeclaredCapabilityCredentials {
   declared: DeclaredCapabilityCredential[]
   /**
-   * True when the GENERATOR half could not be read. `BinaryGeneratorSource` throws rather than
-   * answering an empty set when it cannot reach the mothership, and this surface must not turn
-   * that outage into "no integration needs a credential" — the same "absent ≠ zero" rule the
-   * workspace snapshot's picker applies to the same read.
+   * True when either REMOTE-CAPABLE half could not be read. `BinaryGeneratorSource` and
+   * `FoundationalBuiltinSource` both throw rather than answering an empty set when they cannot
+   * reach the mothership, and this surface must not turn that outage into "nothing needs a
+   * credential" — the same "absent ≠ zero" rule the workspace snapshot's picker applies to the
+   * same reads. One flag rather than one per half, because what it changes downstream is a single
+   * judgement (whether a stored key with no declarer may be called orphaned), and that judgement
+   * is unsafe if EITHER half is short.
    */
   incomplete: boolean
 }
@@ -49,10 +52,21 @@ export interface CollectDeclaredCredentialsInput {
   agentKindRegistry: AgentKindRegistry
   /** The set a RUN resolves against — this process's registry, or the mothership's. */
   binaryGenerators: BinaryGeneratorSource
+  /**
+   * The catalog's `builtin` tier, read through the SOURCE for the reason the generators are:
+   * on a mothership-mode node the estate is the mothership's, and a checklist built from this
+   * process's own registry would ask an operator for keys no run resolves against.
+   *
+   * Only this tier appears, because only a code-registered service may declare a credential
+   * (`storedTierMayNotDeclareCredentials`): the resolver reads a declared key off the
+   * deployment's own environment, so a stored row naming one would be a workspace admin asking
+   * the platform to read deployment-level secret state into an agent process.
+   */
+  foundationalBuiltins: FoundationalBuiltinSource
   logger?: Logger
 }
 
-/** Every credential a registered tool server or generative integration declares. */
+/** Every credential a registered tool server, generative integration or catalog service declares. */
 export async function collectDeclaredCapabilityCredentials(
   input: CollectDeclaredCredentialsInput,
 ): Promise<DeclaredCapabilityCredentials> {
@@ -122,7 +136,27 @@ export async function collectDeclaredCapabilityCredentials(
       })
     }
   }
-  return { declared, incomplete: views === undefined }
+  // The third declarer, read on the same terms as the generators above and folded into the same
+  // `incomplete` flag: a service whose credential the operator never fills in is a step that
+  // generates fine and cannot store a byte.
+  const services = await runBestEffort(
+    input.logger ?? noopLogger,
+    'read foundational services for the credential checklist',
+    () => input.foundationalBuiltins.entries(),
+  )
+  for (const service of services ?? []) {
+    for (const credential of service.credentials ?? []) {
+      push({
+        subject: 'foundational-service',
+        id: service.id,
+        label: service.name,
+        key: credential.key,
+        ...(credential.usage ? { usage: credential.usage } : {}),
+        required: credential.required !== false,
+      })
+    }
+  }
+  return { declared, incomplete: views === undefined || services === undefined }
 }
 
 /**

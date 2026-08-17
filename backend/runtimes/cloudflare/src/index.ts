@@ -18,7 +18,10 @@ import { D1CommitProjectionRepository } from './infrastructure/repositories/D1Co
 import { D1LiveContainerRepository } from './infrastructure/repositories/D1LiveContainerRepository'
 import { D1SubscriptionActivationRepository } from './infrastructure/repositories/D1PersonalSubscriptionRepository'
 import { ContainerInstanceRegistry } from './infrastructure/containers/ContainerInstanceRegistry'
-import { agentContainerNamespace } from './infrastructure/containers/runContainerNamespace'
+import {
+  agentContainerNamespace,
+  deploymentContainerBindings,
+} from './infrastructure/containers/runContainerNamespace'
 import { D1RateLimitRepository } from './infrastructure/repositories/D1RateLimitRepository'
 import { D1TokenUsageRepository } from './infrastructure/repositories/D1TokenUsageRepository'
 import { D1LlmCallMetricRepository } from './infrastructure/repositories/D1LlmCallMetricRepository'
@@ -129,6 +132,16 @@ export { DeployContainer } from './infrastructure/containers/DeployContainer'
 // Container-enabled Durable Object backing per-run UI-TESTER containers (the browser image:
 // Playwright + Chromium + WireMock, the `image: 'ui'` dispatch variant).
 export { UiTesterContainer } from './infrastructure/containers/UiTesterContainer'
+// The BASE class the three above are, exported so a deployment can bind a container class of its
+// own: a Cloudflare Container's image is pinned per CLASS, so an agent kind declaring its own
+// `image` variant needs one. Subclass it (the subclasses add nothing), add the `[[containers]]`
+// block and a durable-object binding named `RUNNER_CONTAINER_<VARIANT>`, and the agent path
+// routes that variant to it — see `runContainerNamespace.ts`.
+export { RunContainer } from './infrastructure/containers/RunContainer'
+export {
+  DEPLOYMENT_CONTAINER_BINDING_PREFIX,
+  deploymentContainerBinding,
+} from './infrastructure/containers/runContainerNamespace'
 // Per-workspace WebSocket fan-out hub (real-time execution/board events).
 export { WorkspaceEventsHub } from './infrastructure/durable-objects/WorkspaceEventsHub'
 // Cross-isolate cache-coherency directory (per-group generation counters; see appCachesHost.ts).
@@ -348,6 +361,32 @@ export {
   RALPH_PIPELINE_ID,
   MEDIA_PIPELINE_ID,
 } from '@cat-factory/kernel'
+// The pipeline AUTHORING seam, so a deployment writes a registered pipeline the way the built-in
+// catalog is written: a list of NAMED steps, lowered into `Pipeline`'s index-aligned
+// `agentKinds`/`gates`/`enabled`/`gating`/`stepOptions` arrays by the same helper. Hand-aligning
+// five arrays is an invariant maintained by eye, and a step inserted in the middle shifts four of
+// them silently.
+export { definePipeline } from '@cat-factory/kernel'
+export type { PipelineSpec, PipelineStepSpec, StepOptions } from '@cat-factory/kernel'
+// What a pipeline's STEP has to be able to NAME, for a deployment replacing a shipped preset with
+// one of its own: the generating kind, the platform's own storage service, the two traits that
+// decide what a kind gets, and the option shapes it fills in. Withholding these turns a one-line
+// registration into either a copied string literal (a second source of truth for a value the
+// platform branches on, refused at the write boundary if it misses by a character) or a second
+// direct dependency on an internal package whose version must be kept in step with this facade's
+// own copy by hand.
+export {
+  MEDIA_GENERATOR_AGENT_KIND,
+  BINARY_OUTPUT_TRAIT,
+  BINARY_STORAGE_TRAIT,
+} from '@cat-factory/agents'
+export type { AgentKindVariantDefinition } from '@cat-factory/agents'
+export {
+  PLATFORM_ASSET_STORAGE_SERVICE_ID,
+  ASSET_STORAGE_CAPABILITY,
+  GENERATION_CONTEXT_CAPABILITY,
+} from '@cat-factory/contracts'
+export type { BinaryOutputConfig } from '@cat-factory/contracts'
 // The options {@link createWorker} takes — re-exported from the root so a deployment can name the
 // type of what it passes without reaching for the `@cat-factory/worker/app` subpath.
 export type { CreateAppOptions } from './app'
@@ -839,6 +878,7 @@ function reapStaleContainers(env: Env, tick: SweepTick, clock: SystemClock): voi
       agentContainerNamespace({
         exec: env.EXEC_CONTAINER,
         ...(env.UI_CONTAINER ? { ui: env.UI_CONTAINER } : {}),
+        deployment: deploymentContainerBindings(env as unknown as Record<string, unknown>),
       }),
       new D1LiveContainerRepository({ db: env.DB }),
       clock,

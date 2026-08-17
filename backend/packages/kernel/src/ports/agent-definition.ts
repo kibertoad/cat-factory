@@ -117,11 +117,24 @@ export interface AgentStepSpec {
    */
   testInfra?: boolean
   /**
-   * The container IMAGE this kind's job needs. `ui` selects the heavier Playwright + browser
-   * image (the UI tester drives a real browser and captures screenshots); absent ⇒ the default
-   * harness image, so the browser never bloats every other kind's cold start.
+   * The container IMAGE VARIANT this kind's job needs, by NAME. Absent ⇒ the default harness
+   * image, so nothing else bloats every other kind's cold start.
+   *
+   * `ui` selects the platform's heavier Playwright + browser image (the UI tester drives a real
+   * browser and captures screenshots). Any other name is the DEPLOYMENT's own variant, which its
+   * runner backend maps to an image and which gets a container of its own for the run
+   * (`containerKeyForRef`), so a kind needing a tool the harness has no reason to carry neither
+   * installs it per run nor puts it in every other kind's cold start.
+   *
+   * `default` is spelled by omission and `deploy` is not selectable: that one is the environment
+   * provisioner's image, dispatched by the platform rather than by a kind, and a kind naming it
+   * would be asking for `kubectl` in an agent container through a door built for something else.
+   * Both are refused at boot (`validateRegistrations`), as is a name that is not a slug.
+   *
+   * A backend with no image for the variant REFUSES the dispatch rather than falling back
+   * (`RUNNER_IMAGE_UNWIRED_REASON`).
    */
-  image?: 'ui'
+  image?: string
   /**
    * `container-explore` only: suppress the READ-ONLY guardrail the surface otherwise appends to
    * the kind's prompt. An explore kind never PUSHES, but a few legitimately write inside their

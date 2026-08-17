@@ -1,6 +1,6 @@
 // The primitive VALUE rules of the untrusted job body: what counts as a required string, which
 // environment-variable names a body may never set, and how the two env-bearing fields (the
-// tester's `testSecrets`, a generative integration's `generatorSecrets`, and a frontend binding's
+// tester's `testSecrets`, a generative integration's `capabilitySecrets`, and a frontend binding's
 // `env`) are parsed against those rules.
 //
 // Extracted from `job.ts` when the generative-integration credentials arrived (the file-size
@@ -93,7 +93,7 @@ const ENV_VAR_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 /**
  * Validate a `{ key, value }` env-pair list under `field`. Shared by the tester's `testSecrets`
- * and by `generatorSecrets` (the credentials of a step's generative binary integrations), because
+ * and by `capabilitySecrets` (the credentials of a step's generative binary integrations), because
  * both are secret values the harness turns into environment variables of the agent's own process
  * and both owe the same guarantees: valid env-var names, no toolchain-critical
  * ({@link isReservedEnvName}) names, no duplicates. A second copy of these rules would be a second

@@ -69,6 +69,31 @@ export function platformAssetIdOf(row: {
 }
 
 /**
+ * Whether a SELECTED storage id is the platform's own asset service — the one fact that decides
+ * whether the account's content-storage configuration is involved in a step at all.
+ *
+ * A function rather than a comparison written twice, because two seams on opposite sides of one
+ * hand-off ask it and they must not disagree. The container executor asks it to decide whether the
+ * job is handed an upload seam into the platform's asset ingest; run admission asks it to decide
+ * whether the `binary-storage` PRECONDITION applies to a step. Those two used to answer it from
+ * different facts — the seam from the step's selection, the precondition from the kind's trait — so
+ * a step repointed at an org's own object service was refused a run over a store its bytes were
+ * never going to reach, and the refusal named a settings page unrelated to the failure.
+ *
+ * Strictly about a STATED id: absent answers false, because "no selection" is not a claim about the
+ * platform's store and the two callers read that state differently. The upload seam falls through
+ * to its own rule; admission treats a trait-carrying kind with nothing to select as bound to the
+ * account store, which is the only target it could have. Neither reading belongs here.
+ *
+ * Compared case-insensitively for the reason {@link platformAssetIdOf} gives: a stored selection is
+ * a lower-kebab slug today, and a comparison that assumed it would break on the first caller
+ * passing an un-normalised one.
+ */
+export function storesThroughPlatformAssets(storageServiceId: string | null | undefined): boolean {
+  return storageServiceId?.trim().toLowerCase() === PLATFORM_ASSET_STORAGE_SERVICE_ID
+}
+
+/**
  * The media types a stored artifact is served back INLINE as, and therefore the ones a surface may
  * point an `<img>` at.
  *

@@ -1,7 +1,7 @@
 import {
   binaryCapabilityCoverage,
   binaryCapabilityProviders,
-  binaryCredentialInjectionName,
+  credentialInjectionName,
   binaryFormatCoverage,
   binaryModalityOverlaps,
   binaryValueCoverage,
@@ -884,7 +884,7 @@ function credentialLines(generator: BinaryGeneratorView): string[] {
     // naming the lookup key here would tell the agent to read a variable that is never set: an
     // integration reported as unavailable on every run, with the brief itself as the reason
     // nobody could see it.
-    const envName = binaryCredentialInjectionName(credential)
+    const envName = credentialInjectionName(credential)
     const usage = credential.usage
       ? ` Send it as ${credential.usage}.`
       : ' Its API contract states how to present it.'
@@ -937,7 +937,7 @@ function credentialSetLine(
   credentials: readonly BinaryGeneratorCredential[],
 ): string {
   const names = (list: readonly BinaryGeneratorCredential[]): string =>
-    list.map((credential) => `\`${binaryCredentialInjectionName(credential)}\``).join(', ')
+    list.map((credential) => `\`${credentialInjectionName(credential)}\``).join(', ')
   const required = credentials.filter((credential) => credential.required !== false)
   const opening = `\`${generatorId}\` is given ${credentials.length} separate values, provided to your process as the environment variables ${names(credentials)}.`
   if (required.length < 2) {

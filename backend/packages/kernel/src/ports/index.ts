@@ -611,14 +611,17 @@ export type {
 export {
   CONTAINER_EVICTION_ERROR,
   containerKeyForRef,
+  deploymentImageVariantMessage,
   HARNESS_SHUTDOWN_ERROR,
-  isRunnerImageVariant,
+  isImageVariantName,
+  isPlatformImageVariant,
   parseContainerKey,
+  PLATFORM_IMAGE_VARIANTS,
   RUNNER_IMAGE_UNWIRED_REASON,
-  RUNNER_IMAGE_VARIANTS,
   runIdFromContainerKey,
-  unservableImageVariant,
+  unservablePlatformImageVariant,
 } from './runner-transport.js'
+export type { PlatformImageVariant } from './runner-transport.js'
 export type { PreviewRef, PreviewTransport, PreviewView } from './preview-transport.js'
 export { PREVIEW_HARNESS_JOB_ID, PREVIEW_PROVISION_TYPE } from './preview-transport.js'
 export type {

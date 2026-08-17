@@ -300,6 +300,48 @@ A skew is therefore structurally impossible rather than merely observable, which
 fingerprint of the resolved tier is exposed on either facade's health read: it would report on a
 disagreement that can no longer occur.
 
+### Authenticating to a service: declared credentials, and only from code
+
+A catalog service is an HTTP API the agent is told to call, and most org APIs are authenticated.
+Until this landed the platform had a credential seam applied to what MAKES an artifact (a
+generative integration declares `credentials` by key name, resolved per dispatch through
+`ToolSecretResolver` and injected into the job as named environment variables) and none applied to
+where the artifact GOES: a step could authenticate to eight vendors and then not to the service it
+had to store the result in. A service's own description had to carry that as a caveat.
+
+A definition may now declare `credentials`, the same `capabilityCredentialSchema` a generative
+integration and an MCP tool server declare, and the same resolution path carries it:
+
+- the ENGINE projects the declarations of the services THIS dispatch was briefed on
+  (`dispatchFoundationalCredentialsFor` → `AgentRunContext.foundationalCredentials`), key names
+  only, never values;
+- `@cat-factory/server` resolves the values through the facade-wired resolver and writes them to
+  the job body's `capabilitySecrets`, which the harness turns into variables of that one job's
+  agent process;
+- the BRIEF names the variable to the agent, from the same helper the resolver keys the body with
+  (`renderServiceCredentials`), so the two cannot name different variables.
+
+**Only the code-registered `builtin` tier may declare one**, and the stored write boundary refuses
+it (`storedTierMayNotDeclareCredentials`). The reason is the resolver's shipped default: it reads
+the declared key off the DEPLOYMENT'S OWN ENVIRONMENT, so a declaration is a request to read
+deployment-level secret state into an agent process. Every other declarer on the platform is
+deployment code, where that is the same trust boundary as the process itself; a foundational
+service is the first one a workspace ADMIN can also create over REST, and there the two are not the
+same at all. `isReservedPlatformEnvKey` bounds the damage to non-platform variables, which is a
+floor rather than a licence. Per-workspace VALUES are unaffected and are the point of the sealed
+capability-credential store: the deployment declares the key in code, each board stores its own
+value under it.
+
+An account or workspace row that OVERRIDES a builtin id therefore loses its credentials, which is
+deliberate rather than a gap: an override supplies its own contract document, and inheriting the
+code tier's token would let a stored row repoint the endpoint while keeping the deployment's
+credential.
+
+Two capabilities from different registries can claim one environment variable for different lookup
+keys, which no single registry's own validation can see. Boot names it
+(`capability_injection_name_collision`) and a dispatch that meets the pair anyway withholds the
+variable from BOTH, which is the one disposition every brief already describes truthfully.
+
 ### The management surface
 
 The REST API is mounted at both scopes from one controller factory, and the SPA mirrors it: an

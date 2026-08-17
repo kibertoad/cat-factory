@@ -801,7 +801,7 @@ export interface AgentJob extends HarnessAuthFields {
    * registration resolved per dispatch. Absent ⇒ no integration declared a credential, or none
    * resolved (which the agent is told to report rather than work around).
    */
-  generatorSecrets?: TestSecretSpec[]
+  capabilitySecrets?: TestSecretSpec[]
   /**
    * Explore mode: stand the service's dependencies up before the agent runs (the
    * tester). Brings the docker-compose infra up on localhost for the duration of the
@@ -1263,7 +1263,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     skills: parseSkillSpecs(o.skills),
     mcpServers: parseMcpServerSpecs(o.mcpServers),
     testSecrets: parseSecretEnvPairs(o.testSecrets, 'testSecrets'),
-    generatorSecrets: parseSecretEnvPairs(o.generatorSecrets, 'generatorSecrets'),
+    capabilitySecrets: parseSecretEnvPairs(o.capabilitySecrets, 'capabilitySecrets'),
     guardLimits: parseGuardLimits(o.guardLimits),
     validation: parseValidationSpec(o.validation),
     validationChecks: parseValidationChecksSpec(o.validationChecks),
@@ -1308,7 +1308,7 @@ interface ParsedAgentJobParts {
   skills: ReturnType<typeof parseSkillSpecs>
   mcpServers: ReturnType<typeof parseMcpServerSpecs>
   testSecrets: ReturnType<typeof parseSecretEnvPairs>
-  generatorSecrets: ReturnType<typeof parseSecretEnvPairs>
+  capabilitySecrets: ReturnType<typeof parseSecretEnvPairs>
   guardLimits: ReturnType<typeof parseGuardLimits>
   validation: ReturnType<typeof parseValidationSpec>
   validationChecks: ReturnType<typeof parseValidationChecksSpec>
@@ -1374,7 +1374,7 @@ function assembleAgentJob(
     reproduction,
     dependencyInstall,
     reviewPrNumber,
-    generatorSecrets,
+    capabilitySecrets,
   } = parts
   const repo = (o.repo ?? {}) as Record<string, unknown>
   return {
@@ -1398,7 +1398,7 @@ function assembleAgentJob(
     ...(skills ? { skills } : {}),
     ...(mcpServers ? { mcpServers } : {}),
     ...(testSecrets.length ? { testSecrets } : {}),
-    ...(generatorSecrets.length ? { generatorSecrets } : {}),
+    ...(capabilitySecrets.length ? { capabilitySecrets } : {}),
     ...(infra ? { infra } : {}),
     ...(pr ? { pr } : {}),
     ...(peerRepos.length ? { peerRepos } : {}),

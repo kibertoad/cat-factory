@@ -323,7 +323,7 @@ export async function handleAgent(job: AgentJob, opts: RunOptions = {}): Promise
     // mode check here would be that decision made twice, in the half that cannot see the registry.
     const scoped = withAgentEnv(opts, {
       ...registryEnv,
-      ...secretEnv(job.generatorSecrets),
+      ...secretEnv(job.capabilitySecrets),
       ...artifactUploadEnv(job.artifactUpload),
     })
     if (job.mode === 'preview') return await runPreviewMode(job, scoped)

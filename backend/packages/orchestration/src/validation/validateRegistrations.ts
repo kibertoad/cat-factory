@@ -25,12 +25,16 @@ import {
   validateFoundationalDefinition,
 } from '@cat-factory/kernel'
 import {
+  type CredentialInjectionClaimant,
   type CustomTaskType,
   type DescriptorField,
+  binaryGeneratorDefinitionIssues,
+  credentialInjectionCollisions,
   descriptorConditionHasPredicate,
   duplicatedDescriptorSectionCaptions,
   isDeploymentScopedSource,
   foundationalServiceDefinitionIssues,
+  isImageVariantName,
   isNamespacedId,
   isValidResultViewId,
   RESULT_VIEW_ID_SET,
@@ -293,6 +297,9 @@ export function collectRegistrationProblems(
   // 6. Agent capabilities: the skills + tool servers declared for each kind.
   problems.push(...checkAgentCapabilities(registry))
 
+  //  7b. A kind's declared IMAGE VARIANT: a slug, and never a platform name it may not claim.
+  problems.push(...checkAgentImageVariants(registry))
+
   // 7. Agent-kind VARIANTS: their base kind must exist and they must actually change the prompt.
   problems.push(...checkAgentKindVariants(opts, registeredKindIds))
 
@@ -304,6 +311,10 @@ export function collectRegistrationProblems(
 
   // 10. Deployment-registered PROMPT FRAGMENTS (only when a registry is supplied).
   problems.push(...checkPromptFragments(opts))
+
+  // 11. CREDENTIAL injection-name collisions, over every capability registry at once: two
+  //     capabilities claiming one environment variable for different lookup keys.
+  problems.push(...checkCredentialInjectionNames(opts))
 
   return problems
 }
@@ -405,6 +416,103 @@ function checkFoundationalServices(opts: ValidateRegistrationsOptions): Registra
         severity: 'error',
         code: 'foundational_service_invalid',
         message: `Foundational service "${definition.id}": ${describeFoundationalProblem(problem)}`,
+      })
+    }
+  }
+  return problems
+}
+
+/**
+ * Section 11 of {@link collectRegistrationProblems}: two registered capabilities that want one
+ * environment variable to hold different values.
+ *
+ * The ONE place that fault is graded, over EVERY capability registry at once. It used to be graded
+ * per registry as well, and that is the trap the shape avoids: a generative integration and a
+ * foundational service are registered independently and neither can see the other, so a rule scoped
+ * to one registry answers a question narrower than the fault. Running both meant a
+ * generator-vs-generator pair was reported twice, under two codes, with two remediations for one
+ * variable; running only the per-registry ones meant a cross-registry pair was reported nowhere.
+ *
+ * Dispatch already handles the collision safely by withholding the variable from BOTH claimants,
+ * the one disposition the briefs describe truthfully, but safely is not the same as visibly. Left to
+ * the runtime the symptom is two capabilities reported unavailable on every run of one step, with a
+ * warning in the log and nothing at the boundary where the declaration was written.
+ *
+ * The RULE is contracts' `credentialInjectionCollisions`, beside the injection-name fallback it is
+ * about; what stays here is the boot taxonomy (severity + code) and WHICH claimants are graded.
+ */
+function checkCredentialInjectionNames(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
+  const { binaryGeneratorRegistry, foundationalServiceRegistry } = opts.registries
+  const claimants: CredentialInjectionClaimant[] = []
+  // Only definitions that PARSED are compared, in both registries: a malformed one is already
+  // reported by its own section, and reading its credentials here would restate that fault as a
+  // second, more confusing one.
+  for (const definition of binaryGeneratorRegistry?.all() ?? []) {
+    if (binaryGeneratorDefinitionIssues(definition).length === 0) {
+      claimants.push({
+        owner: `integration "${definition.id}"`,
+        credentials: definition.credentials,
+      })
+    }
+  }
+  for (const definition of foundationalServiceRegistry?.all() ?? []) {
+    if (foundationalServiceDefinitionIssues(definition).length === 0) {
+      claimants.push({ owner: `service "${definition.id}"`, credentials: definition.credentials })
+    }
+  }
+  return credentialInjectionCollisions(claimants).map((collision) => ({
+    severity: 'error' as const,
+    code: 'capability_injection_name_collision',
+    message: collision.message,
+  }))
+}
+
+/**
+ * A registered kind's declared executor IMAGE VARIANT (`AgentStepSpec.image`).
+ *
+ * The name is open so a deployment can point a kind at its own image, and open is exactly why
+ * boot has to grade it: nothing downstream can tell a typo from a variant this backend has not
+ * been configured for, and both surface as the same refused dispatch, hours later, on whichever
+ * pipeline happens to reach that step first.
+ *
+ * Two names are refused outright rather than merely warned about:
+ *
+ * - `deploy` is the environment provisioner's image, dispatched through its own transport. A kind
+ *   naming it is asking for `kubectl` in an agent container through a door built for something
+ *   else, and on the Cloudflare agent path it is refused at dispatch anyway, so boot is where the
+ *   registration itself should fail.
+ * - `default` is spelled by OMISSION. Accepting it as a value would make two spellings of one
+ *   state, and only one of them keys the run's shared container (`containerKeyForRef` treats them
+ *   the same, which is right, and is a coincidence a reader should not have to verify).
+ *
+ * `ui` is deliberately allowed: it is the platform's image, and a deployment's own browser-driven
+ * kind should run on it rather than publish a second copy.
+ */
+function checkAgentImageVariants(registry: AgentKindRegistry): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  for (const definition of registry.all()) {
+    const variant = definition.agent?.image
+    if (!variant) continue
+    if (variant === 'default' || variant === 'deploy') {
+      problems.push({
+        severity: 'error',
+        code: 'agent_image_variant_reserved',
+        message:
+          `Agent kind "${definition.kind}" declares the "${variant}" executor image, which a kind ` +
+          (variant === 'default'
+            ? 'may not name: the default image is what a kind with no `image` declaration runs on.'
+            : "may not use: it is the environment provisioner's image, dispatched through its own transport."),
+      })
+      continue
+    }
+    if (!isImageVariantName(variant)) {
+      problems.push({
+        severity: 'error',
+        code: 'agent_image_variant_invalid',
+        message:
+          `Agent kind "${definition.kind}" declares the executor image "${variant}", which is not a ` +
+          `lower-kebab slug. The name is a key in a runner backend's image map and a container's ` +
+          `identity, so it is held to the shape every other registered id is.`,
       })
     }
   }

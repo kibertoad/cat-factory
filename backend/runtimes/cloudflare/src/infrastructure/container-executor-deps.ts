@@ -66,7 +66,10 @@ import { ContainerAgentExecutor, type ResolveRunnerTransport } from './ai/Contai
 import type { AccountSettingsService } from '@cat-factory/integrations'
 import type { JobPackageRegistrySpec } from '@cat-factory/server'
 import { CloudflareContainerTransport } from './containers/CloudflareContainerTransport'
-import { agentContainerNamespace } from './containers/runContainerNamespace'
+import {
+  agentContainerNamespace,
+  deploymentContainerBindings,
+} from './containers/runContainerNamespace'
 import { ContainerInstanceRegistry } from './containers/ContainerInstanceRegistry'
 import { D1LiveContainerRepository } from './repositories/D1LiveContainerRepository'
 import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
@@ -289,6 +292,7 @@ export function buildResolveTransport(deps: {
     ? agentContainerNamespace({
         exec: env.EXEC_CONTAINER,
         ...(env.UI_CONTAINER ? { ui: env.UI_CONTAINER } : {}),
+        deployment: deploymentContainerBindings(env as unknown as Record<string, unknown>),
       })
     : null
   const cloudflare = containerNamespace

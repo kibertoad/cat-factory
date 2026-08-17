@@ -17,11 +17,13 @@ transport + the GitHub token/client seams differ.
   Per run AND per IMAGE: a step declaring `image: 'ui'` gets its own container keyed
   `ui:<runId>` on `LOCAL_HARNESS_IMAGE_UI`, always per-run even with a warm pool on, since pool
   members all run one image. `LOCAL_HARNESS_IMAGE_UI` DEFAULTS to the backend-matched tag, so
-  this facade serves the variant out of the box (paying the pull on the first dispatch, see
-  `harnessImage.ts`); a variant it genuinely cannot serve is REFUSED at dispatch, naming what to
-  correct, never run on the default image. `deploy` is refused here too: the agent runner path
-  does not serve it, which is a mistake in a kind's registration rather than a missing pin, so it
-  is a distinct refusal — matching the Worker's `agentContainerNamespace`.
+  this facade serves that variant out of the box (paying the pull on the first dispatch, see
+  `harnessImage.ts`). A DEPLOYMENT's own variant works the same way, mapped by
+  `LOCAL_HARNESS_IMAGE_VARIANTS` (`pixel-tools=ghcr.io/acme/pixel:2,…`). A variant this facade
+  genuinely cannot serve is REFUSED at dispatch, naming what to correct, never run on the default
+  image. `deploy` is refused here too: the agent runner path does not serve it, which is a mistake
+  in a kind's registration rather than a missing pin, so it is a distinct refusal, matching the
+  Worker's `agentContainerNamespace`.
 - `LocalProcessRunnerTransport.ts`: the NATIVE backend (`LOCAL_NATIVE_AGENTS`), one long-lived
   host process serving every concurrent job. Its stderr is PIPED and kept as a bounded tail
   (nothing is forwarded to the developer's console), because that is where the harness routes its

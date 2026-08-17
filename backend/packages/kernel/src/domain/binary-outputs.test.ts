@@ -331,6 +331,29 @@ describe('parseBinaryOutputDeclaration', () => {
       expect(row?.dimensions).toBeUndefined()
     }
   })
+
+  // The second producer. A post-processed artifact has two, and `generator` can name only one:
+  // the integration made the pixels and the processor made the bytes that were stored.
+  it('records a post-processor verbatim, and keeps it out of the generator vocabulary', () => {
+    const stored = (entry: Record<string, unknown>) =>
+      parseBinaryOutputDeclaration(
+        declaration(JSON.stringify([{ service: 'asset-store', location: 'a.png', ...entry }])),
+        known,
+      )
+
+    const snapped = stored({ generator: 'retro-diffusion', processedBy: 'Pixel-Snapper' })
+    // Preserved AS WRITTEN, unlike `generator` beside it: a processor resolves against no
+    // registry, so there is no id for a capitalised spelling to miss, and lowercasing it would
+    // rewrite a label nothing can check.
+    expect(snapped.stored[0]?.processedBy).toBe('Pixel-Snapper')
+    expect(snapped.stored[0]?.generator).toBe('retro-diffusion')
+    // And it is never graded against the registered integrations: only `generator` can be
+    // unknown, because only `generator` names something the deployment registers.
+    expect(stored({ processedBy: 'not-an-integration' }).unknownGenerators).toEqual([])
+    // Absent means NOT STATED, which is what every artifact recorded before the field existed
+    // says. It is not evidence that nothing ran.
+    expect(stored({}).stored[0]?.processedBy).toBeUndefined()
+  })
 })
 
 describe('describeBinaryOutputConfigIssues', () => {

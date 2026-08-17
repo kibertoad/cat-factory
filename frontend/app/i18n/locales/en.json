@@ -3659,7 +3659,8 @@
       "noneDeclared": "None of this deployment's registered capabilities asks for a credential.",
       "subject": {
         "toolServer": "Tool server",
-        "binaryGenerator": "Generative integration"
+        "binaryGenerator": "Generative integration",
+        "foundationalService": "Foundational service"
       },
       "incomplete": {
         "title": "This list may be incomplete",
@@ -7001,6 +7002,7 @@
       "unknownGenerators": "Named a generative integration this deployment does not register: {ids}. The entry is kept as claimed; the integration is registered in the deployment's code, not in this workspace. | Named generative integrations this deployment does not register: {ids}. Their entries are kept as claimed; integrations are registered in the deployment's code, not in this workspace.",
       "generatorsUnverified": "This deployment's generative integrations could not be read when the step settled, so the integrations named below were not checked against them. The entries are kept as claimed."
     },
+    "processedBy": "then {tool}",
     "unknownGeneratorBadge": "Not registered",
     "missizedBadge": "Wrong size",
     "candidates": {

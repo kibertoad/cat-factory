@@ -1,8 +1,13 @@
 import type { CloudProvider, InstanceSize, StepSubtasks } from '../domain/types.js'
-import { UnavailableError } from '../domain/errors.js'
 import type { HarnessFailureCause } from '../domain/harness-failure.js'
 import type { LlmToolSpan } from './llm-trace-sink.js'
-import type { AgentEffortReport } from '@cat-factory/contracts'
+import type { AgentEffortReport, PlatformImageVariant } from '@cat-factory/contracts'
+import {
+  isImageVariantName,
+  isPlatformImageVariant,
+  PLATFORM_IMAGE_VARIANTS,
+} from '@cat-factory/contracts'
+import { UnavailableError, ValidationError } from '../domain/errors.js'
 
 // Port for "where a repo-operating coding job actually runs". The
 // ContainerAgentExecutor dispatches each job and polls it through this transport
@@ -275,58 +280,84 @@ interface RunnerInfraSetup {
 export type RunnerDispatchKind = 'agent' | 'deploy'
 
 /**
- * Which executor image a job runs on. `default` is the standard harness image; `ui` is the
- * heavier UI-tester image that bundles Playwright + a browser (the `tester-ui` kind needs it,
- * and only it, so the browser never bloats every other kind's cold-start); `deploy` is the
- * separate deploy-harness image (slim base + `kubectl`/`kustomize`/`helm`).
+ * Which executor image a job runs on, by NAME.
+ *
+ * Three names are the PLATFORM's, because it publishes those images ({@link
+ * PLATFORM_IMAGE_VARIANTS}): `default` is the standard harness image; `ui` is the heavier
+ * UI-tester image that bundles Playwright + a browser (the `tester-ui` kind needs it, and only
+ * it, so the browser never bloats every other kind's cold-start); `deploy` is the separate
+ * deploy-harness image (slim base + `kubectl`/`kustomize`/`helm`).
+ *
+ * Anything else is a DEPLOYMENT's own variant: a slug one of its agent kinds declares
+ * (`AgentStepSpec.image`) and its runner backend maps to an image. That is the whole reason the
+ * type is open rather than a union of the three. The split exists because different kinds need
+ * different images, and a deployment whose own agent needs a tool the harness image has no
+ * reason to carry had two options: install it inside every run, or put it in every kind's cold
+ * start. The platform cannot enumerate those names, and it does not have to: what it owns is the
+ * ROUTING (a variant is part of the container's identity, {@link containerKeyForRef}) and the
+ * REFUSAL below.
  *
  * A backend that cannot serve a declared variant REFUSES the dispatch rather than running the
  * job on its default image. The two are not interchangeable in the direction that matters: a
  * browser-driven tester on the plain image has no browser, and it discovers that only after a
  * checkout, an install and a model's first turns have been paid for, then reports an `abort`
- * indistinguishable from an app that would not boot. Naming the missing wiring at dispatch
- * costs nothing and says which knob to set.
+ * indistinguishable from an app that would not boot. A deployment's own variant is worse still,
+ * because nothing in the platform knows what it carried, so the job would report a missing
+ * artifact with no cause anywhere. Naming the missing wiring at dispatch costs nothing and says
+ * which knob to set.
  */
-export type RunnerImageVariant = 'default' | 'ui' | 'deploy'
+export type RunnerImageVariant = string
+
+// The reserved-name half of the vocabulary lives on the WIRE (`@cat-factory/contracts`), because
+// a runner backend's variant map is edited in the SPA and an agent kind's declaration is written
+// by a deployment: both must be held to one list of names the platform has already claimed.
+export { PLATFORM_IMAGE_VARIANTS, isPlatformImageVariant, isImageVariantName }
+export type { PlatformImageVariant }
 
 /**
- * The {@link RunnerImageVariant} vocabulary as DATA, so a reader can narrow a string against it
- * rather than cast. Kept beside the type it enumerates and typed as the member list, so adding a
- * variant to the union without adding it here fails to compile.
+ * The `default:` arm of a backend's exhaustive switch over {@link PlatformImageVariant}: it takes
+ * `never`, so publishing a fourth platform image fails the BUILD in every backend until each
+ * decides what to do with it, and it still refuses honestly at RUN time for the case the type
+ * cannot see, a value an older job body or a stored step still carries after this build retired it.
+ *
+ * The compile-time half is the load-bearing one, because the alternative is silent in the worst
+ * direction: a backend that fell through would run the job on its default image, and nothing
+ * downstream can say what the variant was supposed to carry. The DEPLOYMENT-owned half of the
+ * vocabulary is open and gets {@link deploymentImageVariantMessage} instead; this arm is only ever
+ * reached by a name the platform itself claimed.
  */
-export const RUNNER_IMAGE_VARIANTS: readonly RunnerImageVariant[] = ['default', 'ui', 'deploy']
-
-/** Whether a string names a variant THIS build can serve. */
-export function isRunnerImageVariant(
-  value: string | null | undefined,
-): value is RunnerImageVariant {
-  return value != null && (RUNNER_IMAGE_VARIANTS as readonly string[]).includes(value)
-}
-
-/**
- * The `details.reason` every backend carries on the `UnavailableError` it raises for a
- * declared image variant it cannot serve. ONE constant because it is a machine-readable wire
- * vocabulary the SPA and the run record branch on, and each backend refuses in its own file: as
- * a per-file string literal a typo in one produces a reason nothing recognises and no typecheck
- * fails.
- */
-export const RUNNER_IMAGE_UNWIRED_REASON = 'runner_image_unwired'
-
-/**
- * The `default:` arm of a backend's exhaustive switch over {@link RunnerImageVariant}: it takes
- * `never`, so adding a member to the union fails the BUILD until that backend decides what to do
- * with it, and it still refuses honestly at RUN time for the case the type cannot see — a value
- * this build retired that an older row or an older job body still carries.
- */
-export function unservableImageVariant(variant: never): never {
+export function unservablePlatformImageVariant(variant: never): never {
   throw new UnavailableError(
     `This step declared the '${String(variant)}' executor image, which this backend does not ` +
-      'serve. It is not a variant this build knows: re-pick the executor image on the agent ' +
-      "kind's registration.",
+      'serve. It is a platform image this build does not know: re-pick the executor image on the ' +
+      "agent kind's registration.",
     RUNNER_IMAGE_UNWIRED_REASON,
     { image: String(variant) },
   )
 }
+
+/**
+ * The refusal a DEPLOYMENT-named image variant earns when the resolved runner backend maps it to
+ * nothing, with the per-backend knob named by the caller.
+ *
+ * One message, in kernel, because three backends refuse it and an operator reading three
+ * wordings for one misconfiguration learns three things instead of one. The platform's own
+ * variants keep their bespoke messages: the platform knows what `ui` is FOR, so it can say what
+ * a deployment loses by leaving it unwired and what to do instead, and this one cannot say
+ * anything about a variant it has never heard of beyond where the mapping goes.
+ */
+export function deploymentImageVariantMessage(variant: string, setting: string): string {
+  return (
+    `This step's agent kind declares the "${variant}" executor image, which this deployment's ` +
+    `runner backend maps to no image. Add "${variant}" to ${setting}, or drop the kind's ` +
+    `\`image\` declaration if the default harness image is enough: running the default instead ` +
+    `would produce a job without whatever "${variant}" carries, and a step reporting a missing ` +
+    `result with nothing naming the cause.`
+  )
+}
+
+/** The `details.reason` every unwired-image refusal carries, whoever raises it. */
+export const RUNNER_IMAGE_UNWIRED_REASON = 'runner_image_unwired'
 
 /**
  * Optional, transport-level provisioning hints resolved per-service at dispatch.
@@ -663,19 +694,62 @@ export interface RunnerJobRef {
  * a reap from a cron all land on the same container with nothing passed between them.
  */
 export function containerKeyForRef(ref: RunnerJobRef): string {
-  return ref.image && ref.image !== 'default' ? `${ref.image}:${ref.runId}` : ref.runId
+  const key = ref.image && ref.image !== 'default' ? `${ref.image}:${ref.runId}` : ref.runId
+  // The two must be EXACT inverses, and the PRODUCER is the only side that can check it:
+  // `parseContainerKey` reads keys with no ref in hand, so it cannot tell a run id that merely
+  // LOOKS variant-qualified from one that is (see its own doc for why the test it makes is a shape
+  // and not a lookup). Checking here converts the one input class that would break the inverse into
+  // a refused dispatch that NAMES the cause, instead of a key the reaper later maps to no run and
+  // kills a live container for.
+  //
+  // Unreachable for every run-id scheme the platform mints today (all `[A-Za-z0-9_-]`, which cannot
+  // contain the separator), which is exactly why this is a guard and not an escaping scheme: the
+  // invariant the pair rests on is "a run id carries no `:`", and it was previously assumed rather
+  // than stated anywhere. A future scheme that wants one has to pick a different separator, and this
+  // is where it finds out: at the first dispatch, in one place, rather than as a sweep deleting
+  // containers weeks later.
+  const parsed = parseContainerKey(key)
+  if (parsed.runId !== ref.runId || (parsed.image ?? 'default') !== (ref.image || 'default')) {
+    throw new ValidationError(
+      `Cannot address a container for run "${ref.runId}"${ref.image ? ` on the "${ref.image}" executor image` : ''}: ` +
+        `the container key "${key}" does not read back as the run and image it was built from, so ` +
+        `every reader of it (the dispatch, the poll, the orphan sweep) would disagree about which ` +
+        `run owns the container. A run id may not put a variant-shaped segment before a ":", and a ` +
+        `variant name must be a lower-kebab slug.`,
+      {
+        reason: 'container_key_not_reversible',
+        runId: ref.runId,
+        ...(ref.image ? { image: ref.image } : {}),
+      },
+    )
+  }
+  return key
 }
 
 /**
  * The parts a container key encodes, the exact inverse of {@link containerKeyForRef}.
  *
- * The prefix is stripped ONLY when it names a variant this build knows. A bare
- * "everything before the first colon is a variant" split is lossy in the direction that
- * destroys data: a key carrying a colon for any OTHER reason (a job-id scheme, an
- * operator-created label) would be truncated to a run id that matches no run, and the orphan
- * sweep below then kills a live container for being unrecognised — the very misread this
- * inverse exists to prevent. An unrecognised prefix therefore answers "the whole key is the
- * run id", which at worst leaves a container for the next sweep.
+ * The prefix is stripped ONLY when it is SHAPED like a variant name. A bare "everything before
+ * the first colon is a variant" split is lossy in the direction that destroys data: a key
+ * carrying a colon for any OTHER reason (a job-id scheme, an operator-created label) would be
+ * truncated to a run id that matches no run, and the orphan sweep below then kills a live
+ * container for being unrecognised, the very misread this inverse exists to prevent. A prefix
+ * that is not variant-shaped therefore answers "the whole key is the run id", which at worst
+ * leaves a container for the next sweep.
+ *
+ * SHAPE rather than membership, because variant names are open: a deployment's own is a slug
+ * only its runner backend can map, and this function is read by a reaper that holds no backend
+ * config. The rule is the one every declaring boundary already enforces (`checkAgentImageVariants`
+ * at boot, the backends' variant-map schemas), so a prefix this rejects is one no registration
+ * could have produced.
+ *
+ * What that leaves is a prefix which IS slug-shaped and was never a variant. Open names make that
+ * case unknowable HERE, so it is not decided here: {@link containerKeyForRef} refuses to mint a key
+ * this function would read back differently, which is what makes the pair exact rather than merely
+ * careful. Every key the inventory holds was written by that producer, so a prefix reaching this
+ * point and passing the shape test came from a variant a registration declared. The split of
+ * responsibility is the point: the reader refuses anything UNSHAPED, and the writer refuses
+ * anything AMBIGUOUS, because only one of them holds the ref to compare against.
  */
 export function parseContainerKey(containerKey: string): {
   runId: string
@@ -686,7 +760,7 @@ export function parseContainerKey(containerKey: string): {
   const prefix = containerKey.slice(0, separator)
   // `default` is never a prefix (`containerKeyForRef` emits the bare run id for it), so a key
   // spelling it out is not one this function produced and is left whole.
-  if (prefix === 'default' || !isRunnerImageVariant(prefix)) return { runId: containerKey }
+  if (prefix === 'default' || !isImageVariantName(prefix)) return { runId: containerKey }
   return { runId: containerKey.slice(separator + 1), image: prefix }
 }
 

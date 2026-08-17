@@ -42,6 +42,7 @@ async function viewFor(
   const declarations = await collectDeclaredCapabilityCredentials({
     agentKindRegistry: container.agentKindRegistry,
     binaryGenerators: container.binaryGenerators,
+    foundationalBuiltins: container.foundationalBuiltins,
     logger,
   })
   return buildCapabilityCredentialsView({

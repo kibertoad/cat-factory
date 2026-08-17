@@ -537,14 +537,52 @@ describe('AppleContainerRuntimeAdapter', () => {
     expect(new Set(names).size).toBe(2)
   })
 
-  it('leaves a container name whose leading segment is not a variant whole', async () => {
+  it('leaves a container name whose leading segment could not be a variant whole', async () => {
     // A run id is `[a-zA-Z0-9_]` today, but the inverse must not split one that is not on its
-    // first dot: an unrecognised leading segment is part of the key, not a variant.
-    const name = 'cf-i0-not.a.variant'
+    // first dot: a leading segment outside the variant SHAPE is part of the key, not a variant.
+    // Shape rather than a known-names list because variant names are open, so an underscore (or
+    // any other spelling a registration is refused for) is what makes this one decidable.
+    const name = 'cf-i0-not_a.variant'
     const { exec } = fakeExec({ list: JSON.stringify([{ id: name, status: 'running' }]) })
     expect(await adapter.listRunContainers(exec)).toEqual([
-      { containerKey: 'not.a.variant', containerId: name },
+      { containerKey: 'not_a.variant', containerId: name },
     ])
+  })
+
+  it("round-trips a DEPLOYMENT's own variant through the name encoding", async () => {
+    // The reason the check above is a shape and not a lookup: this name is one only the
+    // deployment's runner config can map, and the reaper still has to recover the run behind it.
+    const name = 'cf-i0-pixel-tools.run_42'
+    const { exec } = fakeExec({ list: JSON.stringify([{ id: name, status: 'running' }]) })
+    expect(await adapter.listRunContainers(exec)).toEqual([
+      { containerKey: 'pixel-tools:run_42', containerId: name },
+    ])
+  })
+
+  it('refuses a key it cannot name reversibly, rather than naming it lossily', async () => {
+    // The case the shape test cannot decide: `not.a.variant` as a RUN ID, whose leading segment is a
+    // legal variant name, so the name `cf-i0-not.a.variant` decodes to a DIFFERENT key (`not:a.variant`)
+    // and the sweep asks about a run called `a.variant` that does not exist. The second is the
+    // SANITISER: `run@1` becomes `run-1` in the name and comes back as a run id that is not the one
+    // the container belongs to. Both were silent; both are refused at creation now.
+    const base = {
+      image: 'ghcr.io/x/harness:1',
+      sharedSecret: 'sek',
+      privileged: false,
+      env: {},
+    }
+    const { exec } = fakeExec()
+    await expect(adapter.run(exec, { containerKey: 'not.a.variant', ...base })).rejects.toThrow(
+      /does not decode back/,
+    )
+    await expect(adapter.run(exec, { containerKey: 'ui:run@1', ...base })).rejects.toThrow(
+      /does not decode back/,
+    )
+    // A run id whose leading dot-segment could NOT be a variant is unambiguous and still allowed:
+    // the refusal is about ambiguity, not about dots.
+    await expect(adapter.run(exec, { containerKey: 'not_a.variant', ...base })).resolves.toBe(
+      'cf-i0-not_a.variant',
+    )
   })
 })
 

@@ -89,4 +89,21 @@ describe('local boot entry point', () => {
     expect(published.length).toBeGreaterThan(0)
     expect(published.filter((name) => !exported.has(name))).toEqual([])
   })
+
+  it('re-exports the pipeline AUTHORING vocabulary the Node facade does', () => {
+    // Pinning a shipped pipeline by id is half of replacing one. The other half is naming what its
+    // step selects: the agent kind, the traits that decide what that kind is handed, the platform's
+    // own storage service, the reserved capability tags. Each is a value the platform BRANCHES on,
+    // so a deployment that cannot import it copies a string literal, and a copy that misses by a
+    // character fails a registration rather than a compile (the reason the reserved tags have a
+    // near-miss check at the write boundary at all).
+    const exported = new Set(Object.keys(localServer))
+    const isAuthoringName = (name: string) =>
+      name === 'definePipeline' ||
+      /_(AGENT_KIND|TRAIT|CAPABILITY|SERVICE_ID)$/.test(name) ||
+      name.endsWith('_GENERATOR_ID')
+    const published = Object.keys(nodeServer).filter(isAuthoringName)
+    expect(published).toContain('definePipeline')
+    expect(published.filter((name) => !exported.has(name))).toEqual([])
+  })
 })

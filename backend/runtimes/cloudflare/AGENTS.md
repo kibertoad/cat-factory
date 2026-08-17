@@ -55,10 +55,12 @@ it only reaches the logger the Worker writes through while both imports resolve 
   - per-run-container machinery. There are THREE container classes because a Cloudflare
     Container's image is pinned per CLASS: `ExecutionContainer` (the executor harness),
     `UiTesterContainer` (that harness plus Playwright + a browser, for `image: 'ui'`) and
-    `DeployContainer`. `containers/runContainerNamespace.ts` is the one place a variant maps to a
-    class, shared by the transport that starts a container and the registry the reaper kills one
-    through, and it REFUSES a variant this deployment binds no class for rather than serving the
-    default image. Both halves reading one resolver is load-bearing: `idFromName` returns a usable
+    `DeployContainer`. A DEPLOYMENT adds a fourth by subclassing the exported `RunContainer`,
+    pinning its image in a `[[containers]]` block and binding it as `RUNNER_CONTAINER_<VARIANT>`,
+    which is how one of its own agent kinds gets an image of its own.
+    `containers/runContainerNamespace.ts` is the one place a variant maps to a class, shared by the
+    transport that starts a container and the registry the reaper kills one through, and it REFUSES
+    a variant this deployment binds no class for rather than serving the default image. Both halves reading one resolver is load-bearing: `idFromName` returns a usable
     stub in any namespace, so a reap through the wrong class kills nothing and reports success.
   - `containers/stopCause.ts` is what a per-run container records
     about its OWN stop for the transport to read after that job's poll 404s, and it carries two
