@@ -38,6 +38,7 @@ import { buildTraceSink } from './container-executor-deps.js'
 import type { ModelProviderResolverWrapDeps } from './container.js'
 import type { DrizzleDb } from './db/client.js'
 import { createNodeModelProviderResolver } from './modelProvider.js'
+import { cloudflareRestCredentials } from './providerEndpoints.js'
 import {
   buildNodeApiKeyService,
   buildNodeLocalModelEndpointService,
@@ -310,9 +311,12 @@ export function buildNodeModelDeps(input: NodeModelDepsInput) {
     ...(instrument ? { instrument } : {}),
     limiter: vendorConcurrencyLimiterFromEnv((key) => env[key]),
   })
-  // Cloudflare Workers AI is opt-in on Node: enabled when the REST creds are present.
+  // Cloudflare Workers AI is opt-in on Node: enabled when the REST creds are present. Read through
+  // the SAME credential resolver the inline registry and the container proxy's REST upstream use,
+  // so this gate cannot offer models a dispatch then refuses (a whitespace-only account id read as
+  // configured here and as absent there).
   const cloudflareModelsEnabled =
-    cloudflareModelsEnabledOverride ?? !!(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN)
+    cloudflareModelsEnabledOverride ?? !!cloudflareRestCredentials(env)
 
   const inline = new AiAgentExecutor({
     modelProviderResolver,

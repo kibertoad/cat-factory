@@ -595,10 +595,29 @@ export const MODEL_CATALOG: SelectableModel[] = [
     // arm either, so this entry has no always-available floor and goes unavailable when
     // neither key is set, which is the honest reading of a closed-weights vendor.
   },
-  // LiteLLM — an operator-hosted OpenAI-compatible gateway. Model names are defined by the
-  // operator's LiteLLM `config.yaml` (`model_name`), so this generic entry assumes a
-  // `gpt-4o` route; rename the model (or pin via AGENT_DEFAULT_MODEL) to match your
-  // gateway. Selectable once a LiteLLM API key is connected AND LITELLM_BASE_URL is set.
+  // The two operator-hosted OpenAI-compatible gateways. Each carries ONE generic entry rather
+  // than a per-model set: what a self-hosted gateway serves is its operator's configuration,
+  // which no catalog here can enumerate. Both are selectable only once their key is connected
+  // AND their base URL is set, and neither declares a `family`, so an account model-family
+  // policy treats them as UNCLASSIFIED (blocked under an allowlist, allowed under a blocklist).
+  //
+  // Bifrost (maximhq/bifrost) names models by their CANONICAL `provider/model` pair, so this
+  // entry's `openai/gpt-4o` is a real id on any Bifrost whose OpenAI provider is configured,
+  // rather than an alias the operator has to have coined. Repoint it (or pin via
+  // AGENT_DEFAULT_MODEL / AGENT_MODELS) at whichever upstream your gateway fronts.
+  {
+    id: 'bifrost-default',
+    label: 'Bifrost (gateway default)',
+    description:
+      "Your Bifrost gateway's `openai/gpt-4o` route. Repoint it at any `provider/model` it fronts.",
+    direct: {
+      ref: { provider: 'bifrost', model: 'openai/gpt-4o', contextTokens: 128_000 },
+      keyEnv: 'BIFROST_API_KEY',
+      providerLabel: 'Bifrost',
+    },
+  },
+  // LiteLLM: model names are the operator's own `config.yaml` aliases (`model_name`), so this
+  // generic entry assumes a `gpt-4o` route; rename the model to match your gateway.
   {
     id: 'litellm-default',
     label: 'LiteLLM (gateway default)',

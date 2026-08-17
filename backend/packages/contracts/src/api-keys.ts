@@ -24,10 +24,13 @@ export const apiKeyProviderSchema = v.picklist([
   'deepseek',
   'moonshot',
   'xai',
-  // OpenAI-compatible aggregator/gateway providers: OpenRouter (a single hosted gateway
-  // to 300+ models) and LiteLLM (an operator-hosted gateway; its base URL comes from the
-  // deployment's LITELLM_BASE_URL). Both resolve via the shared OpenAI-compatible path.
+  // OpenAI-compatible aggregator/gateway providers, all resolving via the shared
+  // OpenAI-compatible path: OpenRouter (a single hosted gateway to 300+ models), and the two
+  // operator-hosted gateways, Bifrost and LiteLLM, whose base URL comes from the deployment's
+  // `BIFROST_BASE_URL` / `LITELLM_BASE_URL` (self-hosted software, so there is no public
+  // endpoint to default to and a key here stays unselectable until the URL is set).
   'openrouter',
+  'bifrost',
   'litellm',
 ])
 export type ApiKeyProvider = v.InferOutput<typeof apiKeyProviderSchema>

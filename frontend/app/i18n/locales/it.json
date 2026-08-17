@@ -3426,8 +3426,8 @@
       "proxyHeading": "Chiavi API proxy / gateway",
       "directAccountIntro": "Collega una chiave API di un vendor condivisa da ogni workspace di questo account. Le chiavi vengono memorizzate in forma cifrata, raggruppate e ruotate in base all'utilizzo. Le chiavi dell'account sono gestite dall'amministratore.",
       "directIntro": "Collega una chiave API di un vendor così i modelli vengono eseguiti direttamente su quel provider. Le chiavi vengono memorizzate in forma cifrata, raggruppate e ruotate in base all'utilizzo. Assegna l'ambito di una chiave a questo workspace (condivisa con il team) o a te (il tuo pool personale, utilizzabile ovunque).",
-      "proxyAccountIntro": "Collega una chiave proxy (OpenRouter, LiteLLM) condivisa da ogni workspace di questo account. Un proxy è un intermediario che fa da facciata a molti vendor dietro un'unica chiave. Le chiavi vengono memorizzate in forma cifrata, raggruppate e ruotate in base all'utilizzo.",
-      "proxyIntro": "Collega una chiave proxy (OpenRouter, LiteLLM). Un proxy è un intermediario che raggiunge i modelli di molti vendor attraverso un unico gateway, anziché un singolo vendor direttamente. Le chiavi vengono memorizzate in forma cifrata, raggruppate e ruotate in base all'utilizzo. Assegna l'ambito di una chiave a questo workspace (condivisa con il team) o a te (il tuo pool personale, utilizzabile ovunque).",
+      "proxyAccountIntro": "Collega una chiave proxy (OpenRouter, Bifrost, LiteLLM) condivisa da ogni workspace di questo account. Un proxy è un intermediario che fa da facciata a molti vendor dietro un'unica chiave. Le chiavi vengono memorizzate in forma cifrata, raggruppate e ruotate in base all'utilizzo.",
+      "proxyIntro": "Collega una chiave proxy (OpenRouter, Bifrost, LiteLLM). Un proxy è un intermediario che raggiunge i modelli di molti vendor attraverso un unico gateway, anziché un singolo vendor direttamente. Le chiavi vengono memorizzate in forma cifrata, raggruppate e ruotate in base all'utilizzo. Assegna l'ambito di una chiave a questo workspace (condivisa con il team) o a te (il tuo pool personale, utilizzabile ovunque).",
       "scopeField": "Ambito",
       "scopeWorkspace": "Questo workspace",
       "scopeUser": "Le mie chiavi (solo io)",
@@ -3484,6 +3484,11 @@
           "label": "OpenRouter",
           "step1": "Apri openrouter.ai → Keys e crea una chiave API.",
           "step2": "Copia la chiave (inizia con sk-or-…); raggiunge oltre 300 modelli attraverso un unico gateway."
+        },
+        "bifrost": {
+          "label": "Bifrost (gateway self-hosted)",
+          "step1": "Genera una chiave virtuale nelle impostazioni di governance del tuo gateway Bifrost (oppure usa la sua chiave API).",
+          "step2": "L'URL di base del gateway viene impostato dall'operatore del tuo deployment (BIFROST_BASE_URL), non qui."
         },
         "litellm": {
           "label": "LiteLLM (gateway self-hosted)",

@@ -24,6 +24,7 @@ export type ApiKeyProvider =
   | 'moonshot'
   | 'xai'
   | 'openrouter'
+  | 'bifrost'
   | 'litellm'
 
 /** A (scope, scopeId) pair — the addressing of a pool segment. */

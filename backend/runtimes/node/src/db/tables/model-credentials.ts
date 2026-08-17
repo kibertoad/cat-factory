@@ -184,7 +184,7 @@ export const localModelEndpoints = pgTable(
 )
 
 // Per-WORKSPACE enabled GATEWAY models (the dynamic catalog subset) — OpenRouter today,
-// LiteLLM and others later. `models` is a JSON array of { id, name, contextLength?,
+// Bifrost, LiteLLM and others later. `models` is a JSON array of { id, name, contextLength?,
 // inputPerMillion, outputPerMillion } — the enabled subset with cached context + price
 // (mirror of D1 migration 0006). Keyed by (workspace_id, provider).
 export const providerModelCatalog = pgTable(

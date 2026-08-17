@@ -33,7 +33,7 @@ describe('unsupportedModelProviderMessage', () => {
     expect(msg).toContain(
       `UI-configurable provider (${UI_CONFIGURABLE_DIRECT_PROVIDERS.join(', ')})`,
     )
-    for (const p of ['openai', 'anthropic', 'litellm', 'openrouter']) {
+    for (const p of ['openai', 'anthropic', 'bifrost', 'litellm', 'openrouter']) {
       expect(UI_CONFIGURABLE_DIRECT_PROVIDERS).toContain(p)
     }
   })

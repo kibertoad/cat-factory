@@ -45,7 +45,8 @@ const cloudflareOnlyModels = MODEL_CATALOG.filter((m) => m.cloudflare && !m.dire
 const subscriptionOnlyModels = MODEL_CATALOG.filter(
   (m) => m.subscription && !m.cloudflare && !m.direct,
 )
-// Direct-ONLY models (LiteLLM): a direct variant with no Cloudflare or subscription base.
+// Direct-ONLY models (the operator-hosted gateways): a direct variant with no Cloudflare or
+// subscription base.
 // With no key they have no base to fall back to, so the resolver returns their direct ref
 // as a best-effort (selectability is reported separately).
 const directOnlyModels = MODEL_CATALOG.filter(
@@ -168,7 +169,7 @@ describe('per-block model selection', () => {
           expect(option.flavor).toBe('subscription')
           expect(option.quotaBased).toBe(true)
         } else if (model.direct) {
-          // Direct-only (LiteLLM): no base, so it projects to its best-effort direct flavour
+          // Direct-only (an operator-hosted gateway): no base, so it projects to its direct flavour
           // but is NOT selectable until its provider key is configured.
           expect(option.flavor).toBe('direct')
           expect(option.providerLabel).toBe(model.direct.providerLabel)

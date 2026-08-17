@@ -85,7 +85,10 @@
   silently vanish for that path. See `backend/docs/reusable-operations.md`.
 - `providers/`, the **AI provisioning facade**: `registry.ts` (`CompositeModelProvider`),
   `resolvers.ts` (the runtime-neutral single-provider resolvers), `endpoints.ts`
-  (`providerEndpoints`, the base-URL/key source of truth, also used by the LLM proxy), and
+  (`OPENAI_COMPATIBLE_ENDPOINTS`, the ONE table naming every OpenAI-compatible provider and the
+  endpoint it defaults to (`null` for a self-hosted gateway that has none); the built-in base URLs,
+  the UI-configurable key-pool list, the LLM proxy's `isProxyableProvider` and each facade's env
+  plumbing are all DERIVED from it, so a new provider is one entry there), and
   `instrumented.ts` (`InstrumentedModelProvider`, the INLINE feeder). It has TWO exits and
   takes EXACTLY ONE per call: the kernel `InlineLlmCallRecorder` port, which persists the call
   to `llm_call_metrics` AND (inside the service behind it) fans out to the trace sink; or the

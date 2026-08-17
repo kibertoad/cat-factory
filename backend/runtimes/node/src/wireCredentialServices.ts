@@ -28,7 +28,7 @@ import type {
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { WebCryptoPersonalSecretCipher, WebCryptoSecretCipher } from '@cat-factory/server'
 import type { DrizzleDb } from './db/client.js'
-import { baseUrlForNode } from './modelProvider.js'
+import { baseUrlForNode } from './providerEndpoints.js'
 import { DrizzleProviderSubscriptionTokenRepository } from './repositories/providerSubscription.js'
 import { DrizzleProviderApiKeyRepository } from './repositories/providerApiKey.js'
 import { DrizzlePublicApiKeyRepository } from './repositories/publicApiKey.js'
