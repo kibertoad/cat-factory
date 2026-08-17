@@ -12,6 +12,7 @@ import {
   type PrerequisiteResult,
   type PrerequisiteVerdict,
   runPreflight,
+  unknown,
 } from './preflight.js'
 
 // The gate is the one part of this suite whose failure is silent: a check that reports green
@@ -123,6 +124,66 @@ describe('runPreflight', () => {
       onResult: (result) => seen.push(result.id),
     })
     expect(seen).toEqual(['a'])
+  })
+
+  it("classifies a check's throw against the HOST that check names, not the deployment", async () => {
+    // A check reaching a VCS provider's API or an environment backend directly cannot be described
+    // against the pass-level context, because a value cannot be true for two hosts. Before the
+    // per-check field the only honest option was to catch its own throws and hand-build the verdict,
+    // which puts kernel's classification out of reach of exactly the checks that reach the least
+    // predictable hosts.
+    const report = await runPreflight(
+      [
+        {
+          id: 'kargo-credential',
+          what: 'the Kargo API accepts our token',
+          disposition: 'required',
+          probe: { subject: 'the Kargo API', target: 'https://kargo.example' },
+          check: () =>
+            Promise.reject(
+              new TypeError('fetch failed', {
+                cause: Object.assign(new Error('connect ECONNREFUSED 10.0.0.5:443'), {
+                  code: 'ECONNREFUSED',
+                }),
+              }),
+            ),
+        },
+      ],
+      undefined,
+      { probe: { subject: 'the cat-factory backend', target: 'http://127.0.0.1:8787' } },
+    )
+    const failure = formatPreflightFailure(report) ?? ''
+    expect(failure).toContain('https://kargo.example')
+    // WHOLE rather than merged: a remedy offering `curl <the deployment>/health` for a failure that
+    // never went near it sends an operator to check the one thing this failure has not questioned.
+    expect(failure).not.toContain('127.0.0.1:8787')
+  })
+})
+
+describe('the verdict constructors', () => {
+  it('builds an `unknown` verdict, which suites were spelling out by hand', async () => {
+    // Rule 2 makes `unknown` the state a suite reaches most often BY HAND (a check reaching a host
+    // the runner cannot classify for it catches its own throw), and it shipped as the one state with
+    // no constructor beside its two siblings.
+    const remedy = { steps: ['Check the Kargo API is reachable.'] }
+    const report = await runPreflight(
+      [
+        {
+          id: 'kargo',
+          what: 'Kargo answers',
+          disposition: 'required',
+          check: async () => unknown('the Kargo API did not answer within 10s', remedy),
+        },
+      ],
+      undefined,
+    )
+    expect(report.results[0]?.verdict).toEqual({
+      status: 'unknown',
+      probeFailure: 'the Kargo API did not answer within 10s',
+      remedy,
+    })
+    // An unreadable REQUIRED prerequisite blocks, and says the probe failed rather than the thing.
+    expect(blockingResults(report)).toHaveLength(1)
   })
 })
 

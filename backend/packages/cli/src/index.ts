@@ -78,6 +78,19 @@ export {
   type LocalEnvInput,
   renderEnvFile,
 } from './env.js'
+// The MERGE half of writing a `.env`, beside the render half it completes. Exported for the same
+// reason the k3s reads are: other in-repo tooling (the acceptance suite's `configure`) writes a
+// `.env` a person may already have edited, and the five ways to get that subtly wrong are each a
+// silent failure. See the module header for what they are.
+export {
+  CARRIED_OVER_HEADER,
+  describeEntries,
+  describeMerge,
+  type EnvMerge,
+  mergeEnvFile,
+  quoteEnvValue,
+  readAssignments,
+} from './envMerge.js'
 export { buildGitignore, mergeGitignore, REQUIRED_GITIGNORE_RULES } from './gitignore.js'
 export { type Io, createConsoleIo } from './io.js'
 export { type BootstrapInput, buildPlan, type PlannedFile } from './plan.js'

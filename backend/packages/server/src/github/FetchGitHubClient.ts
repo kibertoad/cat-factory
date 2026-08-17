@@ -43,6 +43,13 @@ import type { CommitFilesInput } from '@cat-factory/contracts'
 import type { AppTokenSource } from './GitHubAppRegistry.js'
 import { postPrReview } from './reviewPosting.js'
 import { probeBranchProtection, readRequiredApprovingReviewCount } from './branchProtection.js'
+import {
+  type ContentsRequest,
+  readDirectory,
+  readFileContent,
+  readRootEntries,
+  readTree,
+} from './repoContents.js'
 import { getRepoForToken, listReposForToken } from './viewerTokenReads.js'
 import {
   listPrReviewThreads,
@@ -57,7 +64,6 @@ import {
   GitHubApiError,
   PER_PAGE,
   USER_AGENT,
-  decodeBase64Utf8,
   githubApiStatus,
   numHeader,
   parseGitHubTime,
@@ -410,22 +416,12 @@ export class FetchGitHubClient implements GitHubClient {
     }
   }
 
+  // The four repository-CONTENTS reads are thin delegates over `repoContents.ts` (extracted along
+  // the same seam as `reviewPosting.ts` and `branchProtection.ts`, since this file is at its size
+  // budget). What lives there is the classification they share: which statuses are ANSWERS here, and
+  // the two facts this endpoint states as something it is not.
   async listRootEntries(installationId: number, ref: GitHubRepoRef): Promise<RepoEntry[]> {
-    let json: unknown
-    try {
-      ;({ json } = await this.request(`/repos/${ref.owner}/${ref.repo}/contents/`, {
-        installationId,
-      }))
-    } catch (err) {
-      // An empty repository has no default branch, so the contents endpoint 404s.
-      // That's the signal we want — treat it as "no entries", not an error.
-      if (err instanceof GitHubApiError && err.status === 404) return []
-      throw err
-    }
-    const entries = Array.isArray(json)
-      ? (json as Array<{ path?: string; name?: string; type?: string }>)
-      : []
-    return entries.map((e) => ({ path: e.path ?? e.name ?? '', type: e.type ?? 'file' }))
+    return readRootEntries(this.contentsRequest(), installationId, ref)
   }
 
   async listDirectory(
@@ -434,29 +430,7 @@ export class FetchGitHubClient implements GitHubClient {
     path: string,
     gitRef?: string,
   ): Promise<RepoContentEntry[]> {
-    const clean = path.replace(/^\/+|\/+$/g, '')
-    const query = gitRef ? `?ref=${encodeURIComponent(gitRef)}` : ''
-    let json: unknown
-    try {
-      ;({ json } = await this.request(`/repos/${ref.owner}/${ref.repo}/contents/${clean}${query}`, {
-        installationId,
-      }))
-    } catch (err) {
-      // Missing path / empty repo → no entries (mirrors listRootEntries).
-      if (err instanceof GitHubApiError && err.status === 404) return []
-      throw err
-    }
-    // A directory returns an array; a single file returns an object — coerce both.
-    const arr = Array.isArray(json) ? json : [json]
-    return (
-      arr as Array<{ path?: string; name?: string; type?: string; sha?: string; size?: number }>
-    ).map((e) => ({
-      path: e.path ?? e.name ?? '',
-      name: e.name ?? (e.path ?? '').split('/').pop() ?? '',
-      type: e.type ?? 'file',
-      sha: e.sha ?? '',
-      ...(typeof e.size === 'number' ? { size: e.size } : {}),
-    }))
+    return readDirectory(this.contentsRequest(), installationId, ref, path, gitRef)
   }
 
   async listTree(
@@ -464,35 +438,7 @@ export class FetchGitHubClient implements GitHubClient {
     ref: GitHubRepoRef,
     gitRef?: string,
   ): Promise<RepoContentEntry[]> {
-    // One recursive git-trees read returns the whole tree, so file search never walks the
-    // contents API directory-by-directory. `HEAD` resolves to the repo's default branch.
-    const treeRef = encodeURIComponent(gitRef && gitRef !== 'HEAD' ? gitRef : 'HEAD')
-    let json: unknown
-    try {
-      ;({ json } = await this.request(
-        `/repos/${ref.owner}/${ref.repo}/git/trees/${treeRef}?recursive=1`,
-        { installationId },
-      ))
-    } catch (err) {
-      // Empty repo / unknown ref → no entries (mirrors listDirectory).
-      if (err instanceof GitHubApiError && err.status === 404) return []
-      throw err
-    }
-    const body = json as {
-      tree?: Array<{ path?: string; type?: string; sha?: string; size?: number }>
-    }
-    const entries = Array.isArray(body.tree) ? body.tree : []
-    // GitHub git-tree `type` is `blob` | `tree` | `commit` (submodule); normalise to the
-    // neutral file/dir vocabulary and drop submodules (they have no browsable content here).
-    return entries
-      .filter((e) => e.type === 'blob' || e.type === 'tree')
-      .map((e) => ({
-        path: e.path ?? '',
-        name: (e.path ?? '').split('/').pop() ?? '',
-        type: e.type === 'tree' ? 'dir' : 'file',
-        sha: e.sha ?? '',
-        ...(typeof e.size === 'number' ? { size: e.size } : {}),
-      }))
+    return readTree(this.contentsRequest(), installationId, ref, gitRef)
   }
 
   async getFileContent(
@@ -501,21 +447,12 @@ export class FetchGitHubClient implements GitHubClient {
     path: string,
     gitRef?: string,
   ): Promise<RepoFileContent | null> {
-    const clean = path.replace(/^\/+/, '')
-    const query = gitRef ? `?ref=${encodeURIComponent(gitRef)}` : ''
-    let json: unknown
-    try {
-      ;({ json } = await this.request(`/repos/${ref.owner}/${ref.repo}/contents/${clean}${query}`, {
-        installationId,
-      }))
-    } catch (err) {
-      if (err instanceof GitHubApiError && err.status === 404) return null
-      throw err
-    }
-    const file = json as { type?: string; content?: string; encoding?: string; sha?: string }
-    if (file.type !== 'file' || typeof file.content !== 'string') return null
-    const content = file.encoding === 'base64' ? decodeBase64Utf8(file.content) : file.content
-    return { content, sha: file.sha ?? '' }
+    return readFileContent(this.contentsRequest(), installationId, ref, path, gitRef)
+  }
+
+  /** This client's authenticated GET, as the narrow callback the contents reads take. */
+  private contentsRequest(): ContentsRequest {
+    return (path, opts) => this.request(path, opts)
   }
 
   async latestCommitSha(
@@ -1307,6 +1244,7 @@ export class FetchGitHubClient implements GitHubClient {
       const text = await res.text().catch(() => '')
       const resetSec = numHeader(res, 'x-ratelimit-reset')
       const rateLimited = numHeader(res, 'x-ratelimit-remaining') === 0
+      const body = text.slice(0, 300)
       throw new GitHubApiError(
         res.status,
         describeVcsApiError({
@@ -1314,11 +1252,12 @@ export class FetchGitHubClient implements GitHubClient {
           status: res.status,
           method: opts.method ?? 'GET',
           url,
-          body: text.slice(0, 300),
+          body,
           rateLimited,
           resetAt: resetSec === null ? null : resetSec * 1000,
         }),
         rateLimited,
+        body,
       )
     }
     const json = res.status === 204 ? null : await res.json().catch(() => null)

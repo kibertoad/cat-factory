@@ -275,9 +275,12 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
     also what makes them testable without a client: `reviewPosting.ts` + `reviewThreads.ts` (the
     REST and GraphQL halves of PR review), `searchApi.ts`, `branchProtection.ts` (the
     security-preflight probe + the required-approvals lookup; together because they read the SAME
-    resource and must not learn failure modes separately), `viewerTokenReads.ts` (the CALLER-token
-    repo reads behind the personal-PAT picker; mints, caches and rate-limit-accounts nothing), and
-    `githubHttpHelpers.ts` (`GitHubApiError` + the shared request constants).
+    resource and must not learn failure modes separately), `repoContents.ts` (the four `/contents`
+    and `/git/trees` reads; together because what they share IS the classification: which statuses
+    are ANSWERS there, plus the two facts that endpoint reports as something they are not, an
+    over-limit blob as a `403` and non-UTF-8 bytes as a string), `viewerTokenReads.ts` (the
+    CALLER-token repo reads behind the personal-PAT picker; mints, caches and rate-limit-accounts
+    nothing), and `githubHttpHelpers.ts` (`GitHubApiError` + the shared request constants).
   - `github/ProviderRoutingGitHubClient.ts` fronts the `github` module in a deployment running BOTH
     a GitHub App and GitLab PAT connect, dispatching each installation-keyed call by the
     connection's stored provider. Reflective (a `Proxy`) rather than a hand-written delegate,

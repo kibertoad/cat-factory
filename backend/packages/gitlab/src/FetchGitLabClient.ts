@@ -317,8 +317,11 @@ export class FetchGitLabClient implements VcsClient {
     }
     const file = json as { content?: string; encoding?: string; blob_id?: string }
     if (typeof file.content !== 'string') return null
-    const content = file.encoding === 'base64' ? decodeBase64Utf8(file.content) : file.content
-    return { content, sha: file.blob_id ?? '' }
+    const { content, lossy } =
+      file.encoding === 'base64'
+        ? decodeRepoFileBase64(file.content)
+        : { content: file.content, lossy: false }
+    return { content, sha: file.blob_id ?? '', ...(lossy ? { lossy: true } : {}) }
   }
 
   async listPullRequests(
@@ -1320,11 +1323,28 @@ function parseProjectWebUrl(url: string): { owner: string; repo: string } | null
   return { owner: full.slice(0, idx), repo: full.slice(idx + 1) }
 }
 
-function decodeBase64Utf8(value: string): string {
+/**
+ * Decode the files API's base64 payload, SAYING when the bytes were not text.
+ *
+ * Strict first, so `lossy` is the decoder's own verdict rather than a scan for a character a text file
+ * may legitimately contain. The lossy rendering is still answered, because what to do about it belongs
+ * to the caller: a pre-op folding a file into a prompt wants the best available text, and a read whose
+ * job is byte-exact grading refuses (see `RepoFileContent.lossy`).
+ *
+ * `githubHttpHelpers.ts` holds the same function, because there is no home below both: kernel names no
+ * web globals by design (its `lib` is ES2022 alone, where both clients add DOM for `atob` and
+ * `TextDecoder`), and neither client package can see the other. Change one, change the other.
+ */
+function decodeRepoFileBase64(value: string): { content: string; lossy: boolean } {
   const binary = atob(value.replace(/\s+/g, ''))
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-  return new TextDecoder().decode(bytes)
+  try {
+    return { content: new TextDecoder('utf-8', { fatal: true }).decode(bytes), lossy: false }
+  } catch {
+    // Not a swallow: the throw IS the answer, reported as `lossy` rather than lost.
+    return { content: new TextDecoder().decode(bytes), lossy: true }
+  }
 }
 
 function parseNextLink(link: string | null): string | undefined {

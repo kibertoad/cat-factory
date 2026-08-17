@@ -27,6 +27,7 @@ import type {
   GetDebugLlmCallView,
   GetDebugLlmExportResponse,
   GetPublicMergeRecordResponse,
+  GetPublicRepoFileResponse,
   GetPublicRunOutcomeResponse,
   GetPublicTrackerWritebackResponse,
   GetPublicVcsConnectionResponse,
@@ -41,6 +42,7 @@ import type {
   ListDebugToolCallsOutcome,
   ListDebugToolCallsResponse,
   ListPublicAvailableReposResponse,
+  ListPublicEnvironmentConnectionsResponse,
   ListPublicJobsResponse,
   ListPublicMergeClassRollupsResponse,
   ListPublicModelPresetsResponse,
@@ -125,6 +127,12 @@ export type DebugGetLlmExportQuery = {
   limit?: number
   order?: ListDebugLlmCallsOrder
   bodyChars?: number
+}
+
+/** Query parameters for `client.repos.getFile()`. */
+export type ReposGetFileQuery = {
+  path: string
+  ref?: string
 }
 
 /** Query parameters for `client.usage.spend()`. */
@@ -423,6 +431,20 @@ export class ReposResource {
     return this.#transport.request<StartPublicRepoBootstrapResponse>({
       method: 'GET',
       path: `/api/v1/repos/bootstrap/${encodePathSegment(jobId)}`,
+      options,
+    })
+  }
+
+  /**
+   * Read one file out of a linked repository
+   * Read a single file, decoded as UTF-8, from a repository this workspace has LINKED, at a branch, tag or commit sha (omit `ref` for the default branch; the response says which was used). It exists to answer what a run actually COMMITTED, which nothing else on this surface could: the repos reads list rows and reachability, the service-spec read serves only the `spec/` tree, and everything else was the agent’s own prose, so a caller wanting a real answer had to hold a second source-control credential of its own. `path` is a query parameter rather than the rest of the URL because a repo-relative path contains slashes and an OpenAPI path segment cannot. One file only: there is deliberately no directory listing. A repository this workspace has not adopted is a 404 with `details.reason: repo_not_linked`, a path the ref does not hold is a 404 with `file_not_found`, and a file past the size this read serves is a 422 with `file_too_large` plus its `size` and `limit`: refused rather than truncated, because a shortened answer reads exactly like a shorter file.
+   * `GET /api/v1/repos/{owner}/{name}/contents` — operation `getPublicRepoFile`.
+   */
+  getFile(owner: string, name: string, query: ReposGetFileQuery, options: RequestOptions = {}): Promise<GetPublicRepoFileResponse> {
+    return this.#transport.request<GetPublicRepoFileResponse>({
+      method: 'GET',
+      path: `/api/v1/repos/${encodePathSegment(owner)}/${encodePathSegment(name)}/contents`,
+      query,
       options,
     })
   }
@@ -808,6 +830,19 @@ export class EnvironmentsResource {
       method: 'POST',
       path: `/api/v1/environments/connections`,
       body,
+      options,
+    })
+  }
+
+  /**
+   * List the environment connections this workspace holds
+   * Every registered environment handler, with the provision type it serves, the engine and backend kind behind it, its endpoint and the secret KEYS it holds, never their values. The read half of the connect call, and the half that was missing: a deployment that registers its handlers programmatically (the documented path for a multi-tenant deployment) had no way for a headless caller to confirm the registration landed, so “the backend accepts our credential” and “this workspace has a handler for that backend” collapsed into one unanswerable question. It reports every engine, including a handler for an environment backend the deployment registered in code, so `engine` and `backendKind` are open strings rather than a fixed set.
+   * `GET /api/v1/environments/connections` — operation `listPublicEnvironmentConnections`.
+   */
+  listConnections(options: RequestOptions = {}): Promise<ListPublicEnvironmentConnectionsResponse> {
+    return this.#transport.request<ListPublicEnvironmentConnectionsResponse>({
+      method: 'GET',
+      path: `/api/v1/environments/connections`,
       options,
     })
   }

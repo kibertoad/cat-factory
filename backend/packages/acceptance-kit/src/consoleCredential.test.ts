@@ -2,13 +2,14 @@ import type { ReadStream } from 'node:tty'
 import { CatFactoryCredentialRequiredError, CatFactoryConflictError } from '@cat-factory/sdk'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  createConsoleCredential,
   createPersonalUnlock,
   enterRawMode,
   PersonalPasswordDeclined,
   readWithoutEcho,
   releaseTerminal,
   withPersonalUnlock,
-} from '../src/personalUnlock.ts'
+} from './consoleCredential.js'
 
 // The unlock exists so a pass can run on the operator's OWN subscription without the password
 // living anywhere but this process. What is worth pinning is therefore not the prompt's cosmetics
@@ -446,5 +447,35 @@ describe('readWithoutEcho', () => {
     await expect(
       readWithoutEcho({ input: typing('\u0003'), write: () => {} }, 'Personal password: '),
     ).rejects.toBeInstanceOf(PersonalPasswordDeclined)
+  })
+})
+
+describe('createConsoleCredential', () => {
+  it('retries through the same holder the client sends headers from', async () => {
+    // The one property the pairing exists for: a suite wiring the retry and the header seam
+    // separately has two objects to keep in step and nothing that fails when it does not, so a pass
+    // could unlock a `start` and then send every later request without the password it just took.
+    const { retry, unlock } = createConsoleCredential(async () => 'hunter2')
+    let attempts = 0
+    const value = await retry('Starting the feature', async () => {
+      attempts += 1
+      if (attempts === 1) throw credentialRequired('claude')
+      return 'started'
+    })
+
+    expect(value).toBe('started')
+    expect(unlock.held()).toBe(true)
+    expect(unlock.headers()).toEqual({ 'X-Personal-Password': 'hunter2' })
+  })
+
+  it('asks nothing at all when no call is refused', async () => {
+    // A workspace on provider API keys never sees a prompt, which is what makes this safe to wire
+    // unconditionally: the ask is the DEPLOYMENT's answer, not a prediction the suite made.
+    const readSecret = vi.fn(async () => 'hunter2')
+    const { retry, unlock } = createConsoleCredential(readSecret)
+
+    await expect(retry('Starting the feature', async () => 'started')).resolves.toBe('started')
+    expect(readSecret).not.toHaveBeenCalled()
+    expect(unlock.headers()).toEqual({})
   })
 })

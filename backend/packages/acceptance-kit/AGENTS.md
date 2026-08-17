@@ -12,10 +12,17 @@ banner, scenarios, summary, closing words, exit code) and `runPreflight` / `crea
 [`backend/internal/acceptance`](../../internal/acceptance), which is this package's only in-repo
 consumer and the reason each rule below exists.
 
-**What this package must NEVER acquire**: a list of prerequisites, a scenario, a configuration
-schema, or anything that prompts a human. Each of those is a fact about ONE suite, and a kit that
-shipped one would be describing the platform's suite rather than serving any. They ride the four
-seams: `Prerequisite`, `Scenario`, `SuiteIdentity`, `CredentialRetry`.
+**What this package must NEVER acquire**: a list of prerequisites, a scenario, or a configuration
+schema. Each of those is a fact about ONE suite, and a kit that shipped one would be describing the
+platform's suite rather than serving any. They ride the four seams: `Prerequisite`, `Scenario`,
+`SuiteIdentity`, `CredentialRetry`.
+
+**Nor may the BASE entry point prompt a human**, and the exception is exact: `consoleCredential.ts`
+is reachable only through its own `./console-credential` subpath, so `node:tty` stays out of the
+import graph of every suite that did not ask for it, including the CI-only ones, for which a prompt
+is a hang. It is here rather than in each consumer because what it holds is not a fact about a suite:
+it is the platform's own `428` protocol plus the terminal handling whose Windows half fails as a bare
+`setRawMode EPERM`. A second such module takes the same shape or does not land.
 
 **`SuiteIdentity` is the deadliest thing to get wrong, and the trap is silence.** Every refusal here
 names something only a suite knows: the command that starts a pass, the variable that resumes one,
@@ -36,24 +43,27 @@ what that loses is the tail, which is the failure and the summary. `runPass` ans
 
 **Where things live**
 
-| File                  | What                                                                                                                   |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `pass.ts`             | A whole pass, and the boundary that reports a bug in the suite without losing the run id or the resume.                |
-| `scenarioRunner.ts`   | The driver: order is the array, bail is the behaviour, the gate runs per gated scenario, no timeout of its own.        |
-| `preflight.ts`        | Prerequisite vocabulary, the runner that evaluates every one, the refusal, and the gate.                               |
-| `probeFailure.ts`     | What a THROWN probe was, as three disjoint states with different remedies.                                             |
-| `deadline.ts`         | The clock. Every wait states its last observation; the outage tolerance is injected, never assumed.                    |
-| `deploymentOutage.ts` | Which thrown poll is a restart worth sitting through, and for how long.                                                |
-| `ledger.ts`           | The resumable ledger, generic over a suite's own fact type. Identity rule, `latest` pointer, `recordsFacts`.           |
-| `passFiles.ts`        | Where a pass's files live and which passes a directory holds. A relative state dir is resolved ONCE, and REFUSED here. |
-| `journal.ts`          | The append-only progress record. A write here may never break a pass.                                                  |
-| `client.ts`           | The two SDK clients, the run/decision descriptions, and the poll that returns on an ANSWERABLE decision.               |
-| `decisions.ts`        | The two kinds answered, what is answerable NOW, and the refusals. The most conservative module here.                   |
-| `runDriver.ts`        | One started run to terminal, under ONE budget spanning every park.                                                     |
-| `resume.ts`           | File or adopt; the four states a resumed pass can find.                                                                |
-| `evidence.ts`         | Report reductions: a `Check` per claim, so a failing pass reports every unmet one.                                     |
-| `operatorText.ts`     | Describers, scrubbing, and the shell dialect table.                                                                    |
-| `suiteIdentity.ts`    | Who is running, and the commands rendered from it.                                                                     |
+| File                   | What                                                                                                                         |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `pass.ts`              | A whole pass, and the boundary that reports a bug in the suite without losing the run id or the resume.                      |
+| `scenarioRunner.ts`    | The driver: order is the array, bail is the behaviour, the gate runs per gated scenario, no timeout of its own.              |
+| `preflight.ts`         | Prerequisite vocabulary, the runner that evaluates every one, the refusal, and the gate.                                     |
+| `probeFailure.ts`      | What a THROWN probe was, as three disjoint states with different remedies.                                                   |
+| `deadline.ts`          | The clock. Every wait states its last observation; the outage tolerance is injected, never assumed.                          |
+| `deploymentOutage.ts`  | Which thrown poll is a restart worth sitting through, and for how long.                                                      |
+| `ledger.ts`            | The resumable ledger, generic over a suite's own fact type. Identity rule, `latest` pointer, `recordsFacts`.                 |
+| `passFiles.ts`         | Where a pass's files live and which passes a directory holds. A relative state dir is resolved ONCE, and REFUSED here.       |
+| `journal.ts`           | The append-only progress record. A write here may never break a pass.                                                        |
+| `client.ts`            | The two SDK clients, the run/decision descriptions, and the poll that returns on an ANSWERABLE decision.                     |
+| `decisions.ts`         | The two kinds answered, what is answerable NOW, and the refusals. The most conservative module here.                         |
+| `runDriver.ts`         | One started run to terminal, under ONE budget spanning every park.                                                           |
+| `resume.ts`            | File or adopt; the four states a resumed pass can find.                                                                      |
+| `resource.ts`          | The same, for a resource the SUITE provisions: record before observing, adopt over re-provisioning, release on CONFIRMATION. |
+| `brief.ts`             | The description-cap branch, read from the contracts' own caps. Over the attachment cap it REFUSES rather than cuts.          |
+| `consoleCredential.ts` | The opt-in `CredentialRetry`: its OWN subpath export, so the base package holds no terminal code.                            |
+| `evidence.ts`          | Report reductions: a `Check` per claim, so a failing pass reports every unmet one. Provider-NEUTRAL prose throughout.        |
+| `operatorText.ts`      | Describers, scrubbing, and the shell dialect table.                                                                          |
+| `suiteIdentity.ts`     | Who is running, and the commands rendered from it.                                                                           |
 
 **Tests** live beside the sources (`src/*.test.ts`) and need no infrastructure: everything here is
 pure over its seams, including the clients (a stubbed `globalThis.fetch`) and the ledger and journal

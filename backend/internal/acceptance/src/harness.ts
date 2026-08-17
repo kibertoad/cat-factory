@@ -27,7 +27,10 @@ import {
 import { type AcceptanceConfig } from './config.ts'
 import { ACCEPTANCE_IDENTITY } from './identity.ts'
 import { serviceTitles } from './instructions.ts'
-import { type PersonalUnlock, withPersonalUnlock } from './personalUnlock.ts'
+import {
+  type PersonalUnlock,
+  withPersonalUnlock,
+} from '@cat-factory/acceptance-kit/console-credential'
 import { PREREQUISITES } from './prerequisites.ts'
 import { createClient, createPassClient } from './publicApi.ts'
 import { type IssueApi, ISSUE_APIS } from './vcsIssues.ts'

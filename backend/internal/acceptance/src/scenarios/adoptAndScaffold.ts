@@ -102,13 +102,20 @@ export function adoptAndScaffoldScenario(harness: Harness): Scenario {
           // non-matching branches are ignored, so a wrong-shaped patch can be accepted and stored as
           // something the deployer will later read as "no manifests": an empty environment that
           // looks like a cluster problem.
+          //
+          // Narrowed on `type` rather than reading `manifestSource` off the union, which is what the
+          // second public member (`custom`) now makes the compiler insist on: this suite runs against
+          // k3s, so a service that came back pinned to anything else is the failure the assertion
+          // above names.
           assert.equal(
             updated.provisioning?.type,
             'kubernetes',
             `service ${service.serviceId} ('${service.repoName}') stored no kubernetes provisioning`,
           )
           assert.equal(
-            updated.provisioning?.manifestSource.path,
+            updated.provisioning?.type === 'kubernetes'
+              ? updated.provisioning.manifestSource.path
+              : null,
             provisioning.manifestSource.path,
             `service ${service.serviceId} ('${service.repoName}') stored another manifest path`,
           )

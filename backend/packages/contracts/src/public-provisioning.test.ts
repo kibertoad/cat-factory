@@ -1,12 +1,16 @@
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
+import { manifestIdSchema } from './environments.js'
 import { kubernetesUrlSourceSchema } from './environments-kubernetes.js'
 import {
   linkPublicRepoSchema,
   publicBootstrapJobSchema,
+  publicEnvironmentHandlerSchema,
   publicKubernetesManifestSourceSchema,
   publicKubernetesUrlSourceSchema,
+  publicRepoFilePathSchema,
   publicRiskPolicySchema,
+  publicServiceProvisioningSchema,
   publicVcsConnectionSchema,
   updatePublicServiceSchema,
 } from './public-provisioning.js'
@@ -178,5 +182,89 @@ describe('linkPublicRepoSchema', () => {
 
   it('still refuses a slash in the NAME, which is one segment on every provider', () => {
     expect(() => v.parse(linkPublicRepoSchema, { owner: 'acme', name: 'a/b' })).toThrow()
+  })
+})
+
+describe('the service-provisioning variant', () => {
+  it('still publishes both provision types a caller can pin', () => {
+    // `custom` is what lets a deployment shipping its OWN environment backend say so at all. Losing
+    // it would leave a Kargo-pinned service and an unpinned one answering identically, which is the
+    // state the read half was added to make checkable.
+    expect(variantMembers(publicServiceProvisioningSchema, 'type')).toEqual(
+      expect.arrayContaining(['kubernetes', 'custom']),
+    )
+  })
+
+  it('accepts exactly the manifest ids the INTERNAL grammar accepts', () => {
+    // The public id format is restated rather than imported, which is this surface's rule for a
+    // STRUCTURAL shape: an internal tightening inherited here would refuse a value a live
+    // integration is already pinning, and that is a break nobody reviewed as one. The two are meant
+    // to agree, so this is what notices when they stop, in EITHER direction: a public value
+    // the internal side refuses is a pin that stores and then resolves nothing.
+    const candidates = [
+      'kargo',
+      'k',
+      'nomad-preview',
+      'a1-b2',
+      'Kargo',
+      'kargo_preview',
+      '-kargo',
+      'kargo ',
+      '',
+      'x'.repeat(65),
+    ]
+    const publicVerdicts = candidates.map(
+      (value) =>
+        v.safeParse(publicServiceProvisioningSchema, { type: 'custom', manifestId: value }).success,
+    )
+    const internalVerdicts = candidates.map(
+      (value) => v.safeParse(manifestIdSchema, value.trim()).success,
+    )
+    expect(publicVerdicts).toEqual(internalVerdicts)
+  })
+})
+
+describe('the environment-handler list', () => {
+  it('reports `engine` as an open string, so a registered backend is not coerced', () => {
+    // The connect call's own view pins `engine: 'kubernetes'`, truthfully, because that is the only
+    // engine this surface REGISTERS. A list has to report what a deployment SEEDED, including a
+    // backend it registered in code, and widening that shipped literal would retype a field a
+    // released client already narrows on. Hence a second shape rather than a change to the first.
+    expect(
+      v.safeParse(publicEnvironmentHandlerSchema, {
+        provisionType: 'custom',
+        manifestId: null,
+        acceptsManifestId: 'kargo',
+        engine: 'remote-custom',
+        backendKind: 'kargo',
+        label: 'Kargo',
+        endpoint: 'https://kargo.example',
+        secretKeys: ['apiToken'],
+        connectedAt: 1,
+      }).success,
+    ).toBe(true)
+  })
+
+  it('carries BOTH manifest-id fields, because the engine matches a service against either', () => {
+    // `resolveInfraHandler` → `matchesCustom` accepts a pinned id keyed on `manifestId` OR declared as
+    // `acceptsManifestId`, and each way of registering a handler sets only one of them. Publishing one
+    // made a seeded handler read as a handler serving nothing, which is the very question this list
+    // exists to answer.
+    expect(Object.keys(publicEnvironmentHandlerSchema.entries)).toContain('manifestId')
+    expect(Object.keys(publicEnvironmentHandlerSchema.entries)).toContain('acceptsManifestId')
+  })
+})
+
+describe('the repo-file read', () => {
+  it('refuses a path that means something other than what it says', () => {
+    // Not a security boundary and it does not claim to be one: the read is already scoped to a
+    // repository this workspace LINKED. What it buys is an honest refusal, since answering a
+    // traversal as `file_not_found` sends someone hunting for a file that is right where they left it.
+    const accepts = (path: string) => v.safeParse(publicRepoFilePathSchema, path).success
+    expect(accepts('deploy/preview.yaml')).toBe(true)
+    expect(accepts('.kargo.yml')).toBe(true)
+    expect(accepts('/etc/passwd')).toBe(false)
+    expect(accepts('deploy/../../secrets')).toBe(false)
+    expect(accepts('   ')).toBe(false)
   })
 })

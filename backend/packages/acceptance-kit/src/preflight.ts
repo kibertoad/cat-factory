@@ -88,6 +88,21 @@ export type Prerequisite<Context> = {
   /** What holding this prerequisite guarantees, phrased for the person reading a failure. */
   what: string
   disposition: PrerequisiteDisposition
+  /**
+   * What THIS check reaches, when that is not the deployment, so a throw out of it is classified
+   * against the right address.
+   *
+   * `PreflightOptions.probe` names ONE host and that host is the deployment, which is correct and is
+   * why it cannot serve a check that calls a VCS provider's REST API or an environment backend
+   * directly. Before this field the only way to keep such a check honest was to catch its own throws
+   * and hand-build the `unknown` verdict, which puts the classification (kernel's whole-cause-chain
+   * transport read, plus the retry and the `AbortError` correction the runner already applies) out of
+   * reach of exactly the checks that reach the least predictable hosts.
+   *
+   * Supplied, the runner prefers it over the pass-level context for this check alone. Omitted, the
+   * pass-level one applies, which is the right default for the majority that do reach the deployment.
+   */
+  probe?: ConnectionFailureContext
   check: (context: Context) => Promise<PrerequisiteVerdict>
 }
 
@@ -99,7 +114,7 @@ export type PrerequisiteResult = {
 }
 
 /**
- * The two verdict constructors, beside the type they build rather than private to whichever module
+ * The three verdict constructors, beside the type they build rather than private to whichever module
  * holds most of a suite's checks: those are routinely written across several (one that reads only
  * the CONFIG needs no client at all), and a second spelling of `{ status: … }` is how a verdict
  * shape drifts.
@@ -109,6 +124,23 @@ export const satisfied = (detail: string): PrerequisiteVerdict => ({ status: 'sa
 export const unsatisfied = (problem: string, remedy: Remedy): PrerequisiteVerdict => ({
   status: 'unsatisfied',
   problem,
+  remedy,
+})
+
+/**
+ * The third state, and it shipped without a constructor for long enough to prove the point of having
+ * one: rule 2 makes `unknown` the state a suite reaches most often by HAND (a check reaching a host
+ * the runner cannot classify for it catches its own throw), and every such site spelled the object
+ * literal out. `probeFailureVerdict` builds one too, from a thrown value; this is the half for a
+ * check that already knows what went wrong and has nothing to classify.
+ *
+ * Named `unknown` beside its siblings rather than hedged to `unknownVerdict`: it is a value, and TS
+ * resolves the intrinsic type of the same name in type position regardless, so `catch (error:
+ * unknown)` in a file importing this still means what it says.
+ */
+export const unknown = (probeFailure: string, remedy: Remedy): PrerequisiteVerdict => ({
+  status: 'unknown',
+  probeFailure,
   remedy,
 })
 
@@ -134,10 +166,10 @@ export type PreflightOptions = {
    *
    * **It names ONE host, and that host is the deployment.** A check that reaches a DIFFERENT one (a
    * VCS provider's own API, a cluster addressed directly) cannot be described against this context,
-   * because a value cannot be true for two hosts. Such a check describes its own failures where it
-   * MAKES the call, through the same kernel describer, and answers an `unknown` verdict rather than
-   * throwing: a context used for both halves would misattribute one of them, which is exactly what
-   * `probeFailure.ts` exists to remove.
+   * because a value cannot be true for two hosts: a context used for both halves would misattribute
+   * one of them, which is exactly what `probeFailure.ts` exists to remove. Such a check names its own
+   * host on {@link Prerequisite.probe} and lets the runner classify against that, or describes its
+   * failures where it MAKES the call and answers an `unknown` verdict rather than throwing.
    */
   probe?: ConnectionFailureContext
   /** Called as each result lands, so a slow probe is not a silent one. */
@@ -187,7 +219,11 @@ async function evaluate<Context>(
     // inlined here is the whole point of that module: read as `error.message`, every transport
     // failure this gate can hit renders as undici's contentless `fetch failed`, so the remedy had
     // to list the causes it could not tell apart. It now names the one that happened.
-    return probeFailureVerdict(error, probe, identity)
+    //
+    // The check's OWN context wins where it declared one, whole rather than merged: a context is a
+    // description of one host, so spreading the pass-level target under a check's would leave a
+    // remedy offering `curl <the deployment>/health` for a failure that never went near it.
+    return probeFailureVerdict(error, prerequisite.probe ?? probe, identity)
   }
 }
 

@@ -145,6 +145,17 @@ export interface RepoContentEntry {
 export interface RepoFileContent {
   content: string
   sha: string
+  /**
+   * True when the file's bytes were NOT valid UTF-8, so `content` is the replacement-character
+   * rendering rather than the file: a PNG, a tarball or a Latin-1 source file decodes to U+FFFD.
+   *
+   * Reported rather than left for a consumer to infer, because the two readings need opposite
+   * handling and only the consumer knows which it is doing: a pre-op folding a file into a prompt
+   * wants the best available text, while a read whose job is byte-exact grading has to refuse rather
+   * than hand back mojibake labelled as the file's content. Optional, so a test double or a client
+   * that cannot tell says nothing rather than asserting the bytes were clean.
+   */
+  lossy?: boolean
 }
 
 /** A single comment on an issue, as returned by {@link GitHubClient.getIssue}. */

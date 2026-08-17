@@ -22,8 +22,16 @@ worked example. What is here is that suite with the suite taken out.
 | `decisions.ts`      | Answering `follow-ups` and `clarity-review` and hard-failing on every other kind, which is what stops an unattended loop from driving a run past a decision a person was meant to make.           |
 | `runDriver.ts`      | Driving one started run to a terminal state under ONE budget spanning every park.                                                                                                                 |
 | `resume.ts`         | File a task, or adopt / re-attach to what a previous pass left, recorded at all three points a pass can be interrupted between.                                                                   |
+| `resource.ts`       | The same discipline for a RESOURCE your suite provisions itself: recorded before it can be observed, adopted rather than re-provisioned, released only when the provider agrees it is gone.       |
+| `brief.ts`          | Getting a real brief onto a task whatever its size: under the description cap it is the description, over it an attached document, and past the attachment cap it is REFUSED rather than cut.     |
 | `evidence.ts`       | Reductions over the PR verification report, so a scenario asserts on what the platform COMPUTED rather than on agent prose.                                                                       |
 | `pass.ts`           | The pass itself: banner, scenarios, summary, closing words, exit code, and the boundary that reports a bug in the suite without losing the resume.                                                |
+
+One further module is a SEPARATE entry point, `@cat-factory/acceptance-kit/console-credential`, so
+the base package stays free of terminal code: `createConsoleCredential()` builds the
+`CredentialRetry` half of the seam for a suite whose models run on a person's own subscription,
+paired with the request header it fills. Importing that path is the decision to be asked; a
+keys-only suite names `passThroughCredentialRetry` and never sees a prompt.
 
 ## Writing a suite
 
@@ -31,6 +39,7 @@ worked example. What is here is that suite with the suite taken out.
 import {
   type Scenario,
   type SuiteIdentity,
+  briefFields,
   createPassClient,
   fileAndDrive,
   requireRunDone,
@@ -54,7 +63,19 @@ const shipsAFeature: Scenario = {
   title: 'the custom agent kind builds, opens a PR and merges it',
   gated: true,
   run: async (step) => {
-    const { run } = await step('drive', () => fileAndDrive({ ...options }))
+    const { run } = await step('drive', () =>
+      fileAndDrive({
+        ...options,
+        // `briefFields` and not `description: brief`: the description caps at 2,000 characters, a
+        // real scaffold brief is several times that, and the ceiling is not a fact your suite
+        // should have to know. Under the cap this is byte-for-byte `{ description: brief }`.
+        createTask: () =>
+          client.tasks.create(serviceId, {
+            title: 'Stand up the catalog API',
+            ...briefFields({ brief, title: 'Stand up the catalog API' }),
+          }),
+      }),
+    )
     requireRunDone(run, 'the feature run')
   },
 }
@@ -94,6 +115,17 @@ it is rather than the obvious way.
    request and any provisioned namespace are still there, and they start a second pass that the
    leftovers then refuse.
 6. **Report every failing claim, not just the first.** A pass costs an afternoon.
+7. **Record an external RESOURCE before anything can observe it, and release it only when the
+   provider agrees.** A teardown needs the provider's own id plus whatever the provision captured,
+   and neither can be re-derived from the deployment or the repository, so a pass killed between the
+   provision returning and the first status poll leaks a machine nothing on disk can name. An
+   accepted delete is not a completed one. `resource.ts` is this rule; `PassOptions.onSettled` is
+   where its reclaim report goes, so what is still standing lands INSIDE the closing words.
+8. **A suite cannot re-create a run's own pull-request environment afterwards.** The merger deletes
+   the head branch on merge when it is under the `cat-factory/` prefix, so an environment requested
+   by pull-request number resolves a ref the provider no longer has. An environment claim about a
+   pull request is read off the run's REPORT (`checkEphemeralEnvironment`); a claim about the
+   MERGED code is provisioned fresh from the default branch. Neither half can cover both.
 
 ## Seams
 
@@ -108,6 +140,16 @@ Four things the kit deliberately does NOT decide, because only a suite can:
   Required on the drive path rather than defaulted, for the reason `gated` is: a suite whose models
   all run on the deployment's own keys passes `passThroughCredentialRetry`, which says so in code,
   where an omission says nothing and surfaces as a pass dying at a `428` after an afternoon of spend.
+  The OTHER branch is `@cat-factory/acceptance-kit/console-credential`, opt-in by import.
+
+**CONFIGURATION is the fifth thing the kit does not decide**, and it is listed apart because half of
+it is not a seam at all. Reading your own configuration is yours; ASSEMBLING it is a `.env` write,
+and the five ways to get that subtly wrong are each a silent failure (the command reports success
+and the file means something else). Those five, and the code for them, are
+`@cat-factory/cli`'s `envMerge.ts`: keep unmanaged lines VERBATIM, report `kept`/`changed`/`added`/
+`preserved` rather than a boolean, quote a value the READER would otherwise disagree about, RECOGNISE
+the carried-over header as well as write it, and withhold secrets by an enumerated list rather than a
+name pattern. `SuiteIdentity.configFile` is what a refusal names.
 
 ## Related
 

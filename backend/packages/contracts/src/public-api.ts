@@ -342,8 +342,33 @@ export const publicTaskTicketSchema = v.object({
 })
 export type PublicTaskTicket = v.InferOutput<typeof publicTaskTicketSchema>
 
+/**
+ * Characters a task's own `description` may carry, on create and on patch alike.
+ *
+ * NAMED rather than written out at the two holes, because it is a number a CALLER has to know: it is
+ * what decides whether a brief goes in `description` or into an attached document, and a caller that
+ * cannot read it discovers the ceiling as a `422` on the first task of an automated setup. It is not
+ * shared with the repository/service descriptions on `public-provisioning.ts`, which merely happen to
+ * hold the same value: those bound a label, this bounds a framing echoed into every prompt.
+ *
+ * The DOCUMENT path is the surface's own answer for anything longer (see
+ * {@link publicTaskDocumentSchema}), which is why this stays where it is rather than being raised.
+ */
+export const MAX_TASK_DESCRIPTION_CHARS = 2000
+
 /** Characters of document text ONE uploaded attachment may carry (see {@link publicTaskDocumentSchema}). */
 export const MAX_UPLOADED_DOCUMENT_CHARS = 100_000
+
+/**
+ * Characters an ATTACHED DOCUMENT's title may carry (see {@link publicTaskUploadedDocumentSchema}).
+ *
+ * Named for the same reason as {@link MAX_TASK_DESCRIPTION_CHARS}: a caller that composes an
+ * attachment (any suite filing a brief bigger than a `description` holds) has to check the title
+ * before the round trip, and one that cannot read the bound restates it, which drifts the moment
+ * either side moves. Not shared with the TASK title bound, which merely happens to hold the same
+ * value today and answers a different question.
+ */
+export const MAX_DOCUMENT_TITLE_CHARS = 200
 
 /** Context documents ONE task creation may attach (imported and uploaded together). */
 export const MAX_TASK_DOCUMENTS = 10
@@ -365,7 +390,7 @@ export type PublicTaskSourceDocument = v.InferOutput<typeof publicTaskSourceDocu
 export const publicTaskUploadedDocumentSchema = v.object({
   kind: v.literal('upload'),
   /** Names the document for the agent (it becomes the attachment's heading and filename). */
-  title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+  title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_DOCUMENT_TITLE_CHARS)),
   /**
    * The document text, as Markdown. Refused when it yields no readable text at all (a body of
    * pure markup would reach the agent as an empty attachment).
@@ -435,7 +460,7 @@ const presetPinSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength
  */
 export const createPublicTaskSchema = v.object({
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
-  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
+  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(MAX_TASK_DESCRIPTION_CHARS))),
   /** The kind of work; omitted → `feature`. `recurring` is not creatable here. */
   taskType: v.optional(createTaskTypeSchema),
   /**
@@ -560,7 +585,7 @@ export type StartPublicTaskInput = v.InferOutput<typeof startPublicTaskSchema>
  */
 export const updatePublicTaskSchema = v.object({
   title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
-  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
+  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(MAX_TASK_DESCRIPTION_CHARS))),
   /**
    * The per-case values for the task's own type, keyed by field, checked against the SAME
    * descriptors `POST /services/:serviceId/tasks` validates a `fields` bag against

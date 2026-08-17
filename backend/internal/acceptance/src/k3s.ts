@@ -90,8 +90,17 @@ export function buildK3sSecrets(cluster: ClusterConfig): Record<string, string> 
   return { [TOKEN_SECRET_KEY]: cluster.apiToken }
 }
 
-/** The per-service half: manifests colocated in the service's own repo, read at the PR head. */
-export function buildServiceProvisioning(): PublicServiceProvisioning {
+/**
+ * The per-service half: manifests colocated in the service's own repo, read at the PR head.
+ *
+ * Typed as the KUBERNETES member rather than the whole union, because that is what it builds and a
+ * caller reads `manifestSource` straight off it. The public union gained a `custom` member for
+ * deployments that ship their own environment backend; this suite runs against k3s.
+ */
+export function buildServiceProvisioning(): Extract<
+  PublicServiceProvisioning,
+  { type: 'kubernetes' }
+> {
   return {
     type: 'kubernetes',
     manifestSource: { type: 'colocated', path: MANIFEST_DIR, renderer: 'raw' },

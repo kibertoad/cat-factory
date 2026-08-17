@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { askForPersonalPassword } from '../src/personalPasswordAsk.ts'
-import { PersonalPasswordDeclined } from '../src/personalUnlock.ts'
+import { PersonalPasswordDeclined } from '@cat-factory/acceptance-kit/console-credential'
 import type { PinnedPreset } from '../src/presets.ts'
 
 // This ask runs before the first prerequisite is evaluated and before a journal line exists, so

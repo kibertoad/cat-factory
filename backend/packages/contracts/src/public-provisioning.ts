@@ -78,6 +78,22 @@ const repoOwnerField = v.pipe(
   v.minLength(1),
   v.maxLength(255),
 )
+/**
+ * A custom-manifest-type id, as this surface accepts it.
+ *
+ * Restated rather than importing `manifestIdSchema`, which is this file's rule for a STRUCTURAL
+ * shape: the internal one is a format this repo may tighten freely, and a tightening inherited here
+ * would refuse a value a live integration is already pinning, which is a break nobody reviewed as
+ * one. The two grammars are meant to agree, so `public-provisioning.test.ts` pins that they do.
+ */
+const publicManifestIdSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.regex(/^[a-z0-9][a-z0-9-]*$/, 'Only lowercase letters, digits and hyphens are allowed'),
+  v.minLength(1),
+  v.maxLength(64),
+)
+
 const descriptionField = v.pipe(v.string(), v.maxLength(2000))
 const instructionsField = v.pipe(v.string(), v.maxLength(8000))
 const labelField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))
@@ -299,6 +315,93 @@ export const linkPublicRepoSchema = v.object({
 })
 export type LinkPublicRepoInput = v.InferOutput<typeof linkPublicRepoSchema>
 
+/**
+ * Characters ONE file read may answer with, past which it is REFUSED rather than truncated.
+ *
+ * A caller reading a file to grade what an agent committed is joining on its exact bytes, and a
+ * silently shortened answer is indistinguishable from an agent that wrote a shorter file. So the
+ * cap refuses (`422`, `details.reason: 'file_too_large'`) and names the size, which is a fact the
+ * caller can act on where a truncation is not. Generous enough for source: 256 KiB is past any
+ * hand-written manifest, workflow or module.
+ *
+ * It is not the only ceiling in play, and the refusal is deliberately the SAME one either way: a
+ * provider's own contents API stops serving a blob at a limit of its own (1 MB on GitHub), which
+ * arrives here as a `403` that says nothing about the file. That is mapped to this reason too, with
+ * the provider's limit in `details` and no `size`, because nothing measured one.
+ */
+export const MAX_REPO_FILE_CHARS = 262_144
+
+/**
+ * A repo-root-relative file path, refused here rather than left to the provider's 404.
+ *
+ * The provider would answer "no such file" for a traversal or an absolute path anyway, so this is
+ * not a security boundary and does not claim to be one: the resolution is already scoped to a
+ * repository this workspace LINKED, which is what actually bounds the read. What it buys is an
+ * honest refusal. `..` and a leading `/` are the two ways a caller means something other than what
+ * it typed, and answering both as `file_not_found` sends someone hunting for a file that is right
+ * where they left it.
+ */
+export const publicRepoFilePathSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(1000),
+  v.check((value) => !value.startsWith('/'), 'A path is relative to the repository root'),
+  v.check((value) => !value.split('/').includes('..'), "No path segment may be '..'"),
+)
+
+/**
+ * ONE file from a repository this workspace has LINKED, at a ref.
+ *
+ * The read that closes the loop on everything else this surface can start: a caller can create a
+ * repository, adopt one, file work against it and watch a run merge, and then had no way to see WHAT
+ * the run committed. The only alternative was grepping the agent's final reply, which is asserting on
+ * model prose (swap the model and it goes red having found nothing wrong), so anything that wanted a
+ * real answer had to hold a VCS credential of its own: a second token in an operator's config, with
+ * its own scopes to get right, for data the workspace's own connection can already read.
+ *
+ * **A single file, deliberately, and no directory listing.** A listing is a separate decision with
+ * its own frozen-forever questions (pagination, recursion, what a large tree does), and this surface
+ * may not answer one badly and then keep answering it. `GET /api/v1/services/:id/spec` remains the
+ * structured read for the one tree the platform itself understands.
+ *
+ * **Only what the workspace has LINKED.** The scope is the same one every other read here takes, so
+ * this publishes nothing a caller could not already reach through the board, and a repository the
+ * connection can see but this workspace has not adopted is a `404` exactly as it is everywhere else.
+ */
+export const publicRepoFileSchema = v.object({
+  owner: v.string(),
+  name: v.string(),
+  /** The repo-root-relative path that was read, as the request gave it. */
+  path: v.string(),
+  /**
+   * The ref the read was pinned to, or `null` when the request named none and the PROVIDER resolved
+   * the repository's own default branch.
+   *
+   * Null rather than the branch name, because this read does not learn which branch that was and the
+   * platform's own idea of it is a value it may have INVENTED: a projection row that carries no
+   * default branch is defaulted to `main` for the benefit of clone targets, and reporting that as the
+   * ref graded would name a branch the repository may not have. `sha` is the value to record either
+   * way, being the one identifier that cannot drift.
+   */
+  ref: v.nullable(v.string()),
+  /**
+   * The file's blob sha: the byte-exact handle, for a caller comparing two reads without diffing
+   * their bodies, or joining what it graded to what the repository holds.
+   */
+  sha: v.string(),
+  /**
+   * The file's content, decoded as UTF-8.
+   *
+   * Text only. A file whose bytes are not valid UTF-8 is REFUSED (`422`,
+   * `details.reason: 'file_not_text'`, carrying the `sha`) rather than answered as the replacement
+   * characters a lossy decode produces: mojibake presented as a file's content is the same lie a
+   * truncation would be, and a caller hashing it would be hashing the decoder's output.
+   */
+  content: v.string(),
+})
+export type PublicRepoFile = v.InferOutput<typeof publicRepoFileSchema>
+
 // ---- 3. The environment connection (the ENGINE half) ------------------------
 
 /**
@@ -497,6 +600,59 @@ export type PublicEnvironmentConnectionView = v.InferOutput<
   typeof publicEnvironmentConnectionViewSchema
 >
 
+/**
+ * One registered handler as the LIST reports it, whatever engine services it.
+ *
+ * Its own shape rather than a reuse of {@link publicEnvironmentConnectionViewSchema}, and the reason
+ * is the difference between the two calls. That one answers a `POST` this surface only ever makes
+ * with `engine: 'kubernetes'`, so its literal is exactly true. A list has to report every handler a
+ * workspace holds, including the `remote-custom` ones a deployment SEEDS from its composition root,
+ * and widening the shipped literal to a string would retype a field a released client already
+ * narrows on. Additive beats a retype (ADR 0034), so the list gets its own view.
+ *
+ * `endpoint` and not `apiServerUrl`: the noun is only true of Kubernetes, and the same mistake in a
+ * shared reduction is what makes an operator whose environment is a VM go looking for an apiserver.
+ *
+ * The write is what makes this read worth having. Handlers are the one half of provisioning a
+ * headless caller could WRITE and never READ, so a deployment that seeds them programmatically (the
+ * documented path for a multi-tenant Node deployment, and the one local mode takes) had no way for
+ * any caller to confirm the seed landed. "Kargo accepts our token" and "this workspace has a Kargo
+ * handler" are different failures with different fixes, and only one of them was checkable.
+ */
+export const publicEnvironmentHandlerSchema = v.object({
+  /** The provision type this handler serves (`kubernetes`, `docker-compose`, `custom`, …). */
+  provisionType: v.string(),
+  /**
+   * For a `custom` handler, the manifest id it is KEYED to; null for every other type.
+   *
+   * Both this and {@link acceptsManifestId} are reported because the engine's own resolution matches
+   * a service's pinned `manifestId` against EITHER, and only one of the two is set by either way of
+   * registering a handler: a seed that keys a handler to `kargo` sets this one and leaves the other
+   * null, while a `remote-custom` connection sets the other. Publishing one of them made the
+   * commonest seed shape indistinguishable from a handler that serves nothing, which is the exact
+   * question this read exists to answer.
+   */
+  manifestId: v.nullable(v.string()),
+  /** For a `custom` handler, the manifest id it declares it ACCEPTS; null for every other type. */
+  acceptsManifestId: v.nullable(v.string()),
+  /** The internal engine servicing it, as an open string: a deployment may register its own. */
+  engine: v.string(),
+  /** The registry backend kind that builds this handler's provider. */
+  backendKind: v.string(),
+  label: v.string(),
+  /** The connection's own endpoint (an apiserver for Kubernetes, the management API otherwise). */
+  endpoint: v.string(),
+  /** The secret-bundle keys this handler holds, never their values. */
+  secretKeys: v.array(v.string()),
+  connectedAt: v.number(),
+})
+export type PublicEnvironmentHandler = v.InferOutput<typeof publicEnvironmentHandlerSchema>
+
+export const publicEnvironmentHandlerListSchema = v.object({
+  connections: v.array(publicEnvironmentHandlerSchema),
+})
+export type PublicEnvironmentHandlerList = v.InferOutput<typeof publicEnvironmentHandlerListSchema>
+
 // ---- 4. A service's provisioning (the SOURCE half) --------------------------
 
 /**
@@ -505,9 +661,36 @@ export type PublicEnvironmentConnectionView = v.InferOutput<
  * The platform keeps these two apart deliberately (one cluster, many services, each with its own
  * manifests), and this surface keeps the same seam rather than collapsing them into one call, so a
  * caller adding a second service to an existing cluster changes one thing.
+ *
+ * **`custom` is here because a deployment that ships its OWN environment backend could not say so.**
+ * The registry model exists precisely so one can (`EnvironmentBackendRegistry`,
+ * `CustomManifestTypeRegistry`, `seedEnvironmentHandlers`), and everything such a backend needs is
+ * reachable from a composition root; none of it was reachable from this surface. A Kargo-backed or
+ * Nomad-backed service could therefore neither be pinned nor READ BACK here, and that second half is
+ * the one that hurts: the projection omitted what it could not describe, so a pinned service and an
+ * unpinned one answered identically (`provisioning: undefined`) and a headless caller could not
+ * report the state, let alone check it.
+ *
+ * **It pins by `manifestId` and carries no backend config**, and that is deliberate rather than
+ * partial. The engine side of a custom backend is an `environmentManifest` whose `providerConfig` is
+ * an open `Record<string, unknown>` by design, so publishing it would freeze a shape this repo
+ * evolves freely onto a surface that may never be reshaped (ADR 0034). What a caller pins here is an
+ * id the DEPLOYMENT already registered, which is a closed, stable value; registering the handler
+ * behind it stays a composition-root act, and `GET /api/v1/environments/connections` is how a caller
+ * confirms one landed.
  */
 export const publicServiceProvisioningSchema = v.variant('type', [
   v.object({ type: v.literal('kubernetes'), manifestSource: publicKubernetesManifestSourceSchema }),
+  v.object({
+    type: v.literal('custom'),
+    /**
+     * The custom-manifest-type id this service produces, matched to a `remote-custom` handler that
+     * declares it accepts the same one.
+     */
+    manifestId: publicManifestIdSchema,
+    /** Where the manifest lives in the repository; omitted ⇒ the manifest type's own default. */
+    manifestPath: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
+  }),
 ])
 export type PublicServiceProvisioning = v.InferOutput<typeof publicServiceProvisioningSchema>
 

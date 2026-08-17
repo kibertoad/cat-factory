@@ -51,6 +51,11 @@ const SURFACE = {
   // decision.
   listPublicAvailableRepos: { group: 'repos', method: 'listAvailable' },
   linkPublicRepo: { group: 'repos', method: 'link' },
+  // `getFile` on the repos group and not a `contents` group of its own: the resource being read is
+  // a REPOSITORY, and one file out of it is a read on that repository rather than a resource with
+  // its own lifecycle. It also keeps the pairing legible: `link` adopts one, `getFile` reads what a
+  // run wrote into it.
+  getPublicRepoFile: { group: 'repos', method: 'getFile' },
 
   // ---- Tasks ----------------------------------------------------------------------------
   createPublicTask: { group: 'tasks', method: 'create' },
@@ -79,6 +84,7 @@ const SURFACE = {
   // `connections`, not `handlers`: the caller is describing a connection to infrastructure,
   // where "handler" names the engine-side object that services it.
   connectPublicEnvironment: { group: 'environments', method: 'connect' },
+  listPublicEnvironmentConnections: { group: 'environments', method: 'listConnections' },
   testPublicEnvironmentConnection: { group: 'environments', method: 'testConnection' },
 
   // ---- What this deployment has WIRED ------------------------------------------------------

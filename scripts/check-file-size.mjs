@@ -225,7 +225,7 @@ const LEGACY_ALLOWANCES = new Map([
   // (`github/viewerTokenReads.ts`, which mints, caches and records nothing), and `GitHubApiError`
   // plus the shared request constants (`githubHttpHelpers.ts` — several modules now classify off
   // the error, and both callers must send the same headers).
-  ['backend/packages/server/src/github/FetchGitHubClient.ts', 1356],
+  ['backend/packages/server/src/github/FetchGitHubClient.ts', 1295],
 ])
 
 /**

@@ -11,6 +11,7 @@
 // the pass), the scenarios, the configuration, and anything that asks a human for a credential. The
 // seams for those are `Prerequisite`, `Scenario`, `SuiteIdentity` and `CredentialRetry`.
 
+export { type BriefFields, type BriefOptions, briefFields } from './brief.js'
 export {
   type ClientOptions,
   type CredentialRetry,
@@ -42,6 +43,7 @@ export {
   unexpectedDecision,
 } from './decisions.js'
 export {
+  type ConfigProblem,
   DeploymentAnswerError,
   DeploymentApi,
   type DeploymentApiOptions,
@@ -121,6 +123,7 @@ export {
   formatRemedy,
   runPreflight,
   satisfied,
+  unknown,
   unsatisfied,
 } from './preflight.js'
 export {
@@ -129,6 +132,19 @@ export {
   describeProbeFailure,
   probeFailureVerdict,
 } from './probeFailure.js'
+export {
+  type AcquireOptions,
+  type AcquireResult,
+  type ReclaimAllOptions,
+  type ReclaimAllResult,
+  type ReleaseOptions,
+  type ReleaseResult,
+  type ReleaseStatus,
+  type ResourceRecord,
+  acquire,
+  reclaimAll,
+  release,
+} from './resource.js'
 export {
   type FileAndDriveOptions,
   type FileAndDriveResult,

@@ -5,6 +5,7 @@ import {
   type PublicKubernetesManifestSource,
   type PublicRepo,
   type PublicService,
+  type PublicServiceProvisioning,
   type PublicTask,
 } from '@cat-factory/contracts'
 import type { PublicRepoOption } from '@cat-factory/orchestration'
@@ -47,25 +48,60 @@ export function toPublicTask(block: Block, serviceId: string): PublicTask {
 /**
  * Project a service frame block onto the external service resource.
  *
- * `provisioning` is projected only for the shapes this surface publishes (today `kubernetes`). A
- * service provisioned through another engine reports NOTHING here rather than a coerced value: the
- * public union cannot describe it, and answering with the nearest member would tell a caller its
+ * `provisioning` is projected only for the shapes this surface publishes. A service provisioned
+ * through a type this build cannot describe reports NOTHING here rather than a coerced value: the
+ * public union cannot express it, and answering with the nearest member would tell a caller its
  * service deploys from manifests it never declared.
+ *
+ * That omission is deliberately as SMALL as the surface allows, because it is indistinguishable from
+ * an unpinned service. A Kargo-backed (or any other custom-backend) service used to land in it, so a
+ * headless caller could not tell "pinned to something I cannot read" from "pinned to nothing", which
+ * are the two states an acceptance prerequisite most needs apart. `custom` now projects, which
+ * leaves the hole covering only a type added to the internal picklist and not to the public one.
  */
 export function toPublicService(frame: Block): PublicService {
-  const provisioning = frame.provisioning
-  const manifestSource =
-    provisioning?.type === 'kubernetes' && provisioning.manifestSource
-      ? toPublicManifestSource(provisioning.manifestSource)
-      : null
   return {
     serviceId: frame.id,
     title: frame.title,
     description: frame.description,
     type: frame.type,
     status: frame.status,
-    ...(manifestSource ? { provisioning: { type: 'kubernetes' as const, manifestSource } } : {}),
+    ...toPublicProvisioning(frame.provisioning),
   }
+}
+
+/**
+ * The `provisioning` key, or nothing when this surface cannot describe what is stored.
+ *
+ * Answers the KEY rather than the value so the caller spreads one expression: an `undefined` value
+ * spread into the object would put the field on the wire as absent-but-present, which valibot and
+ * the SDK read differently from a field that was never there.
+ *
+ * A stored `custom` with no `manifestId` reports nothing, and that is not pedantry: the id is what
+ * matches the service to a handler, so a `custom` without one is a half-written pin that resolves no
+ * backend, and publishing `{ type: 'custom' }` would report it as a configuration that will deploy.
+ */
+function toPublicProvisioning(
+  provisioning: Block['provisioning'],
+): { provisioning: PublicServiceProvisioning } | null {
+  if (provisioning?.type === 'kubernetes') {
+    const manifestSource = provisioning.manifestSource
+      ? toPublicManifestSource(provisioning.manifestSource)
+      : null
+    return manifestSource ? { provisioning: { type: 'kubernetes', manifestSource } } : null
+  }
+  if (provisioning?.type === 'custom' && provisioning.manifestId) {
+    return {
+      provisioning: {
+        type: 'custom',
+        manifestId: provisioning.manifestId,
+        ...(provisioning.manifestPath === undefined
+          ? {}
+          : { manifestPath: provisioning.manifestPath }),
+      },
+    }
+  }
+  return null
 }
 
 /**

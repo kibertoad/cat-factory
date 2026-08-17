@@ -143,13 +143,13 @@ import type {
   SpendRollupRepository,
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
+  ResolveRepoFilesForCoords,
   ResolveRunRepoContext,
   AccountRiskPolicyRepository,
   RiskPolicyRepository,
   RiskPolicySuppressionRepository,
   RunInitiatorScope,
   RunLifecycleSink,
-  RunRepoContext,
   RunnerPoolConnectionRepository,
   RunnerPoolProvider,
   SandboxExperimentRepository,
@@ -430,10 +430,7 @@ export interface CoreDependencies {
    * (`makeResolveRepoFilesForCoords`). Absent → repo validation/bootstrap report "no VCS
    * connection".
    */
-  resolveRepoFilesForCoords?: (
-    workspaceId: string,
-    coords: { owner: string; repo: string; provider?: 'github' | 'gitlab' },
-  ) => Promise<RunRepoContext | null>
+  resolveRepoFilesForCoords?: ResolveRepoFilesForCoords
   /**
    * Optional: dispatch / poll / release a CONTAINER-backed deploy job (real
    * `kubectl`/`kustomize`/`helm`) through the workspace's runner transport — the async

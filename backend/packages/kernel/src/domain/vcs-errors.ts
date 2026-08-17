@@ -124,6 +124,33 @@ export function isVcsRateLimited(error: VcsApiError): boolean {
   return error.rateLimited || error.status === 429
 }
 
+/**
+ * The provider will not serve a blob this large through its file-CONTENTS API.
+ *
+ * Its own class because the alternative is a misattribution the status cannot avoid: GitHub reports
+ * an over-limit blob as a `403`, which is otherwise a permission denial, so every consumer keyed on
+ * the status alone tells an operator that their perfectly good credential was revoked. The provider
+ * adapter is the one layer that knows its own ceiling, so it is the layer that names this.
+ *
+ * Deliberately NOT a {@link VcsApiError}, even though it is born from one: nothing about it is a
+ * fact about the credential or the connection, and every classifier over that type would read it as
+ * one. What it says is that the READ needs a different mechanism (the Git Data blob API) or a
+ * smaller file, which no reconnect changes.
+ */
+export class VcsBlobTooLargeError extends Error {
+  constructor(
+    readonly provider: VcsProvider,
+    /** The provider's own ceiling, in bytes, for the read that refused. */
+    readonly limitBytes: number,
+  ) {
+    super(
+      `${providerLabel(provider)} will not serve a file larger than ${limitBytes} bytes through ` +
+        `its contents API`,
+    )
+    this.name = 'VcsBlobTooLargeError'
+  }
+}
+
 /** The inputs a VCS client has on hand when a request fails, used to pick the remedy. */
 export interface VcsHttpErrorContext {
   provider: VcsProvider

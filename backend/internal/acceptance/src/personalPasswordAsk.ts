@@ -15,7 +15,7 @@
 
 import { describeThrown, scrubbed } from '@cat-factory/acceptance-kit'
 import { needsPersonalPassword, type PinnedPreset } from './presets.ts'
-import { PersonalPasswordDeclined } from './personalUnlock.ts'
+import { PersonalPasswordDeclined } from '@cat-factory/acceptance-kit/console-credential'
 
 /** Everything this decision touches, so the whole of it is drivable from a unit test. */
 export type PersonalPasswordAskDeps = {
@@ -27,7 +27,7 @@ export type PersonalPasswordAskDeps = {
    *
    * One seam rather than a read paired with a hand-over, which is what this was under vitest: the
    * password had to come back as a value so `provide` could send it down an RPC channel to each
-   * worker. In one process the holder is the same closure the lazy ask fills (`personalUnlock.ts`'s
+   * worker. In one process the holder is the same closure the lazy ask fills (the kit's console-credential
    * `obtain`), so nothing has to carry a copy and the suite no longer has a function that hands a
    * password back at all.
    *

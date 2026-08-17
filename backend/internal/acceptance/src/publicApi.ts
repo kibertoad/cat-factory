@@ -6,6 +6,7 @@
 // every task it files pins its model preset, and what is wrong with a key pointed at another board.
 
 import {
+  briefFields,
   createClient as createKitClient,
   createPassClient as createKitPassClient,
 } from '@cat-factory/acceptance-kit'
@@ -19,7 +20,7 @@ import type {
   PublicTask,
 } from '@cat-factory/sdk'
 import type { AcceptanceConfig } from './config.ts'
-import type { PersonalUnlock } from './personalUnlock.ts'
+import type { PersonalUnlock } from '@cat-factory/acceptance-kit/console-credential'
 import { type PinnedPreset, pinnedModel } from './presets.ts'
 
 export type { PublicDecisionList, PublicIdentity, PublicRun, PublicService }
@@ -82,13 +83,21 @@ export async function readPinnedPreset(
 }
 
 /**
- * File a task with the pass's model preset PINNED. The suite's only door onto task creation.
+ * File a task with the pass's model preset PINNED, and its brief wherever the brief FITS. The
+ * suite's only door onto task creation.
  *
- * One helper rather than the field repeated at each `client.tasks.create` call, because the value
+ * One helper rather than the fields repeated at each `client.tasks.create` call, because the value
  * of pinning is that EVERY run of a pass runs on the model the pass names, and a site that forgot
  * the field would silently resolve the workspace default instead: a result that reads exactly like
  * the others and was produced by a different model. There are five such sites (two scaffolds, two
  * feature halves, one bug report) and nothing would fail if one of them drifted.
+ *
+ * The brief goes through the kit's `briefFields`, which is the SIZE half of the same argument.
+ * `description` is capped at 2,000 characters and both scaffold briefs are past it (2,507 and
+ * 2,697), so scenario 01 filed its first task into a `422` after the operator had created two
+ * repositories and wired a workspace. Over the cap the brief becomes an attached document, which is
+ * this surface's own documented path for spec-sized input; under it nothing changes at all, which is
+ * why every site routes through here rather than the two that needed it.
  *
  * Only the model preset is pinned. The RISK POLICY is deliberately left to resolve, because
  * `auto-merge-policy` grades the workspace default and a pin here would make that gate a check on
@@ -100,7 +109,28 @@ export function filePinnedTask(
   serviceId: string,
   task: Omit<CreatePublicTask, 'modelPresetId'>,
 ): Promise<PublicTask> {
-  return client.tasks.create(serviceId, { ...task, modelPresetId: config.modelPresetId })
+  // The task's OWN title names the attachment, so the agent reads a document called "Stand up the
+  // catalog API service" rather than a generic "Brief" beside whatever else the task carries.
+  //
+  // Gated on the brief HAVING TEXT rather than on the field being present, because `briefFields`
+  // refuses an empty one and `createPublicTaskSchema` accepts it: this door may not be stricter than
+  // the route it drives, or a scenario filing a titles-only task aborts wearing the face of a suite
+  // bug.
+  const brief =
+    task.description === undefined || task.description.trim().length === 0
+      ? null
+      : briefFields({ brief: task.description, title: task.title })
+  // The attachment JOINS whatever the caller attached rather than replacing it. Spread after `...task`
+  // (which is what reads naturally) its `documents` array wins outright, so a scenario attaching a
+  // source-backed spec beside a long brief would lose the spec with no error and no log line, and the
+  // run would proceed against an incomplete corpus.
+  const documents = [...(task.documents ?? []), ...(brief?.documents ?? [])]
+  return client.tasks.create(serviceId, {
+    ...task,
+    ...(brief === null ? {} : { description: brief.description }),
+    ...(documents.length > 0 ? { documents } : {}),
+    modelPresetId: config.modelPresetId,
+  })
 }
 
 /**

@@ -287,6 +287,7 @@ export type {
 export type {
   RepoFiles,
   ResolveRepoFiles,
+  ResolveRepoFilesForCoords,
   RunRepoContext,
   ResolveRunRepoContext,
 } from './repo-files.js'

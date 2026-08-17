@@ -13,6 +13,16 @@
 import type { ConfigProblem } from '@cat-factory/contracts'
 import { describeThrown } from './operatorText.js'
 
+/**
+ * One thing the deployment says is wrong with its own configuration, as {@link DeploymentApi.configProblems}
+ * answers it.
+ *
+ * Re-exported from contracts rather than left to structural typing, because it is the ELEMENT type of
+ * a public method's return: a consumer can read `problem.summary` off the array without naming the
+ * type, and cannot annotate the helper, the map or the test fixture it builds over that list.
+ */
+export type { ConfigProblem }
+
 export type DeploymentApiOptions = {
   baseUrl: string
   /** Injected so `test/deploymentApi.test.ts` can drive every answer with no network, as `IssueApi` is. */

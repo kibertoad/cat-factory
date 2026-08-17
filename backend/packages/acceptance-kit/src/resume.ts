@@ -50,7 +50,15 @@ export type FileAndDriveOptions = {
   journal: Journal
   /** What a previous pass recorded for this piece of work, if anything. */
   existing: RunRecord | null
-  /** File the task. Called only when there is nothing to adopt. */
+  /**
+   * File the task. Called only when there is nothing to adopt.
+   *
+   * The suite's own call, because only it knows what to pin (its model preset, its task type, its
+   * per-case fields). What it should NOT own is the size branch: a `description` is capped at 2,000
+   * characters and a real scaffold brief is several times that, so build the body's brief half with
+   * `briefFields` (`brief.ts`) rather than passing a brief straight through and discovering the
+   * ceiling as a `422` on the first task of a pass.
+   */
   createTask: () => Promise<{ taskId: string }>
   pipelineId: string
   steer: string

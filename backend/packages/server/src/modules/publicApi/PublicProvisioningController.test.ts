@@ -2,20 +2,32 @@ import { describe, expect, it } from 'vitest'
 import type {
   Block,
   BootstrapJob,
+  EnvironmentHandlerView,
   GitHubAvailableRepo,
   GitHubConnection,
+  PublicEnvironmentHandler,
   ServiceProvisioning,
 } from '@cat-factory/contracts'
-import { RateLimitedError, UnavailableError, VcsApiError } from '@cat-factory/kernel'
+import { publicEnvironmentHandlerSchema } from '@cat-factory/contracts'
+import {
+  RateLimitedError,
+  UnavailableError,
+  VcsApiError,
+  VcsBlobTooLargeError,
+  type RunRepoContext,
+} from '@cat-factory/kernel'
 import { GitHubApiError } from '../../github/githubHttpHelpers.js'
 import type { RepoUseByRepoId } from '@cat-factory/orchestration'
 import type { ServerContainer } from '../../http/env.js'
 import {
   asVcsRefusal,
+  byHandlerIdentity,
+  readGradableFile,
   readVcsConnection,
   toBlockPatch,
   toPublicAvailableRepo,
   toPublicBootstrapJob,
+  toPublicHandler,
 } from './PublicProvisioningController.js'
 import { toPublicService } from './boardProjection.js'
 
@@ -106,6 +118,43 @@ describe('toBlockPatch', () => {
     })
   })
 
+  it('lowers a CUSTOM pin, keeping the stored remainder it belongs to', () => {
+    // The write half of the custom variant: a service reaching a deployment's own environment
+    // backend is pinned by a manifest id the deployment registered, and nothing about the backend
+    // itself crosses this surface. The overlay rule is the kubernetes one unchanged.
+    const patch = toBlockPatch(
+      { provisioning: { type: 'custom', manifestId: 'kargo', manifestPath: '.kargo.yml' } },
+      { type: 'custom', manifestId: 'kargo', localDevOnly: true } as ServiceProvisioning,
+    )
+    expect(patch.provisioning).toEqual({
+      type: 'custom',
+      manifestId: 'kargo',
+      manifestPath: '.kargo.yml',
+      localDevOnly: true,
+    })
+  })
+
+  it('leaves manifestPath OFF a custom pin that named none', () => {
+    // Written through as `undefined` it would pin the empty path, and the deploy would look for the
+    // manifest at the repository root rather than falling back to the type's own default.
+    const patch = toBlockPatch({ provisioning: { type: 'custom', manifestId: 'kargo' } }, undefined)
+    expect(patch.provisioning).toEqual({ type: 'custom', manifestId: 'kargo' })
+  })
+
+  it('CLEARS a stored manifestPath the patch left out, while keeping what it cannot express', () => {
+    // `manifestPath` is the one stored field this surface publishes, so an omission is the only way a
+    // caller can say "back to the type's default". Carried over from the stored row it would keep
+    // deploying the old path with nothing reporting it, and the public shape offers no other way to
+    // clear it. Everything the public shape cannot express still survives.
+    const patch = toBlockPatch({ provisioning: { type: 'custom', manifestId: 'kargo' } }, {
+      type: 'custom',
+      manifestId: 'kargo',
+      manifestPath: 'deploy/old.yml',
+      localDevOnly: true,
+    } as ServiceProvisioning)
+    expect(patch.provisioning).toEqual({ type: 'custom', manifestId: 'kargo', localDevOnly: true })
+  })
+
   it('distinguishes an empty-string description from an omitted one', () => {
     // `''` is a real edit (clear the description) and `undefined` is "leave it alone". Collapsing
     // them with a truthiness check would make clearing a description impossible through this route.
@@ -158,7 +207,33 @@ describe('toPublicService', () => {
         },
       } as Partial<Block>),
     )
-    expect(projected.provisioning?.manifestSource.path).toBe('deploy/k8s')
+    expect(
+      projected.provisioning?.type === 'kubernetes' && projected.provisioning.manifestSource.path,
+    ).toBe('deploy/k8s')
+  })
+
+  it('projects a CUSTOM provisioning, so a pinned service is not read as an unpinned one', () => {
+    // The gap this closes: a service reaching a deployment's own environment backend used to land in
+    // the "cannot describe it" hole below, so a Kargo-pinned service and a service pinned to nothing
+    // answered identically. Those are the two states a headless setup check most needs apart, and
+    // the omission made "unmet" and "could not be read" collapse into each other.
+    const projected = toPublicService(
+      frame({
+        provisioning: { type: 'custom', manifestId: 'kargo', manifestPath: 'deploy/.kargo.yml' },
+      } as Partial<Block>),
+    )
+    expect(projected.provisioning).toEqual({
+      type: 'custom',
+      manifestId: 'kargo',
+      manifestPath: 'deploy/.kargo.yml',
+    })
+  })
+
+  it('reports nothing for a CUSTOM provisioning naming no manifest id', () => {
+    // The id is what matches the service to a handler, so a `custom` without one resolves no backend.
+    // Publishing `{ type: 'custom' }` would report a half-written pin as a configuration that deploys.
+    const projected = toPublicService(frame({ provisioning: { type: 'custom' } } as Partial<Block>))
+    expect(projected.provisioning).toBeUndefined()
   })
 
   it('reports NOTHING for an engine this surface does not publish, never a coerced value', () => {
@@ -391,5 +466,179 @@ describe('asVcsRefusal', () => {
     expect(asVcsRefusal(outage)).toBe(outage)
     const bug = new TypeError('undefined is not a function')
     expect(asVcsRefusal(bug)).toBe(bug)
+  })
+})
+
+describe('toPublicHandler', () => {
+  const handler = (overrides: Partial<EnvironmentHandlerView> = {}): EnvironmentHandlerView =>
+    ({
+      provisionType: 'kubernetes',
+      manifestId: null,
+      engine: 'remote-kubernetes',
+      providerId: 'prov_1',
+      label: 'staging cluster',
+      baseUrl: 'https://cluster.example:6443',
+      connectedAt: 1_700_000_000_000,
+      secretKeys: ['apiToken'],
+      acceptsManifestId: null,
+      backendKind: 'kubernetes',
+      ...overrides,
+    }) as EnvironmentHandlerView
+
+  it('reports a handler for a deployment-registered backend AS ITSELF, never coerced', () => {
+    // The reason the list does not reuse the connect call's view, whose `engine` is the literal
+    // `kubernetes`. This read exists so a caller can confirm a programmatically-seeded handler
+    // landed, and reporting a Kargo handler as a Kubernetes one would answer that question wrongly
+    // while looking like an answer.
+    expect(
+      toPublicHandler(
+        handler({
+          provisionType: 'custom',
+          engine: 'remote-custom',
+          backendKind: 'kargo',
+          acceptsManifestId: 'kargo',
+          baseUrl: 'https://kargo.example',
+        }),
+      ),
+    ).toEqual({
+      provisionType: 'custom',
+      manifestId: null,
+      acceptsManifestId: 'kargo',
+      engine: 'remote-custom',
+      backendKind: 'kargo',
+      label: 'staging cluster',
+      endpoint: 'https://kargo.example',
+      secretKeys: ['apiToken'],
+      connectedAt: 1_700_000_000_000,
+    })
+  })
+
+  it('reports a handler KEYED to a manifest id, which is the shape a seed produces', () => {
+    // The field the engine's own `matchesCustom` checks FIRST, and the one a deployment seeding a
+    // handler from its composition root sets: `acceptsManifestId` is set only by a `remote-custom`
+    // connection. Published alone, the commonest seed shape read as a handler serving nothing, so a
+    // setup script confirming its own seed landed found no entry naming it while a run against that
+    // handler resolved perfectly.
+    expect(
+      toPublicHandler(handler({ provisionType: 'custom', manifestId: 'kargo' })),
+    ).toMatchObject({ manifestId: 'kargo', acceptsManifestId: null })
+  })
+
+  it('publishes the secret KEYS and never the stored config they came from', () => {
+    // `EnvironmentHandlerView` carries the whole non-secret config for the app's connect-form
+    // prefill. It is the internal per-engine bag, deliberately open, and this surface may not freeze
+    // it, so a field added there must not start appearing on `/api/v1`.
+    const projected = toPublicHandler(
+      handler({ config: { engine: 'remote-kubernetes' } } as Partial<EnvironmentHandlerView>),
+    )
+    // Derived from the published schema rather than restated, so adding a member there is a decision
+    // made in one place: what this pins is that the projection answers EXACTLY the schema's fields,
+    // which is the property that keeps the internal config bag from leaking onto `/api/v1`.
+    expect(Object.keys(projected).sort()).toEqual(
+      Object.keys(publicEnvironmentHandlerSchema.entries).sort(),
+    )
+  })
+})
+
+describe('byHandlerIdentity', () => {
+  const entry = (overrides: Partial<PublicEnvironmentHandler>): PublicEnvironmentHandler =>
+    ({
+      provisionType: 'custom',
+      manifestId: null,
+      acceptsManifestId: null,
+      engine: 'remote-custom',
+      backendKind: 'kargo',
+      label: 'a handler',
+      endpoint: 'https://kargo.example',
+      secretKeys: [],
+      connectedAt: 1,
+      ...overrides,
+    }) as PublicEnvironmentHandler
+
+  it('orders by CODE UNITS, so the same set serialises identically on every runtime', () => {
+    // `localeCompare` collates, and its collation depends on the ICU build and the ambient locale:
+    // workerd, a full-ICU Node and a small-ICU Node can disagree, which is exactly the spurious diff
+    // the ordering exists to prevent. `_` (0x5F) sorts AFTER every uppercase letter by code unit and
+    // before them under most collations, so this pins the difference rather than a spelling.
+    const sorted = [entry({ manifestId: 'a_b' }), entry({ manifestId: 'aB' })]
+      .sort(byHandlerIdentity)
+      .map((handler) => handler.manifestId)
+    expect(sorted).toEqual(['aB', 'a_b'])
+  })
+
+  it('separates two custom handlers keyed to different manifests', () => {
+    // With only `acceptsManifestId` in the key, two seeded handlers tied and fell back to whatever
+    // order the repository read returned: two runs of the same setup check could disagree.
+    const sorted = [entry({ manifestId: 'nomad' }), entry({ manifestId: 'kargo' })]
+      .sort(byHandlerIdentity)
+      .map((handler) => handler.manifestId)
+    expect(sorted).toEqual(['kargo', 'nomad'])
+  })
+})
+
+describe('readGradableFile', () => {
+  const repo = (getFile: RunRepoContext['repo']['getFile']): RunRepoContext['repo'] =>
+    ({ getFile }) as RunRepoContext['repo']
+
+  it('answers the OVER-LIMIT refusal for a blob the provider will not serve, not a 503', () => {
+    // The misattribution this exists for: GitHub reports an over-limit blob as a 403, so
+    // `asVcsRefusal` turned a 1.4 MB lockfile into "re-connect the workspace, a token may have been
+    // revoked" and sent an operator to replace a credential that works.
+    return expect(
+      readGradableFile(
+        repo(() => Promise.reject(new VcsBlobTooLargeError('github', 1_048_576))),
+        'acme/api:pnpm-lock.yaml',
+        'pnpm-lock.yaml',
+        undefined,
+      ),
+    ).rejects.toMatchObject({
+      code: 'validation',
+      details: { reason: 'file_too_large', limit: 1_048_576 },
+    })
+  })
+
+  it('refuses bytes that are not UTF-8 rather than answering the replacement characters', () => {
+    // A PNG or a tarball decodes to U+FFFD, and handing that back under a field documented as the
+    // file's content is the lie the size cap already refuses to tell: a caller comparing against its
+    // own copy sees a mismatch it cannot attribute. The `sha` rides the refusal, so the byte-exact
+    // join a grader wanted is still available.
+    return expect(
+      readGradableFile(
+        repo(async () => ({ content: '��', sha: 'deadbeef', lossy: true })),
+        'acme/api:logo.png',
+        'logo.png',
+        undefined,
+      ),
+    ).rejects.toMatchObject({ details: { reason: 'file_not_text', sha: 'deadbeef' } })
+  })
+
+  it('passes an omitted ref through OMITTED, so the provider resolves the real default branch', async () => {
+    // `context.baseBranch` is the wrong value to substitute: `makeResolveRepoFilesForCoords` invents
+    // `main` for a projection row carrying no default branch, so a repository whose default is
+    // `master` would be read at a branch it does not have and answer `file_not_found` for a file that
+    // is right there.
+    const asked: (string | undefined)[] = []
+    const file = await readGradableFile(
+      repo(async (_path, gitRef) => {
+        asked.push(gitRef)
+        return { content: 'ok', sha: 'abc' }
+      }),
+      'acme/api:README.md',
+      'README.md',
+      undefined,
+    )
+    expect(asked).toEqual([undefined])
+    expect(file?.content).toBe('ok')
+  })
+
+  it('re-raises any OTHER provider failure through the credential/rate-limit mapping', async () => {
+    await expect(
+      readGradableFile(
+        repo(() => Promise.reject(new GitHubApiError(401, 'Bad credentials'))),
+        'acme/api:README.md',
+        'README.md',
+        'main',
+      ),
+    ).rejects.toBeInstanceOf(UnavailableError)
   })
 })
