@@ -8,6 +8,7 @@ import type {
   PlatformAlertSink,
   ResolveBinaryArtifactStore,
   ConsensusSessionRepository,
+  ResolveRepoFilesForCoords,
   ResolveRunRepoContext,
   LocalVcsSetup,
   Logger,
@@ -121,6 +122,14 @@ export interface ServerContainer extends Core {
    * spec endpoint returns an empty view.
    */
   resolveRunRepoContext?: ResolveRunRepoContext
+  /**
+   * The BLOCK-LESS sibling of {@link resolveRunRepoContext}: the same checkout-free
+   * {@link RepoFiles}, from repo coordinates a caller names. `GET /api/v1/repos/:owner/:name/contents/*`
+   * reads through it, so the public file read is scoped to what this workspace has LINKED rather
+   * than to whatever the deployment's credential can reach. Present only when a VCS is wired
+   * (both facades compose it with `makeResolveRepoFilesForCoords`); absent → the read is a 503.
+   */
+  resolveRepoFilesForCoords?: ResolveRepoFilesForCoords
   /**
    * Resolve the repo (installation + owner/name + default branch) linked to a
    * block's enclosing service frame — the same ancestry walk the container executor

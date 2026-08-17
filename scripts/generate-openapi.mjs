@@ -62,7 +62,7 @@ const API_PREFIX = '/api/v1'
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.56.0'
+const API_VERSION = '1.57.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -299,6 +299,12 @@ const OPERATION_DOCS = {
     description:
       'Bind environment provisioning to a Kubernetes cluster: the apiserver, how its TLS is verified, the namespace template, and how an environment URL is derived once manifests are applied. The secret bundle authenticating the connection is write-only; the response reports which secret KEYS were stored and never their values. Idempotent, so re-connecting replaces rather than accumulating.',
   },
+  listPublicEnvironmentConnections: {
+    tag: 'Environments',
+    summary: 'List the environment connections this workspace holds',
+    description:
+      'Every registered environment handler, with the provision type it serves, the engine and backend kind behind it, its endpoint and the secret KEYS it holds, never their values. The read half of the connect call, and the half that was missing: a deployment that registers its handlers programmatically (the documented path for a multi-tenant deployment) had no way for a headless caller to confirm the registration landed, so “the backend accepts our credential” and “this workspace has a handler for that backend” collapsed into one unanswerable question. It reports every engine, including a handler for an environment backend the deployment registered in code, so `engine` and `backendKind` are open strings rather than a fixed set.',
+  },
   testPublicEnvironmentConnection: {
     tag: 'Environments',
     summary: 'Probe a candidate cluster connection without saving it',
@@ -358,6 +364,12 @@ const OPERATION_DOCS = {
     summary: 'Adopt an existing repository into this workspace',
     description:
       'Link a repository the connection can reach, by `owner` and `name`, so a service can be created against it. The act that had no headless counterpart: nothing links a repository for you (the provider webhook for an added repository does not project one, and a resync refreshes what is already linked), so a repository created by any means stayed invisible to the repos list and unusable by service creation until a person opened the app. Takes a NAME rather than the numeric `repoId` its sibling reads report, because a caller setting a workspace up from configuration knows the name and cannot know a provider id for a repository no public read lists; the response carries the `repoId` for the service-creation call that follows. Idempotent: a repository this workspace already links returns its row rather than refusing, so a setup script re-running itself needs no special case. A repository the connection cannot reach is a 404 with `details.reason: repo_not_reachable`, which covers both "it does not exist" and "your credential is not granted it": a provider answers those identically, and inventing a split would be a guess.',
+  },
+  getPublicRepoFile: {
+    tag: 'Repos',
+    summary: 'Read one file out of a linked repository',
+    description:
+      'Read a single file, decoded as UTF-8, from a repository this workspace has LINKED, at a branch, tag or commit sha (omit `ref` for the default branch; the response says which was used). It exists to answer what a run actually COMMITTED, which nothing else on this surface could: the repos reads list rows and reachability, the service-spec read serves only the `spec/` tree, and everything else was the agent’s own prose, so a caller wanting a real answer had to hold a second source-control credential of its own. `path` is a query parameter rather than the rest of the URL because a repo-relative path contains slashes and an OpenAPI path segment cannot. One file only: there is deliberately no directory listing. A repository this workspace has not adopted is a 404 with `details.reason: repo_not_linked`, a path the ref does not hold is a 404 with `file_not_found`, and a file past the size this read serves is a 422 with `file_too_large` plus its `size` and `limit`: refused rather than truncated, because a shortened answer reads exactly like a shorter file.',
   },
   createPublicTask: {
     tag: 'Tasks',

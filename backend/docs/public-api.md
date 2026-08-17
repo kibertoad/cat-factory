@@ -1067,8 +1067,10 @@ deployment actually has.
 | `GET /api/v1/repos/bootstrap/:jobId`         | `admin` | Poll one bootstrap. `404 bootstrap_job_not_found` for a job outside your workspace.                                          |
 | `GET /api/v1/repos/available`                | `admin` | The repositories your connection can REACH, linked or not. `?q=owner/name` point-reads one; `truncated` marks a capped list. |
 | `POST /api/v1/repos/link`                    | `admin` | Adopt a reachable repository by `owner`/`name`. Idempotent `200`; `404 repo_not_reachable` otherwise.                        |
+| `GET /api/v1/repos/:owner/:name/contents`    | `admin` | ONE file out of a LINKED repository, at `?ref=`. `?path=` is required; no directory listing.                                 |
 | `POST /api/v1/environments/connections/test` | `admin` | Probe a candidate cluster connection, persisting nothing. A refusal by the cluster is a `200` with `ok: false`.              |
 | `POST /api/v1/environments/connections`      | `admin` | Bind environment provisioning to a cluster. Idempotent: re-connecting replaces.                                              |
+| `GET /api/v1/environments/connections`       | `admin` | Every handler this workspace holds, with its secret KEYS and never their values.                                             |
 | `GET /api/v1/models`                         | `admin` | The models a run here could dispatch to, with `available` and `policyBlocked`.                                               |
 | `GET /api/v1/vcs/connection`                 | `admin` | The source-control connection and what it may do. `connection: null` when nothing is connected.                              |
 | `GET /api/v1/risk-policies`                  | `admin` | The risk policies, including which is the default for runs nothing is watching (yours). Pin one as `riskPolicyId`.           |
@@ -1242,9 +1244,62 @@ images and no Secrets. Changing the provision type does replace, because the rem
 type being left behind. The patch must name at least one field: an empty body is refused rather than
 spent on a write whose only outcome is the state it started in.
 
-The public engine is `kubernetes`, singular. The platform's internal vocabulary splits it in two, and
-that split is not published because one backend serves both and they lower to the same config: it was
-never observable in anything a run does.
+The public engine for a CONNECTION is `kubernetes`, singular. The platform's internal vocabulary
+splits it in two, and that split is not published because one backend serves both and they lower to
+the same config: it was never observable in anything a run does.
+
+**A deployment that ships its OWN environment backend pins a service by `manifestId` instead:**
+
+```http
+PATCH /api/v1/services/blk_...
+{ "provisioning": { "type": "custom", "manifestId": "kargo", "manifestPath": "deploy/.kargo.yml" } }
+```
+
+The `manifestId` names a custom manifest type the deployment has REGISTERED, and the handler behind
+it is registered from the deployment's own composition root (`seedEnvironmentHandlers`) rather than
+over this API. That asymmetry is deliberate: registering a handler means supplying the backend's own
+config, which is an open shape this repo evolves freely, and freezing it here would owe every future
+change a migration. Confirm the handler landed with `GET /api/v1/environments/connections`, which is
+the read half and reports every engine including one a deployment registered itself:
+
+```http
+GET /api/v1/environments/connections
+200 { "connections": [ { "provisionType": "custom", "acceptsManifestId": "kargo",
+                         "engine": "remote-custom", "backendKind": "kargo", "label": "Kargo",
+                         "endpoint": "https://kargo.example", "secretKeys": ["apiToken"],
+                         "connectedAt": 1755000000000 } ] }
+```
+
+Those two answer DIFFERENT questions, and a setup script wants both: `.../connections/test` proves
+the backend accepts your credential, this proves the workspace has a handler for it. Before the read
+existed a headless caller could only check the first and had to assume the second.
+
+#### Reading what a run committed
+
+```http
+GET /api/v1/repos/acme/payments-api/contents?path=deploy/.kargo.yml&ref=main
+200 { "owner": "acme", "name": "payments-api", "path": "deploy/.kargo.yml", "ref": "main",
+      "sha": "9b2c...", "content": "apiVersion: ..." }
+```
+
+One file, decoded as UTF-8, from a repository this workspace has LINKED. It exists so a caller can
+grade what a run actually committed against the real bytes, rather than grepping the agent's final
+reply (which tests the model's phrasing: swap the model and it goes red having found nothing wrong)
+or holding a second source-control credential of its own.
+
+`path` is a query parameter rather than the rest of the URL because a repo-relative path contains
+slashes and an OpenAPI path segment cannot. Omit `ref` for the default branch; the response says
+which was used either way, so a caller recording what it graded has the branch.
+
+Four outcomes, kept apart because each takes a different action: `404 repo_not_linked` for a
+repository this workspace has not adopted (adopt it with `POST /api/v1/repos/link`), `404
+file_not_found` for a path the ref does not hold, `422 file_too_large` with `size` and `limit` for a
+file past what this read serves, and `503` when the deployment wires no source control or the
+provider could not be reached. The large file is REFUSED rather than truncated: a shortened answer
+reads exactly like a shorter file, and a grader joining on exact bytes cannot tell the difference.
+
+There is deliberately no directory listing, and no write. For the one tree the platform itself
+understands, `GET /api/v1/services/:serviceId/spec` serves it structured.
 
 #### Reading what is wired
 

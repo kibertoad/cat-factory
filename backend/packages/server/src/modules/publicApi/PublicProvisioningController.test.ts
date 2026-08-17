@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type {
   Block,
   BootstrapJob,
+  EnvironmentHandlerView,
   GitHubAvailableRepo,
   GitHubConnection,
   ServiceProvisioning,
@@ -16,6 +17,7 @@ import {
   toBlockPatch,
   toPublicAvailableRepo,
   toPublicBootstrapJob,
+  toPublicHandler,
 } from './PublicProvisioningController.js'
 import { toPublicService } from './boardProjection.js'
 
@@ -106,6 +108,29 @@ describe('toBlockPatch', () => {
     })
   })
 
+  it('lowers a CUSTOM pin, keeping the stored remainder it belongs to', () => {
+    // The write half of the custom variant: a service reaching a deployment's own environment
+    // backend is pinned by a manifest id the deployment registered, and nothing about the backend
+    // itself crosses this surface. The overlay rule is the kubernetes one unchanged.
+    const patch = toBlockPatch(
+      { provisioning: { type: 'custom', manifestId: 'kargo', manifestPath: '.kargo.yml' } },
+      { type: 'custom', manifestId: 'kargo', localDevOnly: true } as ServiceProvisioning,
+    )
+    expect(patch.provisioning).toEqual({
+      type: 'custom',
+      manifestId: 'kargo',
+      manifestPath: '.kargo.yml',
+      localDevOnly: true,
+    })
+  })
+
+  it('leaves manifestPath OFF a custom pin that named none', () => {
+    // Written through as `undefined` it would pin the empty path, and the deploy would look for the
+    // manifest at the repository root rather than falling back to the type's own default.
+    const patch = toBlockPatch({ provisioning: { type: 'custom', manifestId: 'kargo' } }, undefined)
+    expect(patch.provisioning).toEqual({ type: 'custom', manifestId: 'kargo' })
+  })
+
   it('distinguishes an empty-string description from an omitted one', () => {
     // `''` is a real edit (clear the description) and `undefined` is "leave it alone". Collapsing
     // them with a truthiness check would make clearing a description impossible through this route.
@@ -158,7 +183,33 @@ describe('toPublicService', () => {
         },
       } as Partial<Block>),
     )
-    expect(projected.provisioning?.manifestSource.path).toBe('deploy/k8s')
+    expect(
+      projected.provisioning?.type === 'kubernetes' && projected.provisioning.manifestSource.path,
+    ).toBe('deploy/k8s')
+  })
+
+  it('projects a CUSTOM provisioning, so a pinned service is not read as an unpinned one', () => {
+    // The gap this closes: a service reaching a deployment's own environment backend used to land in
+    // the "cannot describe it" hole below, so a Kargo-pinned service and a service pinned to nothing
+    // answered identically. Those are the two states a headless setup check most needs apart, and
+    // the omission made "unmet" and "could not be read" collapse into each other.
+    const projected = toPublicService(
+      frame({
+        provisioning: { type: 'custom', manifestId: 'kargo', manifestPath: 'deploy/.kargo.yml' },
+      } as Partial<Block>),
+    )
+    expect(projected.provisioning).toEqual({
+      type: 'custom',
+      manifestId: 'kargo',
+      manifestPath: 'deploy/.kargo.yml',
+    })
+  })
+
+  it('reports nothing for a CUSTOM provisioning naming no manifest id', () => {
+    // The id is what matches the service to a handler, so a `custom` without one resolves no backend.
+    // Publishing `{ type: 'custom' }` would report a half-written pin as a configuration that deploys.
+    const projected = toPublicService(frame({ provisioning: { type: 'custom' } } as Partial<Block>))
+    expect(projected.provisioning).toBeUndefined()
   })
 
   it('reports NOTHING for an engine this surface does not publish, never a coerced value', () => {
@@ -391,5 +442,68 @@ describe('asVcsRefusal', () => {
     expect(asVcsRefusal(outage)).toBe(outage)
     const bug = new TypeError('undefined is not a function')
     expect(asVcsRefusal(bug)).toBe(bug)
+  })
+})
+
+describe('toPublicHandler', () => {
+  const handler = (overrides: Partial<EnvironmentHandlerView> = {}): EnvironmentHandlerView =>
+    ({
+      provisionType: 'kubernetes',
+      manifestId: null,
+      engine: 'remote-kubernetes',
+      providerId: 'prov_1',
+      label: 'staging cluster',
+      baseUrl: 'https://cluster.example:6443',
+      connectedAt: 1_700_000_000_000,
+      secretKeys: ['apiToken'],
+      acceptsManifestId: null,
+      backendKind: 'kubernetes',
+      ...overrides,
+    }) as EnvironmentHandlerView
+
+  it('reports a handler for a deployment-registered backend AS ITSELF, never coerced', () => {
+    // The reason the list does not reuse the connect call's view, whose `engine` is the literal
+    // `kubernetes`. This read exists so a caller can confirm a programmatically-seeded handler
+    // landed, and reporting a Kargo handler as a Kubernetes one would answer that question wrongly
+    // while looking like an answer.
+    expect(
+      toPublicHandler(
+        handler({
+          provisionType: 'custom',
+          engine: 'remote-custom',
+          backendKind: 'kargo',
+          acceptsManifestId: 'kargo',
+          baseUrl: 'https://kargo.example',
+        }),
+      ),
+    ).toEqual({
+      provisionType: 'custom',
+      acceptsManifestId: 'kargo',
+      engine: 'remote-custom',
+      backendKind: 'kargo',
+      label: 'staging cluster',
+      endpoint: 'https://kargo.example',
+      secretKeys: ['apiToken'],
+      connectedAt: 1_700_000_000_000,
+    })
+  })
+
+  it('publishes the secret KEYS and never the stored config they came from', () => {
+    // `EnvironmentHandlerView` carries the whole non-secret config for the app's connect-form
+    // prefill. It is the internal per-engine bag, deliberately open, and this surface may not freeze
+    // it, so a field added there must not start appearing on `/api/v1`.
+    const projected = toPublicHandler(
+      handler({ config: { engine: 'remote-kubernetes' } } as Partial<EnvironmentHandlerView>),
+    )
+    expect(Object.keys(projected).sort()).toEqual([
+      'acceptsManifestId',
+      'backendKind',
+      'connectedAt',
+      'endpoint',
+      'engine',
+      'label',
+      'provisionType',
+      'secretKeys',
+    ])
   })
 })

@@ -31,6 +31,7 @@ function passUnder(options: {
   gate?: () => Promise<void>
   recordsFacts?: () => boolean
   target?: string
+  onSettled?: (outcomes: readonly ScenarioOutcome[]) => Promise<readonly string[]>
 }) {
   const dir = mkdtempSync(join(tmpdir(), 'cf-kit-pass-'))
   const ledger = new LedgerStore<Facts>({
@@ -55,6 +56,7 @@ function passUnder(options: {
         gate: options.gate ?? (() => Promise.resolve()),
         log: (message) => lines.push(message),
         recordsFacts: options.recordsFacts ?? (() => options.created ?? false),
+        ...(options.onSettled ? { onSettled: options.onSettled } : {}),
       }),
   }
 }
@@ -123,6 +125,61 @@ describe('runPass', () => {
     // The paths are named unconditionally here, unlike in the closing words.
     expect(report).toContain(pass.journal.path)
     printed.mockRestore()
+  })
+
+  it('folds what `onSettled` released INTO the closing words rather than after them', async () => {
+    // The reason the seam exists at all. Wrapping `runPass` puts the reclaim block after the closing
+    // words that were written to be the last thing an operator reads, and on an afternoon-long pass
+    // piped to a file the tail is what gets read.
+    const pass = passUnder({
+      scenarios: [{ id: '01-x', title: 'x', gated: false, run: () => Promise.resolve() }],
+      onSettled: async () => ['1 resource may STILL BE RUNNING: env-42'],
+    })
+    expect(await pass.run()).toBe(0)
+    const tail = pass.lines.at(-1) ?? ''
+    expect(tail).toContain('env-42')
+    expect(tail).toContain('The pass is complete')
+    expect(tail.indexOf('env-42')).toBeLessThan(tail.indexOf('The pass is complete'))
+  })
+
+  it('runs `onSettled` on the FAILURE path, where a leaked resource matters most', async () => {
+    const released: string[] = []
+    const pass = passUnder({
+      created: true,
+      scenarios: [
+        { id: '01-x', title: 'x', gated: false, run: () => Promise.reject(new Error('boom')) },
+      ],
+      onSettled: async (outcomes) => {
+        released.push(outcomes[0]?.status ?? '(none)')
+        return []
+      },
+    })
+    expect(await pass.run()).toBe(1)
+    expect(released).toEqual(['failed'])
+  })
+
+  it('RENDERS a throw out of `onSettled` instead of replacing the scenario failure with it', async () => {
+    // Why it is not a `try/finally` at the call site: the scenario's own report is the more valuable
+    // of the two, and a reclaim that dies must not take it down. The throw becomes a line saying the
+    // resource may still be standing, which is the state an operator has to act on anyway.
+    const pass = passUnder({
+      created: true,
+      scenarios: [
+        {
+          id: '01-x',
+          title: 'x',
+          gated: false,
+          run: () => Promise.reject(new Error('the coder never started')),
+        },
+      ],
+      onSettled: () => Promise.reject(new TypeError('the provider client is gone')),
+    })
+    expect(await pass.run()).toBe(1)
+    const output = pass.lines.join('\n')
+    expect(output).toContain('the coder never started')
+    expect(output).toContain('may still be running')
+    expect(output).toContain('the provider client is gone')
+    expect(output).toContain('  resume:')
   })
 })
 

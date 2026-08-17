@@ -53,6 +53,26 @@ public final class ReposClient {
     }
 
     /**
+     * Read one file out of a linked repository
+     * Read a single file, decoded as UTF-8, from a repository this workspace has LINKED, at a
+     * branch, tag or commit sha (omit `ref` for the default branch; the response says which was
+     * used). It exists to answer what a run actually COMMITTED, which nothing else on this surface
+     * could: the repos reads list rows and reachability, the service-spec read serves only the
+     * `spec/` tree, and everything else was the agent’s own prose, so a caller wanting a real
+     * answer had to hold a second source-control credential of its own. `path` is a query
+     * parameter rather than the rest of the URL because a repo-relative path contains slashes and
+     * an OpenAPI path segment cannot. One file only: there is deliberately no directory listing. A
+     * repository this workspace has not adopted is a 404 with `details.reason: repo_not_linked`, a
+     * path the ref does not hold is a 404 with `file_not_found`, and a file past the size this
+     * read serves is a 422 with `file_too_large` plus its `size` and `limit`: refused rather than
+     * truncated, because a shortened answer reads exactly like a shorter file.
+     * {@code GET /api/v1/repos/{owner}/{name}/contents} (operation {@code getPublicRepoFile}).
+     */
+    public GetPublicRepoFileResponse getFile(String owner, String name, ReposGetFileQuery query) {
+        return transport.request("GET", "/api/v1/repos/" + Transport.pathSegment(owner) + "/" + Transport.pathSegment(name) + "/contents", null, query.toQuery(), new TypeReference<GetPublicRepoFileResponse>() {});
+    }
+
+    /**
      * Adopt an existing repository into this workspace
      * Link a repository the connection can reach, by `owner` and `name`, so a service can be
      * created against it. The act that had no headless counterpart: nothing links a repository for

@@ -574,6 +574,10 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     // The same checkout-free repo resolver the engine binds pre/post-ops with, surfaced so
     // the shared service-spec read controller can read the `spec/` artifact off main.
     resolveRunRepoContext: dependencies.resolveRunRepoContext,
+    // Its BLOCK-LESS sibling, surfaced so the public repo-file read can answer for a repository
+    // a caller names by owner/name. Matching is against the workspace's PROJECTED repos, which
+    // is what keeps that read scoped to what this workspace linked.
+    resolveRepoFilesForCoords: dependencies.resolveRepoFilesForCoords,
     // The block→service→repo resolver, surfaced so the task-search controller can scope a
     // GitHub-issue search to the originating service's repo (and refuse it when unlinked).
     resolveRepoTarget,

@@ -4746,6 +4746,28 @@
                   "manifestSource"
                 ],
                 "type": "object"
+              },
+              {
+                "properties": {
+                  "manifestId": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9][a-z0-9-]*$",
+                    "type": "string"
+                  },
+                  "manifestPath": {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "custom"
+                  }
+                },
+                "required": [
+                  "type",
+                  "manifestId"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -5902,7 +5924,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.56.0"
+    "version": "1.57.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -10362,6 +10384,104 @@
       }
     },
     "/api/v1/environments/connections": {
+      "get": {
+        "description": "Every registered environment handler, with the provision type it serves, the engine and backend kind behind it, its endpoint and the secret KEYS it holds, never their values. The read half of the connect call, and the half that was missing: a deployment that registers its handlers programmatically (the documented path for a multi-tenant deployment) had no way for a headless caller to confirm the registration landed, so “the backend accepts our credential” and “this workspace has a handler for that backend” collapsed into one unanswerable question. It reports every engine, including a handler for an environment backend the deployment registered in code, so `engine` and `backendKind` are open strings rather than a fixed set.",
+        "operationId": "listPublicEnvironmentConnections",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "connections": {
+                      "items": {
+                        "properties": {
+                          "acceptsManifestId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "backendKind": {
+                            "type": "string"
+                          },
+                          "connectedAt": {
+                            "type": "number"
+                          },
+                          "endpoint": {
+                            "type": "string"
+                          },
+                          "engine": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "provisionType": {
+                            "type": "string"
+                          },
+                          "secretKeys": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "provisionType",
+                          "acceptsManifestId",
+                          "engine",
+                          "backendKind",
+                          "label",
+                          "endpoint",
+                          "secretKeys",
+                          "connectedAt"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "connections"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the environment connections this workspace holds",
+        "tags": [
+          "Environments"
+        ],
+        "x-min-scope": "admin"
+      },
       "post": {
         "description": "Bind environment provisioning to a Kubernetes cluster: the apiserver, how its TLS is verified, the namespace template, and how an environment URL is derived once manifests are applied. The secret bundle authenticating the connection is write-only; the response reports which secret KEYS were stored and never their values. Idempotent, so re-connecting replaces rather than accumulating.",
         "operationId": "connectPublicEnvironment",
@@ -13673,6 +13793,115 @@
           }
         },
         "summary": "Adopt an existing repository into this workspace",
+        "tags": [
+          "Repos"
+        ],
+        "x-min-scope": "admin"
+      }
+    },
+    "/api/v1/repos/{owner}/{name}/contents": {
+      "get": {
+        "description": "Read a single file, decoded as UTF-8, from a repository this workspace has LINKED, at a branch, tag or commit sha (omit `ref` for the default branch; the response says which was used). It exists to answer what a run actually COMMITTED, which nothing else on this surface could: the repos reads list rows and reachability, the service-spec read serves only the `spec/` tree, and everything else was the agent’s own prose, so a caller wanting a real answer had to hold a second source-control credential of its own. `path` is a query parameter rather than the rest of the URL because a repo-relative path contains slashes and an OpenAPI path segment cannot. One file only: there is deliberately no directory listing. A repository this workspace has not adopted is a 404 with `details.reason: repo_not_linked`, a path the ref does not hold is a 404 with `file_not_found`, and a file past the size this read serves is a 422 with `file_too_large` plus its `size` and `limit`: refused rather than truncated, because a shortened answer reads exactly like a shorter file.",
+        "operationId": "getPublicRepoFile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "owner",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "maxLength": 1000,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ref",
+            "required": false,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "content": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "owner": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "ref": {
+                      "type": "string"
+                    },
+                    "sha": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "owner",
+                    "name",
+                    "path",
+                    "ref",
+                    "sha",
+                    "content"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Read one file out of a linked repository",
         "tags": [
           "Repos"
         ],
@@ -18256,6 +18485,28 @@
                         "required": [
                           "type",
                           "manifestSource"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "manifestId": {
+                            "maxLength": 64,
+                            "minLength": 1,
+                            "pattern": "^[a-z0-9][a-z0-9-]*$",
+                            "type": "string"
+                          },
+                          "manifestPath": {
+                            "maxLength": 500,
+                            "type": "string"
+                          },
+                          "type": {
+                            "const": "custom"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "manifestId"
                         ],
                         "type": "object"
                       }

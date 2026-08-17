@@ -40,12 +40,11 @@ import {
 import {
   describeEntries,
   describeMerge,
-  type ManagedEntry,
+  type EnvEntry,
   mergeEnvFile,
   readAssignments,
-  REPO_CREATION_URL,
-  REPORTER_TOKEN_URL,
-} from './configureEnv.ts'
+} from '@cat-factory/cli'
+import { REPO_CREATION_URL, REPORTER_TOKEN_URL, SECRET_KEYS } from './configureEnv.ts'
 import {
   isPersonalCredentialState,
   presetAvailability,
@@ -279,7 +278,9 @@ export async function configure(deps: ConfigureDeps): Promise<ConfigureOutcome> 
   })
   const merge = mergeEnvFile(existingText, entries)
   deps.writeFile(envPath, merge.text)
-  io.info([...describeMerge(merge, envPath), '', ...describeEntries(entries)].join('\n'))
+  io.info(
+    [...describeMerge(merge, envPath), '', ...describeEntries(entries, SECRET_KEYS)].join('\n'),
+  )
   io.info(
     'Next: `pnpm --filter @cat-factory/acceptance run acceptance`. It runs the prerequisite gate ' +
       'first and refuses, with instructions, before it spends anything.',
@@ -773,7 +774,7 @@ function buildEntries(input: {
   presetId: string
   reporterToken: string
   cluster: { apiServerUrl: string; token: string }
-}): readonly ManagedEntry[] {
+}): readonly EnvEntry[] {
   return [
     {
       comment: [

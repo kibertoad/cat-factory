@@ -343,7 +343,8 @@ person's subscription, and only their personal password opens it. Two consequenc
   preset's base model reports `personalSubscription`, so a provider-key workspace sees no prompt; when
   the catalog cannot be read, it says so and leaves the ask at the first dispatch that needs it. What
   it never does is hand the password back as a value: the prompt fills the holder that rides every
-  request (`src/personalUnlock.ts`), which is what makes "written nowhere" a property of the code.
+  request (the kit's `@cat-factory/acceptance-kit/console-credential`), which is what makes "written
+  nowhere" a property of the code.
 - **What is asked for early is also HELD from early**, and the condition on that is the confirmation
   above: the ask only happens once the catalog has said this pass will spend the subscription, so the
   credential is not being attached speculatively. A pass runs headless for an afternoon and its
@@ -925,7 +926,7 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | `src/issuePurge.ts`          | Which issues are this suite's to close (ledger-named, plus author-and-title discovery) and which are somebody's real ones. Pure; unit-tested.                                                                                 |
 | `src/repoContentApi.ts`      | The provider calls `repoPurge.ts` plans against, provider-keyed. The one decision in it: the emptied tree is built with no `base_tree`.                                                                                       |
 | `src/configure.ts`           | `configure`'s flow: what it resolves, what it asks. Driven by seams; unit-tested.                                                                                                                                             |
-| `src/configureEnv.ts`        | The `.env` merge and the creation URL. Pure; unit-tested.                                                                                                                                                                     |
+| `src/configureEnv.ts`        | What only THIS suite knows about its own `.env`: which variables are secret, and the two creation URLs. The MERGE is `@cat-factory/cli`'s `envMerge.ts`, which is where its five silent-failure rules are documented.         |
 | `src/configureCli.ts`        | `pnpm run configure`. Supplies the real terminal, shell, files and client.                                                                                                                                                    |
 | `src/instructions.ts`        | The briefs, the two frame titles, the reporter's issue, and the reasoning behind the planted defect.                                                                                                                          |
 | `src/vcsIssues.ts`           | The reporter's own client: filing an issue on the provider and reading it back, provider-keyed. The one thing here that is not the platform.                                                                                  |

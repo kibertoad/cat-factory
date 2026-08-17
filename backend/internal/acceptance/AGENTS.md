@@ -71,8 +71,9 @@ which `configure` and the `model-preset` gate render as "not visible to this sys
 than as a missing provider. Read the ROW, never the response's `excludesUserScopedModels`: that flag
 is about models omitted ENTIRELY (locally-run endpoints), so labelling from it calls every unwired
 model invisible and sends an operator to re-mint a token that will change nothing. `src/presets.ts`
-owns the three-way verdict both commands share. `src/personalUnlock.ts` holds the password for the
-process and nothing else writes it down, and the header rides EVERY request through the client's
+owns the three-way verdict both commands share. The kit's
+`@cat-factory/acceptance-kit/console-credential` holds the password for the process and nothing else
+writes it down, and the header rides EVERY request through the client's
 `fetch` seam once held rather than being attached at the call that first needed it: answering a park
 re-mints the run's activation server-side, so a pass needs it for hours after the start.
 

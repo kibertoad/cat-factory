@@ -68,6 +68,24 @@ export type PassOptions<Facts extends LedgerFacts> = {
    * value read at the start is the answer to a different question.
    */
   recordsFacts: () => boolean
+  /**
+   * Release whatever the pass still holds, once the scenarios have settled, and say what happened.
+   *
+   * For a suite that provisions its OWN infrastructure (see `resource.ts`): the reclaim is the most
+   * operationally important thing a failed pass says, and without this seam it can only be run by
+   * wrapping `runPass`, which prints it AFTER the closing words that were written to be the last
+   * thing an operator reads. On an afternoon-long pass piped to a file, the tail is what gets read.
+   *
+   * The returned lines are folded into the closing words, so a pass that reclaimed nothing adds
+   * nothing and one that could not reclaim a VM says so where the operator is already looking.
+   *
+   * **It runs on the failure path too, and its own throw may not replace the scenario failure.** The
+   * whole reason it is not a `try/finally` at the call site: a reclaim that dies takes the report of
+   * what broke with it, and the report is the more valuable of the two. A throw here is caught and
+   * RENDERED into the same block, which also means it may not be used for anything a scenario's
+   * verdict depends on: this runs after the exit code is decided.
+   */
+  onSettled?: (outcomes: readonly ScenarioOutcome[]) => Promise<readonly string[]>
 }
 
 /**
@@ -119,9 +137,12 @@ export async function runPass<Facts extends LedgerFacts>(
     )
 
     log(formatScenarioSummary(outcomes))
+    // Before the closing words and after the summary: what a pass RELEASED belongs with what it did,
+    // and anything it could not release has to survive being the second-to-last thing on screen.
+    const settled = await settle(options, outcomes)
     // Straight, not guarded: on this path the read is ordinary work, and a ledger that cannot be
     // read is a failure of the pass rather than a line to soften. The boundary below owns that.
-    log(closingWords(outcomes, runId, options.recordsFacts(), identity))
+    log(closingWords(outcomes, runId, options.recordsFacts(), identity, settled))
     return scenariosExitCode(outcomes)
   } catch (error) {
     // `console.log` rather than the injected sink, here and at a suite's own startup boundaries: a
@@ -195,6 +216,30 @@ function journalFailure(failure: ScenarioFailure): string {
 }
 
 /**
+ * Run {@link PassOptions.onSettled} and answer what it said, or what went wrong saying it.
+ *
+ * The catch is the point rather than a precaution. This runs on the failure path, where the
+ * scenario's own report is already on screen and is the more valuable of the two: a reclaim that
+ * throws must not replace it, and a `try/finally` at the call site is exactly what would. So the
+ * throw becomes a LINE in the same block, which is also the honest disposition for a reclaim that
+ * failed: it is the state an operator has to act on, and it is now stated rather than lost.
+ */
+async function settle<Facts extends LedgerFacts>(
+  options: PassOptions<Facts>,
+  outcomes: readonly ScenarioOutcome[],
+): Promise<readonly string[]> {
+  if (!options.onSettled) return []
+  try {
+    return await options.onSettled(outcomes)
+  } catch (error) {
+    return [
+      `Releasing what the pass still held FAILED, so anything it provisioned may still be ` +
+        `running: ${describeThrown(error)}`,
+    ]
+  }
+}
+
+/**
  * The last thing an operator reads, and it says what to do next rather than restating the verdict.
  *
  * A failed pass leaves everything it created in place ON PURPOSE (the run, its pull request, any
@@ -207,32 +252,38 @@ function journalFailure(failure: ScenarioFailure): string {
  * pass with an empty ledger, and told that "everything it created is still there to inspect" they go
  * looking for a run that does not exist. Same rule as the `latest` pointer and as a status report's
  * own advice (`recordsFacts`), so the three cannot come to disagree.
+ *
+ * `settled` is what {@link PassOptions.onSettled} said, folded in FIRST: a resource the pass could
+ * not release outranks every command below it, because the commands are things an operator may do
+ * and a running VM is a thing they must.
  */
 export function closingWords(
   outcomes: readonly ScenarioOutcome[],
   runId: string,
   created: boolean,
   identity: SuiteIdentity,
+  settled: readonly string[] = [],
 ): string {
   const failed = outcomes.find((outcome) => outcome.status === 'failed')
   const status = identity.statusCommand
     ? `\n  report: ${suiteCommand(identity.statusCommand, runId)}`
     : ''
+  const released = settled.length > 0 ? `\n${settled.join('\n')}` : ''
   if (!failed) {
-    return `\nThe pass is complete: ${outcomes.length} scenario(s), nothing left to run.`
+    return `${released}\nThe pass is complete: ${outcomes.length} scenario(s), nothing left to run.`
   }
   if (!created) {
     return (
-      `\nThe pass stopped at '${failed.id}' having created nothing, so there is nothing to inspect ` +
-      `and nothing to resume: fix what is named above and run it again.${status}`
+      `${released}\nThe pass stopped at '${failed.id}' having created nothing, so there is nothing ` +
+      `to inspect and nothing to resume: fix what is named above and run it again.${status}`
     )
   }
   const reset = identity.resetCommand
     ? `\n  or start over: ${suiteCommand(identity.resetCommand, runId)}`
     : ''
   return (
-    `\nThe pass stopped at '${failed.id}', and everything it created is still there to inspect: ` +
-    `the run, its pull request and anything it provisioned.${status}\n` +
+    `${released}\nThe pass stopped at '${failed.id}', and everything it created is still there to ` +
+    `inspect: the run, its pull request and anything it provisioned.${status}\n` +
     `  resume: ${resumeCommand(identity, runId)}${reset}`
   )
 }

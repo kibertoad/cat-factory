@@ -1,4 +1,21 @@
-// Unlocking the operator's PERSONAL subscription for a headless pass.
+// `@cat-factory/acceptance-kit/console-credential`: the OPT-IN half of the `CredentialRetry` seam,
+// for a suite whose models run on a person's own subscription.
+//
+// **Its own entry point, and that is the whole reason it can exist here at all.** The kit must never
+// prompt a human: a base package that opened a terminal would put console code in the import graph
+// of every suite, including the CI-only ones for which a prompt is a hang. So the base export has
+// nothing of this, `passThroughCredentialRetry` remains what a keys-only suite names in code, and
+// importing this path is the decision to be asked.
+//
+// **Why it is not left to each consumer.** The seam is right to be required and right not to hold
+// the credential, but the other branch of it is not two lines: opening the CONTROLLING terminal
+// rather than this process's stdio, `CONIN$` opened READ-WRITE on Windows because turning echo off
+// is a WRITE that answers `EPERM` on a read-only handle, verifying the mode switch through the
+// stream's own `isRaw` rather than through "the call did not throw", separate refusals for a
+// terminal that will not stop echoing and for a process with no console at all, and a release order
+// in which one redundant `closeSync` is an `EBADF` thrown out of a cleanup. None of that is
+// suite-specific, all of it is load-bearing, and the failure a consumer reimplementing it hits is a
+// bare `Error: setRawMode EPERM` that names nothing.
 //
 // A pass pinned to a preset whose model is an individual-usage vendor (Claude / Codex / GLM) runs
 // on the operator's OWN subscription, and the platform can only open that credential with their
@@ -30,7 +47,8 @@ import { closeSync, openSync, writeSync } from 'node:fs'
 import { ReadStream } from 'node:tty'
 import { personalPasswordProblem } from '@cat-factory/contracts'
 import { CatFactoryCredentialRequiredError } from '@cat-factory/sdk'
-import { OperatorRefusal } from '@cat-factory/acceptance-kit'
+import type { CredentialRetry } from './client.js'
+import { OperatorRefusal } from './operatorText.js'
 
 /** The header the platform reads the personal password from (`PERSONAL_PASSWORD_HEADER`). */
 const PERSONAL_PASSWORD_HEADER = 'X-Personal-Password'
@@ -55,8 +73,8 @@ export interface PersonalUnlock {
    * Ask for the password (once per pass), naming why, and HOLD it. Rejects when there is no
    * terminal to ask on.
    *
-   * The one entry point, whether the ask is the up-front one (`personalPasswordAsk.ts`, on a pass
-   * whose pinned preset says it will need this) or the lazy one at a `428`. Two entry points was one
+   * The one entry point, whether the ask is a suite's own UP-FRONT one (made where it can already
+   * tell the pass will spend a subscription) or the lazy one at a `428`. Two entry points was one
    * of them collecting without holding, and what that turned into is described at the top of this
    * file.
    */
@@ -155,6 +173,26 @@ export async function withPersonalUnlock<T>(
       throw stillLocked(what, retryError)
     }
   }
+}
+
+/**
+ * The `CredentialRetry` a suite hands `fileAndDrive` / `driveRun`, and the header seam its client
+ * needs, built from ONE holder.
+ *
+ * The pairing is the point. Both halves read the same closure, so a pass cannot end up retrying
+ * through one password while its client sends another (or none): a suite wiring these separately
+ * had two objects to keep in step and nothing that would fail if it did not. `passThroughCredentialRetry`
+ * stays what a keys-only suite names in code; this is the other branch, ready to wire.
+ *
+ * `readSecret` is injected for the tests, which own every property of the prompt that a real console
+ * cannot be made to exhibit on demand.
+ */
+export function createConsoleCredential(readSecret?: (prompt: string) => Promise<string>): {
+  retry: CredentialRetry
+  unlock: PersonalUnlock
+} {
+  const unlock = readSecret ? createPersonalUnlock(readSecret) : createPersonalUnlock()
+  return { retry: (reason, call) => withPersonalUnlock(unlock, reason, call), unlock }
 }
 
 /**
@@ -492,7 +530,7 @@ function finish(terminal: { write: (text: string) => void }, settle: () => void)
 /**
  * The operator DECLINING at the prompt, which is not the same fact as a terminal that cannot ask.
  *
- * Its own type because the up-front ask (`personalPasswordAsk.ts`) treats the two oppositely: a
+ * Its own type because a suite's up-front ask treats the two oppositely: a
  * terminal it cannot use degrades to asking again at the dispatch that needs one, while somebody
  * pressing Ctrl-C is a person saying "not this pass", and starting an afternoon-long run anyway
  * would be reading a refusal as consent.

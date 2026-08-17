@@ -1,7 +1,6 @@
-import { parseEnv } from 'node:util'
 import { describe, expect, it } from 'vitest'
 import { configure, type ConfigureClient, type LinkOutcome } from '../src/configure.ts'
-import { mergeEnvFile, REPO_CREATION_URL, SECRET_KEYS } from '../src/configureEnv.ts'
+import { REPO_CREATION_URL, SECRET_KEYS } from '../src/configureEnv.ts'
 
 // What is worth pinning about a setup command is what it PROMISES, because each promise fails
 // silently: a merge that loses a hand-added variable looks like a successful write, a token echoed
@@ -904,89 +903,6 @@ describe('configure: the cluster', () => {
     expect(written).toBeNull()
     expect(io.output.join('\n')).toContain('fetch failed')
     expect(io.output.join('\n')).toContain('the SPA serves a /health of its own')
-  })
-})
-
-describe('mergeEnvFile', () => {
-  it('categorises every key so nothing is overwritten without a word about it', () => {
-    const merge = mergeEnvFile('A=1\nB=2\nC=3\n', [
-      { key: 'A', value: '1' },
-      { key: 'B', value: 'changed' },
-      { key: 'D', value: 'new' },
-    ])
-    expect(merge.kept).toEqual(['A'])
-    expect(merge.changed).toEqual(['B'])
-    expect(merge.added).toEqual(['D'])
-    expect(merge.preserved).toEqual(['C'])
-  })
-
-  it('reads `export FOO=bar` and a quoted value as the same assignment', () => {
-    // Both spellings appear in a hand-written `.env`, and reading either as a different key would
-    // have this command write a second copy of it beside the first.
-    const merge = mergeEnvFile('export A="1"\n', [{ key: 'A', value: '1' }])
-    expect(merge.kept).toEqual(['A'])
-    expect(merge.text).toBe('A=1\n')
-  })
-
-  it('drops the comment block above a key it rewrites, so no comment outlives its value', () => {
-    const merge = mergeEnvFile('# describes A\nA=old\nB=keep\n', [
-      { key: 'A', value: 'new', comment: ['the current description'] },
-    ])
-    expect(merge.text).toContain('# the current description\nA=new')
-    expect(merge.text).not.toContain('# describes A')
-    expect(merge.text).toContain('B=keep')
-  })
-
-  it('writes a whole file when there was none', () => {
-    const merge = mergeEnvFile(null, [{ key: 'A', value: '1' }])
-    expect(merge.text).toBe('A=1\n')
-    expect(merge.added).toEqual(['A'])
-    expect(merge.preserved).toEqual([])
-  })
-
-  it('re-writes the carried-over header instead of stacking one copy per run', () => {
-    // The header introduces UNMANAGED content, so the ordinary comment-block rule carries it over,
-    // and a merge that then prepended a fresh copy grew the file by one identical line every run.
-    // A single merge cannot see this, which is why it is asserted across three.
-    let text: string | null = 'ACCEPTANCE_RUN_BUDGET_MS=1200000\n# my own note\n'
-    for (let pass = 0; pass < 3; pass++) {
-      text = mergeEnvFile(text, [{ key: 'A', value: '1', comment: ['managed'] }]).text
-    }
-    expect(text?.match(/Carried over unchanged/g)).toHaveLength(1)
-    expect(text).toContain('ACCEPTANCE_RUN_BUDGET_MS=1200000')
-    expect(text).toContain('# my own note')
-  })
-
-  it('quotes a managed value the reader would otherwise disagree about', () => {
-    // The suite reads its `.env` with `node:util`'s `parseEnv`, which treats an unquoted `#` as a
-    // comment and strips surrounding whitespace, while `renderEnvFile` emits a bare `KEY=value`. So a
-    // value READ from a quoted line, offered as a default and accepted unchanged was written back as
-    // a DIFFERENT value, with `describeMerge` calling it unchanged.
-    const merge = mergeEnvFile('ACCEPTANCE_NAME_PREFIX="cf-acc #2"\n', [
-      { key: 'ACCEPTANCE_NAME_PREFIX', value: 'cf-acc #2' },
-    ])
-    expect(merge.kept).toEqual(['ACCEPTANCE_NAME_PREFIX'])
-    expect(merge.text).toBe('ACCEPTANCE_NAME_PREFIX="cf-acc #2"\n')
-    expect(parseEnv(merge.text).ACCEPTANCE_NAME_PREFIX).toBe('cf-acc #2')
-  })
-
-  it('round-trips every ordinary managed value through parseEnv unchanged', () => {
-    // The property that matters is agreement between this writer and the suite's reader, asserted
-    // over the value shapes that actually occur rather than over one hand-picked string.
-    const values = ['http://127.0.0.1:8787', 'cf_live_pak_a.b-c', 'ws_1', 'cf-acc', 'true', '']
-    for (const value of values) {
-      const text = mergeEnvFile(null, [{ key: 'K', value }]).text
-      expect(parseEnv(text).K ?? '').toBe(value)
-    }
-  })
-
-  it('refuses a value no quoting style can represent, rather than writing a lie', () => {
-    // `parseEnv` supports both delimiters and no escape inside either, so a value carrying both quote
-    // characters cannot survive. This command's promise is that the file it wrote is the file the
-    // suite will read.
-    expect(() => mergeEnvFile(null, [{ key: 'K', value: `he said "hi" to 'them'` }])).toThrow(
-      /cannot be written to a .env file/,
-    )
   })
 })
 

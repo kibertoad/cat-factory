@@ -833,3 +833,38 @@ and stored through the platform's own asset storage, so a caller that pairs scre
 references must filter it out rather than treat it as an unmatched capture. It also does not
 expire: assets are exempt from the retention sweep that reclaims a run's screenshots, so a run's
 artifact list can stay non-empty long after its evidence is gone.
+
+## 1.57.0
+
+Three additive changes, all from one place: gaps a third-party acceptance suite hit while driving a
+deployment whose environments are provisioned by a backend the deployment itself registers
+([ADR 0058](./adr/0058-acceptance-kit-consumer-gaps.md)).
+
+**A new variant on `provisioning`.** `PublicServiceProvisioning` gains
+`{ type: 'custom', manifestId, manifestPath? }` beside the `kubernetes` member, and the service
+projection now serves it. The READ half is the one that mattered: the projection omitted every shape
+it could not describe, so a service pinned to a custom backend and a service pinned to nothing
+answered identically (`provisioning` absent), and a caller could not report the state, let alone
+check it. A consumer that switches exhaustively on `provisioning.type` meets a value it does not
+know; one that reads `manifestSource` off it must narrow on `type` first, which is what the variant
+is for.
+
+What it deliberately does NOT gain is the engine side. Registering a handler for a custom backend
+means supplying an `environmentManifest`, whose `providerConfig` is an open
+`Record<string, unknown>` by design, and freezing that onto a surface that may never be reshaped
+would be a break waiting to happen. Pinning by an id the deployment already registered is closed and
+stable; registering the handler behind it stays a composition-root act.
+
+**A new read: `GET /api/v1/environments/connections`.** Handlers could be written here and never
+read, so a deployment that seeds them programmatically had no way for a headless caller to confirm
+the seed landed. It answers its OWN shape rather than the connect call's, whose `engine` is the
+literal `kubernetes`: a list has to report every engine, including one a deployment registered
+itself, and widening a shipped literal to a string would retype a field a released client already
+narrows on.
+
+**A new read: `GET /api/v1/repos/{owner}/{name}/contents`.** One file out of a LINKED repository, at
+a ref, so a caller can grade what a run committed instead of grepping the agent's prose or holding a
+second source-control credential. `path` is a query parameter because a repo-relative path contains
+slashes and an OpenAPI path segment cannot. One file, no directory listing: a listing has its own
+frozen-forever questions (pagination, recursion, large trees) and this surface should not answer one
+by accident.

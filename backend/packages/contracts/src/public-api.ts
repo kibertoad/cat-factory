@@ -342,6 +342,20 @@ export const publicTaskTicketSchema = v.object({
 })
 export type PublicTaskTicket = v.InferOutput<typeof publicTaskTicketSchema>
 
+/**
+ * Characters a task's own `description` may carry, on create and on patch alike.
+ *
+ * NAMED rather than written out at the two holes, because it is a number a CALLER has to know: it is
+ * what decides whether a brief goes in `description` or into an attached document, and a caller that
+ * cannot read it discovers the ceiling as a `422` on the first task of an automated setup. It is not
+ * shared with the repository/service descriptions on `public-provisioning.ts`, which merely happen to
+ * hold the same value: those bound a label, this bounds a framing echoed into every prompt.
+ *
+ * The DOCUMENT path is the surface's own answer for anything longer (see
+ * {@link publicTaskDocumentSchema}), which is why this stays where it is rather than being raised.
+ */
+export const MAX_TASK_DESCRIPTION_CHARS = 2000
+
 /** Characters of document text ONE uploaded attachment may carry (see {@link publicTaskDocumentSchema}). */
 export const MAX_UPLOADED_DOCUMENT_CHARS = 100_000
 
@@ -435,7 +449,7 @@ const presetPinSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength
  */
 export const createPublicTaskSchema = v.object({
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
-  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
+  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(MAX_TASK_DESCRIPTION_CHARS))),
   /** The kind of work; omitted → `feature`. `recurring` is not creatable here. */
   taskType: v.optional(createTaskTypeSchema),
   /**
@@ -560,7 +574,7 @@ export type StartPublicTaskInput = v.InferOutput<typeof startPublicTaskSchema>
  */
 export const updatePublicTaskSchema = v.object({
   title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
-  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
+  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(MAX_TASK_DESCRIPTION_CHARS))),
   /**
    * The per-case values for the task's own type, keyed by field, checked against the SAME
    * descriptors `POST /services/:serviceId/tasks` validates a `fields` bag against

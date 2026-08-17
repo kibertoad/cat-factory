@@ -787,6 +787,45 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
 }
 
 /**
+ * The four repo-resolution seams the SHARED controllers read, surfaced onto the container together.
+ *
+ * One group rather than four lines in the assembler, because they answer one question from four
+ * angles (a block's repo, a repo a caller NAMES, a service's target, the whole board's) and every
+ * consumer of one is a controller rather than the engine. Kept symmetric with the Node facade, whose
+ * assembler surfaces the same four.
+ *
+ * Two come off `dependencies` because the GitHub deps builder composed them from the wired client;
+ * two are built here from `db` because they are plain reads. Absent client ⇒ absent seams, and each
+ * reader answers a 503 naming what is unwired rather than an empty success.
+ */
+function repoResolutionSeams(
+  dependencies: CoreDependencies,
+  db: D1Database,
+): Pick<
+  ServerContainer,
+  | 'resolveRunRepoContext'
+  | 'resolveRepoFilesForCoords'
+  | 'resolveRepoTarget'
+  | 'listWorkspaceRunRepos'
+> {
+  return {
+    // The checkout-free repo resolver the engine binds pre/post-ops with, so the shared
+    // service-spec read controller can read the `spec/` artifact off main.
+    resolveRunRepoContext: dependencies.resolveRunRepoContext,
+    // Its BLOCK-LESS sibling, so the public repo-file read can answer for a repository a caller
+    // names by owner/name. Matching is against the workspace's PROJECTED repos, which is what
+    // keeps that read scoped to what this workspace linked.
+    resolveRepoFilesForCoords: dependencies.resolveRepoFilesForCoords,
+    // The block→service→repo resolver, so the task-search controller can scope a GitHub-issue
+    // search to the originating service's repo (and refuse it when unlinked).
+    resolveRepoTarget: buildResolveRepoTarget(db),
+    // Its board-wide sibling, so the credential check can ask whether this workspace's runs reach
+    // GitHub at all before judging a stored GitHub token.
+    listWorkspaceRunRepos: buildListWorkspaceRunRepos(db),
+  }
+}
+
+/**
  * What the machine/auth boundary needs on this facade: the machine-node roster the shared gate
  * consults on every `/internal/*` call (SEC-5), the durable password-throttle ledger (SEC-4), and
  * the client address the throttle keys on.
@@ -901,15 +940,7 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     vcsIdentity: buildWorkerVcsIdentityRegistry(config),
     // The app-owned VCS provider registry the neutral webhook route resolves a provider from.
     vcsRegistry,
-    // The same checkout-free repo resolver the engine binds pre/post-ops with, surfaced so
-    // the shared service-spec read controller can read the `spec/` artifact off main.
-    resolveRunRepoContext: dependencies.resolveRunRepoContext,
-    // The block→service→repo resolver, surfaced so the task-search controller can scope a
-    // GitHub-issue search to the originating service's repo (and refuse it when unlinked).
-    resolveRepoTarget: buildResolveRepoTarget(db),
-    // Its board-wide sibling, surfaced so the credential check can ask whether this
-    // workspace's runs reach GitHub at all before judging a stored GitHub token.
-    listWorkspaceRunRepos: buildListWorkspaceRunRepos(db),
+    ...repoResolutionSeams(dependencies, db),
     agentRunRepository,
     // Execution-scoped repo, surfaced for the conformance suite's compareAndSwap parity check.
     executionRepository: dependencies.executionRepository,

@@ -1,12 +1,15 @@
 import {
   connectPublicEnvironmentContract,
   getPublicRepoBootstrapContract,
+  getPublicRepoFileContract,
   getPublicVcsConnectionContract,
   linkPublicRepoContract,
   listPublicAvailableReposContract,
+  listPublicEnvironmentConnectionsContract,
   listPublicModelPresetsContract,
   listPublicRiskPoliciesContract,
   listPublicWiredModelsContract,
+  MAX_REPO_FILE_CHARS,
   startPublicRepoBootstrapContract,
   testPublicEnvironmentConnectionContract,
   updatePublicServiceContract,
@@ -24,6 +27,7 @@ import {
   type PublicBootstrapJob,
   type PublicEnvironmentConnection,
   type PublicEnvironmentConnectionView,
+  type PublicEnvironmentHandler,
   type PublicKubernetesManifestSource,
   type PublicKubernetesUrlSource,
   type PublicModelPreset,
@@ -48,6 +52,7 @@ import {
   NotFoundError,
   RateLimitedError,
   UnavailableError,
+  ValidationError,
   VcsApiError,
   individualVendorForModelId,
   isVcsRateLimited,
@@ -480,6 +485,68 @@ function registerRepoAdoptionRoutes(app: Hono<AppEnv>): void {
     }
     return c.json(toPublicRepo(adopted), 200)
   })
+
+  registerRepoFileRoute(app)
+}
+
+/**
+ * ONE file out of a linked repository, so a caller can grade what a run COMMITTED.
+ *
+ * It closes the loop on everything else this surface can start. A caller could create a repository,
+ * adopt one, file work against it and watch a run merge, and then had nothing to read but the
+ * agent's own final reply, which is asserting on model prose: swap the model and it goes red having
+ * found nothing wrong. The only real alternative was a SECOND VCS credential in the caller's config,
+ * with its own scopes to get right, for data the workspace's own connection already reads.
+ *
+ * Four outcomes, kept apart because each takes a different action, and because folding any of them
+ * onto "no such file" is the same mistake `PublicSpecController` documents at length: a repository
+ * that answers nothing and a file that is genuinely absent look identical from a provider.
+ */
+function registerRepoFileRoute(app: Hono<AppEnv>): void {
+  buildHonoRoute(app, getPublicRepoFileContract, async (c) => {
+    const auth = await authorizeOrThrow(c, getPublicRepoFileContract.minScope)
+    const resolve = requireCapability(
+      c.get('container').resolveRepoFilesForCoords,
+      'No version-control integration is configured for this deployment',
+      'vcs_not_configured',
+    )
+    const { owner, name } = c.req.valid('param')
+    const { path, ref } = c.req.valid('query')
+    // Resolved against the workspace's PROJECTED repos, so this reads only what this workspace has
+    // LINKED. A repository the deployment's credential could reach and nobody adopted is absent
+    // here exactly as it is from `GET /api/v1/repos`, which is what stops the endpoint becoming a
+    // way to read any repository an installation happens to cover.
+    const context = await resolve(auth.workspaceId, { owner, repo: name })
+    if (!context) {
+      throw new NotFoundError('repository', `${owner}/${name}`, { reason: 'repo_not_linked' })
+    }
+    // The ref the read RESOLVED against, named in the response: a caller recording what it graded
+    // needs the branch, and the request may not have supplied one.
+    const resolved = ref ?? context.baseBranch
+    const file = await throughVcs(() => context.repo.getFile(path, resolved))
+    if (!file) {
+      throw new NotFoundError('file', `${owner}/${name}:${path}@${resolved}`, {
+        reason: 'file_not_found',
+      })
+    }
+    if (file.content.length > MAX_REPO_FILE_CHARS) {
+      // REFUSED, never truncated. A caller reading a file to grade what an agent committed is
+      // joining on its exact bytes, and a silently shortened answer is indistinguishable from an
+      // agent that wrote a shorter file. The size and the limit ride `details` because those are
+      // facts a caller can act on where a truncation is not.
+      //
+      // A 422 and not a 413: `Content Too Large` is a statement about the REQUEST entity, and this
+      // request is perfectly well formed. The status class is "structurally valid, refused by a
+      // domain rule", which is the same reading `resolveRepoTarget` takes for an unlinked service,
+      // and the machine-readable cause is `details.reason` as it is everywhere else on this surface.
+      throw new ValidationError(
+        `${owner}/${name}:${path} is ${file.content.length} characters, past the ` +
+          `${MAX_REPO_FILE_CHARS} this read answers with`,
+        { reason: 'file_too_large', size: file.content.length, limit: MAX_REPO_FILE_CHARS },
+      )
+    }
+    return c.json({ owner, name, path, ref: resolved, sha: file.sha, content: file.content }, 200)
+  })
 }
 
 // ---- the environment connection (the ENGINE half) ---------------------------
@@ -573,6 +640,10 @@ function toInfraHandlerConfig(connection: PublicEnvironmentConnection): InfraHan
  *
  * `baseUrl` is the connection's own endpoint, which for a Kubernetes engine is the apiserver, so it
  * is reported under the name the caller supplied it as rather than the engine's generic one.
+ *
+ * The CONNECT response only, which is why `engine` can be the literal: this surface registers
+ * kubernetes and nothing else, so it is true of every handler this call can produce. The LIST is a
+ * different question and takes {@link toPublicHandler}.
  */
 function toPublicConnectionView(view: EnvironmentHandlerView): PublicEnvironmentConnectionView {
   return {
@@ -581,6 +652,35 @@ function toPublicConnectionView(view: EnvironmentHandlerView): PublicEnvironment
     label: view.label,
     apiServerUrl: view.baseUrl,
     secretKeys: view.secretKeys,
+  }
+}
+
+/**
+ * Project a handler for the LIST, whatever engine services it.
+ *
+ * `engine` and `backendKind` are open strings here rather than the connect view's literal, because
+ * this read reports handlers the deployment SEEDED from its composition root, and a deployment may
+ * register an environment backend of its own: the whole point of the registry. Reporting one as
+ * `kubernetes` would be the coercion the board projection refuses next door, and omitting it would
+ * make a seeded handler indistinguishable from an absent one, which is the state this read exists to
+ * make checkable.
+ *
+ * `endpoint` and not `apiServerUrl`: the Kubernetes noun is false of every other engine, and stating
+ * it anyway is what sends an operator whose environment is a VM looking for an apiserver.
+ *
+ * No `config`, though `EnvironmentHandlerView` carries one for the app's connect-form prefill: it is
+ * the internal per-engine bag, deliberately open, and this surface may not freeze it (ADR 0034).
+ */
+export function toPublicHandler(view: EnvironmentHandlerView): PublicEnvironmentHandler {
+  return {
+    provisionType: view.provisionType,
+    acceptsManifestId: view.acceptsManifestId,
+    engine: view.engine,
+    backendKind: view.backendKind,
+    label: view.label,
+    endpoint: view.baseUrl,
+    secretKeys: view.secretKeys,
+    connectedAt: view.connectedAt,
   }
 }
 
@@ -615,6 +715,22 @@ function registerEnvironmentRoutes(app: Hono<AppEnv>): void {
       secrets,
     })
     return c.json(toPublicConnectionView(view), 201)
+  })
+
+  // The read half. Ordered by provision type so a caller diffing two workspaces (or its own setup
+  // before and after) compares two stable lists rather than two insertion orders.
+  buildHonoRoute(app, listPublicEnvironmentConnectionsContract, async (c) => {
+    const auth = await authorizeOrThrow(c, listPublicEnvironmentConnectionsContract.minScope)
+    const environments = requireEnvironments(c)
+    const handlers = await environments.connectionService.listHandlers(auth.workspaceId)
+    const connections = handlers
+      .map(toPublicHandler)
+      .sort(
+        (left, right) =>
+          left.provisionType.localeCompare(right.provisionType) ||
+          (left.acceptsManifestId ?? '').localeCompare(right.acceptsManifestId ?? ''),
+      )
+    return c.json({ connections }, 200)
   })
 }
 
@@ -669,7 +785,7 @@ export function toBlockPatch(
  * Overlay a public provisioning patch onto what the service already declares.
  *
  * `provisioning` is ONE JSON column and `updateBlock` REPLACES it wholesale, where this surface
- * publishes two of its dozen fields. Writing just the pair would therefore delete every field the
+ * publishes a few of its dozen fields. Writing just those would therefore delete every field the
  * public shape cannot express: a Kubernetes service's `images`, `secretInjections` and
  * `helmReleases`, authored in the app by someone who is not the caller. The next deploy would
  * render manifests with no image overrides and no Secrets, which is the "empty environment that
@@ -679,17 +795,40 @@ export function toBlockPatch(
  * A patch that CHANGES the provision type replaces instead of overlaying: the stored remainder
  * belongs to the type being left behind, so carrying it forward would attach one engine's
  * configuration to another.
+ *
+ * Exhaustive over the public variant through a `never`, so a member added there cannot reach the
+ * stored column as an unlowered shape.
  */
 function mergeProvisioning(
   patch: PublicServiceProvisioning,
   stored: ServiceProvisioning | undefined,
 ): ServiceProvisioning {
   const base = stored?.type === patch.type ? stored : undefined
-  return {
-    ...base,
-    type: patch.type,
-    manifestSource: toKubernetesManifestSource(patch.manifestSource),
+  switch (patch.type) {
+    case 'kubernetes':
+      return {
+        ...base,
+        type: 'kubernetes',
+        manifestSource: toKubernetesManifestSource(patch.manifestSource),
+      }
+    case 'custom':
+      // `manifestPath` is omitted rather than written as `undefined` when the patch leaves it out,
+      // so the manifest type's own default still applies. Written through, it would pin the empty
+      // path and the deploy would look for a manifest at the repository root.
+      return {
+        ...base,
+        type: 'custom',
+        manifestId: patch.manifestId,
+        ...(patch.manifestPath === undefined ? {} : { manifestPath: patch.manifestPath }),
+      }
+    default:
+      return unreachableProvisioning(patch)
   }
+}
+
+/** The compile-time half of the lowering above: a new public member has to be lowered explicitly. */
+function unreachableProvisioning(value: never): never {
+  throw new Error(`unmapped public service provisioning: ${JSON.stringify(value)}`)
 }
 
 // ---- what this deployment has WIRED -----------------------------------------

@@ -48,9 +48,15 @@ export function assertChecks(context: string, checks: readonly Check[]): void {
  *
  * `teardown` is checked separately because `complete` deliberately does NOT mean "nothing is
  * left standing": a deployer that declared the environment outlives the run is also complete.
- * A suite whose pipeline carries a `disposer` asserts on it separately for that reason: a namespace
- * left behind on a developer's cluster is the mess that makes people stop running acceptance tests,
- * and the composed verdict alone would not catch it.
+ * A suite whose pipeline carries a `disposer` asserts on it separately for that reason: an
+ * environment left standing is the mess that makes people stop running acceptance tests, and the
+ * composed verdict alone would not catch it.
+ *
+ * **Every claim here is phrased in the vocabulary of the PORT, never of one backend.** The reduction
+ * reads `PrVerificationReport`, which is provider-neutral by construction, and a suite covering its
+ * own environment backend renders these strings verbatim in its failure output: a Kubernetes noun
+ * lands on an operator whose environment is a VM behind a load balancer, or a Cloudflare Worker, and
+ * sends them looking for an object their deployment has never created.
  */
 export function checkEphemeralEnvironment(report: PrVerificationReport): Check[] {
   const { environments } = report
@@ -76,7 +82,7 @@ export function checkEphemeralEnvironment(report: PrVerificationReport): Check[]
         (environments.gaps.length ? `, gaps: ${environments.gaps.join('; ')}` : ''),
     ),
     check(
-      'the disposer reclaimed the namespace and the reclaim was re-probed',
+      'the disposer reclaimed the environment and the reclaim was re-probed',
       environments.teardown === 'confirmed',
       `teardown=${environments.teardown}`,
     ),

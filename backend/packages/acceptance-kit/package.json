@@ -23,6 +23,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./console-credential": {
+      "types": "./dist/consoleCredential.d.ts",
+      "default": "./dist/consoleCredential.js"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {

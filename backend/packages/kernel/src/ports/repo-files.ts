@@ -169,3 +169,23 @@ export type ResolveRunRepoContext = (
   workspaceId: string,
   blockId: string,
 ) => Promise<RunRepoContext | null>
+
+/**
+ * The BLOCK-LESS sibling of {@link ResolveRunRepoContext}: the same checkout-free
+ * {@link RepoFiles}, resolved from repo COORDINATES a caller names rather than from a
+ * block's ancestry walk.
+ *
+ * For the two callers that hold an `owner/name` and no board context: the environments
+ * module validating or bootstrapping a provider's config file in a repo the operator
+ * named, and the public repo-file read. Matching is against the workspace's PROJECTED
+ * repos, so it resolves only what this workspace has LINKED, which is what keeps it from
+ * becoming a way to read any repository the deployment's credential happens to reach.
+ *
+ * Named here rather than written out at each declaration because it is now stated in four
+ * places (the dependency, the server container, and both facades' attach sites) and a shape
+ * spelled four times is a shape that drifts.
+ */
+export type ResolveRepoFilesForCoords = (
+  workspaceId: string,
+  coords: { owner: string; repo: string; provider?: VcsProvider },
+) => Promise<RunRepoContext | null>

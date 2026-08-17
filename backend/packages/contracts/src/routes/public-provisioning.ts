@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
 import {
   connectPublicEnvironmentSchema,
   linkPublicRepoSchema,
@@ -8,7 +8,10 @@ import {
   publicBootstrapRepoSchema,
   publicEnvironmentConnectionTestSchema,
   publicEnvironmentConnectionViewSchema,
+  publicEnvironmentHandlerListSchema,
   publicModelPresetListSchema,
+  publicRepoFilePathSchema,
+  publicRepoFileSchema,
   publicRiskPolicyListSchema,
   publicTrackerWritebackSettingsSchema,
   publicVcsConnectionViewSchema,
@@ -119,6 +122,45 @@ export const linkPublicRepoContract = withMinScope(
   }),
 )
 
+/**
+ * Read ONE file from a repository this workspace has linked, at a ref.
+ *
+ * What it exists for is grading what a run actually COMMITTED, which nothing on this surface could
+ * answer: `GET /repos` lists rows, `/repos/available` answers reachability, and
+ * `GET /services/:id/spec` serves the one tree the platform understands. Everything else was the
+ * agent's own prose, so a caller wanting a real answer had to hold a second VCS credential.
+ *
+ * **`path` is a QUERY parameter, not the rest of the URL**, which is the one place this deliberately
+ * departs from the shape a provider's own API uses. A repo-relative path contains slashes, and a
+ * path SEGMENT cannot: OpenAPI 3 path templating does not admit them, so a `.../contents/{path}`
+ * would be unrepresentable in the spec the four SDK clients are generated from, and the router would
+ * match one segment and 404 everything nested. As a query value it needs one ordinary encoding and
+ * every generated client passes it without a special case.
+ *
+ * `ref` is a branch, tag or commit sha; omitted, the repository's default branch, and the response
+ * says which was used either way.
+ *
+ * Four outcomes a caller branches on, and none of them are folded: `404` with
+ * `details.reason: 'repo_not_linked'` for a repository this workspace has not adopted, `404` with
+ * `'file_not_found'` for a path the ref does not hold, `422` with `'file_too_large'` (plus `size`
+ * and `limit`) for a file past `MAX_REPO_FILE_CHARS`, refused rather than truncated because a
+ * shortened answer reads exactly like a shorter file, and `503` when the deployment's VCS
+ * integration is unwired or the provider could not be reached, which is not evidence about the file.
+ */
+export const getPublicRepoFileContract = withMinScope(
+  'admin',
+  defineApiContract({
+    method: 'get',
+    requestPathParamsSchema: withObjectKeys(v.object({ owner: v.string(), name: v.string() })),
+    pathResolver: ({ owner, name }) => `/api/v1/repos/${owner}/${name}/contents`,
+    requestQuerySchema: v.object({
+      path: publicRepoFilePathSchema,
+      ref: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(255))),
+    }),
+    responsesByStatusCode: { 200: publicRepoFileSchema, ...errorResponses },
+  }),
+)
+
 /** Poll one bootstrap run. Idempotent, and the only way to learn a run's outcome. */
 export const getPublicRepoBootstrapContract = withMinScope(
   'admin',
@@ -165,6 +207,29 @@ export const connectPublicEnvironmentContract = withMinScope(
     pathResolver: () => '/api/v1/environments/connections',
     requestBodySchema: connectPublicEnvironmentSchema,
     responsesByStatusCode: { 201: publicEnvironmentConnectionViewSchema, ...errorResponses },
+  }),
+)
+
+/**
+ * Every environment handler this workspace holds, with the secret KEYS each carries and no values.
+ *
+ * The half that was missing: handlers could be WRITTEN here and never read. A deployment that seeds
+ * them programmatically (the documented path for a multi-tenant Node deployment, and the one local
+ * mode takes) had no way for a headless caller to confirm the seed landed, so "the backend accepts
+ * our credential" and "this workspace has a handler for that backend" collapsed into one
+ * unanswerable question. They are different failures with different fixes.
+ *
+ * It reports every engine, including a `remote-custom` handler for a backend the deployment
+ * registered in code, which is why it does not reuse the connect call's own response shape: that one
+ * pins `engine: 'kubernetes'` truthfully for a write only ever made with it, and widening a shipped
+ * literal would retype a field released clients already narrow on.
+ */
+export const listPublicEnvironmentConnectionsContract = withMinScope(
+  'admin',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/environments/connections',
+    responsesByStatusCode: { 200: publicEnvironmentHandlerListSchema, ...errorResponses },
   }),
 )
 

@@ -39,6 +39,24 @@ public final class EnvironmentsClient {
     }
 
     /**
+     * List the environment connections this workspace holds
+     * Every registered environment handler, with the provision type it serves, the engine and
+     * backend kind behind it, its endpoint and the secret KEYS it holds, never their values. The
+     * read half of the connect call, and the half that was missing: a deployment that registers
+     * its handlers programmatically (the documented path for a multi-tenant deployment) had no way
+     * for a headless caller to confirm the registration landed, so “the backend accepts our
+     * credential” and “this workspace has a handler for that backend” collapsed into one
+     * unanswerable question. It reports every engine, including a handler for an environment
+     * backend the deployment registered in code, so `engine` and `backendKind` are open strings
+     * rather than a fixed set.
+     * {@code GET /api/v1/environments/connections} (operation {@code
+     * listPublicEnvironmentConnections}).
+     */
+    public ListPublicEnvironmentConnectionsResponse listConnections() {
+        return transport.request("GET", "/api/v1/environments/connections", null, Map.of(), new TypeReference<ListPublicEnvironmentConnectionsResponse>() {});
+    }
+
+    /**
      * Probe a candidate cluster connection without saving it
      * Reach the apiserver with the supplied credentials and report what came back, persisting
      * nothing. Worth a call of its own because the alternative is discovering an unreachable
