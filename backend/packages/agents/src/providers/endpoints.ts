@@ -3,7 +3,7 @@ import { isLocalRunner } from '@cat-factory/contracts'
 // The OpenAI-compatible chat endpoints behind the direct-provider flavours.
 // DashScope (Alibaba/Qwen), DeepSeek and Moonshot (Kimi) all expose the OpenAI
 // `/chat/completions` shape, so both the Vercel-AI model provider and the container
-// LLM proxy resolve them from the same base URLs and keys — one source of truth for
+// LLM proxy resolve them from the same base URLs and keys: one source of truth for
 // "where does provider X live". Each is overridable per deployment (a self-hosted
 // gateway, a regional endpoint, or a local stub in tests).
 export const QWEN_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1'
@@ -37,10 +37,10 @@ const OPENAI_COMPATIBLE_ENDPOINTS = {
   openai: OPENAI_BASE_URL,
   openrouter: OPENROUTER_BASE_URL,
   xai: XAI_BASE_URL,
-  // Bifrost (maximhq/bifrost) — a self-hosted Go gateway fronting 1000+ models behind one
+  // Bifrost (maximhq/bifrost), a self-hosted Go gateway fronting 1000+ models behind one
   // OpenAI-compatible `/v1`. Model ids are canonical `provider/model` pairs (`openai/gpt-4o`).
   bifrost: null,
-  // LiteLLM — a self-hosted Python gateway. Model ids are the operator's own `model_name`
+  // LiteLLM, a self-hosted Python gateway. Model ids are the operator's own `model_name`
   // aliases from its `config.yaml`, so there is no canonical id to assume.
   litellm: null,
 } as const satisfies Readonly<Record<string, string | null>>
@@ -98,40 +98,85 @@ export const DEFAULT_OPENAI_COMPATIBLE_BASE_URLS: Readonly<Record<string, string
   )
 
 /**
- * The direct model providers whose API key is UI-configurable through the workspace
- * "AI providers" key pool: every {@link OPENAI_COMPATIBLE_PROVIDERS} member plus `anthropic`
- * (its own SDK, not OpenAI-shaped). This is the single source of truth for that list — a
- * provisioning remedy names it from here rather than re-listing the vendors inline, so adding a
- * provider to {@link OPENAI_COMPATIBLE_ENDPOINTS} keeps the error text in step. Sorted for a
- * deterministic, stable rendering.
+ * A DIRECT model provider: one reached with a key from the workspace "AI providers" pool, as
+ * opposed to a pooled subscription harness, a binding, or a per-user local runner. Every
+ * {@link OPENAI_COMPATIBLE_PROVIDERS} member plus `anthropic`, which speaks its own SDK dialect.
+ *
+ * This is also exactly the set whose base URL a deployment may override through
+ * `${PROVIDER}_BASE_URL`: `anthropic` has no default here (its SDK carries one) but DOES honour
+ * an override, which is why a facade's env map is total over this union rather than over the
+ * OpenAI-compatible one. Skipping `anthropic` there is silent both ways: an operator pointing a
+ * deployment at an Anthropic-compatible endpoint gets no error and no effect.
  */
-export const UI_CONFIGURABLE_DIRECT_PROVIDERS: readonly string[] = [
-  ...OPENAI_COMPATIBLE_PROVIDERS,
-  'anthropic',
-].sort()
+export type DirectProvider = OpenAiCompatibleProvider | 'anthropic'
+
+/**
+ * The direct providers, sorted for a deterministic, stable rendering. The single source of truth
+ * for that list: a provisioning remedy names it from here rather than re-listing the vendors
+ * inline, so adding a provider to {@link OPENAI_COMPATIBLE_ENDPOINTS} keeps the error text in
+ * step.
+ */
+export const UI_CONFIGURABLE_DIRECT_PROVIDERS: readonly DirectProvider[] = (
+  [...OPENAI_COMPATIBLE_PROVIDERS, 'anthropic'] as DirectProvider[]
+).sort()
+
+/** Whether `provider` is a {@link DirectProvider} (key-pooled, `${PROVIDER}_BASE_URL`-overridable). */
+export function isDirectProvider(provider: string): provider is DirectProvider {
+  return provider === 'anthropic' || isOpenAiCompatibleProvider(provider)
+}
 
 /**
  * The single source of truth for "where does OpenAI-compatible provider X live": a
  * per-deployment env override always wins, but a *blank* override falls back to the
  * built-in default (so `QWEN_BASE_URL=` does not silently disable the provider). Returns
- * undefined when the provider has neither an override nor a built-in default — that covers
+ * undefined when the provider has neither an override nor a built-in default, which covers
  * both providers that are not OpenAI-compatible (`anthropic`, `workers-ai`) and the
  * operator-hosted gateways with no public endpoint (`bifrost`, `litellm`), which resolve only
  * once their override is set. Every facade (Worker, Node) routes its base-URL resolution
  * through here so adding a provider is a one-line {@link OPENAI_COMPATIBLE_ENDPOINTS} entry
  * both runtimes pick up automatically.
+ *
+ * The defaults lookup is `Object.hasOwn`-guarded for the reason
+ * {@link isOpenAiCompatibleProvider} is: the map is a plain object, so a bare index would answer
+ * `Object.prototype.toString` (a Function) for `provider === 'toString'` under a signature that
+ * promises a string, and this function takes a raw `string` from callers that have not narrowed.
  */
 export function resolveOpenAiCompatibleBaseUrl(
   provider: string,
   override: string | null | undefined,
 ): string | undefined {
-  return override?.trim() || DEFAULT_OPENAI_COMPATIBLE_BASE_URLS[provider]
+  const configured = override?.trim()
+  if (configured) return configured
+  return Object.hasOwn(DEFAULT_OPENAI_COMPATIBLE_BASE_URLS, provider)
+    ? DEFAULT_OPENAI_COMPATIBLE_BASE_URLS[provider]
+    : undefined
+}
+
+/**
+ * Cloudflare's OpenAI-compatible base URL for an account: the direct Workers AI REST endpoint,
+ * or an AI Gateway when the deployment names one. The ONE place that URL shape is stated, so the
+ * inline resolver (`cloudflareRestResolver`), the Node container-proxy upstream and the
+ * benchmark harness cannot dial three different hosts for the same `workers-ai` model.
+ *
+ * NOT a member of {@link OPENAI_COMPATIBLE_ENDPOINTS}: that table maps a provider to a CONSTANT,
+ * and this one is a function of the account. `workers-ai` therefore stays outside the
+ * OpenAI-compatible provider union (it is reached through the `AI` binding where a runtime has
+ * one), and a facade that serves it over REST resolves the URL here.
+ */
+export function cloudflareRestBaseUrl(opts: { accountId: string; gateway?: string }): string {
+  return opts.gateway
+    ? `https://gateway.ai.cloudflare.com/v1/${opts.accountId}/${opts.gateway}/workers-ai/v1`
+    : `https://api.cloudflare.com/client/v4/accounts/${opts.accountId}/ai/v1`
 }
 
 /**
  * Providers the container LLM proxy can serve, so a container agent's locked model
  * must resolve to one of them (see `LlmProxyController`):
- *  - `workers-ai` — run in-Worker through the AI binding (no upstream, no key);
+ *  - `workers-ai`: through the in-process Cloudflare `AI` binding on a runtime that has one
+ *    (the Worker), else forwarded to Cloudflare's OpenAI-compatible REST endpoint
+ *    ({@link cloudflareRestBaseUrl}) under the deployment's own account credentials. Both routes
+ *    are wired, because this predicate is runtime-NEUTRAL: it admits `workers-ai` at dispatch on
+ *    every facade, so a facade serving neither route would refuse a model its own picker offered;
  *  - every OpenAI-compatible upstream the proxy forwards to
  *    ({@link OPENAI_COMPATIBLE_PROVIDERS}), including the operator-hosted **bifrost** and
  *    **litellm** gateways, which have no public default and resolve only once their

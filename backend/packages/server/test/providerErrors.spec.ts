@@ -3,6 +3,14 @@ import { describe, expect, it } from 'vitest'
 import { openAiCompatibleBaseUrlError } from '../src/agents/providerErrors.js'
 
 describe('openAiCompatibleBaseUrlError', () => {
+  it('has an operator-hosted gateway to assert about', () => {
+    // The floor for the `it.each` below, which is generated from a DERIVED list: were the
+    // `=== null` filter behind it ever broken (a table gaining a `''` placeholder instead of a
+    // null, say), `it.each([])` would register no cases at all and the suite would report green
+    // having asserted nothing about the remedy this file exists for.
+    expect(OPERATOR_HOSTED_GATEWAYS.length).toBeGreaterThan(0)
+  })
+
   // Asserted over the shared set rather than one named gateway: the remedy's whole job is to name
   // the ONE env var an operator has to set, so a gateway that reaches the generic branch (which
   // says "the provider's OpenAI-compatible endpoint" about software they host themselves) is the

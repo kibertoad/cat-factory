@@ -86,7 +86,7 @@
 - `providers/`, the **AI provisioning facade**: `registry.ts` (`CompositeModelProvider`),
   `resolvers.ts` (the runtime-neutral single-provider resolvers), `endpoints.ts`
   (`OPENAI_COMPATIBLE_ENDPOINTS`, the ONE table naming every OpenAI-compatible provider and the
-  endpoint it defaults to — `null` for a self-hosted gateway that has none; the built-in base URLs,
+  endpoint it defaults to (`null` for a self-hosted gateway that has none); the built-in base URLs,
   the UI-configurable key-pool list, the LLM proxy's `isProxyableProvider` and each facade's env
   plumbing are all DERIVED from it, so a new provider is one entry there), and
   `instrumented.ts` (`InstrumentedModelProvider`, the INLINE feeder). It has TWO exits and

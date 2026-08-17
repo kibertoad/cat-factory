@@ -609,14 +609,14 @@ export const MODEL_CATALOG: SelectableModel[] = [
     id: 'bifrost-default',
     label: 'Bifrost (gateway default)',
     description:
-      "Your Bifrost gateway's `openai/gpt-4o` route — repoint at any `provider/model` it fronts.",
+      "Your Bifrost gateway's `openai/gpt-4o` route. Repoint it at any `provider/model` it fronts.",
     direct: {
       ref: { provider: 'bifrost', model: 'openai/gpt-4o', contextTokens: 128_000 },
       keyEnv: 'BIFROST_API_KEY',
       providerLabel: 'Bifrost',
     },
   },
-  // LiteLLM — model names are the operator's own `config.yaml` aliases (`model_name`), so this
+  // LiteLLM: model names are the operator's own `config.yaml` aliases (`model_name`), so this
   // generic entry assumes a `gpt-4o` route; rename the model to match your gateway.
   {
     id: 'litellm-default',

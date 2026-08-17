@@ -7,14 +7,14 @@ import { DOCS, ENV_VARS_ANCHORS } from '../config/docs.js'
 //   - a UI-pooled key exists but the provider has no resolvable base URL (the inline resolver), and
 //   - a container agent's locked provider resolves to no upstream (the proxy).
 // The operator-hosted gateways (Bifrost, LiteLLM) are called out specially: they are self-hosted
-// software with NO public endpoint, so the base URL MUST come from their `${PROVIDER}_BASE_URL` —
+// software with NO public endpoint, so the base URL MUST come from their `${PROVIDER}_BASE_URL`:
 // the generic wording buries the one thing an operator needs to know behind "the provider's
 // OpenAI-compatible endpoint", which for a gateway they run themselves reads as nothing at all.
 
 /**
  * How each operator-hosted gateway is spelled to a human. An exhaustive `Record` over the union
  * {@link OperatorHostedGateway}, which is itself DERIVED from the endpoint table, so adding an
- * endpoint-less gateway there fails to compile until its remedy can name it — rather than
+ * endpoint-less gateway there fails to compile until its remedy can name it, rather than
  * degrading to the generic message that tells its operator nothing.
  */
 const OPERATOR_HOSTED_GATEWAY_LABELS: Record<OperatorHostedGateway, string> = {
@@ -35,7 +35,7 @@ export function openAiCompatibleBaseUrlError(provider: string): string {
     return (
       `${label} is selected but its base URL is not configured. ${label} is an operator-hosted ` +
       `gateway with no public endpoint, so its base URL must be set explicitly. ` +
-      `Fix: set ${envVar} to your ${label} gateway URL and restart — a ${label} key added ` +
+      `Fix: set ${envVar} to your ${label} gateway URL and restart. A ${label} key added ` +
       `to the workspace AI provider key pool stays unselectable until it is set. ` +
       `See ${DOCS.envVars(ENV_VARS_ANCHORS.modelProviders)}`
     )

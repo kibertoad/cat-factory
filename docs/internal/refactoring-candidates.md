@@ -189,12 +189,28 @@ register a resolver" loop is now the shared `createScopedModelProviderResolver`
 table entry both runtimes pick up.
 
 **Closed properly when Bifrost was added.** "Both runtimes pick it up" was only true of the
-inline path: the Node LLM proxy upstream kept its OWN provider→env table (so `xai` was admitted
-by the dispatch guard and had no upstream), and the Worker's typed env override map was a loose
-`Record<string, …>` that silently ignored a provider it omitted (so the documented
-`XAI_BASE_URL` was consumed by neither facade). The Node table is gone (it resolves through
-`baseUrlForNode`), and the Worker map is now total over the derived `OpenAiCompatibleProvider`
-union, so a missing provider is a type error rather than a dead env var.
+inline path, and three separate gaps sat behind that:
+
+- The Node LLM proxy upstream kept its OWN provider→env table, so `xai` was admitted by the
+  dispatch guard and had no upstream. That table is gone; the upstream resolves through
+  `baseUrlForNode`, the same resolution the inline path takes.
+- The Worker's typed env override map was a loose `Record<string, …>` that silently ignored a
+  provider it omitted, so the documented `XAI_BASE_URL` was consumed by neither facade, and
+  `ANTHROPIC_BASE_URL` was honoured on Node and ignored on the Worker. It is now total over the
+  shared `DirectProvider` union (the OpenAI-compatible members plus `anthropic`), built as a map
+  of accessors at module scope rather than an object literal per call, so a missing provider is a
+  type error and a hot-path resolution allocates nothing.
+- `workers-ai` is admitted at dispatch on every facade (the predicate is runtime-neutral) and only
+  the Worker had a route for it, so a Node deployment with Cloudflare REST credentials offered
+  every Cloudflare model in the picker and killed the run at the first proxy call. Node now
+  forwards it to Cloudflare's own OpenAI-compatible endpoint, and the credential pair behind that
+  is read in ONE place (`cloudflareRestCredentials`) that the boot warning, the catalog gate, the
+  inline registry and the proxy upstream all conclude from.
+
+The remaining shape worth watching: `isProxyableProvider` is a static predicate and each facade's
+route for a member is wired separately, so the coupling is held by tests (the Node upstream spec
+iterates the guard's own admitted set) rather than by the compiler. A facade-aware capability on the
+`LlmUpstream` port would make it structural.
 
 ### 2. Split the monolithic Drizzle repositories file ✅
 

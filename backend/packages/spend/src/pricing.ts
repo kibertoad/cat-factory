@@ -288,11 +288,21 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   'openrouter:x-ai/grok-4.6': { inputPerMillion: 1.84, outputPerMillion: 5.52 },
   'openrouter:qwen/qwen3.7-max': { inputPerMillion: 1.36, outputPerMillion: 4.07 },
   openrouter: { inputPerMillion: 1.84, outputPerMillion: 11.04 },
-  // Bifrost / LiteLLM — operator-hosted gateways whose true cost depends entirely on the
-  // backend model each routes to, which we can't know here. Default to the generic fallback
-  // rate, NAMED rather than left to fall through to `defaultPrice`: that value is the guess for
-  // a provider the platform does not know, so a later change to it must not silently re-price
-  // a gateway the platform ships support for.
+  // Bifrost / LiteLLM: operator-hosted gateways whose cost is the backend model each routes to.
+  //
+  // Bifrost names models by their CANONICAL `provider/model` pair, so where the route IS knowable
+  // the real upstream rate is too, and the catalog's shipped `bifrost-default` entry routes
+  // `openai/gpt-4o`. Priced here at that model's own direct rate (`openai:gpt-4o`) rather than the
+  // gateway fallback, which would have metered the one Bifrost model this platform ships selectable
+  // at a sixteenth of its cost: a budget safeguard must never undercount (the rule the `bedrock`
+  // entry below states at length). Add a row per route as the catalog gains one.
+  'bifrost:openai/gpt-4o': { inputPerMillion: 2.3, outputPerMillion: 9.2 },
+  // The bare fallbacks, for a route this table cannot resolve: a repointed Bifrost model, and
+  // every LiteLLM alias (the operator's own `model_name` from their `config.yaml`, which carries no
+  // vendor to look up). NAMED rather than left to fall through to `defaultPrice`: that value is the
+  // guess for a provider the platform does not know, so a later change to it must not silently
+  // re-price a gateway the platform ships support for. Both under-count a frontier route, which is
+  // the residual an operator fronting one accepts by repointing the entry.
   bifrost: { inputPerMillion: 0.14, outputPerMillion: 0.55 },
   litellm: { inputPerMillion: 0.14, outputPerMillion: 0.55 },
   // AWS Bedrock: deliberately a BARE provider entry with no per-model keys, because a

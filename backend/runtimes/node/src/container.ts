@@ -50,7 +50,7 @@ import { buildNodeAccountDeps } from './container-account-deps.js'
 import { buildNodeRealtimeDeps } from './container-realtime-deps.js'
 import type { DrizzleDb } from './db/client.js'
 import { createNodeGateways } from './gateways.js'
-import { baseUrlForNode } from './modelProvider.js'
+import { baseUrlForNode } from './providerEndpoints.js'
 import { LocalMachineEventRelay } from './machineEventRelay.js'
 import { makeNodeClientAddressResolver } from './clientAddress.js'
 

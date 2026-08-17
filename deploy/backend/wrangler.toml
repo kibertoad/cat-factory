@@ -416,6 +416,16 @@ WORKER_PUBLIC_URL = "https://cat-factory-backend.REPLACE_WITH_WORKERS_SUBDOMAIN.
 # OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 # BIFROST_BASE_URL = "https://bifrost.internal.example.com/v1"
 # LITELLM_BASE_URL = "https://litellm.internal.example.com/v1"
+#
+# Per-vendor base-URL overrides (a regional endpoint, a self-hosted proxy). Each defaults to
+# the vendor's public API, and a blank value falls back to that default rather than disabling
+# the vendor. ANTHROPIC_BASE_URL is honoured here and on Node alike.
+# OPENAI_BASE_URL = "https://api.openai.com/v1"
+# ANTHROPIC_BASE_URL = "https://api.anthropic.com"
+# QWEN_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+# DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+# MOONSHOT_BASE_URL = "https://api.moonshot.ai/v1"
+# XAI_BASE_URL = "https://api.x.ai/v1"
 
 # Storage retention. The cron sweeper prunes the tables that don't self-limit to
 # these age windows (in days); 0 disables a table's pass. Defaults are applied

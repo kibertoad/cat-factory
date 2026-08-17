@@ -1,3 +1,4 @@
+import { MODEL_CATALOG } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   CACHE_READ_MULTIPLIER,
@@ -70,6 +71,26 @@ describe('priceFor', () => {
     expect(priceFor(pricing, { provider: 'acme', model: 'unlisted' }).inputPerMillion).toBe(5)
     expect(priceFor(pricing, { provider: 'nobody', model: 'nothing' })).toEqual(
       pricing.defaultPrice,
+    )
+  })
+
+  it('meters the shipped Bifrost gateway entry at the rate of the model it routes to', () => {
+    // Bifrost names models by their CANONICAL `provider/model` pair, so the shipped catalog entry's
+    // real upstream rate IS knowable, and the bare-`bifrost` fallback (a mid-range guess for a
+    // route this table cannot resolve) would under-count it by more than an order of magnitude
+    // against a workspace budget. Both halves are derived from the catalog entry and the vendor's
+    // own row, so repointing the entry fails here rather than silently re-pricing it.
+    const entry = MODEL_CATALOG.find((model) => model.id === 'bifrost-default')
+    const ref = entry?.direct?.ref
+    expect(ref?.provider).toBe('bifrost')
+    const [vendor, ...model] = (ref?.model ?? '').split('/')
+    expect(vendor && model.length).toBeTruthy()
+    const gatewayRate = priceFor(DEFAULT_SPEND_PRICING, ref!)
+    expect(gatewayRate).toEqual(
+      priceFor(DEFAULT_SPEND_PRICING, { provider: vendor!, model: model.join('/') }),
+    )
+    expect(gatewayRate).not.toEqual(
+      priceFor(DEFAULT_SPEND_PRICING, { provider: 'bifrost', model: 'an-unlisted-route' }),
     )
   })
 })

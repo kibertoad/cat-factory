@@ -1,8 +1,4 @@
-import {
-  type ProviderRegistry,
-  type WorkspaceBodiesGate,
-  resolveOpenAiCompatibleBaseUrl,
-} from '@cat-factory/agents'
+import type { ProviderRegistry, WorkspaceBodiesGate } from '@cat-factory/agents'
 import type { ApiKeyService, LocalModelEndpointService } from '@cat-factory/integrations'
 import { type ModelProviderResolver, composeTraceSinks } from '@cat-factory/kernel'
 import { bedrockRegistry } from '@cat-factory/provider-bedrock'
@@ -16,12 +12,14 @@ import {
   bedrockRegionFromEnv,
   createScopedModelProviderResolver,
 } from '@cat-factory/server'
+import { baseUrlForNode, cloudflareRestCredentials } from './providerEndpoints.js'
 
 // The Node deployment's BASE ModelProvider RESOLVER: builds a per-scope provider from the
 // DB-backed API-key pool (account/workspace/user), plus opt-in registries that need no
-// per-scope key — AWS Bedrock (when AWS creds/region are set) and Cloudflare Workers AI
+// per-scope key: AWS Bedrock (when AWS creds/region are set) and Cloudflare Workers AI
 // over REST (when CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN are set). There is no
-// Workers AI binding on Node, so `workers-ai` is served via the Cloudflare REST flavour.
+// Workers AI binding on Node, so `workers-ai` is served via the Cloudflare REST flavour
+// on the inline path and via the same endpoint on the container-proxy path (`gateways.ts`).
 //
 // Telemetry is NOT applied here. The inline instrumentation is a separate wrap
 // (`wrapResolverWithInstrumentation`) the CALLER composes on top, because it must sit
@@ -86,21 +84,6 @@ export function inlineInstrumentFromEnv(
     : undefined
 }
 
-/**
- * The base URL for a direct provider: the `${PROVIDER}_BASE_URL` env override (e.g.
- * QWEN_BASE_URL), else the built-in default. The override-vs-default precedence and the
- * defaults table itself live in @cat-factory/agents so the Worker resolves identically; the
- * operator-hosted gateways (`bifrost`, `litellm`) have no default and so resolve only once their
- * own `BIFROST_BASE_URL` / `LITELLM_BASE_URL` is set.
- *
- * Env is read by NAME rather than from a per-provider table, so this is also what the container
- * LLM proxy's Node upstream resolves through (`gateways.ts`) — the one resolution both the inline
- * and container paths take.
- */
-export function baseUrlForNode(provider: string, env: NodeJS.ProcessEnv): string | undefined {
-  return resolveOpenAiCompatibleBaseUrl(provider, env[`${provider.toUpperCase()}_BASE_URL`])
-}
-
 export function createNodeModelProviderResolver(
   env: NodeJS.ProcessEnv,
   apiKeys: ApiKeyService | undefined,
@@ -108,16 +91,11 @@ export function createNodeModelProviderResolver(
 ): ModelProviderResolver {
   const extraRegistries: ProviderRegistry[] = []
 
-  // Opt-in Cloudflare Workers AI over REST.
-  if (env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN) {
-    extraRegistries.push(
-      cloudflareRestRegistry({
-        accountId: env.CLOUDFLARE_ACCOUNT_ID,
-        apiToken: env.CLOUDFLARE_API_TOKEN,
-        gateway: env.CLOUDFLARE_AI_GATEWAY,
-      }),
-    )
-  }
+  // Opt-in Cloudflare Workers AI over REST, through the one credential reader the catalog gate and
+  // the container proxy's REST upstream also use, so the picker cannot offer a Cloudflare model
+  // that neither dispatch path can resolve.
+  const cloudflare = cloudflareRestCredentials(env)
+  if (cloudflare) extraRegistries.push(cloudflareRestRegistry(cloudflare))
 
   // Opt-in Bedrock: registered only when a region is configured, through the SAME two readers
   // the model catalog's `bedrock` capability uses, so a model the picker offers is never one

@@ -169,7 +169,7 @@ export interface SelectableModel {
   /**
    * The coarse model FAMILY this entry belongs to, used by the account-wide allow/block
    * policy (`familyForModelId` / `isAllowedByFamilyPolicy`). Absent for gateway entries
-   * with no single family (an operator's Bifrost / LiteLLM route) — those are UNCLASSIFIED.
+   * with no single family (an operator's Bifrost / LiteLLM route), which are UNCLASSIFIED.
    */
   family?: ModelFamily
   /** Model-family label shown in the picker, e.g. `Qwen3`. */

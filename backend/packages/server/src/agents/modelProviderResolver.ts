@@ -258,7 +258,7 @@ function buildDirectResolver(
   if (provider === 'anthropic') return anthropicResolver({ apiKey, baseURL })
   // qwen / deepseek / moonshot / xai / openrouter / bifrost / litellm expose an OpenAI-compatible
   // API and need a base URL. The operator-hosted gateways have no public default, so this is the
-  // common "key pooled, `${PROVIDER}_BASE_URL` unset" case — openAiCompatibleBaseUrlError names
+  // common "key pooled, `${PROVIDER}_BASE_URL` unset" case, and openAiCompatibleBaseUrlError names
   // each of them specifically.
   if (!baseURL) {
     throw new Error(openAiCompatibleBaseUrlError(provider))

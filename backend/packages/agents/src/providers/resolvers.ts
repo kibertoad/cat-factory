@@ -1,6 +1,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createOpenAI } from '@ai-sdk/openai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import { cloudflareRestBaseUrl } from './endpoints.js'
 import type { ModelResolver, ProviderRegistry } from './registry.js'
 
 // The base, runtime-neutral resolvers. They depend only on `ai` + the `@ai-sdk/*`
@@ -70,11 +71,7 @@ export function cloudflareRestResolver(opts: {
   /** Full override of the base URL (wins over accountId/gateway). */
   baseURL?: string
 }): ModelResolver {
-  const baseURL =
-    opts.baseURL ??
-    (opts.gateway
-      ? `https://gateway.ai.cloudflare.com/v1/${opts.accountId}/${opts.gateway}/workers-ai/v1`
-      : `https://api.cloudflare.com/client/v4/accounts/${opts.accountId}/ai/v1`)
+  const baseURL = opts.baseURL ?? cloudflareRestBaseUrl(opts)
   return openAiCompatibleResolver({ name: 'cloudflare', apiKey: opts.apiToken, baseURL })
 }
 

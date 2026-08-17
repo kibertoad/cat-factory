@@ -119,12 +119,24 @@ export interface ProxyCallObservation {
 }
 
 /**
- * A resolved OpenAI-compatible upstream: where to forward. The API key is NOT here —
- * it is leased per call from the DB-backed API-key pool by the proxy, so credentials
- * are no longer env-baked into the gateway.
+ * A resolved OpenAI-compatible upstream: where to forward. For a POOLED vendor the API key is
+ * deliberately absent, because it is leased per call from the DB-backed API-key pool by the
+ * proxy: vendor credentials are not env-baked into the gateway.
  */
 export interface LlmUpstreamEndpoint {
   baseURL: string
+  /**
+   * The bearer to send, for the one provider class that has no pool to lease from: a provider
+   * outside the `ApiKeyProvider` vocabulary, whose credential is a DEPLOYMENT-level fact rather
+   * than a workspace's stored vendor key. Today that is Cloudflare Workers AI reached over REST
+   * (`CLOUDFLARE_API_TOKEN`), which a runtime with no `AI` binding forwards to instead of running
+   * in-process. Set it and the proxy skips the pool lease and attributes no key to the spend row.
+   *
+   * NOT an escape hatch for a pooled vendor: setting it for `qwen` would take that provider's
+   * key back out of the pool (no rotation, no per-scope attribution, no UI). A facade resolving a
+   * pooled vendor leaves this undefined.
+   */
+  apiKey?: string
 }
 
 /** What the LLM proxy needs to run a model in-process (e.g. a Workers AI binding). */
@@ -158,14 +170,17 @@ export interface LlmInProcessRequest {
  */
 export interface LlmUpstream {
   /**
-   * Resolve the OpenAI-compatible base URL for `provider`, or null when unavailable.
-   * Key-free: the proxy leases the API key from the DB pool and injects it.
+   * Resolve the OpenAI-compatible base URL for `provider`, or null when unavailable. Key-free
+   * for a pooled vendor (the proxy leases and injects the key); see
+   * {@link LlmUpstreamEndpoint.apiKey} for the provider class that carries its own.
    */
   resolveOpenAiCompatible(provider: string): LlmUpstreamEndpoint | null
   /**
-   * Serve a completion in-process (no external HTTP), returning an OpenAI-shaped
-   * Response — or null when this runtime has no in-process path (the controller then
-   * replies 502 for a provider that requires it, e.g. `workers-ai`).
+   * Serve a completion in-process (no external HTTP), returning an OpenAI-shaped Response, or
+   * null when this runtime has no in-process path. The controller then falls back to the
+   * OpenAI-compatible forward path for the same provider (Node serves `workers-ai` over
+   * Cloudflare's REST endpoint), and only reports the provider unavailable when NEITHER route
+   * resolves.
    */
   runInProcess(request: LlmInProcessRequest): Promise<Response> | null
 }

@@ -275,13 +275,23 @@ export interface Env {
   /** xAI key (provider `xai`, direct Grok; OpenAI-compatible). */
   XAI_API_KEY?: string
 
-  // Optional base-URL overrides for the OpenAI-compatible providers (self-hosted
-  // gateway, regional endpoint, or a stub in tests). Default to the public APIs.
+  // Optional base-URL overrides for the direct providers (self-hosted gateway, regional
+  // endpoint, or a stub in tests). Default to the public APIs. Every one of these is read
+  // through `providerEndpoints.ts`'s override map, which is TOTAL over the shared
+  // `DirectProvider` union, so a field declared here and left unwired there fails to compile
+  // rather than reading as "no override configured" forever.
   QWEN_BASE_URL?: string
   DEEPSEEK_BASE_URL?: string
   MOONSHOT_BASE_URL?: string
   XAI_BASE_URL?: string
   OPENAI_BASE_URL?: string
+  /**
+   * Anthropic override. Not OpenAI-compatible (its SDK speaks its own dialect), but a direct
+   * key-pooled provider all the same, so a deployment fronting Anthropic with a proxy repoints it
+   * here. Node reads env by NAME and has always honoured this; declaring it here is what keeps the
+   * two facades from disagreeing about the same deployment's configuration.
+   */
+  ANTHROPIC_BASE_URL?: string
   // OpenRouter override (defaults to the public gateway). Bifrost and LiteLLM are
   // operator-hosted, so their base URL is REQUIRED to enable the `bifrost` / `litellm` provider
   // at all (self-hosted software, no public default).

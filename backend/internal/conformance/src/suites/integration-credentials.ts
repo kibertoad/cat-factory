@@ -1,4 +1,4 @@
-import { isOperatorHostedGateway } from '@cat-factory/agents'
+import { OPERATOR_HOSTED_GATEWAYS, isOperatorHostedGateway } from '@cat-factory/agents'
 import { MODEL_CATALOG, type ExecutionInstance, type Pipeline } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
@@ -221,18 +221,24 @@ export function defineCredentialsConformance(harness: ConformanceHarness): void 
       const models = `/workspaces/${workspace.id}/models`
 
       // An operator-hosted gateway (Bifrost, LiteLLM) has NO built-in base URL, and the test env
-      // sets none. Connecting a key alone must NOT make it selectable — the run would otherwise
+      // sets none. Connecting a key alone must NOT make it selectable: the run would otherwise
       // pass the start guard and then throw "No base URL configured" at dispatch. (OpenRouter,
-      // with a public default, IS selectable on a key — above.)
+      // with a public default, IS selectable on a key, asserted above.)
       //
-      // Driven off the catalog rather than a named entry, so a gateway added to the shared
-      // endpoint table is covered here the day it ships instead of arriving untested. It IS the
-      // per-facade `baseUrlFor` wiring under test: that is the one thing each runtime supplies
-      // itself, and a facade that forgot a gateway would offer a model its own dispatch refuses.
+      // It IS the per-facade `baseUrlFor` wiring under test: that is the one thing each runtime
+      // supplies itself, and a facade that forgot a gateway would offer a model its own dispatch
+      // refuses. So the subjects are derived, and the ASSERTION that keeps a new gateway from
+      // arriving untested is the one below: the catalog must carry an entry for EVERY member of the
+      // shared endpoint table's operator-hosted set. A count floor could not say that, because the
+      // omission being guarded against (a gateway in the table with no catalog entry, or with a
+      // catalog entry whose facade env field nobody wired) leaves the derived list one member short
+      // and any `>= n` floor still satisfied.
       const gateways = MODEL_CATALOG.filter(
         (model) => model.direct && isOperatorHostedGateway(model.direct.ref.provider),
       )
-      expect(gateways.length).toBeGreaterThanOrEqual(2)
+      expect(gateways.map((model) => model.direct!.ref.provider).sort()).toEqual(
+        [...OPERATOR_HOSTED_GATEWAYS].sort(),
+      )
 
       for (const gateway of gateways) {
         const provider = gateway.direct!.ref.provider

@@ -17,7 +17,7 @@ import type { OpenRouterModelMeta } from '@cat-factory/contracts'
 export interface ProviderModelCatalogRecord {
   /** Workspace (`ws_*`) the enabled set belongs to. */
   workspaceId: string
-  /** Gateway provider id (e.g. `openrouter`, `bifrost`, `litellm`) — also the `ModelRef.provider`. */
+  /** Gateway provider id (e.g. `openrouter`, `bifrost`, `litellm`), also the `ModelRef.provider`. */
   provider: string
   /** The enabled models, each with cached metadata (context + price). */
   models: OpenRouterModelMeta[]
