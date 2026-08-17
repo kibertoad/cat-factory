@@ -53,7 +53,7 @@ import { PgBossEnvConfigRepairRunner } from './execution/envConfigRepairRunner.j
 import { PgBossEnvironmentTestRunner } from './execution/envTestRunner.js'
 import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
-import { baseUrlForNode } from './modelProvider.js'
+import { baseUrlForNode } from './providerEndpoints.js'
 import { DrizzleSubscriptionActivationRepository } from './repositories/personalSubscription.js'
 import { createDrizzleRepositories, createDrizzleSandboxDeps } from './repositories/drizzle.js'
 import { DrizzleReferenceArchitectureRepository } from './repositories/bootstrap.js'

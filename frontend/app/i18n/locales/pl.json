@@ -4188,8 +4188,8 @@
       "proxyHeading": "Klucze API proxy / bramy",
       "directAccountIntro": "Podłącz klucz API dostawcy współdzielony przez wszystkie przestrzenie robocze na tym koncie. Klucze są przechowywane zaszyfrowane, łączone w pulę i rotowane według użycia. Kluczami konta zarządza administrator.",
       "directIntro": "Podłącz klucz API dostawcy, aby modele działały bezpośrednio u tego dostawcy. Klucze są przechowywane zaszyfrowane, łączone w pulę i rotowane według użycia. Określ zakres klucza dla tej przestrzeni roboczej (współdzielony z zespołem) lub dla Ciebie (Twoja własna pula, używalna wszędzie).",
-      "proxyAccountIntro": "Podłącz klucz proxy (OpenRouter, LiteLLM) współdzielony przez wszystkie przestrzenie robocze na tym koncie. Proxy to pośrednik dający dostęp do wielu dostawców za jednym kluczem. Klucze są przechowywane zaszyfrowane, łączone w pulę i rotowane według użycia.",
-      "proxyIntro": "Podłącz klucz proxy (OpenRouter, LiteLLM). Proxy to pośrednik docierający do modeli wielu dostawców przez jedną bramę, zamiast jednego dostawcy bezpośrednio. Klucze są przechowywane zaszyfrowane, łączone w pulę i rotowane według użycia. Określ zakres klucza dla tej przestrzeni roboczej (współdzielony z zespołem) lub dla Ciebie (Twoja własna pula, używalna wszędzie).",
+      "proxyAccountIntro": "Podłącz klucz proxy (OpenRouter, Bifrost, LiteLLM) współdzielony przez wszystkie przestrzenie robocze na tym koncie. Proxy to pośrednik dający dostęp do wielu dostawców za jednym kluczem. Klucze są przechowywane zaszyfrowane, łączone w pulę i rotowane według użycia.",
+      "proxyIntro": "Podłącz klucz proxy (OpenRouter, Bifrost, LiteLLM). Proxy to pośrednik docierający do modeli wielu dostawców przez jedną bramę, zamiast jednego dostawcy bezpośrednio. Klucze są przechowywane zaszyfrowane, łączone w pulę i rotowane według użycia. Określ zakres klucza dla tej przestrzeni roboczej (współdzielony z zespołem) lub dla Ciebie (Twoja własna pula, używalna wszędzie).",
       "scopeField": "Zakres",
       "scopeWorkspace": "Ta przestrzeń robocza",
       "scopeUser": "Moje klucze (tylko ja)",
@@ -4246,6 +4246,11 @@
           "label": "OpenRouter",
           "step1": "Otwórz openrouter.ai → Keys i utwórz klucz API.",
           "step2": "Skopiuj klucz (zaczyna się od sk-or-…); sięga ponad 300 modeli przez jedną bramę."
+        },
+        "bifrost": {
+          "label": "Bifrost (brama self-hosted)",
+          "step1": "Wygeneruj klucz wirtualny w ustawieniach nadzoru swojej bramy Bifrost (lub użyj jej klucza API).",
+          "step2": "Bazowy URL bramy ustawia operator Twojego wdrożenia (BIFROST_BASE_URL), nie tutaj."
         },
         "litellm": {
           "label": "LiteLLM (brama self-hosted)",

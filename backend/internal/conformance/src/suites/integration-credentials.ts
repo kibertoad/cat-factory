@@ -1,4 +1,5 @@
-import type { ExecutionInstance, Pipeline } from '@cat-factory/kernel'
+import { OPERATOR_HOSTED_GATEWAYS, isOperatorHostedGateway } from '@cat-factory/agents'
+import { MODEL_CATALOG, type ExecutionInstance, type Pipeline } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 
@@ -212,26 +213,47 @@ export function defineCredentialsConformance(harness: ConformanceHarness): void 
       expect(dyn.cost?.outputPerMillion).toBe(15)
     })
 
-    it('keeps a base-URL-required provider (LiteLLM) unselectable with a key but no base URL', async () => {
+    it('keeps every operator-hosted gateway unselectable with a key but no base URL', async () => {
       const { call, createWorkspace } = harness.makeApp(undefined, {
         cloudflareModelsEnabled: false,
       })
       const { workspace } = await createWorkspace()
       const models = `/workspaces/${workspace.id}/models`
 
-      // LiteLLM is operator-hosted: it has NO built-in base URL, and the test env sets
-      // no LITELLM_BASE_URL. Connecting a key alone must NOT make it selectable — the
-      // run would otherwise pass the start guard and then throw "No base URL configured"
-      // at dispatch. (OpenRouter, with a public default, IS selectable on a key — above.)
-      const created = await call('POST', `/workspaces/${workspace.id}/api-keys`, {
-        provider: 'litellm',
-        label: 'team',
-        key: 'sk-litellm-secret',
-      })
-      expect(created.status).toBe(201)
+      // An operator-hosted gateway (Bifrost, LiteLLM) has NO built-in base URL, and the test env
+      // sets none. Connecting a key alone must NOT make it selectable: the run would otherwise
+      // pass the start guard and then throw "No base URL configured" at dispatch. (OpenRouter,
+      // with a public default, IS selectable on a key, asserted above.)
+      //
+      // It IS the per-facade `baseUrlFor` wiring under test: that is the one thing each runtime
+      // supplies itself, and a facade that forgot a gateway would offer a model its own dispatch
+      // refuses. So the subjects are derived, and the ASSERTION that keeps a new gateway from
+      // arriving untested is the one below: the catalog must carry an entry for EVERY member of the
+      // shared endpoint table's operator-hosted set. A count floor could not say that, because the
+      // omission being guarded against (a gateway in the table with no catalog entry, or with a
+      // catalog entry whose facade env field nobody wired) leaves the derived list one member short
+      // and any `>= n` floor still satisfied.
+      const gateways = MODEL_CATALOG.filter(
+        (model) => model.direct && isOperatorHostedGateway(model.direct.ref.provider),
+      )
+      expect(gateways.map((model) => model.direct!.ref.provider).sort()).toEqual(
+        [...OPERATOR_HOSTED_GATEWAYS].sort(),
+      )
+
+      for (const gateway of gateways) {
+        const provider = gateway.direct!.ref.provider
+        const created = await call('POST', `/workspaces/${workspace.id}/api-keys`, {
+          provider,
+          label: `team-${provider}`,
+          key: `sk-${provider}-secret`,
+        })
+        expect(created.status).toBe(201)
+      }
 
       const after = await call<Opt[]>('GET', models)
-      expect(after.body.find((m) => m.id === 'litellm-default')?.available).toBe(false)
+      for (const gateway of gateways) {
+        expect(after.body.find((m) => m.id === gateway.id)?.available).toBe(false)
+      }
     })
 
     it('blocks starting a pipeline with an unconfigured model, then allows it after a key is added', async () => {

@@ -46,6 +46,7 @@ import {
   parsePlatformMetricsWindow,
 } from '@cat-factory/observability-otel'
 import { DEFAULT_SPEND_PRICING, budgetCapsOverlay, modelCostResolver } from '@cat-factory/spend'
+import { cloudflareRestCredentials } from './providerEndpoints.js'
 
 // Translate the Node process environment into the shared AppConfig contract. This is
 // the Node analogue of the Worker's `loadConfig(env)`: same SHAPE, different source.
@@ -195,7 +196,9 @@ function loadSystemEmailSender(env: NodeJS.ProcessEnv): EmailConfig['system'] {
  * Cloudflare Workers AI over REST needs BOTH `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
  * When exactly one half is set the provider is silently disabled; this returns which var IS set
  * and which is MISSING so the boot warning can name the gap (error-message coverage A10).
- * Undefined when both are set or both are unset — no half-set footgun to warn about.
+ * Undefined when both are set or both are unset: no half-set footgun to warn about.
+ *
+ * Whether the pair IS configured is `cloudflareRestCredentials`, not a second read here.
  */
 export function cloudflareCredsHalfSet(
   env: NodeJS.ProcessEnv,
@@ -218,8 +221,6 @@ export function cloudflareCredsHalfSet(
  * (error-message coverage A10).
  */
 function resolveProviderCaps(env: NodeJS.ProcessEnv): ProviderCapabilities {
-  const cfAccountId = env.CLOUDFLARE_ACCOUNT_ID?.trim()
-  const cfApiToken = env.CLOUDFLARE_API_TOKEN?.trim()
   const cfHalfSet = cloudflareCredsHalfSet(env)
   if (cfHalfSet) {
     logger.warn(
@@ -233,7 +234,7 @@ function resolveProviderCaps(env: NodeJS.ProcessEnv): ProviderCapabilities {
   return {
     directProviders: new Set(),
     subscriptionVendors: new Set(ALL_SUBSCRIPTION_VENDORS),
-    cloudflareEnabled: !!(cfAccountId && cfApiToken),
+    cloudflareEnabled: !!cloudflareRestCredentials(env),
     // Bedrock is reached with the DEPLOYMENT's own AWS credentials, so unlike a direct
     // provider key it is fully known here: the deployment catalog can state which Bedrock
     // models are selectable without waiting for a per-workspace recompute.

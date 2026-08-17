@@ -4188,8 +4188,8 @@
       "proxyHeading": "Clés d'API de proxy / passerelle",
       "directAccountIntro": "Connectez une clé d'API de fournisseur partagée par tous les espaces de travail de ce compte. Les clés sont stockées chiffrées, mutualisées et alternées selon l'usage. Les clés de compte sont gérées par un administrateur.",
       "directIntro": "Connectez une clé d'API de fournisseur pour que les modèles s'exécutent directement chez ce fournisseur. Les clés sont stockées chiffrées, mutualisées et alternées selon l'usage. Définissez la portée d'une clé sur cet espace de travail (partagée avec l'équipe) ou sur vous (votre propre pool, utilisable partout).",
-      "proxyAccountIntro": "Connectez une clé de proxy (OpenRouter, LiteLLM) partagée par tous les espaces de travail de ce compte. Un proxy est un intermédiaire qui donne accès à de nombreux fournisseurs derrière une seule clé. Les clés sont stockées chiffrées, mutualisées et alternées selon l'usage.",
-      "proxyIntro": "Connectez une clé de proxy (OpenRouter, LiteLLM). Un proxy est un intermédiaire qui atteint les modèles de nombreux fournisseurs via une seule passerelle, plutôt qu'un fournisseur direct. Les clés sont stockées chiffrées, mutualisées et alternées selon l'usage. Définissez la portée d'une clé sur cet espace de travail (partagée avec l'équipe) ou sur vous (votre propre pool, utilisable partout).",
+      "proxyAccountIntro": "Connectez une clé de proxy (OpenRouter, Bifrost, LiteLLM) partagée par tous les espaces de travail de ce compte. Un proxy est un intermédiaire qui donne accès à de nombreux fournisseurs derrière une seule clé. Les clés sont stockées chiffrées, mutualisées et alternées selon l'usage.",
+      "proxyIntro": "Connectez une clé de proxy (OpenRouter, Bifrost, LiteLLM). Un proxy est un intermédiaire qui atteint les modèles de nombreux fournisseurs via une seule passerelle, plutôt qu'un fournisseur direct. Les clés sont stockées chiffrées, mutualisées et alternées selon l'usage. Définissez la portée d'une clé sur cet espace de travail (partagée avec l'équipe) ou sur vous (votre propre pool, utilisable partout).",
       "scopeField": "Portée",
       "scopeWorkspace": "Cet espace de travail",
       "scopeUser": "Mes clés (moi uniquement)",
@@ -4246,6 +4246,11 @@
           "label": "OpenRouter",
           "step1": "Ouvrez openrouter.ai → Keys et créez une clé d'API.",
           "step2": "Copiez la clé (commence par sk-or-…) ; elle atteint plus de 300 modèles via une seule passerelle."
+        },
+        "bifrost": {
+          "label": "Bifrost (passerelle auto-hébergée)",
+          "step1": "Générez une clé virtuelle dans les paramètres de gouvernance de votre passerelle Bifrost (ou utilisez sa clé d'API).",
+          "step2": "L'URL de base de la passerelle est définie par l'opérateur de votre déploiement (BIFROST_BASE_URL), pas ici."
         },
         "litellm": {
           "label": "LiteLLM (passerelle auto-hébergée)",

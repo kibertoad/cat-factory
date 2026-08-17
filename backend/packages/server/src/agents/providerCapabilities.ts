@@ -40,8 +40,8 @@ export interface CapabilityServices {
    * The deployment's base-URL resolver (the same one the model-provider resolver uses).
    * OpenAI-compatible providers (everything but `openai`/`anthropic`) cannot resolve
    * without a base URL — most carry a built-in default, but an operator-hosted gateway
-   * like LiteLLM has none until `LITELLM_BASE_URL` is set. When this resolver is wired, a
-   * configured key for such a provider is treated as selectable ONLY once its base URL
+   * (Bifrost, LiteLLM) has none until its own `${PROVIDER}_BASE_URL` is set. When this resolver is
+   * wired, a configured key for such a provider is treated as selectable ONLY once its base URL
    * resolves, so the catalog + start guard don't offer a model that fails at dispatch.
    */
   baseUrlFor?: (provider: string) => string | null | undefined

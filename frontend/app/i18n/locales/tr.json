@@ -4188,8 +4188,8 @@
       "proxyHeading": "Proxy / ağ geçidi API anahtarları",
       "directAccountIntro": "Bu hesaptaki her çalışma alanı tarafından paylaşılan bir sağlayıcı API anahtarı bağlayın. Anahtarlar şifreli olarak saklanır, havuzlanır ve kullanıma göre döndürülür. Hesap anahtarları yönetici tarafından yönetilir.",
       "directIntro": "Modellerin doğrudan o sağlayıcıda çalışması için bir sağlayıcı API anahtarı bağlayın. Anahtarlar şifreli olarak saklanır, havuzlanır ve kullanıma göre döndürülür. Bir anahtarı bu çalışma alanına (ekiple paylaşılır) veya size (her yerde kullanılabilen kendi havuzunuz) kapsayın.",
-      "proxyAccountIntro": "Bu hesaptaki her çalışma alanı tarafından paylaşılan bir proxy anahtarı (OpenRouter, LiteLLM) bağlayın. Proxy, birçok sağlayıcıyı tek bir anahtarın arkasında sunan bir aracıdır. Anahtarlar şifreli olarak saklanır, havuzlanır ve kullanıma göre döndürülür.",
-      "proxyIntro": "Bir proxy anahtarı (OpenRouter, LiteLLM) bağlayın. Proxy, doğrudan bir sağlayıcı yerine birçok sağlayıcının modellerine tek bir ağ geçidi üzerinden ulaşan bir aracıdır. Anahtarlar şifreli olarak saklanır, havuzlanır ve kullanıma göre döndürülür. Bir anahtarı bu çalışma alanına (ekiple paylaşılır) veya size (her yerde kullanılabilen kendi havuzunuz) kapsayın.",
+      "proxyAccountIntro": "Bu hesaptaki her çalışma alanı tarafından paylaşılan bir proxy anahtarı (OpenRouter, Bifrost, LiteLLM) bağlayın. Proxy, birçok sağlayıcıyı tek bir anahtarın arkasında sunan bir aracıdır. Anahtarlar şifreli olarak saklanır, havuzlanır ve kullanıma göre döndürülür.",
+      "proxyIntro": "Bir proxy anahtarı (OpenRouter, Bifrost, LiteLLM) bağlayın. Proxy, doğrudan bir sağlayıcı yerine birçok sağlayıcının modellerine tek bir ağ geçidi üzerinden ulaşan bir aracıdır. Anahtarlar şifreli olarak saklanır, havuzlanır ve kullanıma göre döndürülür. Bir anahtarı bu çalışma alanına (ekiple paylaşılır) veya size (her yerde kullanılabilen kendi havuzunuz) kapsayın.",
       "scopeField": "Kapsam",
       "scopeWorkspace": "Bu çalışma alanı",
       "scopeUser": "Anahtarlarım (yalnızca ben)",
@@ -4246,6 +4246,11 @@
           "label": "OpenRouter",
           "step1": "openrouter.ai → Keys adresini açın ve bir API anahtarı oluşturun.",
           "step2": "Anahtarı kopyalayın (sk-or-… ile başlar); tek bir ağ geçidi üzerinden 300'den fazla modele ulaşır."
+        },
+        "bifrost": {
+          "label": "Bifrost (kendi barındırdığınız ağ geçidi)",
+          "step1": "Bifrost ağ geçidinizin yönetişim ayarlarında bir sanal anahtar oluşturun (veya API anahtarını kullanın).",
+          "step2": "Ağ geçidinin temel URL'si burada değil, dağıtım operatörünüz tarafından ayarlanır (BIFROST_BASE_URL)."
         },
         "litellm": {
           "label": "LiteLLM (kendi barındırdığınız ağ geçidi)",

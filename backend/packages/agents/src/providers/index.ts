@@ -29,15 +29,25 @@ export {
   openAiResolver,
 } from './resolvers.js'
 export {
+  cloudflareRestBaseUrl,
   DEEPSEEK_BASE_URL,
   DEFAULT_OPENAI_COMPATIBLE_BASE_URLS,
+  isDirectProvider,
+  isOpenAiCompatibleProvider,
+  isOperatorHostedGateway,
   isProxyableProvider,
   MOONSHOT_BASE_URL,
   OPENAI_BASE_URL,
+  OPENAI_COMPATIBLE_PROVIDERS,
   OPENROUTER_BASE_URL,
+  OPERATOR_HOSTED_GATEWAYS,
   QWEN_BASE_URL,
   resolveOpenAiCompatibleBaseUrl,
+  type DirectProvider,
+  type OpenAiCompatibleProvider,
+  type OperatorHostedGateway,
   UI_CONFIGURABLE_DIRECT_PROVIDERS,
+  XAI_BASE_URL,
 } from './endpoints.js'
 export {
   type CachePolicy,
