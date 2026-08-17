@@ -89,8 +89,13 @@ export function inlineInstrumentFromEnv(
 /**
  * The base URL for a direct provider: the `${PROVIDER}_BASE_URL` env override (e.g.
  * QWEN_BASE_URL), else the built-in default. The override-vs-default precedence and the
- * defaults table itself live in @cat-factory/agents so the Worker resolves identically;
- * `litellm` has no default and so resolves only once LITELLM_BASE_URL is set.
+ * defaults table itself live in @cat-factory/agents so the Worker resolves identically; the
+ * operator-hosted gateways (`bifrost`, `litellm`) have no default and so resolve only once their
+ * own `BIFROST_BASE_URL` / `LITELLM_BASE_URL` is set.
+ *
+ * Env is read by NAME rather than from a per-provider table, so this is also what the container
+ * LLM proxy's Node upstream resolves through (`gateways.ts`) — the one resolution both the inline
+ * and container paths take.
  */
 export function baseUrlForNode(provider: string, env: NodeJS.ProcessEnv): string | undefined {
   return resolveOpenAiCompatibleBaseUrl(provider, env[`${provider.toUpperCase()}_BASE_URL`])

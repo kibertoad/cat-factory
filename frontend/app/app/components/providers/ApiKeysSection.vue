@@ -7,7 +7,8 @@
 //  - 'direct' (default): you reach the vendor directly (OpenAI/Anthropic/Qwen/DeepSeek/
 //    Moonshot).
 //  - 'proxy': an intermediary gateway that fronts many vendors behind one key
-//    (OpenRouter, LiteLLM). These are NOT direct vendors, so they get their own section.
+//    (OpenRouter, Bifrost, LiteLLM). These are NOT direct vendors, so they get their own
+//    section.
 //
 // Two scopes:
 //  - Default (no `accountId`): manage WORKSPACE keys (shared by the team) and YOUR own
@@ -128,6 +129,15 @@ const PROXY_PROVIDERS = computed<ProviderMeta[]>(() => [
     steps: [
       t('providers.apiKeys.providers.openrouter.step1'),
       t('providers.apiKeys.providers.openrouter.step2'),
+    ],
+  },
+  {
+    value: 'bifrost',
+    label: t('providers.apiKeys.providers.bifrost.label'),
+    url: 'https://docs.getbifrost.ai/features/governance',
+    steps: [
+      t('providers.apiKeys.providers.bifrost.step1'),
+      t('providers.apiKeys.providers.bifrost.step2'),
     ],
   },
   {

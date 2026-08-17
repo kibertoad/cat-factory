@@ -335,7 +335,7 @@ function vendorLabel(v: SubscriptionVendor): string {
           <ProvidersApiKeysSection category="direct" />
         </template>
 
-        <!-- Proxies / gateways (OpenRouter, LiteLLM): intermediaries that front many vendors -->
+        <!-- Proxies / gateways (OpenRouter, Bifrost, LiteLLM): front many vendors behind one key -->
         <template #proxy>
           <ProvidersApiKeysSection category="proxy" />
         </template>

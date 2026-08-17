@@ -4,7 +4,9 @@ import {
   OPENAI_BASE_URL,
   OPENROUTER_BASE_URL,
   QWEN_BASE_URL,
+  isOpenAiCompatibleProvider,
   resolveOpenAiCompatibleBaseUrl,
+  type OpenAiCompatibleProvider,
 } from '@cat-factory/agents'
 import type { Env } from '../env'
 
@@ -19,20 +21,31 @@ export { DEEPSEEK_BASE_URL, MOONSHOT_BASE_URL, OPENAI_BASE_URL, OPENROUTER_BASE_
 
 /**
  * The effective base URL for a provider: the typed `${PROVIDER}_BASE_URL` env override,
- * else the built-in default. The override-vs-default precedence, the defaults table and
- * the litellm-has-no-default semantics live in @cat-factory/agents so the Node service
- * resolves identically; this only maps the Worker's typed Env fields to that resolver.
+ * else the built-in default. The override-vs-default precedence, the defaults table and the
+ * no-public-endpoint semantics of the operator-hosted gateways live in @cat-factory/agents so the
+ * Node service resolves identically; this only maps the Worker's typed Env fields to that
+ * resolver.
+ *
+ * The map is TOTAL over {@link OpenAiCompatibleProvider} rather than a loose `Record<string, …>`:
+ * `env` is a typed interface, so the field cannot be looked up by name here, and a provider left
+ * out reads as "no override configured" forever. That is silent both ways — a documented
+ * `${PROVIDER}_BASE_URL` that nothing consumes (`XAI_BASE_URL` was exactly this), and an
+ * operator-hosted gateway that can never resolve at all. Adding a member to the shared table now
+ * fails to compile until this map answers for it.
  */
 export function baseUrlFor(provider: string, env: Env): string | null {
-  const override: Record<string, string | undefined> = {
+  const override: Record<OpenAiCompatibleProvider, string | undefined> = {
     qwen: env.QWEN_BASE_URL,
     deepseek: env.DEEPSEEK_BASE_URL,
     moonshot: env.MOONSHOT_BASE_URL,
     openai: env.OPENAI_BASE_URL,
     openrouter: env.OPENROUTER_BASE_URL,
+    xai: env.XAI_BASE_URL,
+    bifrost: env.BIFROST_BASE_URL,
     litellm: env.LITELLM_BASE_URL,
   }
-  return resolveOpenAiCompatibleBaseUrl(provider, override[provider]) ?? null
+  const configured = isOpenAiCompatibleProvider(provider) ? override[provider] : undefined
+  return resolveOpenAiCompatibleBaseUrl(provider, configured) ?? null
 }
 
 /** A resolved OpenAI-compatible upstream: where to send the request (key-free). */

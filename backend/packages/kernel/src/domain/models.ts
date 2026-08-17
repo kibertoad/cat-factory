@@ -169,7 +169,7 @@ export interface SelectableModel {
   /**
    * The coarse model FAMILY this entry belongs to, used by the account-wide allow/block
    * policy (`familyForModelId` / `isAllowedByFamilyPolicy`). Absent for gateway entries
-   * with no single family (an operator's LiteLLM route) — those are UNCLASSIFIED.
+   * with no single family (an operator's Bifrost / LiteLLM route) — those are UNCLASSIFIED.
    */
   family?: ModelFamily
   /** Model-family label shown in the picker, e.g. `Qwen3`. */
@@ -235,7 +235,7 @@ const OPENROUTER_SLUG_FAMILY: Record<string, ModelFamily> = {
 
 /**
  * The coarse model family a model id belongs to for the account-wide allow/block policy,
- * or `null` when it can't be classified (an operator's LiteLLM gateway route, an
+ * or `null` when it can't be classified (an operator's self-hosted gateway route, an
  * OpenRouter slug whose vendor prefix isn't recognised, or a per-user local runner). A
  * catalog id resolves via its declared `family`; a dynamic `openrouter:<slug>` id via the
  * slug's vendor prefix.

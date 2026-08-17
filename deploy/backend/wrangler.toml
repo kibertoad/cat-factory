@@ -409,11 +409,12 @@ WORKER_PUBLIC_URL = "https://cat-factory-backend.REPLACE_WITH_WORKERS_SUBDOMAIN.
 #   wrangler secret put DEEPSEEK_API_KEY   # DeepSeek → DeepSeek API
 #   wrangler secret put MOONSHOT_API_KEY   # Kimi → Moonshot AI
 #
-# OpenRouter + LiteLLM (OpenAI-compatible gateways): their API keys are added per
-# workspace/user via the UI (Settings → Direct provider API keys), NOT as secrets here.
+# OpenRouter + Bifrost + LiteLLM (OpenAI-compatible gateways): their API keys are added
+# per workspace/user via the UI (Settings → Direct provider API keys), NOT as secrets here.
 # Only the base URLs are deployment config — OpenRouter defaults to the public gateway,
-# LiteLLM is operator-hosted so LITELLM_BASE_URL is REQUIRED to enable it.
+# while Bifrost and LiteLLM are self-hosted, so their base URL is REQUIRED to enable them.
 # OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+# BIFROST_BASE_URL = "https://bifrost.internal.example.com/v1"
 # LITELLM_BASE_URL = "https://litellm.internal.example.com/v1"
 
 # Storage retention. The cron sweeper prunes the tables that don't self-limit to

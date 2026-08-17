@@ -17,7 +17,9 @@ describe('familyForModelId', () => {
     expect(familyForModelId('cloudflare-llama')).toBe('llama')
   })
 
-  it('leaves the gateway entry (LiteLLM) unclassified', () => {
+  it('leaves both operator-hosted gateway entries unclassified', () => {
+    // What such a gateway routes to is its operator's config, so no family can be claimed.
+    expect(familyForModelId('bifrost-default')).toBeNull()
     expect(familyForModelId('litellm-default')).toBeNull()
   })
 

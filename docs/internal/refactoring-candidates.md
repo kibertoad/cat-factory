@@ -179,13 +179,22 @@ keeps engine-internal access rather than the minimal public `ResolverContext`).
 ### 1. Shared OpenAI-compatible provider registry ✅
 
 The OpenAI-compatible vendor map and base-URL resolution are now unified in
-`@cat-factory/agents`: `DEFAULT_OPENAI_COMPATIBLE_BASE_URLS` is the single table and
+`@cat-factory/agents`: `OPENAI_COMPATIBLE_ENDPOINTS` is the single table (each provider mapped to
+its public endpoint, or `null` for a self-hosted gateway that has none) and
 `resolveOpenAiCompatibleBaseUrl(provider, override)` the single resolver, both facades
 routing through it (`baseUrlForNode` / the Worker's `baseUrlFor`). The "if key present,
 register a resolver" loop is now the shared `createScopedModelProviderResolver`
 (`@cat-factory/server`), consumed by both `runtimes/node/src/modelProvider.ts` and
 `runtimes/cloudflare/src/infrastructure/container.ts`. Adding a vendor is now a one-line
 table entry both runtimes pick up.
+
+**Closed properly when Bifrost was added.** "Both runtimes pick it up" was only true of the
+inline path: the Node LLM proxy upstream kept its OWN provider→env table (so `xai` was admitted
+by the dispatch guard and had no upstream), and the Worker's typed env override map was a loose
+`Record<string, …>` that silently ignored a provider it omitted (so the documented
+`XAI_BASE_URL` was consumed by neither facade). The Node table is gone (it resolves through
+`baseUrlForNode`), and the Worker map is now total over the derived `OpenAiCompatibleProvider`
+union, so a missing provider is a type error rather than a dead env var.
 
 ### 2. Split the monolithic Drizzle repositories file ✅
 

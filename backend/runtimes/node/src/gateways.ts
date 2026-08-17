@@ -1,10 +1,4 @@
-import {
-  DEEPSEEK_BASE_URL,
-  MOONSHOT_BASE_URL,
-  OPENAI_BASE_URL,
-  OPENROUTER_BASE_URL,
-  QWEN_BASE_URL,
-} from '@cat-factory/agents'
+import { isOpenAiCompatibleProvider } from '@cat-factory/agents'
 import {
   type GitHubBackfillScheduler,
   type GitHubWebhookIngest,
@@ -20,6 +14,7 @@ import {
   PgBossGitHubWebhookIngest,
 } from './execution/githubSyncRunner.js'
 import { PgBossTrackerWebhookIngest } from './execution/trackerSyncRunner.js'
+import { baseUrlForNode } from './modelProvider.js'
 
 // Node implementations of the runtime gateway seams. Async GitHub ingest is backed by
 // pg-boss when the durable job engine is up (the production/dev path): backfills, webhook
@@ -78,17 +73,6 @@ class InlineGitHubWebhookIngest implements GitHubWebhookIngest {
   }
 }
 
-// `baseUrl` is the built-in default; LiteLLM has none (operator-hosted), so it relies
-// purely on its env override and resolves to null until LITELLM_BASE_URL is set.
-const OPENAI_COMPATIBLE: Record<string, { baseUrl?: string; baseUrlEnv: string }> = {
-  qwen: { baseUrl: QWEN_BASE_URL, baseUrlEnv: 'QWEN_BASE_URL' },
-  deepseek: { baseUrl: DEEPSEEK_BASE_URL, baseUrlEnv: 'DEEPSEEK_BASE_URL' },
-  moonshot: { baseUrl: MOONSHOT_BASE_URL, baseUrlEnv: 'MOONSHOT_BASE_URL' },
-  openai: { baseUrl: OPENAI_BASE_URL, baseUrlEnv: 'OPENAI_BASE_URL' },
-  openrouter: { baseUrl: OPENROUTER_BASE_URL, baseUrlEnv: 'OPENROUTER_BASE_URL' },
-  litellm: { baseUrlEnv: 'LITELLM_BASE_URL' },
-}
-
 /**
  * Forwards the container LLM proxy to OpenAI-compatible providers over HTTP. Only the
  * base URL is resolved here (overridable per provider via env); the API key is leased
@@ -100,12 +84,13 @@ class HttpLlmUpstream implements LlmUpstream {
   constructor(private readonly env: NodeJS.ProcessEnv) {}
 
   resolveOpenAiCompatible(provider: string): LlmUpstreamEndpoint | null {
-    const entry = OPENAI_COMPATIBLE[provider]
-    if (!entry) return null
-    // `||` not `??`: a set-but-blank base-URL env must fall back to the default, not
-    // collapse to an empty URL the SDK then chokes on. For a provider with no default
-    // (LiteLLM), an unset env yields null so the proxy reports "not available" cleanly.
-    const baseURL = this.env[entry.baseUrlEnv] || entry.baseUrl
+    // The membership test and the URL both come from the shared table, NOT a second copy of it
+    // here: a provider `isProxyableProvider` admits at dispatch but a local table omitted got
+    // past the guard and then failed as "upstream not available" (which is what `xai` did). The
+    // predicate is what keeps a non-OpenAI-shaped provider out — `baseUrlForNode` honours an
+    // override for any id, `anthropic` included.
+    if (!isOpenAiCompatibleProvider(provider)) return null
+    const baseURL = baseUrlForNode(provider, this.env)
     return baseURL ? { baseURL } : null
   }
 

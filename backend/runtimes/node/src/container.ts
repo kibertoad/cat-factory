@@ -722,7 +722,7 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     cloudflareModelsEnabled,
     ...(bedrockModels ? { bedrockModels } : {}),
     // The direct-provider base-URL resolver the catalog uses to gate selectability on a
-    // resolvable endpoint (e.g. LiteLLM stays unselectable until LITELLM_BASE_URL is set).
+    // resolvable endpoint (e.g. Bifrost stays unselectable until BIFROST_BASE_URL is set).
     baseUrlFor: (provider) => baseUrlForNode(provider, env),
     // The per-user locally-run model endpoints store; present when ENCRYPTION_KEY is set.
     localModelEndpoints,

@@ -146,6 +146,13 @@ Several shapes of entry fall out of this:
   `contextTokens` on the `ModelRef` surfaces this in the picker.
 - **Gateway-only**: `gemini`, `gemini-flash`, `kimi-k3`. No Cloudflare/direct base;
   reached through OpenRouter once a key is connected.
+- **Operator-hosted-gateway entries**: `bifrost-default`, `litellm-default`. One generic entry
+  each for the two self-hosted gateways (Bifrost, LiteLLM), because what such a gateway serves
+  is its operator's configuration and no catalog here can enumerate it. Both are `direct`-flavour
+  entries with **no** Cloudflare floor, so each goes unavailable until its key is pooled AND its
+  base URL is set (§8), and neither declares a `family`, so an account model-family policy treats
+  them as UNCLASSIFIED. Bifrost names models by their canonical `provider/model` pair
+  (`openai/gpt-4o`); LiteLLM by the operator's own `config.yaml` aliases.
 - **Bedrock-only**: `claude-opus-4-8`. Reachable only in an AWS account whose allow-list
   carries it. It is a **separate entry rather than a `bedrock` flavour on `claude-opus`**,
   because Bedrock lags Anthropic: folding it in would silently run 4.8 for a block pinned
@@ -321,8 +328,9 @@ how a container step authenticates and reaches the model:
 - **`pi`** (default): the repo-operating agent kinds (`coder`, `mocker`,
   `playwright`, `blueprints`, `ci-fixer`, `conflict-resolver`, `merger`) run inside a
   per-run container and reach models through the **LLM proxy**. The proxy can only
-  serve **proxyable providers**: `workers-ai`, `qwen`, `deepseek`, `moonshot`, `xai`,
-  `openai` (`isProxyableProvider`). A Pi step pinned to a non-proxyable provider fails
+  serve **proxyable providers**: `workers-ai`, every OpenAI-compatible provider
+  (`OPENAI_COMPATIBLE_PROVIDERS`), and the per-user local runners
+  (`isProxyableProvider`). A Pi step pinned to a non-proxyable provider fails
   loudly at dispatch ("…needs a model the LLM proxy can serve…").
 - **`claude-code` / `codex`** (subscription harnesses): talk **direct to the vendor**
   with a leased token (no proxy session): a pooled workspace token for the poolable
@@ -429,15 +437,29 @@ Both facades compose a model registry from `@cat-factory/agents`'
 **`CompositeModelProvider`** (single-provider resolvers, each registered only when its
 credentials exist). An **unconfigured provider isn't registered**, so `resolve()`
 throws a clear `Unsupported model provider: <provider>` instead of failing deep in the
-SDK. Base URLs are the single source of truth in
-[`providers/endpoints.ts`](../packages/agents/src/providers/endpoints.ts).
+SDK.
 
-|                   | **Cloudflare Worker**     | **Node / local**                                                                               |
-| ----------------- | ------------------------- | ---------------------------------------------------------------------------------------------- |
-| Cloudflare models | `AI` binding              | over REST (`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`, optional `CLOUDFLARE_AI_GATEWAY`) |
-| Direct vendors    | `*_API_KEY` secrets       | `*_API_KEY` env                                                                                |
-| Subscriptions     | requires `ENCRYPTION_KEY` | requires `ENCRYPTION_KEY`                                                                      |
-| Bedrock           | opt-in (`BEDROCK_*`)      | opt-in (`BEDROCK_*`)                                                                           |
+**One table names every OpenAI-compatible provider and the endpoint it defaults to**,
+`OPENAI_COMPATIBLE_ENDPOINTS` in
+[`providers/endpoints.ts`](../packages/agents/src/providers/endpoints.ts), and everything else
+about such a provider is DERIVED from it: the built-in base URLs, the UI-configurable key-pool
+vendors, whether the LLM proxy can serve it, and each facade's env plumbing. A `null` entry marks
+an **operator-hosted** gateway (`bifrost`, `litellm`): self-hosted software with no public instance,
+so it is proxyable and key-poolable but resolves only once the deployment sets its
+`${PROVIDER}_BASE_URL`. That is what the derived `OperatorHostedGateway` union is, and the
+base-URL remedy names each member through an exhaustive `Record` over it, so **adding a gateway is
+one table entry and the compiler finds the rest**: the Worker's typed env map and that remedy both
+fail to compile until they answer for it. Before this was one table, `XAI_BASE_URL` was documented
+but consumed by neither facade, and `xai` was admitted by the dispatch guard while the Node proxy's
+own copy of the list had no upstream for it.
+
+|                      | **Cloudflare Worker**                                  | **Node / local**                                                                               |
+| -------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| Cloudflare models    | `AI` binding                                           | over REST (`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`, optional `CLOUDFLARE_AI_GATEWAY`) |
+| Direct vendors       | `*_API_KEY` secrets                                    | `*_API_KEY` env                                                                                |
+| Subscriptions        | requires `ENCRYPTION_KEY`                              | requires `ENCRYPTION_KEY`                                                                      |
+| Bedrock              | opt-in (`BEDROCK_*`)                                   | opt-in (`BEDROCK_*`)                                                                           |
+| Self-hosted gateways | `BIFROST_BASE_URL` / `LITELLM_BASE_URL` + a pooled key | same                                                                                           |
 
 ### Config / env reference
 
@@ -456,6 +478,10 @@ outcome, because that is what a change to this layer can break:
 - **`ENCRYPTION_KEY` gates the subscription pool existing at all**: without it the
   vendor-credential endpoints answer `503`, so `hasSubscriptionToken` is structurally false and
   §4's override never fires.
+- **`BIFROST_BASE_URL` / `LITELLM_BASE_URL` are the ENABLEMENT of their gateway**, not an
+  override: with no URL the provider is dropped from the capability set (`baseUrlFor` in
+  `resolveWorkspaceCapabilities`), so a pooled key for it stays inert and its catalog entry reads
+  `available: false` rather than passing the start guard and failing at dispatch.
 
 ### AWS Bedrock (opt-in)
 

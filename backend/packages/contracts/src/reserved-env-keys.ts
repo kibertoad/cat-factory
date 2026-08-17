@@ -72,6 +72,7 @@ export const PLATFORM_RESERVED_ENV_PREFIXES: readonly string[] = [
   'AUTH_',
   'AWS_',
   'BEDROCK_',
+  'BIFROST_',
   'BUDGET_',
   'CI_',
   'CLOUDFLARE_',

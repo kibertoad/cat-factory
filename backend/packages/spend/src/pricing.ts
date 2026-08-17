@@ -288,8 +288,12 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   'openrouter:x-ai/grok-4.6': { inputPerMillion: 1.84, outputPerMillion: 5.52 },
   'openrouter:qwen/qwen3.7-max': { inputPerMillion: 1.36, outputPerMillion: 4.07 },
   openrouter: { inputPerMillion: 1.84, outputPerMillion: 11.04 },
-  // LiteLLM — an operator-hosted gateway whose true cost depends entirely on the backend
-  // model it routes to, which we can't know here. Default to the generic fallback rate.
+  // Bifrost / LiteLLM — operator-hosted gateways whose true cost depends entirely on the
+  // backend model each routes to, which we can't know here. Default to the generic fallback
+  // rate, NAMED rather than left to fall through to `defaultPrice`: that value is the guess for
+  // a provider the platform does not know, so a later change to it must not silently re-price
+  // a gateway the platform ships support for.
+  bifrost: { inputPerMillion: 0.14, outputPerMillion: 0.55 },
   litellm: { inputPerMillion: 0.14, outputPerMillion: 0.55 },
   // AWS Bedrock: deliberately a BARE provider entry with no per-model keys, because a
   // Bedrock ref carries the operator's geo/global inference prefix (`eu.anthropic.…`), which

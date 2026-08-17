@@ -282,9 +282,11 @@ export interface Env {
   MOONSHOT_BASE_URL?: string
   XAI_BASE_URL?: string
   OPENAI_BASE_URL?: string
-  // OpenRouter override (defaults to the public gateway). LiteLLM is operator-hosted, so
-  // LITELLM_BASE_URL is REQUIRED to enable the `litellm` provider (no public default).
+  // OpenRouter override (defaults to the public gateway). Bifrost and LiteLLM are
+  // operator-hosted, so their base URL is REQUIRED to enable the `bifrost` / `litellm` provider
+  // at all (self-hosted software, no public default).
   OPENROUTER_BASE_URL?: string
+  BIFROST_BASE_URL?: string
   LITELLM_BASE_URL?: string
 
   // ---- AWS Bedrock (opt-in) -----------------------------------------------
