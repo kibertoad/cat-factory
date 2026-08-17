@@ -6776,6 +6776,8 @@
       "clarity": "בהירות",
       "architecture": "ארכיטקטורה",
       "code-review": "סקירת קוד",
+      "estimation": "אמדן",
+      "answer-recommendation": "תשובות מומלצות",
       "repo-feature": "פיצ׳ר במאגר",
       "repo-bug": "באג במאגר"
     },

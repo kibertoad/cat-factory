@@ -3,8 +3,7 @@ import {
   type AgentKindRegistry,
   appendedDirectivesFor,
   BESPOKE_SYSTEM_PROMPTS,
-  composeBespokePrompt,
-  systemPromptFor,
+  composedSystemPromptFor,
 } from '@cat-factory/agents'
 
 // Per-workspace agent prompt overrides, container side.
@@ -46,16 +45,13 @@ export function builtInDirectivesFor(kind: AgentKind, registry: AgentKindRegistr
 /**
  * The base system prompt for one container dispatch, honouring the workspace's override.
  *
- * A bespoke-prompt kind takes the override in place of its ROLE half and keeps its directives;
- * every other kind goes through `systemPromptFor`, which re-applies the engine-enforced
- * directives on top of the override. Either way an unedited kind sends byte-for-byte what it
- * sent before, and an edited one keeps the invariants it is run under.
+ * All this adds to `composedSystemPromptFor` is reading the override off the run context: the
+ * bespoke-vs-composed branch itself lives in `@cat-factory/agents`, because the Sandbox run-driver
+ * needs the same answer for a graded candidate and sits below this layer.
  */
 export function dispatchSystemPromptFor(
   context: AgentRunContext,
   registry: AgentKindRegistry,
 ): string {
-  const bespoke = BESPOKE_SYSTEM_PROMPTS[context.agentKind]
-  if (bespoke) return composeBespokePrompt(bespoke, context.systemPromptOverride)
-  return systemPromptFor(context.agentKind, registry, context.systemPromptOverride)
+  return composedSystemPromptFor(context.agentKind, registry, context.systemPromptOverride)
 }

@@ -1,8 +1,11 @@
 import { type SandboxFixture, sandboxFixtureSchema } from '@cat-factory/contracts'
 import * as v from 'valibot'
+import { ANSWER_RECOMMENDATION_FIXTURES } from './fixtures/answer-recommendation.js'
 import { ARCHITECTURE_FIXTURES } from './fixtures/architecture.js'
 import { CLARITY_FIXTURES } from './fixtures/clarity.js'
 import { CODE_REVIEW_FIXTURES } from './fixtures/code-review.js'
+import { CODE_REVIEW_REPO_FIXTURES } from './fixtures/code-review-repo.js'
+import { ESTIMATION_FIXTURES } from './fixtures/estimation.js'
 import { REQUIREMENTS_FIXTURES } from './fixtures/requirements.js'
 import type { SandboxFixtureDefinition } from './types.js'
 
@@ -13,7 +16,10 @@ import type { SandboxFixtureDefinition } from './types.js'
 export const BUILTIN_SANDBOX_FIXTURES: readonly SandboxFixtureDefinition[] = [
   ...REQUIREMENTS_FIXTURES,
   ...CLARITY_FIXTURES,
+  ...ANSWER_RECOMMENDATION_FIXTURES,
+  ...ESTIMATION_FIXTURES,
   ...CODE_REVIEW_FIXTURES,
+  ...CODE_REVIEW_REPO_FIXTURES,
   ...ARCHITECTURE_FIXTURES,
 ]
 

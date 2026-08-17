@@ -6776,6 +6776,8 @@
       "clarity": "clarté",
       "architecture": "architecture",
       "code-review": "revue de code",
+      "estimation": "estimation",
+      "answer-recommendation": "réponses recommandées",
       "repo-feature": "fonctionnalité de dépôt",
       "repo-bug": "bogue de dépôt"
     },

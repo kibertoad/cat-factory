@@ -1,27 +1,41 @@
-import { baseSystemPromptFor, PROMPT_VERSIONS, promptVersionLabel } from '@cat-factory/agents'
+import { PROMPT_VERSIONS, promptVersionLabel, shippedBasePromptFor } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import type { SandboxFixtureKind } from '@cat-factory/contracts'
+import type { SandboxAgentBucket, SandboxFixtureKind, SandboxRunMode } from '@cat-factory/contracts'
 import type { SandboxPromptVersion } from '@cat-factory/kernel'
 import type { SandboxTaskType } from './rubrics.js'
 
 // The Sandbox's catalog of testable agent kinds. Baselines are NOT stored in the DB —
 // they are read live from `@cat-factory/agents` so they always reflect current source
-// (the "all currently available prompts as baseline" surface). Each entry declares the
-// agent's execution bucket (inline LLM vs container checkout — mirrors the server's
-// `CONTAINER_KINDS`) and the grading rubric the judge should use for it.
+// (the "all currently available prompts as baseline" surface). Each entry declares how
+// PRODUCTION dispatches the kind, how the SANDBOX runs a cell for it, the grading rubric
+// the judge should use, and the fixture kinds it is exercised against.
 //
-// This is a deliberately curated starting set that maps cleanly onto the three shipped
-// rubrics and the version-controlled baseline prompts. Adding a kind is one entry here.
+// Adding a kind is one entry here. What it must be able to answer is on
+// `SandboxAgentKindMeta` below; the two execution fields are deliberately separate.
 
-export type SandboxAgentBucket = 'inline' | 'container'
+// `SandboxAgentBucket` and `SandboxRunMode` are the contracts' picklists rather than types
+// restated here, because the SPA has to render both and cannot see this package. Conflating the two
+// facts is what let the catalog advertise the `coder` as a testable kind whose every draft
+// experiment then 400-ed at create, and simultaneously describe the `reviewer` as `inline` when
+// production gives it a real checkout.
+export type { SandboxAgentBucket, SandboxRunMode }
 
 export interface SandboxAgentKindMeta {
   /** The agent kind (matches `AgentKind` strings used across the product). */
   agentKind: string
   /** A short human label for the Sandbox prompt browser. */
   label: string
-  /** Inline kinds run a single LLM call; container kinds need a real checkout. */
+  /** How PRODUCTION dispatches this kind. */
   bucket: SandboxAgentBucket
+  /** How the SANDBOX runs a cell for it; `unsupported` ⇒ {@link unsupportedReason} says why. */
+  sandboxRun: SandboxRunMode
+  /**
+   * Why the Sandbox cannot run this kind, phrased for the person reading it in the builder.
+   * Non-null exactly when `sandboxRun === 'unsupported'` (asserted in `baselines.test.ts`), and
+   * the SINGLE source of the refusal: the create endpoint, the run-driver and the SPA's disabled
+   * option all read this one string rather than each carrying its own copy.
+   */
+  unsupportedReason: string | null
   /** Which rubric the judge grades this kind's output against. */
   rubric: SandboxTaskType
   /**
@@ -38,23 +52,72 @@ export interface SandboxAgentKindMeta {
   basePromptId: string | null
 }
 
+/**
+ * Why the `coder` cannot be a Sandbox cell today, and what it would take.
+ *
+ * Stated as the reason rather than "not yet supported" because the two routes are genuinely
+ * different work and a reader deciding whether to wait needs to know which one is missing. See
+ * `docs/initiatives/sandbox-coverage-expansion.md`.
+ */
+const CODER_UNSUPPORTED =
+  "The coder's deliverable is a pushed commit, so grading it needs a real container run against " +
+  'a seed repository. Register a repo fixture pointing at a repository this deployment owns once ' +
+  'container cells land; an inline cell can only grade text.'
+
 /** The testable-kind catalog. Ordered for stable display (inline-first, then container). */
 export const SANDBOX_AGENT_KINDS: readonly SandboxAgentKindMeta[] = [
   {
     agentKind: 'requirements-review',
     label: 'Requirements review',
     bucket: 'inline',
+    sandboxRun: 'inline',
+    unsupportedReason: null,
     rubric: 'requirement-review',
     fixtureKinds: ['requirements'],
     basePromptId: 'requirement-review',
   },
   {
+    // Bug-report triage, graded on `bug-triage` rather than `requirement-review`. The two share an
+    // output shape and nothing else: a triage's best moves are splitting conflated symptoms and
+    // asking about recovery, and `requirement-review`'s `product_scope` dimension actively docked
+    // it for the session/cookie and load-balancer hypotheses that ARE the skill here.
     agentKind: 'clarity-review',
     label: 'Clarity (bug-report) review',
     bucket: 'inline',
-    rubric: 'requirement-review',
+    sandboxRun: 'inline',
+    unsupportedReason: null,
+    rubric: 'bug-triage',
     fixtureKinds: ['clarity'],
     basePromptId: 'clarity-review',
+  },
+  {
+    // The Requirement Writer: for each requirements-review finding it recommends a concrete answer
+    // and self-reports `groundedIn` + `confidence`. Those two fields are what an UNATTENDED run
+    // acts on (ADR 0053), which is why they get rubric dimensions of their own.
+    //
+    // Driven by `IterativeReviewService` as an inline engine kind (see
+    // `INLINE_ENGINE_SYSTEM_PROMPTS`), so its baseline is the numbered `requirement-writer` prompt.
+    agentKind: 'requirements-writer',
+    label: 'Requirement writer (recommended answers)',
+    bucket: 'inline',
+    sandboxRun: 'inline',
+    unsupportedReason: null,
+    rubric: 'answer-recommendation',
+    fixtureKinds: ['answer-recommendation'],
+    basePromptId: 'requirement-writer',
+  },
+  {
+    // Predictive triage: three 0..1 axes plus a rationale, run inline before any design work. Its
+    // scores gate the expensive consensus path and surface on the card, so calibration is the
+    // product behaviour under test. No numbered baseline prompt: the role text is read live.
+    agentKind: 'task-estimator',
+    label: 'Task estimator (triage scores)',
+    bucket: 'inline',
+    sandboxRun: 'inline',
+    unsupportedReason: null,
+    rubric: 'estimation',
+    fixtureKinds: ['estimation'],
+    basePromptId: null,
   },
   {
     // The code `reviewer` is the coder's COMPANION, and a companion's prompt wins over every
@@ -62,22 +125,32 @@ export const SANDBOX_AGENT_KINDS: readonly SandboxAgentKindMeta[] = [
     // phase prompt — naming that id here showed a candidate the wrong text to fork from and
     // graded it against a baseline production never sends. No numbered baseline prompt: the
     // text is read live from the companion track, exactly like `architect-companion` below.
+    //
+    // `bucket: 'container'` is the truth: in production this companion clones the producer's PR
+    // branch and reads the real files (`isContainerBackedCompanion`), and its composed system
+    // prompt says so. The Sandbox still runs it inline, so the run-driver STATES the missing
+    // checkout in the task input and the fixture hands the change over as injected context files,
+    // which is the same seam production uses for an inline caller with no filesystem.
     agentKind: 'reviewer',
     label: 'Code reviewer',
-    bucket: 'inline',
+    bucket: 'container',
+    sandboxRun: 'inline',
+    unsupportedReason: null,
     rubric: 'code-review',
     fixtureKinds: ['code-review'],
     basePromptId: null,
   },
   {
-    // Reviews an `architect`'s design proposal (the architect-companion grades it). A
-    // proposal critique is graded on the same axes as a requirements review — gap
-    // coverage, no-hallucination, specificity. No numbered baseline prompt: the text is
-    // read live from `systemPromptFor('architect-companion')`.
+    // Reviews an `architect`'s design proposal (the architect-companion grades it). Graded on
+    // `architecture-review`: a design critique's whole job is the TECHNICAL layer, so
+    // `requirement-review` was the wrong rubric in the one way that mattered.  No numbered
+    // baseline prompt: the text is read live from `systemPromptFor('architect-companion')`.
     agentKind: 'architect-companion',
     label: 'Architecture-proposal review',
     bucket: 'inline',
-    rubric: 'requirement-review',
+    sandboxRun: 'inline',
+    unsupportedReason: null,
+    rubric: 'architecture-review',
     fixtureKinds: ['architecture'],
     basePromptId: null,
   },
@@ -85,6 +158,8 @@ export const SANDBOX_AGENT_KINDS: readonly SandboxAgentKindMeta[] = [
     agentKind: 'coder',
     label: 'Coder (implementation)',
     bucket: 'container',
+    sandboxRun: 'unsupported',
+    unsupportedReason: CODER_UNSUPPORTED,
     rubric: 'implementation',
     fixtureKinds: ['repo-feature', 'repo-bug'],
     basePromptId: 'build',
@@ -101,29 +176,49 @@ export function sandboxKindMeta(agentKind: string): SandboxAgentKindMeta | undef
 }
 
 /**
+ * Whether a cell for this kind must TELL the candidate it has no checkout.
+ *
+ * True exactly for a kind production dispatches into a container but the Sandbox runs inline: its
+ * composed system prompt was written for an agent holding a real clone and instructs it to diff the
+ * branch and read the changed files. Left unsaid, the candidate is graded on failing to do
+ * something impossible, which is the same defect as silently dropping a capability the prompt
+ * promised. Derived from the two declared facts rather than carried as a third one they could
+ * contradict.
+ */
+export function statesMissingCheckout(meta: SandboxAgentKindMeta): boolean {
+  return meta.bucket === 'container' && meta.sandboxRun === 'inline'
+}
+
+/**
  * The current shipped system-prompt text + `id@vN` label for a catalog kind.
  *
- * The text is the BASE (track) prompt, deliberately WITHOUT the surface directives and trait
- * guidance the platform appends. That is the same unit a workspace prompt override holds and the
- * same unit the pipeline builder's editor shows, which is what makes a sandbox version and a
- * workspace revision interchangeable — a candidate can be promoted to the live prompt, and a live
- * prompt can be dropped into a matrix, with no reinterpretation of what the text means.
+ * The text is `shippedBasePromptFor`: the SAME unit a workspace prompt override holds and the
+ * pipeline builder's editor shows, deliberately WITHOUT the surface directives, trait guidance or
+ * (for a bespoke kind) the directives half the platform re-appends. That is what makes a sandbox
+ * version and a workspace revision interchangeable: a candidate can be promoted to the live prompt,
+ * and a live prompt can be dropped into a matrix, with no reinterpretation of what the text means.
  *
- * The directives are re-applied at RUN time (`SandboxRunService`, via the same `systemPromptFor`
- * override path production dispatch uses), so a candidate is still graded on what would actually
- * be sent. Storing the composed text instead would double the guidance the moment it was promoted.
+ * `PROMPT_VERSIONS` supplies only the LABEL. Reading the text off it instead was wrong for exactly
+ * the inline ENGINE kinds: `PROMPT_VERSIONS['requirement-review'].text` is the COMPOSED prompt
+ * (role plus directives), so a candidate cloned from it already carried the directives, and
+ * promoting that candidate to the live prompt doubled them.
+ *
+ * The directives are re-applied at RUN time by `composedSystemPromptFor`, the same composition
+ * production dispatch uses, so a candidate is still graded on what would actually be sent.
  */
 export function baselinePromptText(
   meta: SandboxAgentKindMeta,
   registry: AgentKindRegistry,
 ): { text: string; label: string } {
-  if (meta.basePromptId && meta.basePromptId in PROMPT_VERSIONS) {
-    const versioned = PROMPT_VERSIONS[meta.basePromptId as keyof typeof PROMPT_VERSIONS]
-    return { text: versioned.text, label: promptVersionLabel(versioned.id, versioned.version) }
-  }
+  const versioned =
+    meta.basePromptId && meta.basePromptId in PROMPT_VERSIONS
+      ? PROMPT_VERSIONS[meta.basePromptId as keyof typeof PROMPT_VERSIONS]
+      : undefined
   return {
-    text: baseSystemPromptFor(meta.agentKind, registry),
-    label: promptVersionLabel(meta.agentKind, 1),
+    text: shippedBasePromptFor(meta.agentKind, registry),
+    label: versioned
+      ? promptVersionLabel(versioned.id, versioned.version)
+      : promptVersionLabel(meta.agentKind, 1),
   }
 }
 

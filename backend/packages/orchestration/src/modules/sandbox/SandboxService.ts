@@ -38,6 +38,7 @@ import {
   sandboxPromptKinds,
   workspacePromptVersions,
 } from '@cat-factory/sandbox'
+import { assertSandboxRunnable, assertSandboxRunnableFixture } from './sandboxAdmission.js'
 
 /** A safety ceiling on how many cells one experiment may expand to (cost guard). */
 export const MAX_SANDBOX_CELLS = 100
@@ -338,23 +339,19 @@ export class SandboxService {
     input: CreateSandboxExperimentInput,
   ): Promise<SandboxExperiment> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    const meta = sandboxKindMeta(input.agentKind)
-    if (!meta) {
-      throw new ValidationError(`"${input.agentKind}" is not a Sandbox-testable agent kind`)
-    }
-    // Refuse container kinds up front: the in-product run driver only runs inline cells,
-    // so a container experiment could be persisted but never launched. Reject at create
-    // time rather than leaving an un-launchable draft in the workspace.
-    if (meta.bucket === 'container') {
-      throw new ValidationError(
-        `The "${input.agentKind}" agent runs in a container; container experiments are not yet supported in the Sandbox.`,
-      )
-    }
+    // Refuse an un-runnable kind up front, through the same assertion the run-driver uses: the
+    // driver only runs inline cells, so a draft naming a kind it cannot dispatch could be persisted
+    // and never launched.
+    assertSandboxRunnable(input.agentKind)
     if (!isRunnableMatrix(input.matrix)) {
       throw new ValidationError(
         'The experiment matrix needs at least one prompt, model and fixture',
       )
     }
+    // ...and the same for the FIXTURES the matrix names, which only `launch` used to check. One
+    // list read indexed into a Map rather than a point read per id (the banned N+1), and the
+    // builtins fill in whatever a workspace has not had seeded yet.
+    await this.assertRunnableFixtures(workspaceId, input.matrix.fixtureIds)
     const repeats = input.repeats ?? 1
     const total = cellCount(input.matrix, repeats)
     if (total > MAX_SANDBOX_CELLS) {
@@ -379,6 +376,26 @@ export class SandboxService {
   }
 
   // ---- internals ------------------------------------------------------------
+
+  /**
+   * Refuse a matrix naming a fixture the run-driver cannot run (today: a repository seed).
+   *
+   * An unknown id is deliberately NOT refused here: the run-driver resolves fixtures against the
+   * workspace store AND the builtins at launch, and a fixture can legitimately be authored between
+   * create and launch. Refusing an absent id would only move that failure earlier while adding a way
+   * for a valid draft to be rejected.
+   */
+  private async assertRunnableFixtures(workspaceId: string, fixtureIds: string[]): Promise<void> {
+    const byId = new Map<string, SandboxFixture>()
+    for (const fixture of listBuiltinFixtures(this.deps.clock.now())) byId.set(fixture.id, fixture)
+    for (const fixture of await this.deps.sandboxFixtureRepository.list(workspaceId)) {
+      byId.set(fixture.id, fixture)
+    }
+    for (const id of new Set(fixtureIds)) {
+      const fixture = byId.get(id)
+      if (fixture) assertSandboxRunnableFixture(fixture)
+    }
+  }
 
   /** Resolve the shipped baseline a clone derives from (by base-prompt id, else by kind). */
   private resolveBaseline(agentKind: string, basePromptId: string | null): SandboxPromptVersion {

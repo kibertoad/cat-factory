@@ -6776,6 +6776,8 @@
       "clarity": "明確さ",
       "architecture": "アーキテクチャ",
       "code-review": "コードレビュー",
+      "estimation": "見積もり",
+      "answer-recommendation": "推奨回答",
       "repo-feature": "リポジトリ機能",
       "repo-bug": "リポジトリのバグ"
     },

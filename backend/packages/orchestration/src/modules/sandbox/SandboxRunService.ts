@@ -24,20 +24,20 @@ import {
   resolveScopedModelProvider,
   ValidationError,
 } from '@cat-factory/kernel'
-import { catFactoryObservability, systemPromptFor } from '@cat-factory/agents'
+import { catFactoryObservability, composedSystemPromptFor } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { SANDBOX_REPO_FIXTURE_KINDS } from '@cat-factory/contracts'
 import {
   expandMatrix,
   listBaselines,
   listBuiltinFixtures,
   rubricFor,
-  sandboxKindMeta,
   versionLabel,
   weightedTotal,
 } from '@cat-factory/sandbox'
 import { generateText } from 'ai'
+import { assertSandboxRunnable, assertSandboxRunnableFixture } from './sandboxAdmission.js'
 import { composeExperimentDetail, type SandboxExperimentDetail } from './SandboxService.js'
+import { renderFixtureInput } from './sandbox-input.js'
 import {
   buildJudgePrompt,
   coerceJudgeScores,
@@ -46,7 +46,6 @@ import {
   JUDGE_SYSTEM_PROMPT,
   objectiveFor,
   parseModelCatalogId,
-  renderFixtureInput,
 } from './sandbox.logic.js'
 
 export interface SandboxRunServiceDependencies {
@@ -106,13 +105,7 @@ export class SandboxRunService {
     if (experiment.status === 'running') {
       throw new ConflictError('This experiment is already running.')
     }
-    const meta = sandboxKindMeta(experiment.agentKind)
-    if (!meta) throw new ValidationError(`"${experiment.agentKind}" is not a Sandbox-testable kind`)
-    if (meta.bucket === 'container') {
-      throw new ValidationError(
-        `The "${experiment.agentKind}" agent runs in a container; container experiments are not yet supported in the Sandbox.`,
-      )
-    }
+    const meta = assertSandboxRunnable(experiment.agentKind)
 
     const provider = await this.providerFor(workspaceId)
     const prompts = await this.resolvePrompts(workspaceId, experiment)
@@ -181,7 +174,7 @@ export class SandboxRunService {
           )
           return { tokensSpent: 0, graded: false }
         }
-        const taskInput = renderFixtureInput(fixture)
+        const taskInput = renderFixtureInput(fixture, meta, this.deps.agentKindRegistry)
         let cellSpent = 0
 
         // Phase 1 — run the candidate. A failure here means the cell produced nothing,
@@ -193,11 +186,12 @@ export class SandboxRunService {
           const candidate = await generateText({
             model: provider.resolve(candidateRef),
             // Composed exactly as production dispatch composes a workspace prompt override: the
-            // stored text is the BASE (track) prompt, and `systemPromptFor` layers the surface
-            // directives and trait guidance on top. Grading the bare base would measure text that
-            // is never sent — which matters most at the moment a well-graded candidate is promoted
-            // to the live prompt, since the promoted prompt would then behave unlike the graded one.
-            system: systemPromptFor(
+            // stored text is the shipped BASE prompt, and `composedSystemPromptFor` puts the rest
+            // back (surface directives and trait guidance, or a bespoke kind's directives half).
+            // Grading the bare base would measure text that is never sent, which matters most at the
+            // moment a well-graded candidate is promoted to the live prompt, since the promoted
+            // prompt would then behave unlike the graded one.
+            system: composedSystemPromptFor(
               experiment.agentKind,
               this.deps.agentKindRegistry,
               prompt.systemText,
@@ -351,11 +345,7 @@ export class SandboxRunService {
       const fixture =
         (await this.deps.sandboxFixtureRepository.get(workspaceId, id)) ?? builtins.get(id)
       if (!fixture) throw new ValidationError(`Unknown fixture "${id}"`)
-      if ((SANDBOX_REPO_FIXTURE_KINDS as readonly string[]).includes(fixture.kind)) {
-        throw new ValidationError(
-          `Fixture "${fixture.name}" needs a repository checkout; repo fixtures are not yet supported in the Sandbox.`,
-        )
-      }
+      assertSandboxRunnableFixture(fixture)
       map.set(id, fixture)
     }
     return map

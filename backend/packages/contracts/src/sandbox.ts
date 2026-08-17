@@ -69,6 +69,21 @@ export const sandboxPromptVersionSchema = v.object({
 })
 export type SandboxPromptVersion = v.InferOutput<typeof sandboxPromptVersionSchema>
 
+// ---- The testable-agent-kind catalog --------------------------------------
+
+/** How PRODUCTION dispatches an agent kind: one inline LLM call, or a container with a checkout. */
+export const sandboxAgentBucketSchema = v.picklist(['inline', 'container'])
+export type SandboxAgentBucket = v.InferOutput<typeof sandboxAgentBucketSchema>
+
+/**
+ * How the SANDBOX runs a cell for a kind. Deliberately a different fact from
+ * {@link sandboxAgentBucketSchema}: the run-driver is inline-only, so a container kind whose
+ * reviewed artifact can be handed over as text is still testable (the code `reviewer` reads a diff),
+ * while one whose deliverable IS a pushed commit (the `coder`) is not.
+ */
+export const sandboxRunModeSchema = v.picklist(['inline', 'unsupported'])
+export type SandboxRunMode = v.InferOutput<typeof sandboxRunModeSchema>
+
 // ---- Fixtures -------------------------------------------------------------
 
 /**
@@ -81,10 +96,19 @@ export const sandboxFixtureKindSchema = v.picklist([
   'clarity',
   'architecture',
   'code-review',
+  'estimation',
+  'answer-recommendation',
   'repo-feature',
   'repo-bug',
 ])
 export type SandboxFixtureKind = v.InferOutput<typeof sandboxFixtureKindSchema>
+
+/**
+ * Every fixture kind, as a value, for a caller that must react to each one (the SPA's label map,
+ * the coverage tests). The picklist's own option list, so adding a member extends it with no
+ * second edit and nothing can list a kind the schema would reject.
+ */
+export const SANDBOX_FIXTURE_KINDS = sandboxFixtureKindSchema.options
 
 /** A pinned starting point in the dedicated fixture repo for a container-agent fixture. */
 export const sandboxRepoRefSchema = v.object({
@@ -139,8 +163,14 @@ export const sandboxExpectationSchema = v.object({
   /** How bad it is to miss (1..5); drives the miss penalty. */
   impact: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(5)),
   /**
-   * Phrases the deterministic scorer matches (token-sequence) to decide whether the
-   * candidate caught this item. Empty ⇒ the scorer falls back to matching `summary`.
+   * Phrases the deterministic scorer matches (a contiguous run of word tokens, compared by
+   * EQUALITY) to decide whether the candidate caught this item. Empty ⇒ the scorer falls back to
+   * matching `summary`.
+   *
+   * A trailing `*` makes the hint's LAST token match by prefix (`idempoten*` catches "idempotent"
+   * and "idempotency"). Write it wherever a word form varies: without the marker a bare stem
+   * matches nothing at all, and a dead hint scores "missed" for every answer while reading as a
+   * perfectly sensible fixture.
    */
   matchHints: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1))), []),
 })

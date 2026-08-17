@@ -4,11 +4,13 @@ import {
   cloneSandboxPromptSchema,
   createSandboxExperimentSchema,
   createSandboxFixtureSchema,
+  sandboxAgentBucketSchema,
   sandboxExperimentSchema,
   sandboxFixtureKindSchema,
   sandboxFixtureSchema,
   sandboxGradeSchema,
   sandboxPromptVersionSchema,
+  sandboxRunModeSchema,
   sandboxRunSchema,
   saveSandboxVersionSchema,
   setSandboxLabelsSchema,
@@ -26,7 +28,16 @@ import { errorResponses, singleStringParam } from './_shared.js'
 const sandboxAgentKindMetaSchema = v.object({
   agentKind: v.string(),
   label: v.string(),
-  bucket: v.string(),
+  /** How PRODUCTION dispatches the kind. */
+  bucket: sandboxAgentBucketSchema,
+  /** How the SANDBOX runs a cell for it. `unsupported` ⇒ `unsupportedReason` says why. */
+  sandboxRun: sandboxRunModeSchema,
+  /**
+   * Why the Sandbox cannot run this kind, phrased for the person reading it in the builder, or null
+   * when it can. The SPA renders this on the disabled option rather than composing its own copy, so
+   * the reason a create would be refused is stated before anyone builds a matrix.
+   */
+  unsupportedReason: v.nullable(v.string()),
   rubric: v.string(),
   fixtureKinds: v.array(sandboxFixtureKindSchema),
   basePromptId: v.nullable(v.string()),

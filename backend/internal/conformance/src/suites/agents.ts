@@ -21,7 +21,8 @@ import type { ConformanceHarness } from '../harness.js'
 
 export function defineAgentConformance(harness: ConformanceHarness): void {
   describe(`[${harness.name}] conformance`, () => {
-    registerSandboxAndCustomKindTests(harness)
+    registerSandboxTests(harness)
+    registerCustomKindTests(harness)
     registerKindCapabilityTests(harness)
     defineToolServerConformance(harness)
     defineTaskTypeConformance(harness)
@@ -31,13 +32,14 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
 }
 
 /**
- * The prompt/model sandbox surface and a deployment-registered custom kind's pre/post-op
- * stages (the manifest-driven extension model's core contract).
+ * The prompt/model sandbox surface, asserted end to end through a real store on every facade:
+ * the CRUD half, the catalog's two execution answers plus its admission refusals, and the
+ * run/grade lifecycle settling to a terminal grid.
  *
  * Registered from the suite above; split out purely to keep each function within the
  * per-function line budget. Every test is unchanged.
  */
-function registerSandboxAndCustomKindTests(harness: ConformanceHarness): void {
+function registerSandboxTests(harness: ConformanceHarness): void {
   describe('sandbox (prompt/model testing surface)', () => {
     it('lists baselines, clones+versions prompts, seeds fixtures and defines experiments', async () => {
       const { call, createWorkspace } = harness.makeApp()
@@ -135,6 +137,71 @@ function registerSandboxAndCustomKindTests(harness: ConformanceHarness): void {
       expect(zeroBudget.status).toBeGreaterThanOrEqual(400)
     })
 
+    it('states per kind whether the Sandbox can run it, and refuses a draft it cannot', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const base = `/workspaces/${workspace.id}/sandbox`
+
+      const overview = await call<{
+        agentKinds: {
+          agentKind: string
+          bucket: string
+          sandboxRun: string
+          unsupportedReason: string | null
+        }[]
+        fixtures: SandboxFixture[]
+      }>('GET', `${base}/overview`)
+      expect(overview.status).toBe(200)
+
+      // Every entry answers both execution questions, and the un-runnable ones carry the reason the
+      // builder renders instead of composing its own copy. Asserted as a RELATION over the catalog
+      // rather than a count, so adding a kind does not re-pin this.
+      const kinds = overview.body.agentKinds
+      expect(kinds.length).toBeGreaterThan(0)
+      for (const kind of kinds) {
+        expect(['inline', 'container']).toContain(kind.bucket)
+        expect(['inline', 'unsupported']).toContain(kind.sandboxRun)
+        if (kind.sandboxRun === 'unsupported') expect(kind.unsupportedReason).toBeTruthy()
+        else expect(kind.unsupportedReason).toBeNull()
+      }
+
+      // A kind the driver cannot dispatch is refused at CREATE, not left as a draft that 400s only
+      // when someone tries to launch it.
+      const unsupported = kinds.find((k) => k.sandboxRun === 'unsupported')
+      expect(unsupported, 'the catalog should carry at least one un-runnable kind').toBeTruthy()
+      const refused = await call('POST', `${base}/experiments`, {
+        name: 'Container kind',
+        agentKind: unsupported!.agentKind,
+        judgeModel: 'anthropic:claude-opus-4-8',
+        matrix: {
+          promptVersionIds: [`baseline:${unsupported!.agentKind}`],
+          models: ['anthropic:claude-opus-4-8'],
+          fixtureIds: [overview.body.fixtures[0]!.id],
+        },
+      })
+      expect(refused.status).toBe(422)
+
+      // ...and so is a matrix naming a fixture that starts from a repository seed, which only the
+      // launch path used to check.
+      const repoFixture = await call<SandboxFixture>('POST', `${base}/fixtures`, {
+        kind: 'repo-bug',
+        name: 'Seeded repo',
+        repoRef: { owner: 'acme', name: 'fixtures', seedRef: 'seed/bug-1' },
+      })
+      expect(repoFixture.status).toBe(201)
+      const repoDraft = await call('POST', `${base}/experiments`, {
+        name: 'Needs a checkout',
+        agentKind: 'requirements-review',
+        judgeModel: 'anthropic:claude-opus-4-8',
+        matrix: {
+          promptVersionIds: ['baseline:requirement-review'],
+          models: ['anthropic:claude-opus-4-8'],
+          fixtureIds: [repoFixture.body.id],
+        },
+      })
+      expect(repoDraft.status).toBe(422)
+    })
+
     it('drives the run/grade lifecycle to a terminal grid identically across runtimes', async () => {
       // Force the model provider ON for both runtimes (the Worker binds `AI`, Node has no
       // binding) so `launch` reaches the run-driver identically rather than 503/400-ing at
@@ -204,7 +271,16 @@ function registerSandboxAndCustomKindTests(harness: ConformanceHarness): void {
       expect(afterRace.body.runs).toHaveLength(2)
     })
   })
+}
 
+/**
+ * A deployment-registered custom kind's pre/post-op stages (the manifest-driven extension model's
+ * core contract), plus the fragment-library conformance that rides the same registry.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerCustomKindTests(harness: ConformanceHarness): void {
   defineAgentFragmentConformance(harness)
 
   describe('registered custom kind pre/post-ops', () => {

@@ -6776,6 +6776,8 @@
       "clarity": "klarowność",
       "architecture": "architektura",
       "code-review": "przegląd kodu",
+      "estimation": "szacowanie",
+      "answer-recommendation": "rekomendowane odpowiedzi",
       "repo-feature": "funkcja repozytorium",
       "repo-bug": "błąd repozytorium"
     },

@@ -7019,6 +7019,8 @@
       "clarity": "chiarezza",
       "architecture": "architettura",
       "code-review": "revisione del codice",
+      "estimation": "stima",
+      "answer-recommendation": "risposte consigliate",
       "repo-feature": "funzionalità del repository",
       "repo-bug": "bug del repository"
     },

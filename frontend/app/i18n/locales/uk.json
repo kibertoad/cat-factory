@@ -6776,6 +6776,8 @@
       "clarity": "ясність",
       "architecture": "архітектура",
       "code-review": "огляд коду",
+      "estimation": "оцінювання",
+      "answer-recommendation": "рекомендовані відповіді",
       "repo-feature": "функція репозиторію",
       "repo-bug": "помилка репозиторію"
     },

@@ -25,6 +25,122 @@ function proposalContext(
 
 export const ARCHITECTURE_FIXTURES: SandboxFixtureDefinition[] = [
   {
+    // The simple anchor of the range. Its flaw is not subtle, which is the point: a reviewer that
+    // cannot name "local disk is not durable on a fleet" has nothing useful to say about the
+    // outbox fixture either, and a rubric needs a floor as much as a ceiling.
+    id: 'arch-avatar-storage-simple',
+    agentKind: 'architect-companion',
+    kind: 'architecture',
+    name: 'Avatar storage design (simple)',
+    difficulty: 'simple',
+    summary: 'An "upload a profile picture" design that stores files on the app server’s own disk.',
+    payload: proposalContext(
+      {
+        title: 'Profile pictures',
+        type: 'service',
+        description: 'Let a user upload a profile picture and show it beside their name.',
+      },
+      [
+        '# Design: profile pictures',
+        '',
+        'The upload endpoint writes the file to `/var/app/uploads/<userId>.png` on the API server and',
+        'stores the path in `users.avatar_path`. A GET endpoint reads the file off disk and streams it',
+        'back. We run three API instances behind the load balancer. Simple and no new dependencies.',
+      ].join('\n'),
+    ),
+    expectations: [
+      exp(
+        'not-shared-or-durable',
+        'Local disk is neither shared across the three instances nor durable across a deploy: an upload lands on one box and 404s from the other two.',
+        {
+          impact: 5,
+          trickiness: 2,
+          detail:
+            'The central flaw. The design even states the instance count, so the contradiction is on ' +
+            'the page; object storage or a shared volume is the fix.',
+          matchHints: [
+            'three instances',
+            'other instance',
+            'not shared',
+            'local disk',
+            'ephemeral',
+            'object storage',
+            's3',
+            'lost on deploy',
+            'durab',
+          ],
+        },
+      ),
+      exp(
+        'no-upload-validation',
+        'No size limit, content-type check or re-encode: the endpoint accepts any file of any size under a `.png` name.',
+        {
+          impact: 4,
+          trickiness: 2,
+          matchHints: [
+            'size limit',
+            'max size',
+            'content type',
+            'content-type',
+            'validate',
+            're-encode',
+            'image type',
+            'arbitrary file',
+          ],
+        },
+      ),
+      exp(
+        'path-from-user-id',
+        'The filename is derived from a request-supplied id, so path traversal and overwriting another user’s avatar both need checking.',
+        {
+          impact: 4,
+          trickiness: 4,
+          detail:
+            'Whether `userId` is the authenticated user or a parameter decides whether this is a ' +
+            'file-overwrite primitive; the design does not say, and a strong review asks.',
+          matchHints: [
+            'path traversal',
+            'travers*',
+            'overwrite',
+            'authenticated user',
+            'sanitis*',
+            'sanitiz*',
+            'another user',
+          ],
+        },
+      ),
+      exp(
+        'serving-through-the-app',
+        'Streaming every avatar through the API ties image traffic to application capacity; a CDN or signed URL decouples them.',
+        {
+          impact: 2,
+          trickiness: 3,
+          matchHints: ['cdn', 'signed url', 'presigned', 'cache', 'static', 'through the app'],
+        },
+      ),
+      exp(
+        'no-lifecycle',
+        'Nothing removes the file when the user changes or deletes their avatar, or when the account is deleted.',
+        {
+          impact: 3,
+          trickiness: 4,
+          matchHints: [
+            'delete',
+            'cleanup',
+            'clean up',
+            'orphan',
+            'replace',
+            'lifecycle',
+            'retention',
+          ],
+        },
+      ),
+    ],
+    notes:
+      'The floor of the range. The must-find is the fleet/durability contradiction; the traversal ' +
+      'and lifecycle questions separate a competent review from a checklist.',
+  },
+  {
     id: 'arch-counter-redis-moderate',
     agentKind: 'architect-companion',
     kind: 'architecture',
@@ -72,7 +188,7 @@ export const ARCHITECTURE_FIXTURES: SandboxFixtureDefinition[] = [
         {
           impact: 3,
           trickiness: 4,
-          matchHints: ['hot key', 'hotspot', 'hot spot', 'contention', 'shard'],
+          matchHints: ['hot key', 'hotspot', 'hot spot', 'contention', 'shard*'],
         },
       ),
       exp(
@@ -92,7 +208,7 @@ export const ARCHITECTURE_FIXTURES: SandboxFixtureDefinition[] = [
           trickiness: 4,
           detail:
             'Whether a view is deduped is a real product/correctness question the design skips.',
-          matchHints: ['dedupe', 'deduplicat', 'unique', 'bot', 'refresh', 'idempoten'],
+          matchHints: ['dedupe', 'deduplicat*', 'unique', 'bot', 'refresh', 'idempoten*'],
         },
       ),
     ],
@@ -167,7 +283,7 @@ export const ARCHITECTURE_FIXTURES: SandboxFixtureDefinition[] = [
           impact: 4,
           trickiness: 3,
           matchHints: [
-            'idempoten',
+            'idempoten*',
             'at least once',
             'at-least-once',
             'duplicate',
@@ -188,7 +304,7 @@ export const ARCHITECTURE_FIXTURES: SandboxFixtureDefinition[] = [
             'schema coupling',
             'schema version',
             'thin event',
-            'bloat',
+            'bloat*',
           ],
         },
       ),

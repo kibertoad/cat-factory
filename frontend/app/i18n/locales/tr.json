@@ -6776,6 +6776,8 @@
       "clarity": "netlik",
       "architecture": "mimari",
       "code-review": "kod incelemesi",
+      "estimation": "tahmin",
+      "answer-recommendation": "önerilen yanıtlar",
       "repo-feature": "depo özelliği",
       "repo-bug": "depo hatası"
     },

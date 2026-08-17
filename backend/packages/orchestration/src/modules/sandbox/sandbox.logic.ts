@@ -19,65 +19,16 @@ import {
 export { extractJson } from '@cat-factory/kernel'
 
 // Pure helpers for the Sandbox run-driver + judge. Kept side-effect-free (no LLM/IO,
-// no clock/identity) so the candidate-input rendering, judge-prompt assembly, score
-// coercion and objective projection are deterministic and unit-testable; the service
-// wraps them with the model-provider calls + persistence.
+// no clock/identity) so the judge-prompt assembly, score coercion and objective projection are
+// deterministic and unit-testable; the service wraps them with the model-provider calls +
+// persistence. The candidate's TASK INPUT is built in `sandbox-input.ts`, which routes each kind
+// through the pure prompt builder its production caller uses.
 
 /** Split a model catalog id (`provider:model`) into a {@link ModelRef}. */
 export function parseModelCatalogId(id: string): ModelRef {
   const idx = id.indexOf(':')
   if (idx === -1) return { provider: id, model: '' }
   return { provider: id.slice(0, idx), model: id.slice(idx + 1) }
-}
-
-/**
- * Render an inline fixture's payload into the task input the candidate reasons over (its
- * system prompt carries the role instructions) and the judge grades against. Defensive:
- * the payload is a `Record<string, unknown>` matching a `RequirementsContext` /
- * `ClarityContext` (a `block` + optional `docs`/`tasks`) or a reviewer `AgentRunContext`
- * (a `block` + the work-to-review in `priorOutputs`), so it reads each field tolerantly.
- */
-export function renderFixtureInput(fixture: SandboxFixture): string {
-  const payload = (fixture.payload ?? {}) as Record<string, unknown>
-  const parts: string[] = []
-
-  const block = payload.block as { title?: string; type?: string; description?: string } | undefined
-  if (block) {
-    const heading = block.type ? `${block.title ?? 'Untitled'} (${block.type})` : block.title
-    parts.push(`# ${heading ?? 'Untitled'}`)
-    if (block.description) parts.push(block.description)
-  }
-
-  const docs = Array.isArray(payload.docs) ? (payload.docs as unknown[]) : []
-  if (docs.length > 0) {
-    parts.push('## Linked documents')
-    for (const doc of docs) {
-      const d = doc as { title?: string; body?: string; content?: string }
-      parts.push(`### ${d.title ?? 'Document'}\n${d.body ?? d.content ?? ''}`.trim())
-    }
-  }
-
-  const tasks = Array.isArray(payload.tasks) ? (payload.tasks as unknown[]) : []
-  if (tasks.length > 0) {
-    parts.push('## Linked tracker issues')
-    for (const task of tasks) {
-      const t = task as { title?: string; body?: string }
-      parts.push(`- ${t.title ?? 'Issue'}${t.body ? `: ${t.body}` : ''}`)
-    }
-  }
-
-  const priorOutputs = Array.isArray(payload.priorOutputs)
-    ? (payload.priorOutputs as unknown[])
-    : []
-  if (priorOutputs.length > 0) {
-    parts.push('## Work from earlier agents')
-    for (const prior of priorOutputs) {
-      const p = prior as { agentKind?: string; output?: string }
-      parts.push(`### ${p.agentKind ?? 'agent'}\n${p.output ?? ''}`.trim())
-    }
-  }
-
-  return parts.join('\n\n').trim()
 }
 
 /** System prompt for the Sandbox judge — a reference-free rubric grader. */
