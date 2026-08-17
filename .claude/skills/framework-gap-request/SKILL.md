@@ -1,16 +1,19 @@
 ---
 name: framework-gap-request
-description: Handle a downstream request to close framework gaps: a consumer build's gap report, an upstream-request spec, or a list of "the seam would not let us do X" findings, given as text, a document path, a URL or an issue reference. Use when asked to triage or act on one ("a consumer hit these gaps", "close the framework gaps in <doc>", "handle this downstream proposal", "here is a gap report from a deployment"). Re-verifies every finding against HEAD, revises it critically against this repo's architecture rules (long-term design over the requester's quick win), lands the tracker or the fix, and opens the PR.
+description: Handle a downstream request to close framework gaps, arriving as a consumer build's gap report, an upstream-request spec, or a list of "the seam would not let us do X" findings, given as text, a document path, a URL or an issue reference. Use when asked to triage or act on one ("a consumer hit these gaps", "close the framework gaps in <doc>", "handle this downstream proposal", "here is a gap report from a deployment"). Re-verifies every finding against HEAD and against the published surface, revises it critically against this repo's architecture rules (long-term design over the requester's quick win), lands the artifact or the fix, and opens the PR.
 ---
 
 # Downstream framework-gap requests
 
 A consumer of the PUBLISHED `@cat-factory/*` packages (an org deployment, a proprietary operation,
 another team's build) reports what the framework would not let it do. This intake has run twice and
-produced three design records, which are the worked examples used throughout below:
-[ADR 0040](../../../backend/docs/adr/0040-deployment-extension-seam-reachability.md),
-[ADR 0044](../../../backend/docs/adr/0044-facade-extension-surface.md) and
-[ADR 0045](../../../backend/docs/adr/0045-deployment-scoped-documents.md).
+produced three design records under `backend/docs/adr/`, which are the worked examples used
+throughout below (cited by NUMBER as well as by link, so they stay findable when this file is read
+outside a checkout, where the link depth means nothing):
+
+- [ADR 0040](../../../backend/docs/adr/0040-deployment-extension-seam-reachability.md)
+- [ADR 0044](../../../backend/docs/adr/0044-facade-extension-surface.md)
+- [ADR 0045](../../../backend/docs/adr/0045-deployment-scoped-documents.md)
 
 Hold one posture the whole way through: **the report is EVIDENCE, never a work order.** The finding
 is usually real. The remedy attached to it is the smallest change that would have unblocked the
@@ -35,19 +38,38 @@ Then capture provenance, and ASK for whatever is missing rather than inferring i
   report was already closed before it arrived.
 - **Which entry point they build against** (`start()`, `startLocal()`, `createWorker()`, the SPA,
   the public API). A seam reachable from one and unreachable from another is itself a finding.
+- **The failing call**: the code they wrote, and what it did (a compile error, a runtime throw, an
+  accepted-and-ignored field). §2 has to cite our side of that same call, and a call reconstructed
+  from prose is where a Misdiagnosed verdict comes from.
 - **What they shipped as a workaround.** The most informative part of any such report: a workaround
   describes the seam the framework should have offered, it becomes the deletion checklist you hand
   back as slices land, and now and then it is simply RIGHT and worth keeping (one consumer's
   two-bodied pointer fragment, whose second body tells the agent the document is missing instead of
   letting absent and empty read the same, is the degrade-loudly rule applied correctly).
 
-## 2. Re-verify every finding against HEAD
+## 2. Re-verify every finding, against HEAD and against the published surface
 
 Independently, with `file:line` evidence behind each verdict. A finding you cannot cite is not
 verified: their references were measured against a published tarball, their reading of our
 internals may be wrong, and a report drafted by an agent is wrong in the same confident voice as
 one that is right. Past about five findings, verify them concurrently, one investigation per
 finding, and keep each verdict with its evidence rather than the search transcript.
+
+Two checks a `file:line` on HEAD structurally cannot make, both of which have decided a verdict:
+
+- **The source tree is not the surface they build against.** A symbol exported from a package's
+  `src/index.ts` and absent from its `exports` / `files` is unreachable from an install, and that
+  gap is the whole of ADR 0044. Read the manifest and the publish surface (`pnpm check:publish`),
+  not only the source.
+- **A fix on HEAD is not a fix they can take.** A `Stale` verdict names the PUBLISHED version
+  carrying it (`npm view <pkg> versions`, or the changeset if it is still unreleased) and says
+  whether that shipped after the version they measured. "Upgrade to X" naming a version without
+  the fix costs a whole round trip.
+
+Search `docs/initiatives/` and `backend/docs/adr/` before dispositioning anything. An open tracker
+may already own a finding (round one's had four companions, and gated one of its own items on
+another initiative), and a REDIRECTED tracker exists precisely so the next report cannot re-propose
+a withdrawn approach. A second tracker landed beside an open one gives the item two owners.
 
 Land each on one of these:
 
@@ -56,26 +78,35 @@ Land each on one of these:
   shape, and the reason a report's item count is never the work's item count.
 - **Misdiagnosed.** Real symptom, wrong cause, so the remedy that follows from their cause fixes
   nothing.
-- **Stale.** Already closed: name the PR and the version, and say whether it shipped after the
-  version they measured.
+- **Stale.** Already closed: name the PR and the published version.
 - **Not a gap.** Works as designed, and the behaviour is right.
 - **Refused by design.** State the constraint, never the taste.
+- **Unverifiable.** Provenance never arrived, or the evidence lives in a tree you cannot read. Say
+  which, and say what would settle it. Never fold one of these into "Not a gap": an unchecked claim
+  and a checked-and-correct behaviour are the pair CLAUDE.md's degrade-loudly rule is about, and
+  the next round pays for collapsing them.
 
-Whatever turns out fine goes into a **Checked and genuinely fine** section of the artifact so
-nobody re-investigates it. Two of the first round's nine landed there, and one was worth writing
-into the reference doc as recommended practice.
+Whatever turns out fine goes into a **Checked and genuinely fine** record so nobody re-investigates
+it, and that record holds more than the requester's numbered list: round one's two entries were both
+side claims the verification turned up rather than gaps anyone reported, and one was worth writing
+into the reference doc as recommended practice. When the round lands no tracker (§4), the record
+goes where the next round will actually look, the reference doc or the ADR, never only a merged PR
+description.
 
 ## 3. Revise it critically
 
-The bar is [CLAUDE.md](../../../CLAUDE.md)'s governing principle: the well-factored design, not the
-fastest thing that unblocks the requester. Dispose of the DEFECT and the REMEDY separately, because
-"accept the bug, reject the remedy" and "accept, widen the fix" are ordinary outcomes.
+The bar is [`CLAUDE.md`](../../../CLAUDE.md)'s governing principle: the well-factored design, not
+the fastest thing that unblocks the requester. Dispose of the DEFECT and the REMEDY separately,
+because "accept the bug, reject the remedy" and "accept, widen the fix" are ordinary outcomes.
 
 Every check below has already changed a disposition on a real report:
 
-- **Audit the class before designing the fix.** The consumer reports the one instance their feature
-  needed. In round two that was a single missing registry constructor, and the audit it triggered
-  found four more of identical shape, none of which any test could see.
+- **Audit the class, then close it with a DERIVED guard.** The consumer reports the one instance
+  their feature needed. In round two that was a single missing registry constructor, and the audit
+  it triggered found four more of identical shape, none of which any test could see. An audit alone
+  closes only today's instances, so the fix carries a classification derived from the real source
+  rather than hand-listed: `SEAM_CONSTRUCTORS` is a total `Record` over the seams `BOOT_ROUTES`
+  already routes, so a new deployment-facing seam fails to compile until its constructor is named.
 - **Route it through the existing seam**: an app-owned registry injected BY REFERENCE, an option on
   every boot entry point, asserted AT the entry point rather than at the container builder. That
   last distinction was round one's headline bug: the guard graded the builder while the seam was
@@ -108,6 +139,10 @@ Every check below has already changed a disposition on a real report:
   trigger, never a number to raise.
 - **Severity is ours to assign.** Blocks a deployment with no workaround, or is silently wrong:
   High. Real with a workaround: Medium. Ergonomics: Low. Their "critical" describes their sprint.
+  A workaround only downgrades a finding when the deployment can KEEP it: one that reaches below
+  the facade, or that reintroduces the failure the seam exists to prevent, is not one. Round one's
+  S1 stayed High for exactly that reason, since the escape hatch for the duplicate-copy bug was
+  taking the dependency that causes duplicate copies.
 - **A rejection is a design statement.** Name the constraint that makes the ask incoherent and what
   would have to exist first, and scope it as a decision when it is one. The refused `documentRef`
   was not an unsound idea, it was a missing deployment-scoped CREDENTIAL HOME, and saying that
@@ -115,48 +150,69 @@ Every check below has already changed a disposition on a real report:
 
 ## 4. Land the artifact
 
-**Multi-PR work gets a tracker** (roughly three accepted findings, or one touching both runtimes
-plus the SPA) under `docs/initiatives/<slug>.md`, registered in
-[the initiatives index](../../../docs/initiatives/README.md). Copy the shape of the tracker that
-became ADR 0040:
+**The trigger for a tracker is MULTI-PR work, not a finding count.** Three outcomes, and the middle
+one is the one a count talks you out of:
+
+- **One accepted finding that lands in one PR**: no artifact. Land the fix, its test and the
+  changeset, and put the disposition in the PR description.
+- **A scope that completes in ONE PR and still sets a durable design decision**: write the ADR
+  directly under `backend/docs/adr/`, no tracker. Round two accepted three findings touching all
+  three facades and landed as one PR carrying ADRs 0044 and 0045; a tracker there would have been
+  created and `git rm`ed in the same change.
+- **Work that spans several PRs**: a tracker under `docs/initiatives/<slug>.md`, registered in
+  [`docs/initiatives/README.md`](../../../docs/initiatives/README.md). Copy the shape of the
+  tracker that became ADR 0040.
+
+A tracker carries:
 
 - A status / owner / started line.
 - A **Provenance** blockquote: who built what against which measured versions, that every finding
-  was re-verified against HEAD and what that changed, and the companion trackers the items touch.
+  was re-verified against HEAD and the published surface and what that changed, and the companion
+  trackers the items touch.
 - **Goal & rationale** naming the recurring FAILURE SHAPES. Round one's nine findings were two
   recurring shapes plus one one-off, and naming the shapes is what stops the next report repeating
   them.
 - A **Summary table**: `# | Gap | Severity | Their ask | Disposition`. Their ask stays in it, in
   their words: the distance between that column and the disposition is what a reviewer reads.
 - One **section per finding**: what is wrong, with `file:line`, then a numbered "Shape to land".
-- A **per-slice checklist** (one PR per slice, scope, dependencies, status, PR link), updated as
-  slices land.
+- A **per-slice checklist** (one PR per slice, scope, dependencies, the test or derived guard that
+  makes the slice's class visible, status, PR link), updated as slices land.
 - **Conventions & gotchas** (which slice must land first and why, what another initiative is
   waiting on) and **Checked and genuinely fine**.
-
-**A single small accepted finding gets no tracker**: land the fix, its test and the changeset, and
-put the disposition in the PR description. Trackers are for multi-PR work.
 
 Either way the revised report is OURS, in our tree and our shape. Do not commit their document
 verbatim: it is written against a version that is already aging, and its unrevised remedies would
 read as accepted.
 
-Slices then proceed under the normal workflow, and when the committed scope completes the tracker
-converts to a numbered ADR (0040, 0044 and 0045 are all such conversions).
+Slices then proceed under the normal workflow, and when a tracker's committed scope completes it
+becomes a numbered ADR and the tracker is `git rm`ed in the same PR. Check the next free number
+against every existing ADR file: parallel branches have collided on one three times. ADR 0040 is
+such a conversion; 0044 and 0045 were written directly, which is the middle outcome above.
 
 ## 5. Answer the requester
 
 Write the disposition list in THEIR numbering: accepted with the shape we will land, accepted with
-a different remedy plus the reason, rejected with the constraint, stale with the version and PR
-that closed it. Add the workarounds they can delete as each slice ships, and what to include next
-time (measured versions, the entry point, the failing call).
+a different remedy plus the reason, rejected with the constraint, stale with the published version
+and PR that closed it, unverifiable with what would settle it. Add the workarounds they can delete
+as each slice ships, and what to include next time (measured versions, the entry point, the failing
+call).
 
 ## 6. PR
 
-Branch, commit, push, open it. A tracker-only change is `docs:`-prefixed with an empty changeset;
-code carries a real one naming any internal break.
+**Run the documentation-staleness sweep BEFORE opening it**, sized to what the accepted findings
+changed: the touched package's `README.md` and `AGENTS.md`, the root README's layout and
+feature-guide rows, and [`CLAUDE.md`](../../../CLAUDE.md) only for a new cross-cutting convention.
+
+**A gap slice usually changes something a catfactory.ai page describes**, since a new env var,
+endpoint, capability, failure mode or operator step all meet that test (ADR 0045 added the
+`DOC_SOURCE_<SOURCE>_<FIELD>` deployment variables). That page ships as a website PR opened and
+merged FIRST, named in this description. Neither repo's CI can see the other, so nothing else will
+catch the omission.
+
+Then branch, commit, push, open it. A tracker-only or ADR-only change is `docs:`-prefixed with an
+empty changeset; code carries a real one naming any internal break.
 
 The description is a reviewer briefing, and its load-bearing half is the asks you REJECTED with the
 reason, because a reviewer's first question is why we are not simply doing what the consumer asked.
 Name the failure shapes and what the consumer could not do; leave the item-by-item account in the
-tracker. Then run the documentation-staleness sweep for whatever the accepted findings changed.
+tracker.
