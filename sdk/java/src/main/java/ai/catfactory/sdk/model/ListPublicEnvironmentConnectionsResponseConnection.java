@@ -16,6 +16,7 @@ import org.jspecify.annotations.Nullable;
  * @param endpoint the {@code endpoint} field.
  * @param engine the {@code engine} field.
  * @param label the {@code label} field.
+ * @param manifestId Always present; {@code null} when the server has no value for it.
  * @param provisionType the {@code provisionType} field.
  * @param secretKeys the {@code secretKeys} field.
  */
@@ -33,6 +34,9 @@ public record ListPublicEnvironmentConnectionsResponseConnection(
     @JsonProperty("engine") String engine,
 
     @JsonProperty("label") String label,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("manifestId") @Nullable String manifestId,
 
     @JsonProperty("provisionType") String provisionType,
 
@@ -57,6 +61,7 @@ public record ListPublicEnvironmentConnectionsResponseConnection(
         private @Nullable String endpoint;
         private @Nullable String engine;
         private @Nullable String label;
+        private @Nullable String manifestId;
         private @Nullable String provisionType;
         private @Nullable List<String> secretKeys;
 
@@ -96,6 +101,12 @@ public record ListPublicEnvironmentConnectionsResponseConnection(
             return this;
         }
 
+        /** Set {@code manifestId}. */
+        public Builder manifestId(@Nullable String manifestId) {
+            this.manifestId = manifestId;
+            return this;
+        }
+
         /** Set {@code provisionType}. */
         public Builder provisionType(@Nullable String provisionType) {
             this.provisionType = provisionType;
@@ -110,7 +121,7 @@ public record ListPublicEnvironmentConnectionsResponseConnection(
 
         /** Build the {@link ListPublicEnvironmentConnectionsResponseConnection}. */
         public ListPublicEnvironmentConnectionsResponseConnection build() {
-            return new ListPublicEnvironmentConnectionsResponseConnection(acceptsManifestId, backendKind, connectedAt, endpoint, engine, label, provisionType, secretKeys);
+            return new ListPublicEnvironmentConnectionsResponseConnection(acceptsManifestId, backendKind, connectedAt, endpoint, engine, label, manifestId, provisionType, secretKeys);
         }
     }
 }

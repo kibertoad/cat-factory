@@ -233,6 +233,7 @@ describe('the environment-handler list', () => {
     expect(
       v.safeParse(publicEnvironmentHandlerSchema, {
         provisionType: 'custom',
+        manifestId: null,
         acceptsManifestId: 'kargo',
         engine: 'remote-custom',
         backendKind: 'kargo',
@@ -242,6 +243,15 @@ describe('the environment-handler list', () => {
         connectedAt: 1,
       }).success,
     ).toBe(true)
+  })
+
+  it('carries BOTH manifest-id fields, because the engine matches a service against either', () => {
+    // `resolveInfraHandler` → `matchesCustom` accepts a pinned id keyed on `manifestId` OR declared as
+    // `acceptsManifestId`, and each way of registering a handler sets only one of them. Publishing one
+    // made a seeded handler read as a handler serving nothing, which is the very question this list
+    // exists to answer.
+    expect(Object.keys(publicEnvironmentHandlerSchema.entries)).toContain('manifestId')
+    expect(Object.keys(publicEnvironmentHandlerSchema.entries)).toContain('acceptsManifestId')
   })
 })
 

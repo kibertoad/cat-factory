@@ -79,11 +79,16 @@ export type PassOptions<Facts extends LedgerFacts> = {
    * The returned lines are folded into the closing words, so a pass that reclaimed nothing adds
    * nothing and one that could not reclaim a VM says so where the operator is already looking.
    *
-   * **It runs on the failure path too, and its own throw may not replace the scenario failure.** The
-   * whole reason it is not a `try/finally` at the call site: a reclaim that dies takes the report of
-   * what broke with it, and the report is the more valuable of the two. A throw here is caught and
-   * RENDERED into the same block, which also means it may not be used for anything a scenario's
-   * verdict depends on: this runs after the exit code is decided.
+   * **It runs on EVERY path out of the pass**, including the boundary below, which is reachable after
+   * a scenario has already provisioned real infrastructure (a throw out of the summary, the journal
+   * or a scenario factory). Skipped there, the leak this whole seam exists to report goes unmentioned
+   * by the one report an operator reads. It runs at most once per pass either way.
+   *
+   * **Its own throw may not replace the scenario failure.** The whole reason it is not a
+   * `try/finally` at the call site: a reclaim that dies takes the report of what broke with it, and
+   * the report is the more valuable of the two. A throw here is caught and RENDERED into the same
+   * block, which also means it may not be used for anything a scenario's verdict depends on: this
+   * runs after the exit code is decided.
    */
   onSettled?: (outcomes: readonly ScenarioOutcome[]) => Promise<readonly string[]>
 }
@@ -115,8 +120,17 @@ export async function runPass<Facts extends LedgerFacts>(
       `  resume:  ${resumeCommand(identity, runId)}\n`,
   )
 
+  // Held outside the `try` so the boundary can settle too, with whatever the scenarios reached. A
+  // pass that dies before `runScenarios` returns has no outcomes to hand a reclaim, and that is the
+  // honest argument: `onSettled` reclaims off the LEDGER, which is written at provision time, so the
+  // records are there whether or not the run that made them got to report itself.
+  let outcomes: readonly ScenarioOutcome[] = []
+  let settled: readonly string[] | null = null
+  const settleOnce = async (): Promise<readonly string[]> =>
+    (settled ??= await settle(options, outcomes))
+
   try {
-    const outcomes = await runScenarios(
+    outcomes = await runScenarios(
       {
         open: (scenario) => {
           // The journal phase is entered HERE, in the one place that knows a scenario is starting,
@@ -139,12 +153,19 @@ export async function runPass<Facts extends LedgerFacts>(
     log(formatScenarioSummary(outcomes))
     // Before the closing words and after the summary: what a pass RELEASED belongs with what it did,
     // and anything it could not release has to survive being the second-to-last thing on screen.
-    const settled = await settle(options, outcomes)
+    const released = await settleOnce()
     // Straight, not guarded: on this path the read is ordinary work, and a ledger that cannot be
     // read is a failure of the pass rather than a line to soften. The boundary below owns that.
-    log(closingWords(outcomes, runId, options.recordsFacts(), identity, settled))
+    log(closingWords(outcomes, runId, options.recordsFacts(), identity, released))
     return scenariosExitCode(outcomes)
   } catch (error) {
+    // The reclaim runs HERE too, and before the report is composed so its lines can go into it. This
+    // boundary is reachable after a scenario has stood up real infrastructure (a throw out of the
+    // summary, the journal, or a later scenario's factory), and a leak that goes unmentioned by the
+    // one report an operator reads is exactly what `resource.ts` exists to prevent. `settle` never
+    // throws, so it cannot displace the failure below; `settleOnce` means a boundary reached AFTER a
+    // clean settle does not reclaim twice.
+    const released = await settleOnce()
     // `console.log` rather than the injected sink, here and at a suite's own startup boundaries: a
     // boundary reports a failure of the pass's own machinery, so it may not route its report
     // through a seam that pass wired. The narration above goes through the seam; the reports out go
@@ -161,6 +182,9 @@ export async function runPass<Facts extends LedgerFacts>(
         // facts rather than advice derived from a report it may not be able to make.
         `The pass is '${runId}'. Its ledger is ${ledger.path} and its journal is ` +
         `${journal.path}; both are as the last scenario left them.\n` +
+        // What is still standing outranks the resume, for the reason `closingWords` folds it first:
+        // the commands below are things an operator MAY do and a running VM is a thing they must.
+        (released.length > 0 ? `${released.join('\n')}\n` : '') +
         // The RESUME is the one line that is not a fact, and it follows the same ledger read
         // `closingWords` makes rather than being offered on the strength of having got this far.
         // This boundary is reachable strictly earlier than that one: a scenario FACTORY that throws
@@ -218,11 +242,12 @@ function journalFailure(failure: ScenarioFailure): string {
 /**
  * Run {@link PassOptions.onSettled} and answer what it said, or what went wrong saying it.
  *
- * The catch is the point rather than a precaution. This runs on the failure path, where the
- * scenario's own report is already on screen and is the more valuable of the two: a reclaim that
- * throws must not replace it, and a `try/finally` at the call site is exactly what would. So the
- * throw becomes a LINE in the same block, which is also the honest disposition for a reclaim that
- * failed: it is the state an operator has to act on, and it is now stated rather than lost.
+ * The catch is the point rather than a precaution. Both call sites already hold something more
+ * valuable than this failure (a scenario's own report, or the suite bug the boundary caught), and a
+ * reclaim that throws must not replace it: a `try/finally` at either call site is exactly what
+ * would. So the throw becomes a LINE in the same block, which is also the honest disposition for a
+ * reclaim that failed: it is the state an operator has to act on, and it is now stated rather than
+ * lost. Because it never throws, the boundary can call it before composing its own report.
  */
 async function settle<Facts extends LedgerFacts>(
   options: PassOptions<Facts>,

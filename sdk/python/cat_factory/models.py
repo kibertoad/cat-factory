@@ -3179,8 +3179,9 @@ class GetPublicRepoFileResponse:
     name: str
     owner: str
     path: str
-    ref: str
     sha: str
+    #: Always present; ``None`` when the server has no value for it.
+    ref: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
@@ -3190,14 +3191,14 @@ class GetPublicRepoFileResponse:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "GetPublicRepoFileResponse":
         """Decode a `GetPublicRepoFileResponse` from its JSON object."""
-        known = {"content", "name", "owner", "path", "ref", "sha"}
+        known = {"content", "name", "owner", "path", "sha", "ref"}
         return cls(
             content=data.get("content"),
             name=data.get("name"),
             owner=data.get("owner"),
             path=data.get("path"),
-            ref=data.get("ref"),
             sha=data.get("sha"),
+            ref=data.get("ref"),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
@@ -3208,8 +3209,8 @@ class GetPublicRepoFileResponse:
         out["name"] = self.name
         out["owner"] = self.owner
         out["path"] = self.path
-        out["ref"] = self.ref
         out["sha"] = self.sha
+        out["ref"] = self.ref
         return out
 
 
@@ -4729,6 +4730,8 @@ class ListPublicEnvironmentConnectionsResponseConnection:
     secret_keys: list[str]
     #: Always present; ``None`` when the server has no value for it.
     accepts_manifest_id: str | None = None
+    #: Always present; ``None`` when the server has no value for it.
+    manifest_id: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
@@ -4738,7 +4741,7 @@ class ListPublicEnvironmentConnectionsResponseConnection:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicEnvironmentConnectionsResponseConnection":
         """Decode a `ListPublicEnvironmentConnectionsResponseConnection` from its JSON object."""
-        known = {"backendKind", "connectedAt", "endpoint", "engine", "label", "provisionType", "secretKeys", "acceptsManifestId"}
+        known = {"backendKind", "connectedAt", "endpoint", "engine", "label", "provisionType", "secretKeys", "acceptsManifestId", "manifestId"}
         return cls(
             backend_kind=data.get("backendKind"),
             connected_at=data.get("connectedAt"),
@@ -4748,6 +4751,7 @@ class ListPublicEnvironmentConnectionsResponseConnection:
             provision_type=data.get("provisionType"),
             secret_keys=[item for item in data.get("secretKeys") or []],
             accepts_manifest_id=data.get("acceptsManifestId"),
+            manifest_id=data.get("manifestId"),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
@@ -4762,6 +4766,7 @@ class ListPublicEnvironmentConnectionsResponseConnection:
         out["provisionType"] = self.provision_type
         out["secretKeys"] = [_encode(item) for item in self.secret_keys]
         out["acceptsManifestId"] = self.accepts_manifest_id
+        out["manifestId"] = self.manifest_id
         return out
 
 

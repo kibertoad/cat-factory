@@ -14,12 +14,54 @@ export function parseIssueHtmlUrl(
   return { owner: m[1]!, repo: m[2]!, number: Number(m[3]) }
 }
 
-/** Decode the contents API's base64 (whitespace-laden) payload to a UTF-8 string. */
-export function decodeBase64Utf8(value: string): string {
+/**
+ * Decode the contents API's base64 (whitespace-laden) payload, SAYING when the bytes were not text.
+ *
+ * Strict first, so `lossy` is the decoder's own verdict rather than a scan for a character a text file
+ * may legitimately contain: a document that genuinely holds a U+FFFD is not a binary file, and a check
+ * on the output could not tell the two apart. The lossy rendering is still ANSWERED, because what to
+ * do about it belongs to the caller: a pre-op folding a file into a prompt wants the best available
+ * text, and a read whose job is byte-exact grading refuses (see `RepoFileContent.lossy`).
+ *
+ * `FetchGitLabClient` holds the same function, because there is no home below both: kernel names no
+ * web globals by design (its `lib` is ES2022 alone, where both clients add DOM for `atob` and
+ * `TextDecoder`), and neither client package can see the other. Change one, change the other.
+ */
+export function decodeRepoFileBase64(value: string): { content: string; lossy: boolean } {
   const binary = atob(value.replace(/\s+/g, ''))
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-  return new TextDecoder().decode(bytes)
+  try {
+    return { content: new TextDecoder('utf-8', { fatal: true }).decode(bytes), lossy: false }
+  } catch {
+    // Not a swallow: the throw IS the answer, reported as `lossy` rather than lost. The strict
+    // decoder's own error names only the offending byte, which tells a caller nothing more.
+    return { content: new TextDecoder().decode(bytes), lossy: true }
+  }
+}
+
+/**
+ * Bytes the contents API will serve in one read, past which it refuses.
+ *
+ * GitHub's own documented ceiling for `GET /repos/{o}/{r}/contents/{path}`: 1 MB with the JSON media
+ * type. Named here (rather than at the one comparison) because it is the number a refusal reports to
+ * a caller, and a caller that knows it can pick a different mechanism instead of retrying.
+ */
+export const GITHUB_CONTENTS_MAX_BYTES = 1_048_576
+
+/**
+ * Whether a failed contents read was refused for the blob's SIZE rather than for the credential.
+ *
+ * GitHub answers an over-limit blob with a `403` carrying `"code": "too_large"`, the same status as
+ * a permission denial and as an exhausted primary rate limit, so nothing structural separates them:
+ * the body is the only signal, which is why {@link GitHubApiError} carries it. Matched on the human
+ * sentence as well as the code because the two sit at opposite ends of a body that arrives truncated
+ * and the sentence comes first. Not matched against the whole `message`, which by then also carries
+ * this repository's own 403 remedy prose about missing scopes.
+ */
+export function isGitHubBlobTooLarge(error: unknown): boolean {
+  if (!(error instanceof GitHubApiError) || error.status !== 403) return false
+  return /too_large|too large/i.test(error.body ?? '')
 }
 
 /** Parse a GitHub ISO-8601 timestamp to epoch ms, or 0 when absent/unparseable. */
@@ -102,6 +144,17 @@ export class GitHubApiError extends VcsApiError {
      * instead of only baked into the human message.
      */
     rateLimited = false,
+    /**
+     * The response body (as the caller truncated it), retained STRUCTURALLY rather than only baked
+     * into `message`.
+     *
+     * Because one status covers causes that need different answers and the body is the only thing
+     * that separates them: an over-limit blob and a missing scope are both a `403`
+     * (see {@link isGitHubBlobTooLarge}). Reading it back out of the rendered `message` would mean
+     * matching against this repository's own remedy prose, which is appended to the same string and
+     * changes for reasons that have nothing to do with what GitHub said.
+     */
+    readonly body?: string,
   ) {
     super('github', status, message, rateLimited)
     this.name = 'GitHubApiError'

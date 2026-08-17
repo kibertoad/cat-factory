@@ -19,6 +19,7 @@
 // in the same build.
 
 import {
+  MAX_DOCUMENT_TITLE_CHARS,
   MAX_TASK_DESCRIPTION_CHARS,
   MAX_UPLOADED_DOCUMENT_CHARS,
   type PublicTaskUploadedDocument,
@@ -107,9 +108,6 @@ function requireTitle(title: string): string {
   }
   return trimmed
 }
-
-/** The bound `publicTaskUploadedDocumentSchema` puts on a title. */
-const MAX_DOCUMENT_TITLE_CHARS = 200
 
 /**
  * The framing that goes in `description` when the brief itself is attached.

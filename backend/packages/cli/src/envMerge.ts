@@ -7,9 +7,11 @@
 // are each a SILENT failure when you get them wrong (the command reports success and the file means
 // something else), and every consumer that writes its own generator has to make all five:
 //
-//   1. **Unmanaged content is carried over VERBATIM**, never re-rendered from a parse. A multi-line
-//      quoted PEM is exactly how a parse-then-requote round trip acquires a stray escape and stops
-//      matching the certificate it was pasted from.
+//   1. **Unmanaged content is carried over VERBATIM**, never re-rendered from a parse, and a
+//      multi-line quoted value is ONE assignment rather than a line and some debris. A parse-then-
+//      requote round trip is how a PEM acquires a stray escape and stops matching the certificate it
+//      was pasted from; a line-at-a-time strip is how one loses its opening line and has the rest
+//      re-filed as somebody else's content, which the reader then takes for a set of garbage keys.
 //   2. **The report is four categories, not a boolean.** "Nothing was overwritten" is the claim such
 //      a command makes, and only `kept` / `changed` / `added` / `preserved` can state it.
 //   3. **A managed value is QUOTED where the READER would otherwise disagree with the writer.**
@@ -17,7 +19,8 @@
 //      comment, so `A=cf-kargo #2` reads back as `cf-kargo`. A value carrying both quote characters
 //      is unrepresentable and THROWS rather than being written as something else.
 //   4. **The carried-over header must be RECOGNISED as well as written**, or the file grows by one
-//      identical line per run.
+//      identical line per run, and recognised by a STABLE PREFIX rather than the whole sentence, or
+//      the day the wording changes every file written by a previous run grows one anyway.
 //   5. **Secrets are withheld by an ENUMERATED list**, never a pattern match: `key.includes('TOKEN')`
 //      passes today and quietly stops covering the next secret whose name does not say so.
 //
@@ -44,15 +47,31 @@ export interface EnvMerge {
 }
 
 /**
+ * The part of the header that IDENTIFIES it, and the only part any recognition may depend on.
+ *
+ * Split off the sentence because recognising the whole of it is a trap that has already fired: the
+ * header used to name `configure`, and generalising the wording for a published helper meant every
+ * file a previous run had written carried a line the next run no longer matched. It was then filed as
+ * an ordinary comment above unmanaged content, a fresh header was prepended above it, and the file
+ * kept both, which is precisely the growth rule 4 exists to prevent. Matching a prefix that does not
+ * carry the changeable half makes the next rewording free.
+ */
+const CARRIED_OVER_PREFIX = '# Carried over unchanged from the previous file;'
+
+/**
  * The header written above the content the merge did not manage.
  *
- * Exported because it has to be RECOGNISED as well as written: it introduces an UNMANAGED
- * assignment, so the ordinary comment-block rule carries it over, and a merge that then prepended a
- * fresh copy grew the file by one identical line per run. A consumer rendering its own report can
- * also match on it.
+ * Exported because a consumer rendering its own report matches on it. Recognition on the way IN goes
+ * through {@link CARRIED_OVER_PREFIX}, not through this: it introduces an UNMANAGED assignment, so
+ * the ordinary comment-block rule carries it over, and a merge that then prepended a fresh copy grew
+ * the file by one line per run.
  */
-export const CARRIED_OVER_HEADER =
-  '# Carried over unchanged from the previous file; this command does not manage these.'
+export const CARRIED_OVER_HEADER = `${CARRIED_OVER_PREFIX} this command does not manage these.`
+
+/** Whether a line is the carried-over header, in whichever words the run that wrote it used. */
+function isCarriedOverHeader(line: string): boolean {
+  return line.trim().startsWith(CARRIED_OVER_PREFIX)
+}
 
 /**
  * Merge the managed entries into an existing `.env`, keeping every unmanaged line VERBATIM.
@@ -123,15 +142,108 @@ export function quoteEnvValue(value: string): string {
  */
 export function readAssignments(text: string): Record<string, string> {
   const found: Record<string, string> = {}
-  for (const line of text.split('\n')) {
-    const match = ASSIGNMENT.exec(line)
-    if (match?.[1] !== undefined) found[match[1]] = unquote(match[2] ?? '')
+  for (const line of readEnvLines(text)) {
+    if (line.kind === 'assignment') found[line.key] = line.value
   }
   return found
 }
 
 /** `export FOO=bar` and `FOO=bar` alike, since both appear in a hand-written file. */
 const ASSIGNMENT = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/
+
+/**
+ * One LOGICAL line of a `.env`, carrying every physical line it spans.
+ *
+ * `text` is what gets written back for content the merge keeps, so it is the original bytes rather
+ * than anything re-rendered (rule 1), joined with newlines where the value spanned several lines.
+ */
+type EnvLine =
+  | { kind: 'comment'; text: string }
+  | { kind: 'blank'; text: string }
+  | { kind: 'assignment'; key: string; value: string; text: string }
+  /** Anything else a hand-written file may hold. Never interpreted, only carried. */
+  | { kind: 'other'; text: string }
+
+/**
+ * Split a `.env` into logical lines, joining a QUOTED VALUE that spans several of them.
+ *
+ * The one place the multi-line rule lives, because both readers need it and neither can be right
+ * alone: a line-at-a-time reader takes `KEY="-----BEGIN CERTIFICATE-----` for the whole value, and a
+ * line-at-a-time stripper drops that first line and re-emits the certificate's body as unmanaged
+ * content, which the merge then writes back under the carried-over header and the reader takes for a
+ * set of garbage keys (a base64 line ending `Qm9keQ==` even parses as an assignment). A PEM is the
+ * commonest such value and is exactly what the module header promises to survive.
+ *
+ * Continuation is decided by the OPENING quote only: a value whose first character is `"` or `'` and
+ * which does not close it on the same line continues until a line that does. That matches what
+ * `node:util`'s `parseEnv` accepts, which is the reader this writer has to agree with, and it leaves
+ * every ordinary bare value exactly as it was.
+ */
+function readEnvLines(text: string): EnvLine[] {
+  const physical = text.split('\n')
+  const out: EnvLine[] = []
+  for (let index = 0; index < physical.length; index++) {
+    const line = physical[index]!
+    if (line.trim().startsWith('#')) {
+      out.push({ kind: 'comment', text: line })
+      continue
+    }
+    if (line.trim().length === 0) {
+      out.push({ kind: 'blank', text: line })
+      continue
+    }
+    const match = ASSIGNMENT.exec(line)
+    const key = match?.[1]
+    if (key === undefined) {
+      out.push({ kind: 'other', text: line })
+      continue
+    }
+    const raw = match?.[2] ?? ''
+    const quote = unclosedQuote(raw)
+    if (quote === null) {
+      out.push({ kind: 'assignment', key, value: unquote(raw), text: line })
+      continue
+    }
+    const spanned = [raw]
+    while (index + 1 < physical.length) {
+      const next = physical[++index]!
+      spanned.push(next)
+      if (next.includes(quote)) break
+    }
+    // An unterminated quote is REFUSED rather than guessed at. Where the value ends is then unknowable,
+    // so every answer this module gives about the file (which keys it holds, what is unmanaged, what it
+    // preserved) would be a guess reported as a fact, and the whole point of the four-way report is
+    // that it can be trusted. The file is already unreadable to `parseEnv` for the same reason.
+    if (!spanned.at(-1)?.includes(quote)) {
+      throw new Error(
+        `${key} opens a ${quote === '"' ? 'double' : 'single'}-quoted value that is never closed, ` +
+          `so where it ends cannot be known and neither can what else this file holds. Close the ` +
+          `quote (or remove it) and run this again.`,
+      )
+    }
+    const joined = spanned.join('\n')
+    out.push({
+      kind: 'assignment',
+      key,
+      value: unquote(joined),
+      text: `${line.slice(0, line.length - raw.length)}${joined}`,
+    })
+  }
+  return out
+}
+
+/**
+ * The quote character a value OPENS and does not close on its own line, or null.
+ *
+ * The opening character only, and never a quote found mid-value: `A=it's fine` opens nothing, so
+ * treating a stray apostrophe as a continuation would swallow every line after it.
+ */
+function unclosedQuote(raw: string): string | null {
+  const value = raw.trimStart()
+  const quote = value.startsWith('"') ? '"' : value.startsWith("'") ? "'" : null
+  if (quote === null) return null
+  return value.indexOf(quote, 1) === -1 ? quote : null
+}
 
 function unquote(raw: string): string {
   const value = raw.trim()
@@ -148,32 +260,36 @@ function unquote(raw: string): string {
  * them; kept, they would sit above whatever unmanaged variable happened to follow and describe it
  * wrongly.
  *
- * {@link CARRIED_OVER_HEADER} is dropped wherever it appears rather than only above a managed key:
- * the merge re-writes it, and it introduces UNMANAGED content, so the ordinary comment-block rule
- * carries it over and the file grows by one identical line per run.
+ * The carried-over header is dropped wherever it appears rather than only above a managed key: the
+ * merge re-writes it, and it introduces UNMANAGED content, so the ordinary comment-block rule carries
+ * it over and the file grows by one line per run. Matched by {@link isCarriedOverHeader}, so a header
+ * a previous version of this code wrote in different words is still recognised.
+ *
+ * A managed key whose value spans several lines takes ALL of them with it, which is what reading
+ * through {@link readEnvLines} buys: dropped a line at a time, the continuation lines are neither
+ * comments nor blanks nor assignments to a managed key, so they survive as "unmanaged" content and
+ * the file is written back corrupted.
  */
 function stripAssignments(text: string, managed: readonly string[]): string {
   const out: string[] = []
   let comments: string[] = []
-  for (const line of text.split('\n')) {
-    if (line.trim() === CARRIED_OVER_HEADER) continue
-    if (line.trim().startsWith('#')) {
-      comments.push(line)
+  for (const line of readEnvLines(text)) {
+    if (line.kind === 'comment') {
+      if (!isCarriedOverHeader(line.text)) comments.push(line.text)
       continue
     }
-    if (line.trim().length === 0) {
+    if (line.kind === 'blank') {
       // A blank line ends a comment block: whatever it introduced is above it, so the comments are
       // free-standing and belong with the content that is kept.
-      out.push(...comments, line)
+      out.push(...comments, line.text)
       comments = []
       continue
     }
-    const key = ASSIGNMENT.exec(line)?.[1]
-    if (key !== undefined && managed.includes(key)) {
+    if (line.kind === 'assignment' && managed.includes(line.key)) {
       comments = []
       continue
     }
-    out.push(...comments, line)
+    out.push(...comments, line.text)
     comments = []
   }
   out.push(...comments)

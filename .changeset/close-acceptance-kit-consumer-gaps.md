@@ -3,6 +3,7 @@
 '@cat-factory/contracts': minor
 '@cat-factory/kernel': minor
 '@cat-factory/server': minor
+'@cat-factory/gitlab': minor
 '@cat-factory/cli': minor
 '@cat-factory/sdk': minor
 '@cat-factory/mcp-server': minor
@@ -43,10 +44,20 @@ the `renderEnvFile` it completes.
 On `/api/v1` (spec `1.57.0`, all additive): `PublicServiceProvisioning` gains a `custom` variant so a
 service pinned to a deployment's own environment backend can be declared and, more importantly, READ
 BACK (the projection dropped what it could not describe, so a pinned service and an unpinned one
-answered identically); `GET /api/v1/environments/connections` closes the write-only loop on handlers;
-and `GET /api/v1/repos/{owner}/{name}/contents` reads one file out of a linked repository, so a caller
-can grade what a run committed without a second VCS credential.
+answered identically); `GET /api/v1/environments/connections` closes the write-only loop on handlers,
+reporting BOTH manifest-id fields because the engine matches a pinned service against either and each
+way of registering a handler sets only one; and `GET /api/v1/repos/{owner}/{name}/contents` reads one
+file out of a linked repository, so a caller can grade what a run committed without a second VCS
+credential. That read answers `ref: null` for a request that named none, since the branch the provider
+resolved is not something it learns and the platform's recorded default may be one it invented; `sha`
+is the handle to record. It refuses rather than answering approximately in three cases: past its own
+cap, past the PROVIDER's contents ceiling (`file_too_large` either way, which is also what stops
+GitHub's over-limit `403` reading as a revoked credential), and for bytes that are not UTF-8
+(`file_not_text`, carrying the `sha`).
 
 Watch for: `provisioning.type` must now be narrowed before `manifestSource` is read, since the public
-union is no longer single-member. What was DELIBERATELY not added, and why, is
+union is no longer single-member. A `custom` service patch that omits `manifestPath` CLEARS the stored
+one, which is the only way this surface can express "back to the manifest type's default".
+`RepoFileContent` gains an optional `lossy`, so a `VcsClient` implementation outside this repo should
+set it where it can tell. What was DELIBERATELY not added, and why, is
 `backend/docs/adr/0058-acceptance-kit-consumer-gaps.md`.

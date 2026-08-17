@@ -780,7 +780,8 @@ export interface GetPublicRepoFileResponse {
   name: string
   owner: string
   path: string
-  ref: string
+  /** Always present; `null` when the server has no value for it. */
+  ref: string | null
   sha: string
 }
 
@@ -1175,6 +1176,8 @@ export interface ListPublicEnvironmentConnectionsResponseConnection {
   endpoint: string
   engine: string
   label: string
+  /** Always present; `null` when the server has no value for it. */
+  manifestId: string | null
   provisionType: string
   secretKeys: string[]
 }

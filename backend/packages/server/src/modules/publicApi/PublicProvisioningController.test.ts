@@ -5,14 +5,24 @@ import type {
   EnvironmentHandlerView,
   GitHubAvailableRepo,
   GitHubConnection,
+  PublicEnvironmentHandler,
   ServiceProvisioning,
 } from '@cat-factory/contracts'
-import { RateLimitedError, UnavailableError, VcsApiError } from '@cat-factory/kernel'
+import { publicEnvironmentHandlerSchema } from '@cat-factory/contracts'
+import {
+  RateLimitedError,
+  UnavailableError,
+  VcsApiError,
+  VcsBlobTooLargeError,
+  type RunRepoContext,
+} from '@cat-factory/kernel'
 import { GitHubApiError } from '../../github/githubHttpHelpers.js'
 import type { RepoUseByRepoId } from '@cat-factory/orchestration'
 import type { ServerContainer } from '../../http/env.js'
 import {
   asVcsRefusal,
+  byHandlerIdentity,
+  readGradableFile,
   readVcsConnection,
   toBlockPatch,
   toPublicAvailableRepo,
@@ -129,6 +139,20 @@ describe('toBlockPatch', () => {
     // manifest at the repository root rather than falling back to the type's own default.
     const patch = toBlockPatch({ provisioning: { type: 'custom', manifestId: 'kargo' } }, undefined)
     expect(patch.provisioning).toEqual({ type: 'custom', manifestId: 'kargo' })
+  })
+
+  it('CLEARS a stored manifestPath the patch left out, while keeping what it cannot express', () => {
+    // `manifestPath` is the one stored field this surface publishes, so an omission is the only way a
+    // caller can say "back to the type's default". Carried over from the stored row it would keep
+    // deploying the old path with nothing reporting it, and the public shape offers no other way to
+    // clear it. Everything the public shape cannot express still survives.
+    const patch = toBlockPatch({ provisioning: { type: 'custom', manifestId: 'kargo' } }, {
+      type: 'custom',
+      manifestId: 'kargo',
+      manifestPath: 'deploy/old.yml',
+      localDevOnly: true,
+    } as ServiceProvisioning)
+    expect(patch.provisioning).toEqual({ type: 'custom', manifestId: 'kargo', localDevOnly: true })
   })
 
   it('distinguishes an empty-string description from an omitted one', () => {
@@ -478,6 +502,7 @@ describe('toPublicHandler', () => {
       ),
     ).toEqual({
       provisionType: 'custom',
+      manifestId: null,
       acceptsManifestId: 'kargo',
       engine: 'remote-custom',
       backendKind: 'kargo',
@@ -488,6 +513,17 @@ describe('toPublicHandler', () => {
     })
   })
 
+  it('reports a handler KEYED to a manifest id, which is the shape a seed produces', () => {
+    // The field the engine's own `matchesCustom` checks FIRST, and the one a deployment seeding a
+    // handler from its composition root sets: `acceptsManifestId` is set only by a `remote-custom`
+    // connection. Published alone, the commonest seed shape read as a handler serving nothing, so a
+    // setup script confirming its own seed landed found no entry naming it while a run against that
+    // handler resolved perfectly.
+    expect(
+      toPublicHandler(handler({ provisionType: 'custom', manifestId: 'kargo' })),
+    ).toMatchObject({ manifestId: 'kargo', acceptsManifestId: null })
+  })
+
   it('publishes the secret KEYS and never the stored config they came from', () => {
     // `EnvironmentHandlerView` carries the whole non-secret config for the app's connect-form
     // prefill. It is the internal per-engine bag, deliberately open, and this surface may not freeze
@@ -495,15 +531,114 @@ describe('toPublicHandler', () => {
     const projected = toPublicHandler(
       handler({ config: { engine: 'remote-kubernetes' } } as Partial<EnvironmentHandlerView>),
     )
-    expect(Object.keys(projected).sort()).toEqual([
-      'acceptsManifestId',
-      'backendKind',
-      'connectedAt',
-      'endpoint',
-      'engine',
-      'label',
-      'provisionType',
-      'secretKeys',
-    ])
+    // Derived from the published schema rather than restated, so adding a member there is a decision
+    // made in one place: what this pins is that the projection answers EXACTLY the schema's fields,
+    // which is the property that keeps the internal config bag from leaking onto `/api/v1`.
+    expect(Object.keys(projected).sort()).toEqual(
+      Object.keys(publicEnvironmentHandlerSchema.entries).sort(),
+    )
+  })
+})
+
+describe('byHandlerIdentity', () => {
+  const entry = (overrides: Partial<PublicEnvironmentHandler>): PublicEnvironmentHandler =>
+    ({
+      provisionType: 'custom',
+      manifestId: null,
+      acceptsManifestId: null,
+      engine: 'remote-custom',
+      backendKind: 'kargo',
+      label: 'a handler',
+      endpoint: 'https://kargo.example',
+      secretKeys: [],
+      connectedAt: 1,
+      ...overrides,
+    }) as PublicEnvironmentHandler
+
+  it('orders by CODE UNITS, so the same set serialises identically on every runtime', () => {
+    // `localeCompare` collates, and its collation depends on the ICU build and the ambient locale:
+    // workerd, a full-ICU Node and a small-ICU Node can disagree, which is exactly the spurious diff
+    // the ordering exists to prevent. `_` (0x5F) sorts AFTER every uppercase letter by code unit and
+    // before them under most collations, so this pins the difference rather than a spelling.
+    const sorted = [entry({ manifestId: 'a_b' }), entry({ manifestId: 'aB' })]
+      .sort(byHandlerIdentity)
+      .map((handler) => handler.manifestId)
+    expect(sorted).toEqual(['aB', 'a_b'])
+  })
+
+  it('separates two custom handlers keyed to different manifests', () => {
+    // With only `acceptsManifestId` in the key, two seeded handlers tied and fell back to whatever
+    // order the repository read returned: two runs of the same setup check could disagree.
+    const sorted = [entry({ manifestId: 'nomad' }), entry({ manifestId: 'kargo' })]
+      .sort(byHandlerIdentity)
+      .map((handler) => handler.manifestId)
+    expect(sorted).toEqual(['kargo', 'nomad'])
+  })
+})
+
+describe('readGradableFile', () => {
+  const repo = (getFile: RunRepoContext['repo']['getFile']): RunRepoContext['repo'] =>
+    ({ getFile }) as RunRepoContext['repo']
+
+  it('answers the OVER-LIMIT refusal for a blob the provider will not serve, not a 503', () => {
+    // The misattribution this exists for: GitHub reports an over-limit blob as a 403, so
+    // `asVcsRefusal` turned a 1.4 MB lockfile into "re-connect the workspace, a token may have been
+    // revoked" and sent an operator to replace a credential that works.
+    return expect(
+      readGradableFile(
+        repo(() => Promise.reject(new VcsBlobTooLargeError('github', 1_048_576))),
+        'acme/api:pnpm-lock.yaml',
+        'pnpm-lock.yaml',
+        undefined,
+      ),
+    ).rejects.toMatchObject({
+      code: 'validation',
+      details: { reason: 'file_too_large', limit: 1_048_576 },
+    })
+  })
+
+  it('refuses bytes that are not UTF-8 rather than answering the replacement characters', () => {
+    // A PNG or a tarball decodes to U+FFFD, and handing that back under a field documented as the
+    // file's content is the lie the size cap already refuses to tell: a caller comparing against its
+    // own copy sees a mismatch it cannot attribute. The `sha` rides the refusal, so the byte-exact
+    // join a grader wanted is still available.
+    return expect(
+      readGradableFile(
+        repo(async () => ({ content: '��', sha: 'deadbeef', lossy: true })),
+        'acme/api:logo.png',
+        'logo.png',
+        undefined,
+      ),
+    ).rejects.toMatchObject({ details: { reason: 'file_not_text', sha: 'deadbeef' } })
+  })
+
+  it('passes an omitted ref through OMITTED, so the provider resolves the real default branch', async () => {
+    // `context.baseBranch` is the wrong value to substitute: `makeResolveRepoFilesForCoords` invents
+    // `main` for a projection row carrying no default branch, so a repository whose default is
+    // `master` would be read at a branch it does not have and answer `file_not_found` for a file that
+    // is right there.
+    const asked: (string | undefined)[] = []
+    const file = await readGradableFile(
+      repo(async (_path, gitRef) => {
+        asked.push(gitRef)
+        return { content: 'ok', sha: 'abc' }
+      }),
+      'acme/api:README.md',
+      'README.md',
+      undefined,
+    )
+    expect(asked).toEqual([undefined])
+    expect(file?.content).toBe('ok')
+  })
+
+  it('re-raises any OTHER provider failure through the credential/rate-limit mapping', async () => {
+    await expect(
+      readGradableFile(
+        repo(() => Promise.reject(new GitHubApiError(401, 'Bad credentials'))),
+        'acme/api:README.md',
+        'README.md',
+        'main',
+      ),
+    ).rejects.toBeInstanceOf(UnavailableError)
   })
 })

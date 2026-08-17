@@ -124,10 +124,11 @@ export interface ServerContainer extends Core {
   resolveRunRepoContext?: ResolveRunRepoContext
   /**
    * The BLOCK-LESS sibling of {@link resolveRunRepoContext}: the same checkout-free
-   * {@link RepoFiles}, from repo coordinates a caller names. `GET /api/v1/repos/:owner/:name/contents/*`
-   * reads through it, so the public file read is scoped to what this workspace has LINKED rather
-   * than to whatever the deployment's credential can reach. Present only when a VCS is wired
-   * (both facades compose it with `makeResolveRepoFilesForCoords`); absent → the read is a 503.
+   * {@link RepoFiles}, from repo coordinates a caller names.
+   * `GET /api/v1/repos/:owner/:name/contents?path=` reads through it (the path is a QUERY value, not
+   * a path segment: see the contract), so the public file read is scoped to what this workspace has
+   * LINKED rather than to whatever the deployment's credential can reach. Present only when a VCS is
+   * wired (both facades compose it with `makeResolveRepoFilesForCoords`); absent → the read is a 503.
    */
   resolveRepoFilesForCoords?: ResolveRepoFilesForCoords
   /**

@@ -10421,6 +10421,16 @@
                           "label": {
                             "type": "string"
                           },
+                          "manifestId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "provisionType": {
                             "type": "string"
                           },
@@ -10433,6 +10443,7 @@
                         },
                         "required": [
                           "provisionType",
+                          "manifestId",
                           "acceptsManifestId",
                           "engine",
                           "backendKind",
@@ -13860,7 +13871,14 @@
                       "type": "string"
                     },
                     "ref": {
-                      "type": "string"
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "sha": {
                       "type": "string"

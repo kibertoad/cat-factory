@@ -32,6 +32,11 @@ function passUnder(options: {
   recordsFacts?: () => boolean
   target?: string
   onSettled?: (outcomes: readonly ScenarioOutcome[]) => Promise<readonly string[]>
+  /**
+   * Make the operator sink throw on a chosen line, which is how a BOUNDARY failure is reached from
+   * outside: everything inside `runScenarios` is deliberately its own scenario's failure instead.
+   */
+  logThrowsOn?: (message: string) => boolean
 }) {
   const dir = mkdtempSync(join(tmpdir(), 'cf-kit-pass-'))
   const ledger = new LedgerStore<Facts>({
@@ -54,7 +59,10 @@ function passUnder(options: {
         journal,
         scenarios: options.scenarios,
         gate: options.gate ?? (() => Promise.resolve()),
-        log: (message) => lines.push(message),
+        log: (message) => {
+          if (options.logThrowsOn?.(message)) throw new TypeError('the log sink went away')
+          lines.push(message)
+        },
         recordsFacts: options.recordsFacts ?? (() => options.created ?? false),
         ...(options.onSettled ? { onSettled: options.onSettled } : {}),
       }),
@@ -156,6 +164,59 @@ describe('runPass', () => {
     })
     expect(await pass.run()).toBe(1)
     expect(released).toEqual(['failed'])
+  })
+
+  it('reclaims on the BOUNDARY path too, and says so where that report is already looking', async () => {
+    // The boundary is reachable AFTER the scenarios have stood up real infrastructure: this drives the
+    // summary line failing to write, which is the documented shape and the earliest of them, so the
+    // settle it precedes is the one that used to be skipped. Left inside the `try`, the only report an
+    // operator got named the run id, the ledger and the journal, and said nothing about a live VM.
+    const printed = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const settled: number[] = []
+    const pass = passUnder({
+      created: true,
+      scenarios: [{ id: '01-x', title: 'x', gated: false, run: () => Promise.resolve() }],
+      // Not the `open` seam or a scenario body: `runScenarios` owns those on purpose, so a throw there
+      // is a failed scenario with a summary rather than a boundary.
+      logThrowsOn: (message) => message.startsWith('\nsummary'),
+      onSettled: async () => {
+        settled.push(1)
+        return ['1 resource(s) this pass provisioned may STILL BE RUNNING: env-42']
+      },
+    })
+
+    expect(await pass.run()).toBe(1)
+    const report = printed.mock.calls.map((call) => String(call[0])).join('\n')
+    expect(report).toContain('SUITE ITSELF')
+    expect(settled).toHaveLength(1)
+    expect(report).toContain('env-42')
+    // Above the resume, for the reason the closing words fold it first: the commands are things an
+    // operator MAY do and a running VM is a thing they must.
+    expect(report.indexOf('env-42')).toBeLessThan(report.indexOf('  resume:'))
+    printed.mockRestore()
+  })
+
+  it('reclaims ONCE when the boundary is reached after a clean settle', async () => {
+    // Both exits ask for the reclaim now, so the one path that passes through both must not tear the
+    // same resources down twice and report them twice.
+    const printed = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const settled: number[] = []
+    const pass = passUnder({
+      scenarios: [{ id: '01-x', title: 'x', gated: false, run: () => Promise.resolve() }],
+      // Read by the closing words, which run AFTER the settle: the throw lands on the boundary with a
+      // settle already behind it.
+      recordsFacts: () => {
+        throw new TypeError('the ledger is gone')
+      },
+      onSettled: async () => {
+        settled.push(1)
+        return []
+      },
+    })
+
+    expect(await pass.run()).toBe(1)
+    expect(settled).toHaveLength(1)
+    printed.mockRestore()
   })
 
   it('RENDERS a throw out of `onSettled` instead of replacing the scenario failure with it', async () => {

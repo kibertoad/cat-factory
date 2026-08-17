@@ -100,7 +100,11 @@ export async function acquire<Fields>(
     return { record: existing, provisioned: false }
   }
   if (existing) {
-    journal.record(
+    // `say` like both of its siblings, and for the reason `say` exists: this is the ONE line that
+    // explains why a resumed pass did not adopt what its ledger names, and filed without being
+    // printed it leaves an operator watching a fresh id appear with nothing saying what became of
+    // the old one.
+    journal.say(
       'milestone',
       `the ledger's '${label}' (${existing.externalId}) was released, so a fresh one is provisioned`,
     )

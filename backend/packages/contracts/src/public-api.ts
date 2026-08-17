@@ -359,6 +359,17 @@ export const MAX_TASK_DESCRIPTION_CHARS = 2000
 /** Characters of document text ONE uploaded attachment may carry (see {@link publicTaskDocumentSchema}). */
 export const MAX_UPLOADED_DOCUMENT_CHARS = 100_000
 
+/**
+ * Characters an ATTACHED DOCUMENT's title may carry (see {@link publicTaskUploadedDocumentSchema}).
+ *
+ * Named for the same reason as {@link MAX_TASK_DESCRIPTION_CHARS}: a caller that composes an
+ * attachment (any suite filing a brief bigger than a `description` holds) has to check the title
+ * before the round trip, and one that cannot read the bound restates it, which drifts the moment
+ * either side moves. Not shared with the TASK title bound, which merely happens to hold the same
+ * value today and answers a different question.
+ */
+export const MAX_DOCUMENT_TITLE_CHARS = 200
+
 /** Context documents ONE task creation may attach (imported and uploaded together). */
 export const MAX_TASK_DOCUMENTS = 10
 
@@ -379,7 +390,7 @@ export type PublicTaskSourceDocument = v.InferOutput<typeof publicTaskSourceDocu
 export const publicTaskUploadedDocumentSchema = v.object({
   kind: v.literal('upload'),
   /** Names the document for the agent (it becomes the attachment's heading and filename). */
-  title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+  title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_DOCUMENT_TITLE_CHARS)),
   /**
    * The document text, as Markdown. Refused when it yields no readable text at all (a body of
    * pure markup would reach the agent as an empty attachment).

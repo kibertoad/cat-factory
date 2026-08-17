@@ -13,7 +13,7 @@ import org.jspecify.annotations.Nullable;
  * @param name the {@code name} field.
  * @param owner the {@code owner} field.
  * @param path the {@code path} field.
- * @param ref the {@code ref} field.
+ * @param ref Always present; {@code null} when the server has no value for it.
  * @param sha the {@code sha} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -26,7 +26,8 @@ public record GetPublicRepoFileResponse(
 
     @JsonProperty("path") String path,
 
-    @JsonProperty("ref") String ref,
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("ref") @Nullable String ref,
 
     @JsonProperty("sha") String sha
 ) {

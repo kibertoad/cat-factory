@@ -320,9 +320,14 @@ export type LinkPublicRepoInput = v.InferOutput<typeof linkPublicRepoSchema>
  *
  * A caller reading a file to grade what an agent committed is joining on its exact bytes, and a
  * silently shortened answer is indistinguishable from an agent that wrote a shorter file. So the
- * cap refuses (`413`, `details.reason: 'file_too_large'`) and names the size, which is a fact the
+ * cap refuses (`422`, `details.reason: 'file_too_large'`) and names the size, which is a fact the
  * caller can act on where a truncation is not. Generous enough for source: 256 KiB is past any
  * hand-written manifest, workflow or module.
+ *
+ * It is not the only ceiling in play, and the refusal is deliberately the SAME one either way: a
+ * provider's own contents API stops serving a blob at a limit of its own (1 MB on GitHub), which
+ * arrives here as a `403` that says nothing about the file. That is mapped to this reason too, with
+ * the provider's limit in `details` and no `size`, because nothing measured one.
  */
 export const MAX_REPO_FILE_CHARS = 262_144
 
@@ -370,13 +375,29 @@ export const publicRepoFileSchema = v.object({
   /** The repo-root-relative path that was read, as the request gave it. */
   path: v.string(),
   /**
-   * The ref the read resolved against: the requested one, or the repository's default branch when
-   * the request named none. Stated rather than echoed, so a caller can record what it graded.
+   * The ref the read was pinned to, or `null` when the request named none and the PROVIDER resolved
+   * the repository's own default branch.
+   *
+   * Null rather than the branch name, because this read does not learn which branch that was and the
+   * platform's own idea of it is a value it may have INVENTED: a projection row that carries no
+   * default branch is defaulted to `main` for the benefit of clone targets, and reporting that as the
+   * ref graded would name a branch the repository may not have. `sha` is the value to record either
+   * way, being the one identifier that cannot drift.
    */
-  ref: v.string(),
-  /** The file's blob sha, for a caller comparing two reads without diffing their bodies. */
+  ref: v.nullable(v.string()),
+  /**
+   * The file's blob sha: the byte-exact handle, for a caller comparing two reads without diffing
+   * their bodies, or joining what it graded to what the repository holds.
+   */
   sha: v.string(),
-  /** The file's decoded UTF-8 content. */
+  /**
+   * The file's content, decoded as UTF-8.
+   *
+   * Text only. A file whose bytes are not valid UTF-8 is REFUSED (`422`,
+   * `details.reason: 'file_not_text'`, carrying the `sha`) rather than answered as the replacement
+   * characters a lossy decode produces: mojibake presented as a file's content is the same lie a
+   * truncation would be, and a caller hashing it would be hashing the decoder's output.
+   */
   content: v.string(),
 })
 export type PublicRepoFile = v.InferOutput<typeof publicRepoFileSchema>
@@ -601,6 +622,17 @@ export type PublicEnvironmentConnectionView = v.InferOutput<
 export const publicEnvironmentHandlerSchema = v.object({
   /** The provision type this handler serves (`kubernetes`, `docker-compose`, `custom`, …). */
   provisionType: v.string(),
+  /**
+   * For a `custom` handler, the manifest id it is KEYED to; null for every other type.
+   *
+   * Both this and {@link acceptsManifestId} are reported because the engine's own resolution matches
+   * a service's pinned `manifestId` against EITHER, and only one of the two is set by either way of
+   * registering a handler: a seed that keys a handler to `kargo` sets this one and leaves the other
+   * null, while a `remote-custom` connection sets the other. Publishing one of them made the
+   * commonest seed shape indistinguishable from a handler that serves nothing, which is the exact
+   * question this read exists to answer.
+   */
+  manifestId: v.nullable(v.string()),
   /** For a `custom` handler, the manifest id it declares it ACCEPTS; null for every other type. */
   acceptsManifestId: v.nullable(v.string()),
   /** The internal engine servicing it, as an open string: a deployment may register its own. */

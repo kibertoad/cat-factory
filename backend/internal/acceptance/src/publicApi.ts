@@ -109,13 +109,26 @@ export function filePinnedTask(
   serviceId: string,
   task: Omit<CreatePublicTask, 'modelPresetId'>,
 ): Promise<PublicTask> {
+  // The task's OWN title names the attachment, so the agent reads a document called "Stand up the
+  // catalog API service" rather than a generic "Brief" beside whatever else the task carries.
+  //
+  // Gated on the brief HAVING TEXT rather than on the field being present, because `briefFields`
+  // refuses an empty one and `createPublicTaskSchema` accepts it: this door may not be stricter than
+  // the route it drives, or a scenario filing a titles-only task aborts wearing the face of a suite
+  // bug.
+  const brief =
+    task.description === undefined || task.description.trim().length === 0
+      ? null
+      : briefFields({ brief: task.description, title: task.title })
+  // The attachment JOINS whatever the caller attached rather than replacing it. Spread after `...task`
+  // (which is what reads naturally) its `documents` array wins outright, so a scenario attaching a
+  // source-backed spec beside a long brief would lose the spec with no error and no log line, and the
+  // run would proceed against an incomplete corpus.
+  const documents = [...(task.documents ?? []), ...(brief?.documents ?? [])]
   return client.tasks.create(serviceId, {
     ...task,
-    // The task's OWN title names the attachment, so the agent reads a document called "Stand up the
-    // catalog API service" rather than a generic "Brief" beside whatever else the task carries.
-    ...(task.description === undefined
-      ? {}
-      : briefFields({ brief: task.description, title: task.title })),
+    ...(brief === null ? {} : { description: brief.description }),
+    ...(documents.length > 0 ? { documents } : {}),
     modelPresetId: config.modelPresetId,
   })
 }

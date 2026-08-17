@@ -54,8 +54,11 @@ import {
   UnavailableError,
   ValidationError,
   VcsApiError,
+  VcsBlobTooLargeError,
   individualVendorForModelId,
   isVcsRateLimited,
+  type RepoFileContent,
+  type RunRepoContext,
 } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
@@ -520,12 +523,16 @@ function registerRepoFileRoute(app: Hono<AppEnv>): void {
     if (!context) {
       throw new NotFoundError('repository', `${owner}/${name}`, { reason: 'repo_not_linked' })
     }
-    // The ref the read RESOLVED against, named in the response: a caller recording what it graded
-    // needs the branch, and the request may not have supplied one.
-    const resolved = ref ?? context.baseBranch
-    const file = await throughVcs(() => context.repo.getFile(path, resolved))
+    // `ref` is passed through EXACTLY as the request gave it, absent included, because the port
+    // resolves the repository's own default branch for an omitted one. `context.baseBranch` is the
+    // wrong value to substitute: `makeResolveRepoFilesForCoords` INVENTS `main` for a projection row
+    // carrying no default branch, so a repository whose default is `master` would be read at a
+    // branch it does not have and answer `file_not_found` for a file that is right there, while the
+    // response named the invented branch as the thing graded.
+    const at = `${owner}/${name}:${path}`
+    const file = await readGradableFile(context.repo, at, path, ref)
     if (!file) {
-      throw new NotFoundError('file', `${owner}/${name}:${path}@${resolved}`, {
+      throw new NotFoundError('file', `${at}@${ref ?? 'the default branch'}`, {
         reason: 'file_not_found',
       })
     }
@@ -540,13 +547,62 @@ function registerRepoFileRoute(app: Hono<AppEnv>): void {
       // domain rule", which is the same reading `resolveRepoTarget` takes for an unlinked service,
       // and the machine-readable cause is `details.reason` as it is everywhere else on this surface.
       throw new ValidationError(
-        `${owner}/${name}:${path} is ${file.content.length} characters, past the ` +
-          `${MAX_REPO_FILE_CHARS} this read answers with`,
+        `${at} is ${file.content.length} characters, past the ${MAX_REPO_FILE_CHARS} this read ` +
+          `answers with`,
         { reason: 'file_too_large', size: file.content.length, limit: MAX_REPO_FILE_CHARS },
       )
     }
-    return c.json({ owner, name, path, ref: resolved, sha: file.sha, content: file.content }, 200)
+    return c.json(
+      { owner, name, path, ref: ref ?? null, sha: file.sha, content: file.content },
+      200,
+    )
   })
+}
+
+/**
+ * Read one file, turning the two answers only this layer can name into the refusals it documents.
+ *
+ * **A blob past the PROVIDER's own contents ceiling is the same refusal as one past ours.** GitHub
+ * reports it as a `403`, which {@link asVcsRefusal} would otherwise read as a rejected credential,
+ * so an operator whose lockfile is 1.4 MB would be told to re-mint a token that works. The adapter
+ * names the fact (`VcsBlobTooLargeError`) and this maps it onto `file_too_large` with the provider's
+ * limit and NO size, because nothing here measured one.
+ *
+ * **Bytes that are not UTF-8 are refused rather than answered.** The decode is lossy for a PNG, a
+ * tarball or a Latin-1 source file, and handing back replacement characters under a field documented
+ * as the file's content is the same lie the truncation above refuses to tell: a caller comparing
+ * against its own copy sees a mismatch it cannot attribute. The `sha` rides the refusal, so the
+ * byte-exact join a grader wanted is still available.
+ *
+ * Anything else is a fact about the provider and goes through {@link asVcsRefusal} unchanged.
+ */
+export async function readGradableFile(
+  repo: RunRepoContext['repo'],
+  at: string,
+  path: string,
+  ref: string | undefined,
+): Promise<RepoFileContent | null> {
+  let file: RepoFileContent | null
+  try {
+    file = await repo.getFile(path, ref)
+  } catch (error) {
+    if (error instanceof VcsBlobTooLargeError) {
+      throw new ValidationError(
+        `${at} is past the ${error.limitBytes} bytes ${error.provider} will serve through its ` +
+          `contents API, so this read cannot answer with it`,
+        { reason: 'file_too_large', limit: error.limitBytes },
+      )
+    }
+    throw asVcsRefusal(error)
+  }
+  if (file?.lossy) {
+    throw new ValidationError(
+      `${at} is not UTF-8 text, so this read cannot answer with its content; its blob sha is ` +
+        `${file.sha}`,
+      { reason: 'file_not_text', sha: file.sha },
+    )
+  }
+  return file
 }
 
 // ---- the environment connection (the ENGINE half) ---------------------------
@@ -668,12 +724,20 @@ function toPublicConnectionView(view: EnvironmentHandlerView): PublicEnvironment
  * `endpoint` and not `apiServerUrl`: the Kubernetes noun is false of every other engine, and stating
  * it anyway is what sends an operator whose environment is a VM looking for an apiserver.
  *
+ * BOTH manifest-id fields are reported, because the engine's own resolution
+ * (`resolveInfraHandler` → `matchesCustom`) matches a service's pinned `manifestId` against EITHER,
+ * and the two ways of registering a handler each set only one: a deployment SEEDING one keys it with
+ * `manifestId`, while a `remote-custom` connection declares `acceptsManifestId`. Publishing only the
+ * second made the commonest seed shape read as a handler serving nothing, so a setup script checking
+ * that its own seed landed found no entry naming it while a run against it resolved fine.
+ *
  * No `config`, though `EnvironmentHandlerView` carries one for the app's connect-form prefill: it is
  * the internal per-engine bag, deliberately open, and this surface may not freeze it (ADR 0034).
  */
 export function toPublicHandler(view: EnvironmentHandlerView): PublicEnvironmentHandler {
   return {
     provisionType: view.provisionType,
+    manifestId: view.manifestId,
     acceptsManifestId: view.acceptsManifestId,
     engine: view.engine,
     backendKind: view.backendKind,
@@ -717,21 +781,47 @@ function registerEnvironmentRoutes(app: Hono<AppEnv>): void {
     return c.json(toPublicConnectionView(view), 201)
   })
 
-  // The read half. Ordered by provision type so a caller diffing two workspaces (or its own setup
-  // before and after) compares two stable lists rather than two insertion orders.
+  // The read half. Ordered so a caller diffing two workspaces (or its own setup before and after)
+  // compares two stable lists rather than two insertion orders.
   buildHonoRoute(app, listPublicEnvironmentConnectionsContract, async (c) => {
     const auth = await authorizeOrThrow(c, listPublicEnvironmentConnectionsContract.minScope)
     const environments = requireEnvironments(c)
     const handlers = await environments.connectionService.listHandlers(auth.workspaceId)
-    const connections = handlers
-      .map(toPublicHandler)
-      .sort(
-        (left, right) =>
-          left.provisionType.localeCompare(right.provisionType) ||
-          (left.acceptsManifestId ?? '').localeCompare(right.acceptsManifestId ?? ''),
-      )
+    const connections = handlers.map(toPublicHandler).sort(byHandlerIdentity)
     return c.json({ connections }, 200)
   })
+}
+
+/**
+ * Order handlers by what IDENTIFIES one, comparing code units rather than collating.
+ *
+ * `localeCompare` is ICU- and locale-dependent, so the same set of handlers can serialise in one
+ * order from a workerd isolate and in another from a Node build with a different ICU: precisely the
+ * spurious diff the ordering was added to prevent. A code-unit comparison answers the same everywhere,
+ * which is what a wire ordering needs.
+ *
+ * Both manifest ids join the key, since two `custom` handlers keyed to different manifests are
+ * otherwise equal here. A handler that ties on all four keys keeps its position from the repository
+ * read (the sort is stable), which is the honest fallback: nothing published distinguishes them.
+ */
+export function byHandlerIdentity(
+  left: PublicEnvironmentHandler,
+  right: PublicEnvironmentHandler,
+): number {
+  return (
+    compareCodeUnits(left.provisionType, right.provisionType) ||
+    compareCodeUnits(left.manifestId, right.manifestId) ||
+    compareCodeUnits(left.acceptsManifestId, right.acceptsManifestId) ||
+    compareCodeUnits(left.label, right.label)
+  )
+}
+
+/** An absent id sorts first, which is the only ordering a null can honestly take. */
+function compareCodeUnits(left: string | null, right: string | null): number {
+  const a = left ?? ''
+  const b = right ?? ''
+  if (a === b) return 0
+  return a < b ? -1 : 1
 }
 
 // ---- a service's provisioning (the SOURCE half) -----------------------------
@@ -811,16 +901,22 @@ function mergeProvisioning(
         type: 'kubernetes',
         manifestSource: toKubernetesManifestSource(patch.manifestSource),
       }
-    case 'custom':
-      // `manifestPath` is omitted rather than written as `undefined` when the patch leaves it out,
-      // so the manifest type's own default still applies. Written through, it would pin the empty
-      // path and the deploy would look for a manifest at the repository root.
+    case 'custom': {
+      // `manifestPath` is the one stored field this surface PUBLISHES, so it is also the only one a
+      // patch can be said to have left out on purpose: omitted, it is CLEARED, and the manifest
+      // type's own default applies again. Carried over from the stored row (which is what a plain
+      // `...base` does), a caller correcting a path back to the default would keep deploying the old
+      // one and have no way to say so, since the public shape has no other way to express "none".
+      // Every field the public shape cannot express still rides `...rest`, for the reason the
+      // function's own doc gives.
+      const { manifestPath: _cleared, ...rest } = base ?? {}
       return {
-        ...base,
+        ...rest,
         type: 'custom',
         manifestId: patch.manifestId,
         ...(patch.manifestPath === undefined ? {} : { manifestPath: patch.manifestPath }),
       }
+    }
     default:
       return unreachableProvisioning(patch)
   }

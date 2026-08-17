@@ -137,15 +137,19 @@ export const linkPublicRepoContract = withMinScope(
  * match one segment and 404 everything nested. As a query value it needs one ordinary encoding and
  * every generated client passes it without a special case.
  *
- * `ref` is a branch, tag or commit sha; omitted, the repository's default branch, and the response
- * says which was used either way.
+ * `ref` is a branch, tag or commit sha. Omitted, it is passed through omitted, so the PROVIDER
+ * resolves the repository's own default branch: the platform's recorded default may be a value it
+ * invented for a projection row that carries none, and pinning that would read a branch the
+ * repository need not have. The response then reports `ref: null` and the `sha` it did read.
  *
- * Four outcomes a caller branches on, and none of them are folded: `404` with
+ * Five outcomes a caller branches on, and none of them are folded: `404` with
  * `details.reason: 'repo_not_linked'` for a repository this workspace has not adopted, `404` with
- * `'file_not_found'` for a path the ref does not hold, `422` with `'file_too_large'` (plus `size`
- * and `limit`) for a file past `MAX_REPO_FILE_CHARS`, refused rather than truncated because a
- * shortened answer reads exactly like a shorter file, and `503` when the deployment's VCS
- * integration is unwired or the provider could not be reached, which is not evidence about the file.
+ * `'file_not_found'` for a path the ref does not hold, `422` with `'file_too_large'` for a file past
+ * `MAX_REPO_FILE_CHARS` (plus `size` and `limit`) or past the provider's own contents ceiling (plus
+ * `limit` alone, since nothing measured it), refused rather than truncated because a shortened
+ * answer reads exactly like a shorter file, `422` with `'file_not_text'` (plus `sha`) for bytes that
+ * are not UTF-8, and `503` when the deployment's VCS integration is unwired or the provider could
+ * not be reached, which is not evidence about the file.
  */
 export const getPublicRepoFileContract = withMinScope(
   'admin',

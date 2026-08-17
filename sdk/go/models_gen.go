@@ -1272,8 +1272,9 @@ type GetPublicRepoFileResponse struct {
 	Name    string `json:"name"`
 	Owner   string `json:"owner"`
 	Path    string `json:"path"`
-	Ref     string `json:"ref"`
-	Sha     string `json:"sha"`
+	// Ref always present; nil when the server has no value for it.
+	Ref *string `json:"ref"`
+	Sha string  `json:"sha"`
 }
 
 // GetPublicRunOutcomeResponse is the `GetPublicRunOutcomeResponse` wire model.
@@ -2157,14 +2158,16 @@ type ListPublicEnvironmentConnectionsResponse struct {
 // ListPublicEnvironmentConnectionsResponseConnection is the `ListPublicEnvironmentConnectionsResponseConnection` wire model.
 type ListPublicEnvironmentConnectionsResponseConnection struct {
 	// AcceptsManifestID always present; nil when the server has no value for it.
-	AcceptsManifestID *string  `json:"acceptsManifestId"`
-	BackendKind       string   `json:"backendKind"`
-	ConnectedAt       float64  `json:"connectedAt"`
-	Endpoint          string   `json:"endpoint"`
-	Engine            string   `json:"engine"`
-	Label             string   `json:"label"`
-	ProvisionType     string   `json:"provisionType"`
-	SecretKeys        []string `json:"secretKeys"`
+	AcceptsManifestID *string `json:"acceptsManifestId"`
+	BackendKind       string  `json:"backendKind"`
+	ConnectedAt       float64 `json:"connectedAt"`
+	Endpoint          string  `json:"endpoint"`
+	Engine            string  `json:"engine"`
+	Label             string  `json:"label"`
+	// ManifestID always present; nil when the server has no value for it.
+	ManifestID    *string  `json:"manifestId"`
+	ProvisionType string   `json:"provisionType"`
+	SecretKeys    []string `json:"secretKeys"`
 }
 
 // ListPublicJobsResponse is the `ListPublicJobsResponse` wire model.

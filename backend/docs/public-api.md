@@ -1264,15 +1264,25 @@ the read half and reports every engine including one a deployment registered its
 
 ```http
 GET /api/v1/environments/connections
-200 { "connections": [ { "provisionType": "custom", "acceptsManifestId": "kargo",
-                         "engine": "remote-custom", "backendKind": "kargo", "label": "Kargo",
+200 { "connections": [ { "provisionType": "custom", "manifestId": "kargo",
+                         "acceptsManifestId": null, "engine": "remote-custom",
+                         "backendKind": "kargo", "label": "Kargo",
                          "endpoint": "https://kargo.example", "secretKeys": ["apiToken"],
                          "connectedAt": 1755000000000 } ] }
 ```
 
-Those two answer DIFFERENT questions, and a setup script wants both: `.../connections/test` proves
-the backend accepts your credential, this proves the workspace has a handler for it. Before the read
-existed a headless caller could only check the first and had to assume the second.
+**Match on EITHER manifest-id field.** The engine resolves a service pinning `manifestId: "kargo"`
+against a handler keyed to that id OR one declaring it acceptable, and the two ways of registering a
+handler each set only one: a seed sets `manifestId`, a `remote-custom` connection sets
+`acceptsManifestId`. A setup check that reads only one of them reports its own seed as missing while a
+run against that handler resolves perfectly.
+
+The list is ordered by provision type and then by those ids, so a caller diffing two workspaces (or
+its own setup before and after) compares two stable lists rather than two insertion orders.
+
+Those two calls answer DIFFERENT questions, and a setup script wants both: `.../connections/test`
+proves the backend accepts your credential, this proves the workspace has a handler for it. Before the
+read existed a headless caller could only check the first and had to assume the second.
 
 #### Reading what a run committed
 
@@ -1280,6 +1290,10 @@ existed a headless caller could only check the first and had to assume the secon
 GET /api/v1/repos/acme/payments-api/contents?path=deploy/.kargo.yml&ref=main
 200 { "owner": "acme", "name": "payments-api", "path": "deploy/.kargo.yml", "ref": "main",
       "sha": "9b2c...", "content": "apiVersion: ..." }
+
+GET /api/v1/repos/acme/payments-api/contents?path=README.md
+200 { "owner": "acme", "name": "payments-api", "path": "README.md", "ref": null,
+      "sha": "4d10...", "content": "# payments-api\n..." }
 ```
 
 One file, decoded as UTF-8, from a repository this workspace has LINKED. It exists so a caller can
@@ -1288,15 +1302,23 @@ reply (which tests the model's phrasing: swap the model and it goes red having f
 or holding a second source-control credential of its own.
 
 `path` is a query parameter rather than the rest of the URL because a repo-relative path contains
-slashes and an OpenAPI path segment cannot. Omit `ref` for the default branch; the response says
-which was used either way, so a caller recording what it graded has the branch.
+slashes and an OpenAPI path segment cannot. Omit `ref` and the PROVIDER resolves the repository's own
+default branch; the response then reports `"ref": null`, because this read does not learn which branch
+that was and the platform's recorded default may be one it invented for a repository whose projection
+row carries none. **`sha` is the value to record either way**: it is the byte-exact handle, and it
+cannot drift the way a branch name can.
 
-Four outcomes, kept apart because each takes a different action: `404 repo_not_linked` for a
+Five outcomes, kept apart because each takes a different action: `404 repo_not_linked` for a
 repository this workspace has not adopted (adopt it with `POST /api/v1/repos/link`), `404
-file_not_found` for a path the ref does not hold, `422 file_too_large` with `size` and `limit` for a
-file past what this read serves, and `503` when the deployment wires no source control or the
-provider could not be reached. The large file is REFUSED rather than truncated: a shortened answer
-reads exactly like a shorter file, and a grader joining on exact bytes cannot tell the difference.
+file_not_found` for a path the ref does not hold, `422 file_too_large` for a file past what this read
+serves (with `size` and `limit`) or past the provider's own contents ceiling (with `limit` alone, since
+nothing measured it), `422 file_not_text` with the `sha` for bytes that are not UTF-8, and `503` when
+the deployment wires no source control or the provider could not be reached.
+
+The last two are REFUSALS rather than best-effort answers for the same reason: a truncated file reads
+exactly like a shorter one, and a binary file decoded as UTF-8 is a string of replacement characters
+that reads like odd text. A grader joining on exact bytes cannot tell either apart from the real thing,
+so the read says what it cannot answer and hands back the `sha` to join on instead.
 
 There is deliberately no directory listing, and no write. For the one tree the platform itself
 understands, `GET /api/v1/services/:serviceId/spec` serves it structured.

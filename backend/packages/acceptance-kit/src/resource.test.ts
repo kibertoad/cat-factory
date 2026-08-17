@@ -1,7 +1,7 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Journal } from './journal.js'
 import { acquire, reclaimAll, release, type ResourceRecord } from './resource.js'
 
@@ -11,8 +11,25 @@ import { acquire, reclaimAll, release, type ResourceRecord } from './resource.js
 
 type Fields = { ref: string }
 
+// ONE state directory for the file, removed on the way out: `new Journal` per test with a fresh
+// `mkdtempSync` left a directory per call under the OS temp dir, and nothing here reads a journal
+// back, so what the tests need is a real writer rather than a private one.
+const stateDir = mkdtempSync(join(tmpdir(), 'cf-kit-resource-'))
+afterAll(() => {
+  rmSync(stateDir, { recursive: true, force: true })
+})
+
+// `say` prints, so an un-silenced run interleaves a dozen of the kit's own milestone lines with the
+// reporter's output and a green run stops reading as one.
+beforeEach(() => {
+  vi.spyOn(console, 'log').mockImplementation(() => {})
+})
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
 function journal(): Journal {
-  return new Journal(mkdtempSync(join(tmpdir(), 'cf-kit-resource-')), 'run-1')
+  return new Journal(stateDir, 'run-1')
 }
 
 const live = (externalId: string): ResourceRecord<Fields> => ({
@@ -72,6 +89,11 @@ describe('acquire', () => {
 
     expect(result.provisioned).toBe(true)
     expect(result.record.externalId).toBe('env-42')
+    // PRINTED, not merely filed: this is the one line explaining why a resumed pass did not adopt what
+    // its ledger names, and both of its sibling milestones say their piece out loud. Filed silently, an
+    // operator watches a second id appear with nothing saying what became of the first.
+    const said = vi.mocked(console.log).mock.calls.map((call) => String(call[0]))
+    expect(said.join('\n')).toContain('env-41')
   })
 })
 
