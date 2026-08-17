@@ -1,11 +1,8 @@
-import {
-  NANO_BANANA_GENERATOR_ID,
-  PLATFORM_ASSET_STORAGE_SERVICE_ID,
-  hasApproverPolicy,
-} from '@cat-factory/contracts'
+import { NANO_BANANA_GENERATOR_ID, PLATFORM_ASSET_STORAGE_SERVICE_ID } from '@cat-factory/contracts'
+import { definePipeline, type PipelineStepSpec } from './define-pipeline.js'
 import type { PipelineRegistry } from './pipeline-registry.js'
 import type { TaskTypeRegistry } from './task-type-registry.js'
-import type { Block, Pipeline, StepGateConfig, StepGating, StepOptions } from './types.js'
+import type { Block, Pipeline, StepGating, StepOptions } from './types.js'
 
 // Sample architecture used to populate a workspace on creation. Mirrors the
 // frontend's `app/utils/seed.ts`. Block ids are stable strings; because blocks
@@ -150,114 +147,6 @@ export function seedBlocks(): Block[] {
   ]
 }
 
-/**
- * A pipeline step in the readable seed form. A bare kind string is an ENABLED step with no human
- * gate; the object form NAMES the step's human `gate` (approval pause), marks it opt-in
- * (`enabled: false` — present in the preset but disabled by default), and/or declares its estimate
- * `gating` (skip the step unless the task estimate clears a threshold). This replaces the fragile
- * index-aligned `gates`/`enabled`/`gating` arrays: each is declared BY NAME on its own step, so
- * inserting a step (e.g. a `deployer` before the tester) can never shift a positional flag onto the
- * wrong step.
- *
- * `gate` is the extension seam it was always meant to be: `true` is a plain human checkpoint, and
- * an OBJECT is that step's gate CONFIGURATION, lowering into `stepOptions[i].gateConfig`, so a
- * configured gate needs no new array and no new column. See
- * `backend/docs/adr/0038-per-step-gate-config.md`.
- *
- * The object form does NOT imply a human checkpoint by itself, because the two halves of
- * `StepGateConfig` answer different questions. `approvers` / `minApprovals` configure the human
- * gate and therefore raise `gates[i]`; `fields` configures the REGISTERED gate the step's kind
- * already runs (a `ci` step's attempt budget, a `post-release-health` step's watch window), which
- * has nothing to do with pausing for a person. Lowering `{ fields: … }` into `gates[i] = true`
- * would bolt a human approval pause onto a `ci` step whose author only wanted three fixer rounds
- * silently, since nothing downstream can tell an intended checkpoint from an inferred one.
- * `assertValidGateConfig` draws the same line at the other door: it requires `gates[i]` for the
- * approval half and never for `fields`.
- *
- * `gate` and `gating` are mutually exclusive on one step, and `validatePipelineShape` enforces
- * that rather than this type: the estimate may ADD a human checkpoint but never cancel an approval
- * pause the author asked for. A pipeline declaring both fails the kernel seed test.
- */
-type SeedStep =
-  | string
-  | {
-      kind: string
-      gate?: boolean | StepGateConfig
-      enabled?: boolean
-      gating?: StepGating
-      /** Non-gate per-step options a built-in needs (merged under any `gate` config it declares). */
-      options?: StepOptions
-    }
-
-/**
- * Lower a named-step pipeline spec into the wire {@link Pipeline} (index-aligned
- * `agentKinds`/`gates`/`enabled`/`gating`/`stepOptions`). Each array is emitted ONLY when a step
- * actually declares the corresponding flag, so a plain all-enabled, gate-less pipeline stays as
- * bare `agentKinds` — its persisted shape is byte-identical to the hand-authored form.
- */
-function definePipeline(spec: {
-  id: string
-  name: string
-  description?: string
-  /**
-   * What this preset exists to do. Required, and required HERE rather than only asserted in the
-   * seed test: the catalog is ours, so every entry can say what it is for, and a preset that
-   * skipped it would fall silently out of a narrowed picker rather than fail anything.
-   */
-  purpose: Pipeline['purpose']
-  steps: readonly SeedStep[]
-  availability?: Pipeline['availability']
-  labels?: string[]
-  version?: number
-  public?: boolean
-  /** Hide from every user-facing surface; the platform still starts it by id. */
-  internal?: boolean
-  /**
-   * Seed this rung as the workspace's default for a run nothing is watching
-   * (`Pipeline.isUnattendedDefault`). There is deliberately no `interactiveDefault` twin: the
-   * in-app scope already resolves an answer without a flagged row, so a seeded one would overrule
-   * the interface-mode rung a board resolves today (see `Pipeline.isDefault`).
-   */
-  unattendedDefault?: boolean
-}): Pipeline {
-  const norm = spec.steps.map((s) => (typeof s === 'string' ? { kind: s } : s))
-  // A human checkpoint is `gate: true`, or an object configuring the APPROVAL half. An object that
-  // only carries `fields` configures the step's registered gate and raises no checkpoint. See the
-  // `SeedStep` docs for why conflating the two would be a silent pause nobody authored.
-  const gates = norm.map(
-    (s) =>
-      s.gate === true ||
-      (typeof s.gate === 'object' &&
-        (hasApproverPolicy(s.gate.approvers) || s.gate.minApprovals !== undefined)),
-  )
-  const enabled = norm.map((s) => s.enabled !== false)
-  const gating = norm.map((s) => s.gating ?? null)
-  const stepOptions = norm.map((s) => {
-    const options: StepOptions = {
-      ...s.options,
-      ...(typeof s.gate === 'object' ? { gateConfig: s.gate } : {}),
-    }
-    return Object.keys(options).length ? options : null
-  })
-  return {
-    id: spec.id,
-    name: spec.name,
-    ...(spec.description ? { description: spec.description } : {}),
-    agentKinds: norm.map((s) => s.kind),
-    ...(gates.some(Boolean) ? { gates } : {}),
-    ...(enabled.some((e) => !e) ? { enabled } : {}),
-    ...(gating.some((g) => g !== null) ? { gating } : {}),
-    ...(stepOptions.some((o) => o !== null) ? { stepOptions } : {}),
-    ...(spec.availability ? { availability: spec.availability } : {}),
-    purpose: spec.purpose,
-    ...(spec.labels ? { labels: spec.labels } : {}),
-    ...(spec.version !== undefined ? { version: spec.version } : {}),
-    ...(spec.public ? { public: spec.public } : {}),
-    ...(spec.internal ? { internal: spec.internal } : {}),
-    ...(spec.unattendedDefault ? { isUnattendedDefault: true } : {}),
-  } as Pipeline
-}
-
 // ---- The conditional tester pair ----------------------------------------------------------
 //
 // Every build preset verifies through BOTH testers and lets each one decide for itself whether
@@ -269,17 +158,17 @@ function definePipeline(spec: {
 // This is what retired the `pl_frontend` preset: a UI-testing pipeline was a pipeline only
 // because a `tester-ui` step could not say "not on this run", so the frontend case needed a whole
 // near-duplicate of the build ladder to itself.
-const TESTER_API_STEP: SeedStep = {
+const TESTER_API_STEP: PipelineStepSpec = {
   kind: 'tester-api',
   options: { condition: { serviceScope: 'backend' } },
 }
-const TESTER_UI_STEP: SeedStep = {
+const TESTER_UI_STEP: PipelineStepSpec = {
   kind: 'tester-ui',
   options: { condition: { serviceScope: 'frontend' } },
 }
 
 /** The same pair, additionally gated on the task estimate (the adaptive rung). */
-function gatedTesterSteps(gating: StepGating): SeedStep[] {
+function gatedTesterSteps(gating: StepGating): PipelineStepSpec[] {
   return [
     { ...(TESTER_API_STEP as { kind: string; options: StepOptions }), gating },
     { ...(TESTER_UI_STEP as { kind: string; options: StepOptions }), gating },

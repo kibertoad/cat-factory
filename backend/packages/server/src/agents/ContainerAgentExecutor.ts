@@ -49,7 +49,7 @@ import {
   stepToolServerRecord,
   type ResolvedToolServers,
 } from './toolServers.js'
-import { resolveBinaryGeneratorSecrets } from './binaryGenerators.js'
+import { resolveCapabilitySecrets } from './capabilitySecrets.js'
 import {
   buildDoneUpdate,
   buildFailureMeta,
@@ -838,7 +838,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         blockId,
       },
     )
-    const { testSecretEnv, generatorSecrets } = await this.resolveJobSecretEnv(context, {
+    const { testSecretEnv, capabilitySecrets } = await this.resolveJobSecretEnv(context, {
       workspaceId,
       blockId,
       resolvedTestSecrets,
@@ -863,7 +863,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         contextFiles,
         skillsBody: skillRender.body,
         mcpServers: tools.mcpServers,
-        generatorSecrets,
+        capabilitySecrets,
         // Extend the no-edit exploration allowance by the task-estimator's complexity when a
         // prior estimator step produced one (absent ⇒ the kind's tuning / harness default
         // stands — only absolute spiralling is caught). Loosen-only; see `withComplexityAllowance`.
@@ -963,11 +963,11 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    *
    * - `testSecretEnv`: the tester's sensitive credentials (already resolved by the caller); the
    *   prompt advertises their keys + descriptions through `context.testSecrets`.
-   * - `generatorSecrets`: the credentials of this step's GENERATIVE BINARY INTEGRATIONS. The
-   *   engine resolved WHICH ones onto the context; only their values are resolved here, where the
-   *   facade's secret resolver lives. A key that does not resolve is simply absent — the agent's
-   *   brief already tells it what an unset variable means, and refusing the dispatch would trade a
-   *   named gap for a silent one.
+   * - `capabilitySecrets`: this step's registered CAPABILITIES — its generative integrations, and
+   *   the foundational services it was briefed to read and store through. The engine resolved
+   *   WHICH ones; only their values are resolved here, where the facade's resolver lives, and both
+   *   producers share ONE call because a variable-name conflict between them is visible per JOB
+   *   alone. A key that does not resolve is absent: the brief already defines an unset variable.
    */
   private async resolveJobSecretEnv(
     context: AgentRunContext,
@@ -978,9 +978,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     },
   ): Promise<{
     testSecretEnv: { key: string; value: string }[]
-    generatorSecrets: { key: string; value: string }[]
+    capabilitySecrets: { key: string; value: string }[]
   }> {
-    const generatorSecrets = await resolveBinaryGeneratorSecrets({
+    const capabilitySecrets = await resolveCapabilitySecrets({
       context,
       workspaceId: args.workspaceId,
       blockId: args.blockId,
@@ -989,7 +989,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     })
     return {
       testSecretEnv: args.resolvedTestSecrets.map((e) => ({ key: e.key, value: e.value })),
-      generatorSecrets,
+      capabilitySecrets,
     }
   }
 

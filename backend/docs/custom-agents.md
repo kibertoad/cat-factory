@@ -290,6 +290,67 @@ import '@cat-factory/example-custom-agent'
 …then `linkRepo`s a target repo and runs `pl_org_audit`. It proves a brand-new
 repo-writing agent ships with **zero** harness changes.
 
+## The container image a kind runs in
+
+A kind declares the executor image its jobs need by NAME (`AgentStepSpec.image`). Three names are
+the platform's own: `default` (spelled by omission), `ui` (Playwright + a browser, what `tester-ui`
+runs on) and `deploy` (the k8s-CLI image the environment provisioner dispatches, which a kind may
+not claim). Anything else is a DEPLOYMENT's variant, mapped to an image by its runner backend:
+
+| backend               | where the name is mapped                                                                                                                                                            |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Kubernetes / EKS pool | the runner config's `imageVariants` (`{ "pixel-tools": "ghcr.io/acme/pixel:2" }`)                                                                                                   |
+| local Docker          | `LOCAL_HARNESS_IMAGE_VARIANTS=pixel-tools=ghcr.io/acme/pixel:2,fonts=…` (each name held to the same slug shape a declaration is; a rejected entry is named in a boot warning)       |
+| Cloudflare            | a `[[containers]]` class (subclass the exported `RunContainer`) plus a durable-object binding named `RUNNER_CONTAINER_PIXEL_TOOLS`, because a Container's image is pinned per CLASS |
+| manifest-driven pool  | forwarded verbatim as `{{input.image}}`; the pool maps it                                                                                                                           |
+
+Two rules make this safe, and both were learned the hard way.
+
+**A variant is part of the CONTAINER's identity, not a dispatch-time hint.** The container is per
+run on every backend, so a run's steps share one, and a step declaring a different image needs its
+own: `containerKeyForRef` qualifies the run id with the variant, and the ref carries it so the
+poll and release sites address the container the dispatch started. It is DERIVED from the step's
+agent kind at both sites rather than remembered between them, because the poll rebuilds its handle
+from the persisted step alone, in another process after a durable replay. Keyed on the run id
+alone, a later step re-attached to whatever the run's first step created: a browser-driven tester
+running on an image with no browser.
+
+Because the key is two facts in one string, `containerKeyForRef` REFUSES to mint one it cannot read
+back (`container_key_not_reversible`). Only the producer can check that: the reader holds no ref, so
+it cannot tell a run id that merely looks variant-qualified from one that is, and a key it splits
+wrongly names a run that does not exist, which is what makes the orphan sweep delete a live
+container. No run-id scheme in the platform can trip it today; a future one that wants a `:` finds
+out at the first dispatch instead of weeks later.
+
+**A backend with no image for a variant REFUSES the dispatch** (`runner_image_unwired`) rather than
+falling back to its default. The platform's own variants say what a deployment loses by leaving
+them unwired; a deployment's own gets the shared message, because nothing here knows what the image
+carried. That asymmetry is the point: an unwired `ui` costs a browser the tester discovers it needs
+after paying for a checkout, an install and the model's first turns, and an unwired `pixel-tools`
+costs a tool nothing in the platform can even name, so the job would report a missing result with
+no cause anywhere. The one deliberate fallback left is `deploy`, whose harness preflights for its
+own CLIs and reports them.
+
+Which half a name falls in is asked through `isPlatformImageVariant`, never by respelling the
+platform's names, and each backend's platform half is an EXHAUSTIVE switch over
+`PlatformImageVariant`. So publishing a fourth platform image fails every backend's build until it
+says which image serves it: a backend that respelled the names would instead route the new image
+into the deployment half and refuse it as unwired on the one runtime that ships it, and nothing
+would fail at compile time.
+
+Boot refuses a kind that declares `default` or `deploy`, or a name that is not a lower-kebab slug
+(the name is a map key and half a container's identity, so it is held to the shape every other
+registered id is). It does not refuse a name no backend maps: which backends a workspace runs on is
+not knowable at boot, and a deployment that binds the image on its pool and not on its laptop is an
+ordinary state, not a misregistration.
+
+**What this does NOT do is install anything.** There is no `tools:` declaration and no per-kind
+package manifest: that would put the platform in the business of resolving software supply chains,
+and the first kind needing a system library or a private registry would need an escape hatch that
+is "name your own image" with more steps. The image IS the dependency declaration. Where the tool
+ships as WASM or a static binary small enough for the base image, exposing it from the harness is
+still the cheaper answer and needs no variant at all.
+
 ## Status / scope
 
 - The extension framework (the three-stage model, the registry seams, live pre/post-op

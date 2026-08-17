@@ -1,6 +1,7 @@
 import type {
   ApiContractDocument,
   ApiContractSummary,
+  CapabilityCredential,
   CreateFoundationalServiceInput,
 } from '@cat-factory/contracts'
 import { deepFreeze } from '../shared/deep-freeze.logic.js'
@@ -43,6 +44,12 @@ export interface FoundationalServiceRegistryEntry {
   description: string
   capabilities: string[]
   contracts: ApiContractSummary[]
+  /**
+   * The credentials a step authenticates to this service with, by key NAME. Absent when the
+   * definition declares none, which is a different fact from an empty list on a tier that could
+   * not have declared any (only this one can).
+   */
+  credentials?: CapabilityCredential[]
 }
 
 /**
@@ -125,6 +132,10 @@ export class FoundationalServiceRegistry {
         description: definition.description,
         capabilities: definition.capabilities ?? [],
         contracts: summarized.map((c) => c.summary),
+        // Key NAMES only, and only from a CODE-registered definition: a stored row cannot carry
+        // them (`storedTierMayNotDeclareCredentials`). Omitted rather than emitted empty, so the
+        // brief can tell "this service needs no credential" from "this tier cannot declare one".
+        ...(definition.credentials?.length ? { credentials: definition.credentials } : {}),
       })
       documents.set(
         definition.id,

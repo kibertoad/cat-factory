@@ -16,6 +16,7 @@ import type {
   FoundationalCatalogView,
   InjectedContextFile,
   Logger,
+  ResolvedServiceCredentials,
 } from '@cat-factory/kernel'
 import {
   FOUNDATIONAL_CATALOG_FILE,
@@ -58,6 +59,21 @@ export interface FoundationalServiceResolver {
     workspaceId: string,
     selection: FoundationalServiceSelection | undefined,
   ): Promise<InjectedContextFile[]>
+  /**
+   * The credential DECLARATIONS (key names, never values) of the services named by `serviceIds`,
+   * for the container executor to resolve values for onto the job body. Ids the catalog does not
+   * resolve, and services declaring no credential, are simply absent from the answer.
+   *
+   * On this interface for the reason `binaryOutputContextFilesFor` is: it is the same catalog
+   * behind the same tier merge and cache, and the brief that tells an agent which variable to
+   * read must be built from the same read as the projection that puts a value in it. THROWS on a
+   * mothership-mode node whose mothership is unreachable, which the caller's best-effort wrapper
+   * turns into no credentials and therefore unset variables, the state every brief defines.
+   */
+  credentialsFor(
+    workspaceId: string,
+    serviceIds: readonly string[],
+  ): Promise<ResolvedServiceCredentials[]>
   /**
    * The BINARY-OUTPUT read (`run-binary-output.ts`): the brief + contract files for a
    * generating step's own selection (`stepOptions.binaryOutput`). On this interface rather

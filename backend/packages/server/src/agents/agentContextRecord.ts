@@ -148,6 +148,16 @@ export function buildAgentContextRecord(
             })),
           }
         : {}),
+      // The catalog services this dispatch could authenticate to, by SERVICE ID only. Same
+      // question one layer over: an upload that never happened is first diagnosed by asking
+      // whether the step was given a way to authenticate at all. The credential key names are
+      // deliberately not copied, for the reason they are not copied above: they identify nothing
+      // about the run, and this is a body a human reads for debugging.
+      ...(context.foundationalCredentials?.length
+        ? {
+            authenticatedServices: context.foundationalCredentials.map((service) => service.id),
+          }
+        : {}),
       ...(context.revision
         ? { revision: { feedback: context.revision.feedback, hadPriorProposal: true } }
         : {}),

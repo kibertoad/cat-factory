@@ -18,8 +18,8 @@ import {
 } from '@cat-factory/orchestration'
 import { DOC_WRITER_KIND, READ_ONLY_AGENT_KINDS } from '@cat-factory/agents'
 import type { McpServerJobSpec } from './toolServers.js'
-import type { GeneratorSecretJobSpec } from './binaryGenerators.js'
-import { PLATFORM_ASSET_STORAGE_SERVICE_ID, aprioriReferenceBranches } from '@cat-factory/contracts'
+import type { CapabilitySecretJobSpec } from './capabilitySecrets.js'
+import { aprioriReferenceBranches, storesThroughPlatformAssets } from '@cat-factory/contracts'
 import {
   renderMergerMultiRepoSection,
   renderMultiRepoWorkspaceSection,
@@ -189,7 +189,7 @@ function artifactUploadFor(
 ): { url: string; token: string } | undefined {
   const { proxyBaseUrl, sessionToken } = auth
   if (typeof proxyBaseUrl !== 'string' || typeof sessionToken !== 'string') return undefined
-  if (context.binaryStorageServiceId === PLATFORM_ASSET_STORAGE_SERVICE_ID) {
+  if (storesThroughPlatformAssets(context.binaryStorageServiceId)) {
     return { url: `${proxyBaseUrl}/assets/ingest`, token: sessionToken }
   }
   if (agentKindRegistry.agentStep(context.agentKind)?.image === 'ui') {
@@ -215,7 +215,7 @@ export function buildCommonBody(
     contextFiles: { path: string; title: string; url: string; content: string }[]
     skillsBody?: unknown[]
     mcpServers?: McpServerJobSpec[]
-    generatorSecrets?: GeneratorSecretJobSpec[]
+    capabilitySecrets?: CapabilitySecretJobSpec[]
     guardLimits?: unknown
     designImages?: DesignImageSet
   },
@@ -223,7 +223,7 @@ export function buildCommonBody(
   agentKindRegistry: AgentKindRegistry,
 ): Record<string, unknown> {
   const { jobId, model, auth, ghToken, packageRegistries, repoSpec, contextFiles } = args
-  const { skillsBody, mcpServers, generatorSecrets, guardLimits } = args
+  const { skillsBody, mcpServers, capabilitySecrets, guardLimits } = args
   // Where this job sends the bytes it produces, if it produces any. See {@link artifactUploadFor}.
   const artifactUpload = artifactUploadFor(context, auth, agentKindRegistry)
   // The other direction of the same seam: the images the engine resolved for this task, as
@@ -270,13 +270,14 @@ export function buildCommonBody(
     // credentials. Also a dedicated top-level field the agent-context snapshot allow-list omits —
     // the prompt-facing (non-secret) projection rides `context.toolServers` instead.
     ...(mcpServers?.length ? { mcpServers } : {}),
-    // The resolved credentials of this step's generative binary integrations, as `{ key, value }`
-    // env pairs the harness injects into the agent's own process — the same channel and the same
-    // secrecy contract as the tester's `testSecrets`, and likewise omitted by the agent-context
-    // snapshot's allow-list. On the BASE body (not a per-kind one) because the kind that carries
-    // the `binary-output` trait is a deployment's own, and gating this on a built-in kind list is
-    // exactly the coupling the trait exists to avoid.
-    ...(generatorSecrets?.length ? { generatorSecrets } : {}),
+    // The resolved credentials of this step's registered CAPABILITIES (its generative binary
+    // integrations, and the foundational services it was briefed to read and store through), as
+    // `{ key, value }` env pairs the harness injects into the agent's own process — the same
+    // channel and the same secrecy contract as the tester's `testSecrets`, and likewise omitted by
+    // the agent-context snapshot's allow-list. On the BASE body (not a per-kind one) because the
+    // kinds that carry these traits are a deployment's own, and gating this on a built-in kind
+    // list is exactly the coupling the traits exist to avoid.
+    ...(capabilitySecrets?.length ? { capabilitySecrets } : {}),
     // Switch on the agent CLI's OWN generation tool when this step selected a harness-served
     // integration. Keyed off the TRANSPORT, never off a CLI name: which tool that is belongs to
     // the harness, and admission has already refused a step whose model resolves to a CLI that

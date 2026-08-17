@@ -1,4 +1,4 @@
-import type { BinaryGeneratorSource } from '@cat-factory/kernel'
+import type { BinaryGeneratorSource, FoundationalBuiltinSource } from '@cat-factory/kernel'
 import { AgentKindRegistry } from '@cat-factory/agents'
 import { describe, expect, it } from 'vitest'
 import {
@@ -52,9 +52,22 @@ const unreachableGenerators: BinaryGeneratorSource = {
   documentsFor: async () => new Map(),
 } as never
 
+const services = (entries: unknown[]): FoundationalBuiltinSource =>
+  ({ entries: async () => entries, documentsFor: async () => new Map() }) as never
+
+const noServices = services([])
+
+const unreachableServices: FoundationalBuiltinSource = {
+  entries: async () => {
+    throw new Error('mothership unreachable')
+  },
+  documentsFor: async () => new Map(),
+} as never
+
 describe('collectDeclaredCapabilityCredentials', () => {
   it('collects both subjects and reports the read as complete', async () => {
     const result = await collectDeclaredCapabilityCredentials({
+      foundationalBuiltins: noServices,
       agentKindRegistry: registryWithServer(),
       binaryGenerators: generators([
         { id: 'meshy', name: 'Meshy', credentials: [{ key: 'MESHY_API_KEY', usage: 'Bearer' }] },
@@ -67,11 +80,53 @@ describe('collectDeclaredCapabilityCredentials', () => {
     ])
   })
 
+  it('collects a foundational SERVICE credential as its own subject', async () => {
+    // The third declarer. Its absence was the blocker: a step could authenticate to eight vendors
+    // and then not to the service it had to store the result in, and the operator had no row to
+    // fill in because nothing projected the key.
+    const result = await collectDeclaredCapabilityCredentials({
+      foundationalBuiltins: services([
+        {
+          id: 'file-storage',
+          name: 'File Storage',
+          credentials: [{ key: 'FILE_STORAGE_TOKEN', usage: 'Authorization: Bearer <value>' }],
+        },
+      ]),
+      agentKindRegistry: registryWithServer(),
+      binaryGenerators: generators([]),
+    })
+    expect(result.incomplete).toBe(false)
+    expect(result.declared.filter((entry) => entry.subject === 'foundational-service')).toEqual([
+      {
+        subject: 'foundational-service',
+        id: 'file-storage',
+        label: 'File Storage',
+        key: 'FILE_STORAGE_TOKEN',
+        usage: 'Authorization: Bearer <value>',
+        required: true,
+      },
+    ])
+  })
+
+  it('reports the list as INCOMPLETE when the catalog read fails, not as empty', async () => {
+    // Same rule as the generator half, and the consequence is the same: with the flag unset, every
+    // stored key would be reported as orphaned during somebody else's outage, and an operator
+    // acting on that list would delete live credentials.
+    const result = await collectDeclaredCapabilityCredentials({
+      foundationalBuiltins: unreachableServices,
+      agentKindRegistry: registryWithServer(),
+      binaryGenerators: generators([]),
+    })
+    expect(result.incomplete).toBe(true)
+    expect(result.declared.map((entry) => entry.key)).toEqual(['ISSUE_TOKEN'])
+  })
+
   it('gives a key PAIR a row each, so the form matches the vendor console it is filled from', async () => {
     // A vendor authenticating over HTTP Basic issues two values under two names. One row for them
     // is a checklist that cannot be filled in correctly: whatever the operator types, half of the
     // credential is a convention nobody stated on the surface where they are typing it.
     const result = await collectDeclaredCapabilityCredentials({
+      foundationalBuiltins: noServices,
       agentKindRegistry: registryWithServer(),
       binaryGenerators: generators([
         {
@@ -96,6 +151,7 @@ describe('collectDeclaredCapabilityCredentials', () => {
 
   it('reports ONE declaration for a server two kinds reference', async () => {
     const result = await collectDeclaredCapabilityCredentials({
+      foundationalBuiltins: noServices,
       agentKindRegistry: registryWithServer(),
       binaryGenerators: generators([]),
     })
@@ -116,6 +172,7 @@ describe('collectDeclaredCapabilityCredentials', () => {
     })
     registry.assignToolServers('coder', ['issues'])
     const result = await collectDeclaredCapabilityCredentials({
+      foundationalBuiltins: noServices,
       agentKindRegistry: registry,
       binaryGenerators: generators([]),
     })
@@ -140,6 +197,7 @@ describe('collectDeclaredCapabilityCredentials', () => {
       secretKeys: [{ key: 'ORPHAN_TOKEN' }],
     })
     const result = await collectDeclaredCapabilityCredentials({
+      foundationalBuiltins: noServices,
       agentKindRegistry: registry,
       binaryGenerators: generators([]),
     })
@@ -151,6 +209,7 @@ describe('collectDeclaredCapabilityCredentials', () => {
     // mothership. Turning that into "no integration needs a credential" is the exact
     // misattribution the source's own throw exists to prevent.
     const result = await collectDeclaredCapabilityCredentials({
+      foundationalBuiltins: noServices,
       agentKindRegistry: registryWithServer(),
       binaryGenerators: unreachableGenerators,
     })

@@ -3,13 +3,18 @@ import type { CoreDependencies } from '@cat-factory/orchestration'
 import * as kernel from '@cat-factory/kernel'
 import * as facade from '../src/index.js'
 import type {
+  AgentKindVariantDefinition,
+  BinaryOutputConfig,
   CustomTaskType,
   DescriptorField,
   DescriptorFieldShowWhen,
   GateDefinition,
   JudgeDefinition,
+  PipelineSpec,
+  PipelineStepSpec,
   PromptFragment,
   StepCompletionResolver,
+  StepOptions,
   TaskTypeFieldDescriptor,
   TaskTypeFieldOption,
   TaskTypePresentation,
@@ -257,6 +262,14 @@ const _authoringVocabulary:
       gate: GateDefinition
       judge: JudgeDefinition
       resolver: StepCompletionResolver
+      // The PIPELINE authoring half: a deployment replacing a shipped preset writes its steps by
+      // name and fills in the per-step options its kinds read, so the spec shapes are as much part
+      // of the seam as the registry constructor is.
+      pipeline: PipelineSpec
+      pipelineStep: PipelineStepSpec
+      stepOptions: StepOptions
+      binaryOutput: BinaryOutputConfig
+      variant: AgentKindVariantDefinition
     }
   | undefined = undefined
 

@@ -735,6 +735,42 @@ describe('LocalContainerRunnerTransport — image variants', () => {
     expect(calls.filter((c) => c[0] === 'rm')).toHaveLength(0)
   })
 
+  it("runs a DEPLOYMENT's own variant on the image its map names", async () => {
+    const { exec, calls, fetchImpl } = dispatchable()
+    const transport = mkTransport({
+      image: 'harness:test',
+      imageVariants: { 'pixel-tools': 'ghcr.io/acme/pixel:2' },
+      exec,
+      fetchImpl,
+    })
+
+    await transport.dispatch(
+      { runId: 'run-1', jobId: 'snapper', image: 'pixel-tools' },
+      {},
+      'agent',
+    )
+
+    const runs = calls.filter((c) => c[0] === 'run')
+    expect(runs).toHaveLength(1)
+    expect(runs[0]).toContain('ghcr.io/acme/pixel:2')
+    // Its own container for the run, keyed by the variant exactly as `ui` is: the routing is the
+    // platform's, and only the image behind the name is the deployment's.
+    expect(runs[0]).toContain('cat-factory.runId=pixel-tools:run-1')
+  })
+
+  it('refuses an unmapped deployment variant, naming the variable and starting nothing', async () => {
+    // The refusal matters MORE here than for `ui`: the platform knows what its own UI image is
+    // for and could describe what a run loses, and it knows nothing about what `pixel-tools`
+    // carried, so a fallback would produce a job silently missing it.
+    const { exec, calls, fetchImpl } = dispatchable()
+    const transport = mkTransport({ image: 'harness:test', exec, fetchImpl })
+
+    await expect(
+      transport.dispatch({ runId: 'run-1', jobId: 'snapper', image: 'pixel-tools' }, {}, 'agent'),
+    ).rejects.toThrow(/LOCAL_HARNESS_IMAGE_VARIANTS/)
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(0)
+  })
+
   it('refuses a deploy job on the agent path, naming the registration rather than running it', async () => {
     // The agent runner path does not serve `deploy` — those go through the provisioning
     // adapter's own transport — so a `deploy` ref arriving here is a mistake in a kind's

@@ -20,7 +20,14 @@
 
 import { writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { DEPLOY_PKG, IMAGES, readRepoFile, repoRoot, WRANGLER } from './runner-images.mjs'
+import {
+  DEPLOY_PKG,
+  IMAGES,
+  readRepoFile,
+  repoRoot,
+  semverPinRe,
+  WRANGLER,
+} from './runner-images.mjs'
 
 let changed = 0
 for (const { label, image, harnessPkg, extraPins } of IMAGES) {
@@ -30,8 +37,10 @@ for (const { label, image, harnessPkg, extraPins } of IMAGES) {
     process.exitCode = 1
     continue
   }
-  // `<image>:<digit...>` — semver tags only, so example tags like `:local` are left alone.
-  const tagRe = new RegExp(`(${image}:)\\d[^"'\\s]*`, 'g')
+  // Semver pins only, so a placeholder ref (`:local`, `:<harness-version>`) is left alone. The
+  // pattern is shared with the guard that verifies these pins, so the two cannot disagree about
+  // which refs are pins.
+  const tagRe = semverPinRe(image)
   const replacement = `$1${version}`
   for (const target of [DEPLOY_PKG, WRANGLER, ...extraPins]) {
     const before = readRepoFile(target)

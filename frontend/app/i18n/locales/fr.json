@@ -3374,7 +3374,8 @@
       "noneDeclared": "Aucune des capacités enregistrées de ce déploiement ne réclame d'identifiant.",
       "subject": {
         "toolServer": "Serveur d'outils",
-        "binaryGenerator": "Intégration générative"
+        "binaryGenerator": "Intégration générative",
+        "foundationalService": "Service fondamental"
       },
       "incomplete": {
         "title": "Cette liste est peut-être incomplète",
@@ -6690,6 +6691,7 @@
       "unknownGenerators": "A nommé une intégration générative que ce déploiement n'enregistre pas : {ids}. L'entrée est conservée telle que déclarée ; l'intégration s'enregistre dans le code du déploiement, pas dans cet espace de travail. | A nommé des intégrations génératives que ce déploiement n'enregistre pas : {ids}. Leurs entrées sont conservées telles que déclarées ; les intégrations s'enregistrent dans le code du déploiement, pas dans cet espace de travail.",
       "generatorsUnverified": "Les intégrations génératives de ce déploiement n'ont pas pu être lues à la clôture de l'étape, les intégrations citées ci-dessous n'ont donc pas été vérifiées. Les entrées sont conservées telles que déclarées."
     },
+    "processedBy": "puis {tool}",
     "unknownGeneratorBadge": "Non enregistrée",
     "missizedBadge": "Mauvaise taille",
     "candidates": {

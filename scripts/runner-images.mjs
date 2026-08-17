@@ -28,8 +28,8 @@ export const IMAGES = [
     image: 'cat-factory-executor',
     harnessPkg: 'backend/internal/executor-harness/package.json',
     // RECOMMENDED_HARNESS_IMAGE — the tag local mode pins + pulls at boot; must stay a
-    // matched set with the backend (see CLAUDE.md → Releases & changesets). The guard only
-    // verifies DEPLOY_PKG/WRANGLER, but the sync keeps this in step too.
+    // matched set with the backend (see CLAUDE.md → Releases & changesets). The sync writes it
+    // and the guard verifies it, like every other pin below.
     extraPins: ['backend/runtimes/local/src/harnessImage.ts'],
     sourcePrefixes: ['backend/internal/executor-harness/src/'],
     sourceFiles: [
@@ -64,7 +64,7 @@ export const IMAGES = [
     // RECOMMENDED_DEPLOY_IMAGE — the tag local mode's `container` deploy runner defaults to (the
     // escape-hatch analogue of RECOMMENDED_HARNESS_IMAGE). Kept in step with the Worker's
     // wrangler.toml pin + the deploy-harness version so every facade resolves the SAME supported
-    // deploy image. The guard only verifies DEPLOY_PKG/WRANGLER, but the sync keeps this in step too.
+    // deploy image.
     extraPins: ['backend/runtimes/local/src/deployImage.ts'],
     sourcePrefixes: ['backend/internal/deploy-harness/src/'],
     sourceFiles: [
@@ -77,4 +77,23 @@ export const IMAGES = [
 
 export function readRepoFile(relPath) {
   return readFileSync(resolve(repoRoot, relPath), 'utf8')
+}
+
+/**
+ * The `<image>:<semver>` pin pattern, capturing the `<image>:` prefix and the tag separately so
+ * the same expression serves a read and a rewrite.
+ *
+ * Anchored on a DIGIT, which is what keeps a PLACEHOLDER ref out of the pin set: a doc comment's
+ * `cat-factory-executor:<harness-version>` and an example's `:local` are not pins and must not be
+ * rewritten or graded as drift. Stated here once because the guard that VERIFIES the pins and the
+ * sync that WRITES them have to agree exactly about which refs are pins: one that recognised a pin
+ * the other did not is the drift the pair exists to prevent.
+ */
+export function semverPinRe(image) {
+  return new RegExp(`(${image}:)(\\d[^"'\\s]*)`, 'g')
+}
+
+/** Every semver pin of `image` in `text`, in the order they appear. */
+export function semverPinsIn(image, text) {
+  return [...text.matchAll(semverPinRe(image))].map((match) => match[2])
 }

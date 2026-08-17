@@ -18,12 +18,13 @@ import { BINARY_OUTPUT_TRAIT, BINARY_STORAGE_TRAIT } from './traits.js'
 // type rather than a week of registration work.
 //
 // It carries BOTH traits, and the second one is the precondition. `binary-storage` refuses the
-// run up front when the account has no content storage configured, which is exactly right for
-// this kind because the storage it ships pointing at IS that store (a local deployment gets the
-// filesystem with nothing configured; every other one picks a backend in account settings). A
-// deployment storing through its own object service instead registers its own binary-output kind
-// and omits the trait: the trait is a statement about where THIS kind's bytes go, not about
-// binary output in general, which is why it is declared here rather than implied by the sibling.
+// run up front when the account has no content storage configured, which is exactly right for the
+// shipped `pl_media`, whose step selects the platform's own asset service: those bytes ARE that
+// store (a local deployment gets the filesystem with nothing configured; every other one picks a
+// backend in account settings). The precondition is resolved from the STEP's selection, not from
+// the trait alone, so this same kind repointed at an org's own object service is admitted with no
+// content storage configured. That is what makes the kind reusable by a deployment with its own
+// estate: a step selection rather than a forked kind.
 //
 // It is read-only over the checkout (`container-explore`) and opens no pull request: its
 // deliverable is stored through an API, and the trait guidance is explicit that binaries are

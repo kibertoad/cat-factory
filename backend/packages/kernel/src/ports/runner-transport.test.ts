@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   containerKeyForRef,
-  isRunnerImageVariant,
+  isImageVariantName,
   parseContainerKey,
-  RUNNER_IMAGE_VARIANTS,
+  PLATFORM_IMAGE_VARIANTS,
   runIdFromContainerKey,
 } from './runner-transport.js'
 
@@ -58,14 +58,70 @@ describe('runIdFromContainerKey', () => {
     expect(runIdFromContainerKey('ui:run:with:colons')).toBe('run:with:colons')
   })
 
-  it('leaves a key whose prefix is not a known variant WHOLE', () => {
+  it('leaves a key whose prefix could not be a variant WHOLE', () => {
     // The direction that destroys data. A key carrying a colon for any other reason (a job-id
     // scheme, an operator-created label, a future id shape) is not one this pair produced, and
-    // truncating it yields a run id that matches no run — which is exactly what makes the orphan
-    // sweep delete a live container. `default` counts as unknown here: `containerKeyForRef`
-    // never emits it as a prefix, so a key spelling it out came from somewhere else.
-    expect(runIdFromContainerKey('bootstrap:ws1')).toBe('bootstrap:ws1')
+    // truncating it yields a run id that matches no run, which is exactly what makes the orphan
+    // sweep delete a live container. Variant names are open, so what is checkable is the SHAPE
+    // every declaring boundary holds a name to: a prefix outside it is one no registration could
+    // have declared. `default` is unsplittable for a different reason: `containerKeyForRef` never
+    // emits it as a prefix, so a key spelling it out came from somewhere else.
+    expect(runIdFromContainerKey('Bootstrap:ws1')).toBe('Bootstrap:ws1')
+    expect(runIdFromContainerKey('job_id:ws1')).toBe('job_id:ws1')
     expect(runIdFromContainerKey('default:run-1')).toBe('default:run-1')
+  })
+})
+
+describe('the container-key invariant', () => {
+  // What the shape test above CANNOT decide, and therefore does not: a prefix that is slug-shaped
+  // and was never a variant. `bootstrap:ws1` is the fixture that names it: a plausible future run
+  // id whose leading segment is a perfectly legal variant name. Read alone it splits to `ws1`,
+  // a run that does not exist, which is what makes the orphan sweep kill a live container. Nothing
+  // in the reader can tell it apart from a real `ui:run-1`, so the PRODUCER decides: it refuses to
+  // mint a key it cannot read back.
+
+  it('refuses to mint a key for a run id that would read back as variant-qualified', () => {
+    expect(() => containerKeyForRef({ runId: 'bootstrap:ws1', jobId: 'j' })).toThrow(
+      /does not read back/,
+    )
+    // And the same run id under an explicit variant: the key would be `ui:bootstrap:ws1`, which
+    // recovers `bootstrap:ws1` correctly (only the FIRST separator is the variant), so this one is
+    // fine. The refusal is about ambiguity, not about colons.
+    expect(containerKeyForRef({ runId: 'bootstrap:ws1', jobId: 'j', image: 'ui' })).toBe(
+      'ui:bootstrap:ws1',
+    )
+  })
+
+  it('mints keys for every run-id shape the platform actually uses', () => {
+    // The guard must not refuse the present. These are the id schemes in the tree: execution ids,
+    // bootstrap job ids, the synthetic inline id, and a pool member id.
+    for (const runId of ['exec_1', 'run-1', 'bootstrap_ws1', 'inline-9f2ac1', 'member_3']) {
+      for (const image of [undefined, 'ui', 'pixel-tools']) {
+        const key = containerKeyForRef({ runId, jobId: 'j', ...(image ? { image } : {}) })
+        expect(parseContainerKey(key)).toEqual(image ? { runId, image } : { runId })
+      }
+    }
+  })
+
+  it('refuses a variant name no declaring boundary would have accepted', () => {
+    // `checkAgentImageVariants` refuses these at boot and both backend variant maps refuse them on
+    // the way in, so one arriving here means it got past every declaring boundary. Minting the key
+    // anyway is the silent case: `Bootstrap:run-1` reads back as an unqualified run id, so the
+    // step's own container and the run's ordinary one become the same container.
+    expect(() => containerKeyForRef({ runId: 'run-1', jobId: 'j', image: 'Bootstrap' })).toThrow(
+      /lower-kebab/,
+    )
+    expect(() => containerKeyForRef({ runId: 'run-1', jobId: 'j', image: 'pixel_tools' })).toThrow(
+      /does not read back/,
+    )
+  })
+
+  it('round-trips a key whose RUN ID is spelled exactly like a qualified one', () => {
+    // The inverse's hardest case, and the one the shape test gets wrong on its own: a run id that
+    // IS `ui:run-1`. There is no encoding that recovers it, so it is refused rather than mis-read.
+    expect(() => containerKeyForRef({ runId: 'ui:run-1', jobId: 'j' })).toThrow(
+      /does not read back/,
+    )
   })
 })
 
@@ -75,10 +131,12 @@ describe('parseContainerKey', () => {
     expect(parseContainerKey('run-1')).toEqual({ runId: 'run-1' })
   })
 
-  it('round-trips every variant through containerKeyForRef', () => {
+  it("round-trips a platform variant AND a deployment's own through containerKeyForRef", () => {
     // What an adapter re-encoding the key into a name (Apple `container`, whose names cannot hold
     // a colon) has to preserve: the variant AND the run, or its inverse cannot answer either.
-    for (const image of RUNNER_IMAGE_VARIANTS) {
+    // A deployment's own name rides the same path, which is the whole reason the prefix test is
+    // a shape rather than a lookup in the platform's list.
+    for (const image of [...PLATFORM_IMAGE_VARIANTS, 'pixel-tools']) {
       const parsed = parseContainerKey(containerKeyForRef({ runId: 'run-1', jobId: 'j', image }))
       expect(parsed.runId).toBe('run-1')
       expect(parsed.image ?? 'default').toBe(image)
@@ -86,13 +144,18 @@ describe('parseContainerKey', () => {
   })
 })
 
-describe('isRunnerImageVariant', () => {
-  it('accepts exactly the declared vocabulary', () => {
-    // Derived from the picklist rather than restated, so a member added to the union without a
-    // row here fails the build rather than being narrowed away at run time.
-    for (const image of RUNNER_IMAGE_VARIANTS) expect(isRunnerImageVariant(image)).toBe(true)
-    expect(isRunnerImageVariant('browser')).toBe(false)
-    expect(isRunnerImageVariant(null)).toBe(false)
-    expect(isRunnerImageVariant(undefined)).toBe(false)
+describe('isImageVariantName', () => {
+  it("accepts the platform's own names and a deployment's, and nothing unshaped", () => {
+    // Derived from the platform picklist rather than restated, so a name added there without the
+    // shape rule agreeing fails here rather than being narrowed away at run time. The negatives
+    // are what the container-key inverse leans on: each is a spelling a declaring boundary
+    // refuses, so a key prefixed with one was never a variant.
+    for (const image of PLATFORM_IMAGE_VARIANTS) expect(isImageVariantName(image)).toBe(true)
+    expect(isImageVariantName('pixel-tools')).toBe(true)
+    expect(isImageVariantName('Bootstrap')).toBe(false)
+    expect(isImageVariantName('job_id')).toBe(false)
+    expect(isImageVariantName('-leading')).toBe(false)
+    expect(isImageVariantName('')).toBe(false)
+    expect(isImageVariantName('x'.repeat(65))).toBe(false)
   })
 })

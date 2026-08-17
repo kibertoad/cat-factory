@@ -13,13 +13,15 @@ import type {
 import {
   composePostMortem,
   containerKeyForRef,
+  deploymentImageVariantMessage,
   describeError,
   getErrorMessage,
+  isPlatformImageVariant,
   runBestEffort,
-  runIdFromContainerKey,
   RUNNER_IMAGE_UNWIRED_REASON,
+  runIdFromContainerKey,
   UnavailableError,
-  unservableImageVariant,
+  unservablePlatformImageVariant,
 } from '@cat-factory/kernel'
 import { resolveDockerResources } from '@cat-factory/contracts'
 import type { LocalSettings } from '@cat-factory/contracts'
@@ -52,6 +54,7 @@ import { type LocalVcsCredential, harnessAllowedHosts } from './vcsCredential.js
 import {
   RECOMMENDED_HARNESS_IMAGE,
   resolveHarnessImage,
+  resolveHarnessImageVariants,
   resolveUiHarnessImage,
 } from './harnessImage.js'
 import { recommendedHarnessVersion, verifyHarnessVersion } from './harnessVersion.js'
@@ -119,6 +122,18 @@ export interface LocalContainerRunnerTransportOptions {
    * browser. See `imageFor`.
    */
   imageUi?: string
+  /**
+   * The DEPLOYMENT's own image variants: the name one of its agent kinds declares
+   * (`AgentStepSpec.image`) mapped to the image ref a container for it runs. From
+   * `LOCAL_HARNESS_IMAGE_VARIANTS`.
+   *
+   * A map rather than more named options, because these are open-ended in a way `image` and
+   * `imageUi` are not: those two are images this repo publishes and every backend knows the
+   * meaning of, while what a deployment's own kind needs in its container is known only to that
+   * deployment. Absent ⇒ any such variant is refused at dispatch, which is the same disposition
+   * an unconfigured `imageUi` gets and for a stronger reason.
+   */
+  imageVariants?: Record<string, string>
   /**
    * The container runtime adapter (Docker-family or Apple). Defaults to the Docker-CLI
    * adapter (`docker` binary) so existing callers/tests keep working.
@@ -235,6 +250,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   private readonly adapter: ContainerRuntimeAdapter
   private readonly image: string
   private readonly imageUi: string | undefined
+  private readonly imageVariants: Record<string, string>
   private readonly sharedSecret: string
   private readonly network?: string
   // Mutable: the warm-pool sizing + checkout env are re-read live via `applySettings` when
@@ -287,6 +303,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
       })
     this.image = options.image
     this.imageUi = options.imageUi
+    this.imageVariants = options.imageVariants ?? {}
     this.sharedSecret = options.sharedSecret
     this.network = options.network
     this.extraEnv = options.env ?? {}
@@ -383,17 +400,36 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   /**
    * The image a job runs on, refusing a variant this transport cannot serve.
    *
-   * Exhaustive over {@link RunnerImageVariant} rather than a single `ui` test, because the two
-   * unservable cases need DIFFERENT fixes and a fall-through gave both of them the default image.
-   * A `ui` job on it has no browser, which it discovers only after the checkout, the install and
-   * the model's first turns, and then reports as an `abort` a reader cannot tell apart from an app
-   * that would not start. A `deploy` job on it has no `kubectl`. One refused dispatch, naming what
-   * to correct, is the cheaper answer to either — and matches what the Worker's
-   * `agentContainerNamespace` answers for the same two inputs.
+   * Each unservable case is refused SEPARATELY, because they need different fixes and a
+   * fall-through gave all of them the default image. A `ui` job on it has no browser, which it
+   * discovers only after the checkout, the install and the model's first turns, and then reports
+   * as an `abort` a reader cannot tell apart from an app that would not start. A `deploy` job on
+   * it has no `kubectl`, and is a mistake in a kind's registration rather than a missing pin,
+   * which is what makes it a distinct refusal here and on the Worker's `agentContainerNamespace`.
+   * A DEPLOYMENT's own variant is worse than either, because nothing here can even name what the
+   * image carried. One refused dispatch, naming what to correct, is the cheaper answer to all
+   * three.
+   *
+   * The two halves are split by `isPlatformImageVariant` and the platform half is an EXHAUSTIVE
+   * switch, so a fourth published platform image fails this build rather than falling into the
+   * deployment branch and earning a refusal that names `LOCAL_HARNESS_IMAGE_VARIANTS` for an image
+   * no operator could have put there.
    */
   private imageFor(ref: RunnerJobRef): string {
-    const variant = ref.image ?? 'default'
-    switch (variant) {
+    const declared = ref.image || 'default'
+    if (!isPlatformImageVariant(declared)) {
+      // A DEPLOYMENT's own variant, named by one of its agent kinds and mapped here. The message
+      // is the shared one because this is the case the platform can say nothing specific about: it
+      // does not know what the image carries, only where the mapping goes.
+      const mapped = this.imageVariants[declared]
+      if (mapped) return mapped
+      throw new UnavailableError(
+        deploymentImageVariantMessage(declared, 'LOCAL_HARNESS_IMAGE_VARIANTS'),
+        RUNNER_IMAGE_UNWIRED_REASON,
+        { image: declared, variable: 'LOCAL_HARNESS_IMAGE_VARIANTS' },
+      )
+    }
+    switch (declared) {
       case 'default':
         return this.image
       case 'ui':
@@ -408,7 +444,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
             'the `tester-ui` step from the pipeline: the visual-confirmation gate still runs on ' +
             'screenshots a person uploads.',
           RUNNER_IMAGE_UNWIRED_REASON,
-          { image: variant, variable: 'LOCAL_HARNESS_IMAGE_UI' },
+          { image: declared, variable: 'LOCAL_HARNESS_IMAGE_UI' },
         )
       case 'deploy':
         throw new UnavailableError(
@@ -416,10 +452,10 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
             'not serve: deploy jobs run through the environment-provisioning adapter and its own ' +
             'deploy-harness transport. Correct the agent kind’s registration.',
           RUNNER_IMAGE_UNWIRED_REASON,
-          { image: variant },
+          { image: declared },
         )
       default:
-        return unservableImageVariant(variant)
+        return unservablePlatformImageVariant(declared)
     }
   }
 
@@ -1211,6 +1247,17 @@ export function createLocalContainerTransportFromEnv(
   const image = resolveHarnessImage(env)
   const pool = settings?.pool
   const extraEnv = checkoutExtraEnv(settings)
+  // An entry this facade cannot use is stated HERE, at boot, rather than left to surface as a
+  // refused dispatch naming the variable the operator can already see the variant in. Boot is also
+  // the only moment the whole variable is in view, so a typo is one line to fix instead of a run to
+  // spend discovering.
+  const imageVariants = resolveHarnessImageVariants(env)
+  for (const { entry, reason } of imageVariants.rejected) {
+    logger.warn(
+      `local mode: ignoring LOCAL_HARNESS_IMAGE_VARIANTS entry "${entry}": ${reason}. Any agent ` +
+        `kind declaring that image will be refused at dispatch until the entry is corrected.`,
+    )
+  }
   return new LocalContainerRunnerTransport({
     image,
     // Same rule as the base image, with one difference: the UI image is NOT pre-pulled at boot
@@ -1218,6 +1265,7 @@ export function createLocalContainerTransportFromEnv(
     // most deployments never dispatch to). It is pulled by the runtime on the first `image: 'ui'
     // dispatch, which is the first moment anything needs it.
     imageUi: resolveUiHarnessImage(env),
+    imageVariants: imageVariants.variants,
     adapter: createRuntimeAdapter(env),
     sharedSecret: requireHarnessSharedSecret(env),
     network: env.LOCAL_DOCKER_NETWORK?.trim() || undefined,

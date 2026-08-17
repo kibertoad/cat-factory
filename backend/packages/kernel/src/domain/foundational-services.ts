@@ -2,10 +2,15 @@ import { parse as parseYaml } from 'yaml'
 import type {
   ApiContractFormat,
   ApiContractSummary,
+  CapabilityCredential,
   FoundationalServiceSelection,
   UploadApiContract,
 } from '@cat-factory/contracts'
-import { operationsAreIndexable, reservedCapabilityNearMiss } from '@cat-factory/contracts'
+import {
+  credentialInjectionName,
+  operationsAreIndexable,
+  reservedCapabilityNearMiss,
+} from '@cat-factory/contracts'
 import { extractFencedDeclaration } from './fenced-declaration.js'
 
 // ---------------------------------------------------------------------------
@@ -488,6 +493,16 @@ export interface FoundationalCatalogView {
   description: string
   capabilities: string[]
   contracts: ApiContractSummary[]
+  /**
+   * The credentials a caller authenticates to this service WITH, by key name only, and only on a
+   * service the DEPLOYMENT registered in code (a stored row may not declare any). The VALUES ride
+   * the job body and never this projection, which is folded into prompts.
+   *
+   * Absent means the service declares none, which the briefs state as "no credential is supplied":
+   * an unauthenticated service and one whose token the platform failed to deliver need opposite
+   * reactions from an agent, and only the first is a fact about the service.
+   */
+  credentials?: CapabilityCredential[]
 }
 
 /**
@@ -591,6 +606,8 @@ export interface FoundationalContractBundle {
   summary: string
   description: string
   contracts: { contractId: string; format: ApiContractFormat; title: string; body: string }[]
+  /** See {@link FoundationalCatalogView.credentials}: key names, never values. */
+  credentials?: CapabilityCredential[]
 }
 
 /**
@@ -607,6 +624,7 @@ export function renderContractDocument(bundle: FoundationalContractBundle): stri
     '',
     bundle.description.trim(),
     '',
+    ...renderServiceCredentials(bundle.credentials),
   ]
   for (const contract of bundle.contracts) {
     lines.push(`## ${contract.title} (${contract.format})`, '')
@@ -693,6 +711,97 @@ export function renderFoundationalIndex(input: FoundationalIndexRead): string {
     )
   }
   return lines.join('\n').trimEnd()
+}
+
+/**
+ * How to AUTHENTICATE to a service, as lines folded into whatever surface describes it.
+ *
+ * The one place that sentence is written, because two surfaces state it (a consumer's injected
+ * contract document and a binary-output step's storage brief) and both must name the SAME variable
+ * the dispatch resolver sets. The name comes from `credentialInjectionName`, the same helper the
+ * resolver keys the job body with, so the two cannot drift into naming different variables.
+ *
+ * A service that declares NONE renders nothing at all here, deliberately: it is the ordinary case
+ * (an internal service on a trusted network, a contract that carries its own auth story in prose),
+ * and a line saying "this needs no credential" on every one of them would be noise that trains an
+ * agent to skip the section on the service where it matters.
+ *
+ * What is NOT said here is whether the value actually resolved. The agent can SEE whether the
+ * variable is set, and an unset one already means "the platform could not provide it" everywhere
+ * else on this seam; a second claim from the prompt side could only agree with the environment or
+ * contradict it.
+ */
+export function renderServiceCredentials(
+  credentials: readonly CapabilityCredential[] | undefined,
+): string[] {
+  if (!credentials?.length) return []
+  const lines = [
+    credentials.length === 1
+      ? 'Authenticate to it with the credential the platform supplies in this environment variable:'
+      : 'Authenticate to it with the credentials the platform supplies in these environment variables:',
+  ]
+  for (const credential of credentials) {
+    const name = credentialInjectionName(credential)
+    const usage = credential.usage ? ` — ${credential.usage}` : ''
+    const optional = credential.required === false ? ' (optional)' : ''
+    lines.push(`- \`$${name}\`${optional}${usage}`)
+  }
+  lines.push(
+    'An UNSET variable means the platform could not provide that credential: report the gap rather than calling the service unauthenticated or inventing a token.',
+    '',
+  )
+  return lines
+}
+
+/**
+ * The DISPATCH projection of one foundational service's credentials: the ids and the two NAMES per
+ * credential, never a value.
+ *
+ * The twin of `ResolvedBinaryGenerator`, and a shape of its own for the same reason: the container
+ * executor rebuilds a dispatch from the run context alone, with neither the catalog nor the step
+ * to look a definition up in. Narrower than {@link CapabilityCredential} because the prose fields
+ * (`usage`) are the BRIEF's business, and a second copy of them on the wire would be text nothing
+ * reads and a future reader could believe was authoritative.
+ */
+export interface ResolvedServiceCredentials {
+  id: string
+  /** The service's display name, for the log line when a credential does not resolve. */
+  name: string
+  /** In declaration order; never empty (a service declaring none is omitted from the set). */
+  credentials: ResolvedServiceCredential[]
+}
+
+/** One credential on the dispatch projection: both names plus the disposition. */
+export interface ResolvedServiceCredential {
+  /** The LOOKUP key the executor asks the resolver for. */
+  key: string
+  /** The variable the value is injected as, when it differs from {@link key}. */
+  envName?: string
+  /** Whether a missing value means the service must not be called (defaults true). */
+  required?: boolean
+}
+
+/**
+ * Project the services a dispatch was briefed on down to the ones that declare a credential.
+ *
+ * Here rather than at the call site because two different id sets reach it (a binary-output
+ * step's selection, a consumer kind's declared set) and both must produce the same shape from the
+ * same catalog: a projection built twice is two places for the injection-name fallback to drift
+ * from the brief that names it.
+ */
+export function dispatchServiceCredentials(
+  services: readonly FoundationalCatalogView[],
+): ResolvedServiceCredentials[] {
+  const projected: ResolvedServiceCredentials[] = []
+  for (const service of services) {
+    const credentials = (service.credentials ?? []).map((credential) => ({
+      key: credential.key,
+      ...(credential.envName ? { envName: credential.envName } : {}),
+      ...(credential.required === false ? { required: false } : {}),
+    }))
+    if (credentials.length) projected.push({ id: service.id, name: service.name, credentials })
+  }
+  return projected
 }
 
 /** The `.cat-context/` path one service's contract bundle is injected at. */

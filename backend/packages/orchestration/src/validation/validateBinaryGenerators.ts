@@ -1,12 +1,6 @@
 import type { BinaryGeneratorRegistry } from '@cat-factory/kernel'
-import {
-  binaryGeneratorDetailIssues,
-  binaryGeneratorInjectionCollisions,
-} from '@cat-factory/kernel'
-import {
-  type BinaryGeneratorDefinition,
-  binaryGeneratorDefinitionIssues,
-} from '@cat-factory/contracts'
+import { binaryGeneratorDetailIssues } from '@cat-factory/kernel'
+import { binaryGeneratorDefinitionIssues } from '@cat-factory/contracts'
 // Type-only, so the pairing with the module this section was extracted from stays a compile-time
 // fact and no import cycle exists at runtime.
 import type { RegistrationProblem } from './validateRegistrations.js'
@@ -27,19 +21,23 @@ import type { RegistrationProblem } from './validateRegistrations.js'
  * the run container. Each of those costs a run to discover and names nothing that points back at
  * the registration.
  *
- * The RULES are kernel's (`binaryGeneratorDetailIssues` / `binaryGeneratorInjectionCollisions`),
- * not this module's, and that split is what makes them reusable: a definitions package
- * (`@cat-factory/binary-generators`, and a deployment's own) runs the same functions at authoring
- * time, so a definition that would fail this boot fails a test first. What stays here is the boot
- * TAXONOMY: which severity each fault carries, and that a definition failing its parse is not
- * asked the questions the parse just called meaningless.
+ * The RULES are kernel's (`binaryGeneratorDetailIssues`), not this module's, and that split is what
+ * makes them reusable: a definitions package (`@cat-factory/binary-generators`, and a deployment's
+ * own) runs the same functions at authoring time, so a definition that would fail this boot fails a
+ * test first. What stays here is the boot TAXONOMY: which severity each fault carries, and that a
+ * definition failing its parse is not asked the questions the parse just called meaningless.
+ *
+ * Every fault here is about ONE definition. Two integrations claiming one environment variable for
+ * different lookup keys is NOT graded here, even though this section could see the pair: the same
+ * fault spans registries (a foundational service claims variables from a registry this one cannot
+ * see), so it is graded once for all of them in section 11. Grading it here as well is what
+ * reported one collision twice, under two codes, with two remediations for one variable.
  */
 export function checkBinaryGenerators(
   registry: BinaryGeneratorRegistry | undefined,
 ): RegistrationProblem[] {
   const problems: RegistrationProblem[] = []
   if (!registry) return problems
-  const valid: BinaryGeneratorDefinition[] = []
   for (const definition of registry.all()) {
     const issues = binaryGeneratorDefinitionIssues(definition)
     if (issues.length > 0) {
@@ -52,12 +50,8 @@ export function checkBinaryGenerators(
       // would restate one fault as several.
       continue
     }
-    valid.push(definition)
     problems.push(...asProblems(binaryGeneratorDetailIssues(definition)))
   }
-  // Only definitions that PARSED are compared: a malformed one has already been reported, and
-  // reading its credentials here would restate that fault as a second, more confusing one.
-  problems.push(...asProblems(binaryGeneratorInjectionCollisions(valid)))
   return problems
 }
 

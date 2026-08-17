@@ -1,16 +1,15 @@
 import * as v from 'valibot'
 import {
+  type CapabilityCredential,
+  capabilityCredentialSchema,
+  uniqueCredentialInjectionNames,
+} from './capability-credentials.js'
+import {
   binaryGeneratorAcceptsSchema,
   binaryGeneratorCapabilitySchema,
 } from './binary-capabilities.js'
 import { binaryModalitySchema, mediaTypeSchema } from './binary-modalities.js'
 import { uploadApiContractSchema } from './foundational-services.js'
-import {
-  isReservedPlatformEnvKey,
-  isToolchainEnvName,
-  reservedEnvKeyMessage,
-  toolchainEnvNameMessage,
-} from './reserved-env-keys.js'
 
 // ---------------------------------------------------------------------------
 // Wire vocabulary for GENERATIVE BINARY INTEGRATIONS — the third-party (or in-house) APIs a
@@ -57,141 +56,18 @@ const slug = v.pipe(
 )
 
 /**
- * ONE credential a generative integration needs, declared by NAME only, never a value.
+ * The credential declaration a generative integration uses: the shared
+ * {@link capabilityCredentialSchema}, unchanged.
  *
- * The value is resolved per dispatch through the facade-wired `ToolSecretResolver` port (the
- * same port a tool server's credentials go through) and written straight onto the job body,
- * where the harness injects it into THIS JOB's agent environment. It never reaches
- * `AgentRunContext`, a prompt, or the telemetry snapshot: only the key NAME does, because the
- * agent has to know which variable to read.
- *
- * An integration declares a LIST of these ({@link binaryGeneratorDefinitionSchema}'s
- * `credentials`), because a vendor's account is not always one string. HTTP Basic over a
- * key/secret pair is the ordinary case that breaks a single field, and it is common enough to be
- * a shape rather than one vendor's eccentricity. Under one field the two halves have to be
- * colon-joined into a single variable, which rotates them together, hands the operator one
- * checklist row where their vendor console shows two values, and turns a mis-joined value into a
- * 401 indistinguishable from a wrong key.
+ * An ALIAS rather than a copy, and named here because the brief, the picker and the checklist all
+ * speak of "the integration's credentials". The shape moved out when a foundational STORAGE
+ * service needed the same declaration: the two names a credential carries, and the reserved-key
+ * and toolchain floors over them, are properties of the injection CHANNEL rather than of what
+ * declared it, and a second copy is the first place two declarers could disagree about a reserved
+ * key.
  */
-export const binaryGeneratorCredentialSchema = v.object({
-  /**
-   * The credential's LOOKUP key: what the secret resolver is asked for, and what a workspace
-   * stores its own value under. Also the ENVIRONMENT VARIABLE the agent reads it from unless
-   * {@link envName} says otherwise, so it must be a valid POSIX variable name either way: a
-   * generator declaring `x-rd-token` would resolve fine and then be dropped by the harness's env
-   * validation, which is a silent "the integration just 401s" at run time.
-   *
-   * It may NOT name a variable the platform's own configuration owns
-   * ({@link isReservedPlatformEnvKey}). The resolver reads the key off the deployment's
-   * environment and the value is injected into an agent process, so an integration declaring
-   * `ENCRYPTION_KEY` would hand a prompt-injectable agent the deployment's master sealing key.
-   * Refused here so a deployment learns at boot, and again at dispatch, since a mothership-mode
-   * node boot-validates none of the definitions it resolves.
-   */
-  key: v.pipe(
-    v.string(),
-    v.trim(),
-    v.minLength(1),
-    v.maxLength(128),
-    v.regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'must be a valid environment variable name'),
-    v.check(
-      (key) => !isReservedPlatformEnvKey(key),
-      (issue) => reservedEnvKeyMessage(String(issue.input)),
-    ),
-  ),
-  /**
-   * The environment variable the value is injected as, when that differs from {@link key}. This
-   * is the name the agent is told to read, and it is what a vendor SDK that auto-reads its own
-   * documented variable needs.
-   *
-   * Held to the toolchain rule rather than the reserved-platform one, because it reads nothing:
-   * the floor above is about what may be READ off the deployment's environment, and an injection
-   * name only decides what a variable is called inside this job's agent process. That is what lets
-   * an integration keep a vendor's documented name even when a platform prefix family covers it.
-   */
-  envName: v.optional(
-    v.pipe(
-      v.string(),
-      v.trim(),
-      v.minLength(1),
-      v.maxLength(128),
-      v.regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'must be a valid environment variable name'),
-      v.check(
-        (name) => !isToolchainEnvName(name),
-        (issue) => toolchainEnvNameMessage(String(issue.input)),
-      ),
-    ),
-  ),
-  /**
-   * How the integration expects the credential to be presented (`X-RD-Token: <value>`,
-   * `Authorization: Bearer <value>`). Folded into the brief verbatim: the agent writes the
-   * request itself, and a key with no stated header is a key it has to guess the use of.
-   */
-  usage: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(400))),
-  /**
-   * When true (the default), an integration whose credential does not resolve is reported to
-   * the agent as UNAVAILABLE rather than offered. Set false only for an endpoint that genuinely
-   * works unauthenticated — an agent handed an API whose first call 401s burns a run
-   * discovering it.
-   */
-  required: v.optional(v.boolean()),
-})
-export type BinaryGeneratorCredential = v.InferOutput<typeof binaryGeneratorCredentialSchema>
-
-/**
- * The two names a credential carries, which is all the fallback below reads.
- *
- * Structural rather than {@link BinaryGeneratorCredential} itself, because the DISPATCH projection
- * carries a narrower shape (kernel's `ResolvedBinaryGeneratorCredential`, which drops `usage` and
- * every other prose field the container executor has no use for) and would otherwise have to
- * either widen or re-spell the fallback. A parameter type nothing outside the two names can
- * satisfy is what makes the "one place" claim below enforceable rather than aspirational.
- */
-export interface BinaryCredentialNames {
-  key: string
-  envName?: string
-}
-
-/**
- * The environment variable one credential arrives as: its {@link BinaryGeneratorCredential.envName}
- * when it declares one, else its lookup key.
- *
- * The ONE place that fallback is written, because three layers apply it (the schema's uniqueness
- * check below, the dispatch-time resolver that keys the job body, and the brief that tells the
- * agent which variable to read) and a copy that drifted would name a variable that is never set:
- * an integration reported as unavailable on every run, with nothing to see at either end.
- */
-export function binaryCredentialInjectionName(credential: BinaryCredentialNames): string {
-  return credential.envName ?? credential.key
-}
-
-/**
- * The form an injection name is COMPARED in, which is not the form it is injected under.
- *
- * Case-folded, the same way {@link isReservedPlatformEnvKey} folds the lookup key it screens, and
- * for the reason that floor has: environment lookup is case-insensitive on Windows, so `ACME_KEY`
- * and `acme_key` are two variables in the declaration and one variable in the process that reads
- * them. A rule comparing them exactly would call that pair distinct and let one value overwrite
- * the other on the one platform where it matters.
- */
-export function comparableCredentialInjectionName(credential: BinaryCredentialNames): string {
-  return binaryCredentialInjectionName(credential).toUpperCase()
-}
-
-/**
- * Whether every credential in a declaration arrives as its own variable.
- *
- * Exported so the boot check and the schema share one implementation rather than agreeing by
- * hand. Duplicate LOOKUP keys are deliberately allowed: an integration wanting one stored value
- * delivered under two names is odd but honest, and nothing is lost. A duplicate INJECTION name
- * loses a value, which is why only that one is refused.
- */
-export function uniqueCredentialInjectionNames(
-  credentials: readonly BinaryGeneratorCredential[],
-): boolean {
-  const names = credentials.map(comparableCredentialInjectionName)
-  return new Set(names).size === names.length
-}
+export const binaryGeneratorCredentialSchema = capabilityCredentialSchema
+export type BinaryGeneratorCredential = CapabilityCredential
 
 /**
  * HOW an integration is reached, which decides what the rest of the definition may say.

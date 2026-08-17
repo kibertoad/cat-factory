@@ -198,6 +198,14 @@ const state = computed(() => {
           >
             {{ t('binaryOutput.unknownGeneratorBadge') }}
           </UBadge>
+          <!-- What made the DELIVERABLE, where that is not what made the pixels. Rendered as
+               "then <tool>" rather than as a bare second name: the two are a sequence, and side
+               by side they would read as two integrations that both produced this artifact. It
+               resolves against no registry, so it carries no unknown badge — nothing here can
+               judge a label. -->
+          <span v-if="row.processedBy" class="font-mono" data-testid="binary-output-processed-by">{{
+            t('binaryOutput.processedBy', { tool: row.processedBy })
+          }}</span>
           <span v-if="row.entity">{{ row.entity }}</span>
           <span v-if="row.contentType" class="font-mono">{{ row.contentType }}</span>
           <!-- What was actually DELIVERED, beside the media type it was delivered as. Rendered

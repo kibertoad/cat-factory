@@ -1,4 +1,5 @@
 import type { UploadApiContract } from '@cat-factory/contracts'
+import { storedTierMayNotDeclareCredentials } from '@cat-factory/contracts'
 import {
   ValidationError,
   describeFoundationalProblem,
@@ -29,7 +30,22 @@ import {
 export function assertValidDefinition(input: {
   capabilities?: string[]
   contracts?: UploadApiContract[]
+  credentials?: unknown[]
 }): void {
+  // The one rule that is about the DECLARER rather than the definition, which is why it lives at
+  // this boundary and not in the kernel validator beside it: that validator also grades a
+  // deployment's CODE-registered service at boot, where declaring a credential is exactly the
+  // supported thing to do. Here the row belongs to an account or a workspace, and the shipped
+  // resolver reads a declared key off the DEPLOYMENT'S OWN ENVIRONMENT — so accepting one would
+  // let a workspace admin name a variable the platform then reads and hands to an agent process.
+  // The record type carries no such field either, so this refusal is what turns a silently
+  // dropped declaration into a stated one.
+  const credentialProblem = storedTierMayNotDeclareCredentials(input)
+  if (credentialProblem) {
+    throw new ValidationError(credentialProblem, {
+      reason: 'foundational_service_credentials_not_storable',
+    })
+  }
   const problems = validateFoundationalDefinition(input)
   const first = problems[0]
   if (!first) return

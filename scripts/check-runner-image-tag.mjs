@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Guards the per-run container image tags: each pinned tag is hand-maintained in THREE
+// Guards the per-run container image tags: each pinned tag is hand-maintained in several
 // places that must stay in lockstep, and a change to the image sources that forgets to
 // bump the tag would republish over the live tag without minting a new version, so a
 // deployment mirroring that tag never rolls out the change (its per-run containers keep
@@ -10,8 +10,14 @@
 //   - deploy   (the k8s render image):       @cat-factory/deploy-harness   ⇄ cat-factory-deploy:<tag>
 //
 // For EACH image, two checks:
-//   1. Consistency (always): the harness `version` and the `<image>:<tag>` pins in
-//      deploy/backend/{package.json,wrangler.toml} are all equal.
+//   1. Consistency (always): the harness `version` and EVERY `<image>:<semver>` pin in the
+//      descriptor's pin files are all equal. That is deploy/backend/{package.json,wrangler.toml}
+//      plus the descriptor's `extraPins`, the facade-side constants (local mode's
+//      RECOMMENDED_HARNESS_IMAGE and friends). Reading only the deploy pair is what let a
+//      release ship with the local facade a version behind: the effective default image then
+//      runs a harness that ignores whatever job-body field the release renamed, and every
+//      value in it silently vanishes from the agent's env. The auto-sync writes all of them,
+//      so this verifies all of them.
 //   2. Bump-vs-base (only with `--since <ref>`): if any of that image's source files
 //      changed in `<ref>...HEAD`, the wrangler tag MUST differ from the tag at `<ref>`.
 //
@@ -30,16 +36,21 @@ import {
   IMAGES as IMAGE_DESCRIPTORS,
   readRepoFile,
   repoRoot,
+  semverPinsIn,
   WRANGLER,
 } from './runner-images.mjs'
 
 // Adapt the shared descriptors (scripts/runner-images.mjs — the single source of truth this
-// and the auto-sync both derive from) to what the guard needs: a `tagRe` that matches the
-// `<image>:<tag>` ref in DEPLOY_PKG + WRANGLER (capturing the tag up to the first quote or
-// whitespace) and the source files as a Set for fast membership tests.
+// and the auto-sync both derive from) to what the guard needs: the files a tag is pinned in,
+// a `tagRe` that matches the `<image>:<tag>` ref in one of them (capturing the tag up to the
+// first quote or whitespace), and the source files as a Set for fast membership tests.
 const IMAGES = IMAGE_DESCRIPTORS.map((d) => ({
   label: d.label,
+  image: d.image,
   harnessPkg: d.harnessPkg,
+  // Every file carrying a pin, deploy pair first: the wrangler tag is the one the bump-vs-base
+  // check compares across revisions, and the first two are named in the drift message.
+  pinFiles: [DEPLOY_PKG, WRANGLER, ...(d.extraPins ?? [])],
   tagRe: new RegExp(`${d.image}:([^"'\\s]+)`),
   sourcePrefixes: d.sourcePrefixes,
   sourceFiles: new Set(d.sourceFiles),
@@ -53,6 +64,11 @@ function fail(message) {
 function extractTag(tagRe, relPath) {
   const match = tagRe.exec(readRepoFile(relPath))
   return match ? match[1] : null
+}
+
+/** Every semver-tagged pin of one image in one file, in the order they appear. */
+function pinnedTags(image, relPath) {
+  return semverPinsIn(image.image, readRepoFile(relPath))
 }
 
 function isImageSource(image, path) {
@@ -74,28 +90,38 @@ function parseSinceArg(argv) {
 
 function checkConsistency(image) {
   const harnessVersion = JSON.parse(readRepoFile(image.harnessPkg)).version
-  const deployTag = extractTag(image.tagRe, DEPLOY_PKG)
   const wranglerTag = extractTag(image.tagRe, WRANGLER)
 
   console.log(
     `[${image.label}] harness version (${image.harnessPkg}): ${harnessVersion ?? '<none>'}`,
   )
-  console.log(`[${image.label}] deploy publish tag (${DEPLOY_PKG}): ${deployTag ?? '<none>'}`)
-  console.log(`[${image.label}] wrangler image tag (${WRANGLER}): ${wranglerTag ?? '<none>'}`)
-
   if (!harnessVersion) fail(`[${image.label}] Could not read "version" from ${image.harnessPkg}.`)
-  if (!deployTag)
-    fail(`[${image.label}] Could not read the ${image.label} image tag from ${DEPLOY_PKG}.`)
-  if (!wranglerTag)
-    fail(`[${image.label}] Could not read the ${image.label} image tag from ${WRANGLER}.`)
-  if (!harnessVersion || !deployTag || !wranglerTag) return wranglerTag
 
-  if (harnessVersion !== deployTag || harnessVersion !== wranglerTag) {
+  // Every pin file, not just the deploy pair. A file the descriptor names but that carries no
+  // semver pin is a fault of its own: the pin was renamed or moved, and a guard that treated the
+  // absence as "nothing to check" would go on passing while the constant drifted.
+  const drifted = []
+  for (const relPath of image.pinFiles) {
+    const tags = pinnedTags(image, relPath)
+    console.log(`[${image.label}] pinned in ${relPath}: ${tags.join(', ') || '<none>'}`)
+    if (tags.length === 0) {
+      fail(
+        `[${image.label}] Could not read a ${image.image}:<version> pin from ${relPath}. ` +
+          `scripts/runner-images.mjs names it as a pin location, so either the pin moved (update ` +
+          `the descriptor) or it was dropped (restore it).`,
+      )
+      continue
+    }
+    if (harnessVersion && tags.some((tag) => tag !== harnessVersion)) drifted.push(relPath)
+  }
+
+  if (drifted.length > 0) {
     fail(
-      `[${image.label}] image tag drift: the harness version (${harnessVersion}), the ` +
-        `deploy/backend/package.json publish tag (${deployTag}), and the ` +
-        `deploy/backend/wrangler.toml [[containers]] image tag (${wranglerTag}) must all ` +
-        `match. Bump every ${image.label} image tag to ${harnessVersion}.`,
+      `[${image.label}] image tag drift: the harness version is ${harnessVersion}, but ` +
+        `${drifted.join(', ')} pin${drifted.length === 1 ? 's' : ''} a different ${image.image} ` +
+        `tag. Every pin must name the published tag, or a facade defaulting to the stale one runs ` +
+        `a harness this build was not released against. Run \`node scripts/sync-runner-image-tags.mjs\` ` +
+        `to bring them all to ${harnessVersion}.`,
     )
   }
   return wranglerTag
