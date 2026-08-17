@@ -1,5 +1,13 @@
 # @cat-factory/binary-generators
 
+## 0.2.4
+
+### Patch Changes
+
+- Updated dependencies [3afea3a]
+  - @cat-factory/contracts@0.319.0
+  - @cat-factory/kernel@0.309.0
+
 ## 0.2.3
 
 ### Patch Changes
