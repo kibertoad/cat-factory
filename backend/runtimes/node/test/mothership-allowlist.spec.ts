@@ -11,7 +11,6 @@ import {
 import {
   DrizzleGitHubInstallationRepository,
   DrizzleRunnerPoolConnectionRepository,
-  DrizzleServiceFrameRepository,
 } from '../src/repositories/containerExecution.js'
 import {
   DrizzleBranchProjectionRepository,
@@ -85,7 +84,7 @@ import { DrizzleUserRepoAccessRepository } from '../src/repositories/userRepoAcc
 // coverage-independent backstop: it reflects EVERY public method of EVERY Drizzle repository and
 // requires each to be CLASSIFIED exactly once — either it is in the server-side allow-list
 // (`REMOTE_PERSISTENCE_METHODS`, i.e. remotely callable), or it is in `NON_REMOTE` with an explicit
-// reason (telemetry / local-sqlite / admin-gated / sweeper / pending / inbound / helper).
+// reason (telemetry / local-sqlite / admin-gated / sweeper / pre-auth / inbound / helper).
 //
 // So adding a new Drizzle repository or method WITHOUT a deliberate decision fails this test: the
 // author must either allow-list it (proxy it to the mothership) or record why it stays off the
@@ -98,10 +97,13 @@ import { DrizzleUserRepoAccessRepository } from '../src/repositories/userRepoAcc
 // listed rather than the classifications.
 // ---------------------------------------------------------------------------
 
+// There is deliberately NO `pending` member. It used to be the surface-completion BACKLOG, and
+// the backlog is now empty: every org/durable method is either allow-listed or has one of the
+// permanent reasons below. Retiring the member is what keeps it that way — CLAUDE.md requires a
+// new repository method to pick its bucket in the SAME PR, and while "pending" existed that rule
+// had a landing pad. A new method that belongs on the machine API now fails this test until it is
+// actually proxied, rather than until someone types a word.
 type Reason =
-  // Org/durable, REMOTE, but not allow-listed yet — the explicit surface-completion backlog. A
-  // new org method lands here until a slice proxies it (with a scope rule + conformance coverage).
-  | 'pending'
   // A per-USER credential/secret store kept on the laptop (`node:sqlite`), never the mothership.
   | 'local'
   // High-volume / local-first telemetry: a mothership-mode node writes AND reads it in its own
@@ -119,6 +121,12 @@ type Reason =
   // A non-port implementation helper that is public on the prototype but never called via the
   // repository registry (row mappers, credential decoders, etc.).
   | 'helper'
+  // Pre-authentication: the method answers "who is this credential" (or "is this reset link
+  // good") BEFORE any token exists. It runs on the deployment that publishes the login URL, which
+  // in mothership mode is the mothership, and a machine token is itself minted BY a completed
+  // login — so there is no state here a node could be asked about. Some of them also carry the
+  // password hash. Permanent, not a backlog state.
+  | 'preauth'
   // State of an INBOUND delivery path, written only where the delivery ARRIVES. A webhook reaches
   // whichever deployment holds the public URL, which in mothership mode is the mothership; a
   // laptop receives none, so it has nothing to dedupe and never reads these rows. Permanent (the
@@ -145,15 +153,12 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     updateSettings: 'admin',
   },
   membershipRepository: { upsert: 'admin', remove: 'admin' },
-  // Workspace-RBAC member tier (slice 3). The gate's per-request `get` + the list-annotation
-  // `getRolesForUserInWorkspaces` are now allow-listed (REMOTE_PERSISTENCE_METHODS — the two
-  // reads that run on every signed edge request). The roster reads back the member-management
-  // API (a later slice, no SPA path yet → pending), and the mutations are admin-gated member
-  // management — the machine token is role-blind, so exposing them would let a member self-grant,
-  // exactly like `membershipRepository.upsert`/`remove`.
+  // Workspace-RBAC member tier (slice 3). The gate's per-request `get`, the list-annotation
+  // `getRolesForUserInWorkspaces` and now the two roster READS (`listByWorkspace` for the members
+  // panel, `listWorkspaceIdsForUser` for the caller's own visibility) are allow-listed. The
+  // mutations stay admin-gated member management — the machine token is role-blind, so exposing
+  // them would let a member self-grant, exactly like `membershipRepository.upsert`/`remove`.
   workspaceMemberRepository: {
-    listByWorkspace: 'pending',
-    listWorkspaceIdsForUser: 'pending',
     upsert: 'admin',
     remove: 'admin',
     removeByAccountMembership: 'admin',
@@ -162,16 +167,17 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // roster enrichment + the single-user display lookup, bound by co-membership via the `user`/
   // `userList` scope rules). They carry only the presentational `UserRecord` — the password
   // `secret` lives on `UserIdentityRecord`, read only via `getIdentity`/`listIdentities` (kept off).
-  // `update` (profile write) + `findByIdentity`/`findByEmail`/`getIdentity`/`listIdentities` are the
-  // account-lifecycle / login surface (the identity reads leak the hash), so they stay off.
+  // `update` (the profile edit the SPA offers on either deployment shape) is allow-listed under
+  // `selfUser`. The identity reads are `preauth`, not a backlog: they answer "who is this
+  // credential" BEFORE any token exists, they run on the deployment that holds the login, and
+  // `getIdentity`/`listIdentities` carry the password hash.
   userRepository: {
     create: 'onboarding',
-    update: 'pending',
-    findByIdentity: 'pending',
-    findByEmail: 'pending',
-    getIdentity: 'pending',
+    findByIdentity: 'preauth',
+    findByEmail: 'preauth',
+    getIdentity: 'preauth',
     linkIdentity: 'onboarding',
-    listIdentities: 'pending',
+    listIdentities: 'preauth',
     // The session-revocation WRITE. `sessionGeneration` (the read) is allow-listed so a node stops
     // honouring a revoked bearer, but the bump is the revocation itself: a role-blind token that
     // could reach it could sign out every user in its account scope, so it stays mothership-only
@@ -184,16 +190,20 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // scoped-token call) — all stay mothership-internal.
   invitationRepository: {
     create: 'admin',
-    get: 'pending',
-    findByTokenHash: 'pending',
+    get: 'preauth',
+    findByTokenHash: 'preauth',
     setStatus: 'admin',
   },
+  // The password-reset flow in full. `preauth`, and permanently: a reset link is followed by
+  // someone who cannot authenticate, at the URL the deployment publishes, which in mothership mode
+  // is the mothership. A node holds no such request, and a machine token is itself minted BY a
+  // completed login, so there is no state here a node could ever be asked about.
   passwordResetTokenRepository: {
-    create: 'pending',
-    findByTokenHash: 'pending',
-    listPendingByUser: 'pending',
-    setStatus: 'pending',
-    consume: 'pending',
+    create: 'preauth',
+    findByTokenHash: 'preauth',
+    listPendingByUser: 'preauth',
+    setStatus: 'preauth',
+    consume: 'preauth',
     deleteExpired: 'sweeper',
   },
   // The machine-node roster + revocation tombstones (SEC-5) are the machine API's OWN auth
@@ -241,13 +251,13 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `upsert`/`softDelete` (connect/disconnect) are admin-gated → stay mothership-internal.
   emailConnectionRepository: { upsert: 'admin', softDelete: 'admin' },
   // `countActiveInternal` (the public API's initiative-start concurrency backstop) is now
-  // allow-listed, completing the headless surface whose paginated reads were already remote.
-  // The single-service `listByService` has no live consumer (board composition goes through the
-  // batched `listByServices`), so exposing it would be dead surface — it stays pending until
-  // something actually calls it.
-  blockRepository: { listByService: 'pending' },
+  // allow-listed, completing the headless surface whose paginated reads were already remote. The
+  // single-service `listByService` is GONE rather than classified: board composition has gone
+  // through the batched `listByServices` for as long as this table has existed, so it was a dead
+  // port method, and allow-listing one buys attack surface for a caller that does not exist.
+  blockRepository: {},
   pipelineRepository: {},
-  executionRepository: { listByService: 'pending', listStale: 'sweeper' },
+  executionRepository: { listStale: 'sweeper' },
   // `getRef` is allow-listed (the board's retry/stop run-control entry point). `listStale`/
   // `liveRunIds`/`listPausedExecutions` are the stale-run/paused-resume sweeper's kind-spanning
   // reads — mothership-internal cron. `recordRedrive` is the WRITE half of that same sweep and
@@ -424,69 +434,40 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   serviceFragmentDefaultsRepository: {},
   pipelineScheduleRepository: {
     values: 'helper',
-    // `get`/`upsert`/`remove`/`insertRun`/`updateRun`/`listRuns` are now allow-listed (the
-    // recurring-schedule management surface incl. `runNow`); the serviceId-keyed `listByService`
-    // stays off the SPA path and the sweeper reads/prunes stay mothership-internal.
-    listByService: 'pending',
+    // `get`/`upsert`/`remove`/`insertRun`/`updateRun`/`listRuns` are allow-listed (the
+    // recurring-schedule management surface incl. `runNow`); the sweeper reads/prunes stay
+    // mothership-internal. The single-service `listByService` was deleted with its siblings.
     listDue: 'sweeper',
     pruneRunsBefore: 'sweeper',
   },
   // `put` is now allow-listed (the tracker-settings editor); `get` was already remote.
   trackerSettingsRepository: {},
-  serviceRepository: {
-    // `get`/`listByIds`/`listByAccount`/`getByFrameBlock`/`listByFrameBlocks` are allow-listed (the
-    // org-catalog mount flow + board composition + run-path frame resolution + the batched
-    // duplicate-service / frame-deletion read). The remaining CRUD + `getByRepo` (the GitHub-sync
-    // repo→service link) stay off the SPA path — a later slice.
-    getByRepo: 'pending',
-    // `insert` is the one with a REACHABLE consumer, and it needs more than an allow-list line, so
-    // it is recorded here rather than opened: `registerServiceForFrame` runs it on EVERY top-level
-    // frame creation, so a mothership-mode node cannot create a service frame at all today.
-    //
-    // What blocks it is that no existing rule binds it soundly. The obvious `accountField` (the
-    // record's own `accountId`) leaves `frameBlockId` unbound, and `getByFrameBlock` resolves by
-    // frame block id ALONE — the unique index is `(account_id, frame_block_id)`, so two accounts may
-    // hold a service for one frame id and the walk answers with an arbitrary one (see
-    // `mountProjection.frameMount`, which already works around this). A caller could then plant a
-    // service on another org's frame block and redirect its runs' `resolveRepoTarget` at a repo it
-    // controls. Binding the frame block instead is not available either: `registerServiceForFrame`
-    // inserts the service BEFORE the block row exists, so the resolver would find nothing and refuse
-    // every legitimate frame creation. Opening it therefore needs either an account-scoped
-    // `getByFrameBlock` or a port that carries the frame's workspace — its own slice, tracked in
-    // `docs/initiatives/mothership-mode.md`.
-    insert: 'pending',
-    update: 'pending',
-    delete: 'pending',
-    deleteMany: 'pending',
-  },
-  workspaceMountRepository: {
-    // `listByWorkspace`/`countByServiceIds`/`get`/`upsert`/`update`/`remove` are allow-listed (the
-    // shared-service mount management surface), and `listWorkspaceIdsMountingBlock` now joins them
-    // — the real-time fan-out calls it on EVERY publish, so it was never optional. The unbatched
-    // `listByService` has no remaining consumer on that path; the frame-deletion batch cleanup
-    // (`removeByServices`) and the board-delete cascade's batched read (`listByServiceIds`, used by
-    // `planSharedServiceRehome`) stay off because their surrounding flows — service CRUD and
-    // workspace delete — are themselves still mothership-internal.
-    listByService: 'pending',
-    listByServiceIds: 'pending',
-    removeByServices: 'pending',
-  },
+  // The whole service surface is now remote: the reads (`get`/`listByIds`/`listByAccount`/
+  // `getByFrameBlock`/`listByFrameBlocks`) plus the CRUD, which a mothership-mode node needs to
+  // create a service frame at all. `insert` took a new rule rather than an allow-list line
+  // (`serviceInsert`: the declared account AND the frame block it claims), and `update` takes
+  // `serviceUpdate` (the stored service's account AND any account a patch re-homes it into).
+  // `getByRepo` is gone rather than classified: nothing called it.
+  serviceRepository: {},
+  // Fully remote too, and it had to move WITH the service CRUD above: the frame-deletion cascade
+  // (`removeByServices`) and the board-delete re-home read (`listByServiceIds`) are what finish a
+  // service delete, so opening the delete without them would leave every OTHER board in the org
+  // mounting a service that no longer exists. The unbatched `listByService` was deleted.
+  workspaceMountRepository: {},
   // The whole requirement-review repo is remote (getByBlock/get/upsert were exposed earlier; the
   // rev-guarded compareAndSwap — which every review edit now rides — and the atomic
   // replaceForBlock that starts a fresh review run complete it).
   requirementReviewRepository: {},
-  // `listByWorkspace`/`listByExecution` are now allow-listed (the Kaizen screen's grading-history
-  // + per-run status reads); `getByStep`/`upsert` were already remote (the run-path grade). The
-  // single-grade `get` is internal-only (no SPA path); `listPending`/`claim` are the sweep's reads.
+  // The Kaizen read surface is fully remote (the run-path grade, the screen's history, the
+  // per-run status and the single-grade detail read); only the sweep's own claim pair stays
+  // mothership-internal, since the sweep runs there.
   kaizenGradingRepository: {
-    get: 'pending',
     listPending: 'sweeper',
     claim: 'sweeper',
   },
-  // `listByWorkspace` is now allow-listed (the Kaizen screen's verified-combo library); `getByKey`
-  // was already remote. `upsert` is the background sweep's streak write — best-effort in mothership
-  // mode until Phase 5.
-  kaizenVerifiedComboRepository: { upsert: 'pending' },
+  // Fully remote, streak write included: it is best-effort, which is exactly why leaving it off
+  // was invisible — a node's runs verified combos that were never recorded.
+  kaizenVerifiedComboRepository: {},
   // The advanced review / structured-dialogue session surfaces are now fully remote (run + re-read
   // + persist/replace as the window iterates) — get/getByStep/getByBlock/upsert for consensus,
   // get/upsert/compareAndSwap/replaceFor* for clarity + brainstorm (getByBlock/getByBlockStage
@@ -526,11 +507,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `listAll` is the global cross-account sweep.
   accountSettingsRepository: { getByAccount: 'admin', upsert: 'admin', listAll: 'sweeper' },
   releaseHealthConfigRepository: {},
-  // The sealed sensitive test-credential surface is allow-listed for the inspector CRUD +
-  // run-path frame read (`getByBlock`/`upsert`/`deleteByBlock` — the sealed blob rides the
-  // machine API, decrypted service-side under the LOCAL key). `listByWorkspace` has no consumer
-  // on any SPA/run path yet, so it stays pending until a slice needs it.
-  testSecretsRepository: { listByWorkspace: 'pending' },
+  // The sealed sensitive test-credential surface is fully remote (the inspector CRUD, the
+  // run-path frame read and the workspace-wide list — the sealed blob rides the machine API and
+  // is decrypted service-side under the LOCAL key).
+  testSecretsRepository: {},
   // Pre-PR validation checks: the whole surface is allow-listed (the inspector CRUD + the
   // dispatch's frame read). Nothing sealed — the commands are operator-authored shell strings
   // that run inside the run's own container — so the plain record rides the machine API.
@@ -551,26 +531,20 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // row-mapping helper; the serviceId-keyed `listByService` stays off the SPA path.
   bootstrapJobRepository: {
     blockServiceId: 'helper',
-    listByService: 'pending',
   },
   // The whole reference-architecture library is now remote (the bootstrap modal's CRUD + the
   // retry re-resolve): get/listByWorkspace/insert/update/softDelete.
   referenceArchitectureRepository: {},
-  // `getByWorkspace` is now allow-listed: `resolveRepoTarget` reads it FIRST on every
-  // container-agent dispatch (installation → then the `github_repos` projection), so the
-  // run path needs it alongside `repoProjectionRepository.list`. The installationId-keyed
-  // reads, the sync/token writes, the webhook fan-out, and the cron `listActive` stay off
-  // (a later GitHub sync + repo-write slice — the mothership owns App + webhooks).
+  // The installation surface is now remote (see `rpc-allowlist-vcs.ts`): the run path's
+  // `getByWorkspace`, the account-tier lookup, the installationId-keyed reads the connect page
+  // drives, and the connect/disconnect writes (`upsert` under the `installationUpsert` rule, which
+  // binds the STORED row so a caller cannot repoint another org's binding). `updateCachedToken`
+  // was DELETED rather than classified: nothing has written that column since the App token cache
+  // moved in-process. `listActive` is the cron's every-tenant read, which takes no argument and so
+  // can be bound by no rule — `listActiveForAccount` exists beside it for that reason.
   githubInstallationRepository: {
-    getByInstallationId: 'pending',
-    listByInstallationIds: 'pending',
-    listWorkspacesForInstallation: 'pending',
     listActive: 'sweeper',
-    upsert: 'pending',
-    updateCachedToken: 'pending',
-    softDelete: 'pending',
   },
-  serviceFrameRepository: { getByFrameBlock: 'pending' },
   // The whole self-hosted runner-backend connection surface is now remote (the runner-pool
   // settings panel's connect/rotate/disconnect): getByWorkspace/softDelete via the `workspace`
   // rule, the record-based `upsert` via the `workspaceField` rule. Its credentials ride a SEALED
@@ -716,46 +690,22 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // The whole custom-manifest-type catalog is now remote (the environments management panel's
   // infra-configurator reads/edits it — no secrets, just manifest metadata).
   customManifestTypeRepository: {},
-  // `list` is now allow-listed (the SPA's repos panel + the run-path `resolveRepoTarget` walk of
-  // the `github_repos` projection). The board-linkage write (`setMonorepo`), the sync ingest
-  // (`upsertMany`/`tombstoneMissing`), the installationId-keyed cursors, the fan-out
-  // `linkedWorkspaces`, and the single-repo `get` (repo-write facade only) stay off the SPA path
-  // — a later GitHub sync + repo-write slice; `listStale` is the reconcile sweeper's read.
+  // The projection surface is now remote in both directions (see `rpc-allowlist-vcs.ts`): the
+  // panel + run-path reads, and the WRITES a node's own GitHub client earns — a node that opens a
+  // PR through the delegated App token must be able to project it. Only the two reads no rule can
+  // bind stay mothership-internal: `listStale` (the reconcile cron, cross-tenant) and
+  // `listByInstallation` (the delegation mint's own repo-scoping read, unscoped across an
+  // installation's workspaces — exposing it would leak repo rows past the per-call workspace
+  // scoping).
   repoProjectionRepository: {
-    upsertMany: 'pending',
-    get: 'pending',
-    linkedWorkspaces: 'pending',
-    tombstoneMissing: 'pending',
-    setMonorepo: 'pending',
     listStale: 'sweeper',
-    // The GitHub-delegation mint's mothership-side repo-scoping read (`repository_ids`):
-    // unscoped across an installation's workspaces, so it must stay mothership-internal —
-    // exposing it over the RPC would leak repo rows past the per-call workspace scoping.
     listByInstallation: 'sweeper',
-    getCursor: 'pending',
-    setCursor: 'pending',
   },
-  // The projection READS the SPA's VCS board panels display are now allow-listed
-  // (`branchProjectionRepository.listByRepo`, `pullRequest`/`issueProjectionRepository`
-  // `.listByWorkspace`). The `upsertMany` sync ingest + the per-repo `listByRepo` variants the
-  // panels don't drive stay off — the mothership owns GitHub sync (a later sync-write slice).
-  branchProjectionRepository: { upsertMany: 'pending' },
-  pullRequestProjectionRepository: {
-    upsertMany: 'pending',
-    rowToPr: 'helper',
-    listByRepo: 'pending',
-  },
-  issueProjectionRepository: {
-    upsertMany: 'pending',
-    rowToIssue: 'helper',
-    listByRepo: 'pending',
-  },
-  commitProjectionRepository: {
-    upsertMany: 'pending',
-    deleteOlderThan: 'sweeper',
-    listByRepo: 'pending',
-  },
-  checkRunProjectionRepository: { upsertMany: 'pending', listBySha: 'pending' },
+  branchProjectionRepository: {},
+  pullRequestProjectionRepository: { rowToPr: 'helper' },
+  issueProjectionRepository: { rowToIssue: 'helper' },
+  commitProjectionRepository: { deleteOlderThan: 'sweeper' },
+  checkRunProjectionRepository: {},
   // --- per-user local-sqlite credential stores (never proxied) --------------------
   providerApiKeyRepository: {
     listByScope: 'local',
@@ -857,7 +807,6 @@ function reflectAllRepositories(): Record<string, string[]> {
     referenceArchitectureRepository: DrizzleReferenceArchitectureRepository,
     githubInstallationRepository: DrizzleGitHubInstallationRepository,
     runnerPoolConnectionRepository: DrizzleRunnerPoolConnectionRepository,
-    serviceFrameRepository: DrizzleServiceFrameRepository,
     repoProjectionRepository: DrizzleRepoProjectionRepository,
     branchProjectionRepository: DrizzleBranchProjectionRepository,
     pullRequestProjectionRepository: DrizzlePullRequestProjectionRepository,
@@ -925,7 +874,7 @@ describe('mothership persistence allow-list completeness', () => {
       'Every Drizzle repository method must be either allow-listed in REMOTE_PERSISTENCE_METHODS ' +
         '(proxied to the mothership) or recorded in NON_REMOTE with a reason. The methods below are ' +
         'neither — add a scope rule to the allow-list to proxy them, or classify them as ' +
-        'pending/local/telemetry/admin/sweeper/onboarding/helper in this test:\n' +
+        'local/telemetry/admin/sweeper/preauth/onboarding/helper in this test:\n' +
         unclassified.join('\n'),
     ).toEqual([])
   })

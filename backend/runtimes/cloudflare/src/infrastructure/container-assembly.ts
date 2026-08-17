@@ -103,6 +103,11 @@ import { D1PlatformMetricsRepository } from './repositories/D1PlatformMetricsRep
 import { D1ProvisioningLogRepository } from './repositories/D1ProvisioningLogRepository'
 import { D1ReferenceArchitectureRepository } from './repositories/D1ReferenceArchitectureRepository'
 import { D1RepoProjectionRepository } from './repositories/D1RepoProjectionRepository'
+import { D1BranchProjectionRepository } from './repositories/D1BranchProjectionRepository'
+import { D1PullRequestProjectionRepository } from './repositories/D1PullRequestProjectionRepository'
+import { D1IssueProjectionRepository } from './repositories/D1IssueProjectionRepository'
+import { D1CommitProjectionRepository } from './repositories/D1CommitProjectionRepository'
+import { D1CheckRunProjectionRepository } from './repositories/D1CheckRunProjectionRepository'
 import { D1SealedSecretInventory } from './repositories/D1SealedSecretInventory'
 import { D1ServiceRepository } from './repositories/D1ServiceRepository'
 import { D1SubscriptionActivationRepository } from './repositories/D1PersonalSubscriptionRepository'
@@ -814,6 +819,66 @@ function selectWorkerMachineAuthDeps(
   }
 }
 
+/**
+ * The repository registry a Cloudflare mothership REFLECTS over for `POST /internal/persistence`.
+ *
+ * Extracted from {@link assembleWorkerContainer} (a function-size ratchet split — behaviour is
+ * identical). It is also the half that grows: everything folded in here is a repository the ENGINE
+ * reaches through something other than `CoreDependencies`, so a mothership-mode node would
+ * otherwise get `... is not wired` for it. The Node facade's `buildNodePersistenceRegistry` is the
+ * twin; the two are kept sourced identically on purpose.
+ */
+function buildWorkerPersistenceRegistry(
+  dependencies: CoreDependencies,
+  db: D1Database,
+  agentRunRepository: unknown,
+): PersistenceRegistry {
+  return {
+    ...dependencies,
+    agentRunRepository,
+    // The binary-artifact METADATA store (visual-confirmation gate screenshots/references) is
+    // not part of `CoreDependencies` (it's composed into `resolveBinaryArtifactStore`, not the
+    // engine's Core), so fold it into the reflected registry explicitly — else a mothership-mode
+    // node's artifact reads/writes come back `... is not wired`. The blob BYTES stay per-account
+    // local; only the metadata is proxied.
+    binaryArtifactMetadataStore: new D1BinaryArtifactMetadataStore({ db }),
+    // The sensitive per-service test-credential store is org/durable state the engine reads via
+    // the `resolveTestSecretRefs` FUNCTION (never the repo directly), so it isn't in
+    // `CoreDependencies` either — fold it in explicitly, else a mothership-mode node's tester
+    // run-path read + the inspector CRUD come back `... is not wired`. Only the SEALED blob is
+    // proxied (decrypted service-side under the LOCAL key), like the observability/runner-pool
+    // connections.
+    testSecretsRepository: new D1TestSecretsRepository({ db }),
+    // Same reasoning for the per-service PRE-PR VALIDATION CHECKS: the engine reads them via
+    // the `resolveValidationChecks` FUNCTION, and the inspector CRUD goes through the service,
+    // so the repo isn't in `CoreDependencies` — reflect it explicitly or a mothership-mode
+    // node's dispatch resolution + inspector reads come back `... is not wired`.
+    validationConfigRepository: new D1ValidationConfigRepository({ db }),
+    // GitHub projection + installation reads the mothership serves over the persistence RPC even
+    // when its OWN github service is off. A mothership-mode local node reaches GitHub by token
+    // DELEGATION (no local App), which enables `container.github`, so its board snapshot
+    // (`github.service.listRepos` → `repoProjectionRepository.list`) and run-path repo resolution
+    // (`githubInstallationRepository.getByWorkspace` + `repoProjectionRepository.list`) read the
+    // projection over RPC. Both are plain org tables the mothership owns (`selectGitHubDeps`
+    // folds them into `dependencies` only when the App is configured), so reflect them regardless
+    // of `config.github.enabled`, else a mothership without its own App 500s that board load with
+    // `... is not wired`. Allow-listed in `REMOTE_PERSISTENCE_METHODS`; folded in explicitly like
+    // the stores above. Sourced identically on both facades.
+    repoProjectionRepository: new D1RepoProjectionRepository({ db }),
+    githubInstallationRepository: new D1GitHubInstallationRepository({ db }),
+    // The four ENTITY projections + the check-run one join them, for the same reason and now
+    // with a sharper one: a mothership-mode node's delegated GitHub client opens PRs and pushes
+    // branches for real, so it must be able to project what it just wrote. Reflected regardless
+    // of this deployment's own `config.github.enabled` (they land in `dependencies` only when
+    // the module is wired). Sourced identically on both facades.
+    branchProjectionRepository: new D1BranchProjectionRepository({ db }),
+    pullRequestProjectionRepository: new D1PullRequestProjectionRepository({ db }),
+    issueProjectionRepository: new D1IssueProjectionRepository({ db }),
+    commitProjectionRepository: new D1CommitProjectionRepository({ db }),
+    checkRunProjectionRepository: new D1CheckRunProjectionRepository({ db }),
+  } as unknown as PersistenceRegistry
+}
+
 export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): ServerContainer {
   const { env, config, db, clock, registries, resolveTransport, gateProviders } = input
   const {
@@ -948,40 +1013,7 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     // Core never reads it — it's surfaced separately above for `AgentRunController`), so fold it
     // in explicitly, else the board's retry/stop `getRef` call comes back `... is not wired`.
     // Sourced identically on both facades so they attach the same registry surface.
-    repositories: {
-      ...dependencies,
-      agentRunRepository,
-      // The binary-artifact METADATA store (visual-confirmation gate screenshots/references) is
-      // not part of `CoreDependencies` (it's composed into `resolveBinaryArtifactStore`, not the
-      // engine's Core), so fold it into the reflected registry explicitly — else a mothership-mode
-      // node's artifact reads/writes come back `... is not wired`. The blob BYTES stay per-account
-      // local; only the metadata is proxied.
-      binaryArtifactMetadataStore: new D1BinaryArtifactMetadataStore({ db }),
-      // The sensitive per-service test-credential store is org/durable state the engine reads via
-      // the `resolveTestSecretRefs` FUNCTION (never the repo directly), so it isn't in
-      // `CoreDependencies` either — fold it in explicitly, else a mothership-mode node's tester
-      // run-path read + the inspector CRUD come back `... is not wired`. Only the SEALED blob is
-      // proxied (decrypted service-side under the LOCAL key), like the observability/runner-pool
-      // connections.
-      testSecretsRepository: new D1TestSecretsRepository({ db }),
-      // Same reasoning for the per-service PRE-PR VALIDATION CHECKS: the engine reads them via
-      // the `resolveValidationChecks` FUNCTION, and the inspector CRUD goes through the service,
-      // so the repo isn't in `CoreDependencies` — reflect it explicitly or a mothership-mode
-      // node's dispatch resolution + inspector reads come back `... is not wired`.
-      validationConfigRepository: new D1ValidationConfigRepository({ db }),
-      // GitHub projection + installation reads the mothership serves over the persistence RPC even
-      // when its OWN github service is off. A mothership-mode local node reaches GitHub by token
-      // DELEGATION (no local App), which enables `container.github`, so its board snapshot
-      // (`github.service.listRepos` → `repoProjectionRepository.list`) and run-path repo resolution
-      // (`githubInstallationRepository.getByWorkspace` + `repoProjectionRepository.list`) read the
-      // projection over RPC. Both are plain org tables the mothership owns (`selectGitHubDeps`
-      // folds them into `dependencies` only when the App is configured), so reflect them regardless
-      // of `config.github.enabled`, else a mothership without its own App 500s that board load with
-      // `... is not wired`. Allow-listed in `REMOTE_PERSISTENCE_METHODS`; folded in explicitly like
-      // the stores above. Sourced identically on both facades.
-      repoProjectionRepository: new D1RepoProjectionRepository({ db }),
-      githubInstallationRepository: new D1GitHubInstallationRepository({ db }),
-    } as unknown as PersistenceRegistry,
+    repositories: buildWorkerPersistenceRegistry(dependencies, db, agentRunRepository),
     // The machine/auth boundary's own wiring (SEC-4 + SEC-5), mirrored on the Node facade.
     ...selectWorkerMachineAuthDeps(db),
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind

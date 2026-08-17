@@ -170,9 +170,10 @@ clean and shipped the deployment's master sealing key to a third party. So:
   reason (`process.env` lookup is case-insensitive on Windows). Refused where the declaration is
   made (the generative-integration credential schema; boot validation for a tool server) AND at
   dispatch, because a **mothership-mode node boot-validates none of the definitions it resolves**:
-  they arrive per dispatch over `/internal/binary-generators` and
-  `/internal/foundational-services`, authored by a process one build ahead of it, against an
-  environment that is a developer's own laptop. `ENCRYPTION_KEY` and
+  they arrive per dispatch over `/internal/binary-generators`, `/internal/foundational-services`
+  and `/internal/agent-kinds` (the tool servers a deployment ASSIGNS to a kind, which name their
+  credential the same way), authored by a process one build ahead of it, against an environment
+  that is a developer's own laptop. `ENCRYPTION_KEY` and
   `HARNESS_SHARED_SECRET` are the keys to the boundary BETWEEN those two processes, held by the
   side meant to keep them; that is what the floor protects, with no configuration.
 - **The injection name carries a narrower rule, not the floor** (`isToolchainEnvName`): not `PATH`,

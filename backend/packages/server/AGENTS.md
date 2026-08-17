@@ -234,7 +234,13 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   it should pass, which is exactly how one stayed green over a call site missing its value.
 - The **mothership-mode machine API** (`/internal/*`, machine-token authed, mounted on both
   facades: see `docs/initiatives/mothership-mode.md`): `persistence/rpc.ts` +
-  `modules/persistence/` (the repository RPC + GitHub installation-token delegation),
+  `persistence/rpc-allowlist*.ts` + `modules/persistence/` (the repository RPC, its per-domain
+  allow-list tables and `dispatchScope.ts`'s per-request entity resolvers, plus GitHub
+  installation-token delegation),
+  `persistence/agentKinds.ts` + `modules/agentKinds/AgentKindsController.ts` (the agent-kind
+  CAPABILITY layer: the one code-registered source that MERGES with the node's own registry,
+  because a kind's executable half cannot cross a wire while the skills and tool servers a
+  deployment ASSIGNS to it are data),
   `secrets/sealedSecretSources.ts` + `persistence/secretDelegation.ts` +
   `modules/persistence/SecretDelegationController.ts` (SECRET delegation: the mothership opens,
   and seals, an ORG credential a node holds no key for. The one machine surface answering with a

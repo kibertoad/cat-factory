@@ -58,6 +58,37 @@ const resolver = (values: Record<string, string>): ToolSecretResolver => ({
 })
 
 describe('resolveToolServers', () => {
+  it('wires a server the DEPLOYMENT declared, carried on the context by the engine', async () => {
+    // Mothership mode: the org assigned its issue tracker to this kind and this node's build knows
+    // nothing about it. The ENGINE reads that layer (one round trip per dispatch) and carries the
+    // declarations here; the EXECUTOR still decides servability, which is the split ADR 0029 states.
+    const result = await resolveToolServers({
+      context: { ...context(), orgToolServers: [STDIO] } as AgentRunContext,
+      agentKindRegistry: new AgentKindRegistry(),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ ISSUE_TOKEN: 'tok' }),
+    })
+    expect(result.toolServers.map((server) => server.id)).toEqual(['issues'])
+  })
+
+  it('keeps the LOCAL definition when both halves declare the same server id', async () => {
+    // Same precedence `toolServersFor` gives a kind's own declaration over one assigned to it: the
+    // kind's code is what has to work with the server it named.
+    const result = await resolveToolServers({
+      context: {
+        ...context(),
+        orgToolServers: [{ ...STDIO, label: 'From the org', secretKeys: [] }],
+      } as AgentRunContext,
+      agentKindRegistry: registryWith(STDIO),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ ISSUE_TOKEN: 'tok' }),
+    })
+    expect(result.toolServers).toHaveLength(1)
+    expect(result.toolServers[0]!.label).toBe('Issue tracker')
+  })
+
   it('splits a wired server into a non-secret projection and a secret-bearing job spec', async () => {
     const result = await resolveToolServers({
       context: context(),

@@ -60,6 +60,11 @@ interface RegistryFixtures {
   blocks: Map<string, { workspaceId: string }>
   services: Map<string, { id: string; accountId: string | null }>
   accountMembers: Map<string, string[]>
+  /** VCS installation bindings, keyed by installation id (the `installation` scope's anchor). */
+  installations: Map<
+    number,
+    { installationId: number; workspaceId: string; accountId: string | null }
+  >
 }
 
 function makeFixtures(): RegistryFixtures {
@@ -88,6 +93,14 @@ function makeFixtures(): RegistryFixtures {
       [ACCOUNT, [USER, 'usr_co']],
       [OTHER_ACCOUNT, ['usr_out']],
     ]),
+    // Two installation bindings: an ACCOUNT-bound App installation (11) and a PAT binding that
+    // carries NO account (22), so the resolver's fallback to the connector workspace's account is
+    // exercised rather than assumed. 33 is bound to the out-of-scope board.
+    installations: new Map([
+      [11, { installationId: 11, workspaceId: 'ws_in', accountId: ACCOUNT }],
+      [22, { installationId: 22, workspaceId: 'ws_in', accountId: null }],
+      [33, { installationId: 33, workspaceId: 'ws_out', accountId: OTHER_ACCOUNT }],
+    ]),
   }
 }
 
@@ -96,7 +109,7 @@ function makeFixtures(): RegistryFixtures {
  * account/membership/user graph the dispatcher binds every other surface against.
  */
 function buildScopeAnchorRepos(fx: RegistryFixtures) {
-  const { workspaces, executions, blocks, services, accountMembers } = fx
+  const { workspaces, executions, blocks, services, accountMembers, installations } = fx
   return {
     workspaceRepository: {
       get: async (id: string) => workspaces.get(id) ?? null,
@@ -198,6 +211,38 @@ function buildScopeAnchorRepos(fx: RegistryFixtures) {
       // each frame block id so the round-trip can assert the call reached the bound blocks.
       listByFrameBlocks: async (frameBlockIds: string[]) =>
         frameBlockIds.map((frameBlockId) => ({ frameBlockId })),
+      // The CRUD half. `insert` lands the row in the shared fixture map so a later scope
+      // resolution sees it, exactly as one store would.
+      insert: async (service: { id: string; accountId: string | null }) => {
+        services.set(service.id, { id: service.id, accountId: service.accountId })
+      },
+      update: async () => undefined,
+      delete: async (id: string) => void services.delete(id),
+      deleteMany: async (ids: string[]) => {
+        for (const id of ids) services.delete(id)
+      },
+    },
+    // The VCS installation bindings: a scope ANCHOR now, because the `installation` rules resolve a
+    // call through this row. `getByWorkspace` is the run path's first read (before the projection
+    // walk) and echoes the board; the id-keyed reads answer from the fixture map so an out-of-scope
+    // or unknown installation really fails closed. `listActive` is wired but absent from the
+    // allow-list (the cron's cross-tenant read), so it must be refused.
+    githubInstallationRepository: {
+      getByWorkspace: async (ws: string) => ({ ws }),
+      listActiveForAccount: async (accountId: string) => [{ accountId }],
+      getByInstallationId: async (id: number) => installations.get(id) ?? null,
+      listByInstallationIds: async (ids: number[]) =>
+        ids.map((id) => installations.get(id)).filter(Boolean),
+      listWorkspacesForInstallation: async (id: number) => [`ws_of_${id}`],
+      upsert: async (row: {
+        installationId: number
+        workspaceId: string
+        accountId: string | null
+      }) => {
+        installations.set(row.installationId, row)
+      },
+      softDelete: async () => undefined,
+      listActive: async () => [],
     },
     accountRepository: {
       get: async (id: string) => ({ id, name: id }),
@@ -220,6 +265,17 @@ function buildScopeAnchorRepos(fx: RegistryFixtures) {
       listByIds: async (ids: string[]) =>
         ids.map((id) => ({ id, name: id, email: null, avatarUrl: null, createdAt: 0 })),
       getIdentity: async () => null,
+      // The profile edit (`selfUser`): echoes the id it was asked to write.
+      update: async (id: string) => ({ id }),
+    },
+    // The workspace roster reads: `listByWorkspace` echoes the board (arg0), and the visibility
+    // read echoes the user (arg0, `selfUser`).
+    workspaceMemberRepository: {
+      get: async (ws: string, userId: string) => ({ ws, userId }),
+      listByWorkspace: async (ws: string) => [{ ws }],
+      listWorkspaceIdsForUser: async (userId: string) => [userId],
+      getRolesForUserInWorkspaces: async (userId: string) => ({ [userId]: 'member' }),
+      upsert: async () => undefined,
     },
   }
 }
@@ -257,6 +313,9 @@ function buildBoardConfigRepos() {
       remove: async () => undefined,
       // The real-time fan-out's per-publish read: origin workspaceId (arg0) + a blockId.
       listWorkspaceIdsMountingBlock: async (ws: string, blockId: string) => [`${ws}:${blockId}`],
+      // The frame-deletion cascade's batched pair (the `serviceList` rule).
+      listByServiceIds: async (_ids: string[]) => [],
+      removeByServices: async () => undefined,
     },
     workspaceSettingsRepository: {
       get: async (ws: string) => ({ ws }),
@@ -581,34 +640,50 @@ function buildReviewAndIntegrationRepos() {
     kaizenGradingRepository: {
       listByWorkspace: async (ws: string) => [{ ws }],
       listByExecution: async (ws: string, executionId: string) => [{ ws, executionId }],
+      get: async (ws: string, id: string) => ({ ws, id }),
     },
     kaizenVerifiedComboRepository: {
       listByWorkspace: async (ws: string) => [{ ws }],
+      upsert: async () => undefined,
     },
-    // The VCS/GitHub projection READ surface the SPA's board panels display (repos/branches/
-    // PRs/issues). Each echoes its workspaceId (arg0); `list` is also on the run-path repo
-    // resolution. The projection WRITES + per-repo `listByRepo` variants stay off (a later slice).
-    // `githubInstallationRepository.getByWorkspace` is the run path's FIRST read (before `list`);
-    // it echoes the workspaceId as a single record. The rest of the installation repo stays off.
-    githubInstallationRepository: {
-      getByWorkspace: async (ws: string) => ({ ws }),
-      // The account-scoped installation list the repo-sourced libraries resolve their GitHub
-      // credential through; echoes the accountId (arg0). `listActive` is its GLOBAL sibling —
-      // wired but absent from the allow-list, so it must be refused.
-      listActiveForAccount: async (accountId: string) => [{ accountId }],
-      listActive: async () => [],
-    },
+    // The VCS projections, reads AND the sync/repo-write half a node's own GitHub client earns.
+    // Each echoes its workspaceId (arg0); `repoProjectionRepository.list` is also on the run-path
+    // repo resolution. The installation repo itself lives with the scope anchors above, because an
+    // installation id is now something calls are BOUND by.
     repoProjectionRepository: {
       list: async (ws: string) => [{ ws }],
+      get: async (ws: string, repoGithubId: number) => ({ ws, repoGithubId }),
+      upsertMany: async () => undefined,
+      tombstoneMissing: async () => undefined,
+      setMonorepo: async () => undefined,
+      // Answers with the candidates it was given, which is the shape the rule binds.
+      linkedWorkspaces: async (_repoId: number, candidates: string[]) => candidates,
+      getCursor: async (installationId: number) => ({ installationId }),
+      setCursor: async () => undefined,
+      listStale: async () => [],
+      listByInstallation: async () => [],
     },
     branchProjectionRepository: {
       listByRepo: async (ws: string) => [{ ws }],
+      upsertMany: async () => undefined,
     },
     pullRequestProjectionRepository: {
       listByWorkspace: async (ws: string) => [{ ws }],
+      listByRepo: async (ws: string) => [{ ws }],
+      upsertMany: async () => undefined,
     },
     issueProjectionRepository: {
       listByWorkspace: async (ws: string) => [{ ws }],
+      listByRepo: async (ws: string) => [{ ws }],
+      upsertMany: async () => undefined,
+    },
+    commitProjectionRepository: {
+      listByRepo: async (ws: string) => [{ ws }],
+      upsertMany: async () => undefined,
+    },
+    checkRunProjectionRepository: {
+      listBySha: async (ws: string) => [{ ws }],
+      upsertMany: async () => undefined,
     },
     // The self-hosted runner-backend connection surface: `getByWorkspace`/`softDelete` echo the
     // workspaceId (arg0); the record-based `upsert` binds on the record's `workspaceId` FIELD.
@@ -813,6 +888,8 @@ export function makeRegistry(): {
   resolveBlockAccountIds: NonNullable<DispatchOptions['resolveBlockAccountIds']>
   resolveServiceAccountIds: NonNullable<DispatchOptions['resolveServiceAccountIds']>
   resolveSkillSourceAccountId: NonNullable<DispatchOptions['resolveSkillSourceAccountId']>
+  resolveInstallationOwner: NonNullable<DispatchOptions['resolveInstallationOwner']>
+  resolveFrameBlockOwner: NonNullable<DispatchOptions['resolveFrameBlockOwner']>
   resolveLibrarySourceOwner: NonNullable<DispatchOptions['resolveLibrarySourceOwner']>
   resolveAccountMemberIds: NonNullable<DispatchOptions['resolveAccountMemberIds']>
 } {
@@ -859,6 +936,33 @@ export function makeRegistry(): {
       const map = new Map<string, string | null | undefined>()
       for (const service of services) map.set(service.id, service.accountId)
       return map
+    },
+    // Built exactly as the controller builds them. The installation owner falls back to the
+    // connector workspace's account when the row carries none (the PAT-connect shape), and the
+    // frame-block owner answers `absent` for a block that does not exist yet — which is the
+    // ordinary case a service insert relies on.
+    resolveInstallationOwner: async (installationId) => {
+      const row = (await registry.githubInstallationRepository!.getByInstallationId!(
+        installationId,
+      )) as { accountId?: string | null; workspaceId?: string } | null
+      if (!row) return { status: 'absent' }
+      if (typeof row.accountId === 'string') return { status: 'found', accountId: row.accountId }
+      const ws = row.workspaceId
+      return {
+        status: 'found',
+        accountId: typeof ws === 'string' ? await resolveAccountId(ws) : null,
+      }
+    },
+    resolveFrameBlockOwner: async (frameBlockId) => {
+      const found = (await registry.blockRepository!.findById!(frameBlockId)) as {
+        workspaceId?: string
+      } | null
+      if (!found) return { status: 'absent' }
+      const ws = found.workspaceId
+      return {
+        status: 'found',
+        accountId: typeof ws === 'string' ? await resolveAccountId(ws) : null,
+      }
     },
     // Built exactly as the controller builds it (source row → its `accountId`), so the round-trip
     // exercises the real server-side resolution for the `skillSource` scope. A source that does not

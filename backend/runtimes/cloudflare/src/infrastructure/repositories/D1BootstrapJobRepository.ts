@@ -210,16 +210,6 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
     return (results ?? []).map(rowToRecord)
   }
 
-  async listByService(serviceId: string): Promise<BootstrapJobRecord[]> {
-    const { results } = await this.db
-      .prepare(
-        `SELECT * FROM agent_runs WHERE service_id = ? AND kind = 'bootstrap' ORDER BY created_at DESC`,
-      )
-      .bind(serviceId)
-      .all<AgentRunRow>()
-    return (results ?? []).map(rowToRecord)
-  }
-
   async listByServices(serviceIds: string[]): Promise<BootstrapJobRecord[]> {
     if (serviceIds.length === 0) return []
     const out: BootstrapJobRecord[] = []

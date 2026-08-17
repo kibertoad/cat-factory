@@ -427,6 +427,10 @@ interface NodeServerContainerBundle {
   options: NodeContainerOptions
   repoProjectionRepository: DrizzleRepoProjectionRepository
   githubInstallationRepository: GitHubInstallationRepository
+  /** The five VCS entity projections, sourced once by the run platform (remote ⇄ Drizzle). */
+  entityProjectionRepositories: ReturnType<
+    typeof buildNodeRunPlatform
+  >['entityProjectionRepositories']
   environmentBackendRegistry: NodeAppRegistriesResult['environmentBackendRegistry']
   runnerBackendRegistry: NodeAppRegistriesResult['runnerBackendRegistry']
   resolveBinaryArtifactStore: NodeAccountDepsResult['resolveBinaryArtifactStore']
@@ -483,8 +487,17 @@ function buildNodePersistenceRegistry(bundle: {
   repos: ReturnType<typeof createDrizzleRepositories>
   repoProjectionRepository: DrizzleRepoProjectionRepository
   githubInstallationRepository: GitHubInstallationRepository
+  entityProjectionRepositories: ReturnType<
+    typeof buildNodeRunPlatform
+  >['entityProjectionRepositories']
 }): PersistenceRegistry {
-  const { dependencies, repos, repoProjectionRepository, githubInstallationRepository } = bundle
+  const {
+    dependencies,
+    repos,
+    repoProjectionRepository,
+    githubInstallationRepository,
+    entityProjectionRepositories,
+  } = bundle
   return {
     ...dependencies,
     agentRunRepository: repos.agentRunRepository,
@@ -513,6 +526,13 @@ function buildNodePersistenceRegistry(bundle: {
     // `REMOTE_PERSISTENCE_METHODS`; folded in explicitly like the stores above.
     repoProjectionRepository,
     githubInstallationRepository,
+    // The four ENTITY projections + the check-run one join them, for the same reason and now with
+    // a sharper one: a mothership-mode node's delegated GitHub client opens PRs and pushes
+    // branches for real, so it must be able to project what it just wrote. Reflected regardless of
+    // the mothership's own `config.github.enabled` (they land in `dependencies` only when the
+    // module is wired), else a node's own sync answers `... is not wired` on a mothership that
+    // hosts no App of its own.
+    ...entityProjectionRepositories,
   } as unknown as PersistenceRegistry
 }
 
@@ -535,6 +555,7 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     options,
     repoProjectionRepository,
     githubInstallationRepository,
+    entityProjectionRepositories,
     environmentBackendRegistry,
     runnerBackendRegistry,
     resolveBinaryArtifactStore,
@@ -613,6 +634,7 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
       repos,
       repoProjectionRepository,
       githubInstallationRepository,
+      entityProjectionRepositories,
     }),
     // The machine-node roster + revocation tombstones (SEC-5): recorded on every machine-token
     // mint, consulted by the shared machine gate on every /internal/* call, served to the owner
@@ -860,6 +882,9 @@ interface NodeContainerFinalizeBundle {
   defaultWebSearchUpstream: NodeRunServicesResult['defaultWebSearchUpstream']
   appRegistry: ReturnType<typeof buildNodeAppRegistry>
   repoProjectionRepository: DrizzleRepoProjectionRepository
+  entityProjectionRepositories: ReturnType<
+    typeof buildNodeRunPlatform
+  >['entityProjectionRepositories']
   vcsRegistry: NodeAppRegistriesResult['vcsRegistry']
   testSecretsService: NodeRunServicesResult['testSecretsService']
   capabilityCredentialsService: NodeRunServicesResult['capabilityCredentialsService']
@@ -953,6 +978,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     defaultWebSearchUpstream,
     appRegistry,
     repoProjectionRepository,
+    entityProjectionRepositories,
     vcsRegistry,
     testSecretsService,
     capabilityCredentialsService,
@@ -1116,6 +1142,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     options,
     repoProjectionRepository,
     githubInstallationRepository,
+    entityProjectionRepositories,
     environmentBackendRegistry,
     runnerBackendRegistry,
     resolveBinaryArtifactStore,

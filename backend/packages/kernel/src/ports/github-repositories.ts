@@ -93,7 +93,6 @@ export interface GitHubInstallationRepository {
    */
   listActiveForAccount(accountId: string): Promise<GitHubInstallation[]>
   upsert(installation: GitHubInstallation): Promise<void>
-  updateCachedToken(installationId: number, token: string, expiresAt: number): Promise<void>
   softDelete(installationId: number, at: number): Promise<void>
 }
 

@@ -115,15 +115,6 @@ export class D1GitHubInstallationRepository implements GitHubInstallationReposit
       .run()
   }
 
-  async updateCachedToken(installationId: number, token: string, expiresAt: number): Promise<void> {
-    await this.db
-      .prepare(
-        'UPDATE github_installations SET cached_token = ?, token_expires_at = ? WHERE installation_id = ?',
-      )
-      .bind(token, expiresAt, installationId)
-      .run()
-  }
-
   async softDelete(installationId: number, at: number): Promise<void> {
     await this.db
       .prepare('UPDATE github_installations SET deleted_at = ? WHERE installation_id = ?')

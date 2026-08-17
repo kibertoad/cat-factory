@@ -377,6 +377,17 @@ function defineMachineApiGate(harness: ConformanceHarness): void {
       expect(res.status).toBe(403)
     })
 
+    it('serves /internal/agent-kinds with the machine-token gate active', async () => {
+      const { call } = harness.makeApp()
+      // The AGENT-KIND CAPABILITY layer (the skills and tool servers a deployment assigns to its
+      // kinds, which a mothership-mode node merges with its own registry so a run does not
+      // silently drop the org's playbook). Mounted by the shared controller on both facades and
+      // machine-gated FIRST, so an unauthenticated call is a 403 everywhere — including on a
+      // deployment that assigns none, where the answer would otherwise be a legitimate empty set.
+      const res = await call('GET', '/internal/agent-kinds')
+      expect(res.status).toBe(403)
+    })
+
     it('serves /internal/notifications/deliver with the machine-token gate active', async () => {
       const { call } = harness.makeApp()
       // The notification DELIVERY endpoint (a mothership-mode node asks the mothership to deliver

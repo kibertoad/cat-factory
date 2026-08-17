@@ -106,7 +106,7 @@ import { BoardScanService } from './modules/boardScan/BoardScanService.js'
 import { TutorialProgressService } from './modules/tutorial/TutorialProgressService.js'
 import { TutorialTelemetryService } from './modules/tutorial/TutorialTelemetryService.js'
 import { UserSettingsService } from './modules/settings/UserSettingsService.js'
-import { type AgentKindRegistry } from '@cat-factory/agents'
+import { type AgentKindRegistry, type AgentKindSource } from '@cat-factory/agents'
 import type {
   FoundationalServiceModule,
   FragmentLibraryModule,
@@ -404,6 +404,13 @@ export interface CoreSpine {
    * drift this seam exists to remove — just moved one surface along.
    */
   binaryGenerators: BinaryGeneratorSource
+  /**
+   * Where a RUN's agent-kind CAPABILITY layer is read from, when that is not this process's own
+   * registry (a mothership-mode node). Undefined everywhere else, deliberately: unlike its three
+   * siblings this one MERGES with the local registry rather than replacing it, so "nothing to
+   * merge" is best expressed by there being no source at all.
+   */
+  agentKinds?: AgentKindSource
   /**
    * Where the foundational catalog's `builtin` tier is READ from — this process's own registry,
    * unless a mothership-mode node injected the remote source. Re-exposed for the reason

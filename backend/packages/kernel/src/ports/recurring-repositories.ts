@@ -20,16 +20,9 @@ export interface PipelineScheduleRepository {
   /** All schedules for a workspace (for the snapshot + UI). */
   list(workspaceId: string): Promise<PipelineSchedule[]>
   /**
-   * All schedules owned by a service, regardless of which workspace created them. Backs
-   * the in-org board: a schedule on a shared service shows on every workspace that mounts
-   * it. (Matches the schedule's `service_id` column.)
-   */
-  listByService(serviceId: string): Promise<PipelineSchedule[]>
-  /**
-   * Every schedule owned by ANY of the given services, in a single (chunked) query — the
-   * batched form of {@link PipelineScheduleRepository.listByService} used to compose a board's
-   * schedules from all the services it mounts without one round-trip per mount. Empty input →
-   * empty.
+   * Every schedule owned by ANY of the given services, in a single (chunked) query, so a
+   * schedule on a shared service shows on every workspace that mounts it. Matches the
+   * schedule's `service_id` column. Empty input → empty.
    */
   listByServices(serviceIds: string[]): Promise<PipelineSchedule[]>
   /**

@@ -48,6 +48,16 @@ export {
   normalizeSkillRefs,
   normalizeToolRefs,
 } from './agents/kinds/capabilities.js'
+// Where the deployment's capability LAYER is read from when it is not this process's own registry
+// (a mothership-mode node reads the mothership's, over `GET /internal/agent-kinds`). The kind
+// catalog itself stays node-local: only the data half can cross a wire.
+export {
+  type AgentKindCapabilityView,
+  type AgentKindSource,
+  agentKindCapabilityViews,
+  mergeKindCapabilities,
+  registryAgentKindSource,
+} from './agents/kinds/source.js'
 export {
   isInlineModelStep,
   REQUIREMENTS_REVIEW_AGENT_KIND,

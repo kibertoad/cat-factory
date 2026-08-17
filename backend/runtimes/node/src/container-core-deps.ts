@@ -338,6 +338,7 @@ function selectNodeRegistryDeps(bundle: NodeCoreDepsBundle) {
     promptFragmentRegistry: options.promptFragmentRegistry ?? promptFragmentRegistryWithBuiltins(),
     // …and where that pool is READ from when it is not the registry above (mothership mode).
     promptFragmentSource: options.promptFragmentSource,
+    agentKindSource: options.agentKindSource,
     // The app-owned initiative-preset registry; the initiative services read it and it is
     // re-exposed on Core for the snapshot descriptors + preset probe.
     initiativePresetRegistry,

@@ -115,6 +115,28 @@ const EMPTY: ResolvedToolServers = {
 }
 
 /**
+ * What this dispatch DECLARES, before any servability question: this build's registry, unioned
+ * with the deployment-level layer the engine resolved onto the context when a source is wired (a
+ * mothership-mode node reads the mothership's over `GET /internal/agent-kinds`).
+ *
+ * The union is deduplicated by server id with the LOCAL definition winning, matching the
+ * precedence `toolServersFor` gives a kind's own declaration over one assigned to it. Absent
+ * `orgToolServers` ⇒ the registry answers alone, byte-for-byte the previous behaviour.
+ */
+function declaredToolServers(
+  input: ResolveToolServersInput,
+): ReturnType<AgentKindRegistry['toolServersFor']> {
+  const local = input.agentKindRegistry.toolServersFor(input.context.agentKind as AgentKind)
+  const org = input.context.orgToolServers ?? []
+  if (!org.length) return local
+  const ids = new Set(local.servers.map((server) => server.id))
+  return {
+    ...local,
+    servers: [...local.servers, ...org.filter((server) => !ids.has(server.id))],
+  }
+}
+
+/**
  * Resolve the tool servers for one dispatch. Never throws: a server that cannot be wired is
  * reported as unavailable (which the prompt states) rather than failing the run — an agent told
  * a tool is missing does useful degraded work, while a run that refuses to start does none.
@@ -122,7 +144,7 @@ const EMPTY: ResolvedToolServers = {
 export async function resolveToolServers(
   input: ResolveToolServersInput,
 ): Promise<ResolvedToolServers> {
-  const declared = input.agentKindRegistry.toolServersFor(input.context.agentKind as AgentKind)
+  const declared = declaredToolServers(input)
   if (!declared.servers.length) {
     reportUnknown(input, declared.unknown)
     return EMPTY

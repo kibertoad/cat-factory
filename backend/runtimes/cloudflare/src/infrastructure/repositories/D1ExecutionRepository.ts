@@ -78,16 +78,6 @@ export class D1ExecutionRepository implements ExecutionRepository {
     return row?.n ?? 0
   }
 
-  async listByService(serviceId: string): Promise<ExecutionInstance[]> {
-    const { results } = await this.db
-      .prepare(
-        `SELECT * FROM agent_runs WHERE service_id = ? AND kind = 'execution' ORDER BY created_at`,
-      )
-      .bind(serviceId)
-      .all<ExecutionRow>()
-    return tryDecodeRows(results, rowToExecution, runContext)
-  }
-
   async listByServices(serviceIds: string[]): Promise<ExecutionInstance[]> {
     if (serviceIds.length === 0) return []
     const out: ExecutionInstance[] = []

@@ -87,6 +87,12 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
     // mothership), while the source is the pool any RUN folds its standards from.
     promptFragments:
       dependencies.promptFragmentSource ?? registryPromptFragmentSource(promptFragmentRegistry),
+    // The fourth member of the family, and the only one whose default and override MERGE rather
+    // than replace: a kind's own declarations belong to the code implementing it (which stays
+    // local), while the deployment's assignments to BUILT-IN kinds are the layer that can drift.
+    // Left UNDEFINED when no source is injected, rather than defaulted to the in-process one, so
+    // the merge path is not even entered on a deployment that has nothing to merge.
+    ...(dependencies.agentKindSource ? { agentKinds: dependencies.agentKindSource } : {}),
     initiativePresetRegistry:
       dependencies.initiativePresetRegistry ?? defaultInitiativePresetRegistry(),
     workRunner: dependencies.workRunner ?? new NoopWorkRunner(),

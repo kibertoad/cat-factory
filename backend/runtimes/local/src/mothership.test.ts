@@ -217,6 +217,43 @@ describe('composeMothership', () => {
     }
   })
 
+  it('reads the agent-kind capability layer from the mothership, and MERGES it', async () => {
+    // The fourth of the same family, and the only one that merges rather than replaces: this
+    // node's build owns each kind's executable half (prompts, hooks, output parsers), so the
+    // catalog stays local, while `assignSkills`/`assignToolServers` are the deployment's layer —
+    // data whose absence here is silent, since the agent simply works without the org's playbook.
+    const seen: { url: string; auth: string | null }[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      seen.push({ url: String(url), auth: new Headers(init?.headers).get('authorization') })
+      return new Response(
+        JSON.stringify({
+          kinds: [
+            {
+              kind: 'coder',
+              skills: { bundled: [], catalog: [{ skillId: 'src:s1:playbook' }], unknown: [] },
+              toolServers: { servers: [], unknown: [] },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    })
+
+    const { agentKinds, close } = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test/', LOCAL_MOTHERSHIP_TOKEN: 'machine-tok' }),
+    )
+    try {
+      const views = await agentKinds.capabilities()
+      expect(views[0]?.skills.catalog).toEqual([{ skillId: 'src:s1:playbook' }])
+      // Same base URL and same per-request machine token as the persistence RPC.
+      expect(seen).toEqual([
+        { url: 'https://m.test/internal/agent-kinds', auth: 'Bearer machine-tok' },
+      ])
+    } finally {
+      close()
+    }
+  })
+
   it('serves the local-first telemetry bucket from the laptop, never over the RPC', async () => {
     // Telemetry is written on the hot path of every LLM call / dispatch / provisioning attempt and
     // read back by the observability panel + the board's per-step rollups. If it resolved to the

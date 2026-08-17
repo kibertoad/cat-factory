@@ -8,11 +8,16 @@ import {
 } from '@cat-factory/kernel'
 import { REMOTE_PERSISTENCE_METHODS } from './rpc-allowlist.js'
 import {
+  checkInstallationListScope,
+  checkInstallationUpsertScope,
   checkLibrarySourceScope,
   checkOwnerFieldUpsertScope,
   checkOwnerPairScope,
+  checkServiceInsertScope,
   checkServiceMountScope,
+  checkServiceUpdateScope,
   checkUsageRecordScope,
+  checkWorkspaceListScope,
 } from './rpc-scope.logic.js'
 
 // The mothership-mode persistence RPC wire protocol.
@@ -227,6 +232,59 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *                       columns, so binding only the declared owner would let a token scoped to one
  *                       tenant repoint another tenant's source at a repo it controls, whose Markdown
  *                       bodies the victim's next sync folds into their prompts as guidance.
+ *   - `workspaceList` — `args[arg]` is `string[]` of workspaceIds; EVERY one must resolve to an
+ *                       in-scope account, so a missing or out-of-scope board fails closed. The
+ *                       workspace-keyed sibling of `blockList`/`serviceList`, and what a read whose
+ *                       ANSWER is a subset of a candidate list needs (`linkedWorkspaces`): binding
+ *                       the candidates is what stops a node learning about boards it cannot address
+ *                       by passing them in. Empty input is allowed (it returns empty).
+ *   - `installation`  — `args[arg]` is a VCS installation id (a `github_installations` row's
+ *                       `installationId`, a NUMBER) with no workspace/account arg; resolve that
+ *                       row's owning account server-side. A PAT connection stores no `accountId`,
+ *                       so the resolver falls back to the connector workspace's account: the
+ *                       binding is "whoever owns the board that connected it" either way. A missing
+ *                       row, an unreadable table, or no resolver fails closed (404).
+ *   - `installationList`
+ *                     — `args[arg]` is `number[]` of installation ids (the connect page's batched
+ *                       annotation read); EVERY id must resolve to an in-scope account. Unlike the
+ *                       other list kinds an id with NO row is admitted: the caller is asking which
+ *                       of the ids GitHub offered are already bound, and refusing an unbound one
+ *                       would make the read unusable for its only purpose. Nothing is disclosed by
+ *                       that: a row absent from the answer is the same value the caller sent in.
+ *   - `installationUpsert`
+ *                     — `args[arg]` is a `GitHubInstallation` record (the App-connect / PAT-connect
+ *                       write). Binds THREE things, and each closes a different hole: the connector
+ *                       `workspaceId` FIELD (the row is read back through it), the DECLARED
+ *                       `accountId` when non-null (the row is shared with every board of that
+ *                       account, so stamping a foreign one hands that org this node's connection),
+ *                       and — when a row with the same `installationId` already EXISTS — the STORED
+ *                       row's account, because the write conflicts on the installation id alone. An
+ *                       absent row is a CREATE and passes on the declared halves. Without the third,
+ *                       an in-scope caller could name another org's installation id and repoint its
+ *                       binding at a board it controls, which is the account-takeover primitive
+ *                       `GitHubInstallationService.connect` refuses in the service layer the RPC
+ *                       bypasses.
+ *   - `serviceInsert` — `args[arg]` is a `Service` record (`registerServiceForFrame`'s insert, run on
+ *                       EVERY top-level frame creation). Binds the DECLARED `accountId` and the
+ *                       `frameBlockId`: an EXISTING frame block must resolve to the same in-scope
+ *                       account, and one that does not exist yet is the ordinary case (the service
+ *                       row is written BEFORE its frame block, so an absent block is a create and
+ *                       passes on the declared account alone; block ids are server-minted, so a
+ *                       caller cannot reserve one another tenant will later be given).
+ *
+ *                       The equality is the point. `getByFrameBlock` resolves by frame block id
+ *                       ALONE — the unique index is `(account_id, frame_block_id)`, so two accounts
+ *                       may hold a service for one frame id and the walk answers with an arbitrary
+ *                       one — and `resolveRepoTarget` walks it on every dispatch. Binding only the
+ *                       declared account would let a caller plant a service on another org's frame
+ *                       block and redirect that org's runs at a repo it controls.
+ *   - `serviceUpdate` — `args[arg]` is a serviceId and `args[patchArg]` a `ServicePatch`. Binds the
+ *                       STORED service's owning account (like `service`) AND, when the patch
+ *                       declares an `accountId`, the account it would move the service INTO: a patch
+ *                       that re-homes a service into an account the caller cannot reach would put an
+ *                       attacker-authored frame in that org's mountable catalog. A patch clearing the
+ *                       account (an explicit null) is refused rather than admitted — a service with
+ *                       no account is the legacy/unscoped row, which no scoped token may create.
  *   - `usageRecord`   — `args[arg]` is a `TokenUsageRecord` (the spend ledger's `record`). Binds on
  *                       the row's `workspaceId` FIELD like `workspaceField`, AND ADDITIONALLY pins
  *                       the two DENORMALIZED rollup keys the account- and user-tier budget reads
@@ -248,9 +306,15 @@ export type ScopeRule =
   | { kind: 'visibility'; arg: number }
   | { kind: 'block'; arg: number }
   | { kind: 'blockList'; arg: number }
+  | { kind: 'workspaceList'; arg: number }
   | { kind: 'serviceList'; arg: number }
   | { kind: 'service'; arg: number }
   | { kind: 'serviceMount'; arg: number }
+  | { kind: 'serviceInsert'; arg: number }
+  | { kind: 'serviceUpdate'; arg: number; patchArg: number }
+  | { kind: 'installation'; arg: number }
+  | { kind: 'installationList'; arg: number }
+  | { kind: 'installationUpsert'; arg: number }
   | { kind: 'skillSource'; arg: number }
   // `entity` names the resolver that binds the STORED row. Skills live in ONE tier, so theirs is
   // the account-keyed form; a library owned by an `(ownerKind, ownerId)` PAIR takes
@@ -294,6 +358,23 @@ export type LibrarySourceOwnerLookup =
   /** No such source row: for an id-keyed upsert this is a CREATE. */
   | { status: 'absent' }
   /** This deployment cannot read that source table at all, so nothing may be concluded. */
+  | { status: 'unreadable' }
+
+/**
+ * What a single-row OWNER lookup answered, in the same three states and for the same reason
+ * {@link LibrarySourceOwnerLookup} gives: a rule that reads "no such row" as an ADMISSION (the
+ * create half of an id-keyed write) may never spend a table it could not read as that admission.
+ *
+ * `accountId` is nullable inside `found` because a row can legitimately exist with no account (a
+ * PAT installation binds a board, not an org; a legacy service predates accounts). That is not a
+ * third state: it fails the scope check like any other unresolvable account, and it must not be
+ * mistaken for `absent`, which is the only value an id-keyed create may be granted on.
+ */
+export type EntityOwnerLookup =
+  | { status: 'found'; accountId: string | null | undefined }
+  /** No such row: for an id-keyed write this is a CREATE. */
+  | { status: 'absent' }
+  /** This deployment cannot read that table at all, so nothing may be concluded. */
   | { status: 'unreadable' }
 
 export interface MethodSpec {
@@ -362,6 +443,23 @@ export interface DispatchOptions {
     entity: LibrarySourceEntity,
     sourceId: string,
   ): Promise<LibrarySourceOwnerLookup>
+  /**
+   * Resolve a VCS installation row's owning account (`github_installations`), as a three-state
+   * lookup: an App binding answers its own `accountId`, a per-workspace PAT binding (which stores
+   * none) answers its connector workspace's account, and a row this deployment cannot read answers
+   * `unreadable` rather than the `absent` an id-keyed upsert would be entitled to read as a create.
+   * Required for the `installation` / `installationList` / `installationUpsert` kinds; a call
+   * hitting one with no resolver fails closed (404), like the other entity resolvers.
+   */
+  resolveInstallationOwner?(installationId: number): Promise<EntityOwnerLookup>
+  /**
+   * Resolve a FRAME BLOCK's owning account (block → home workspace → account), as a three-state
+   * lookup. Distinct from {@link resolveBlockAccountId} precisely because of the third state: the
+   * `serviceInsert` rule admits an absent frame block (the service row is written before its block)
+   * and must refuse an unreadable one, and a nullable answer cannot tell those apart. Required for
+   * the `serviceInsert` kind; a call hitting it with no resolver fails closed (404).
+   */
+  resolveFrameBlockOwner?(frameBlockId: string): Promise<EntityOwnerLookup>
   /**
    * Resolve the member userIds of an account (the mothership's `MembershipRepository.listByAccount`,
    * mapped to `userId`s). Required for the `user`/`userList` scope kinds: a requested user is in
@@ -589,7 +687,10 @@ async function checkCallScope(
  * default keeps the switches jointly exhaustive over `ScopeRule`.
  */
 async function checkEntityListCallScope(
-  rule: Extract<ScopeRule, { kind: 'userList' | 'blockList' | 'serviceList' }>,
+  rule: Extract<
+    ScopeRule,
+    { kind: 'userList' | 'blockList' | 'workspaceList' | 'serviceList' | 'installationList' }
+  >,
   args: unknown[],
   opts: DispatchOptions,
   helpers: {
@@ -643,6 +744,10 @@ async function checkEntityListCallScope(
       }
       break
     }
+    case 'workspaceList':
+      return checkWorkspaceListScope(args[rule.arg], opts, inScope, denied)
+    case 'installationList':
+      return checkInstallationListScope(args[rule.arg], opts, inScope, denied)
     default: {
       // Fail closed: a list kind with no case here must never reach the method unscoped. The
       // `never` binding makes adding a list kind without a case a compile error.
@@ -666,13 +771,24 @@ async function checkEntityListCallScope(
  * ceiling; the `never` default keeps the switches jointly exhaustive over `ScopeRule`.
  */
 async function checkEntityIdCallScope(
-  rule: Extract<ScopeRule, { kind: 'block' | 'service' | 'skillSource' }>,
+  rule: Extract<ScopeRule, { kind: 'block' | 'service' | 'skillSource' | 'installation' }>,
   args: unknown[],
   opts: DispatchOptions,
   inScope: (accountId: string | null | undefined) => boolean,
 ): Promise<DispatchResult | undefined> {
   const denied = fail('not_found', 'Not found')
   const id = args[rule.arg]
+  // An installation id is a NUMBER (GitHub's own id, or the synthetic one a PAT connection derives
+  // from its workspace); every other entity here is an opaque string id.
+  if (rule.kind === 'installation') {
+    if (typeof id !== 'number' || !opts.resolveInstallationOwner) return denied
+    const owner = await opts.resolveInstallationOwner(id)
+    // `absent` fails closed here, unlike in `installationList`: a point read/write names ONE row,
+    // so an id with no row is a caller addressing something it cannot bind, not a question about
+    // its own list.
+    if (owner.status !== 'found' || !inScope(owner.accountId)) return denied
+    return undefined
+  }
   if (typeof id !== 'string') return denied
   switch (rule.kind) {
     case 'block': {
@@ -766,9 +882,15 @@ async function checkEntityCallScope(
         | 'userList'
         | 'block'
         | 'blockList'
+        | 'workspaceList'
         | 'service'
         | 'serviceList'
         | 'serviceMount'
+        | 'serviceInsert'
+        | 'serviceUpdate'
+        | 'installation'
+        | 'installationList'
+        | 'installationUpsert'
         | 'skillSource'
         | 'accountFieldUpsert'
         | 'usageRecord'
@@ -799,13 +921,16 @@ async function checkEntityCallScope(
     }
     case 'userList':
     case 'blockList':
+    case 'workspaceList':
     case 'serviceList':
+    case 'installationList':
       // The batched list-scope kinds (each id must resolve in scope) are split out to keep this
       // function under the complexity ceiling; same contract (404 `denied` / `undefined`).
       return checkEntityListCallScope(rule, args, opts, helpers)
     case 'block':
     case 'service':
     case 'skillSource':
+    case 'installation':
       // The single-ENTITY-ID kinds (an opaque id bound through a server-side account resolver) are
       // split out to keep this function under the complexity ceiling; same contract.
       return checkEntityIdCallScope(rule, args, opts, inScope)
@@ -813,75 +938,45 @@ async function checkEntityCallScope(
       // Binds the record's DECLARED account and the STORED row's account together; see the rule's
       // entry on `ScopeRule` for why the declared half alone is not enough.
       return checkAccountFieldUpsertScope(rule, args, opts, inScope)
-    case 'serviceMount': {
-      const denialForMount = await checkServiceMountScope(args[rule.arg], opts, inScope, denied)
-      if (denialForMount) return denialForMount
-      break
-    }
-    case 'usageRecord': {
-      const denialForUsage = await checkUsageRecordScope(args[rule.arg], opts, inScope, denied)
-      if (denialForUsage) return denialForUsage
-      break
-    }
-    case 'owner': {
-      // A tenant-library row keyed by an (ownerKind, ownerId) PAIR. Resolve the owning account
-      // server-side and reject anything outside the token scope (404, no existence leak):
-      //   - 'workspace' → the ownerId is a workspaceId; resolve its owning account (like `workspace`).
-      //   - 'account'   → the ownerId IS an accountId (like `account`).
-      // Any other kind, a non-string ownerId, or an unresolvable/out-of-scope owner fails closed.
-      const denialForOwner = await checkOwnerPairScope(
-        args[rule.kindArg],
-        args[rule.idArg],
-        opts,
-        inScope,
-        denied,
-      )
-      if (denialForOwner) return denialForOwner
-      break
-    }
+    case 'serviceMount':
+      return checkServiceMountScope(args[rule.arg], opts, inScope, denied)
+    case 'usageRecord':
+      return checkUsageRecordScope(args[rule.arg], opts, inScope, denied)
+    case 'serviceInsert':
+      // Binds the record's declared account AND the frame block it claims; see the rule's entry on
+      // `ScopeRule` for why an absent block is the ordinary create and a foreign one is a hijack.
+      return checkServiceInsertScope(args[rule.arg], opts, inScope, denied)
+    case 'serviceUpdate':
+      // Binds the STORED service's account AND the account a patch would re-home it into.
+      return checkServiceUpdateScope(args[rule.arg], args[rule.patchArg], opts, inScope, denied)
+    case 'installationUpsert':
+      // Binds the connector workspace, the declared account and the STORED row together; see the
+      // rule's entry on `ScopeRule` for the takeover the third half closes.
+      return checkInstallationUpsertScope(args[rule.arg], opts, inScope, denied)
+    case 'owner':
+      // A tenant-library row keyed by an (ownerKind, ownerId) PAIR, positionally.
+      return checkOwnerPairScope(args[rule.kindArg], args[rule.idArg], opts, inScope, denied)
     case 'ownerField': {
-      // The record-based library `upsert(record)` whose (ownerKind, ownerId) are FIELDS of the
-      // record, not positional args. Bind on those fields exactly like `owner` — a non-object arg,
-      // a missing/non-string field, or an unresolvable/out-of-scope owner is refused as 404, so the
-      // row can only ever be persisted under the caller's own in-scope owner.
+      // The same pair as FIELDS of a record `upsert(record)`, so the row can only ever be
+      // persisted under the caller's own in-scope owner.
       const record = args[rule.arg]
       const isObj = record && typeof record === 'object'
-      const denialForOwnerField = await checkOwnerPairScope(
+      return checkOwnerPairScope(
         isObj ? (record as { ownerKind?: unknown }).ownerKind : undefined,
         isObj ? (record as { ownerId?: unknown }).ownerId : undefined,
         opts,
         inScope,
         denied,
       )
-      if (denialForOwnerField) return denialForOwnerField
-      break
     }
-    case 'librarySource': {
+    case 'librarySource':
       // A repo-sourced library's sync method carries only a source id; resolve that source's owning
       // tier PAIR server-side and bind it like `owner` (the owner-pair analogue of `skillSource`).
-      const denialForSource = await checkLibrarySourceScope(
-        rule.entity,
-        args[rule.arg],
-        opts,
-        inScope,
-        denied,
-      )
-      if (denialForSource) return denialForSource
-      break
-    }
-    case 'ownerFieldUpsert': {
+      return checkLibrarySourceScope(rule.entity, args[rule.arg], opts, inScope, denied)
+    case 'ownerFieldUpsert':
       // Binds the record's DECLARED owner and the STORED row's owner together; see the rule's entry
       // on `ScopeRule` for why the declared half alone is not enough.
-      const denialForUpsert = await checkOwnerFieldUpsertScope(
-        rule.entity,
-        args[rule.arg],
-        opts,
-        inScope,
-        denied,
-      )
-      if (denialForUpsert) return denialForUpsert
-      break
-    }
+      return checkOwnerFieldUpsertScope(rule.entity, args[rule.arg], opts, inScope, denied)
     default: {
       // Fail closed: a `ScopeRule` kind with no case in EITHER switch must NEVER reach the method
       // unscoped. The `never` binding makes adding a kind without a case a compile error.

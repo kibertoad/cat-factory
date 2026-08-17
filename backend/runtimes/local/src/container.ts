@@ -451,6 +451,13 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
           // MOTHERSHIP's registrations; this node's build can only hold a second copy of them.
           // `startLocal` warns at boot if this node registered fragments anyway.
           promptFragmentSource: mothership.promptFragments,
+          // …and the capability layer the deployment assigns to agent KINDS. The fourth of the
+          // family and the only one that MERGES: this node's build owns each kind's executable
+          // half (prompts, hooks, output parsers), which is why the catalog stays local and a
+          // step naming an unknown kind still fails loudly; what it cannot own is the org's
+          // decision to give `coder` its house playbook or its issue-tracker MCP server, which is
+          // data, and whose absence here would silently produce work without them.
+          agentKindSource: mothership.agentKinds,
           // …and the LIVING DOCUMENTS those standards may name. The fourth of the same family, and
           // the one whose reason is a credential rather than a registration: the document-source
           // credentials are configured in the MOTHERSHIP's environment and never reach a laptop, so

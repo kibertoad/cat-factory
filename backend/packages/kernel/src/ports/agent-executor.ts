@@ -28,6 +28,7 @@ import type {
 } from '../domain/types.js'
 import type { LocalModelDeclarations } from '../domain/local-model-declarations.js'
 import type {
+  McpServerDefinition,
   ResolvedSkill,
   ResolvedToolServer,
   UnavailableToolServer,
@@ -302,6 +303,22 @@ export interface AgentRunContext {
    * telemetry snapshot). Absent ⇒ the kind declared none.
    */
   toolServers?: ResolvedToolServer[]
+  /**
+   * The tool servers the DEPLOYMENT declares for this kind, resolved by the engine from a source
+   * that is not this process's registry: a mothership-mode node reads the mothership's capability
+   * layer over `GET /internal/agent-kinds`, because a playbook or MCP server the org assigned to a
+   * BUILT-IN kind is data its own build may be one release behind on.
+   *
+   * Carried on the context because the ENGINE owns the read (one per dispatch) while the EXECUTOR
+   * owns whether each server is SERVABLE here (the resolved harness, the facade-wired credential
+   * resolver) — the split ADR 0029 states. Non-secret by construction: a definition names a
+   * credential's KEY, never its value, which is the same bar {@link toolServers} already meets for
+   * the telemetry snapshot.
+   *
+   * Absent ⇒ no deployment-level source is wired, and the executor reads its own registry exactly
+   * as before.
+   */
+  orgToolServers?: McpServerDefinition[]
   /**
    * Tool servers the kind declared that were NOT wired for this dispatch, with the reason. The
    * prompt states them so the agent plans around a tool it does not have rather than discovering

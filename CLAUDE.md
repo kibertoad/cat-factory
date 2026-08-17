@@ -200,7 +200,7 @@ org/durable state: allow-list + scope rule + round-trip and cross-account-refusa
 `local-sqlite` (a per-user/per-deployment credential or local-runner knob), `telemetry` (append-heavy,
 hot-path run observability the node also READS locally), or `excluded` (named in the drift guard's
 classification map, with the reason). There is no fifth outcome ("it doesn't apply to mothership mode"
-is not one), and `pending` is a _migration_ state, not a landing pad for new work. The tracker holds
+is not one), and the guard no longer has a `pending` word to park one in. The tracker holds
 each bucket's implementation pattern, the `pickRepoSource` rule for services reading off `options.db`,
 the `/internal/*` rule for new cross-cutting concerns, and the sealed-secret rule (a repo that decrypts
 INSIDE the repo cannot go remote, because the mothership's `ENCRYPTION_KEY` never reaches a laptop).

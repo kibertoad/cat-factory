@@ -84,6 +84,7 @@ const SEAM_ROUTES = {
   foundationalBuiltinSource: 'option',
   binaryGeneratorSource: 'option',
   promptFragmentSource: 'option',
+  agentKindSource: 'option',
   // Registered together on one `createBackendRegistries()` bundle and injected as
   // `backendRegistries`, because an environment backend and its runner backend are two halves of
   // one deployment's infrastructure and splitting them into two options would let a deployment
@@ -157,6 +158,7 @@ const BOOT_ROUTES = {
   foundationalBuiltinSource: 'facade-internal',
   binaryGeneratorSource: 'facade-internal',
   promptFragmentSource: 'facade-internal',
+  agentKindSource: 'facade-internal',
   environmentBackendRegistry: 'bundled',
   runnerBackendRegistry: 'bundled',
   providerRegistry: 'internal',

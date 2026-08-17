@@ -45,6 +45,7 @@ export type RunContextAdmissionDeps = Pick<
   | 'resolveValidationChecks'
   | 'fragmentResolver'
   | 'skillResolver'
+  | 'agentKindSource'
   | 'spendService'
   | 'workspaceSettingsService'
   | 'resolveBinaryArtifactStore'
@@ -94,6 +95,7 @@ export function buildRunContextAndAdmission(deps: RunContextAdmissionDeps): {
     resolveValidationChecks: deps.resolveValidationChecks,
     fragmentResolver: deps.fragmentResolver,
     skillResolver: deps.skillResolver,
+    agentKindSource: deps.agentKindSource,
     foundationalServiceResolver: deps.foundationalServiceResolver,
     binaryGeneratorSource: deps.binaryGeneratorSource,
     resolveBinaryArtifactStore: deps.resolveBinaryArtifactStore,

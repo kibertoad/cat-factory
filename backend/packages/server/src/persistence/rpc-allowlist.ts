@@ -1,4 +1,6 @@
 import type { PersistenceMethodTable } from './rpc.js'
+import { LIBRARY_PERSISTENCE_METHODS } from './rpc-allowlist-libraries.js'
+import { VCS_PERSISTENCE_METHODS } from './rpc-allowlist-vcs.js'
 
 // The mothership-mode persistence ALLOW-LIST — the default-deny table naming every repository
 // method a mothership-mode node may invoke over `POST /internal/persistence`, and the scope rule
@@ -172,6 +174,14 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   workspaceMemberRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
     getRolesForUserInWorkspaces: { scope: { kind: 'selfUser', arg: 0 } },
+    // The board's roster, read by the members panel a mothership-mode SPA serves and by the
+    // visibility read that decides which restricted boards a user sees at all. Member-level and
+    // workspace-scoped, exactly like `get`: the row carries a role and a grantor id, no credential.
+    // The roster WRITES stay admin-gated (`members.manage`), so they are not here.
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    // Which boards the caller holds an explicit member row in. Bound by `selfUser`, not `user`:
+    // this is the caller's own visibility, and a node has no business enumerating a teammate's.
+    listWorkspaceIdsForUser: { scope: { kind: 'selfUser', arg: 0 } },
   },
   // --- Member-display read surface ------------------------------------------------
   // The user DISPLAY records the account members panel enriches its roster with
@@ -204,6 +214,11 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     get: { scope: { kind: 'user', arg: 0 } },
     listByIds: { scope: { kind: 'userList', arg: 0 } },
     sessionGeneration: { scope: { kind: 'selfUser', arg: 0 } },
+    // The profile edit (name / email / avatar), which the SPA a mothership-mode node serves offers
+    // exactly as a hosted one does. Bound by `selfUser`: the patch names the row it writes, and
+    // nothing here lets a node edit anyone but the ONE mothership user it acts as — which is the
+    // same bar the service layer applies, rather than one the RPC would be bypassing.
+    update: { scope: { kind: 'selfUser', arg: 0 } },
   },
   // --- Board-load read surface --------------------------------------------------
   // The workspace-scoped reads a `GET /workspaces/:id` snapshot assembles. Each takes the
@@ -224,14 +239,29 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // frame's service in ONE query (the duplicate-service check when linking a monorepo, and the
     // frame-subtree deletion cleanup in `BoardService`). arg0 is a `frameBlockIds[]` array, so the
     // `blockList` rule resolves each frame block's home workspace's account server-side and fails
-    // closed on any missing/out-of-scope id (empty input → empty). The remaining service CRUD +
-    // `getByRepo` (the GitHub-sync repo→service link) stay off the SPA path — a later slice.
+    // closed on any missing/out-of-scope id (empty input → empty).
     listByFrameBlocks: { scope: { kind: 'blockList', arg: 0 } },
     // The org-catalog mount flow reads a single service by id before mounting it onto a board
     // (`ServiceMountService.mount` — the cross-org guard that a service is mounted only within
     // its own account). arg0 is a serviceId with no workspace arg, so the `service` rule resolves
     // its owning account server-side.
     get: { scope: { kind: 'service', arg: 0 } },
+    // --- Service CRUD ------------------------------------------------------------
+    // `insert` is the one a mothership-mode node could not do without: `registerServiceForFrame`
+    // runs it on EVERY top-level frame creation, so until now such a node could not create a
+    // service frame at all. It needed more than an allow-list line, which is why it waited: no
+    // existing rule bound it soundly, and the `serviceInsert` rule added with this slice is what
+    // does — it binds the declared account AND the frame block the row claims, so a service can
+    // never be planted on another org's frame (where `resolveRepoTarget`'s frame-block walk could
+    // then redirect that org's runs at a repo the caller controls).
+    insert: { scope: { kind: 'serviceInsert', arg: 0 } },
+    // The repo-link patch (`addServiceFromRepo` / the bootstrap's post-create link). `serviceUpdate`
+    // binds the STORED service's account and, when the patch re-homes it, the destination account.
+    update: { scope: { kind: 'serviceUpdate', arg: 0, patchArg: 1 } },
+    // Frame deletion dooms the service it registered; the batched form is what the cascade uses
+    // (`removal-cascade.ts`), the single form the last frame's own delete.
+    delete: { scope: { kind: 'service', arg: 0 } },
+    deleteMany: { scope: { kind: 'serviceList', arg: 0 } },
   },
   // --- Shared-service mount management surface -------------------------------------
   // The org-catalog / shared-service mounting flow a mothership-mode SPA drives
@@ -269,6 +299,13 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'serviceMount', arg: 0 } },
     update: { scope: { kind: 'workspace', arg: 0 } },
     remove: { scope: { kind: 'workspace', arg: 0 } },
+    // The two batched forms the frame-deletion cascade and the board-delete re-home decision run.
+    // They were held back only because the flows around them (service CRUD, workspace delete) were
+    // themselves mothership-internal; service CRUD is now remote, so the cascade that finishes it
+    // must be too, or a node deletes a frame and leaves its mounts pointing at a doomed service on
+    // every OTHER board in the org. Both take `serviceIds[]` (the `serviceList` rule).
+    listByServiceIds: { scope: { kind: 'serviceList', arg: 0 } },
+    removeByServices: { scope: { kind: 'serviceList', arg: 0 } },
   },
   workspaceSettingsRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
@@ -845,6 +882,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'workspace', arg: 0 } },
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     listByExecution: { scope: { kind: 'workspace', arg: 0 } },
+    // The single-grade read behind the Kaizen screen's detail view. Workspace-keyed on arg0 like
+    // its siblings; it was the last read on this repo a node could not serve.
+    get: { scope: { kind: 'workspace', arg: 0 } },
   },
   // Mixed (workspaceId + blockId/stage): the workspace arg stays the scope key.
   requirementReviewRepository: {
@@ -882,6 +922,11 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   kaizenVerifiedComboRepository: {
     getByKey: { scope: { kind: 'workspace', arg: 0 } },
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    // The streak write the grading sweep records once a combo verifies. Best-effort, which is
+    // exactly why it was easy to leave off and wrong to: a swallowed `unknown_method` means a
+    // mothership-mode node's runs never build a streak, and the screen reads as an org whose local
+    // developers verify nothing.
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
   },
   // Env-config-repair (a Tester sub-flow) lists a workspace's repair jobs on the run path
   // (`listByWorkspace`), and the board's run controls retry / stop a failed or running repair run:
@@ -1011,6 +1056,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     getByBlock: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
     deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    // The workspace-wide list (the board-delete purge's read, and the inspector's "which frames
+    // hold credentials" summary). Workspace-scoped and sealed like its siblings.
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
   },
   // The PER-WORKSPACE CAPABILITY CREDENTIALS — the tenant-scoped home for the secrets a registered
   // tool server / generative binary integration declares by name. `credentials` rides a SEALED
@@ -1072,58 +1120,12 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
     delete: { scope: { kind: 'workspace', arg: 0 } },
   },
-  // --- VCS / GitHub projection READ surface ---------------------------------------
-  // The GitHub read models the SPA's VCS board panels display (repos / branches / PRs /
-  // issues), served straight from the local projections by `GitHubService` (`container.github`)
-  // — fast, rate-limit-free, and NO GitHub API call, so they run unchanged in mothership mode
-  // over the remote-sourced projection repos. Each takes the workspaceId as arg0 (the
-  // `workspace` rule); reads only.
-  //
-  // These same reads are ALSO the run path: `resolveRepoTarget` (which runs on EVERY
-  // container-agent dispatch to find a block's repo) reads `githubInstallationRepository.
-  // getByWorkspace` FIRST and returns null if there's no installation, THEN walks the
-  // `github_repos` projection via `repoProjectionRepository.list` and the block ancestry via
-  // `blockRepository.get` / `serviceRepository.getByFrameBlock` (both already remote). So
-  // closing the run-path gap for real (non-fake-executor) runs needs BOTH the installation
-  // read and `list` — allow-listing `list` alone left the resolver failing one call earlier on
-  // the un-remoted installation read. `getByWorkspace` is a member-level read (its own binding
-  // or the account-shared one), workspace-scoped on arg0.
-  //
-  // Deliberately EXCLUDED (a later "GitHub sync + repo-write" slice): the projection WRITE
-  // surface — `upsertMany` (the sync/webhook ingest; the mothership owns GitHub sync, since the
-  // App + webhooks live there), the board-linkage write `repoProjectionRepository.setMonorepo`,
-  // the sync cursors (`getCursor`/`setCursor`, keyed on installationId not
-  // workspaceId), and `tombstoneMissing`. `repoProjectionRepository.get` stays off too: it backs
-  // only `GitHubService.resolve` for the repo-WRITE endpoints (create-branch / open-PR /
-  // merge / comment), and exposing it alone would let create-branch/open-PR perform the real
-  // GitHub write and THEN fail on the un-remoted `upsertMany` projection refresh — a worse
-  // failure than today's clean pre-write refusal. It comes back with the repo-write slice. The
-  // rest of `githubInstallationRepository` (installationId-keyed reads, sync/token writes, the
-  // fan-out, the cron `listActive`) also stays off — only the two SCOPED reads the run path needs
-  // are opened here.
-  //
-  // `listActiveForAccount` is the second: the account-tier installation lookup
-  // (`createTierInstallationResolvers.forAccount`) every repo-sourced library's sync and the skill
-  // run path's resource fetch go through. It exists precisely BECAUSE the cron `listActive` cannot
-  // be exposed — a global read across every tenant answers a single-account question, and no scope
-  // rule can bind an argument-less method. The scoped form takes the accountId as arg0 (the
-  // `account` rule) and returns only rows bound to that account or to one of its own boards.
-  githubInstallationRepository: {
-    getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
-    listActiveForAccount: { scope: { kind: 'account', arg: 0 } },
-  },
-  repoProjectionRepository: {
-    list: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  branchProjectionRepository: {
-    listByRepo: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  pullRequestProjectionRepository: {
-    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
-  },
-  issueProjectionRepository: {
-    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
-  },
+  // --- VCS / GitHub installations + projections ------------------------------------
+  // The installation bindings and the six read-model projections, including the sync + repo-write
+  // half a node's own GitHub client now earns. Split into `rpc-allowlist-vcs.ts` (this file had
+  // reached its size budget, and that block is the one cohesive section inside it); the merged
+  // table is what every reader sees.
+  ...VCS_PERSISTENCE_METHODS,
   // --- Self-hosted runner-backend connection surface ------------------------------
   // The workspace's binding to an "agent runner backend" (the manifest HTTP pool / native
   // Kubernetes runner / …) the runner-pool settings panel manages (`RunnerPoolController` →
@@ -1180,201 +1182,12 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     deleteByIds: { scope: { kind: 'workspace', arg: 0 } },
     delete: { scope: { kind: 'workspace', arg: 0 } },
   },
-  // --- Prompt-fragment library management surface ---------------------------------
-  // The tenant-scoped prompt-fragment library (ADR 0006) a mothership-mode SPA curates
-  // (`FragmentLibraryController` → `FragmentLibraryService`): list / create / update / delete
-  // hand-authored fragments at either tier. The library module assembles from
-  // `promptFragmentRepository` ALONE (no connection/secret repo — unlike the document/task
-  // integrations, whose modules require a decrypt-inside connection repo and so stay off), and its
-  // rows carry NO secrets, so the whole management surface is remote. Every method is keyed by an
-  // `(ownerKind, ownerId)` PAIR (`ownerKind` ∈ `workspace` | `account`), bound by the `owner` scope
-  // rule (positional pair) / `ownerField` rule (the record's fields on `upsert`): a `workspace`
-  // owner resolves its account like the `workspace` rule, an `account` owner IS the accountId — so a
-  // machine token scoped to one account can never read/write another tenant's fragments. Both tiers'
-  // endpoints are member-level (account-tier routes guard on `requireMember`, NOT `requireAdmin`), so
-  // this follows the same member-level policy as the other settings/library panels above.
-  //
-  // `listBySource` (the repo-sync reconcile read) joins them: see the `librarySource` note on
-  // `fragmentSourceRepository` below for why the sync surface is no longer deferred.
-  promptFragmentRepository: {
-    listByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-    get: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-    upsert: { scope: { kind: 'ownerField', arg: 0 } },
-    softDelete: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-    // The source-keyed reconcile pair, mirroring the skill and foundational-service libraries':
-    // list a source's live fragments to diff against the repo listing, and tombstone all of them
-    // in one write on unlink. Each method carries a source id and nothing else, so the
-    // `librarySource` rule resolves that source's owning tier pair server-side (`fragmentSource`
-    // names the table it lives in).
-    listBySource: { scope: { kind: 'librarySource', arg: 0, entity: 'fragmentSource' } },
-    softDeleteBySource: { scope: { kind: 'librarySource', arg: 0, entity: 'fragmentSource' } },
-  },
-  // Model-GENERATED condensed briefs for long standards (`FragmentBriefService`), read and
-  // written on the RUN path: a mothership-mode implementer dispatch resolves them alongside the
-  // fragment bodies above, so leaving them off would silently fold full standards on every turn
-  // of every local loop — the exact cost this feature exists to remove. `remote`, not
-  // `local-first`: they are org-durable derived state (a condensation an account paid a model
-  // for, reused by every board in it), not per-user runner telemetry. The rows hold model output
-  // condensing a standard the same token already reads in full through `promptFragmentRepository`,
-  // so they widen no exposure, and every method is keyed by the same `(ownerKind, ownerId)` pair —
-  // bound by the `owner` rule (positional) / `ownerField` rule (the record's fields on `upsert`),
-  // so a token scoped to one account can neither read nor overwrite another tenant's briefs.
-  fragmentBriefRepository: {
-    listByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-    upsert: { scope: { kind: 'ownerField', arg: 0 } },
-    delete: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-  },
-  // The fragment-source (repo-linkage) library the SPA lists, links and SYNCS
-  // (`FragmentSourceService`), owner scoped exactly like the fragments above. `listByOwner` is bound
-  // by the `owner` rule; the sourceId-keyed sync methods by `librarySource`, which resolves a
-  // source's owning `(ownerKind, ownerId)` pair server-side.
-  //
-  // The sync half was deferred on a premise that is no longer true: that a mothership-mode node has
-  // no GitHub client. Token delegation gave it one (`DelegatedAppTokenSource` mints the tier's App
-  // token over the same machine API), which is what already made the SKILLS library's sync surface
-  // remote — so these routes were reachable and broken, the state that is worse than either serving
-  // them or hiding them. `librarySource` is `skillSource` generalised to a tier PAIR, because a
-  // fragment source can be owned by a workspace as well as an account.
-  //
-  // `upsert(record)` takes `ownerFieldUpsert`, NOT the plain `ownerField` the fragments above use.
-  // This is the gap the skills slice named and could not close: the write conflicts on the `id`
-  // ALONE and never re-`SET`s the owner columns, so binding only the DECLARED owner would let an
-  // in-scope caller name a foreign source id and repoint another tenant's link at a repo it
-  // controls, whose Markdown bodies the victim's next sync folds into their prompts as standards.
-  // The rule binds the STORED row's owner too; a create (no such row) still passes on the declared
-  // half. `ownerFieldUpsert` is the owner-pair analogue of `accountFieldUpsert` above, and is what
-  // any new id-keyed library upsert must use.
-  fragmentSourceRepository: {
-    listByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-    upsert: { scope: { kind: 'ownerFieldUpsert', arg: 0, entity: 'fragmentSource' } },
-    get: { scope: { kind: 'librarySource', arg: 0, entity: 'fragmentSource' } },
-    updateSyncState: { scope: { kind: 'librarySource', arg: 0, entity: 'fragmentSource' } },
-    softDelete: { scope: { kind: 'librarySource', arg: 0, entity: 'fragmentSource' } },
-  },
-  // --- Repo-sourced Claude Skills library (ADR 0024) ------------------------------
-  // Skills live in ONE tier — the ACCOUNT — so every method here binds on an accountId rather
-  // than the `(ownerKind, ownerId)` pair the fragment library uses: positionally via the `account`
-  // rule, on a record's `accountId` FIELD via `accountField` / `accountFieldUpsert`, or (the sync
-  // surface) via the `skillSource` rule, which resolves a source id to its owning account
-  // server-side. A machine token scoped to one account can therefore neither read nor write another
-  // tenant's skills.
-  //
-  // Remote rather than `telemetry` or `local-sqlite` for the reason the bucket test names: what
-  // READS this is a RUN. `SkillRunResolver` resolves the picked skill (and ADR 0029's declared
-  // `{ catalogSkillId }` capabilities) out of `accountSkillRepository` at every dispatch, and
-  // `skillResolver` is a HARD dependency for a `skill` step — so leaving the catalog off would
-  // not merely blank a panel, it would fail every skill-running dispatch on a mothership-mode
-  // node with `unknown_method`. The rows carry no secrets (a `SKILL.md` body plus a resource
-  // manifest of `{ path, sha, size }`); the resource BODIES are fetched from the repo at
-  // dispatch and never stored, so nothing credential-bearing crosses the machine API.
-  //
-  // This was the FIRST library whose repo-SYNC surface went remote. A sync needs a GitHub client,
-  // and a mothership-mode node HAS one (`DelegatedAppTokenSource` mints the account's App token
-  // over the same machine API), so its `SkillSourceService` assembles and its link/sync/unlink
-  // routes are live. Leaving the sourceId-keyed methods off would leave those routes reachable and
-  // broken, which is worse than either serving them or hiding them. `skillSource` is the rule that
-  // binds them (skills live in one tier, so it resolves a bare accountId); the sibling
-  // libraries have since adopted it, in its owner-pair form (`librarySource`).
-  accountSkillRepository: {
-    // Catalog reads: the account library panel, the pipeline builder's skill picker, and the RUN
-    // path (`SkillCatalogService.list`/`get`, behind the per-account `skillCatalog` cache slice).
-    listByAccount: { scope: { kind: 'account', arg: 0 } },
-    get: { scope: { kind: 'account', arg: 0 } },
-    // Sync writes. `upsert(record)` binds on the record's `accountId` FIELD, so a synced skill can
-    // only ever land under an in-scope account. Plain `accountField` is sufficient HERE (and NOT for
-    // `skillSourceRepository.upsert` below) because this write conflicts on `(account_id, skill_id)`
-    // on both runtimes: the bound account is part of the key, so a foreign `skillId` inserts a fresh
-    // row under the caller's own account and can never mutate another tenant's. `softDelete(accountId,
-    // skillId, at)` is positional.
-    upsert: { scope: { kind: 'accountField', arg: 0 } },
-    softDelete: { scope: { kind: 'account', arg: 0 } },
-    // The source-keyed reconcile pair: list a source's live skills to diff against the repo, and
-    // tombstone all of them in one write on unlink. Both bind through `skillSource`.
-    listBySource: { scope: { kind: 'skillSource', arg: 0 } },
-    softDeleteBySource: { scope: { kind: 'skillSource', arg: 0 } },
-  },
-  // The repo-linkage rows the library panel lists and the sync pins its head commit on.
-  // `listByAccount` is positional; the three sourceId-keyed methods bind through `skillSource`.
-  //
-  // `upsert(record)` takes `accountFieldUpsert`, NOT the plain `accountField` its sibling above uses,
-  // because this write conflicts on the `id` ALONE and does not re-`SET account_id` (D1
-  // `ON CONFLICT (id) DO UPDATE`, Drizzle `target: skillSources.id`). The row it lands on is therefore
-  // chosen by the id, not by the bound account — so binding only the DECLARED `accountId` would let a
-  // token scoped to account A name account B's source id, declare its own account to pass the check,
-  // and repoint B's link at an attacker-controlled repo; B's next sync folds that repo's `SKILL.md`
-  // bodies — agent INSTRUCTIONS — into B's catalog. `accountFieldUpsert` additionally binds the STORED
-  // row's account, so an existing foreign row is refused while a create (no such row) still passes.
-  //
-  // `listByRepo` is deliberately absent: it is the GLOBAL `(repoOwner, repoName)` → sources reverse
-  // lookup the push-webhook fan-out uses, spanning every account by construction, so no rule can
-  // bind it. It runs on the mothership (which receives the webhook), never on a laptop — the same
-  // "unscoped, mothership-internal" bucket as `slackConnectionRepository.getByTeam`.
-  skillSourceRepository: {
-    listByAccount: { scope: { kind: 'account', arg: 0 } },
-    get: { scope: { kind: 'skillSource', arg: 0 } },
-    upsert: { scope: { kind: 'accountFieldUpsert', arg: 0, entity: 'skillSource' } },
-    updateSyncState: { scope: { kind: 'skillSource', arg: 0 } },
-    softDelete: { scope: { kind: 'skillSource', arg: 0 } },
-  },
-  // --- Foundational services (backend/docs/adr/0031-foundational-services.md) -----------
-  // The tiered catalog of shared capabilities an Architect designs against, and the API contract
-  // documents its consumers lazily read. Both are `(ownerKind, ownerId)`-keyed org/durable state
-  // — the `remote` bucket by default — and every method here binds with the same `owner` /
-  // `ownerField` rules the prompt-fragment library uses, so a token scoped to one account can
-  // neither read nor overwrite another tenant's catalog.
-  //
-  // Remote rather than `telemetry` or `local-sqlite` for the reason the bucket test names: what
-  // READS this is a RUN. A mothership-mode node dispatching an architect step resolves the merged
-  // catalog over this RPC, and its coder resolves the declared services' contract documents the
-  // same way — so a catalog that lived only on the laptop would make every design on a
-  // mothership-mode deployment silently see an empty catalog and rebuild capabilities the org
-  // already runs. `listByServiceIds` is the hot one (once per consumer dispatch) and is already a
-  // single chunked `IN` query, so it stays one round trip over the wire too.
-  //
-  // The sourceId-keyed sync methods now bind through `librarySource` (see the fragment library
-  // above: the same rule, the same dead premise, and the same node-side GitHub client). What stays
-  // OFF is `foundationalServiceSourceRepository.listStale` (the autorefresh sweep's global query)
-  // and `listByRepo` (the push-webhook fan-out's), both unscoped across tiers by construction and
-  // both running where a delivery ARRIVES, which is never a laptop.
-  foundationalServiceRepository: {
-    listByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-    get: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-    upsert: { scope: { kind: 'ownerField', arg: 0 } },
-    softDelete: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-    // Lifting a board's suppression of an inherited service. Same owner rule as `softDelete` and
-    // the same management surface, so it belongs on the same side of the boundary: leaving it off
-    // would let a mothership-mode board opt OUT of an account service with no way back in.
-    hardDelete: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-    // The source-keyed reconcile pair, mirroring `accountSkillRepository`'s: list a source's live
-    // services to diff against the repo, and tombstone all of them in one write on unlink.
-    listBySource: {
-      scope: { kind: 'librarySource', arg: 0, entity: 'foundationalServiceSource' },
-    },
-    softDeleteBySource: {
-      scope: { kind: 'librarySource', arg: 0, entity: 'foundationalServiceSource' },
-    },
-  },
-  apiContractRepository: {
-    listManifestByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-    listByServiceIds: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-    replaceForService: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-    deleteForService: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-  },
-  // `upsert` takes `ownerFieldUpsert` for exactly the reason `fragmentSourceRepository.upsert` does:
-  // it conflicts on the `id` alone, so the declared owner does not decide which row is written.
-  foundationalServiceSourceRepository: {
-    listByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-    upsert: {
-      scope: { kind: 'ownerFieldUpsert', arg: 0, entity: 'foundationalServiceSource' },
-    },
-    get: { scope: { kind: 'librarySource', arg: 0, entity: 'foundationalServiceSource' } },
-    updateSyncState: {
-      scope: { kind: 'librarySource', arg: 0, entity: 'foundationalServiceSource' },
-    },
-    softDelete: {
-      scope: { kind: 'librarySource', arg: 0, entity: 'foundationalServiceSource' },
-    },
-  },
+  // --- Repo-sourced content libraries ---------------------------------------------
+  // The prompt-fragment, Claude-Skills and foundational-service libraries: their owner-scoped
+  // management surfaces plus the repo-SYNC methods that bind through `librarySource` /
+  // `skillSource`. Split into `rpc-allowlist-libraries.ts` to keep this file inside its size
+  // budget; the merged table is what every reader sees.
+  ...LIBRARY_PERSISTENCE_METHODS,
   // --- Account onboarding read surface --------------------------------------------
   // The two account-scoped READS a mothership-mode SPA's account/members + email-settings panels
   // drive, both member-level (`AccountController` guards them with `requireMember`, NOT

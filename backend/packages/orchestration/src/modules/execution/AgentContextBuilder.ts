@@ -29,6 +29,7 @@ import type {
   PipelineStep,
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
+  McpServerDefinition,
   ResolvedSkill,
   SkillVersionPin,
   TaskRepository,
@@ -54,7 +55,7 @@ import {
   hasTrait,
   standardsVerbosityFor,
 } from '@cat-factory/agents'
-import type { AgentKindRegistry } from '@cat-factory/agents'
+import type { AgentKindRegistry, AgentKindSource } from '@cat-factory/agents'
 import { resolveDispatchSettings } from './dispatchPromptSettings.js'
 import {
   boundServiceFrameIds,
@@ -73,7 +74,7 @@ import { buildImplementationChoice } from './forkDecision.logic.js'
 import { buildRalphValidation } from './ralph.logic.js'
 import { isTesterKind } from './ci.logic.js'
 import { interviewFollowsStep } from '../initiative/initiative.logic.js'
-import { resolveRunSkills } from './run-skills.js'
+import { resolveKindCapabilities, resolveRunSkills } from './run-skills.js'
 import {
   linkedContextWithDesignFlag,
   mergeInjectedContextFiles,
@@ -272,6 +273,14 @@ export interface AgentContextBuilderDeps {
    */
   skillResolver?: SkillResolver
   /**
+   * Optional: the DEPLOYMENT's agent-kind capability layer, when that is not this process's own
+   * registry. Wired by ONE caller: a mothership-mode node, which reads the mothership's over
+   * `GET /internal/agent-kinds`, because a playbook or MCP server the org assigned to a BUILT-IN
+   * kind is data whose absence on a node one build behind is silent. Absent ⇒ the local registry
+   * answers alone (every other deployment shape, unchanged).
+   */
+  agentKindSource?: AgentKindSource
+  /**
    * Optional: the FOUNDATIONAL SERVICES catalog seam — the design-time catalog for a
    * `foundational-catalog` kind and the lazily-resolved contract documents for a
    * `foundational-contracts` one, both delivered as injected `.cat-context/` files. Wired only
@@ -334,6 +343,24 @@ export interface BuildContextOptions {
  * single home for service-frame resolution (`resolveServiceFrameId`/`resolveServiceConfig`),
  * which a few other engine paths reuse.
  */
+/**
+ * The two CAPABILITY fields one dispatch contributes to its context: the skills the engine
+ * resolved, and the tool-server DECLARATIONS the executor resolves servability for.
+ *
+ * One helper for both because they are one answer (`resolveKindCapabilities`), and because each is
+ * omitted rather than sent empty: an absent `orgToolServers` means no deployment-level source is
+ * wired, which is what tells the executor to read its own registry exactly as before.
+ */
+function capabilityContextFields(resolved: {
+  skills: ResolvedSkill[]
+  toolServers: McpServerDefinition[]
+}): { skills?: ResolvedSkill[]; orgToolServers?: McpServerDefinition[] } {
+  return {
+    ...(resolved.skills.length ? { skills: resolved.skills } : {}),
+    ...(resolved.toolServers.length ? { orgToolServers: resolved.toolServers } : {}),
+  }
+}
+
 export class AgentContextBuilder {
   constructor(private readonly deps: AgentContextBuilderDeps) {}
 
@@ -530,7 +557,7 @@ export class AgentContextBuilder {
       // The resolved skills for this dispatch — instructions + resource bodies, rendered
       // harness-aware by the container executor. Catalog versions are pinned onto the step
       // (skillVersions) inside the resolver. Absent when the run applies no skills.
-      ...(runSkills.skills.length ? { skills: runSkills.skills } : {}),
+      ...capabilityContextFields(runSkills),
       block: buildBlockPayload({
         block,
         description,
@@ -1195,19 +1222,34 @@ export class AgentContextBuilder {
    * ran. Delegates to {@link resolveRunSkills}, which owns the precedence, the dedup and the
    * per-source failure policy; a kind with no declarations and a step with no pick costs nothing.
    */
-  private resolveSkillsForStep(
+  private async resolveSkillsForStep(
     workspaceId: string,
     agentKind: string,
     step: PipelineStep,
-  ): Promise<{ skills: ResolvedSkill[]; versions: SkillVersionPin[] }> {
-    return resolveRunSkills({
+  ): Promise<{
+    skills: ResolvedSkill[]
+    versions: SkillVersionPin[]
+    toolServers: McpServerDefinition[]
+  }> {
+    // ONE capability resolution per dispatch, feeding both halves: the skills the engine resolves
+    // here, and the tool-server DECLARATIONS the executor resolves for servability. Resolving them
+    // separately would mean two reads of a deployment-level source that crosses a network.
+    const capabilities = await resolveKindCapabilities(agentKind, this.deps)
+    const resolved = await resolveRunSkills({
       workspaceId,
       agentKind,
       step,
+      capabilities,
       agentKindRegistry: this.deps.agentKindRegistry,
       ...(this.deps.skillResolver ? { skillResolver: this.deps.skillResolver } : {}),
       ...(this.deps.logger ? { logger: this.deps.logger } : {}),
     })
+    // Only when a deployment-level source is wired: with none, the executor's own registry read is
+    // the same answer, and sending it would be a second copy of it on every context.
+    return {
+      ...resolved,
+      toolServers: this.deps.agentKindSource ? capabilities.toolServers.servers : [],
+    }
   }
 
   /**

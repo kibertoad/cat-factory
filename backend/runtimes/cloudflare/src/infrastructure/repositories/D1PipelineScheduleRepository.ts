@@ -127,14 +127,6 @@ export class D1PipelineScheduleRepository implements PipelineScheduleRepository 
     return results.map(rowToSchedule)
   }
 
-  async listByService(serviceId: string): Promise<PipelineSchedule[]> {
-    const { results } = await this.db
-      .prepare(`SELECT * FROM pipeline_schedules WHERE service_id = ? ORDER BY created_at ASC`)
-      .bind(serviceId)
-      .all<ScheduleRow>()
-    return results.map(rowToSchedule)
-  }
-
   async listByServices(serviceIds: string[]): Promise<PipelineSchedule[]> {
     if (serviceIds.length === 0) return []
     const out: PipelineSchedule[] = []

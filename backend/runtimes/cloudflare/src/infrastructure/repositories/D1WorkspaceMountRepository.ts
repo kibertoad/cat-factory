@@ -42,14 +42,6 @@ export class D1WorkspaceMountRepository implements WorkspaceMountRepository {
     return (results ?? []).map(rowToMount)
   }
 
-  async listByService(serviceId: string): Promise<WorkspaceMount[]> {
-    const { results } = await this.db
-      .prepare(`SELECT * FROM workspace_services WHERE service_id = ? ORDER BY created_at`)
-      .bind(serviceId)
-      .all<MountRow>()
-    return (results ?? []).map(rowToMount)
-  }
-
   async listByServiceIds(serviceIds: string[]): Promise<WorkspaceMount[]> {
     if (serviceIds.length === 0) return []
     const mounts: WorkspaceMount[] = []

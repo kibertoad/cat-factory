@@ -353,15 +353,6 @@ export class DrizzleBlockRepository implements BlockRepository {
     return tryDecodeRows(rows, rowToBlock, (r) => ({ table: 'blocks', id: r.id }))
   }
 
-  async listByService(serviceId: string): Promise<Block[]> {
-    const rows = await this.db
-      .select()
-      .from(blocks)
-      .where(eq(blocks.service_id, serviceId))
-      .orderBy(blocks.seq)
-    return tryDecodeRows(rows, rowToBlock, (r) => ({ table: 'blocks', id: r.id }))
-  }
-
   async listByServices(serviceIds: string[]): Promise<Block[]> {
     if (serviceIds.length === 0) return []
     const out: Block[] = []
@@ -636,19 +627,6 @@ export class DrizzleServiceRepository implements ServiceRepository {
     return out
   }
 
-  async getByRepo(installationId: number, repoGithubId: number): Promise<Service | null> {
-    const [row] = await this.db
-      .select()
-      .from(services)
-      .where(
-        and(
-          eq(services.installation_id, installationId),
-          eq(services.repo_github_id, repoGithubId),
-        ),
-      )
-    return row ? rowToService(row) : null
-  }
-
   async insert(service: Service): Promise<void> {
     await this.db.insert(services).values({
       id: service.id,
@@ -704,15 +682,6 @@ export class DrizzleWorkspaceMountRepository implements WorkspaceMountRepository
       .select()
       .from(workspaceServices)
       .where(eq(workspaceServices.workspace_id, workspaceId))
-      .orderBy(workspaceServices.created_at)
-    return rows.map(rowToMount)
-  }
-
-  async listByService(serviceId: string): Promise<WorkspaceMount[]> {
-    const rows = await this.db
-      .select()
-      .from(workspaceServices)
-      .where(eq(workspaceServices.service_id, serviceId))
       .orderBy(workspaceServices.created_at)
     return rows.map(rowToMount)
   }
