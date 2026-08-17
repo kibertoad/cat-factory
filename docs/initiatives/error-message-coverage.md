@@ -118,8 +118,8 @@ configs. For those, the error's PRIMARY fix instruction names the UI location (a
 path, and where possible a `details.reason` code the SPA turns into a jump action, the
 `usePipelineErrorToast` pattern) and mentions the env var only as the deployment-level
 ALTERNATIVE. Env-var-first wording is reserved for genuinely operator/env-only settings
-(`DATABASE_URL`, `ENCRYPTION_KEY`, wrangler bindings, and, until H1 lands,
-`LITELLM_BASE_URL`).
+(`DATABASE_URL`, `ENCRYPTION_KEY`, wrangler bindings, and, until H1 lands, an operator-hosted
+gateway's `BIFROST_BASE_URL` / `LITELLM_BASE_URL`).
 
 ## Per-item checklist
 
@@ -147,12 +147,12 @@ issue.
 
 ### B. Model provisioning
 
-| #   | Failure / misconfiguration                                  | Current behaviour                                                                                                       | Surface | Sev | Proposed fix                                                                                                                                                                                           | Doc URL to embed                | Status  | PR      |
-| --- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- | ------- | ------- |
-| B1  | `Unsupported model provider: X`                             | Terse throw (`backend/packages/agents/src/providers/registry.ts:54`); reaches users raw via the frontend fallback toast | UI      | P1  | UI-first remedy: point at the provider key pool ("Configure AI" / workspace provider keys) as the primary fix, env var(s) as the deployment alternative; consider a `ConflictReason` for a jump action | `backend/docs/model-support.md` | ✅ done | phase 4 |
-| B2  | `Unsupported Bedrock model: X`                              | Terse throw (`backend/packages/provider-bedrock/src/index.ts:38-40`); doesn't name the allow-list                       | env     | P2  | Name `BEDROCK_MODELS`, list the allowed models, link docs                                                                                                                                              | `backend/docs/model-support.md` | ✅ done | phase 4 |
-| B3  | LiteLLM selected but `LITELLM_BASE_URL` unset               | Falls through to generic B1 (`endpoints.ts:38-43` returns `undefined`, provider never registers)                        | env→UI  | P1  | Dedicated message naming `LITELLM_BASE_URL` (operator-hosted, no public default); flips to a UI-first remedy once H1 lands                                                                             | `docs/environment-variables.md` | ✅ done | phase 4 |
-| B4  | `No base URL configured for OpenAI-compatible provider 'X'` | Partial message, no remedy (`backend/packages/server/src/agents/modelProviderResolver.ts:149`)                          | UI/env  | P2  | Name the `${PROVIDER}_BASE_URL` var and (where the key is UI-pooled) the key-pool panel                                                                                                                | `backend/docs/model-support.md` | ✅ done | phase 4 |
+| #   | Failure / misconfiguration                                               | Current behaviour                                                                                                       | Surface | Sev | Proposed fix                                                                                                                                                                                           | Doc URL to embed                | Status  | PR      |
+| --- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- | ------- | ------- |
+| B1  | `Unsupported model provider: X`                                          | Terse throw (`backend/packages/agents/src/providers/registry.ts:54`); reaches users raw via the frontend fallback toast | UI      | P1  | UI-first remedy: point at the provider key pool ("Configure AI" / workspace provider keys) as the primary fix, env var(s) as the deployment alternative; consider a `ConflictReason` for a jump action | `backend/docs/model-support.md` | ✅ done | phase 4 |
+| B2  | `Unsupported Bedrock model: X`                                           | Terse throw (`backend/packages/provider-bedrock/src/index.ts:38-40`); doesn't name the allow-list                       | env     | P2  | Name `BEDROCK_MODELS`, list the allowed models, link docs                                                                                                                                              | `backend/docs/model-support.md` | ✅ done | phase 4 |
+| B3  | An operator-hosted gateway selected but its `${PROVIDER}_BASE_URL` unset | Falls through to generic B1 (`resolveOpenAiCompatibleBaseUrl` returns `undefined`, provider never registers)            | env→UI  | P1  | Dedicated message naming that var (operator-hosted, no public default), per gateway via an exhaustive `Record` over `OperatorHostedGateway`; flips to a UI-first remedy once H1 lands                  | `docs/environment-variables.md` | ✅ done | phase 4 |
+| B4  | `No base URL configured for OpenAI-compatible provider 'X'`              | Partial message, no remedy (`backend/packages/server/src/agents/modelProviderResolver.ts:149`)                          | UI/env  | P2  | Name the `${PROVIDER}_BASE_URL` var and (where the key is UI-pooled) the key-pool panel                                                                                                                | `backend/docs/model-support.md` | ✅ done | phase 4 |
 
 ### C. GitHub / VCS runtime
 
@@ -210,11 +210,12 @@ that union change is itself image-affecting, so it batches into the same slice.
 
 Verified 2026-07-11: **none of this exists yet.** The UI key pool (`apiKeyProviderSchema`,
 `backend/packages/contracts/src/api-keys.ts:20-32`; `ApiKeysSection.vue`) covers API keys
-for openai/anthropic/qwen/deepseek/moonshot/openrouter/litellm, but **no base URL or
-credential endpoint is UI-configurable anywhere**. `LITELLM_BASE_URL` is env-only (the
-i18n copy even tells the user "set by your deployment operator (LITELLM_BASE_URL), not
-here", `en.json` `providers.apiKeys.providers.litellm.step2`; the capability gate
-`providerCapabilities.ts:61-79` keeps a UI-connected LiteLLM key unselectable until the
+for openai/anthropic/qwen/deepseek/moonshot/xai/openrouter and both operator-hosted gateways
+(bifrost/litellm), but **no base URL or credential endpoint is UI-configurable anywhere**. A
+gateway's `${PROVIDER}_BASE_URL` is env-only (the i18n copy even tells the user "set by your
+deployment operator (BIFROST_BASE_URL), not here", `en.json`
+`providers.apiKeys.providers.bifrost.step2`; the capability gate
+`providerCapabilities.ts` `baseUrlFor` keeps a UI-connected gateway key unselectable until the
 env var is set). Cloudflare Workers AI (`CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN`/
 `CLOUDFLARE_AI_GATEWAY`) and Bedrock (`BEDROCK_REGION` + AWS creds + `BEDROCK_MODELS`,
 Node-only) have zero UI surface (Bedrock appears only as a residency-policy checkbox).
@@ -228,13 +229,13 @@ adding an endpoint/config dimension to the pooled provider-credential model (tod
 demoted to deployment-level fallback. Runtimes symmetric (D1 ⇄ Drizzle) + a conformance
 assertion, per the standing rules.
 
-| #   | Work item                                                                                                         | Sev | Status  | PR  |
-| --- | ----------------------------------------------------------------------------------------------------------------- | --- | ------- | --- |
-| H1  | LiteLLM base URL configurable in the UI (alongside its pooled key); `LITELLM_BASE_URL` becomes the fallback       | P1  | ⬜ todo |     |
-| H2  | Cloudflare Workers AI credentials (account id + API token + optional AI-gateway) configurable in the UI           | P2  | ⬜ todo |     |
-| H3  | Bedrock configurable in the UI (region, credentials, model allow-list); Node-only runtime support                 | P2  | ⬜ todo |     |
-| H4  | Optional base-URL override in the UI for the remaining direct/proxy providers (`${PROVIDER}_BASE_URL` → fallback) | P3  | ⬜ todo |     |
-| H5  | Revisit B1–B4 / A10 remedies once H1–H4 land so the primary instruction is always the UI path                     | P3  | ⬜ todo |     |
+| #   | Work item                                                                                                                               | Sev | Status  | PR  |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------- | --- | ------- | --- |
+| H1  | Operator-hosted-gateway base URL configurable in the UI (Bifrost + LiteLLM, alongside the pooled key); the env var becomes the fallback | P1  | ⬜ todo |     |
+| H2  | Cloudflare Workers AI credentials (account id + API token + optional AI-gateway) configurable in the UI                                 | P2  | ⬜ todo |     |
+| H3  | Bedrock configurable in the UI (region, credentials, model allow-list); Node-only runtime support                                       | P2  | ⬜ todo |     |
+| H4  | Optional base-URL override in the UI for the remaining direct/proxy providers (`${PROVIDER}_BASE_URL` → fallback)                       | P3  | ⬜ todo |     |
+| H5  | Revisit B1–B4 / A10 remedies once H1–H4 land so the primary instruction is always the UI path                                           | P3  | ⬜ todo |     |
 
 ### I. Structured error codes & typeguards instead of string/regex matching
 
@@ -721,13 +722,15 @@ DispatchError`, reading `.status`), NOT the `/dispatch failed/i` regex, which is
   imports for B2. The server-layer B3/B4 wording lives in one shared helper
   (`server/src/agents/providerErrors.ts` `openAiCompatibleBaseUrlError`) so the INLINE resolver
   (`modelProviderResolver.ts`) and the container LLM proxy (`LlmProxyController.ts`) explain a
-  missing base URL identically. B3 (litellm) is handled at that base-URL site when a litellm key
-  IS pooled but `LITELLM_BASE_URL` is unset; a litellm ref with NO pooled key still lands on B1's
-  (now elaborated) message, which lists litellm among the UI-configurable providers. The B1 remedy
-  derives that provider list from `UI_CONFIGURABLE_DIRECT_PROVIDERS` (`agents/providers/endpoints.ts`,
-  = the built-in OpenAI-compatible endpoints + `anthropic` + `litellm`) rather than re-listing the
-  vendors inline, so adding a vendor to `DEFAULT_OPENAI_COMPATIBLE_BASE_URLS` keeps the error text in
-  step automatically: do NOT re-hardcode the vendor names at the throw site.
+  missing base URL identically. B3 (an operator-hosted gateway) is handled at that base-URL site
+  when its key IS pooled but its `${PROVIDER}_BASE_URL` is unset; such a ref with NO pooled key
+  still lands on B1's (now elaborated) message, which lists the gateway among the UI-configurable
+  providers. Both halves derive from the ONE endpoint table (`agents/providers/endpoints.ts`
+  `OPENAI_COMPATIBLE_ENDPOINTS`): B1's list is `UI_CONFIGURABLE_DIRECT_PROVIDERS` (its members plus
+  `anthropic`), and B3 branches on `isOperatorHostedGateway` with its display names in an
+  exhaustive `Record` over the derived `OperatorHostedGateway` union. So adding a gateway to that
+  table keeps B1 in step automatically and fails to compile until B3 can name it: do NOT
+  re-hardcode the vendor names at either throw site.
 
 ## Out of scope
 

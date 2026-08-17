@@ -4335,8 +4335,8 @@
       "proxyHeading": "Proxy / gateway API keys",
       "directAccountIntro": "Connect a vendor API key shared by every workspace in this account. Keys are stored encrypted, pooled, and rotated by usage. Account keys are admin-managed.",
       "directIntro": "Connect a vendor API key so models run directly on that provider. Keys are stored encrypted, pooled, and rotated by usage. Scope a key to this workspace (shared with the team) or to you (your own pool, usable anywhere).",
-      "proxyAccountIntro": "Connect a proxy key (OpenRouter, LiteLLM) shared by every workspace in this account. A proxy is an intermediary that fronts many vendors behind a single key. Keys are stored encrypted, pooled, and rotated by usage.",
-      "proxyIntro": "Connect a proxy key (OpenRouter, LiteLLM). A proxy is an intermediary that reaches many vendors' models through a single gateway, rather than one vendor directly. Keys are stored encrypted, pooled, and rotated by usage. Scope a key to this workspace (shared with the team) or to you (your own pool, usable anywhere).",
+      "proxyAccountIntro": "Connect a proxy key (OpenRouter, Bifrost, LiteLLM) shared by every workspace in this account. A proxy is an intermediary that fronts many vendors behind a single key. Keys are stored encrypted, pooled, and rotated by usage.",
+      "proxyIntro": "Connect a proxy key (OpenRouter, Bifrost, LiteLLM). A proxy is an intermediary that reaches many vendors' models through a single gateway, rather than one vendor directly. Keys are stored encrypted, pooled, and rotated by usage. Scope a key to this workspace (shared with the team) or to you (your own pool, usable anywhere).",
       "scopeField": "Scope",
       "scopeWorkspace": "This workspace",
       "scopeUser": "My keys (only me)",
@@ -4396,6 +4396,11 @@
           "label": "OpenRouter",
           "step1": "Open openrouter.ai → Keys and create an API key.",
           "step2": "Copy the key (starts with sk-or-…); it reaches 300+ models through one gateway."
+        },
+        "bifrost": {
+          "label": "Bifrost (self-hosted gateway)",
+          "step1": "Create a virtual key in your Bifrost gateway's governance settings (or use its API key).",
+          "step2": "The gateway's base URL is set by your deployment operator (BIFROST_BASE_URL), not here."
         },
         "litellm": {
           "label": "LiteLLM (self-hosted gateway)",

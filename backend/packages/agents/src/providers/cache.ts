@@ -86,7 +86,7 @@ function firstNumber(...candidates: unknown[]): number {
  *   `prompt_cache_hit_tokens`): the prompt count is the WHOLE prompt and every cache class the
  *   payload reports is a partition of it, so both come off. Subtracting both — not just the
  *   read — is what keeps the total we record equal to the vendor's own `prompt_tokens`: an
- *   OpenAI-shaped gateway fronting Anthropic (`litellm`, OpenRouter) reports its reads under
+ *   OpenAI-shaped gateway fronting Anthropic (`bifrost`, `litellm`, OpenRouter) reports its reads under
  *   the OpenAI field AND a `cache_creation_input_tokens` beside it, and reading only one of
  *   them would either drop the dearest class or mint input the vendor never billed.
  * - **Exclusive** (Anthropic `cache_read_input_tokens` / `cache_creation_input_tokens`, or the

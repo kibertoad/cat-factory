@@ -10,11 +10,11 @@ rate-limited multi-turn runs), not cost; token burn is not a concern for this pr
 `providerCachePolicy(provider)` (`@cat-factory/kernel`, `domain/cache-policy.ts`) is the
 one place that classifies how a provider caches:
 
-| Policy               | Providers                                                           | How                                                                                                 |
-| -------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `auto-prefix`        | `openai`, `deepseek`, `qwen`                                        | caches automatically on an exact prefix match; OpenAI also accepts a `prompt_cache_key` routing key |
-| `explicit-anthropic` | `anthropic`                                                         | needs explicit `cache_control` breakpoints (set on the inline path)                                 |
-| `none`               | `workers-ai`, `moonshot`, `openrouter`, `litellm`, bedrock, unknown | no caching we rely on                                                                               |
+| Policy               | Providers                                                                      | How                                                                                                 |
+| -------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `auto-prefix`        | `openai`, `deepseek`, `qwen`                                                   | caches automatically on an exact prefix match; OpenAI also accepts a `prompt_cache_key` routing key |
+| `explicit-anthropic` | `anthropic`                                                                    | needs explicit `cache_control` breakpoints (set on the inline path)                                 |
+| `none`               | `workers-ai`, `moonshot`, `openrouter`, `bifrost`, `litellm`, bedrock, unknown | no caching we rely on                                                                               |
 
 `providerCachesPrompts(provider)` is the boolean derived from it. Both the model catalog
 (`models.ts` `toOption` → `ModelOption.cachesPrompts`) and the AI-call helpers
@@ -70,7 +70,7 @@ another:
   rather than silently reported as `0`.
 
 Reading the two classes independently is what makes the **gateway** shape work: an
-OpenAI-compatible gateway fronting Anthropic (`litellm`, OpenRouter) reports its reads under the
+OpenAI-compatible gateway fronting Anthropic (`bifrost`, `litellm`, OpenRouter) reports its reads under the
 OpenAI field AND a `cache_creation_input_tokens` beside it. Letting the read detection short-
 circuit the write would drop the DEAREST class on the only path that reports it (a read costs
 ~0.1x base input while a **write costs 1.25-2x, more than fresh**), which is precisely the spend
@@ -89,7 +89,9 @@ provider doesn't actually deliver:
   its OpenAI-compatible chat endpoint returns cached-token usage automatically.
 - **`openrouter`**: a gateway that can pass through the underlying provider's caching
   and a `cache_discount`; behaviour is per-underlying-model.
-- **`litellm`**: an operator-hosted gateway; pass-through depends on its config.
+- **`bifrost` / `litellm`**: operator-hosted gateways; pass-through depends on each
+  deployment's own gateway config, and Bifrost's semantic cache is a plugin an operator
+  enables, so neither can be promoted deployment-wide from here.
 
 ### How to verify (and then promote)
 

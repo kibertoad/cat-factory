@@ -72,6 +72,7 @@ export const PLATFORM_RESERVED_ENV_PREFIXES: readonly string[] = [
   'AUTH_',
   'AWS_',
   'BEDROCK_',
+  'BIFROST_',
   'BUDGET_',
   'CI_',
   'CLOUDFLARE_',
@@ -128,10 +129,19 @@ export const PLATFORM_RESERVED_ENV_KEYS: readonly string[] = [
   // capability taken away from a live integration to protect one name.
   'ADVANCE_TIMEOUT',
   'ANTHROPIC_API_KEY',
+  // The per-vendor `${VENDOR}_BASE_URL` overrides, alongside each vendor's key below. Exact names
+  // rather than a `QWEN_` / `DEEPSEEK_` / … family, for the reason `ADVANCE_TIMEOUT` above gives:
+  // reserving a namespace is only free where the platform owns the whole of it, and it owns two
+  // variables in each of these. They belong here because the platform READS them by name at
+  // dispatch (Node resolves `${PROVIDER}_BASE_URL` off its own env for any provider id, and the
+  // Worker maps a typed field per provider), which is the whole test for this list: the set is the
+  // platform's environment, not just its secrets.
+  'ANTHROPIC_BASE_URL',
   'APP_BASE_URL',
   'AUDIT_EVENT_RETENTION_DAYS',
   'DATABASE_URL',
   'DEEPSEEK_API_KEY',
+  'DEEPSEEK_BASE_URL',
   'ENCRYPTION_KEY',
   'ENVIRONMENT',
   'GATE_OUTCOME_RETENTION_DAYS',
@@ -144,22 +154,26 @@ export const PLATFORM_RESERVED_ENV_KEYS: readonly string[] = [
   // nobody names a credential after a redirect URL, and it is refused loudly at boot if anyone does.
   'MCP_OAUTH_REDIRECT_URL',
   'MOONSHOT_API_KEY',
+  'MOONSHOT_BASE_URL',
   // Exact names rather than a `NOTIFICATION_` / `PROVISIONING_` family, for the same reason as
   // `ADVANCE_TIMEOUT`: each family holds one platform variable, and reserving the whole namespace
   // would newly refuse credential keys a deployment may already have registered under it.
   'NOTIFICATION_RETENTION_DAYS',
   'OPENAI_API_KEY',
+  'OPENAI_BASE_URL',
   'PLATFORM_RUN_DAY_RETENTION_DAYS',
   'PORT',
   'PROVISIONING_LOG_RETENTION_DAYS',
   'PUBLIC_URL',
   'QWEN_API_KEY',
+  'QWEN_BASE_URL',
   'REALTIME_NODE_ID',
   'WORKER_PUBLIC_URL',
-  // Exact name rather than an `XAI_` family, for the same reason as `ADVANCE_TIMEOUT`: the
-  // platform owns one variable in that namespace, and reserving the family would newly
+  // Exact names rather than an `XAI_` family, for the same reason as `ADVANCE_TIMEOUT`: the
+  // platform owns two variables in that namespace, and reserving the family would newly
   // refuse a credential key a deployment may already hold under it.
   'XAI_API_KEY',
+  'XAI_BASE_URL',
 ]
 
 const RESERVED = new Set(PLATFORM_RESERVED_ENV_KEYS.map((key) => key.toUpperCase()))

@@ -198,12 +198,13 @@ interface UpstreamTarget {
 }
 
 /**
- * Workers AI (and any binding-reached provider) has no external upstream: run it in-process via
- * the facade's gateway, which owns the model timing and reports its own observation via
- * `recordMetric`. We only observe here when the dispatch itself is unavailable or throws.
+ * Run a binding-reached provider in-process via the facade's gateway, which owns the model timing
+ * and reports its own observation via `recordMetric`. Returns null when this runtime has no
+ * in-process path at all, leaving the caller to try the forward path; we only observe here when
+ * the dispatch itself throws.
  */
-async function dispatchInProcess(c: Context<AppEnv>, ctx: ProxyCallContext): Promise<Response> {
-  const { session, payload, streaming, gateways, log, observe, record, waitUntil } = ctx
+function dispatchInProcess(c: Context<AppEnv>, ctx: ProxyCallContext): Promise<Response> | null {
+  const { session, payload, streaming, gateways, observe, record, waitUntil, log } = ctx
   const dispatchAt = Date.now()
   const inProcess = gateways.llmUpstream.runInProcess({
     model: session.model,
@@ -214,27 +215,50 @@ async function dispatchInProcess(c: Context<AppEnv>, ctx: ProxyCallContext): Pro
     waitUntil,
     log,
   })
-  if (!inProcess) {
-    log.error('llm proxy: in-process provider is not available in this runtime')
-    observe({
-      usage: null,
-      finishReason: null,
-      responseText: '',
-      ok: false,
-      httpStatus: 502,
-      errorMessage: `Provider '${session.provider}' is not available`,
-      upstreamMs: 0,
-    })
-    return c.json(
-      {
-        error: {
-          code: 'upstream_unavailable',
-          message: `Provider '${session.provider}' is not available`,
-        },
+  return inProcess ? awaitInProcess(c, ctx, inProcess, dispatchAt) : null
+}
+
+/**
+ * Neither route exists in this runtime for a provider that needs one of them: no binding to run
+ * in-process and no OpenAI-compatible upstream to forward to. Reported as unavailable rather than
+ * as an upstream failure, because nothing was dialled.
+ */
+function inProcessUnavailable(c: Context<AppEnv>, ctx: ProxyCallContext): Response {
+  const { session, log, observe } = ctx
+  log.error('llm proxy: provider has neither an in-process nor a forwardable route here')
+  observe({
+    usage: null,
+    finishReason: null,
+    responseText: '',
+    ok: false,
+    httpStatus: 502,
+    errorMessage: `Provider '${session.provider}' is not available`,
+    upstreamMs: 0,
+  })
+  return c.json(
+    {
+      error: {
+        code: 'upstream_unavailable',
+        message: `Provider '${session.provider}' is not available`,
       },
-      502,
-    )
-  }
+    },
+    502,
+  )
+}
+
+/**
+ * Await an in-process dispatch, mapping a throw onto the same observed 502 the forward path
+ * reports. Split from {@link dispatchInProcess} so that helper can answer "no in-process route
+ * here" SYNCHRONOUSLY (a null, not a rejected promise) and its caller can try the forward path
+ * without having to distinguish the two failures after the fact.
+ */
+async function awaitInProcess(
+  c: Context<AppEnv>,
+  ctx: ProxyCallContext,
+  inProcess: Promise<Response>,
+  dispatchAt: number,
+): Promise<Response> {
+  const { session, log, observe } = ctx
   try {
     return await inProcess
   } catch (err) {
@@ -361,6 +385,18 @@ async function resolveUpstreamTarget(
         { error: { code: 'upstream_error', message: 'Upstream provider request failed' } },
         502,
       ),
+    }
+  }
+  // An upstream that carries its OWN bearer has no pool to lease from: its provider is outside
+  // the `ApiKeyProvider` vocabulary and its credential is a deployment-level fact (Cloudflare
+  // Workers AI over REST). Skip the lease rather than failing on an empty pool, and attribute no
+  // key id to the spend row, exactly as the local-runner branch does.
+  if (upstream.apiKey) {
+    return {
+      upstreamUrl: `${upstream.baseURL}/chat/completions`,
+      apiKey: upstream.apiKey,
+      leasedApiKeyId: null,
+      fetchRunner: null,
     }
   }
   // Lease the API key for this provider from the DB-backed pool (workspace + owning account + the
@@ -887,9 +923,19 @@ async function handleChatCompletion(c: Context<AppEnv>): Promise<Response> {
     record,
   }
 
-  // Workers AI (and any binding-reached provider) has no external upstream: run it in-process
-  // via the facade's gateway. Null-provider (e.g. Node can't) surfaces as unavailable.
-  if (session.provider === 'workers-ai') return dispatchInProcess(c, ctx)
+  // Workers AI is reached through the in-process Cloudflare `AI` BINDING on a runtime that has one
+  // (the Worker) and over Cloudflare's OpenAI-compatible REST endpoint on one that does not (Node,
+  // local). Prefer the binding, then fall through to the shared forward path, and report the
+  // provider unavailable only when NEITHER route resolves: `isProxyableProvider` admits
+  // `workers-ai` at dispatch on every facade, so a facade that can serve it must not refuse it
+  // here (that mismatch is what killed an xai-pinned run mid-flight before the shared table).
+  if (session.provider === 'workers-ai') {
+    const inProcess = dispatchInProcess(c, ctx)
+    if (inProcess) return inProcess
+    if (!gateways.llmUpstream.resolveOpenAiCompatible(session.provider)) {
+      return inProcessUnavailable(c, ctx)
+    }
+  }
 
   // Resolve the upstream base URL + bearer key (local runner vs the DB-backed key pool), then
   // forward + meter. A failure is already observed and returned ready-to-send.

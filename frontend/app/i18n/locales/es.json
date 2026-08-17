@@ -4189,8 +4189,8 @@
       "proxyHeading": "Claves de API de proxy / pasarela",
       "directAccountIntro": "Conecta una clave de API de proveedor compartida por todos los espacios de trabajo de esta cuenta. Las claves se almacenan cifradas, se agrupan y se rotan según el uso. Las claves de cuenta las gestiona un administrador.",
       "directIntro": "Conecta una clave de API de proveedor para que los modelos se ejecuten directamente en ese proveedor. Las claves se almacenan cifradas, se agrupan y se rotan según el uso. Asigna el alcance de una clave a este espacio de trabajo (compartida con el equipo) o a ti (tu propio grupo, usable en cualquier sitio).",
-      "proxyAccountIntro": "Conecta una clave de proxy (OpenRouter, LiteLLM) compartida por todos los espacios de trabajo de esta cuenta. Un proxy es un intermediario que da acceso a muchos proveedores tras una sola clave. Las claves se almacenan cifradas, se agrupan y se rotan según el uso.",
-      "proxyIntro": "Conecta una clave de proxy (OpenRouter, LiteLLM). Un proxy es un intermediario que llega a los modelos de muchos proveedores a través de una sola pasarela, en lugar de un proveedor directo. Las claves se almacenan cifradas, se agrupan y se rotan según el uso. Asigna el alcance de una clave a este espacio de trabajo (compartida con el equipo) o a ti (tu propio grupo, usable en cualquier sitio).",
+      "proxyAccountIntro": "Conecta una clave de proxy (OpenRouter, Bifrost, LiteLLM) compartida por todos los espacios de trabajo de esta cuenta. Un proxy es un intermediario que da acceso a muchos proveedores tras una sola clave. Las claves se almacenan cifradas, se agrupan y se rotan según el uso.",
+      "proxyIntro": "Conecta una clave de proxy (OpenRouter, Bifrost, LiteLLM). Un proxy es un intermediario que llega a los modelos de muchos proveedores a través de una sola pasarela, en lugar de un proveedor directo. Las claves se almacenan cifradas, se agrupan y se rotan según el uso. Asigna el alcance de una clave a este espacio de trabajo (compartida con el equipo) o a ti (tu propio grupo, usable en cualquier sitio).",
       "scopeField": "Alcance",
       "scopeWorkspace": "Este espacio de trabajo",
       "scopeUser": "Mis claves (solo yo)",
@@ -4247,6 +4247,11 @@
           "label": "OpenRouter",
           "step1": "Abre openrouter.ai → Keys y crea una clave de API.",
           "step2": "Copia la clave (empieza por sk-or-…); llega a más de 300 modelos a través de una sola pasarela."
+        },
+        "bifrost": {
+          "label": "Bifrost (pasarela autoalojada)",
+          "step1": "Genera una clave virtual en los ajustes de gobernanza de tu pasarela Bifrost (o usa su clave de API).",
+          "step2": "La URL base de la pasarela la establece el operador de tu despliegue (BIFROST_BASE_URL), no aquí."
         },
         "litellm": {
           "label": "LiteLLM (pasarela autoalojada)",

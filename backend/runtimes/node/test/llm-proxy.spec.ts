@@ -5,13 +5,19 @@ import { buildNodeContainer } from '../src/container.js'
 import { createApp } from '../src/server.js'
 import { setupTestDb } from './harness.js'
 
-// The LLM proxy + its live `llmCall` activity event are runtime-neutral (shared
-// `@cat-factory/server` controller), but each facade composes the proxy over its own
-// gateways + publisher. This spec proves the Node facade's real Hono app pushes the
-// SAME compact activity event the Cloudflare Worker does (the Worker asserts it over
-// the DO publisher in its own `llm-proxy.spec.ts`) — so the live "Model activity"
-// stream can't silently work on one runtime and not the other. CI provides Postgres
-// via `DATABASE_URL`; without it the spec skips.
+// The LLM proxy controller is runtime-neutral (shared `@cat-factory/server`), but each facade
+// composes it over its OWN gateways and publisher, so what this spec is for is the behaviour that
+// only the composition can show. Two things:
+//
+//   - the live `llmCall` activity event: the Node app must push the SAME compact event the
+//     Cloudflare Worker does (the Worker asserts it over the DO publisher in its own
+//     `llm-proxy.spec.ts`), or the "Model activity" stream silently works on one runtime only;
+//   - `workers-ai` routing: the Worker runs it in-process through the `AI` binding, and this facade
+//     has no binding, so the controller's fall-through to Cloudflare's OpenAI-compatible REST
+//     endpoint can only be driven here. That fall-through is what stops a dispatch guard that
+//     admits `workers-ai` everywhere from killing a run on a facade that refuses it.
+//
+// CI provides Postgres via `DATABASE_URL`; without it the spec skips.
 
 const BASE = 'https://cat-factory.test'
 const SECRET = 'proxy-secret'
@@ -41,7 +47,28 @@ if (databaseUrl) {
     })
   }
 
-  describe('[node] llm proxy live activity event', () => {
+  /** Capture the single upstream call the proxy makes, answering an OpenAI-shaped completion. */
+  function stubUpstream(): { url: () => string; auth: () => string } {
+    let url = ''
+    let auth = ''
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (target: string, init: { headers: Record<string, string> }) => {
+        url = target
+        auth = init.headers.authorization ?? ''
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 5 },
+          }),
+          { headers: { 'content-type': 'application/json' } },
+        )
+      }),
+    )
+    return { url: () => url, auth: () => auth }
+  }
+
+  describe('[node] llm proxy', () => {
     afterEach(() => vi.restoreAllMocks())
 
     it('pushes a compact llmCall activity event per proxied call (no prompt/response bodies)', async () => {
@@ -55,19 +82,7 @@ if (databaseUrl) {
         model: 'qwen3-max',
       })
 
-      vi.stubGlobal(
-        'fetch',
-        vi.fn(
-          async () =>
-            new Response(
-              JSON.stringify({
-                choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
-                usage: { prompt_tokens: 10, completion_tokens: 5 },
-              }),
-              { headers: { 'content-type': 'application/json' } },
-            ),
-        ),
-      )
+      stubUpstream()
 
       // Inject a recording publisher so we can observe the emit directly (Node's real
       // publisher is the no-op NoopEventPublisher — there is no real-time transport yet,
@@ -109,9 +124,68 @@ if (databaseUrl) {
       expect(activity).not.toHaveProperty('responseText')
       expect(activity).not.toHaveProperty('reasoningText')
     })
+
+    it('serves a workers-ai-locked step over the Cloudflare REST endpoint, with no pooled key', async () => {
+      // The other half of the shared controller's `workers-ai` decision, and the one only this
+      // facade can drive: there is no `AI` binding here, so `runInProcess` answers null and the
+      // controller must fall THROUGH to the forward path. `isProxyableProvider` admits `workers-ai`
+      // on every facade and the catalog offers every Cloudflare model once these two vars are set,
+      // so refusing it here killed a `coder` step at its first proxy call on a model the picker had
+      // just called available.
+      const workspaceId = `ws-${crypto.randomUUID()}`
+      const executionId = `ex-${crypto.randomUUID()}`
+      const token = await new ContainerSessionService({ secret: SECRET }).mint({
+        workspaceId,
+        executionId,
+        agentKind: 'coder',
+        provider: 'workers-ai',
+        model: '@cf/meta/llama-3.1-8b-instruct',
+      })
+      const upstream = stubUpstream()
+
+      const container = buildNodeContainer({
+        db,
+        env: {
+          ...TEST_ENV,
+          CLOUDFLARE_ACCOUNT_ID: 'acct1',
+          CLOUDFLARE_API_TOKEN: 'cf-account-token',
+        },
+      })
+      // Deliberately NO seeded key: `workers-ai` is not an `ApiKeyProvider`, so there is no pool to
+      // lease from and the bearer has to ride the resolved endpoint instead.
+      const app = createApp(container, TEST_ENV)
+
+      const res = await app.fetch(chatRequest(token))
+      expect(res.status).toBe(200)
+      expect(upstream.url()).toBe(
+        'https://api.cloudflare.com/client/v4/accounts/acct1/ai/v1/chat/completions',
+      )
+      expect(upstream.auth()).toBe('Bearer cf-account-token')
+    })
+
+    it('refuses a workers-ai-locked step when the Cloudflare pair is unset', async () => {
+      // Neither route: no binding on Node and no REST credentials to forward with. Reported as the
+      // provider being unavailable rather than as an upstream failure, because nothing was dialled.
+      const token = await new ContainerSessionService({ secret: SECRET }).mint({
+        workspaceId: `ws-${crypto.randomUUID()}`,
+        executionId: `ex-${crypto.randomUUID()}`,
+        agentKind: 'coder',
+        provider: 'workers-ai',
+        model: '@cf/meta/llama-3.1-8b-instruct',
+      })
+      const upstream = stubUpstream()
+
+      const app = createApp(buildNodeContainer({ db, env: TEST_ENV }), TEST_ENV)
+      const res = await app.fetch(chatRequest(token))
+      expect(res.status).toBe(502)
+      expect(((await res.json()) as { error: { message: string } }).error.message).toMatch(
+        /Provider 'workers-ai' is not available/,
+      )
+      expect(upstream.url()).toBe('')
+    })
   })
 } else {
-  describe.skip('[node] llm proxy live activity event (set DATABASE_URL to run)', () => {
+  describe.skip('[node] llm proxy (set DATABASE_URL to run)', () => {
     it('requires Postgres', () => {})
   })
 }

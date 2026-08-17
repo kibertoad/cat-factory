@@ -17,7 +17,7 @@ import * as v from 'valibot'
 /**
  * The curated model families the policy operates on — the coarse "family" axis of the
  * built-in catalog. `familyForModelId` (kernel) maps a catalog id (and OpenRouter slug)
- * onto one of these; ids with no family (an operator's LiteLLM gateway, an arbitrary
+ * onto one of these; ids with no family (an operator's self-hosted gateway, an arbitrary
  * OpenRouter slug, a per-user local runner) are UNCLASSIFIED and handled per the mode
  * (allowlist ⇒ blocked, blocklist ⇒ allowed — see `isAllowedByFamilyPolicy`).
  */

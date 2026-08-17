@@ -2,7 +2,11 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { LanguageModel } from 'ai'
-import { PROMPT_VERSIONS } from '@cat-factory/agents'
+import {
+  OPENAI_COMPATIBLE_PROVIDERS,
+  OPERATOR_HOSTED_GATEWAYS,
+  PROMPT_VERSIONS,
+} from '@cat-factory/agents'
 import type { ModelProvider } from '@cat-factory/kernel'
 import { MockLanguageModelV3 } from 'ai/test'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -169,6 +173,30 @@ describe('endpoints', () => {
     const ep = resolvePiEndpoint({ provider: 'deepseek', model: 'deepseek-chat' }, undefined, {})
     expect(ep.baseUrl).toBe('https://api.deepseek.com/v1')
     expect(ep.keyEnv).toBe('DEEPSEEK_API_KEY')
+  })
+
+  it('reaches every provider the shared table knows, honouring a base-URL override', () => {
+    // Derived from the shared table rather than a list here: the harness kept its own copy of the
+    // provider→URL map, so a vendor added (or a regional endpoint moved) upstream left benchmarks
+    // dialling a stale host or refusing the provider outright.
+    for (const provider of OPENAI_COMPATIBLE_PROVIDERS) {
+      const env = { [`${provider.toUpperCase()}_BASE_URL`]: 'https://stub.internal/v1' }
+      const ep = resolvePiEndpoint({ provider, model: 'm' }, undefined, env)
+      expect(ep).toEqual({
+        baseUrl: 'https://stub.internal/v1',
+        keyEnv: `${provider.toUpperCase()}_API_KEY`,
+      })
+    }
+  })
+
+  it('separates "Pi cannot speak to it" from "the gateway URL is unset"', () => {
+    expect(() => resolvePiEndpoint({ provider: 'anthropic', model: 'claude-x' }, undefined, {})) //
+      .toThrow(/not reached over an OpenAI-compatible endpoint/)
+    for (const gateway of OPERATOR_HOSTED_GATEWAYS) {
+      expect(() => resolvePiEndpoint({ provider: gateway, model: 'm' }, undefined, {})).toThrow(
+        new RegExp(`${gateway.toUpperCase()}_BASE_URL`),
+      )
+    }
   })
 })
 

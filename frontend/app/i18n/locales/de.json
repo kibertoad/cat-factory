@@ -3427,8 +3427,8 @@
       "proxyHeading": "Proxy-/Gateway-API-Schlüssel",
       "directAccountIntro": "Verbinden Sie einen Vendor-API-Schlüssel, der von jedem Workspace in diesem Account geteilt wird. Schlüssel werden verschlüsselt gespeichert, gepoolt und nach Nutzung rotiert. Account-Schlüssel werden vom Administrator verwaltet.",
       "directIntro": "Verbinden Sie einen Vendor-API-Schlüssel, damit Modelle direkt bei diesem Provider laufen. Schlüssel werden verschlüsselt gespeichert, gepoolt und nach Nutzung rotiert. Beschränken Sie einen Schlüssel auf diesen Workspace (mit dem Team geteilt) oder auf sich selbst (Ihr eigener Pool, überall nutzbar).",
-      "proxyAccountIntro": "Verbinden Sie einen Proxy-Schlüssel (OpenRouter, LiteLLM), der von jedem Workspace in diesem Account geteilt wird. Ein Proxy ist ein Vermittler, der viele Vendors hinter einem einzigen Schlüssel bündelt. Schlüssel werden verschlüsselt gespeichert, gepoolt und nach Nutzung rotiert.",
-      "proxyIntro": "Verbinden Sie einen Proxy-Schlüssel (OpenRouter, LiteLLM). Ein Proxy ist ein Vermittler, der die Modelle vieler Vendors über ein einziges Gateway erreicht, statt direkt bei einem Vendor. Schlüssel werden verschlüsselt gespeichert, gepoolt und nach Nutzung rotiert. Beschränken Sie einen Schlüssel auf diesen Workspace (mit dem Team geteilt) oder auf sich selbst (Ihr eigener Pool, überall nutzbar).",
+      "proxyAccountIntro": "Verbinden Sie einen Proxy-Schlüssel (OpenRouter, Bifrost, LiteLLM), der von jedem Workspace in diesem Account geteilt wird. Ein Proxy ist ein Vermittler, der viele Vendors hinter einem einzigen Schlüssel bündelt. Schlüssel werden verschlüsselt gespeichert, gepoolt und nach Nutzung rotiert.",
+      "proxyIntro": "Verbinden Sie einen Proxy-Schlüssel (OpenRouter, Bifrost, LiteLLM). Ein Proxy ist ein Vermittler, der die Modelle vieler Vendors über ein einziges Gateway erreicht, statt direkt bei einem Vendor. Schlüssel werden verschlüsselt gespeichert, gepoolt und nach Nutzung rotiert. Beschränken Sie einen Schlüssel auf diesen Workspace (mit dem Team geteilt) oder auf sich selbst (Ihr eigener Pool, überall nutzbar).",
       "scopeField": "Geltungsbereich",
       "scopeWorkspace": "Dieser Workspace",
       "scopeUser": "Meine Schlüssel (nur ich)",
@@ -3485,6 +3485,11 @@
           "label": "OpenRouter",
           "step1": "Öffnen Sie openrouter.ai → Keys und erstellen Sie einen API-Schlüssel.",
           "step2": "Kopieren Sie den Schlüssel (beginnt mit sk-or-…); er erreicht über ein Gateway mehr als 300 Modelle."
+        },
+        "bifrost": {
+          "label": "Bifrost (selbst gehostetes Gateway)",
+          "step1": "Erstellen Sie einen virtuellen Schlüssel in den Governance-Einstellungen Ihres Bifrost-Gateways (oder verwenden Sie dessen API-Schlüssel).",
+          "step2": "Die Basis-URL des Gateways wird von Ihrem Deployment-Betreiber festgelegt (BIFROST_BASE_URL), nicht hier."
         },
         "litellm": {
           "label": "LiteLLM (selbst gehostetes Gateway)",
