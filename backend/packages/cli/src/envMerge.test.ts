@@ -106,6 +106,9 @@ describe('mergeEnvFile', () => {
     // (which keys the file holds, what is unmanaged, what was preserved) would be a guess presented as
     // a fact. `parseEnv` cannot read such a file either.
     expect(() => mergeEnvFile('PEM="-----BEGIN CERT-----\nQm9keQ==\n', [])).toThrow(/never closed/)
+    // The degenerate case, which a check reading the LAST spanned line would pass: the opening quote
+    // is the only one there is, so it must not count as its own closer.
+    expect(() => mergeEnvFile('PEM="', [])).toThrow(/never closed/)
   })
 
   it('quotes a managed value the reader would otherwise disagree about', () => {

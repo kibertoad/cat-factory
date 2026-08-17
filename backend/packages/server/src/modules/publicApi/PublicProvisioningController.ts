@@ -501,9 +501,10 @@ function registerRepoAdoptionRoutes(app: Hono<AppEnv>): void {
  * found nothing wrong. The only real alternative was a SECOND VCS credential in the caller's config,
  * with its own scopes to get right, for data the workspace's own connection already reads.
  *
- * Four outcomes, kept apart because each takes a different action, and because folding any of them
+ * Five outcomes, kept apart because each takes a different action, and because folding any of them
  * onto "no such file" is the same mistake `PublicSpecController` documents at length: a repository
- * that answers nothing and a file that is genuinely absent look identical from a provider.
+ * that answers nothing and a file that is genuinely absent look identical from a provider. Two of the
+ * five are what {@link readGradableFile} exists to name.
  */
 function registerRepoFileRoute(app: Hono<AppEnv>): void {
   buildHonoRoute(app, getPublicRepoFileContract, async (c) => {

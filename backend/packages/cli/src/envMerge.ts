@@ -205,16 +205,19 @@ function readEnvLines(text: string): EnvLine[] {
       continue
     }
     const spanned = [raw]
-    while (index + 1 < physical.length) {
+    // Tracked rather than read back off the last element, which would count the OPENING quote in
+    // `raw` as its own closer for a `KEY="` that is the file's final line.
+    let closed = false
+    while (!closed && index + 1 < physical.length) {
       const next = physical[++index]!
       spanned.push(next)
-      if (next.includes(quote)) break
+      closed = next.includes(quote)
     }
-    // An unterminated quote is REFUSED rather than guessed at. Where the value ends is then unknowable,
-    // so every answer this module gives about the file (which keys it holds, what is unmanaged, what it
-    // preserved) would be a guess reported as a fact, and the whole point of the four-way report is
-    // that it can be trusted. The file is already unreadable to `parseEnv` for the same reason.
-    if (!spanned.at(-1)?.includes(quote)) {
+    // An unterminated quote is REFUSED rather than guessed at. Where the value ends is then
+    // unknowable, so every answer this module gives about the file (which keys it holds, what is
+    // unmanaged, what it preserved) would be a guess reported as a fact, and the whole point of the
+    // four-way report is that it can be trusted. `parseEnv` cannot read such a file either.
+    if (!closed) {
       throw new Error(
         `${key} opens a ${quote === '"' ? 'double' : 'single'}-quoted value that is never closed, ` +
           `so where it ends cannot be known and neither can what else this file holds. Close the ` +
