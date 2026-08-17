@@ -5,7 +5,7 @@ import {
   listBuiltinFixtures,
   suggestExperiment,
 } from './fixtures.js'
-import { scoreExpectations } from './rubrics.js'
+import { scoreExpectations } from './expectations.js'
 
 describe('listBuiltinFixtures', () => {
   it('projects every builtin definition to a valid wire fixture', () => {

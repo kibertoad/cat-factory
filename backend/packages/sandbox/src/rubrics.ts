@@ -1,17 +1,33 @@
-import type { SandboxExpectation } from '@cat-factory/contracts'
-
-// Grading rubrics for the Sandbox judge. These are lifted verbatim from the benchmark
-// harness's rubrics (`backend/internal/benchmark-harness/src/rubrics.ts`) so the in-product
-// Sandbox and the offline `cat-bench` grade on the same axes. Reference-free: each dimension
-// is scored 1–5 by the judge model against the task input + the candidate output; the weighted
-// mean is the cell score.
+// Grading rubrics for the Sandbox judge. Reference-free: each dimension is scored 1–5 by the
+// judge model against the task input + the candidate output; the weighted mean is the cell score.
 //
-// The copies are pinned equal by `benchmark-harness/test/rubrics.conformity.test.ts` — a
-// dimension added to one side and not the other does not fail anything on its own, it just
-// quietly makes a Sandbox score and a benchmark score incomparable. Change one, change both.
+// The first three (`requirement-review`, `code-review`, `implementation`) are lifted verbatim from
+// the benchmark harness's rubrics (`backend/internal/benchmark-harness/src/rubrics.ts`) so the
+// in-product Sandbox and the offline `cat-bench` grade on the same axes. Those copies are pinned
+// equal by `benchmark-harness/test/rubrics.conformity.test.ts`, which also asserts every harness
+// task IS a Sandbox task: a dimension added to one side and not the other does not fail anything on
+// its own, it just quietly makes a Sandbox score and a benchmark score incomparable. Change one,
+// change both.
+//
+// The remaining rubrics are Sandbox-only, because the offline harness has no runner for them. They
+// exist because a rubric is a claim about what the task IS: grading an architecture critique or a
+// bug triage on `requirement-review` scored them against `product_scope`, a dimension that
+// penalizes exactly the technical findings those two stages are FOR.
 
-/** The grading task a Sandbox agent kind maps to (drives which rubric is used). */
-export type SandboxTaskType = 'requirement-review' | 'code-review' | 'implementation'
+/**
+ * The grading task a Sandbox agent kind maps to (drives which rubric is used).
+ *
+ * Adding a member means adding its dimension list to {@link RUBRICS}, which is a
+ * `Record<SandboxTaskType, …>` and so fails to compile until it is there.
+ */
+export type SandboxTaskType =
+  | 'requirement-review'
+  | 'code-review'
+  | 'implementation'
+  | 'architecture-review'
+  | 'bug-triage'
+  | 'estimation'
+  | 'answer-recommendation'
 
 export interface RubricDimension {
   key: string
@@ -140,11 +156,236 @@ const IMPLEMENTATION: RubricDimension[] = [
   },
 ]
 
+// A design critique is the OPPOSITE of a requirements review on the one axis that matters: the
+// technical layer is what it is FOR. Grading it on `requirement-review` docked it for every
+// partition-key, durability and hot-key finding, which is why the architecture fixtures'
+// highest-value expectations were the ones the rubric punished.
+const ARCHITECTURE_REVIEW: RubricDimension[] = [
+  {
+    key: 'design_risk_detection',
+    label: 'Design-risk detection',
+    description:
+      'Finds the genuine correctness, scaling, consistency and durability flaws in the proposed ' +
+      'design, including the ones its own wording papers over.',
+    weight: 3,
+  },
+  {
+    key: 'failure_mode_reasoning',
+    label: 'Failure-mode reasoning',
+    description:
+      'Reasons about what the design does when a component dies, two writes race, delivery ' +
+      'retries or load is uneven, rather than only assessing the happy path.',
+    weight: 3,
+  },
+  {
+    key: 'tradeoff_grounding',
+    label: 'Trade-off grounding',
+    description:
+      'Weighs the proposal against concrete alternatives and says what each one buys and costs, ' +
+      'instead of asserting a preference.',
+    weight: 2,
+  },
+  {
+    key: 'operability',
+    label: 'Operability',
+    description:
+      'Covers what running this actually needs: rollout and migration, what is observable, the ' +
+      'cost shape, and what a person would be paged for.',
+    weight: 1,
+  },
+  {
+    key: 'actionability',
+    label: 'Actionability',
+    description:
+      'Each finding names the part of the design it concerns and what to change; no generic ' +
+      'architecture advice that would apply to any proposal.',
+    weight: 2,
+  },
+  {
+    key: 'false_positives',
+    label: 'Few false positives',
+    description:
+      'Does not invent flaws or demand scale the stated context does not need, and says plainly ' +
+      'where a choice is sound.',
+    weight: 2,
+  },
+]
+
+// Bug triage shares nothing with a requirements review except its output shape. Its whole job is
+// to make an unactionable report diagnosable, and the two moves that decide whether it succeeded
+// (splitting conflated symptoms, and asking about containment rather than only the fix) had no
+// dimension of their own.
+const BUG_TRIAGE: RubricDimension[] = [
+  {
+    key: 'missing_facts',
+    label: 'Missing facts',
+    description:
+      'Asks for the facts that actually block a diagnosis: reproduction, scope, timing and the ' +
+      'regression window, environment, and observed versus expected behaviour.',
+    weight: 3,
+  },
+  {
+    key: 'symptom_separation',
+    label: 'Symptom separation',
+    description:
+      'Splits a report that conflates several distinct failures into separate issues rather ' +
+      'than triaging them as one, and names what distinguishes them.',
+    weight: 3,
+  },
+  {
+    key: 'hypothesis_quality',
+    label: 'Hypothesis quality',
+    description:
+      'Offers a concrete, testable cause where the evidence supports one (and says what would ' +
+      'confirm it), without guessing where it does not.',
+    weight: 2,
+  },
+  {
+    key: 'containment',
+    label: 'Blast radius & recovery',
+    description:
+      'Covers who is affected and how many, and whether anything lost or corrupted can be ' +
+      'recovered, rather than treating the eventual fix as the whole response.',
+    weight: 2,
+  },
+  {
+    key: 'no_redundancy',
+    label: 'No redundant questions',
+    description:
+      'Does not re-ask what the report or an attached investigation already answers; builds on ' +
+      'the evidence it was given.',
+    weight: 1,
+  },
+  {
+    key: 'actionability',
+    label: 'Actionability',
+    description:
+      'Each item is phrased so the reporter or an on-call engineer can act on it directly.',
+    weight: 2,
+  },
+]
+
+// A predictive triage returns three numbers and a paragraph, so every rubric written for prose
+// grades it on axes it structurally cannot show. What matters instead is whether the numbers are
+// defensible, independent of each other, and justified by something in the task.
+const ESTIMATION: RubricDimension[] = [
+  {
+    key: 'calibration',
+    label: 'Calibration',
+    description:
+      'The scores are defensible for the work described: neither anchored to the middle of the ' +
+      'range nor uniformly extreme.',
+    weight: 3,
+  },
+  {
+    key: 'axis_independence',
+    label: 'Axis independence',
+    description:
+      'Complexity, risk and impact are judged separately. A task may be intricate and safe, or ' +
+      'trivial and dangerous; three near-identical numbers need a reason.',
+    weight: 2,
+  },
+  {
+    key: 'evidence',
+    label: 'Evidence in the rationale',
+    description:
+      'The rationale names the specific things in the task that drive each score, rather than ' +
+      'restating the task or asserting a level.',
+    weight: 3,
+  },
+  {
+    key: 'blast_radius_reasoning',
+    label: 'Blast-radius reasoning',
+    description:
+      'Impact reflects who and how much is affected if the change goes wrong, not how large or ' +
+      'how difficult the change is (that is complexity).',
+    weight: 2,
+  },
+  {
+    key: 'format_compliance',
+    label: 'Format compliance',
+    description:
+      'Returns exactly the requested JSON object (the three numeric axes plus the rationale) ' +
+      'and nothing else: no prose, no code fences, no extra keys.',
+    weight: 1,
+  },
+]
+
+// The Requirement Writer's two self-reported fields are what an unattended run acts on (ADR 0053):
+// a confident answer may be adopted with nobody reading it, and `groundedIn` is the provenance a
+// human checks before trusting one. Both are claims the writer makes about itself, so both get a
+// dimension of their own; no prose rubric scores an honest provenance report.
+const ANSWER_RECOMMENDATION: RubricDimension[] = [
+  {
+    key: 'answer_concreteness',
+    label: 'Concrete, adoptable answers',
+    description:
+      'Each recommendation is a specific default a product owner could accept as written, not a ' +
+      'restatement of the finding and not an "it depends".',
+    weight: 3,
+  },
+  {
+    key: 'product_scope',
+    label: 'Product scope discipline',
+    description:
+      'Recommends product / business decisions only (a behaviour, rule, limit or boundary), ' +
+      'never a technical design, and does not answer a technical question that slipped past the ' +
+      'reviewer as if it were one.',
+    weight: 2,
+  },
+  {
+    key: 'grounding_honesty',
+    label: 'Honest grounding',
+    description:
+      'Reports where each answer actually came from. A standard or the project spec is cited ' +
+      'only when it genuinely settles the finding; general knowledge is labelled as such rather ' +
+      'than dressed up as sourced.',
+    weight: 3,
+  },
+  {
+    key: 'confidence_calibration',
+    label: 'Confidence calibration',
+    description:
+      'Confidence reflects how sure the answer is the one THIS project would choose. High ' +
+      'confidence is reserved for answers that need nobody to sign off; anything turning on ' +
+      'unstated business specifics is rated low.',
+    weight: 3,
+  },
+  {
+    key: 'coverage',
+    label: 'Coverage',
+    description:
+      'Answers every finding it was given, one entry per id, with none dropped, merged or ' +
+      'invented.',
+    weight: 2,
+  },
+  {
+    key: 'concision',
+    label: 'Concision',
+    description: 'States the answer in a few sentences, without preamble, hedging or padding.',
+    weight: 1,
+  },
+]
+
 const RUBRICS: Record<SandboxTaskType, RubricDimension[]> = {
   'requirement-review': REQUIREMENT_REVIEW,
   'code-review': CODE_REVIEW,
   implementation: IMPLEMENTATION,
+  'architecture-review': ARCHITECTURE_REVIEW,
+  'bug-triage': BUG_TRIAGE,
+  estimation: ESTIMATION,
+  'answer-recommendation': ANSWER_RECOMMENDATION,
 }
+
+/**
+ * Every grading task the Sandbox ships, as a value.
+ *
+ * Exported so a consumer can enumerate the rubrics rather than re-listing them: the
+ * benchmark-harness conformity guard reads it to assert that every task the OFFLINE harness grades
+ * is also a Sandbox task with identical dimensions, which is a relation over a list it does not
+ * own. Derived from {@link RUBRICS} so adding a rubric extends it with no second edit.
+ */
+export const SANDBOX_TASK_TYPES = Object.keys(RUBRICS) as readonly SandboxTaskType[]
 
 export function rubricFor(task: SandboxTaskType): Rubric {
   return { task, dimensions: RUBRICS[task] }
@@ -166,123 +407,4 @@ export function weightedTotal(
     }
   }
   return weight === 0 ? 0 : Math.round((sum / weight) * 100) / 100
-}
-
-/** An expectation is "high-impact" (a serious miss) at or above this impact rating. */
-export const HIGH_IMPACT_THRESHOLD = 4
-/** An expectation is "tricky" (its catch earns the wow bonus) at or above this rating. */
-export const TRICKY_THRESHOLD = 4
-
-export interface ExpectationScore {
-  /** Expectations the candidate output surfaced. */
-  caught: SandboxExpectation[]
-  /** Expectations the candidate output missed. */
-  missed: SandboxExpectation[]
-  /**
-   * Impact-weighted recall in [0,1]: `1 − Σ(impact of missed) / Σ(impact of all)`. Missing
-   * a high-impact item moves this far more than missing a low-impact one — the asymmetry the
-   * fixtures are graded on. 1 when there are no expectations.
-   */
-  impactRecall: number
-  /**
-   * Trickiness-weighted "wow" bonus in [0,1]: `Σ(trickiness of caught tricky items) /
-   * Σ(trickiness of all tricky items)`. Only the genuinely tricky items (trickiness ≥
-   * {@link TRICKY_THRESHOLD}) contribute, so catching a hard-to-spot finding is rewarded
-   * while missing one is not penalized here (impact handles penalties). 1 when nothing is
-   * tricky (no wow on offer).
-   */
-  wowBonus: number
-  /** Ids of missed expectations with impact ≥ {@link HIGH_IMPACT_THRESHOLD}. */
-  missedHighImpact: string[]
-}
-
-/**
- * Deterministic, asymmetric objective score for `findings` fixtures. An expectation is
- * "caught" when any of its `matchHints` (defaulting to its `summary`) appears in the
- * candidate output as a contiguous run of word tokens — case/whitespace/punctuation
- * insensitive, so `reset logic` does not match inside `preset logic`. Recorded ALONGSIDE
- * the judge grade (never blended in); it intentionally does not penalize extra findings
- * (that is the judge's `false_positives` dimension). The two signals are deliberately
- * different: `impactRecall` punishes missing what matters, `wowBonus` rewards catching what
- * is hard to spot. See {@link SandboxExpectation}.
- */
-export function scoreExpectations(
-  expectations: readonly SandboxExpectation[],
-  output: string,
-): ExpectationScore {
-  const haystack = tokenize(output)
-  const caught: SandboxExpectation[] = []
-  const missed: SandboxExpectation[] = []
-  for (const expectation of expectations) {
-    const hints = expectation.matchHints.length > 0 ? expectation.matchHints : [expectation.summary]
-    const hit = hints.some((hint) => {
-      const needle = tokenize(hint)
-      return needle.length > 0 && containsSequence(haystack, needle)
-    })
-    ;(hit ? caught : missed).push(expectation)
-  }
-
-  const totalImpact = expectations.reduce((sum, e) => sum + e.impact, 0)
-  const missedImpact = missed.reduce((sum, e) => sum + e.impact, 0)
-  const impactRecall = totalImpact === 0 ? 1 : round2(1 - missedImpact / totalImpact)
-
-  const trickyTotal = expectations
-    .filter((e) => e.trickiness >= TRICKY_THRESHOLD)
-    .reduce((sum, e) => sum + e.trickiness, 0)
-  const trickyCaught = caught
-    .filter((e) => e.trickiness >= TRICKY_THRESHOLD)
-    .reduce((sum, e) => sum + e.trickiness, 0)
-  const wowBonus = trickyTotal === 0 ? 1 : round2(trickyCaught / trickyTotal)
-
-  const missedHighImpact = missed.filter((e) => e.impact >= HIGH_IMPACT_THRESHOLD).map((e) => e.id)
-  return { caught, missed, impactRecall, wowBonus, missedHighImpact }
-}
-
-/**
- * Render the graded expectations into a Markdown section to append to the judge prompt —
- * "what the judge should expect to see", with the scoring guidance the asymmetry implies.
- * Returns an empty string when there are no expectations (an un-graded fixture).
- */
-export function renderExpectationBrief(expectations: readonly SandboxExpectation[]): string {
-  if (expectations.length === 0) return ''
-  const lines = [
-    '## Expected findings (grading reference)',
-    '',
-    'A strong response should surface the following. Each is rated by **impact** (how bad it',
-    'is to miss, 1–5) and **trickiness** (how hard it is to spot, 1–5). Reward catching',
-    'high-trickiness items — those are the impressive catches. Penalize missing high-impact',
-    'items most heavily; missing a merely tricky item is a smaller concern.',
-    '',
-  ]
-  for (const e of expectations) {
-    lines.push(`- **${e.summary}** _(impact ${e.impact}, trickiness ${e.trickiness})_`)
-    if (e.detail.trim()) lines.push(`  - ${e.detail.trim()}`)
-  }
-  return lines.join('\n')
-}
-
-/** Round to 2 decimal places. */
-function round2(n: number): number {
-  return Math.round(n * 100) / 100
-}
-
-/** Lowercase alphanumeric word tokens (drops punctuation/whitespace). */
-function tokenize(text: string): string[] {
-  return text.toLowerCase().match(/[a-z0-9]+/g) ?? []
-}
-
-/** Whether `needle`'s tokens appear as a contiguous run within `haystack`'s tokens. */
-function containsSequence(haystack: string[], needle: string[]): boolean {
-  if (needle.length === 0) return false
-  for (let i = 0; i + needle.length <= haystack.length; i++) {
-    let hit = true
-    for (let j = 0; j < needle.length; j++) {
-      if (haystack[i + j] !== needle[j]) {
-        hit = false
-        break
-      }
-    }
-    if (hit) return true
-  }
-  return false
 }

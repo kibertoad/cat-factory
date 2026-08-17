@@ -4,12 +4,15 @@ import {
   cloneSandboxPromptSchema,
   createSandboxExperimentSchema,
   createSandboxFixtureSchema,
+  sandboxAgentBucketSchema,
   sandboxExperimentSchema,
   sandboxFixtureKindSchema,
   sandboxFixtureSchema,
   sandboxGradeSchema,
   sandboxPromptVersionSchema,
+  sandboxRunModeSchema,
   sandboxRunSchema,
+  sandboxUnsupportedReasonSchema,
   saveSandboxVersionSchema,
   setSandboxLabelsSchema,
 } from '../sandbox.js'
@@ -26,7 +29,17 @@ import { errorResponses, singleStringParam } from './_shared.js'
 const sandboxAgentKindMetaSchema = v.object({
   agentKind: v.string(),
   label: v.string(),
-  bucket: v.string(),
+  /** How PRODUCTION dispatches the kind. */
+  bucket: sandboxAgentBucketSchema,
+  /** How the SANDBOX runs a cell for it. `unsupported` ⇒ `unsupportedReason` says why. */
+  sandboxRun: sandboxRunModeSchema,
+  /**
+   * Why the Sandbox cannot run this kind, as a bounded CODE, or null when it can. The SPA maps it
+   * to translated copy and shows it beside the field, so the reason a create would be refused is
+   * stated before anyone builds a matrix; the catalog stays the one place that DECIDES, without
+   * the backend composing prose no locale can reach.
+   */
+  unsupportedReason: v.nullable(sandboxUnsupportedReasonSchema),
   rubric: v.string(),
   fixtureKinds: v.array(sandboxFixtureKindSchema),
   basePromptId: v.nullable(v.string()),

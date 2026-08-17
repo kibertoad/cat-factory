@@ -13,6 +13,7 @@ import type {
   SandboxPromptOrigin,
   SandboxPromptVersion,
   SandboxRun,
+  SandboxUnsupportedReason,
 } from '~/types/sandbox'
 
 const ui = useUiStore()
@@ -34,8 +35,20 @@ const FIXTURE_KIND_LABEL = computed<Record<SandboxFixtureKind, string>>(() => ({
   clarity: t('sandbox.fixtureKind.clarity'),
   architecture: t('sandbox.fixtureKind.architecture'),
   'code-review': t('sandbox.fixtureKind.code-review'),
+  estimation: t('sandbox.fixtureKind.estimation'),
+  'answer-recommendation': t('sandbox.fixtureKind.answer-recommendation'),
   'repo-feature': t('sandbox.fixtureKind.repo-feature'),
   'repo-bug': t('sandbox.fixtureKind.repo-bug'),
+}))
+/**
+ * Why the Sandbox cannot run a kind, in the reader's own language.
+ *
+ * The backend sends the CODE and this maps it: the catalog decides, the SPA words it. Composing
+ * the sentence server-side would have put untranslated English under a translated form label, and
+ * an exhaustive Record is what stops a new code shipping that way silently.
+ */
+const UNSUPPORTED_REASON_LABEL = computed<Record<SandboxUnsupportedReason, string>>(() => ({
+  'container-run-required': t('sandbox.unsupportedReason.container-run-required'),
 }))
 /**
  * Badge colour per prompt origin. An exhaustive Record over the closed union rather than a
@@ -99,6 +112,19 @@ watch(
 )
 
 // ---- experiment builder ----------------------------------------------------
+/**
+ * The kinds the builder may offer, and the ones it cannot, from the catalog's own answer.
+ *
+ * Offering an un-runnable kind is worse than omitting it: `POST /sandbox/experiments` refuses it, so
+ * the whole matrix is built and then 400s. But omitting it silently would read as "the Sandbox does
+ * not know about the coder", so the excluded kinds are NAMED with the catalog's own reason under the
+ * field. Their prompts stay in the Prompts tab, where cloning and promoting them still works.
+ */
+const runnableAgentKinds = computed(() => store.agentKinds.filter((k) => k.sandboxRun === 'inline'))
+const unrunnableAgentKinds = computed(() =>
+  store.agentKinds.filter((k) => k.sandboxRun !== 'inline'),
+)
+
 const agentKind = ref('requirements-review')
 const name = ref('')
 const selectedPromptIds = ref<string[]>([])
@@ -298,10 +324,22 @@ async function archive(prompt: SandboxPromptVersion) {
             <UFormField :label="t('sandbox.builder.agent')">
               <USelect
                 v-model="agentKind"
-                :items="store.agentKinds.map((k) => ({ label: k.label, value: k.agentKind }))"
+                :items="runnableAgentKinds.map((k) => ({ label: k.label, value: k.agentKind }))"
                 value-key="value"
                 class="w-full"
               />
+              <p
+                v-for="excluded in unrunnableAgentKinds"
+                :key="excluded.agentKind"
+                class="mt-1 text-[11px] leading-snug text-slate-500"
+              >
+                <span class="font-medium text-slate-400">{{ excluded.label }}:</span>
+                {{
+                  excluded.unsupportedReason
+                    ? UNSUPPORTED_REASON_LABEL[excluded.unsupportedReason]
+                    : t('sandbox.unsupportedReason.unknown')
+                }}
+              </p>
             </UFormField>
 
             <div>

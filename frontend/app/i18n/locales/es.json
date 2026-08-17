@@ -6778,8 +6778,14 @@
       "clarity": "claridad",
       "architecture": "arquitectura",
       "code-review": "revisión de código",
+      "estimation": "estimación",
+      "answer-recommendation": "respuestas recomendadas",
       "repo-feature": "función de repositorio",
       "repo-bug": "error de repositorio"
+    },
+    "unsupportedReason": {
+      "container-run-required": "Su entregable es un commit publicado, así que evaluarlo requiere una ejecución real en contenedor contra un repositorio semilla; una celda en línea solo puede evaluar texto.",
+      "unknown": "Este agente no puede ejecutarse en el Sandbox."
     },
     "fixtureOrigin": {
       "builtin": "integrado",

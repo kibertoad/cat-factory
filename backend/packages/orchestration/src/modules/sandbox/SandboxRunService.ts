@@ -24,20 +24,25 @@ import {
   resolveScopedModelProvider,
   ValidationError,
 } from '@cat-factory/kernel'
-import { catFactoryObservability, systemPromptFor } from '@cat-factory/agents'
+import { catFactoryObservability, composedSystemPromptFor } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { SANDBOX_REPO_FIXTURE_KINDS } from '@cat-factory/contracts'
 import {
   expandMatrix,
   listBaselines,
   listBuiltinFixtures,
   rubricFor,
-  sandboxKindMeta,
+  type SandboxAgentKindMeta,
   versionLabel,
   weightedTotal,
 } from '@cat-factory/sandbox'
 import { generateText } from 'ai'
+import {
+  assertSandboxFixtureMatchesKind,
+  assertSandboxRunnable,
+  assertSandboxRunnableFixture,
+} from './sandboxAdmission.js'
 import { composeExperimentDetail, type SandboxExperimentDetail } from './SandboxService.js'
+import { renderFixtureInput } from './sandbox-input.js'
 import {
   buildJudgePrompt,
   coerceJudgeScores,
@@ -46,7 +51,6 @@ import {
   JUDGE_SYSTEM_PROMPT,
   objectiveFor,
   parseModelCatalogId,
-  renderFixtureInput,
 } from './sandbox.logic.js'
 
 export interface SandboxRunServiceDependencies {
@@ -82,6 +86,20 @@ interface ResolvedPrompt {
 }
 
 /**
+ * A fixture resolved for this run, with its task input ALREADY RENDERED.
+ *
+ * Rendering happens during resolution (before the run is claimed) rather than inside the cell loop
+ * because {@link renderFixtureInput} refuses a payload it cannot read: run inside the loop, one
+ * malformed fixture would abort the whole matrix mid-flight, leaving every later cell `queued`
+ * forever with no error on it and the earlier cells' tokens already spent. Pre-claim it is just a
+ * bad request, which is what the claim comment below promises.
+ */
+interface ResolvedFixture {
+  fixture: SandboxFixture
+  taskInput: string
+}
+
+/**
  * The Sandbox run-driver + judge. {@link launch} expands a draft experiment's matrix
  * into cells, runs each inline candidate (one LLM call against the prompt-version's
  * system text + the fixture's rendered input), grades it with the judge model against
@@ -106,25 +124,22 @@ export class SandboxRunService {
     if (experiment.status === 'running') {
       throw new ConflictError('This experiment is already running.')
     }
-    const meta = sandboxKindMeta(experiment.agentKind)
-    if (!meta) throw new ValidationError(`"${experiment.agentKind}" is not a Sandbox-testable kind`)
-    if (meta.bucket === 'container') {
-      throw new ValidationError(
-        `The "${experiment.agentKind}" agent runs in a container; container experiments are not yet supported in the Sandbox.`,
-      )
-    }
+    const meta = assertSandboxRunnable(experiment.agentKind)
 
     const provider = await this.providerFor(workspaceId)
     const prompts = await this.resolvePrompts(workspaceId, experiment)
-    const fixtures = await this.resolveFixtures(workspaceId, experiment)
+    const fixtures = await this.resolveFixtures(workspaceId, experiment, meta)
     const rubric = rubricFor(meta.rubric)
 
     // Atomically claim the run BEFORE touching the grid: the conditional transition to
     // `running` lets exactly one concurrent launch win, so two simultaneous launches can't
     // both clear + re-expand the grid (duplicating cells) or race the grid-clearing deletes.
     // The fast-path read above is just a friendly early error; THIS is the authoritative gate.
-    // Validation/resolution runs first, so a bad request never mutates state or strands the
-    // experiment `running`. The `finally` below settles the terminal status from here on.
+    // Validation/resolution runs first, RENDERING each fixture's task input as it goes, so every
+    // refusal a bad matrix can raise lands here rather than mid-grid: a fixture whose payload the
+    // builder cannot read is a 4xx with nothing persisted, never a run that spends tokens on the
+    // cells before it and leaves the rest `queued` with no error to explain them. The `finally`
+    // below settles the terminal status from here on.
     if (!(await this.deps.sandboxExperimentRepository.claimForRun(workspaceId, experimentId))) {
       throw new ConflictError('This experiment is already running.')
     }
@@ -170,8 +185,8 @@ export class SandboxRunService {
         run: SandboxRun,
       ): Promise<{ tokensSpent: number; graded: boolean }> => {
         const prompt = prompts.get(run.promptVersionId)
-        const fixture = fixtures.get(run.fixtureId)
-        if (!prompt || !fixture) {
+        const resolved = fixtures.get(run.fixtureId)
+        if (!prompt || !resolved) {
           await this.failRun(
             workspaceId,
             run,
@@ -181,7 +196,7 @@ export class SandboxRunService {
           )
           return { tokensSpent: 0, graded: false }
         }
-        const taskInput = renderFixtureInput(fixture)
+        const { fixture, taskInput } = resolved
         let cellSpent = 0
 
         // Phase 1 — run the candidate. A failure here means the cell produced nothing,
@@ -193,11 +208,12 @@ export class SandboxRunService {
           const candidate = await generateText({
             model: provider.resolve(candidateRef),
             // Composed exactly as production dispatch composes a workspace prompt override: the
-            // stored text is the BASE (track) prompt, and `systemPromptFor` layers the surface
-            // directives and trait guidance on top. Grading the bare base would measure text that
-            // is never sent — which matters most at the moment a well-graded candidate is promoted
-            // to the live prompt, since the promoted prompt would then behave unlike the graded one.
-            system: systemPromptFor(
+            // stored text is the shipped BASE prompt, and `composedSystemPromptFor` puts the rest
+            // back (surface directives and trait guidance, or a bespoke kind's directives half).
+            // Grading the bare base would measure text that is never sent, which matters most at the
+            // moment a well-graded candidate is promoted to the live prompt, since the promoted
+            // prompt would then behave unlike the graded one.
+            system: composedSystemPromptFor(
               experiment.agentKind,
               this.deps.agentKindRegistry,
               prompt.systemText,
@@ -340,23 +356,29 @@ export class SandboxRunService {
     return map
   }
 
-  /** Resolve every fixture referenced by the matrix (stored, else builtin), refusing repo fixtures. */
+  /**
+   * Resolve every fixture referenced by the matrix (stored, else builtin), refusing one the driver
+   * cannot run and RENDERING each one's task input. Every refusal this method can raise therefore
+   * happens before the run is claimed, so a bad matrix is a 4xx with no grid rather than a
+   * half-finished experiment.
+   */
   private async resolveFixtures(
     workspaceId: string,
     experiment: SandboxExperiment,
-  ): Promise<Map<string, SandboxFixture>> {
+    meta: SandboxAgentKindMeta,
+  ): Promise<Map<string, ResolvedFixture>> {
     const builtins = new Map(listBuiltinFixtures(this.deps.clock.now()).map((f) => [f.id, f]))
-    const map = new Map<string, SandboxFixture>()
+    const map = new Map<string, ResolvedFixture>()
     for (const id of new Set(experiment.matrix.fixtureIds)) {
       const fixture =
         (await this.deps.sandboxFixtureRepository.get(workspaceId, id)) ?? builtins.get(id)
       if (!fixture) throw new ValidationError(`Unknown fixture "${id}"`)
-      if ((SANDBOX_REPO_FIXTURE_KINDS as readonly string[]).includes(fixture.kind)) {
-        throw new ValidationError(
-          `Fixture "${fixture.name}" needs a repository checkout; repo fixtures are not yet supported in the Sandbox.`,
-        )
-      }
-      map.set(id, fixture)
+      assertSandboxRunnableFixture(fixture)
+      assertSandboxFixtureMatchesKind(fixture, meta)
+      map.set(id, {
+        fixture,
+        taskInput: renderFixtureInput(fixture, meta, this.deps.agentKindRegistry),
+      })
     }
     return map
   }

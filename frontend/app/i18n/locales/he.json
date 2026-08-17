@@ -6778,8 +6778,14 @@
       "clarity": "בהירות",
       "architecture": "ארכיטקטורה",
       "code-review": "סקירת קוד",
+      "estimation": "אמדן",
+      "answer-recommendation": "תשובות מומלצות",
       "repo-feature": "פיצ׳ר במאגר",
       "repo-bug": "באג במאגר"
+    },
+    "unsupportedReason": {
+      "container-run-required": "התוצר שלו הוא קומיט שנדחף, ולכן הערכה שלו דורשת הרצה אמיתית בקונטיינר מול מאגר זרע; תא מוטבע יכול להעריך טקסט בלבד.",
+      "unknown": "סוכן זה אינו יכול לרוץ ב-Sandbox."
     },
     "fixtureOrigin": {
       "builtin": "מובנה",

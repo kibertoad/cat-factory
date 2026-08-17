@@ -119,6 +119,19 @@ describe('the on-call prompt', () => {
     expect(p).toContain('p99 doubled')
     expect(p.trimEnd().endsWith('"evidence":["…"]}.')).toBe(true)
   })
+
+  it('closes on the reply-shape instruction after a caller RUN NOTICE', () => {
+    // `opts.runNotice` is the third appender (the Sandbox's "you have no checkout" note), and it
+    // is threaded through the option rather than concatenated onto the finished string for exactly
+    // this reason: a caller appending afterwards would bury the reply shape behind an aside on the
+    // kinds most likely to have one.
+    const p = userPromptFor(context(ON_CALL_AGENT_KIND, withPr(7, 'feat/y')), registry, {
+      runNotice: 'EVALUATION NOTE: this run has NO repository checkout.',
+    })
+    expect(p).toContain('EVALUATION NOTE')
+    expect(p.indexOf('EVALUATION NOTE')).toBeLessThan(p.indexOf('"evidence"'))
+    expect(p.trimEnd().endsWith('"evidence":["…"]}.')).toBe(true)
+  })
 })
 
 describe('the conflict-resolver prompt', () => {

@@ -8,20 +8,26 @@ export {
   type SandboxTaskType,
   type Rubric,
   type RubricDimension,
+  SANDBOX_TASK_TYPES,
+  rubricFor,
+  weightedTotal,
+} from './rubrics.js'
+
+export {
   type ExpectationScore,
   HIGH_IMPACT_THRESHOLD,
   TRICKY_THRESHOLD,
-  rubricFor,
-  weightedTotal,
   scoreExpectations,
   renderExpectationBrief,
-} from './rubrics.js'
+} from './expectations.js'
 
 export {
   type SandboxAgentBucket,
   type SandboxAgentKindMeta,
+  type SandboxRunMode,
   SANDBOX_AGENT_KINDS,
   sandboxKindMeta,
+  statesMissingCheckout,
   baselinePromptText,
   listBaselines,
 } from './baselines.js'

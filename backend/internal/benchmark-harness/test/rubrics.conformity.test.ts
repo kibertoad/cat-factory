@@ -1,7 +1,7 @@
-import { rubricFor as sandboxRubricFor } from '@cat-factory/sandbox'
+import { SANDBOX_TASK_TYPES, rubricFor as sandboxRubricFor } from '@cat-factory/sandbox'
 import { describe, expect, it } from 'vitest'
 import { rubricFor } from '../src/rubrics'
-import type { TaskType } from '../src/types'
+import { TASK_TYPES } from '../src/types'
 
 // `@cat-factory/sandbox` carries a hand-copied duplicate of these rubrics so the in-product
 // Sandbox and the offline `cat-bench` grade on the same axes (it says so in its own header). A
@@ -13,13 +13,26 @@ import type { TaskType } from '../src/types'
 // here, so the published package stays unaware of it. If a rubric legitimately needs to differ
 // per surface one day, that is a real design decision — split the types and delete this test,
 // don't loosen it.
-
-const TASKS: TaskType[] = ['requirement-review', 'code-review', 'implementation']
+//
+// The relation is deliberately ONE-WAY. The Sandbox ships rubrics the offline harness has no runner
+// for (`architecture-review`, `bug-triage`, `estimation`, `answer-recommendation`), so equality of
+// the two task LISTS would fail on every Sandbox-only addition and teach the next person to
+// re-pin it unread. What must hold is that the harness never grades on an axis the Sandbox does not
+// know: every harness task IS a Sandbox task, with identical dimensions.
 
 describe('rubric conformity with @cat-factory/sandbox', () => {
-  for (const task of TASKS) {
+  for (const task of TASK_TYPES) {
     it(`keeps the ${task} dimensions identical in both copies`, () => {
       expect(rubricFor(task).dimensions).toEqual(sandboxRubricFor(task).dimensions)
     })
   }
+
+  it('grades only tasks the Sandbox also ships', () => {
+    // Derived from both sides' own exported lists rather than a count: an added harness task with no
+    // Sandbox rubric fails here (its grades would be incomparable), while an added Sandbox-only
+    // rubric passes, which is the asymmetry above.
+    for (const task of TASK_TYPES) {
+      expect(SANDBOX_TASK_TYPES, `${task} has no Sandbox rubric`).toContain(task)
+    }
+  })
 })

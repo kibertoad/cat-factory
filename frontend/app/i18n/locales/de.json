@@ -7021,8 +7021,14 @@
       "clarity": "Klarheit",
       "architecture": "Architektur",
       "code-review": "Code-Review",
+      "estimation": "Schätzung",
+      "answer-recommendation": "empfohlene Antworten",
       "repo-feature": "Repo-Feature",
       "repo-bug": "Repo-Bug"
+    },
+    "unsupportedReason": {
+      "container-run-required": "Sein Ergebnis ist ein gepushter Commit. Die Bewertung braucht daher einen echten Container-Lauf gegen ein Seed-Repository; eine Inline-Zelle kann nur Text bewerten.",
+      "unknown": "Dieser Agent kann nicht in der Sandbox laufen."
     },
     "fixtureOrigin": {
       "builtin": "integriert",

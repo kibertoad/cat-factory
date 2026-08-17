@@ -15,7 +15,7 @@ import { mockFrontendSection, mockSystemPrompt } from './prompts/mock.js'
 import { testingSystemPrompt, testerEnvironmentSection } from './prompts/testing.js'
 import type { AgentKindRegistry } from './kinds/registry.js'
 import { traitGuidanceFor } from './kinds/traits.js'
-import { roleSystemPrompt } from './prompts/roles.js'
+import { roleSystemPrompt, TRIAGE_JSON_CONTRACT } from './prompts/roles.js'
 import {
   FINAL_ANSWER_IN_REPLY,
   PLATFORM_IS_NOT_THE_PRODUCT,
@@ -64,11 +64,18 @@ import {
  * multi-line verdict from arriving as invalid JSON. A workspace that edits its reviewer prompt for
  * an unrelated reason would otherwise get ungraded findings back — every point reaching the engine
  * as equally urgent — with nothing in the editor saying why.
+ *
+ * {@link TRIAGE_JSON_CONTRACT} is the third of that shape and the one a BESPOKE split could not
+ * have covered: the `task-estimator` takes its prompt from a built-in track, so an override
+ * replaces the whole thing, and its JSON shape is what `coerceTaskEstimate` reads. An estimate
+ * that fails to parse is silent (every step gated on the estimate simply stops being gated),
+ * which is why it must survive an edit rather than merely be documented as load-bearing.
  */
 const OVERRIDE_PRESERVED_FRAGMENTS = [
   READ_ONLY_GUARDRAIL,
   FINAL_ANSWER_IN_REPLY,
   REVIEW_FINDINGS_LAYOUT,
+  TRIAGE_JSON_CONTRACT,
 ] as const
 
 /**
@@ -310,6 +317,17 @@ export interface AgentUserPromptOptions {
    * phrase itself without one rather than invent a branch name.
    */
   dispatch?: AgentDispatchContext
+  /**
+   * A caller-supplied note about how THIS run differs from the run the kind's own prompt assumes.
+   * The Sandbox is the caller: it runs a container-backed kind inline, so the composed system
+   * prompt tells the agent to diff a branch it will not have, and saying nothing would grade it on
+   * failing to do something impossible (the "degrade loudly" rule).
+   *
+   * Threaded through here rather than concatenated onto the finished string BECAUSE of the
+   * ordering below: `userPromptSuffix` exists to be the last thing the agent reads, and a caller
+   * appending afterwards silently buries a kind's reply-shape instruction behind an aside.
+   */
+  runNotice?: string
 }
 
 /**
@@ -326,15 +344,24 @@ export function userPromptFor(
   opts: AgentUserPromptOptions = {},
 ): string {
   const { prompt, suffix } = buildBaseUserPrompt(context, registry, opts)
-  // The kind's closing instruction is applied OUTSIDE both wrappers, not folded into the base
+  // The kind's closing instruction is applied OUTSIDE every wrapper, not folded into the base
   // prompt: `userPromptSuffix` exists to be the last thing the agent reads (the `on-call` kind's
-  // "respond with ONLY a JSON object" is the shape), and both wrappers append. Folded in earlier,
+  // "respond with ONLY a JSON object" is the shape), and every wrapper appends. Folded in earlier,
   // a revision re-run would end on the reviewer's feedback and an inline run on a context-file
-  // dump, leaving the reply-shape instruction buried mid-prompt.
+  // dump, leaving the reply-shape instruction buried mid-prompt. `opts.runNotice` is inside the
+  // same rule: it goes after the material and BEFORE the suffix.
   return withSuffix(
-    withInjectedContext(withPriorReview(withRevision(prompt, context), context), context, opts),
+    withRunNotice(
+      withInjectedContext(withPriorReview(withRevision(prompt, context), context), context, opts),
+      opts.runNotice,
+    ),
     suffix,
   )
+}
+
+/** Append the caller's note about how this run differs from the one the prompt assumes. */
+function withRunNotice(prompt: string, notice: string | undefined): string {
+  return notice?.trim() ? `${prompt}\n\n${notice.trim()}` : prompt
 }
 
 /**

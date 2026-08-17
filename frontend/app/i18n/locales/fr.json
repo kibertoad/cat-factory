@@ -6778,8 +6778,14 @@
       "clarity": "clarté",
       "architecture": "architecture",
       "code-review": "revue de code",
+      "estimation": "estimation",
+      "answer-recommendation": "réponses recommandées",
       "repo-feature": "fonctionnalité de dépôt",
       "repo-bug": "bogue de dépôt"
+    },
+    "unsupportedReason": {
+      "container-run-required": "Son livrable est un commit poussé : l’évaluer exige une exécution réelle en conteneur sur un dépôt de départ ; une cellule en ligne ne peut évaluer que du texte.",
+      "unknown": "Cet agent ne peut pas s’exécuter dans le Sandbox."
     },
     "fixtureOrigin": {
       "builtin": "intégré",

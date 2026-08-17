@@ -1,7 +1,7 @@
 import type { AgentKind } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '../kinds/registry.js'
-import { baseSystemPromptFor } from '../catalog.js'
-import type { BespokeSystemPrompt } from './bespoke.js'
+import { baseSystemPromptFor, systemPromptFor } from '../catalog.js'
+import { composeBespokePrompt, type BespokeSystemPrompt } from './bespoke.js'
 import { INLINE_ENGINE_SYSTEM_PROMPTS } from './inline-engine.js'
 import { DEPLOY_FIXER_DIRECTIVES, DEPLOY_FIXER_ROLE_PROMPT } from '../kinds/deploy-fixer.js'
 import { FINAL_ANSWER_IN_REPLY } from './shared.js'
@@ -140,4 +140,32 @@ export const BESPOKE_SYSTEM_PROMPTS: Partial<Record<AgentKind, BespokeSystemProm
  */
 export function shippedBasePromptFor(kind: AgentKind, registry: AgentKindRegistry): string {
   return BESPOKE_SYSTEM_PROMPTS[kind]?.role ?? baseSystemPromptFor(kind, registry)
+}
+
+/**
+ * The system prompt a kind ACTUALLY SENDS, given a replacement for its shipped base
+ * ({@link shippedBasePromptFor}). The inverse of that function: one takes the composed prompt
+ * apart down to the editable unit, this puts it back together.
+ *
+ * A bespoke-prompt kind takes the replacement in place of its ROLE half and keeps its directives;
+ * every other kind goes through `systemPromptFor`, which re-applies the engine-enforced directives
+ * and trait guidance on top. Either way an unedited kind sends byte-for-byte what it sent before,
+ * and a replaced one keeps the invariants it is run under.
+ *
+ * Every caller that holds a candidate/override for a kind and needs the text that would go on the
+ * wire uses this, so the branch lives once: container dispatch (`dispatchSystemPromptFor`, which
+ * only adds reading the replacement off the run context) and the Sandbox run-driver, which composes
+ * a graded candidate exactly as production composes an override. Reaching for `systemPromptFor`
+ * alone is the bug it replaces: for the inline ENGINE kinds that returns the thin `roles.ts` line
+ * plus a second copy of directives the base already carried, so a candidate was graded on a prompt
+ * no run ever sends and could not be promoted unchanged.
+ */
+export function composedSystemPromptFor(
+  kind: AgentKind,
+  registry: AgentKindRegistry,
+  replacement?: string,
+): string {
+  const bespoke = BESPOKE_SYSTEM_PROMPTS[kind]
+  if (bespoke) return composeBespokePrompt(bespoke, replacement)
+  return systemPromptFor(kind, registry, replacement)
 }
