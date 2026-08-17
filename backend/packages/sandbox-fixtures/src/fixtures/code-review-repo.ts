@@ -38,6 +38,17 @@ function repoReviewerContext(
     stepIndex: 1,
     isFinalStep: true,
     block,
+    // A repo-scale change always belongs to a service in production, and the engine names it in
+    // every dispatch, so this fixture states one. The single-file fixtures deliberately do not:
+    // between them the library exercises both branches of `ownServiceSection`, which is the one
+    // section that renders when the answer is "no service" (an unstated product must not read like
+    // an obvious one).
+    ownService: {
+      stated: true,
+      frameId: 'frame-settings-api',
+      title: 'Settings API',
+      description: 'Per-workspace settings storage and the HTTP surface that reads them.',
+    },
     priorOutputs: [{ agentKind: 'coder', output: report }],
     decisions: [],
     resolvedDecision: null,
@@ -304,14 +315,17 @@ export const CODE_REVIEW_REPO_FIXTURES: SandboxFixtureDefinition[] = [
             'A green test that covers nothing is worse than a missing one: it reads as coverage. ' +
             'The test name claims expiry and the body never expires anything.',
           matchHints: [
-            'never advance',
-            'does not advance',
-            'advancetimers',
+            // Prefix-marked: the natural phrasing is third-person ("the test never advances
+            // them"), and `vi.advanceTimersByTime` tokenizes to one long word, so the bare stems
+            // matched neither.
+            'never advance*',
+            'does not advance*',
+            'advancetimers*',
             'fake timers',
             'vacuous',
             'tests nothing',
             'always pass',
-            'never expires in the test',
+            'never expire*',
           ],
         },
       ),

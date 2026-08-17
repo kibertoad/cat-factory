@@ -6783,6 +6783,10 @@
       "repo-feature": "funkcja repozytorium",
       "repo-bug": "błąd repozytorium"
     },
+    "unsupportedReason": {
+      "container-run-required": "Jego wynikiem jest wypchnięty commit, więc ocena wymaga prawdziwego uruchomienia w kontenerze na repozytorium zalążkowym; komórka inline potrafi ocenić wyłącznie tekst.",
+      "unknown": "Ten agent nie może działać w Sandboksie."
+    },
     "fixtureOrigin": {
       "builtin": "wbudowany",
       "custom": "niestandardowy"

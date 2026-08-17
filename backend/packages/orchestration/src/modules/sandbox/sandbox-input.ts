@@ -1,8 +1,10 @@
 import type { SandboxFixture } from '@cat-factory/contracts'
+import { blockTypeSchema } from '@cat-factory/contracts'
 import type {
   AgentRunContext,
   BlockType,
   InjectedContextFile,
+  OwnServiceContext,
   RequirementReviewItem,
 } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
@@ -29,8 +31,31 @@ import {
 // is deliberately no generic fallback: an unknown kind is refused at launch, so a fallback could
 // only ever mean "silently grade a different task".
 
+/** Everything a builder needs about the cell whose input it is rendering. */
+interface FixtureCell {
+  payload: Record<string, unknown>
+  /** The fixture's name, for the refusals below. */
+  fixtureName: string
+  /**
+   * The CATALOG entry the cell runs under. The agent kind comes from here and nowhere else: the
+   * system prompt is composed from `meta.agentKind`, so reading the kind off the payload instead
+   * would let a hand-authored fixture compose one kind's user prompt under another's system
+   * prompt: the same "silently grade a different task" the missing generic fallback rules out.
+   */
+  meta: SandboxAgentKindMeta
+  /**
+   * The evaluation note this cell owes the candidate ({@link NO_CHECKOUT_NOTICE}), or undefined.
+   *
+   * Each builder PLACES it rather than the caller appending it to the finished string. On the
+   * `userPromptFor` path the prompt ends on the kind's `userPromptSuffix` by design (that field
+   * exists to be the last thing the agent reads), so an append afterwards buries a reply-shape
+   * instruction behind an aside.
+   */
+  notice: string | undefined
+}
+
 /** Builds the user prompt for one agent kind from a fixture's payload. */
-type InputBuilder = (payload: Record<string, unknown>, fixtureName: string) => string
+type InputBuilder = (cell: FixtureCell) => string
 
 /**
  * What the candidate is TOLD when the Sandbox runs a kind production dispatches into a container.
@@ -59,19 +84,32 @@ const NO_CHECKOUT_NOTICE = [
  * kind decides what prompt that shape becomes.
  */
 function inputBuilders(registry: AgentKindRegistry): Record<string, InputBuilder> {
-  const asAgentContext: InputBuilder = (payload, fixtureName) =>
-    userPromptFor(agentRunContext(payload, fixtureName), registry)
+  const asAgentContext: InputBuilder = (cell) =>
+    userPromptFor(agentRunContext(cell), registry, cell.notice ? { runNotice: cell.notice } : {})
+  // The inline ENGINE builders return a plain string with no closing instruction of their own, so
+  // appending is the right placement for them; it is still routed through one helper rather than
+  // hand-written three times, so a kind that later grows a suffix has one place to change.
   return {
-    'requirements-review': (payload, name) => buildReviewPrompt(requirementsContext(payload, name)),
-    'clarity-review': (payload, name) => buildClarityPrompt(clarityContext(payload, name)),
-    'requirements-writer': (payload, name) => {
-      const context = requirementsContext(payload, name)
-      return buildRecommendationPrompt(context, findings(payload, name), grounding(payload))
-    },
+    'requirements-review': (cell) =>
+      appendNotice(buildReviewPrompt(requirementsContext(cell)), cell),
+    'clarity-review': (cell) => appendNotice(buildClarityPrompt(clarityContext(cell)), cell),
+    'requirements-writer': (cell) =>
+      appendNotice(
+        buildRecommendationPrompt(
+          requirementsContext(cell),
+          findings(cell),
+          grounding(cell.payload),
+        ),
+        cell,
+      ),
     reviewer: asAgentContext,
     'architect-companion': asAgentContext,
     'task-estimator': asAgentContext,
   }
+}
+
+function appendNotice(prompt: string, cell: FixtureCell): string {
+  return cell.notice ? `${prompt}\n\n${cell.notice}` : prompt
 }
 
 /**
@@ -81,6 +119,9 @@ function inputBuilders(registry: AgentKindRegistry): Record<string, InputBuilder
  * its agent kind consumes. That is deliberate: the old tolerant renderer turned a malformed
  * workspace fixture into an EMPTY prompt, and the cell then ran, the judge was told "(no task input
  * was supplied)", and it graded anyway, producing a real-looking score for a task nobody posed.
+ *
+ * Because it throws, the run-driver resolves it BEFORE claiming the experiment: a fixture the
+ * builder cannot read is a bad request, not a half-run grid.
  */
 export function renderFixtureInput(
   fixture: SandboxFixture,
@@ -94,8 +135,12 @@ export function renderFixtureInput(
       { reason: 'sandbox_input_unsupported' },
     )
   }
-  const text = build(fixture.payload ?? {}, fixture.name)
-  return statesMissingCheckout(meta) ? `${text}\n\n${NO_CHECKOUT_NOTICE}` : text
+  return build({
+    payload: fixture.payload ?? {},
+    fixtureName: fixture.name,
+    meta,
+    notice: statesMissingCheckout(meta) ? NO_CHECKOUT_NOTICE : undefined,
+  })
 }
 
 // ---- payload coercion -----------------------------------------------------
@@ -103,47 +148,40 @@ export function renderFixtureInput(
 // coercion asserts what its builder cannot work without and defaults the rest. The BUILTIN payloads
 // are additionally pinned against the real context types by `sandbox-fixture-payloads.test.ts`.
 
-const BLOCK_TYPES: readonly BlockType[] = [
-  'frontend',
-  'service',
-  'api',
-  'database',
-  'queue',
-  'integration',
-  'external',
-  'environment',
-]
+/**
+ * Narrow a payload's `block.type` through the picklist that OWNS the vocabulary rather than a copy
+ * of its members. A hand list is silently partial the day a block type is added: the coercion keeps
+ * compiling, downgrades the new type to `service`, and the fixture's prompt then names a different
+ * kind of thing than the fixture describes.
+ */
+function isBlockType(value: unknown): value is BlockType {
+  return (blockTypeSchema.options as readonly string[]).includes(value as string)
+}
 
 /** The `{ title, type, description }` every context shape starts from. */
-function block(
-  payload: Record<string, unknown>,
-  fixtureName: string,
-): { title: string; type: BlockType; description: string } {
-  const raw = asRecord(payload.block)
+function block(cell: FixtureCell): { title: string; type: BlockType; description: string } {
+  const raw = asRecord(cell.payload.block)
   const title = asString(raw.title)
   if (!title) {
     throw new ValidationError(
-      `Fixture "${fixtureName}" has no \`block.title\`; there is nothing for the agent to work on.`,
+      `Fixture "${cell.fixtureName}" has no \`block.title\`; there is nothing for the agent to work on.`,
       { reason: 'sandbox_fixture_payload_invalid' },
     )
   }
-  const type = raw.type
   return {
     title,
-    type: BLOCK_TYPES.includes(type as BlockType) ? (type as BlockType) : 'service',
+    type: isBlockType(raw.type) ? raw.type : 'service',
     description: asString(raw.description),
   }
 }
 
-function requirementsContext(
-  payload: Record<string, unknown>,
-  fixtureName: string,
-): RequirementsContext {
+function requirementsContext(cell: FixtureCell): RequirementsContext {
+  const payload = cell.payload
   // `service` rides through as authored: absent means the fixture deliberately does not identify
   // the product, which `buildReviewPrompt` STATES ("do not pick one") rather than omitting. A
   // fixture that supplies one is exercising the opposite, identified path.
   return {
-    block: block(payload, fixtureName),
+    block: block(cell),
     docs: asArray(payload.docs).map((doc) => {
       const d = asRecord(doc)
       return {
@@ -169,9 +207,10 @@ function requirementsContext(
   }
 }
 
-function clarityContext(payload: Record<string, unknown>, fixtureName: string): ClarityContext {
+function clarityContext(cell: FixtureCell): ClarityContext {
+  const payload = cell.payload
   return {
-    block: block(payload, fixtureName),
+    block: block(cell),
     ...optional('service', payload.service as ClarityContext['service']),
     ...optionalString('investigation', payload.investigation),
     ...optionalString('clarifiedDoc', payload.clarifiedDoc),
@@ -183,8 +222,8 @@ function clarityContext(payload: Record<string, unknown>, fixtureName: string): 
  * contract is one recommendation per finding id, so a fixture with none poses no task and its
  * `coverage` dimension would have nothing to score.
  */
-function findings(payload: Record<string, unknown>, fixtureName: string): RequirementReviewItem[] {
-  const items = asArray(payload.findings).map((item, index) => {
+function findings(cell: FixtureCell): RequirementReviewItem[] {
+  const items = asArray(cell.payload.findings).map((item, index) => {
     const f = asRecord(item)
     return {
       id: asString(f.id) || `finding-${index + 1}`,
@@ -201,7 +240,7 @@ function findings(payload: Record<string, unknown>, fixtureName: string): Requir
   })
   if (items.length === 0) {
     throw new ValidationError(
-      `Fixture "${fixtureName}" declares no \`findings\`; the requirement writer answers findings, so there is nothing to recommend.`,
+      `Fixture "${cell.fixtureName}" declares no \`findings\`; the requirement writer answers findings, so there is nothing to recommend.`,
       { reason: 'sandbox_fixture_payload_invalid' },
     )
   }
@@ -242,17 +281,22 @@ function grounding(payload: Record<string, unknown>): RecommendationGrounding {
  * states its own budget), which is why a multi-file fixture uses it rather than pasting the diff
  * into a prior output.
  */
-function agentRunContext(payload: Record<string, unknown>, fixtureName: string): AgentRunContext {
+function agentRunContext(cell: FixtureCell): AgentRunContext {
+  const payload = cell.payload
   const resolved = asRecord(payload.resolvedDecision)
   return {
-    agentKind: asString(payload.agentKind) || 'reviewer',
+    // From the CATALOG entry, never the payload: this context composes the USER prompt while
+    // `meta.agentKind` composes the SYSTEM prompt, and a payload that named a different kind (or
+    // named none, and defaulted) would pair one kind's task framing with another's instructions.
+    agentKind: cell.meta.agentKind,
     pipelineName: asString(payload.pipelineName) || 'sandbox',
     stepIndex: typeof payload.stepIndex === 'number' ? payload.stepIndex : 0,
     isFinalStep: payload.isFinalStep !== false,
     block: {
-      ...block(payload, fixtureName),
+      ...block(cell),
       ...optional('estimate', payload.estimate as AgentRunContext['block']['estimate']),
     },
+    ownService: ownService(payload),
     priorOutputs: asArray(payload.priorOutputs).map((prior) => {
       const p = asRecord(prior)
       return { agentKind: asString(p.agentKind) || 'coder', output: asString(p.output) }
@@ -267,6 +311,26 @@ function agentRunContext(payload: Record<string, unknown>, fixtureName: string):
         : null,
     ...optional('injectedContextFiles', contextFiles(payload.injectedContextFiles)),
   }
+}
+
+/**
+ * Which system the fixture's work belongs to, ALWAYS answered.
+ *
+ * Production's `AgentContextBuilder` populates `ownService` on every dispatch, and
+ * `ownServiceSection` is the one section that renders when the value says "no service", because a
+ * short task title names no software, so a silent omission reads exactly like a task whose product
+ * is obvious, and a model asked for concrete output then supplies one. Leaving the field undefined
+ * here would have graded these three kinds on a prompt production never sends, and penalised a
+ * candidate for inventing a product the harness gave it no way to know.
+ *
+ * A fixture that identifies one authors `ownService` as the real `OwnServiceContext` (the payload
+ * IS the context shape); one that does not gets the honest `not-under-a-service`, which is what
+ * production sends for a task sitting outside every service frame.
+ */
+function ownService(payload: Record<string, unknown>): OwnServiceContext {
+  const own = payload.ownService as OwnServiceContext | undefined
+  if (own && typeof own === 'object' && typeof own.stated === 'boolean') return own
+  return { stated: false, reason: 'not-under-a-service' }
 }
 
 /** The injected context files, or undefined when the fixture declares none. */

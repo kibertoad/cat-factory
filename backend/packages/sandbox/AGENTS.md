@@ -25,10 +25,17 @@ for it. The code `reviewer` is `container` + `inline` (production clones the PR 
 does not), the `coder` is `container` + `unsupported` (its deliverable is a pushed commit). One
 merged field described the reviewer as inline while its composed prompt told it to diff a branch,
 and advertised the coder as testable while every draft for it was refused at create.
-`unsupportedReason` is the ONE copy of that refusal: the create endpoint, the run-driver and the
-SPA's excluded-kind note all read it. `statesMissingCheckout` derives the third fact from those two,
-so the run-driver can state the absent checkout rather than grade a candidate on failing to run
-`git diff`.
+`unsupportedReason` is the ONE place the refusal is DECIDED, as a bounded CODE rather than a
+sentence: `sandboxAdmission.ts` turns it into the API message an operator sees and the SPA maps it
+to translated copy under the field, so the catalog holds no prose a locale cannot reach.
+`statesMissingCheckout` derives the third fact from those two, so the run-driver can state the
+absent checkout rather than grade a candidate on failing to run `git diff`.
+
+**Container cells, when they land, must SUPPRESS the workspace prompt override.** Their dispatch
+goes through `dispatchSystemPromptFor`, which reads the override off the run context, and an
+experiment must run its SELECTED candidate. Passed through unchanged, every prompt column of the
+grid returns identical scores with nothing saying why. Full model:
+[`agent-prompt-overrides.md`](../../docs/agent-prompt-overrides.md).
 
 **A rubric is a claim about what the task IS.** `SANDBOX_TASK_TYPES` is exported as a value and the
 `RUBRICS` table is a total `Record`, so adding a task type fails to compile until it has dimensions.

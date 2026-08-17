@@ -84,6 +84,24 @@ export type SandboxAgentBucket = v.InferOutput<typeof sandboxAgentBucketSchema>
 export const sandboxRunModeSchema = v.picklist(['inline', 'unsupported'])
 export type SandboxRunMode = v.InferOutput<typeof sandboxRunModeSchema>
 
+/**
+ * Why the Sandbox cannot run a kind, as a bounded CODE rather than prose.
+ *
+ * A code because the SPA has to render this to a person in their own language: prose composed in
+ * the catalog reaches the browser untranslatable, and the backend does not localize (it emits a
+ * machine-readable reason the SPA maps to a key). It is also what keeps the two readers' wording
+ * independent while the DECISION stays in one place: the operator hitting the API gets a sentence
+ * naming the route, the person in the builder gets translated copy under the field.
+ *
+ * `container-run-required`: the kind's deliverable is a pushed commit, so grading it needs a real
+ * container run against a seed repository the deployment owns. An inline cell can only grade text.
+ */
+export const sandboxUnsupportedReasonSchema = v.picklist(['container-run-required'])
+export type SandboxUnsupportedReason = v.InferOutput<typeof sandboxUnsupportedReasonSchema>
+
+/** Every unsupported reason, as a value, for a caller that must react to each one (the SPA's map). */
+export const SANDBOX_UNSUPPORTED_REASONS = sandboxUnsupportedReasonSchema.options
+
 // ---- Fixtures -------------------------------------------------------------
 
 /**

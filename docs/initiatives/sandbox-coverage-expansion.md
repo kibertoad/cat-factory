@@ -44,7 +44,8 @@ Three defects, each of which makes a Sandbox score quietly wrong rather than abs
   inverse: what an override replaces.
 - **A catalog entry answers the two execution questions separately.** `bucket` is how PRODUCTION
   dispatches the kind; `sandboxRun` is how the Sandbox runs a cell for it; `unsupportedReason` is
-  the single string the create endpoint, the run-driver and the SPA's excluded-kind note all read.
+  the single bounded CODE the create endpoint, the run-driver and the SPA's excluded-kind note all
+  read, each wording it for its own reader.
 - **A container kind the Sandbox runs inline is TOLD it has no checkout** (`statesMissingCheckout`
   plus the run-driver's evaluation note). Its composed system prompt was written for an agent
   holding a real clone.
@@ -53,21 +54,28 @@ Three defects, each of which makes a Sandbox score quietly wrong rather than abs
 
 ## Committed scope
 
-- [x] Route every cell's task input through the production prompt builder
-      ([#TBD](https://github.com/kibertoad/cat-factory/pulls))
+All of the below landed in [#2037](https://github.com/kibertoad/cat-factory/pull/2037) unless
+another PR is named.
+
+- [x] Route every cell's task input through the production prompt builder, `ownService` included
+      (production sets it on every dispatch, and `ownServiceSection` renders the ABSENCE, so
+      leaving it unset graded three kinds on a prompt production never sends)
 - [x] Fix the baseline text to the promotable unit, and hoist the composition branch into
       `@cat-factory/agents`
 - [x] `architecture-review`, `bug-triage`, `estimation` and `answer-recommendation` rubrics;
       re-map `clarity-review` and `architect-companion`
 - [x] `task-estimator` and `requirements-writer` catalog entries, with fixture kinds and fixtures
-- [x] Split `bucket` from `sandboxRun`, with one home for the refusal, refused at CREATE as well as
-      launch
+- [x] Split `bucket` from `sandboxRun`, with one home for the refusal (a bounded CODE the SPA
+      translates), refused at CREATE as well as launch, and the fixture↔kind pairing refused at both
 - [x] A repo-scale (multi-file) reviewer fixture, delivered as injected context files
 - [x] Explicit `*` prefix marker on `matchHints` (a bare stem was a dead hint: the scorer compares
       tokens by equality, so `idempoten` never matched `idempotent` and scored "missed" for every
       answer)
+- [x] Reconcile the builtin fixture library against the CATALOG on every read, rather than seeding
+      once when the workspace has none
 - [ ] Container cells, for the kinds whose deliverable is a pushed commit. See the decision below:
-      the route is a deployment-owned seed repository, NOT an injected fake.
+      the route is a deployment-owned seed repository, NOT an injected fake. **Their dispatch must
+      suppress the workspace prompt override** (see the gotchas).
 - [ ] Durable fan-out for the matrix. `launch` drives every cell inline in the request today,
       bounded by the cell cap and the token budget. A large matrix belongs on Workflows / pg-boss
       like execution and bootstrap.
@@ -140,6 +148,20 @@ checkout rather than letting the prompt claim one. Only the write side waits on 
   requires one high-impact and one tricky expectation each.
 - **The catalog advertised the `coder` and then 400-ed every draft for it.** Splitting `bucket` from
   `sandboxRun` is what let the builder exclude it while its prompts stay editable.
+- **Container cells will pick up the workspace prompt override unless told not to.** Their dispatch
+  goes through `dispatchSystemPromptFor`, which reads `AgentRunContext.systemPromptOverride`; an
+  experiment must run its SELECTED candidate, so that path needs the override suppressed
+  EXPLICITLY. The symptom is not an error: every prompt column of the grid returns the same score.
+- **A promotable kind whose JSON contract lives inside its ROLE text is one edit from silence.**
+  The `task-estimator` takes its prompt from a built-in track, so a promoted candidate replaces the
+  whole thing, contract included, and `coerceTaskEstimate` then parses nothing while the run looks
+  normal. Its shape is now a named `OVERRIDE_PRESERVED_FRAGMENTS` member. **Check that before
+  adding a kind to the catalog**: the bespoke `{ role, directives }` split is not available to a
+  track-prompt kind.
+- **A negatively-phrased expectation cannot be scored objectively.** `scoreExpectations` detects
+  PRESENCE, so "does not invent a standard" scores "missed" against a model that behaved correctly
+  and said nothing. State the positive behaviour a right answer contains, and leave the absence to
+  the rubric dimension that covers it (the judge can see an absence; the token matcher cannot).
 
 ## Related
 

@@ -6783,6 +6783,10 @@
       "repo-feature": "リポジトリ機能",
       "repo-bug": "リポジトリのバグ"
     },
+    "unsupportedReason": {
+      "container-run-required": "成果物はプッシュされたコミットのため、評価にはシード用リポジトリに対する実際のコンテナ実行が必要です。インラインのセルはテキストしか評価できません。",
+      "unknown": "このエージェントはサンドボックスでは実行できません。"
+    },
     "fixtureOrigin": {
       "builtin": "組み込み",
       "custom": "カスタム"

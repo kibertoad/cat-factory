@@ -21,6 +21,15 @@ last-write-wins would silently discard one of two people's prompts.
 on top, because those are invariants of how the platform runs a kind rather than editorial
 content, so the editor shows, and an override supplies, `baseSystemPromptFor`.
 
+**Reach for the two TOTAL seams, not that pair.** `shippedBasePromptFor(kind, registry)` is what an
+override REPLACES and `composedSystemPromptFor(kind, registry, replacement?)` is what then goes on
+the wire, and each already branches on whether the kind's prompt is bespoke. `systemPromptFor` alone
+is right only for a kind that has no bespoke entry: for an inline ENGINE kind it returns the thin
+`roles.ts` line and appends a second copy of directives the real prompt already carried, so a caller
+using it shows an editor text nobody runs and grades a candidate on a prompt nothing sends. Three
+callers ride the total pair: container dispatch (`dispatchSystemPromptFor`, which only adds reading
+the replacement off the run context), the prompt editor, and the Sandbox run-driver.
+
 ## An invariant reaches a shipped prompt by TWO routes and only one survives an override
 
 `applySurfaceDirectives` APPENDS, but a built-in track prompt carries the same rule INLINE.
@@ -36,7 +45,11 @@ there because a companion's verdict is READ by the engine and RENDERED to a pers
 edited for an unrelated reason would otherwise take the severity grading with it (every finding
 then reaches the engine equally urgent, and nothing can hold a run on a must-fix) along with the
 escaping rule (a multi-line summary arrives as invalid JSON and costs a repair retry), with nothing
-in the editor saying why.
+in the editor saying why. `TRIAGE_JSON_CONTRACT` is there because the `task-estimator`'s prompt
+comes from a built-in track, so the `{ role, directives }` split below is not available to it and
+the JSON shape `coerceTaskEstimate` reads sits inside the editable text. **A parse failure there is
+SILENT**: no estimate is persisted, so every step gated on the estimate simply stops being gated
+and the run looks normal.
 
 ## The engine resolves the override ONCE per dispatch
 
@@ -67,7 +80,7 @@ an addition, not a replacement, is the default a variant should reach for. The d
 actually ran on `step.promptVariant` `{ id, applied, fingerprint? }` beside `promptRevision`, and
 every reader keys off the PIN, never off `stepOptions.agentVariantId`.
 
-## `BESPOKE_CONTAINER_SYSTEM_PROMPTS` is SPLIT into `{ role, directives }`
+## `BESPOKE_SYSTEM_PROMPTS` is SPLIT into `{ role, directives }`
 
 `merger` and `on-call` dispatch a bespoke constant instead of their role prompt, bypassing
 `applySurfaceDirectives`. The role is editable; the directives (the JSON contract the engine
@@ -84,3 +97,9 @@ time through the same override path production uses, so a candidate is graded on
 actually be sent. Promote is `POST /agent-prompts/:kind/promote`, NOT a sandbox route: it writes
 the live prompt, so it answers to `settings.manage` rather than the sandbox's
 `integrations.manage`.
+
+That sharing runs the OTHER way too, and it is the trap for the Sandbox's future container cells:
+their dispatch would go through `dispatchSystemPromptFor`, which reads the workspace override off
+the run context. **An experiment must run its SELECTED candidate**, so that path has to suppress
+the override explicitly. Passed straight through, every prompt column of the grid would score
+identically, with nothing saying why.

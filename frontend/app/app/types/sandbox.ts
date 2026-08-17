@@ -6,13 +6,15 @@
 // All wire shapes are sourced from @cat-factory/contracts (single source of truth).
 // The overview / agent-kind-meta / experiment-detail composites have no exported
 // contract type (the routes model them inline), so they stay frontend-only below.
-// `bucket` and `sandboxRun` reuse the contract's picklist types (the builder branches on
-// `sandboxRun`, so a widened `string` there would let a typo compile); `rubric` stays the
+// `bucket`, `sandboxRun` and `unsupportedReason` reuse the contract's picklist types (the builder
+// branches on `sandboxRun` and MAPS `unsupportedReason` to a locale key, so a widened `string`
+// there would let a typo compile and a new member ship untranslated); `rubric` stays the
 // contract's looser `string`, since nothing here branches on it.
 
 export type {
   SandboxAgentBucket,
   SandboxRunMode,
+  SandboxUnsupportedReason,
   SandboxPromptOrigin,
   SandboxPromptVersion,
   SandboxFixtureKind,
@@ -42,6 +44,7 @@ import type {
   SandboxPromptVersion,
   SandboxRun,
   SandboxRunMode,
+  SandboxUnsupportedReason,
 } from '@cat-factory/contracts'
 
 /** The Sandbox catalog entry for a testable agent kind (from the overview). Frontend-only. */
@@ -56,8 +59,12 @@ export interface SandboxAgentKindMeta {
    * a 400 on a surface that suggested it.
    */
   sandboxRun: SandboxRunMode
-  /** Why the Sandbox cannot run this kind, straight from the catalog; null when it can. */
-  unsupportedReason: string | null
+  /**
+   * Why the Sandbox cannot run this kind, as the catalog's bounded CODE; null when it can. The
+   * builder maps it through an exhaustive `Record` to a locale key, so a new member fails the
+   * typecheck instead of reaching a non-English reader in English.
+   */
+  unsupportedReason: SandboxUnsupportedReason | null
   rubric: string
   /** Fixture kinds this agent is exercised against (the UI filters the library by these). */
   fixtureKinds: SandboxFixtureKind[]

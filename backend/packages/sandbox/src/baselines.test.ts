@@ -1,5 +1,5 @@
 import { defaultAgentKindRegistry, shippedBasePromptFor } from '@cat-factory/agents'
-import { SANDBOX_FIXTURE_KINDS } from '@cat-factory/contracts'
+import { SANDBOX_FIXTURE_KINDS, SANDBOX_UNSUPPORTED_REASONS } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   baselinePromptText,
@@ -23,12 +23,19 @@ describe('SANDBOX_AGENT_KINDS', () => {
   })
 
   it('ties the un-runnable reason to the run mode in both directions', () => {
-    // The refusal message has ONE home so the create endpoint, the run-driver and the SPA's
-    // disabled option cannot disagree. A kind marked unsupported with no reason leaves each of
+    // The refusal is DECIDED in ONE place so the create endpoint, the run-driver and the SPA's
+    // excluded-kind note cannot disagree. A kind marked unsupported with no reason leaves each of
     // them to invent one; a reason on a runnable kind reads as a refusal that never fires.
+    //
+    // Checked against the CONTRACT's picklist rather than for truthiness: the value is a code the
+    // SPA maps to a locale key, so prose (or a code with no key) would reach a non-English reader
+    // in English, which the parity gate cannot see because the key would simply be absent.
     for (const meta of SANDBOX_AGENT_KINDS) {
       if (meta.sandboxRun === 'unsupported') {
-        expect(meta.unsupportedReason, `${meta.agentKind} needs a reason`).toBeTruthy()
+        expect(
+          SANDBOX_UNSUPPORTED_REASONS as readonly string[],
+          `${meta.agentKind} needs a known reason code`,
+        ).toContain(meta.unsupportedReason)
       } else {
         expect(meta.unsupportedReason, `${meta.agentKind} should have no reason`).toBeNull()
       }

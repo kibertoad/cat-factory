@@ -1,4 +1,4 @@
-import type { SandboxFixture } from '@cat-factory/contracts'
+import type { SandboxFixture, SandboxUnsupportedReason } from '@cat-factory/contracts'
 import { SANDBOX_REPO_FIXTURE_KINDS } from '@cat-factory/contracts'
 import { ValidationError } from '@cat-factory/kernel'
 import { type SandboxAgentKindMeta, sandboxKindMeta } from '@cat-factory/sandbox'
@@ -9,8 +9,24 @@ import { type SandboxAgentKindMeta, sandboxKindMeta } from '@cat-factory/sandbox
 // while `launch` refused both the kind and a repo FIXTURE, each with its own hand-written message.
 // So a matrix naming a repo fixture persisted as a draft that could never be launched, and the two
 // copies of the container-kind wording were free to drift from the catalog's own explanation of why.
-// Both doors now assert through here, and the reason itself comes off the catalog entry
-// (`unsupportedReason`), which is the same string the SPA renders on the disabled option.
+// Both doors now assert through here, and WHICH refusal applies comes off the catalog entry
+// (`unsupportedReason`), the same value the SPA maps to its translated note.
+
+/**
+ * The API-facing sentence for each refusal code, exhaustive over the vocabulary so a new member
+ * fails to compile until it has one.
+ *
+ * English on purpose: this is the message on a `ValidationError`, read by whoever called the
+ * endpoint, and it carries `details.reason` for a client that wants to say it differently. The
+ * SPA never renders it (it maps the CODE to a locale key), which is what keeps the catalog free of
+ * prose no locale can reach.
+ */
+const UNSUPPORTED_MESSAGES: Record<SandboxUnsupportedReason, string> = {
+  'container-run-required':
+    'This agent’s deliverable is a pushed commit, so grading it needs a real container run ' +
+    'against a seed repository. Register a repo fixture pointing at a repository this deployment ' +
+    'owns once container cells land; an inline cell can only grade text.',
+}
 
 /**
  * Resolve a Sandbox-testable kind, refusing one the catalog does not know or cannot run.
@@ -28,11 +44,10 @@ export function assertSandboxRunnable(agentKind: string): SandboxAgentKindMeta {
     })
   }
   if (meta.sandboxRun === 'unsupported') {
+    const reason = meta.unsupportedReason
     throw new ValidationError(
-      meta.unsupportedReason ?? `"${agentKind}" cannot run in the Sandbox`,
-      {
-        reason: 'sandbox_kind_unsupported',
-      },
+      reason ? UNSUPPORTED_MESSAGES[reason] : `"${agentKind}" cannot run in the Sandbox`,
+      { reason: 'sandbox_kind_unsupported' },
     )
   }
   return meta
@@ -54,5 +69,31 @@ export function assertSandboxRunnableFixture(fixture: Pick<SandboxFixture, 'kind
       'checkout. Use an inline fixture, or wait for container cells (which need a seed repository ' +
       'this deployment owns).',
     { reason: 'sandbox_fixture_needs_checkout' },
+  )
+}
+
+/**
+ * Refuse a fixture the chosen agent kind does not claim.
+ *
+ * The catalog entry's `fixtureKinds` is what the library filter offers, but the FILTER is the SPA's
+ * and the API is not the SPA's only caller. Without this, `POST /sandbox/experiments` accepted a
+ * `requirements` fixture under `task-estimator`: the estimator's system prompt went out, the
+ * requirements payload rendered through the estimator's builder, and the cell was graded against
+ * the `estimation` rubric using the requirements fixture's expectations. Every layer behaved
+ * correctly and the resulting score meant nothing.
+ *
+ * The catalog already guarantees no two kinds claim the same fixture kind (`baselines.test.ts`), so
+ * a fixture belongs to at most one agent and this is a total answer rather than a heuristic.
+ */
+export function assertSandboxFixtureMatchesKind(
+  fixture: Pick<SandboxFixture, 'kind' | 'name'>,
+  meta: SandboxAgentKindMeta,
+): void {
+  if ((meta.fixtureKinds as readonly string[]).includes(fixture.kind)) return
+  throw new ValidationError(
+    `Fixture "${fixture.name}" is a "${fixture.kind}" fixture, which "${meta.agentKind}" is not ` +
+      `exercised against (it takes: ${meta.fixtureKinds.join(', ')}). Grading it here would score ` +
+      "one agent's task on another's rubric.",
+    { reason: 'sandbox_fixture_kind_mismatch' },
   )
 }

@@ -251,15 +251,20 @@ export const ANSWER_RECOMMENDATION_FIXTURES: SandboxFixtureDefinition[] = [
         },
       ),
       exp(
-        'no-invented-standard',
-        'Does not attribute an answer to a standard or regulation it was not given.',
+        'grounded-in-general-practice',
+        'Reports the un-grounded answers as `general-practice`, the level they actually came from.',
         {
           impact: 5,
           trickiness: 4,
           detail:
             'The provenance test, and the one that matters most: a suggestion that cites a named ' +
             'regulation looks far more authoritative in the answer box than the guess it actually ' +
-            'is. There are no standards in this fixture’s grounding at all.',
+            'is. There are no standards in this fixture’s grounding at all, so anything but ' +
+            '`general-practice` on the grace-period and shared-content answers is invented.',
+          // Phrased as what a correct answer CONTAINS, not as the absence of an invented citation.
+          // The scorer can only detect presence, so a negatively-phrased expectation would score
+          // "missed" against a model that behaved correctly and said nothing about it. The absence
+          // half is the judge's `grounding_honesty` dimension, which can see it.
           matchHints: [
             'general practice',
             'general-practice',
@@ -286,26 +291,13 @@ export const ANSWER_RECOMMENDATION_FIXTURES: SandboxFixtureDefinition[] = [
           ],
         },
       ),
-      exp(
-        'no-technical-design',
-        'Keeps every answer at the product level: no schema, no soft-delete column, no job scheduler.',
-        {
-          impact: 3,
-          trickiness: 4,
-          detail:
-            'Deletion invites a design answer. The Writer is explicitly told the Architect owns ' +
-            'that, so specifying HOW is a scope violation even when the design is sensible.',
-          matchHints: [
-            'product level',
-            'architect',
-            'not a technical',
-            'business decision',
-            'behaviour',
-            'policy',
-          ],
-        },
-      ),
     ],
+    // Deletion invites a design answer (a soft-delete column, a purge job), and the Writer is told
+    // the Architect owns that, so specifying HOW is a scope violation here even when the design is
+    // sensible. That is deliberately NOT an expectation: it is an ABSENCE, and the objective scorer
+    // can only detect presence, so it would score "missed" against exactly the answers that got it
+    // right. The `product_scope` rubric dimension already states it to the judge, which can see an
+    // absence; adding a token-matched proxy beside it would only make the grid disagree with itself.
     notes:
       'The provenance fixture. One finding the spec settles, one that needs a concrete default from ' +
       'general knowledge honestly labelled, and one that belongs to a person.',

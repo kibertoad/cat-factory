@@ -7103,6 +7103,10 @@
       "repo-feature": "repo feature",
       "repo-bug": "repo bug"
     },
+    "unsupportedReason": {
+      "container-run-required": "Its deliverable is a pushed commit, so grading it needs a real container run against a seed repository. An inline cell can only grade text.",
+      "unknown": "This agent cannot run in the Sandbox."
+    },
     "fixtureOrigin": {
       "builtin": "builtin",
       "custom": "custom"

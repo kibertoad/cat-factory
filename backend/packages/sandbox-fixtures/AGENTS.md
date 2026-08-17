@@ -25,7 +25,12 @@ discriminates nothing:
 
 - **Every expectation needs explicit `matchHints`**, and a hint whose word form varies needs a
   trailing `*` (`idempoten*`). Matching is whole-token, so a bare stem or a full sentence is a dead
-  hint scored "missed" for every answer.
+  hint scored "missed" for every answer. The `*` widens too: `forge*` also catches "forget", so
+  enumerate the forms where the stem has an unrelated neighbour.
+- **State what a right answer CONTAINS, never what it omits.** The scorer detects presence only, so
+  a negatively-phrased expectation ("does not invent a standard") scores "missed" against exactly
+  the answers that got it right. Leave an absence to the rubric dimension that covers it: the judge
+  can see one, the token matcher cannot.
 - **Every fixture needs one impact ≥ 4 and one trickiness ≥ 4.** `impactRecall` needs something whose
   miss actually hurts; `wowBonus` divides by the tricky total, so a fixture with nothing tricky is a
   constant 1 and ranks a thorough answer level with a shallow one.

@@ -86,6 +86,39 @@ describe('renderFixtureInput', () => {
     )
   })
 
+  it('names the system the work belongs to, and STATES the absence when the fixture names none', () => {
+    // Production's `AgentContextBuilder` sets `ownService` on every dispatch and
+    // `ownServiceSection` renders the "no service" case rather than omitting it, because a bare
+    // task title names no software and a silent omission reads like a task whose product is
+    // obvious. Left unset here, these three kinds were graded on a prompt production never sends,
+    // and a model that invented a product was docked for a hole the harness created.
+    const stated = render('review-settings-cache-multifile-complex', 'reviewer')
+    expect(stated).toContain('The system this work belongs to: Settings API')
+    for (const [fixtureId, kind] of [
+      ['review-token-bucket-simple', 'reviewer'],
+      ['arch-avatar-storage-simple', 'architect-companion'],
+      ['estimate-currency-rounding-moderate', 'task-estimator'],
+    ] as const) {
+      expect(render(fixtureId, kind), fixtureId).toContain('NOT STATED')
+    }
+  })
+
+  it('composes the user prompt for the CATALOG kind, never the one the payload claims', () => {
+    // The system prompt is composed from `meta.agentKind`. A payload naming a different kind (or
+    // naming none, which used to default to `reviewer`) would pair one kind's task framing with
+    // another's instructions, which is the "silently grade a different task" the module rules out.
+    const authored = fixture('arch-avatar-storage-simple')
+    const lying: SandboxFixture = {
+      ...authored,
+      payload: { ...authored.payload, agentKind: 'reviewer' },
+    }
+    const input = renderFixtureInput(lying, sandboxKindMeta('architect-companion')!, registry)
+    // The companion pointer names the step under review, and for the architect-companion that is
+    // the `architect` output, not a coder's.
+    expect(input).toContain('`architect` step')
+    expect(input).not.toContain('`coder` step')
+  })
+
   it('carries the whole multi-file diff into the prompt', () => {
     const input = render('review-settings-cache-multifile-complex', 'reviewer')
     // Every file of the change has to arrive, because four of that fixture's findings need two files

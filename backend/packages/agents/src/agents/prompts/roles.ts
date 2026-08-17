@@ -9,6 +9,21 @@ import { FINAL_ANSWER_IN_REPLY } from './shared.js'
  */
 export const TASK_ESTIMATOR_AGENT_KIND = 'task-estimator'
 
+/**
+ * The three-axis JSON contract the engine PARSES off a triage reply (`coerceTaskEstimate` for the
+ * estimator, `resolveMergerStep` for the merger).
+ *
+ * Named rather than written twice inline because it is an invariant of how the platform RUNS these
+ * kinds, not editorial content: it is an `OVERRIDE_PRESERVED_FRAGMENTS` member, so a workspace that
+ * rewrites the role text around it gets it back. Without that, a promoted Sandbox candidate (the
+ * estimator is a promotable catalog kind) could delete the only statement of the shape the engine
+ * reads, and every later estimate would parse to nothing, silently disabling every step gated on
+ * it. The bespoke kinds solve the same problem with a `{ role, directives }` split; a kind whose
+ * prompt comes from a built-in TRACK cannot, because an override replaces the whole track prompt.
+ */
+export const TRIAGE_JSON_CONTRACT =
+  'Respond with ONLY a JSON object {"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"} — no prose, no code fences.'
+
 // Thin one-line role prompts for the built-in agent kinds that do NOT have a
 // built-out, multi-section prompt elsewhere (the standard phases, acceptance,
 // business-logic, mock, testing and companion tracks each own their own file).
@@ -64,11 +79,14 @@ const ROLES: Partial<Record<AgentKind, string>> = {
   // and to surface Complexity/Risk/Impact ratings in the UI. Mirror of `merger`'s
   // JSON-only contract, but predictive (pre-implementation) rather than retrospective.
   'task-estimator':
-    'You are a delivery lead triaging a software task BEFORE any design or implementation has begun. From the clarified requirements and any specification context provided, predict three axes, each from 0 (trivial/safe/local) to 1 (severe/dangerous/system-wide): complexity (how intricate the work will be — scope, coupling, unknowns), risk (how likely the change is to break something or go wrong), and impact (the blast radius / how much and who it affects if it does). Be calibrated and conservative; do not anchor every axis to the middle. Respond with ONLY a JSON object {"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"} — no prose, no code fences. The rationale must briefly justify each score.',
+    'You are a delivery lead triaging a software task BEFORE any design or implementation has begun. From the clarified requirements and any specification context provided, predict three axes, each from 0 (trivial/safe/local) to 1 (severe/dangerous/system-wide): complexity (how intricate the work will be — scope, coupling, unknowns), risk (how likely the change is to break something or go wrong), and impact (the blast radius / how much and who it affects if it does). Be calibrated and conservative; do not anchor every axis to the middle. ' +
+    TRIAGE_JSON_CONTRACT +
+    ' The rationale must briefly justify each score.',
   // Runs in a container against the PR head branch as the final pipeline step. It
   // ONLY assesses — it must not modify the repo — and returns a JSON score object.
   merger:
-    'You are a release manager assessing a pull request before merge. Inspect the change against the base branch and judge three axes, each from 0 (trivial/safe) to 1 (severe): complexity, risk and impact. Be conservative. Make no commits. Respond with ONLY a JSON object {"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"} — no prose, no code fences.',
+    'You are a release manager assessing a pull request before merge. Inspect the change against the base branch and judge three axes, each from 0 (trivial/safe) to 1 (severe): complexity, risk and impact. Be conservative. Make no commits. ' +
+    TRIAGE_JSON_CONTRACT,
 }
 
 /**

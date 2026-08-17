@@ -234,7 +234,13 @@ export const CODE_REVIEW_FIXTURES: SandboxFixtureDefinition[] = [
             'alg: none',
             'algorithm none',
             'none algorithm',
-            'forge*',
+            // Enumerated rather than `forge*`, which also matches "forget", a word a JWT review
+            // reaches for constantly ("don't forget the `exp` claim") and which says nothing about
+            // the forgery risk this expectation is about.
+            'forge',
+            'forged',
+            'forgery',
+            'forging',
             'unverified',
           ],
         },

@@ -38,7 +38,11 @@ import {
   sandboxPromptKinds,
   workspacePromptVersions,
 } from '@cat-factory/sandbox'
-import { assertSandboxRunnable, assertSandboxRunnableFixture } from './sandboxAdmission.js'
+import {
+  assertSandboxFixtureMatchesKind,
+  assertSandboxRunnable,
+  assertSandboxRunnableFixture,
+} from './sandboxAdmission.js'
 
 /** A safety ceiling on how many cells one experiment may expand to (cost guard). */
 export const MAX_SANDBOX_CELLS = 100
@@ -77,6 +81,27 @@ export async function composeExperimentDetail(
     repos.sandboxGradeRepository.listByExperiment(workspaceId, experimentId),
   ])
   return { experiment, runs, grades }
+}
+
+/**
+ * A stored fixture's content, as a comparable string: every field a reconcile could need to
+ * refresh, serialized in a FIXED order.
+ *
+ * Ordered explicitly rather than stringifying the row, because the two are built by different
+ * code (one by the catalog, one by a repository's row mapping) and JSON key order is significant
+ * to `JSON.stringify`. Reading the row's own order would make every comparison false and turn a
+ * read-only reconcile into a write per builtin on every overview load. Both facades persist these
+ * as JSON TEXT, so the nested payload round-trips byte-stable.
+ */
+function fixtureContent(fixture: SandboxFixture): string {
+  return JSON.stringify([
+    fixture.kind,
+    fixture.name,
+    fixture.payload,
+    fixture.repoRef,
+    fixture.objective,
+    fixture.origin,
+  ])
 }
 
 /** The opt-in Sandbox overview the management surface loads on open. */
@@ -283,10 +308,10 @@ export class SandboxService {
 
   // ---- fixtures -------------------------------------------------------------
 
-  /** The fixture library, seeding the builtin fixtures on first use. */
+  /** The fixture library, reconciled against the shipped builtin catalog first. */
   async listFixtures(workspaceId: string): Promise<SandboxFixture[]> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    await this.ensureBuiltinFixtures(workspaceId)
+    await this.reconcileBuiltinFixtures(workspaceId)
     return this.deps.sandboxFixtureRepository.list(workspaceId)
   }
 
@@ -342,7 +367,7 @@ export class SandboxService {
     // Refuse an un-runnable kind up front, through the same assertion the run-driver uses: the
     // driver only runs inline cells, so a draft naming a kind it cannot dispatch could be persisted
     // and never launched.
-    assertSandboxRunnable(input.agentKind)
+    const meta = assertSandboxRunnable(input.agentKind)
     if (!isRunnableMatrix(input.matrix)) {
       throw new ValidationError(
         'The experiment matrix needs at least one prompt, model and fixture',
@@ -351,7 +376,7 @@ export class SandboxService {
     // ...and the same for the FIXTURES the matrix names, which only `launch` used to check. One
     // list read indexed into a Map rather than a point read per id (the banned N+1), and the
     // builtins fill in whatever a workspace has not had seeded yet.
-    await this.assertRunnableFixtures(workspaceId, input.matrix.fixtureIds)
+    await this.assertRunnableFixtures(workspaceId, input.matrix.fixtureIds, meta)
     const repeats = input.repeats ?? 1
     const total = cellCount(input.matrix, repeats)
     if (total > MAX_SANDBOX_CELLS) {
@@ -378,14 +403,19 @@ export class SandboxService {
   // ---- internals ------------------------------------------------------------
 
   /**
-   * Refuse a matrix naming a fixture the run-driver cannot run (today: a repository seed).
+   * Refuse a matrix naming a fixture the run-driver cannot run (a repository seed) or one the
+   * chosen agent kind is not exercised against.
    *
    * An unknown id is deliberately NOT refused here: the run-driver resolves fixtures against the
    * workspace store AND the builtins at launch, and a fixture can legitimately be authored between
    * create and launch. Refusing an absent id would only move that failure earlier while adding a way
    * for a valid draft to be rejected.
    */
-  private async assertRunnableFixtures(workspaceId: string, fixtureIds: string[]): Promise<void> {
+  private async assertRunnableFixtures(
+    workspaceId: string,
+    fixtureIds: string[],
+    meta: SandboxAgentKindMeta,
+  ): Promise<void> {
     const byId = new Map<string, SandboxFixture>()
     for (const fixture of listBuiltinFixtures(this.deps.clock.now())) byId.set(fixture.id, fixture)
     for (const fixture of await this.deps.sandboxFixtureRepository.list(workspaceId)) {
@@ -393,7 +423,9 @@ export class SandboxService {
     }
     for (const id of new Set(fixtureIds)) {
       const fixture = byId.get(id)
-      if (fixture) assertSandboxRunnableFixture(fixture)
+      if (!fixture) continue
+      assertSandboxRunnableFixture(fixture)
+      assertSandboxFixtureMatchesKind(fixture, meta)
     }
   }
 
@@ -407,12 +439,33 @@ export class SandboxService {
     return source
   }
 
-  /** Seed the builtin fixture library for a workspace that has none yet. Idempotent. */
-  private async ensureBuiltinFixtures(workspaceId: string): Promise<void> {
-    const current = await this.deps.sandboxFixtureRepository.list(workspaceId)
-    if (current.length > 0) return
-    for (const fixture of listBuiltinFixtures(this.deps.clock.now())) {
-      await this.deps.sandboxFixtureRepository.upsert(workspaceId, fixture)
+  /**
+   * Bring the workspace's builtin fixture rows up to date with the shipped catalog, leaving
+   * workspace-authored ones untouched. Idempotent, and a no-op write-wise once they agree.
+   *
+   * Reconciled against the CATALOG rather than seeded once, for the same reason built-in pipelines
+   * are: a "seed only when the workspace has none" gate makes every LATER release invisible to
+   * every workspace that has already opened the surface. This shipped two new agent kinds, and on
+   * such a workspace their fixture lists came back empty, so the kind was offered in the builder
+   * with a permanently disabled Run button and nothing on screen saying why.
+   *
+   * Compared field by field (rather than upserting all of them every time) because this runs on
+   * every overview load: a workspace whose builtins already match pays reads only. `createdAt` is
+   * taken from the stored row, so an unchanged fixture is byte-identical and no row churns.
+   */
+  private async reconcileBuiltinFixtures(workspaceId: string): Promise<void> {
+    const stored = new Map(
+      (await this.deps.sandboxFixtureRepository.list(workspaceId)).map((f) => [f.id, f]),
+    )
+    for (const shipped of listBuiltinFixtures(this.deps.clock.now())) {
+      const existing = stored.get(shipped.id)
+      if (existing && fixtureContent(existing) === fixtureContent(shipped)) continue
+      // Keep the original `createdAt` on a refresh: the row is the same fixture, and the library
+      // is ordered by it, so re-stamping would reshuffle the list on an unrelated release.
+      await this.deps.sandboxFixtureRepository.upsert(workspaceId, {
+        ...shipped,
+        ...(existing ? { createdAt: existing.createdAt } : {}),
+      })
     }
   }
 

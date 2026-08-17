@@ -7026,6 +7026,10 @@
       "repo-feature": "funzionalità del repository",
       "repo-bug": "bug del repository"
     },
+    "unsupportedReason": {
+      "container-run-required": "Il suo risultato è un commit inviato, quindi valutarlo richiede un’esecuzione reale in container su un repository seme; una cella inline può valutare solo testo.",
+      "unknown": "Questo agente non può essere eseguito nella Sandbox."
+    },
     "fixtureOrigin": {
       "builtin": "integrata",
       "custom": "personalizzata"

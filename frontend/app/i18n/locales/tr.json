@@ -6783,6 +6783,10 @@
       "repo-feature": "depo özelliği",
       "repo-bug": "depo hatası"
     },
+    "unsupportedReason": {
+      "container-run-required": "Çıktısı gönderilmiş bir commit olduğundan değerlendirilmesi, bir tohum deposu üzerinde gerçek bir konteyner çalıştırması gerektirir; satır içi hücre yalnızca metni değerlendirebilir.",
+      "unknown": "Bu ajan Sandbox’ta çalıştırılamaz."
+    },
     "fixtureOrigin": {
       "builtin": "yerleşik",
       "custom": "özel"

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { baseSystemPromptFor, systemPromptFor } from './catalog.js'
 import { defaultAgentKindRegistry } from './kinds/registry.js'
 import { FINAL_ANSWER_IN_REPLY } from './prompts/shared.js'
+import { TRIAGE_JSON_CONTRACT } from './prompts/roles.js'
 import { READ_ONLY_GUARDRAIL } from './kinds/read-only.js'
 
 // `systemPromptFor`'s `override` parameter is the per-workspace agent prompt override (a
@@ -51,6 +52,18 @@ describe('systemPromptFor override', () => {
 
   it('keeps the read-only guardrail on a read-only kind', () => {
     expect(systemPromptFor('architect', registry, 'Do it my way.')).toContain(READ_ONLY_GUARDRAIL)
+  })
+
+  it('keeps the estimator’s JSON contract across an override', () => {
+    // The `task-estimator` is a PROMOTABLE Sandbox catalog kind whose prompt comes from a built-in
+    // track, so the bespoke `{ role, directives }` split is not available to it and its output
+    // contract sits inside the editable text. A promoted candidate that reworded the role would
+    // otherwise take the shape `coerceTaskEstimate` parses with it, and the failure is silent: no
+    // estimate is persisted, so every step gated on the estimate simply stops being gated.
+    expect(systemPromptFor('task-estimator', registry)).toContain(TRIAGE_JSON_CONTRACT)
+    expect(systemPromptFor('task-estimator', registry, 'Score it however you like.')).toContain(
+      TRIAGE_JSON_CONTRACT,
+    )
   })
 
   it('does not duplicate an invariant an override already restates', () => {

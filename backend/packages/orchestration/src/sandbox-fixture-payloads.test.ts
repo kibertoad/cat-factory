@@ -1,5 +1,6 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
 import type { RequirementReviewItem } from '@cat-factory/contracts'
+import { blockTypeSchema } from '@cat-factory/contracts'
 import { builtinFixture, builtinFixturesFor } from '@cat-factory/sandbox-fixtures'
 import { describe, expect, it } from 'vitest'
 import type * as clarityLogic from './modules/clarity/clarity.logic.js'
@@ -121,6 +122,28 @@ describe('fixture payloads conform to the agents’ context types', () => {
     }
   })
 
+  it('an AgentRunContext fixture that states its service states it as an OwnServiceContext', () => {
+    // `ownService` is a DISCRIMINATED result, not a nullable title, and the payload IS the context
+    // shape, so a fixture that identifies its product must author the real thing. Typed here so a
+    // change to `OwnServiceContext` fails the fixture rather than silently rendering nothing: the
+    // coercion falls back to "not under a service" for anything it cannot read, which would turn a
+    // drifted payload into a quietly different (and still plausible) prompt.
+    const withService = ['reviewer', 'architect-companion', 'task-estimator']
+      .flatMap((kind) => builtinFixturesFor(kind))
+      .filter((f) => (f.payload as { ownService?: unknown }).ownService !== undefined)
+    // Both branches of `ownServiceSection` need exercising, and it is the one section that renders
+    // when the answer is "no service", so the library must not be all of one kind.
+    expect(withService.length).toBeGreaterThan(0)
+    for (const f of withService) {
+      const own = (f.payload as unknown as AgentRunContext).ownService
+      expect(own?.stated, `${f.id}`).toBe(true)
+      if (own?.stated) {
+        expect(own.frameId.length).toBeGreaterThan(0)
+        expect(own.title.length).toBeGreaterThan(0)
+      }
+    }
+  })
+
   it('at least one reviewer fixture delivers a repo-scale change as injected context files', () => {
     // The coverage this library would otherwise be missing entirely: in production the code
     // reviewer reads a real multi-file checkout, and the findings that matter most span files.
@@ -147,16 +170,9 @@ describe('fixture payloads conform to the agents’ context types', () => {
   })
 
   it('every requirements/clarity/estimation block uses a valid BlockType', () => {
-    const valid = new Set([
-      'frontend',
-      'service',
-      'api',
-      'database',
-      'queue',
-      'integration',
-      'external',
-      'environment',
-    ])
+    // From the picklist that OWNS the vocabulary, not a copy of its members: a hand list here would
+    // agree with a hand list in the coercion and both could be wrong together.
+    const valid = new Set<string>(blockTypeSchema.options)
     for (const kind of [
       'requirements-review',
       'clarity-review',

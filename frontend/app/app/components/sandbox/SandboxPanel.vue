@@ -13,6 +13,7 @@ import type {
   SandboxPromptOrigin,
   SandboxPromptVersion,
   SandboxRun,
+  SandboxUnsupportedReason,
 } from '~/types/sandbox'
 
 const ui = useUiStore()
@@ -38,6 +39,16 @@ const FIXTURE_KIND_LABEL = computed<Record<SandboxFixtureKind, string>>(() => ({
   'answer-recommendation': t('sandbox.fixtureKind.answer-recommendation'),
   'repo-feature': t('sandbox.fixtureKind.repo-feature'),
   'repo-bug': t('sandbox.fixtureKind.repo-bug'),
+}))
+/**
+ * Why the Sandbox cannot run a kind, in the reader's own language.
+ *
+ * The backend sends the CODE and this maps it: the catalog decides, the SPA words it. Composing
+ * the sentence server-side would have put untranslated English under a translated form label, and
+ * an exhaustive Record is what stops a new code shipping that way silently.
+ */
+const UNSUPPORTED_REASON_LABEL = computed<Record<SandboxUnsupportedReason, string>>(() => ({
+  'container-run-required': t('sandbox.unsupportedReason.container-run-required'),
 }))
 /**
  * Badge colour per prompt origin. An exhaustive Record over the closed union rather than a
@@ -323,7 +334,11 @@ async function archive(prompt: SandboxPromptVersion) {
                 class="mt-1 text-[11px] leading-snug text-slate-500"
               >
                 <span class="font-medium text-slate-400">{{ excluded.label }}:</span>
-                {{ excluded.unsupportedReason }}
+                {{
+                  excluded.unsupportedReason
+                    ? UNSUPPORTED_REASON_LABEL[excluded.unsupportedReason]
+                    : t('sandbox.unsupportedReason.unknown')
+                }}
               </p>
             </UFormField>
 

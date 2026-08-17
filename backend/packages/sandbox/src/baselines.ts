@@ -1,6 +1,11 @@
 import { PROMPT_VERSIONS, promptVersionLabel, shippedBasePromptFor } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import type { SandboxAgentBucket, SandboxFixtureKind, SandboxRunMode } from '@cat-factory/contracts'
+import type {
+  SandboxAgentBucket,
+  SandboxFixtureKind,
+  SandboxRunMode,
+  SandboxUnsupportedReason,
+} from '@cat-factory/contracts'
 import type { SandboxPromptVersion } from '@cat-factory/kernel'
 import type { SandboxTaskType } from './rubrics.js'
 
@@ -13,12 +18,12 @@ import type { SandboxTaskType } from './rubrics.js'
 // Adding a kind is one entry here. What it must be able to answer is on
 // `SandboxAgentKindMeta` below; the two execution fields are deliberately separate.
 
-// `SandboxAgentBucket` and `SandboxRunMode` are the contracts' picklists rather than types
-// restated here, because the SPA has to render both and cannot see this package. Conflating the two
-// facts is what let the catalog advertise the `coder` as a testable kind whose every draft
-// experiment then 400-ed at create, and simultaneously describe the `reviewer` as `inline` when
-// production gives it a real checkout.
-export type { SandboxAgentBucket, SandboxRunMode }
+// `SandboxAgentBucket`, `SandboxRunMode` and `SandboxUnsupportedReason` are the contracts'
+// picklists rather than types restated here, because the SPA has to render all three and cannot see
+// this package. Conflating the first two is what let the catalog advertise the `coder` as a testable
+// kind whose every draft experiment then 400-ed at create, and simultaneously describe the
+// `reviewer` as `inline` when production gives it a real checkout.
+export type { SandboxAgentBucket, SandboxRunMode, SandboxUnsupportedReason }
 
 export interface SandboxAgentKindMeta {
   /** The agent kind (matches `AgentKind` strings used across the product). */
@@ -30,12 +35,17 @@ export interface SandboxAgentKindMeta {
   /** How the SANDBOX runs a cell for it; `unsupported` ⇒ {@link unsupportedReason} says why. */
   sandboxRun: SandboxRunMode
   /**
-   * Why the Sandbox cannot run this kind, phrased for the person reading it in the builder.
-   * Non-null exactly when `sandboxRun === 'unsupported'` (asserted in `baselines.test.ts`), and
-   * the SINGLE source of the refusal: the create endpoint, the run-driver and the SPA's disabled
-   * option all read this one string rather than each carrying its own copy.
+   * Why the Sandbox cannot run this kind, as a bounded CODE. Non-null exactly when
+   * `sandboxRun === 'unsupported'` (asserted in `baselines.test.ts`), and the SINGLE place the
+   * refusal is DECIDED: the create endpoint, the run-driver and the SPA's excluded-kind note all
+   * read this one value rather than each carrying its own copy.
+   *
+   * A code rather than the sentence itself because the two readers need different text in
+   * different languages: `sandboxAdmission.ts` turns it into the API refusal an operator sees, and
+   * the SPA maps it to a translated line under the field. Prose here could only ever reach the
+   * browser in English.
    */
-  unsupportedReason: string | null
+  unsupportedReason: SandboxUnsupportedReason | null
   /** Which rubric the judge grades this kind's output against. */
   rubric: SandboxTaskType
   /**
@@ -51,18 +61,6 @@ export interface SandboxAgentKindMeta {
    */
   basePromptId: string | null
 }
-
-/**
- * Why the `coder` cannot be a Sandbox cell today, and what it would take.
- *
- * Stated as the reason rather than "not yet supported" because the two routes are genuinely
- * different work and a reader deciding whether to wait needs to know which one is missing. See
- * `docs/initiatives/sandbox-coverage-expansion.md`.
- */
-const CODER_UNSUPPORTED =
-  "The coder's deliverable is a pushed commit, so grading it needs a real container run against " +
-  'a seed repository. Register a repo fixture pointing at a repository this deployment owns once ' +
-  'container cells land; an inline cell can only grade text.'
 
 /** The testable-kind catalog. Ordered for stable display (inline-first, then container). */
 export const SANDBOX_AGENT_KINDS: readonly SandboxAgentKindMeta[] = [
@@ -155,11 +153,16 @@ export const SANDBOX_AGENT_KINDS: readonly SandboxAgentKindMeta[] = [
     basePromptId: null,
   },
   {
+    // The coder's deliverable is a pushed commit, so grading it needs a real container run against
+    // a seed repository the deployment owns; an inline cell can only grade text. Stated as that
+    // specific route rather than "not yet supported" because the alternatives are genuinely
+    // different work and a reader deciding whether to wait needs to know which one is missing. See
+    // `docs/initiatives/sandbox-coverage-expansion.md`.
     agentKind: 'coder',
     label: 'Coder (implementation)',
     bucket: 'container',
     sandboxRun: 'unsupported',
-    unsupportedReason: CODER_UNSUPPORTED,
+    unsupportedReason: 'container-run-required',
     rubric: 'implementation',
     fixtureKinds: ['repo-feature', 'repo-bug'],
     basePromptId: 'build',

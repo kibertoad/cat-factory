@@ -67,7 +67,7 @@ export const ARCHITECTURE_FIXTURES: SandboxFixtureDefinition[] = [
             'object storage',
             's3',
             'lost on deploy',
-            'durab',
+            'durab*',
           ],
         },
       ),

@@ -12,6 +12,7 @@ import {
   sandboxPromptVersionSchema,
   sandboxRunModeSchema,
   sandboxRunSchema,
+  sandboxUnsupportedReasonSchema,
   saveSandboxVersionSchema,
   setSandboxLabelsSchema,
 } from '../sandbox.js'
@@ -33,11 +34,12 @@ const sandboxAgentKindMetaSchema = v.object({
   /** How the SANDBOX runs a cell for it. `unsupported` ⇒ `unsupportedReason` says why. */
   sandboxRun: sandboxRunModeSchema,
   /**
-   * Why the Sandbox cannot run this kind, phrased for the person reading it in the builder, or null
-   * when it can. The SPA renders this on the disabled option rather than composing its own copy, so
-   * the reason a create would be refused is stated before anyone builds a matrix.
+   * Why the Sandbox cannot run this kind, as a bounded CODE, or null when it can. The SPA maps it
+   * to translated copy and shows it beside the field, so the reason a create would be refused is
+   * stated before anyone builds a matrix; the catalog stays the one place that DECIDES, without
+   * the backend composing prose no locale can reach.
    */
-  unsupportedReason: v.nullable(v.string()),
+  unsupportedReason: v.nullable(sandboxUnsupportedReasonSchema),
   rubric: v.string(),
   fixtureKinds: v.array(sandboxFixtureKindSchema),
   basePromptId: v.nullable(v.string()),
