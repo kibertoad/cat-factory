@@ -757,6 +757,11 @@
         "body": "Integracja wdrożeniowa tej usługi nie przeszła testu połączenia: {detail}. Sprawdź jej punkt końcowy i poświadczenia, a następnie ponownie przetestuj połączenie, aby go uruchomić.",
         "action": "Skonfiguruj infrastrukturę"
       }
+    },
+    "asyncView": {
+      "title": "Nie udało się wczytać tego widoku",
+      "body": "Nie udało się wczytać jego kodu. Zwykle oznacza to, że aplikacja została zaktualizowana, gdy ta karta była otwarta, więc plików żądanych przez tę stronę nie ma już na serwerze. Odśwież, aby pobrać aktualną wersję.",
+      "reload": "Odśwież"
     }
   },
   "personalSubscriptions": {

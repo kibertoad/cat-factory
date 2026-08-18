@@ -3,6 +3,7 @@ import { ref, shallowRef, computed, watch } from 'vue'
 import { useBoardActivity } from '~/composables/useBoardActivity'
 import { useSettlingRaf } from '~/composables/useSettlingRaf'
 import { commitSegments, type EdgeSegment } from '~/utils/edgeSegments'
+import { measureBlocks, type BlockMeasurements } from '~/utils/blockRects'
 
 /**
  * Draws dependency arrows between task cards as an SVG overlay on top of the
@@ -11,9 +12,11 @@ import { commitSegments, type EdgeSegment } from '~/utils/edgeSegments'
  * zoom / drag / expand for free. When a task's frame is collapsed (its card
  * isn't rendered), the arrow anchors to the frame card instead.
  *
- * Measuring is O(edges) `querySelector` + forced layout reads, so it runs only
- * while something is actually moving: the board's activity pulse wakes it and
- * `useSettlingRaf` parks it again once the resolved segments hold still.
+ * Measuring costs forced layout reads, so it runs only while something is actually
+ * moving: the board's activity pulse wakes it and `useSettlingRaf` parks it again
+ * once the resolved segments hold still. Within one pass the cards are resolved and
+ * measured through a single shared snapshot (`measureBlocks`), so a task with five
+ * dependencies is found and measured once rather than five times.
  */
 const board = useBoardStore()
 
@@ -91,10 +94,10 @@ const connectionLinks = computed(() => {
 
 /** Resolve a task's anchor: walk up task → module → service to the first card
  * that's actually rendered (a container may be collapsed). */
-function anchorEl(taskId: string): HTMLElement | null {
+function anchorEl(taskId: string, blocks: BlockMeasurements): HTMLElement | null {
   let cur = board.getBlock(taskId)
   while (cur) {
-    const el = document.querySelector(`[data-block-id="${cur.id}"]`) as HTMLElement | null
+    const el = blocks.elementFor(cur.id)
     if (el) return el
     cur = cur.parentId ? board.getBlock(cur.parentId) : undefined
   }
@@ -112,12 +115,17 @@ function border(cx: number, cy: number, hw: number, hh: number, tx: number, ty: 
 
 /** Resolve the on-screen, origin-relative border-to-border segment between two blocks,
  * or null when either end is missing or both collapsed into the same frame. */
-function segmentBetween(sourceId: string, targetId: string, origin: DOMRect) {
-  const a = anchorEl(sourceId)
-  const b = anchorEl(targetId)
+function segmentBetween(
+  sourceId: string,
+  targetId: string,
+  origin: DOMRect,
+  blocks: BlockMeasurements,
+) {
+  const a = anchorEl(sourceId, blocks)
+  const b = anchorEl(targetId, blocks)
   if (!a || !b || a === b) return null // missing, or both collapsed into the same frame
-  const ra = a.getBoundingClientRect()
-  const rb = b.getBoundingClientRect()
+  const ra = blocks.rectFor(a)
+  const rb = blocks.rectFor(b)
   const ax = ra.left + ra.width / 2 - origin.left
   const ay = ra.top + ra.height / 2 - origin.top
   const bx = rb.left + rb.width / 2 - origin.left
@@ -131,10 +139,11 @@ function segmentBetween(sourceId: string, targetId: string, origin: DOMRect) {
 function linkSegments(
   links: { id: string; source: string; target: string }[],
   origin: DOMRect,
+  blocks: BlockMeasurements,
 ): EdgeSegment[] {
   const out: EdgeSegment[] = []
   for (const link of links) {
-    const seg = segmentBetween(link.source, link.target, origin)
+    const seg = segmentBetween(link.source, link.target, origin, blocks)
     if (seg) out.push({ id: link.id, ...seg })
   }
   return out
@@ -145,10 +154,12 @@ function recompute(): boolean {
   const el = svg.value
   if (!el) return false
   const origin = el.getBoundingClientRect()
+  // One snapshot for the whole pass: every overlay below resolves and measures through it.
+  const blocks = measureBlocks()
 
   const deps: EdgeSegment[] = []
   for (const d of taskDeps.value) {
-    const seg = segmentBetween(d.source, d.target, origin)
+    const seg = segmentBetween(d.source, d.target, origin, blocks)
     if (!seg) continue
     deps.push({ id: d.id, ...seg, done: board.getBlock(d.source)?.status === 'done' })
   }
@@ -157,9 +168,9 @@ function recompute(): boolean {
   // would short-circuit and leave the later overlays drawn at stale coordinates.
   return [
     commitSegments(segments, deps),
-    commitSegments(memberSegments, linkSegments(epicLinks.value, origin)),
-    commitSegments(frontendSegments, linkSegments(frontendLinks.value, origin)),
-    commitSegments(connectionSegments, linkSegments(connectionLinks.value, origin)),
+    commitSegments(memberSegments, linkSegments(epicLinks.value, origin, blocks)),
+    commitSegments(frontendSegments, linkSegments(frontendLinks.value, origin, blocks)),
+    commitSegments(connectionSegments, linkSegments(connectionLinks.value, origin, blocks)),
   ].some(Boolean)
 }
 

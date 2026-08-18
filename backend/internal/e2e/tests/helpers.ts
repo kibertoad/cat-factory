@@ -1032,11 +1032,44 @@ export function taskCard(page: Page, blockId: string): Locator {
  * no focus view at all. The spec then waits out its full timeout on a step list nothing opened,
  * and the failure points at the assertion rather than at the click.
  *
- * A spec that only needs the card SELECTED (the inspector's `run-step` list) may still click the
- * root: selection is what every path through the card does, `review()` included.
+ * A spec that needs the card SELECTED takes `selectTask` below, for the same reason.
  */
 export async function openTaskFocusView(card: Locator): Promise<void> {
   await card.getByTestId('task-review').click()
+}
+
+/**
+ * SELECT a task, i.e. open the inspector on it (its run panel is the `run-step` list).
+ *
+ * This used to be spelled `card.click()`, on the reasoning that selection is what every path
+ * through the card does. That reasoning was wrong, and it is what made
+ * `requirements-review.spec` fail one CI run in N as `element(s) not found` on a step list
+ * nothing had opened. Every control on the card's action row is `@click.stop`, and the
+ * attention affordance's handler (`attention.open()`) opens a decision or a result window
+ * WITHOUT selecting, so a centre click resolved to it selects nothing at all. `review()`
+ * happens to select; `task-resolve`, `task-start` and `merge` do not.
+ *
+ * Which one the centre lands on is a coin flip a spec cannot gate away, because card height
+ * tracks content that arrives on its own events: the parked card grows a "folding in" stage
+ * chip, the running one a progress bar and step list, the finished one a PR chip. Gating on
+ * `data-status` first does not help, since the status arrives before the row settles.
+ *
+ * So click the TITLE, which is always rendered, is never a control, and bubbles to the root's
+ * `selectTask`. Then assert the panel is showing THIS block: a stale panel from an earlier
+ * selection is visible too, and only the subject tells the two apart. The retry covers the same
+ * lost-click race `openAttention` documents, and re-selecting is idempotent.
+ */
+export async function selectTask(card: Locator): Promise<void> {
+  const blockId = await card.getAttribute('data-block-id')
+  if (!blockId)
+    throw new Error('selectTask expects a card locator carrying data-block-id (see `taskCard`)')
+  const panel = card
+    .page()
+    .locator(`[data-testid="inspector-panel"][data-inspector-block="${blockId}"]`)
+  await expect(async () => {
+    if (await panel.isHidden()) await card.getByTestId('task-title').click()
+    await expect(panel).toBeVisible({ timeout: 2_000 })
+  }).toPass({ timeout: LIVE_TIMEOUT })
 }
 
 /**

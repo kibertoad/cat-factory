@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures'
-import { LIVE_TIMEOUT, taskCard } from './helpers'
+import { LIVE_TIMEOUT, selectTask, taskCard } from './helpers'
 
 // The responsive shell on a phone-sized viewport. The board chrome (sidebar, toolbar,
 // inspector) is desktop-first by default; below `lg` (1024px) the sidebar becomes an
@@ -47,10 +47,9 @@ test.describe('mobile responsive shell', () => {
   test('selecting a task opens the inspector as a bottom sheet', async ({ page, seededBoard }) => {
     void seededBoard
 
-    // `taskCard()` resolves by `data-block-id`, which sits on the SAME element as
-    // `data-testid="task-card"` — so click the card directly rather than a (non-existent)
-    // descendant test id.
-    await taskCard(page, 'task_login').first().click()
+    // The subject is the sheet's PLACEMENT, so selection just has to be reliable: `selectTask`
+    // takes the card's title and waits for the panel to name this block.
+    await selectTask(taskCard(page, 'task_login').first())
     const inspector = page.getByTestId('inspector-panel')
     await expect(inspector).toBeVisible({ timeout: LIVE_TIMEOUT })
     // The sheet is pinned to the bottom edge of the viewport on compact widths.

@@ -86,6 +86,29 @@ the animation that follows, parking once the output has held still for a few fra
 half works alone: a signal fires one frame BEFORE the transition it starts has any geometry, and
 a bare frame loop never stops.
 
+**The pulse does not treat its signals alike, and a driver must not assume it does.** What the
+user is moving (pointer, wheel, scroll, resize, the camera's own `pulse()`) wakes the loops
+immediately, because a lagging arrow under a drag is the bug this whole design exists to fix.
+RENDERS do not: a live board re-renders its cards on every execution event, and admitting each
+one kept the loops awake forever on exactly the board where measuring costs most, so mutations
+go through a rate limit (`utils/boardWakeGate.ts`, one wake led in immediately and then at most
+one per 250ms while the stream lasts). The cost is stated rather than hidden: a geometry change
+caused purely by a re-render, a badge appearing and growing a card, can take up to that interval
+to be followed. A driver that needs a signal the DOM cannot show, a link set changing with no
+card moving, watches its own reactive source and pokes, the way `TaskDependencyEdges` watches
+its four link lists.
+
+The gesture listeners are on the WINDOW, not on the canvas element. A drag does not stop at the
+canvas's edge (`useBlockDrag` tracks the pointer on the window for exactly that reason) and the
+top overlay region and the inspector are siblings painted OVER the canvas, so a canvas-bound
+listener went quiet for as long as the cursor crossed one of them.
+
+**Measure through `utils/blockRects.ts`, never a `querySelector` per card.** `measureBlocks()`
+hands a pass one snapshot: the cards resolved in one query, first-in-document-order per id, and
+each rect read at most once. It is what makes a wake cheap enough for the rate limit above to be
+a saving rather than a way of hiding an expensive pass, and it is lazy, so a pass that resolves
+nothing (a board with no links at all) touches no DOM.
+
 Two things this cost, both worth knowing before adding a third driver. `compute` returning
 `true` unconditionally silently restores the old behaviour, which is why the loop's contract is
 stated in terms of what the user can see rather than what the function did. And the pulse
@@ -102,7 +125,9 @@ font resizing a card. That leaves an arrow stale until the next pulse of any kin
 deliberate trade: firing too often costs a handful of frames, and the alternative is the loop
 that never sleeps.
 
-`app/utils/settlingLoop.spec.ts` pins the loop against a hand-driven frame clock.
+`app/utils/settlingLoop.spec.ts` pins the loop against a hand-driven frame clock;
+`boardWakeGate.spec.ts` pins that the rate limit delivers every suppressed wake rather than
+dropping it, and `blockRects.spec.ts` that a snapshot resolves and measures each card once.
 
 ### A store must be instantiable outside a component `setup`
 

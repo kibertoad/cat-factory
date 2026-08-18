@@ -74,7 +74,7 @@ symmetric" (CLAUDE.md).
 | 23  | P3  | engine       | `resolveRiskPolicy` re-reads merge preset per gate evaluation (optional slice)                                                      | ✅ done | [#1143](https://github.com/kibertoad/cat-factory/pull/1143) |
 | 24  | P2  | gateways     | Dispatch GH client: no single-flight / throttle; concurrent same-run steps duplicate token mint + branch probe                      | ⬜ todo |                                                             |
 | 25  | P1  | frontend     | `execution.getByBlock` full scan per call on the card/lane/measurement paths; cards scan global gate lists                          | ✅ done | [#2023](https://github.com/kibertoad/cat-factory/pull/2023) |
-| 26  | P2  | frontend     | Activity pulse re-wakes the DOM-measuring loops on every card re-render, so a busy board never parks them                           | ⬜ todo |                                                             |
+| 26  | P2  | frontend     | Activity pulse re-wakes the DOM-measuring loops on every card re-render, so a busy board never parks them                           | ✅ done | this PR                                                     |
 | 27  | P2  | frontend     | Observability/kaizen stores grow unbounded per session and survive board switches                                                   | ⬜ todo |                                                             |
 | 28  | P2  | frontend     | ~35 direct `refresh()` call sites + starvable trailing-only debounce + stacking retry chains                                        | ✅ done | [#2023](https://github.com/kibertoad/cat-factory/pull/2023) |
 | 29  | P3  | frontend     | Deep reactivity over `execution.instances` (shallowRef viable) and `board.blocks` (blocked by in-place writes)                      | ⬜ todo |                                                             |
@@ -837,6 +837,49 @@ observer ignore mutations inside subtrees the overlays own AND rate-limit re-wak
 gesture/camera/geometry-affecting change happened (a card's text-content churn does not move
 cards); or split the hover probe (cheap, per-frame) from the deep-zoom sweep (expensive, only
 needed on real geometry change). Fold the duplicate `pointermove` into the pulse's listener.
+
+**As landed (this PR): the pulse classifies its own sources, and one pass measures once.**
+
+The wake sources split in two. A gesture, a `ResizeObserver` / window resize and the camera's
+explicit `pulse()` stay unthrottled: those are the user moving something, and an arrow lagging the
+card it points at is the bug item 11 fixed. MUTATIONS go through `utils/boardWakeGate.ts`, which
+admits the first straight through and then at most one per 250ms for as long as the stream lasts, so
+a board taking an execution event every few frames wakes the loops a few times a second instead of
+continuously. The interval is several times the ~66ms settle tail, which is what lets the loops park
+BETWEEN renders on exactly the board where measuring costs the most. The gate is a pure factory over
+an injected scheduler, so its leading-edge / owed-wake / idle behaviour is pinned by unit tests
+rather than by a timer.
+
+Rate-limiting wakes without making a wake cheaper would have left the expensive pass expensive, so
+the second half is `utils/blockRects.ts`: ONE `querySelectorAll` per pass plus a per-pass rect memo,
+shared by both drivers. The edge overlay ran two `document.querySelector` scans and two
+`getBoundingClientRect` reads PER LINK, so a task with five dependencies was found and measured five
+times in one frame; the expansion sweep ran a scan per candidate task. First-in-document-order wins
+per id, which is what `document.querySelector` returned before, so a card also rendered outside the
+canvas resolves to the same element it always did.
+
+`useTaskExpansion`'s second `pointermove` listener is gone: the pulse already listened for the same
+gestures on the same element, so it tracks the position and the driver reads it inside its pass. One
+trap that fold surfaced, documented at the site: the pulse listens in the CAPTURE phase, where a
+non-bubbling `pointerleave` fired at a descendant is still seen, so only the canvas's OWN leave
+clears the pointer. Clearing on any descendant's would collapse the hovered card the moment the
+pointer crossed one of its inner elements.
+
+Two things review caught, both about the boundary of "unthrottled". The gesture listeners bind to
+the WINDOW, not to the canvas element: `useBlockDrag` tracks the pointer on the window precisely so
+a dragged card keeps following it past the canvas's edge, and the top overlay region and the
+inspector are SIBLINGS painted over the canvas, so a canvas-bound listener went silent for as long
+as the cursor crossed one of them and the arrows fell back to the 250ms mutation wake during the
+one interaction this design exists to keep smooth. Capture on the window sees the same events
+wherever they are dispatched, and the `pointerleave` check is on the TARGET, so it reads unchanged.
+And `measureBlocks` defers its query to the first lookup: the edge overlay builds a pass every awake
+frame and, on a board with no links of any kind, asks it for no card at all, where the per-link
+scans it replaced did no DOM work there either. Deferring keeps that in the helper, which both
+drivers inherit, rather than as a link-count guard at a call site a fifth overlay would miss.
+
+Not done here, deliberately: teaching the observer to ignore the overlays' own subtrees. The drivers
+already write their attributes outside its filter, so the wakes that would drop are the ones the
+rate limit now bounds anyway.
 
 ### 27. Observability/kaizen stores grow unbounded per session and survive board switches (P2)
 

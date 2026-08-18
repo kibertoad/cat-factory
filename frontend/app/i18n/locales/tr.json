@@ -757,6 +757,11 @@
         "body": "Bu hizmetin dağıtım entegrasyonu bağlantı testinde başarısız oldu: {detail}. Uç noktasını ve kimlik bilgilerini kontrol edin, ardından çalıştırmak için bağlantıyı yeniden test edin.",
         "action": "Altyapıyı yapılandır"
       }
+    },
+    "asyncView": {
+      "title": "Bu görünüm yüklenemedi",
+      "body": "Kodu yüklenemedi. Bu genellikle bu sekme açıkken uygulamanın güncellendiği anlamına gelir; sayfanın istediği dosyalar artık sunucuda değildir. Geçerli sürümü almak için yeniden yükleyin.",
+      "reload": "Yeniden yükle"
     }
   },
   "personalSubscriptions": {

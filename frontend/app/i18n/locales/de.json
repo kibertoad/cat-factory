@@ -6041,6 +6041,11 @@
         "body": "Die Bereitstellungsintegration dieses Dienstes hat den Verbindungstest nicht bestanden: {detail}. Überprüfe ihren Endpunkt und ihre Anmeldedaten und teste die Verbindung erneut, um sie auszuführen.",
         "action": "Infrastruktur konfigurieren"
       }
+    },
+    "asyncView": {
+      "title": "Diese Ansicht konnte nicht geladen werden",
+      "body": "Ihr Code konnte nicht geladen werden. Meist wurde die Anwendung aktualisiert, während dieser Tab geöffnet war, sodass die angeforderten Dateien nicht mehr auf dem Server liegen. Laden Sie neu, um die aktuelle Version zu erhalten.",
+      "reload": "Neu laden"
     }
   },
   "slack": {

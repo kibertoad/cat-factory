@@ -1,11 +1,12 @@
 import { test, expect } from './fixtures'
 import {
-  LIVE_TIMEOUT,
-  RUN_TERMINAL_TIMEOUT,
   createSeededWorkspace,
   createSimplePipeline,
+  LIVE_TIMEOUT,
   openBoard,
   pinWorkspace,
+  RUN_TERMINAL_TIMEOUT,
+  selectTask,
   setFakeProfile,
   taskCard,
 } from './helpers'
@@ -81,7 +82,7 @@ test.describe('run controls (start from the board, stop from the inspector)', ()
 
     // 4) Stop it from the inspector's run panel. Killing a running job discards in-flight work, so
     // the control is confirm-gated exactly like Reset.
-    await card.click()
+    await selectTask(card)
     await page.getByTestId('run-stop').click()
     await page.getByTestId('confirm-accept').click()
 

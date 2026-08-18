@@ -847,6 +847,11 @@
         },
         "action": "Configure infrastructure"
       }
+    },
+    "asyncView": {
+      "title": "This view could not be loaded",
+      "body": "Its code failed to load. That usually means the app was updated while this tab was open, so the files this page is asking for are no longer on the server. Reload to pick up the current version.",
+      "reload": "Reload"
     }
   },
   "personalSubscriptions": {

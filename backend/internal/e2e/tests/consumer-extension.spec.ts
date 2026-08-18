@@ -1,10 +1,11 @@
 import { test, expect } from './fixtures'
 import {
-  LIVE_TIMEOUT,
-  RUN_TERMINAL_TIMEOUT,
   createSimplePipeline,
   createTask,
+  LIVE_TIMEOUT,
   openTaskFocusView,
+  RUN_TERMINAL_TIMEOUT,
+  selectTask,
   setFakeProfile,
   startRun,
   taskCard,
@@ -42,7 +43,7 @@ test.describe('consumer extension (dogfood)', () => {
     // Selecting a task block opens the inspector, whose body is the `inspectorPanels` panel
     // group (`<PanelsOutlet>`). The consumer panel's `when(block)` matches task-level blocks,
     // so it renders for the seeded `task_login` alongside the built-in panels — zero host edit.
-    await taskCard(page, 'task_login').click()
+    await selectTask(taskCard(page, 'task_login'))
     await expect(page.getByTestId('inspector-panel')).toBeVisible({ timeout: LIVE_TIMEOUT })
     await expect(page.getByTestId('acme-incident-panel')).toBeVisible({ timeout: LIVE_TIMEOUT })
     await expect(page.getByTestId('acme-incident-status')).toBeVisible()

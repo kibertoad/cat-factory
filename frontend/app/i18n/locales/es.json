@@ -757,6 +757,11 @@
         "body": "La integración de despliegue de este servicio falló la prueba de conexión: {detail}. Revisa su endpoint y credenciales y vuelve a probar la conexión para ejecutarla.",
         "action": "Configurar infraestructura"
       }
+    },
+    "asyncView": {
+      "title": "No se pudo cargar esta vista",
+      "body": "No se pudo cargar su código. Normalmente significa que la aplicación se actualizó mientras esta pestaña estaba abierta, así que los archivos que pide esta página ya no están en el servidor. Vuelve a cargar para obtener la versión actual.",
+      "reload": "Volver a cargar"
     }
   },
   "personalSubscriptions": {

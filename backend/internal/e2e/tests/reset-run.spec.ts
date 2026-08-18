@@ -1,8 +1,9 @@
 import { test, expect } from './fixtures'
 import {
+  createSimplePipeline,
   LIVE_TIMEOUT,
   RUN_TERMINAL_TIMEOUT,
-  createSimplePipeline,
+  selectTask,
   startRun,
   taskCard,
 } from './helpers'
@@ -34,9 +35,10 @@ test.describe('reset a parked run', () => {
     await expect(page.getByTestId('decision-badge')).toBeVisible({ timeout: LIVE_TIMEOUT })
     await expect(card).toHaveAttribute('data-status', 'blocked', { timeout: LIVE_TIMEOUT })
 
-    // Open the task inspector (a card-body click only selects — it never pops the
-    // decision modal), then hit the destructive Reset control on its run panel.
-    await card.click()
+    // Open the task inspector, then hit the destructive Reset control on its run panel. The
+    // card is parked here, so its action row carries the Resolve affordance, and a click
+    // resolved to THAT pops the decision modal instead of selecting (see `selectTask`).
+    await selectTask(card)
     const reset = page.getByTestId('run-reset')
     await expect(reset).toBeVisible()
     await reset.click()
