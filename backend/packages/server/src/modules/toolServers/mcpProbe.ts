@@ -1,6 +1,7 @@
 import { isAllowedMcpHttpUrl, redactSecrets } from '@cat-factory/kernel'
 import { MCP_PROBE_MAX_PAGES, MCP_PROBE_TIMEOUT_MS } from '@cat-factory/contracts'
 import {
+  chooseProtocolVersion,
   dialectHeaders,
   LEGACY_ERA,
   legacyInitializeParams,
@@ -244,7 +245,17 @@ async function discover(ctx: Exchange): Promise<DiscoverAttempt> {
     // JSON-RPC endpoint answers that way too. Fall through to the legacy attempt, whose own
     // refusal is what names "answering JSON-RPC but not MCP".
     if (!discovered) return { kind: 'legacy' }
-    return { kind: 'modern', ...(discovered.identity ? { identity: discovered.identity } : {}) }
+    return adoptDiscoveredVersion(ctx, discovered)
+  }
+  // The STATUS decides before the body does. `readFrame` parses a JSON body under ANY non-2xx, so
+  // an auth proxy answering `{"error":"invalid_token"}` at 401 hands back a frame that reads as
+  // "not modern" and buys a second, identically refused handshake. A refused redirect, an
+  // unreadable body, a 401 and a 5xx are facts about the ENDPOINT rather than about a dialect, and
+  // asking again in the other one spends the deadline twice for the same answer. Only the statuses
+  // a server really answers an unknown or unsupported request with reach the era reader.
+  const httpStatus = answer.failure.status === 'http_error' ? answer.failure.httpStatus : undefined
+  if (httpStatus !== undefined && !LEGACY_FALLBACK_STATUSES.has(httpStatus)) {
+    return { kind: 'failure', failure: answer.failure }
   }
   // The server spoke JSON-RPC, so its error code says which era answered: one of the three
   // MCP-reserved codes is a modern server refusing, and anything else (`-32601`, "not
@@ -260,13 +271,39 @@ async function discover(ctx: Exchange): Promise<DiscoverAttempt> {
     }
     return { kind: 'legacy' }
   }
-  // No frame to read an era off. A refused redirect, an unreadable body, a 401 and a 5xx are all
-  // facts about the ENDPOINT rather than about a dialect, and asking again in the other one spends
-  // the deadline twice for the same answer. Only the statuses a server really answers an unknown
-  // method with fall through to the handshake, which is the spec's own fallback trigger.
-  const status = answer.failure.status === 'http_error' ? answer.failure.httpStatus : undefined
-  if (status !== undefined && LEGACY_FALLBACK_STATUSES.has(status)) return { kind: 'legacy' }
+  // A fallback status with no readable frame is the spec's own trigger: the endpoint did not
+  // understand a modern request, so ask the handshake. Anything else is the endpoint's own fault,
+  // already stated.
+  if (httpStatus !== undefined) return { kind: 'legacy' }
   return { kind: 'failure', failure: answer.failure }
+}
+
+/**
+ * Settle which revision the rest of the exchange speaks, given the list `server/discover` named.
+ *
+ * `supportedVersions` is what the modern revision publishes the RPC for, so reading it and then
+ * sending the next request under the version we happened to open with makes the probe report a
+ * revision the server never agreed to, and leaves `tools/list` to be refused by a server that
+ * already said which revision to use. Reconciling is the same rule the `-32022` refusal takes, so
+ * both go through `chooseProtocolVersion` and cannot drift apart.
+ */
+function adoptDiscoveredVersion(
+  ctx: Exchange,
+  discovered: { supportedVersions: string[]; identity?: ServerIdentity },
+): DiscoverAttempt {
+  const asked = ctx.era.era === 'modern' ? ctx.era.version : undefined
+  const choice = chooseProtocolVersion(discovered.supportedVersions, asked)
+  // A server whose own discover result names only handshake-era revisions is answering the modern
+  // RPC while telling us it does not speak the modern dialect. Take it at its word.
+  if (choice.choice === 'legacy') return { kind: 'legacy' }
+  if (choice.choice === 'mismatch') {
+    return {
+      kind: 'failure',
+      failure: { status: 'protocol_error', error: redact(choice.error) },
+    }
+  }
+  ctx.era = { era: 'modern', version: choice.version }
+  return { kind: 'modern', ...(discovered.identity ? { identity: discovered.identity } : {}) }
 }
 
 /**

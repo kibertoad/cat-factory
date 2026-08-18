@@ -152,19 +152,67 @@ describe('discoverMcpOAuthEndpoints', () => {
     expect(endpoints.tokenUrl).toBe('https://auth.example.com/token')
   })
 
-  it('refuses metadata whose issuer is not the one it was fetched for', async () => {
+  it('refuses metadata whose issuer is not the DECLARED one it was fetched for', async () => {
     await expect(
       discoverMcpOAuthEndpoints('https://mcp.example.com/mcp', {
         fetch: fakeFetch({
+          'https://mcp.example.com/.well-known/oauth-protected-resource/mcp': {
+            authorization_servers: ['https://auth.example.com'],
+          },
           // The document names endpoints, so whoever writes it chooses where the user is sent and
           // where this deployment posts its client secret. RFC 8414 §3.3 is what stops a host
-          // serving someone else's metadata at a well-known path from redirecting both.
-          'https://mcp.example.com/.well-known/oauth-authorization-server': asMetadataFor(
+          // serving someone else's metadata at the well-known path of the issuer the RESOURCE
+          // named from redirecting both.
+          'https://auth.example.com/.well-known/oauth-authorization-server': asMetadataFor(
             'https://attacker.example.com',
           ),
         }),
       }),
     ).rejects.toMatchObject({ permanent: true })
+  })
+
+  it('accepts an authorization server that identifies as itself under the ORIGIN fallback', async () => {
+    const endpoints = await discoverMcpOAuthEndpoints('https://mcp.example.com/mcp', {
+      fetch: fakeFetch({
+        // A fronted IdP, and the ordinary shape for a server that predates RFC 9728. §3.3 compares
+        // a document against the issuer identifier the client was GIVEN, and here there is none:
+        // the origin is this client's own guess, so the equality would test the guess rather than
+        // the server and would refuse every deployment whose AS identifies as anything else.
+        'https://mcp.example.com/.well-known/oauth-authorization-server': asMetadataFor(
+          'https://login.vendor.example',
+        ),
+      }),
+    })
+    expect(endpoints.tokenUrl).toBe('https://auth.example.com/token')
+  })
+
+  it('refuses a document with no issuer claim at all, under either source', async () => {
+    await expect(
+      discoverMcpOAuthEndpoints('https://mcp.example.com/mcp', {
+        // An absent claim is the missing half RFC 8414 §3.3 exists for, and a document without one
+        // is not authorization-server metadata whichever issuer it was fetched for.
+        fetch: fakeFetch({
+          'https://mcp.example.com/.well-known/oauth-authorization-server': AS_METADATA,
+        }),
+      }),
+    ).rejects.toMatchObject({ permanent: true })
+  })
+
+  it('probes each well-known location once for a path-less issuer', async () => {
+    const asked: string[] = []
+    const fetchImpl = (async (url: string) => {
+      asked.push(String(url))
+      return new Response('not found', { status: 404 })
+    }) as unknown as typeof fetch
+
+    await expect(
+      discoverMcpOAuthEndpoints('https://mcp.example.com', { fetch: fetchImpl }),
+    ).rejects.toMatchObject({ permanent: true })
+
+    // The two OIDC forms render to the same URL when the issuer has no path, which is the ordinary
+    // case: a duplicate probe spends a round trip and a slot of the bounded fetch budget to be told
+    // the same 404 twice.
+    expect(new Set(asked).size).toBe(asked.length)
   })
 
   it('refuses a metadata redirect that leaves the url floor, rather than following it', async () => {

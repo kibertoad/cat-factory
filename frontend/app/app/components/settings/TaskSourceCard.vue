@@ -82,6 +82,8 @@ const STATUS_UI: Record<
   auth_failed: { color: 'error', icon: 'i-lucide-key-round' },
   forbidden: { color: 'error', icon: 'i-lucide-shield-x' },
   unreachable: { color: 'error', icon: 'i-lucide-wifi-off' },
+  // Warning rather than error: nothing about the connection is broken, and the fix is to wait.
+  rate_limited: { color: 'warning', icon: 'i-lucide-hourglass' },
   error: { color: 'error', icon: 'i-lucide-triangle-alert' },
 }
 </script>

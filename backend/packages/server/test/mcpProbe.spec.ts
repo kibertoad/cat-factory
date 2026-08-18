@@ -231,6 +231,68 @@ describe('probeMcpHttpServer', () => {
     expect(sent).toHaveLength(1)
   })
 
+  it('falls back to the handshake when the refusal names a HANDSHAKE-era revision', async () => {
+    const { doFetch, sent } = stubFetch([
+      json(
+        {
+          jsonrpc: '2.0',
+          id: 1,
+          error: { code: -32022, message: 'nope', data: { supported: ['2025-11-25'] } },
+        },
+        { status: 400 },
+      ),
+      json(HANDSHAKE),
+      new Response(null, { status: 202 }),
+      json({ jsonrpc: '2.0', id: 2, result: { tools: [] } }),
+    ])
+
+    const outcome = await probeMcpHttpServer(target, { fetch: doFetch })
+
+    // The refusal named a revision this client speaks, just not in the modern dialect. Reporting a
+    // mismatch here would list `2025-11-25` on both sides of the sentence.
+    expect(outcome).toMatchObject({ status: 'ok', protocolVersion: '2025-06-18' })
+    expect((sent[1]!.body as { method: string }).method).toBe('initialize')
+  })
+
+  it('takes a discovery that names only handshake-era revisions at its word', async () => {
+    const { doFetch, sent } = stubFetch([
+      json({
+        jsonrpc: '2.0',
+        id: 1,
+        result: { resultType: 'complete', supportedVersions: ['2025-11-25', '2025-06-18'] },
+      }),
+      json(HANDSHAKE),
+      new Response(null, { status: 202 }),
+      json({ jsonrpc: '2.0', id: 2, result: { tools: [] } }),
+    ])
+
+    const outcome = await probeMcpHttpServer(target, { fetch: doFetch })
+
+    // `supportedVersions` is what the RPC is published FOR, so a server that answers it while
+    // naming no modern revision has said which dialect to use. Sending `tools/list` under the
+    // version we opened with would report a revision the server never agreed to.
+    expect(outcome).toMatchObject({ status: 'ok', protocolVersion: '2025-06-18' })
+    expect((sent[1]!.body as { method: string }).method).toBe('initialize')
+  })
+
+  it('reports a discovery that names no revision either side speaks', async () => {
+    const { doFetch, sent } = stubFetch([
+      json({
+        jsonrpc: '2.0',
+        id: 1,
+        result: { resultType: 'complete', supportedVersions: ['2030-01-01'] },
+      }),
+    ])
+
+    const outcome = await probeMcpHttpServer(target, { fetch: doFetch })
+
+    // A server publishing only revisions from the future is not reachable in either dialect, and
+    // `tools/list` under the version it did not name would be refused a second time.
+    expect(outcome).toMatchObject({ status: 'protocol_error' })
+    expect((outcome as { error: string }).error).toContain('2030-01-01')
+    expect(sent).toHaveLength(1)
+  })
+
   it('takes the server identity off a modern result when discovery named none', async () => {
     const { doFetch } = stubFetch([
       json({
@@ -284,6 +346,18 @@ describe('probeMcpHttpServer', () => {
 
     // A 401 is about the CREDENTIAL, and asking the same endpoint again in the legacy dialect
     // spends the deadline twice to be told the same thing.
+    expect(outcome).toMatchObject({ status: 'http_error', httpStatus: 401 })
+    expect(sent).toHaveLength(1)
+  })
+
+  it('does not re-ask in the other dialect when a refusal arrives as JSON', async () => {
+    const { doFetch, sent } = stubFetch([json({ error: 'invalid_token' }, { status: 401 })])
+
+    const outcome = await probeMcpHttpServer(target, { fetch: doFetch })
+
+    // The shape an OAuth-protected server really answers with. A JSON body under a non-2xx is
+    // parsed for the MCP-reserved error codes, and this one carries none, so reading the body
+    // first would call it "not modern" and buy a second, identically refused request.
     expect(outcome).toMatchObject({ status: 'http_error', httpStatus: 401 })
     expect(sent).toHaveLength(1)
   })

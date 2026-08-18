@@ -34,6 +34,22 @@ export const MODERN_PROTOCOL_VERSIONS: readonly string[] = [MODERN_PROTOCOL_VERS
 /** The legacy revision the fallback handshake asks for. Negotiated, so a server may answer older. */
 export const LEGACY_PROTOCOL_VERSION = '2025-11-25'
 
+/**
+ * The revision at which the modern dialect BEGINS: `2026-07-28` is the one that deleted the
+ * `initialize` handshake, so every earlier revision is handshake-era by definition.
+ *
+ * A fact about the SPEC, which is why it is not derived from `MODERN_PROTOCOL_VERSIONS`: that list
+ * says only which modern revisions this client has implemented, so a future revision we have not
+ * caught up with yet is still modern and must not be mistaken for one the handshake can reach.
+ * Revisions are `YYYY-MM-DD`, which orders lexicographically.
+ */
+const FIRST_MODERN_REVISION = '2026-07-28'
+
+/** Whether a revision a server named is one the legacy `initialize` handshake could speak. */
+function isLegacyRevision(version: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(version) && version < FIRST_MODERN_REVISION
+}
+
 /** The `_meta` keys the modern revision reserves. Prefixed by the spec, not by us. */
 const META_PROTOCOL_VERSION = 'io.modelcontextprotocol/protocolVersion'
 const META_CLIENT_INFO = 'io.modelcontextprotocol/clientInfo'
@@ -147,6 +163,44 @@ export function readDiscoverResult(
   }
 }
 
+/** Which revision to speak, given the list a server named. */
+export type VersionChoice =
+  /** Speak this one: either the server left what we asked standing, or it named one we implement. */
+  | { choice: 'speak'; version: string }
+  /** Nothing modern is mutual, but the server named a handshake-era revision. Fall back. */
+  | { choice: 'legacy' }
+  /** The two sides share no revision at all. Say so, naming both lists. */
+  | { choice: 'mismatch'; error: string }
+
+/**
+ * Reconcile the revisions a server named with the ones this client speaks.
+ *
+ * Two callers ask, and the whole point is that they cannot answer differently: a successful
+ * `server/discover`, whose `supportedVersions` is the list the modern revision publishes it FOR,
+ * and an `UnsupportedProtocolVersionError`, which names the same list on the way out. The refusal
+ * passes no `asked`, because the version it would name is the one the server just rejected.
+ *
+ * A named handshake-era revision means fall back rather than report: the legacy `initialize` is a
+ * dialect this client speaks, so refusing a server that just said it speaks `2025-11-25` while
+ * listing `2025-11-25` among our own revisions is a contradiction the operator cannot act on.
+ */
+export function chooseProtocolVersion(supported: readonly string[], asked?: string): VersionChoice {
+  // The server ANSWERED the request that carried `asked` and named nothing that displaces it, so
+  // that revision is settled: an empty list is a server publishing no opinion, not a refusal.
+  if (asked && (supported.length === 0 || supported.includes(asked))) {
+    return { choice: 'speak', version: asked }
+  }
+  const mutual = MODERN_PROTOCOL_VERSIONS.find((version) => supported.includes(version))
+  if (mutual) return { choice: 'speak', version: mutual }
+  if (supported.some(isLegacyRevision)) return { choice: 'legacy' }
+  return {
+    choice: 'mismatch',
+    error:
+      `the server supports MCP ${supported.join(', ') || '(none named)'} and this deployment ` +
+      `speaks ${[...MODERN_PROTOCOL_VERSIONS, LEGACY_PROTOCOL_VERSION].join(', ')}`,
+  }
+}
+
 /** What a refused modern attempt means for which dialect to speak next. */
 export type EraVerdict =
   /** A modern server refused the VERSION and named what it speaks. Retry with this one. */
@@ -175,17 +229,13 @@ export function readEraVerdict(frame: Record<string, unknown> | undefined): EraV
       isRecord(error?.data) && Array.isArray(error.data.supported)
         ? error.data.supported.filter((v): v is string => typeof v === 'string')
         : []
-    const mutual = MODERN_PROTOCOL_VERSIONS.find((version) => supported.includes(version))
-    if (mutual) return { verdict: 'retry', version: mutual }
-    // The server is modern and speaks none of our revisions. Falling back to `initialize` here
-    // would ask a server that just NAMED its versions for one it did not name, so the honest
-    // answer is the mismatch itself, with both sides listed.
-    return {
-      verdict: 'report',
-      error:
-        `the server supports MCP ${supported.join(', ') || '(none named)'} and this deployment ` +
-        `speaks ${[...MODERN_PROTOCOL_VERSIONS, LEGACY_PROTOCOL_VERSION].join(', ')}`,
-    }
+    const choice = chooseProtocolVersion(supported)
+    if (choice.choice === 'speak') return { verdict: 'retry', version: choice.version }
+    // A server that named a handshake-era revision gets the handshake. Only a server naming
+    // nothing either side speaks is reported, and then with both lists, because there is no
+    // second dialect left to ask in.
+    if (choice.choice === 'legacy') return { verdict: 'legacy' }
+    return { verdict: 'report', error: choice.error }
   }
   if (code === HEADER_MISMATCH || code === MISSING_REQUIRED_CLIENT_CAPABILITY) {
     // A modern server refusing a modern request on grounds this client controls. Reported rather
