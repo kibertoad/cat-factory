@@ -102,6 +102,12 @@ An unpaired id degrades to the generic prose panel (a dev-console warning names 
 id); a structured kind with no bespoke window gets the built-in `generic-structured` viewer
 for free.
 
+**Contribute the component asynchronously.** Every first-party window is registered as
+`defineAsyncComponent(() => import('...'))`, so its code is fetched on the click that opens it
+rather than on every board load; an async component is an ordinary `Component`, so the slot entry
+and the host's mount are identical either way. A window is a modal opened deliberately, so copy
+that shape unless yours is small enough not to matter.
+
 ### Navigation
 
 A consumer nav item carries its own `run` closure (first-party items use a typed `action`

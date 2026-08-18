@@ -87,7 +87,7 @@ run) and Playwright traces for the SPA cold-open waterfall.
 | 11  | P3  | node boot     | Start pg-boss workers after listen? (design decision; documented invariant says before)         | ⬜ todo    |         |
 | 12  | P3  | frontend      | Duplicate `github.probe()` + 6-probe SideBar fan-out on open                                    | 🟡 partial | #1097   |
 | 13  | P3  | frontend      | Non-`en` users pay an awaited locale-catalog fetch in the boot plugin                           | ⬜ todo    |         |
-| 14  | P3  | frontend      | Bundle: Vue Flow + 3 stylesheets eager; markdown-it likely in the initial chunk (measure first) | ⬜ todo    |         |
+| 14  | P3  | frontend      | Bundle: Vue Flow + 3 stylesheets eager; markdown-it likely in the initial chunk (measure first) | 🟡 partial | this PR |
 | 15  | P3  | worker        | Isolate cold-start parse weight (~250-import container graph; opt-in integrations eager)        | ⬜ todo    |         |
 | 16  | P3  | run start     | No container pre-warm on Cloudflare; local warm pool defaults off (design decision)             | ⬜ todo    |         |
 
@@ -366,6 +366,39 @@ probably `markdown-it` via eagerly-imported inspector/step-prose paths. No bundl
 measurement exists in CI. **Fix:** add a one-off bundle analysis (rollup visualizer) to
 establish the actual chunk composition; then decide whether anything (markdown-it path,
 rarely-used eager components) is worth deferring. Don't blind-defer Vue Flow.
+
+**Measured (this PR).** Built `@cat-factory/deploy-frontend` and walked the emitted chunk graph
+from the entry: **2.14 MB of JavaScript across 83 chunks was eager**, ahead of the active locale's
+~550 kB message chunk. The locale question the audit did not ask answered itself: @nuxtjs/i18n v10
+splits every locale (the `lazy` option is gone because it is now the only behaviour), so nine of
+the ten catalogs never load, and the one that does ships as precompiled message ASTs rather than
+JSON. Two eager costs were worth deferring, and both were REGISTRIES rather than the import paths
+the finding guessed at:
+
+- `modular/result-views.ts` statically imported all twenty-plus built-in result windows, so a board
+  that opens none paid for every one, the review windows' prose readers included. They are
+  contributed as `defineAsyncComponent` entries now; the slot, the compile-time exhaustiveness
+  check and `StepResultViewHost`'s `<component :is>` mount are unchanged, because an async
+  component IS a `Component`.
+- `AgentStepDetail` was the one always-mounted surface in `pages/index.vue` carrying a heavy chunk:
+  its prose reader pulls markdown-it for output nothing can be reading until a step has been
+  opened. It is store-gated now (`v-if="ui.stepDetail"`), like its ~40 lazy neighbours.
+
+Together: **2.14 MB -> 1.86 MB eager (-281 kB, -13%)**, with the deferred code landing in chunks
+fetched on the click that needs them.
+
+**Remaining, and why it is not a one-line change.** markdown-it is still on the critical path, but
+no longer through an import a component could drop: the bundler groups CommonJS-interop modules
+together, so it rides a ~113 kB shared vendor chunk that other eager CJS dependencies also need.
+Its module factory is lazily initialised inside that chunk, so what is left is download and parse
+weight rather than execution. Isolating it means a chunking-strategy change (a rolldown
+`advancedChunks` group) in the LAYER's `nuxt.config.ts`, inherited by every consuming deployment,
+so it wants its own slice with its own before/after. The inspector panel registry
+(`modular/panels/inspector.ts`, ~20 sub-panel SFCs) is the other eager registry and was left eager
+deliberately: the inspector opens on a single click on any card, which is the everyday loop, where
+a per-panel chunk fetch would read as flicker. Vue Flow stays eager, as the finding says. There is
+still no bundle-size gate in CI: the walk above is a script run by hand, and turning it into a
+check is a separate decision about where the budget lives and who owns a regression.
 
 ### 15. Worker isolate cold-start parse weight (P3, measure first)
 

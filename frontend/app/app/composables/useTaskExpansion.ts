@@ -3,6 +3,7 @@ import { onMounted, onBeforeUnmount } from 'vue'
 import { lodAtLeast } from '~/composables/useSemanticZoom'
 import { onBoardActivity, type BoardActivity } from '~/composables/useBoardActivity'
 import { useSettlingRaf } from '~/composables/useSettlingRaf'
+import { measureBlocks, type BlockMeasurements } from '~/utils/blockRects'
 import { headerDistanceSq, type Rect } from '~/utils/taskExpansionRanking'
 
 function intersects(a: Rect, b: Rect) {
@@ -54,21 +55,6 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>, activity: B
   // card is still tested at its expanded extent and stays denied. Stable.
   const expandedHeight = new Map<string, number>()
 
-  // Last pointer position over the board (viewport coords), or null when the pointer has
-  // left it. The card under the pointer is expanded on hover (see `hoveredTaskId`).
-  let pointer: { x: number; y: number } | null = null
-  function onPointerMove(e: PointerEvent) {
-    pointer = { x: e.clientX, y: e.clientY }
-  }
-  function onPointerLeave() {
-    pointer = null
-  }
-
-  function rectOf(id: string): DOMRect | null {
-    const el = document.querySelector(`[data-block-id="${id}"]`) as HTMLElement | null
-    return el ? el.getBoundingClientRect() : null
-  }
-
   // The task whose card is topmost at the pointer, or null. Using elementFromPoint (not a
   // rect test) means an open pipeline stacked above a neighbour wins the hit, so hovering
   // a region obscured by another pipeline doesn't switch to the card hidden beneath it.
@@ -77,6 +63,9 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>, activity: B
   // a frame, a module, or a task with no run expands to nothing, and granting it would
   // still lift an empty card over its neighbours (see LaneTask's z-index).
   function hoveredTaskId(): string | null {
+    // Where the pointer is comes from the pulse, which already listens for the same gestures on
+    // the same element (see `BoardActivity.pointer`).
+    const pointer = activity.pointer()
     if (!pointer) return null
     const hit = document.elementFromPoint(pointer.x, pointer.y)
     const id = hit?.closest('[data-block-id]')?.getAttribute('data-block-id') ?? null
@@ -107,6 +96,8 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>, activity: B
     }
     const view = container.value?.getBoundingClientRect()
     if (!view) return changed
+    // One DOM query for the whole sweep instead of one per candidate task (see `measureBlocks`).
+    const blocks: BlockMeasurements = measureBlocks()
     const cx = view.left + view.width / 2
     const cy = view.top + view.height / 2
 
@@ -115,8 +106,9 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>, activity: B
     for (const t of board.allTasks) {
       // Only tasks whose run actually has steps would expand a pipeline list.
       if (!execution.getByBlock(t.id)?.steps.length) continue
-      const rect = rectOf(t.id)
-      if (!rect) continue
+      const el = blocks.elementFor(t.id)
+      if (!el) continue
+      const rect = blocks.rectFor(el)
       liveIds.add(t.id)
       // While a card is granted it's rendered expanded, so its live height is its
       // expanded footprint — cache it. A denied card keeps its last cached value.
@@ -166,19 +158,12 @@ export function useTaskExpansion(container: Ref<HTMLElement | null>, activity: B
   }
 
   const { poke } = useSettlingRaf(recompute)
-  // The pointer listeners below only record where the pointer IS; the pulse (which watches the
-  // same gestures) is what schedules the frame that acts on it.
+  // The pulse both records where the pointer is and schedules the frame that acts on it.
   onBoardActivity(activity, poke)
   onMounted(() => {
     store.setDriverActive(true)
-    const el = container.value
-    el?.addEventListener('pointermove', onPointerMove)
-    el?.addEventListener('pointerleave', onPointerLeave)
   })
   onBeforeUnmount(() => {
-    const el = container.value
-    el?.removeEventListener('pointermove', onPointerMove)
-    el?.removeEventListener('pointerleave', onPointerLeave)
     store.setDriverActive(false)
   })
 }

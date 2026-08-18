@@ -8,7 +8,6 @@ import TranslationWarningBanner from '~/components/layout/TranslationWarningBann
 import PipelineBuilder from '~/components/pipeline/PipelineBuilder.vue'
 import InspectorPanel from '~/components/panels/InspectorPanel.vue'
 import DecisionModal from '~/components/panels/DecisionModal.vue'
-import AgentStepDetail from '~/components/panels/AgentStepDetail.vue'
 import StepResultViewHost from '~/components/panels/StepResultViewHost.vue'
 import AppOverlayHost from '~/components/panels/AppOverlayHost.vue'
 import AddTaskModal from '~/components/board/AddTaskModal.vue'
@@ -19,6 +18,15 @@ import CommandBar from '~/components/layout/CommandBar.vue'
 import PersonalCredentialModal from '~/components/providers/PersonalCredentialModal.vue'
 import ConfirmDialog from '~/components/common/ConfirmDialog.vue'
 import KeyboardShortcutsHelp from '~/components/common/KeyboardShortcutsHelp.vue'
+
+// The step-detail reader, mounted only while a step is open. It is the one always-mounted
+// surface whose chunk dominated the initial bundle: its prose reader pulls markdown-it (~200 kB
+// raw of the ~2.1 MB eager graph) purely to render an agent's output, which nothing can be
+// reading until a step has been opened. Store-gated like the panels below, so the reader loads
+// on the click that needs it.
+const AgentStepDetail = defineAsyncComponent(
+  () => import('~/components/panels/AgentStepDetail.vue'),
+)
 
 // Heavy, rarely-open panels — code-split into their own chunks via defineAsyncComponent
 // and mounted only while their ui open-flag is set (the v-if gates in the template), so
@@ -479,7 +487,7 @@ watch(
         <!-- Always-mounted, fast-path surfaces. -->
         <PipelineBuilder />
         <DecisionModal />
-        <AgentStepDetail />
+        <AgentStepDetail v-if="ui.stepDetail" />
         <StepResultViewHost />
         <!-- Consumer-contributed top-level overlays (extension slice D). Renders nothing until a
              consumer opens one via `ui.openOverlay` / `useAppOverlays().open(...)`. -->
