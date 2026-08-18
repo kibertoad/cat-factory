@@ -30,7 +30,8 @@ const connection: ObservabilityConnectionRecord = {
 function makeProvider(
   config: ReleaseHealthConfigRecord | null,
   monitorState: string,
-  monitorStateModified?: string,
+  /** When the monitor's group last went into alert, as an ISO string for readability. */
+  triggeredAt?: string,
 ): RegistryReleaseHealthProvider {
   const connectionRepo: ObservabilityConnectionRepository = {
     get: async () => connection,
@@ -48,13 +49,27 @@ function makeProvider(
       ({ id, parentId: null }) as Block,
   } as unknown as BlockRepository
 
-  // Fake Datadog: every monitor returns `monitorState` (+ optional last-change time).
+  // Fake Datadog: every monitor returns `monitorState`, and a named trigger time rides the shape a
+  // real `group_states=all` answer carries it in: per GROUP, with that group's own `status` and an
+  // epoch-SECONDS `last_triggered_ts`. There is no monitor-level transition field to fake, which is
+  // the whole finding this fixture used to encode the wrong side of.
   const fetchImpl = (async () =>
     new Response(
       JSON.stringify({
         name: 'errors',
         overall_state: monitorState,
-        ...(monitorStateModified ? { overall_state_modified: monitorStateModified } : {}),
+        ...(triggeredAt
+          ? {
+              state: {
+                groups: {
+                  'host:a': {
+                    status: monitorState,
+                    last_triggered_ts: Math.floor(Date.parse(triggeredAt) / 1000),
+                  },
+                },
+              },
+            }
+          : {}),
       }),
       { status: 200 },
     )) as unknown as typeof fetch
