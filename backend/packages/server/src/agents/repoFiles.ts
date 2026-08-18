@@ -311,13 +311,29 @@ export function makeResolveDeployCloneTarget(
  * Resolve a checkout-free {@link RunRepoContext} from explicit repo COORDINATES (owner +
  * repo), with no block context — the block-less sibling of {@link makeResolveRunRepoContext}
  * the environments module uses to validate/bootstrap a provider's config file in a repo the
- * operator names. Matches the workspace's projected repos by owner+name; returns null when
- * GitHub isn't connected (no installation / no repos) or the named repo isn't projected, so
- * the caller degrades cleanly to "no VCS connection".
+ * operator names. Matches the workspace's projected repos by owner+name; returns null when the
+ * workspace has no VCS connection, the named repo isn't projected, or the caller named a
+ * provider the projection disagrees with, so the caller degrades cleanly to "no VCS connection".
  *
- * VCS-neutrality note: bound over the wired {@link GitHubClient} today; the provider never
- * sees it — it only gets a `readRepoFile`. When GitLab lands, resolve a `VcsClient` via the
- * VCS registry here instead; the provider code is unchanged.
+ * VCS-neutral in the same way the rest of the engine is: the bound {@link GitHubClient} is
+ * whichever the facade wired for the deployment's engine (`engineVcsClient`, so the GitLab-backed
+ * adapter on a GitLab-only deployment), and the provider consuming the result never sees it: it
+ * only gets a `readRepoFile`. This used to refuse ANY caller that named `gitlab`, which was
+ * written when the seam could only be GitHub-backed and outlived that: on a GitLab-only
+ * deployment it refused the one provider the wired client actually serves, so a compose layer
+ * that named its provider (`ComposeSource.provider`, a supported field) reported "no VCS
+ * connection" for a project sitting in the repo list.
+ *
+ * What replaces it is a MISMATCH check against the projection's own answer, which is what the
+ * caller's `provider` was ever a claim about. A row predating the discriminator column reads as
+ * its connection's provider rather than as `github`, so the fallback follows the connection
+ * instead of the historical default.
+ *
+ * The remaining gap is the one the engine has generally: on a deployment serving BOTH a GitHub
+ * App and per-workspace GitLab connections the facade binds the App client here, so a
+ * GitLab-connected workspace resolves a context it cannot read. That is the per-workspace engine
+ * routing slice (see `docs/initiatives/gitlab-ui-parity.md`), not something this function can
+ * answer: it is handed one client and has no workspace-level routing of its own.
  */
 export function makeResolveRepoFilesForCoords(
   client: GitHubClient,
@@ -328,23 +344,25 @@ export function makeResolveRepoFilesForCoords(
   coords: { owner: string; repo: string; provider?: 'github' | 'gitlab' },
 ) => Promise<RunRepoContext | null> {
   return async (workspaceId, { owner, repo, provider }) => {
-    // Only GitHub is resolvable today. A caller that explicitly asks for another VCS
-    // (e.g. `gitlab`) must NOT be silently bound to the GitHub installation/projection —
-    // that could read the wrong repo or report a misleading match. Bail cleanly until a
-    // VcsClient is resolved here per `provider`.
-    if (provider && provider !== 'github') return null
     const installation = await installationRepository.getByWorkspace(workspaceId)
     if (!installation) return null
     const repos = await repoProjectionRepository.list(workspaceId)
     const match = repos.find((r) => r.owner === owner && r.name === repo)
     if (!match) return null
+    // The row's own provider, falling back to the connection that projected it (rows predating
+    // the column carry none). A caller that NAMED a provider is making a claim about where the
+    // repo lives, so a disagreement is refused rather than resolved: binding a GitLab-named
+    // layer to a GitHub connection would read a different repository of the same name and report
+    // it as a match.
+    const resolved = match.provider ?? installation.provider
+    if (provider && provider !== resolved) return null
     return {
       repo: makeRepoFiles(client, installation.installationId, { owner, repo }),
       baseBranch: match.defaultBranch ?? 'main',
       repoId: String(match.githubId),
       owner,
       name: repo,
-      ...(match.provider ? { provider: match.provider } : {}),
+      provider: resolved,
     }
   }
 }

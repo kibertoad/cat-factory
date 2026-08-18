@@ -13,7 +13,7 @@ import {
   resolvePresetModelForKind,
   resolvePresetProviderPreference,
 } from '@cat-factory/orchestration'
-import { buildInfrastructureCapabilities, logger } from '@cat-factory/server'
+import { buildInfrastructureCapabilities, deploymentRepoOrigin, logger } from '@cat-factory/server'
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). The facade
 // builds an app-owned `GateRegistry` pre-loaded with the suite via `gateRegistryWithBuiltins()`
 // below, then wires each gate's provider.
@@ -215,6 +215,15 @@ export function resolveNodeContainerFoundation(options: NodeContainerOptions) {
     })
   }
 
+  // Where a run's containers clone from, a deployment-level fact like the GitLab engine client
+  // above, and resolved here so the three run-path consumers (the transport's clone target, the
+  // container executor, the PR report publisher) cannot end up with different answers. An
+  // injected resolver wins (local mode routes on its live credential); otherwise it is DERIVED
+  // from this deployment's own config, so a hosted GitLab-only deployment clones its GitLab host
+  // rather than falling through to `githubRepoOrigin` and handing every container a `github.com`
+  // URL for a project that lives elsewhere.
+  const resolveRepoOrigin = options.resolveRepoOrigin ?? deploymentRepoOrigin(config)
+
   // Honour the workspace's model presets at run time (block-pinned > the task's
   // selected/default model preset > env routing), uniformly for inline and container
   // kinds. The built-in default preset points every agent kind at Kimi K2.7.
@@ -256,6 +265,7 @@ export function resolveNodeContainerFoundation(options: NodeContainerOptions) {
     sourced,
     registries,
     gitlabEngineClient,
+    resolveRepoOrigin,
     resolveWorkspaceModelDefault,
     resolvePresetProviderPreference: resolvePresetPreference,
   }

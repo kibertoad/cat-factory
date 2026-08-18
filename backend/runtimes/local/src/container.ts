@@ -39,7 +39,7 @@ import { followVcsReachOnProviderRegistry } from './gateProviderFollowing.js'
 import { WorkspaceSettingsService } from '@cat-factory/orchestration'
 import {
   buildInfrastructureCapabilities,
-  githubRepoOrigin,
+  deploymentRepoOrigin,
   logger,
   RunnerJobClient,
 } from '@cat-factory/server'
@@ -78,7 +78,7 @@ import {
 import {
   type LocalVcsCredentialSource,
   createLocalVcsCredentialSource,
-  gitlabVcsHost,
+  localGitLabConfig,
 } from './vcsCredential.js'
 import { credentialRoutedGitHubClient } from './vcsClientRouter.js'
 import type { GitHubClient, VcsIdentityRegistry, VcsProvider } from '@cat-factory/kernel'
@@ -202,24 +202,21 @@ function resolveLocalVcs(
   // mothership-delegated shape). The synthetic connection is stamped with it.
   const deploymentProvider = (): VcsProvider => credentials.current()?.provider ?? 'github'
   // When GitLab is the active backend, the agent containers must clone the GitLab host and open
-  // merge requests — not github.com. The repo projection carries no host, so build the clone URL
-  // + provider from the configured GitLab host here. Same host the harness allow-list is widened
-  // to (`harnessAllowedHosts`), so they can't disagree.
+  // merge requests rather than reaching github.com. The repo projection carries no host, so the
+  // clone URL and provider are derived from the configured instance here.
   //
-  // The GitHub branch DELEGATES to the engine's own `githubRepoOrigin` rather than restating its
-  // URL. This resolver is now always wired, so it displaces that default on every local build, and
-  // a second literal `https://github.com/...` here would be a copy that drifts silently the day
-  // the default learns anything (a GitHub Enterprise host from `GITHUB_API_BASE`, which NEITHER
-  // supports today — a GHE local deployment still clones github.com, unchanged by this PR).
-  const resolveRepoOrigin: ResolveRepoOrigin = (repo) => {
-    const gitlabHost = gitlabVcsHost(env, credentials.current())
-    return gitlabHost
-      ? {
-          cloneUrl: `https://${gitlabHost}/${repo.owner}/${repo.name}.git`,
-          provider: 'gitlab',
-        }
-      : githubRepoOrigin(repo)
-  }
+  // The derivation itself is the SHARED one both hosted facades wire (`deploymentRepoOrigin`),
+  // read per call because local mode's provider is whichever PAT is currently installed. It also
+  // covers the GitHub branch, so no literal `https://github.com/...` is restated here: a copy
+  // would drift the day the default learns anything (a GitHub Enterprise host from
+  // `GITHUB_API_BASE`, which none of the three supports today). `harnessAllowedHosts` widens the
+  // container's allow-list from the same `localGitLabConfig`, so the host cloned and the host
+  // permitted cannot disagree.
+  const resolveRepoOrigin: ResolveRepoOrigin = (repo) =>
+    deploymentRepoOrigin({
+      github: { enabled: false },
+      gitlab: localGitLabConfig(env, credentials.current()),
+    })(repo)
   return { gitToken, delegatedGitHub, vcsClient, deploymentProvider, resolveRepoOrigin }
 }
 

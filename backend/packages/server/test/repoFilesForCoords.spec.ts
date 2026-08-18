@@ -10,7 +10,8 @@ import { makeResolveRepoFilesForCoords } from '../src/agents/repoFiles.js'
 // uses to validate / bootstrap a provider's config file in a repo the operator names. It
 // matches the workspace's projected repos by owner+name and binds a checkout-free
 // RepoFiles over the wired GitHubClient — degrading to null (→ "no VCS connection") when
-// GitHub isn't connected or the repo isn't projected.
+// the workspace has no connection, the repo isn't projected, or the caller named a provider
+// the projection disagrees with.
 
 const REF = { owner: 'acme', repo: 'widgets' }
 
@@ -20,18 +21,25 @@ function fakeClient(): GitHubClient {
   } as unknown as GitHubClient
 }
 
-const installationRepo = (installationId: number | null) =>
+const installationRepo = (
+  installationId: number | null,
+  provider: 'github' | 'gitlab' = 'github',
+) =>
   ({
-    getByWorkspace: vi.fn(async () => (installationId == null ? null : { installationId })),
+    getByWorkspace: vi.fn(async () =>
+      installationId == null ? null : { installationId, provider },
+    ),
   }) as unknown as Pick<GitHubInstallationRepository, 'getByWorkspace'>
 
-const projectionRepo = (repos: { owner: string; name: string; defaultBranch?: string }[]) =>
+const projectionRepo = (
+  repos: { owner: string; name: string; defaultBranch?: string; provider?: 'github' | 'gitlab' }[],
+) =>
   ({
     list: vi.fn(async () => repos),
   }) as unknown as Pick<RepoProjectionRepository, 'list'>
 
 describe('makeResolveRepoFilesForCoords', () => {
-  it('returns null when GitHub has no installation for the workspace', async () => {
+  it('returns null when the workspace has no VCS connection', async () => {
     const resolve = makeResolveRepoFilesForCoords(
       fakeClient(),
       installationRepo(null),
@@ -70,5 +78,47 @@ describe('makeResolveRepoFilesForCoords', () => {
     )
     const ctx = await resolve('ws1', { owner: 'acme', repo: 'widgets' })
     expect(ctx?.baseBranch).toBe('main')
+  })
+
+  // The GitLab half of the seam. A GitLab-only deployment wires this over the GitLab-backed
+  // engine client, so a compose layer that names its provider must RESOLVE rather than be read
+  // as an absent connection, which is what the blanket `provider !== 'github'` refusal did.
+  it('resolves a repo the caller names as gitlab when the projection agrees', async () => {
+    const client = fakeClient()
+    const resolve = makeResolveRepoFilesForCoords(
+      client,
+      installationRepo(7, 'gitlab'),
+      projectionRepo([{ owner: 'group/sub', name: 'widgets', provider: 'gitlab' }]),
+    )
+    const ctx = await resolve('ws1', { owner: 'group/sub', repo: 'widgets', provider: 'gitlab' })
+    expect(ctx?.provider).toBe('gitlab')
+    await ctx?.repo.getFile('compose.yml')
+    expect(client.getFileContent).toHaveBeenCalledWith(
+      7,
+      { owner: 'group/sub', repo: 'widgets' },
+      'compose.yml',
+      undefined,
+    )
+  })
+
+  // A row written before the provider column reads as its CONNECTION's provider, not as the
+  // historical `github` default: the connection is what projected it.
+  it('falls back to the connection provider for a row that carries none', async () => {
+    const resolve = makeResolveRepoFilesForCoords(
+      fakeClient(),
+      installationRepo(7, 'gitlab'),
+      projectionRepo([{ owner: 'acme', name: 'widgets' }]),
+    )
+    expect((await resolve('ws1', { owner: 'acme', repo: 'widgets' }))?.provider).toBe('gitlab')
+    expect(await resolve('ws1', { owner: 'acme', repo: 'widgets', provider: 'github' })).toBeNull()
+  })
+
+  it('refuses coordinates whose named provider the projection disagrees with', async () => {
+    const resolve = makeResolveRepoFilesForCoords(
+      fakeClient(),
+      installationRepo(42),
+      projectionRepo([{ owner: 'acme', name: 'widgets', provider: 'github' }]),
+    )
+    expect(await resolve('ws1', { owner: 'acme', repo: 'widgets', provider: 'gitlab' })).toBeNull()
   })
 })

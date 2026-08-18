@@ -1,7 +1,7 @@
 # Initiative: GitLab Issues as a task source
 
-**Status:** in progress (read path, both predicate scans, push intake and writeback landed;
-conformance + the docs sweep are open) ·
+**Status:** in progress (read path, both predicate scans, push intake, writeback and the docs
+sweep landed; conformance and the `tracker` STEP's filing path are open) ·
 **Owner:** core · **Started:** 2026-08-05
 
 > Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the
@@ -142,7 +142,7 @@ tracker rather than a one-PR change.
 | 7a  | Writeback as a `TaskSourceProvider` capability, GitLab implemented (PR notices, pickup, Q&A, acks)      | 🟩 done | this |
 | 7b  | The `tracker` STEP filing a new GitLab issue (`TicketTrackerProvider`, still GitHub/Jira/Linear)        | ⬜ todo |      |
 | 8   | Conformance: the task-source suite parameterised over the new provider on both facades                  | ⬜ todo |      |
-| 9   | Docs sweep: root README "What it supports", `vcs-providers.md`, `gitlab-parity.md` cross-links          | ⬜ todo |      |
+| 9   | Docs sweep: root README "What it supports", `vcs-providers.md`, `gitlab-parity.md` cross-links          | 🟩 done | this |
 
 ## Findings (slices 1-3c: the read path)
 
@@ -340,6 +340,32 @@ fallback)(…)` reads fine and throws a `TypeError` for any deployment implement
   config-built array. Wiring it over the FINAL dependency object (the "post-override wiring over
   the FINAL provider" pattern both facades already use for `envConfigRepairer`) is the prerequisite
   for driving a writeback assertion through the conformance fakes, and belongs with slice 8.
+
+## Findings (slice 9: the docs sweep, and what surveying for it found)
+
+- **The stale claim was in `gitlab-parity.md`'s ACCEPTED-GAP list and on the website matrix**, both
+  of which still said GitLab had no push intake and no writeback several slices after both landed.
+  The root README was already current. That asymmetry is worth knowing: the README describes the
+  product feature by feature and gets edited with the feature, while the parity log's gap list is a
+  standing claim nothing forces anyone to revisit, and the matrix lives in the other repo. A slice
+  that closes a gap has to go and unsay it in both, or the two documents whose whole job is naming
+  what GitLab cannot do become the two that are wrong about it.
+- **The website matrix's credential-model rows were stale in the same direction**, still describing
+  one deployment-wide token as the whole story after the per-workspace PAT connect landed. They now
+  split the two halves that actually differ: browse/link/sync is per workspace, the engine's own
+  work is not.
+- **Slice 7b is a SEAM gap, and it is the same shape slice 7a fixed one door over.** Filing a new
+  issue goes through `TicketTrackerProvider` / `TicketTrackerService`, which dispatches on a
+  separate `TrackerKind` vocabulary (`github` / `jira` / `linear`) and takes a per-vendor injected
+  resolver, exactly the `if (source === …)` chain that `TaskSourceProvider.writeback` replaced. So
+  "GitLab cannot file" and "a deployment-registered tracker can never file" are again one bug, and
+  the fix belongs on the provider rather than as a fourth leg.
+  One thing the writeback seam did NOT have to answer, which this one does: filing needs a TARGET
+  and no external id to parse it out of. Jira and Linear read theirs from `TrackerSettings`
+  (`jiraProjectKey` / `linearTeamId`), while both repo-backed sources need the run's own repository,
+  which today is resolved from `CreateTicketRequest.frameId` by a facade-supplied `resolveRepoTarget`
+  the providers cannot see. A filing capability therefore has to carry target resolution with it,
+  and that decision is what the slice is, not the GitLab call itself.
 
 When the committed scope completes, convert this tracker into a numbered ADR under
 `backend/docs/adr/` and `git rm` this file, per CLAUDE.md.
