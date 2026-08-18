@@ -62,7 +62,7 @@ const API_PREFIX = '/api/v1'
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.57.0'
+const API_VERSION = '1.58.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -110,6 +110,14 @@ const COMPONENT_SCHEMAS = {
   StartPublicTask: 'startPublicTaskSchema',
   UpdatePublicTask: 'updatePublicTaskSchema',
   PublicRun: 'publicRunSchema',
+  // The Kaizen entry surface: the entry, its two resolved-context sub-objects (hoisted beside it
+  // so a generated client names them rather than emitting anonymous inline types), the list
+  // wrapper and the acknowledge body.
+  PublicKaizenEntry: 'publicKaizenEntrySchema',
+  PublicKaizenEntryTask: 'publicKaizenEntryTaskSchema',
+  PublicKaizenEntryCombo: 'publicKaizenEntryComboSchema',
+  PublicKaizenEntryList: 'publicKaizenEntryListSchema',
+  AcknowledgeKaizenEntry: 'acknowledgeKaizenEntrySchema',
   PublicPipeline: 'publicPipelineSchema',
   PublicPipelineList: 'publicPipelineListSchema',
   Notification: 'notificationSchema',
@@ -902,6 +910,24 @@ const OPERATION_DOCS = {
     summary: 'Tag the reviewer effort a merge took',
     description:
       'Record how much review a landed pull request actually needed (`none` for zero blocking comments, `minor` for a nit pass, `major` for real rework), or `null` to clear the tag. This is the ground truth the auto-merge score thresholds are trying to approximate, and it is never mandatory: an untagged merge records a null tag and nothing downstream breaks. A `write` key, not an `admin` one: the pull request already landed, so tagging it merges nothing. Idempotent, and orthogonal to the decision, so a record can be tagged whenever the effort becomes known, before or after the `act` that merged it.',
+  },
+  listPublicKaizenEntries: {
+    tag: 'Kaizen',
+    summary: "List the workspace's Kaizen entries",
+    description:
+      'Every post-run grading the workspace has produced, newest first and keyset-paginated, with no run or task named up front. A Kaizen entry is the platform grading its OWN work: after a run finishes, each completed agent step is judged on how smooth or chaotic the interaction was (1..5) and what would make it better, keyed by the `(agentKind, model, promptVersion)` combo it ran. Each entry carries the context a follow-up needs (the run and step it came from, the agent kind, the resolved model, the prompt version, the board task and its service, and where the combo stands in its verification streak), so acting on one does not mean opening the app first. Filter with `acknowledged=false` for the untriaged backlog, `status` for what has settled (a `failed` grading names a deployment problem, such as prompt recording being off), `agentKind` for one role, and `since` for an incremental sweep. A task deleted since the run reports `task: null` rather than a blank title.',
+  },
+  getPublicKaizenEntry: {
+    tag: 'Kaizen',
+    summary: 'Get one Kaizen entry',
+    description:
+      'The same entry addressed by its own id, for a caller that stored one (on a ticket it filed, say) and wants the current grade, recommendations and triage state without re-paging the list. Scoped to the calling key’s workspace.',
+  },
+  acknowledgePublicKaizenEntry: {
+    tag: 'Kaizen',
+    summary: 'Acknowledge a Kaizen entry',
+    description:
+      'Record that this entry has been triaged, optionally with a note (a ticket id, why it was dismissed), and take it out of the `acknowledged=false` backlog. Send `{"acknowledged": false}` to undo. A `write` key, not an `admin` one: acknowledging starts nothing and merges nothing. Acknowledging twice is a no-op that returns the row unchanged, so `acknowledgedAt` keeps naming the FIRST triage rather than the last retry. An entry whose grading has not settled yet is refused `409` with `details.reason: "kaizen_entry_not_settled"` (there are no recommendations to have read), and an unknown id is `404` with `details.reason: "kaizen_entry_not_found"`.',
   },
   getPublicServiceSpec: {
     tag: 'Spec',

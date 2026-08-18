@@ -682,7 +682,8 @@
         "submission_not_allowed": "Fusion non autorisée pour cette exécution",
         "webhook_limit_reached": "Limite de webhooks atteinte",
         "risk_policy_inherited": "Cette politique appartient au compte",
-        "risk_policy_not_inherited": "Cette politique appartient à ce tableau"
+        "risk_policy_not_inherited": "Cette politique appartient à ce tableau",
+        "kaizen_entry_not_settled": "L'entrée Kaizen n'a pas encore été évaluée"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -723,7 +724,8 @@
         "submission_not_allowed": "La politique de fusion de cette tâche n'autorise pas le rôle qui a lancé cette exécution à fusionner ce type de changement. Un coéquipier dont le rôle le permet peut le faire, ou un admin peut élargir la politique dans le préréglage de fusion.",
         "webhook_limit_reached": "Cet espace de travail a déjà enregistré le nombre maximal de webhooks sortants. Supprimez-en un dont vous n’avez plus besoin, puis enregistrez celui-ci à nouveau.",
         "risk_policy_inherited": "Elle est partagée par tous les tableaux du compte et ne peut donc pas être modifiée ici. Clonez-la vers ce tableau et modifiez la copie.",
-        "risk_policy_not_inherited": "C'est déjà la politique propre à ce tableau : modifiez-la directement, ou supprimez-la si vous ne voulez plus qu'elle soit proposée."
+        "risk_policy_not_inherited": "C'est déjà la politique propre à ce tableau : modifiez-la directement, ou supprimez-la si vous ne voulez plus qu'elle soit proposée.",
+        "kaizen_entry_not_settled": "Son évaluation est encore en attente ou en cours, il n'y a donc aucune recommandation à accuser réception. Réessayez une fois qu'elle sera terminée."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",

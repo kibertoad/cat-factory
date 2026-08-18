@@ -757,7 +757,8 @@
         "submission_not_allowed": "Merge not allowed for this run",
         "webhook_limit_reached": "Webhook limit reached",
         "risk_policy_inherited": "This policy belongs to the account",
-        "risk_policy_not_inherited": "This policy belongs to this board"
+        "risk_policy_not_inherited": "This policy belongs to this board",
+        "kaizen_entry_not_settled": "The Kaizen entry has not been graded yet"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -801,7 +802,8 @@
         "submission_not_allowed": "This task's merge policy doesn't let the role that started this run merge this kind of change. Somebody whose role may merge it can do so, or an admin can widen the policy in the merge preset.",
         "webhook_limit_reached": "This workspace already has the maximum number of outbound webhooks registered. Remove one you no longer need, then register this again.",
         "risk_policy_inherited": "It is shared with every board in the account, so it cannot be changed from here. Clone it to this board and edit the copy.",
-        "risk_policy_not_inherited": "It is already this board's own policy: edit it directly, or delete it if you no longer want it offered."
+        "risk_policy_not_inherited": "It is already this board's own policy: edit it directly, or delete it if you no longer want it offered.",
+        "kaizen_entry_not_settled": "Its grading is still queued or running, so there are no recommendations to acknowledge. Try again once it finishes."
       },
       "action": {
         "connectGitHub": "Connect GitHub",

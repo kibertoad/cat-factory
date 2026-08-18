@@ -378,6 +378,48 @@ func (q *JobsListQuery) values() map[string]string {
 	return out
 }
 
+// KaizenListEntriesQuery holds the query parameters for KaizenService.ListEntries.
+type KaizenListEntriesQuery struct {
+	// Limit zero value means "not sent".
+	Limit *int
+	// Cursor zero value means "not sent".
+	Cursor *string
+	// Acknowledged zero value means "not sent".
+	Acknowledged *ListPublicKaizenEntriesAcknowledged
+	// Status zero value means "not sent".
+	Status *PublicKaizenEntryStatus
+	// AgentKind zero value means "not sent".
+	AgentKind *string
+	// Since zero value means "not sent".
+	Since *int
+}
+
+func (q *KaizenListEntriesQuery) values() map[string]string {
+	out := map[string]string{}
+	if q == nil {
+		return out
+	}
+	if q.Limit != nil {
+		out["limit"] = fmt.Sprintf("%v", *q.Limit)
+	}
+	if q.Cursor != nil {
+		out["cursor"] = fmt.Sprintf("%v", *q.Cursor)
+	}
+	if q.Acknowledged != nil {
+		out["acknowledged"] = fmt.Sprintf("%v", *q.Acknowledged)
+	}
+	if q.Status != nil {
+		out["status"] = fmt.Sprintf("%v", *q.Status)
+	}
+	if q.AgentKind != nil {
+		out["agentKind"] = fmt.Sprintf("%v", *q.AgentKind)
+	}
+	if q.Since != nil {
+		out["since"] = fmt.Sprintf("%v", *q.Since)
+	}
+	return out
+}
+
 // TasksListByServiceQuery holds the query parameters for TasksService.ListByService.
 type TasksListByServiceQuery struct {
 	// Limit zero value means "not sent".
@@ -439,6 +481,11 @@ type ListDebugToolCallsResponseItem = ListDebugToolCallsResponseToolCall
 // An alias rather than a second declaration, so the pager cannot drift from the list it pages
 // over.
 type ListPublicJobsResponseItem = PublicJob
+
+// PublicKaizenEntryListItem is the element type of PublicKaizenEntryList.Entries.
+// An alias rather than a second declaration, so the pager cannot drift from the list it pages
+// over.
+type PublicKaizenEntryListItem = PublicKaizenEntry
 
 // PublicTaskListItem is the element type of PublicTaskList.Tasks.
 // An alias rather than a second declaration, so the pager cannot drift from the list it pages
@@ -3063,6 +3110,117 @@ func (s *MergeRecordsService) TagEffort(ctx context.Context, recordID string, bo
 		return nil, err
 	}
 	return &out, nil
+}
+
+// KaizenService the platform's own improvement backlog: every post-run grading of an agent step, with the agent
+// kind, model, prompt version and run it came from, what the grader recommended changing, and
+// whether anybody has acted on it yet. Reading takes a `read` key and acknowledging one a `write`
+// key: neither runs anything.
+type KaizenService struct {
+	client *Client
+}
+
+// AcknowledgeEntry acknowledge a Kaizen entry
+// Record that this entry has been triaged, optionally with a note (a ticket id, why it was
+// dismissed), and take it out of the `acknowledged=false` backlog. Send `{"acknowledged": false}`
+// to undo. A `write` key, not an `admin` one: acknowledging starts nothing and merges nothing.
+// Acknowledging twice is a no-op that returns the row unchanged, so `acknowledgedAt` keeps naming
+// the FIRST triage rather than the last retry. An entry whose grading has not settled yet is
+// refused `409` with `details.reason: "kaizen_entry_not_settled"` (there are no recommendations
+// to have read), and an unknown id is `404` with `details.reason: "kaizen_entry_not_found"`.
+// POST /api/v1/kaizen/entries/{entryId}/acknowledge (operation acknowledgePublicKaizenEntry).
+func (s *KaizenService) AcknowledgeEntry(ctx context.Context, entryID string, body *AcknowledgeKaizenEntry) (*PublicKaizenEntry, error) {
+	if body == nil {
+		body = &AcknowledgeKaizenEntry{}
+	}
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/kaizen/entries/%s/acknowledge", pathEscape(entryID)),
+		Body:   body,
+	}
+	var out PublicKaizenEntry
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetEntry get one Kaizen entry
+// The same entry addressed by its own id, for a caller that stored one (on a ticket it filed,
+// say) and wants the current grade, recommendations and triage state without re-paging the list.
+// Scoped to the calling key’s workspace.
+// GET /api/v1/kaizen/entries/{entryId} (operation getPublicKaizenEntry).
+func (s *KaizenService) GetEntry(ctx context.Context, entryID string) (*PublicKaizenEntry, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/kaizen/entries/%s", pathEscape(entryID)),
+	}
+	var out PublicKaizenEntry
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListEntries list the workspace's Kaizen entries
+// Every post-run grading the workspace has produced, newest first and keyset-paginated, with no
+// run or task named up front. A Kaizen entry is the platform grading its OWN work: after a run
+// finishes, each completed agent step is judged on how smooth or chaotic the interaction was
+// (1..5) and what would make it better, keyed by the `(agentKind, model, promptVersion)` combo it
+// ran. Each entry carries the context a follow-up needs (the run and step it came from, the agent
+// kind, the resolved model, the prompt version, the board task and its service, and where the
+// combo stands in its verification streak), so acting on one does not mean opening the app first.
+// Filter with `acknowledged=false` for the untriaged backlog, `status` for what has settled (a
+// `failed` grading names a deployment problem, such as prompt recording being off), `agentKind`
+// for one role, and `since` for an incremental sweep. A task deleted since the run reports `task:
+// null` rather than a blank title.
+// GET /api/v1/kaizen/entries (operation listPublicKaizenEntries).
+func (s *KaizenService) ListEntries(ctx context.Context, query *KaizenListEntriesQuery) (*PublicKaizenEntryList, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/kaizen/entries",
+		Query:  query.values(),
+	}
+	var out PublicKaizenEntryList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListEntriesAll iterates every entries across every page of ListEntries.
+// Follows nextCursor until the server reports no further page. Yields (item, nil) per item and,
+// on a failure mid-iteration, one final (zero, err) — so a partial walk is never mistaken for a
+// complete one.
+func (s *KaizenService) ListEntriesAll(ctx context.Context, query *KaizenListEntriesQuery) iter.Seq2[PublicKaizenEntryListItem, error] {
+	return func(yield func(PublicKaizenEntryListItem, error) bool) {
+		var page KaizenListEntriesQuery
+		if query != nil {
+			page = *query
+		}
+		for {
+			result, err := s.ListEntries(ctx, &page)
+			if err != nil {
+				var zero PublicKaizenEntryListItem
+				yield(zero, err)
+				return
+			}
+			for _, item := range result.Entries {
+				if !yield(item, nil) {
+					return
+				}
+			}
+			if result.NextCursor == nil || *result.NextCursor == "" {
+				return
+			}
+			if page.Cursor != nil && *page.Cursor == *result.NextCursor {
+				var zero PublicKaizenEntryListItem
+				yield(zero, ErrRepeatedCursor)
+				return
+			}
+			page.Cursor = result.NextCursor
+		}
+	}
 }
 
 // KeysService the workspace's own API keys: provision one headlessly, list them, revoke one (and what it

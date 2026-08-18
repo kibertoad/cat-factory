@@ -5971,7 +5971,8 @@
         "submission_not_allowed": "Zusammenführen für diesen Lauf nicht erlaubt",
         "webhook_limit_reached": "Webhook-Limit erreicht",
         "risk_policy_inherited": "Diese Richtlinie gehört zum Konto",
-        "risk_policy_not_inherited": "Diese Richtlinie gehört zu diesem Board"
+        "risk_policy_not_inherited": "Diese Richtlinie gehört zu diesem Board",
+        "kaizen_entry_not_settled": "Der Kaizen-Eintrag wurde noch nicht bewertet"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -6012,7 +6013,8 @@
         "submission_not_allowed": "Die Merge-Richtlinie dieser Aufgabe erlaubt der Rolle, die diesen Lauf gestartet hat, diese Änderungsart nicht zusammenzuführen. Jemand mit einer passenden Rolle kann es tun, oder ein Admin erweitert die Richtlinie in der Merge-Vorlage.",
         "webhook_limit_reached": "Für diesen Workspace ist bereits die maximale Anzahl ausgehender Webhooks registriert. Entfernen Sie einen nicht mehr benötigten und registrieren Sie diesen erneut.",
         "risk_policy_inherited": "Sie gilt für alle Boards des Kontos und kann daher nicht von hier geändert werden. Klone sie in dieses Board und bearbeite die Kopie.",
-        "risk_policy_not_inherited": "Sie ist bereits die eigene Richtlinie dieses Boards: bearbeite sie direkt oder lösche sie, wenn sie nicht mehr angeboten werden soll."
+        "risk_policy_not_inherited": "Sie ist bereits die eigene Richtlinie dieses Boards: bearbeite sie direkt oder lösche sie, wenn sie nicht mehr angeboten werden soll.",
+        "kaizen_entry_not_settled": "Die Bewertung steht noch aus oder läuft gerade, es gibt also keine Empfehlungen zum Bestätigen. Versuchen Sie es erneut, sobald sie abgeschlossen ist."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",

@@ -212,8 +212,8 @@ machine-readable; `message` is operator prose. Codes fall in two families:
 
 ### Pagination
 
-Bounded lists (`GET /jobs`, `GET /services/:id/tasks`, and everything under `/debug`) are
-**keyset**-paginated:
+Bounded lists (`GET /jobs`, `GET /services/:id/tasks`, `GET /kaizen/entries`, and everything under
+`/debug`) are **keyset**-paginated:
 
 - `?limit=`: 1..100, digits only (defaults: jobs 25, tasks 50). Anything else is a 400.
 - `?cursor=`: opaque; echo a previous page's `nextCursor` back verbatim. A tampered or truncated
@@ -2114,6 +2114,86 @@ curl -s -X POST -H "$AUTH" -H 'content-type: application/json' \
 # What the board has earned, per class.
 curl -s -H "$AUTH" "$BASE/api/v1/merge-records/rollups" \
   | jq '.rollups[] | select(.merged > 0) | {changeClass, merged, autoMerged, effort}'
+```
+
+### Kaizen entries (`/api/v1/kaizen/entries`)
+
+The platform's own post-run gradings, as a backlog an improvement loop drains rather than a screen a
+person browses. After a run finishes, the Kaizen agent grades each completed agent step on how
+smooth or chaotic the interaction was (1..5) and recommends what would make it better, keyed by the
+`(agentKind, model, promptVersion)` combo the step ran on; a combo that scores 4 or 5 with no
+recommendations enough times in a row is VERIFIED and stops being graded.
+
+| Method / path                                      | Scope   | Behaviour                                                 |
+| -------------------------------------------------- | ------- | --------------------------------------------------------- |
+| `GET /api/v1/kaizen/entries`                       | `read`  | One keyset page of the workspace's entries, newest first. |
+| `GET /api/v1/kaizen/entries/:entryId`              | `read`  | One entry by id.                                          |
+| `POST /api/v1/kaizen/entries/:entryId/acknowledge` | `write` | Record that it has been triaged, or clear that.           |
+
+**The list names no run and no task, and that is the whole point.** Every other read of a grading
+makes the caller supply a run first (the app's Kaizen screen is per board and bounded, the run window
+is per run), which is the one thing a consumer asking "what has the platform learned about my agents"
+cannot know: finding out is the question. Filters compose and are applied in SQL: `acknowledged`
+(`false` for the untriaged backlog), `status`, `agentKind`, `since` (epoch ms, created-at-or-after),
+plus `limit` (1..100, default 25) and `cursor`. Ordering is `createdAt DESC, entryId DESC` and the
+cursor is a keyset on that composite, so a finished run scheduling one grading per step in the same
+millisecond cannot lose rows between pages.
+
+**An entry carries the context a follow-up needs**, so acting on one takes no second lookup and no
+browser: `runId` + `stepIndex` (the graded step), `agentKind`, `model` as RESOLVED at dispatch,
+`promptVersion`, `comboKey` and the `combo` streak behind it, `grade`, `summary`, `recommendations`,
+`graderModel`, and `taskId` plus a resolved `task` (its title, board status, and the `serviceId` /
+`serviceTitle` of the enclosing service frame). The run's own detail is deliberately NOT copied here:
+`runId` joins onto [`/api/v1/debug/runs/:runId`](./debug-api.md), which owns that and stays current
+in a way a copy could not.
+
+`taskId` and `task` are two different facts and stay two. The id is what the grading row RECORDED,
+and it answers whatever the board does next; `task` is what the board says NOW, and it is `null` when
+that block has since been deleted. Collapsing them would make a deleted task read as an entry that
+never had one. `combo` is `null` on the same terms: nothing has been recorded for that combination
+yet, which is not the same fact as a streak of zero.
+
+**A `failed` entry is a real entry, not a hidden one.** The grader records a failure with its
+`error` when it had nothing to judge (prompt recording is off for the deployment, so no telemetry was
+captured) or nothing to judge it with (no grader model is wired). Those name a deployment-level
+problem rather than a run-level one, nothing else reports them, and they are acknowledgeable for
+exactly that reason.
+
+**Acknowledging is `write`, not `admin`**, for the reason [tagging reviewer
+effort](#merge-evidence-apiv1merge-records) is: it records that a person has read something. Nothing
+runs, nothing merges, nothing is deleted. The body is `{ "acknowledged"?: boolean, "note"?: string |
+null }`; an empty `{}` acknowledges, `{"acknowledged": false}` puts the entry back on the backlog,
+and `note` is capped at 2000 characters. Acknowledging an already-acknowledged entry is a **no-op
+that returns the row unchanged**, so `acknowledgedAt` names when the entry was FIRST triaged rather
+than when a retrying client last repeated itself; clearing and re-acknowledging is how you move it
+deliberately. `acknowledgedBy` is the user id when the key was minted onto a person and the key id
+otherwise, so a follow-up always has somebody to go back to.
+
+**Acknowledgement survives a re-grade.** The grading sweep owns the grade and re-writes the row on
+every transition; acknowledgement is written only through this surface. A row that is graded again
+keeps whatever was recorded about it, which is what lets a poll loop treat `acknowledged=false` as a
+queue that only ever shrinks by somebody's decision.
+
+Refusals carry `error.details.reason`: `kaizen_entry_not_found` (the id names no entry this workspace
+holds, from both the point read and the acknowledge write, so a client branches on one value
+whichever it called) and `kaizen_entry_not_settled` (the entry exists and its grading is still
+`scheduled` or `running`, with `details.status` naming which). The second is a `409` rather than a
+`404` because it is about TIMING: acknowledging then would take an entry off the backlog before there
+were any recommendations on it, and the recommendations would land on a row nobody looks at again.
+Retry once it settles. A deployment that wired no Kaizen module answers `503`.
+
+```sh
+# The loop: drain what nobody has looked at, newest first.
+curl -s -H "$AUTH" "$BASE/api/v1/kaizen/entries?acknowledged=false&status=complete&limit=50" \
+  | jq '.entries[] | {entryId, agentKind, model, grade, recommendations, runId}'
+
+# Act on one (file a ticket, edit a prompt), then take it off the backlog.
+curl -s -X POST -H "$AUTH" -H 'content-type: application/json' \
+  -d '{"note":"filed as CF-431"}' \
+  "$BASE/api/v1/kaizen/entries/$ENTRY/acknowledge"
+
+# What one agent kind is being told to fix, since the last sweep.
+curl -s -H "$AUTH" "$BASE/api/v1/kaizen/entries?agentKind=coder&since=$LAST_SWEEP_MS"
 ```
 
 ### Service specification

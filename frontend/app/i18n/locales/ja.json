@@ -682,7 +682,8 @@
         "submission_not_allowed": "この実行ではマージできません",
         "webhook_limit_reached": "Webhook の上限に達しました",
         "risk_policy_inherited": "このポリシーはアカウントのものです",
-        "risk_policy_not_inherited": "このポリシーはこのボードのものです"
+        "risk_policy_not_inherited": "このポリシーはこのボードのものです",
+        "kaizen_entry_not_settled": "この Kaizen エントリはまだ採点されていません"
       },
       "description": {
         "dependencies_unmet": "このタスクは、まだ完了していない他のタスクに依存しています。それらを完了または解除してから、もう一度開始してください。",
@@ -723,7 +724,8 @@
         "submission_not_allowed": "このタスクのマージポリシーでは、実行を開始したロールがこの種類の変更をマージすることを許可していません。マージできるロールのメンバーが対応するか、管理者がマージプリセットでポリシーを広げてください。",
         "webhook_limit_reached": "このワークスペースには送信 Webhook がすでに上限数まで登録されています。不要なものを削除してから、もう一度登録してください。",
         "risk_policy_inherited": "アカウント内のすべてのボードで共有されているため、ここからは変更できません。このボードに複製してコピーを編集してください。",
-        "risk_policy_not_inherited": "すでにこのボード自身のポリシーです。直接編集するか、提示したくない場合は削除してください。"
+        "risk_policy_not_inherited": "すでにこのボード自身のポリシーです。直接編集するか、提示したくない場合は削除してください。",
+        "kaizen_entry_not_settled": "採点が待機中または実行中のため、確認できる改善提案がまだありません。完了してから再試行してください。"
       },
       "action": {
         "connectGitHub": "GitHub に接続",

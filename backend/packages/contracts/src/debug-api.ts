@@ -12,6 +12,12 @@ import {
   type LlmCallOutcome,
 } from './observability.js'
 import { provisioningLogEntrySchema } from './provisioning-logs.js'
+import {
+  cursorSchema,
+  epochMsQuerySchema,
+  pageLimitSchema,
+  PUBLIC_MAX_PAGE_LIMIT,
+} from './public-paging.js'
 import { stepToolServersSchema } from './tool-servers.js'
 
 // ---------------------------------------------------------------------------
@@ -62,11 +68,8 @@ import { stepToolServersSchema } from './tool-servers.js'
 // values rather than the 400 a malformed request deserves. The `maxValue` ceilings are what
 // make the bounds real backstops rather than suggestions.
 
-/** An OPAQUE keyset cursor. Callers echo it back verbatim; its encoding may change. */
-const cursorSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))
-
-/** Hard ceiling on rows one page may return. */
-export const DEBUG_MAX_PAGE_LIMIT = 100
+/** Hard ceiling on rows one page may return: the surface-wide one, never a second number. */
+export const DEBUG_MAX_PAGE_LIMIT = PUBLIC_MAX_PAGE_LIMIT
 
 /** Hard ceiling on the per-field body preview a LIST may inline. */
 export const DEBUG_MAX_PREVIEW_CHARS = 4_000
@@ -83,16 +86,6 @@ export const DEBUG_MAX_BODY_OFFSET = 2_000_000
 
 /** Hard ceiling on a `contains` search term's length. */
 export const DEBUG_MAX_SEARCH_CHARS = 256
-
-const pageLimitSchema = v.pipe(
-  v.string(),
-  v.regex(/^\d+$/, 'Must be a whole number'),
-  v.transform(Number),
-  v.number(),
-  v.integer(),
-  v.minValue(1),
-  v.maxValue(DEBUG_MAX_PAGE_LIMIT),
-)
 
 /**
  * Per-field preview budget on a LIST. Defaults to 0 — a sweep costs no body bytes at all,
@@ -141,16 +134,6 @@ const bodyOffsetSchema = v.pipe(
  * text, and a term that behaved as a wildcard on one runtime only would be a parity bug.
  */
 const containsSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(DEBUG_MAX_SEARCH_CHARS))
-
-/** An epoch-ms query filter: digits only, for the same reason as {@link pageLimitSchema}. */
-const epochMsQuerySchema = v.pipe(
-  v.string(),
-  v.regex(/^\d+$/, 'Must be a whole number of epoch milliseconds'),
-  v.transform(Number),
-  v.number(),
-  v.integer(),
-  v.minValue(0),
-)
 
 /** A non-negative integer query filter (step indexes). */
 const nonNegativeIntQuerySchema = v.pipe(

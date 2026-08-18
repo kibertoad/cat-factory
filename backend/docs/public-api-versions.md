@@ -868,3 +868,34 @@ second source-control credential. `path` is a query parameter because a repo-rel
 slashes and an OpenAPI path segment cannot. One file, no directory listing: a listing has its own
 frozen-forever questions (pagination, recursion, large trees) and this surface should not answer one
 by accident.
+
+## 1.58.0
+
+**A new resource: Kaizen entries** (`GET /api/v1/kaizen/entries`, `GET …/{entryId}`,
+`POST …/{entryId}/acknowledge`). The platform's post-run gradings of its own agent steps, as a
+backlog a consumer drains rather than a screen a person browses.
+
+The gradings already existed and were already rendered, which is why this is a shape change rather
+than a new feature. What did not exist was any way to READ them without naming a run or a task
+first, and that is precisely what a consumer asking "what has the platform learned about my agents"
+cannot supply: finding out is the question it is asking. The app's own reads are per board and
+bounded (the Kaizen screen) or per run (the run window), so the newest entries pushed the rest out
+of reach, and a poll loop re-reported the same rows every pass with no way to say it had dealt with
+one.
+
+Hence the second half, and the one part that is not merely a projection: an entry now carries
+`acknowledged` / `acknowledgedAt` / `acknowledgedBy` / `acknowledgementNote`, written ONLY through
+this surface and never by the grading sweep. `?acknowledged=false` is the queue, and acknowledging
+is what shrinks it. A re-graded row keeps its acknowledgement, so the queue never re-fills behind a
+consumer's back.
+
+Two refusal reasons are new, both on `error.details.reason`: `kaizen_entry_not_found` (a 404 shared
+by the point read and the acknowledge write, so one value covers both doors) and
+`kaizen_entry_not_settled` (a 409 for acknowledging an entry whose grading is still `scheduled` or
+`running`, with `details.status` naming which). The second is deliberately not a 404: the entry
+exists, and acknowledging it then would take it off the backlog before there were recommendations on
+it.
+
+Additive throughout: no existing field changed type or meaning, and `KaizenGrading` on the
+session-authed surface gained the same acknowledgement fields, which is an internal shape rather
+than part of this contract.

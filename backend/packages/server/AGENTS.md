@@ -27,7 +27,11 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   carries one authorization model), `PublicMergeEvidenceController` (the merge-EVIDENCE loop: a run's
   merge decision with its backend-derived change class and the merger's scores, the workspace's
   per-class rollups, and the reviewer-effort TAG a landed pull request earned; the tag at `write`,
-  not the `admin` that `act` needs, since tagging merges nothing), `PublicSpendController` (the
+  not the `admin` that `act` needs, since tagging merges nothing), `PublicKaizenController` (the
+  KAIZEN entry backlog: every post-run grading of an agent step as a workspace-wide keyset page
+  naming no run up front, plus the acknowledgement that takes one off `?acknowledged=false`; the
+  acknowledge at `write` for the same reason the effort tag is, and the JOIN that makes an entry
+  actionable lives in orchestration's `KaizenEntryReader`, not here), `PublicSpendController` (the
   `read`-scoped **spend analytics** read at `/api/v1/usage/spend`: one dimension of
   `ReportsService` over a window, scoped to the key's own account AND board, so the
   cost-attribution axes the panel serves account-wide (repository, ticket, run) are reachable

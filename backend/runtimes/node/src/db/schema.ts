@@ -694,6 +694,11 @@ export const kaizenGradings = pgTable(
     recommendations: text('recommendations').notNull().default('[]'),
     grader_model: text('grader_model'),
     error: text('error'),
+    // Written only by `setAcknowledgement` (never by the grading sweep's upsert), so a re-graded
+    // row keeps whatever a person recorded about the grade it used to carry.
+    acknowledged_at: bigint('acknowledged_at', { mode: 'number' }),
+    acknowledged_by: text('acknowledged_by'),
+    acknowledgement_note: text('acknowledgement_note'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
@@ -702,6 +707,8 @@ export const kaizenGradings = pgTable(
     uniqueIndex('idx_kaizen_gradings_step').on(t.workspace_id, t.execution_id, t.step_index),
     index('idx_kaizen_gradings_status').on(t.status, t.updated_at),
     index('idx_kaizen_gradings_execution').on(t.workspace_id, t.execution_id),
+    // The public entry list's `(created_at DESC, id DESC)` page over one workspace.
+    index('idx_kaizen_gradings_workspace_created').on(t.workspace_id, t.created_at),
   ],
 )
 

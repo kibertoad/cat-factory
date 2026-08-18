@@ -15,6 +15,7 @@ import type {
   ModelProviderResolver,
   ModelRef,
   PipelineStep,
+  ServiceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import {
@@ -23,12 +24,15 @@ import {
   getErrorMessage,
   resolveScopedModelProvider,
 } from '@cat-factory/kernel'
+import type { PublicKaizenEntry } from '@cat-factory/contracts'
 import { generateText } from 'ai'
 import {
   catFactoryObservability,
   KAIZEN_SYSTEM_PROMPT,
   promptVersionForKind,
 } from '@cat-factory/agents'
+import type { KaizenAcknowledgement, KaizenEntryQuery } from './kaizenEntries.js'
+import { KaizenEntryReader } from './kaizenEntries.js'
 import type { AgentContextObservabilityService } from '../observability/AgentContextObservabilityService.js'
 import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
 import { comboKeyFor, isVerified, nextComboState } from './kaizen.logic.js'
@@ -43,6 +47,8 @@ export interface KaizenServiceDependencies {
   kaizenGradingRepository: KaizenGradingRepository
   kaizenVerifiedComboRepository: KaizenVerifiedComboRepository
   blockRepository: BlockRepository
+  /** Resolves the account service a graded task belongs to, for the public entry surface. */
+  serviceRepository: ServiceRepository
   llmCallMetricRepository: LlmCallMetricRepository
   /** Reads the complete context each step was given (system/user prompts + injected files). */
   agentContextObservability: AgentContextObservabilityService
@@ -84,7 +90,22 @@ export interface KaizenServiceDependencies {
  * agent step — for the `kaizen` kind — so operators configure it in Model Configuration.
  */
 export class KaizenService {
-  constructor(private readonly deps: KaizenServiceDependencies) {}
+  /**
+   * The public entry surface (list / read / acknowledge), a collaborator rather than more methods
+   * here: it shares none of the grading machinery below, and its whole job is the board + combo
+   * JOIN that makes an entry actionable outside the app.
+   */
+  private readonly entries: KaizenEntryReader
+
+  constructor(private readonly deps: KaizenServiceDependencies) {
+    this.entries = new KaizenEntryReader({
+      gradings: deps.kaizenGradingRepository,
+      combos: deps.kaizenVerifiedComboRepository,
+      findBlocks: (blockIds) => deps.blockRepository.findByIds(blockIds),
+      listServices: (serviceIds) => deps.serviceRepository.listByIds(serviceIds),
+      clock: deps.clock,
+    })
+  }
 
   /** Whether the LLM-backed grader is available (else gradings settle as `failed`). */
   get enabled(): boolean {
@@ -145,6 +166,11 @@ export class KaizenService {
         recommendations: [],
         graderModel: null,
         error: null,
+        // A fresh grading is nobody's business yet; the acknowledgement columns are written only
+        // by the public entry surface, and every later transition carries them through untouched.
+        acknowledgedAt: null,
+        acknowledgedBy: null,
+        acknowledgementNote: null,
         createdAt: now,
         updatedAt: now,
       }
@@ -273,6 +299,28 @@ export class KaizenService {
   /** The gradings recorded for a single run (the run-window status surface). */
   listForExecution(workspaceId: string, executionId: string): Promise<KaizenGrading[]> {
     return this.deps.kaizenGradingRepository.listByExecution(workspaceId, executionId)
+  }
+
+  // ---- the public entry surface (`/api/v1/kaizen/entries`) -----------------
+  // Thin delegates onto {@link KaizenEntryReader}; the reasoning lives there.
+
+  /** One keyset page of the workspace's entries, newest first, with their context joined on. */
+  listEntries(workspaceId: string, query: KaizenEntryQuery): Promise<PublicKaizenEntry[]> {
+    return this.entries.listEntries(workspaceId, query)
+  }
+
+  /** One entry by id, or null when this workspace holds no such grading. */
+  getEntry(workspaceId: string, entryId: string): Promise<PublicKaizenEntry | null> {
+    return this.entries.getEntry(workspaceId, entryId)
+  }
+
+  /** Record or clear an entry's acknowledgement, answering the entry as it now stands. */
+  acknowledgeEntry(
+    workspaceId: string,
+    entryId: string,
+    input: KaizenAcknowledgement,
+  ): Promise<PublicKaizenEntry> {
+    return this.entries.acknowledge(workspaceId, entryId, input)
   }
 
   // ---- internals ----------------------------------------------------------

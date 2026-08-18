@@ -28,6 +28,9 @@ function grading(overrides: Partial<KaizenGrading> & Pick<KaizenGrading, 'id'>):
     recommendations: [],
     graderModel: null,
     error: null,
+    acknowledgedAt: null,
+    acknowledgedBy: null,
+    acknowledgementNote: null,
     createdAt: 1,
     updatedAt: 1,
     ...overrides,
@@ -207,6 +210,151 @@ export function defineKaizenSuite(
       expect(await repo.claim(ws, `${ws}-fr`, 50, 2000)).toBe(false)
       // A stale running row (updatedAt before the cutoff) is re-claimable.
       expect(await repo.claim(ws, `${ws}-st`, 50, 2000)).toBe(true)
+    })
+
+    it('pages newest-first on the (createdAt, id) keyset, filtered in SQL', async () => {
+      const repo = makeGradingRepo()
+      const { ws, e1 } = ids()
+      // Two rows share a createdAt, which is the normal case: a finished run schedules a grading
+      // per step in one pass. A timestamp-only cursor would drop one of them between pages.
+      await repo.upsert(
+        ws,
+        grading({ id: `${ws}-a`, executionId: e1, stepIndex: 0, createdAt: 10 }),
+      )
+      await repo.upsert(
+        ws,
+        grading({ id: `${ws}-b`, executionId: e1, stepIndex: 1, createdAt: 20 }),
+      )
+      await repo.upsert(
+        ws,
+        grading({ id: `${ws}-c`, executionId: e1, stepIndex: 2, createdAt: 20 }),
+      )
+      await repo.upsert(
+        ws,
+        grading({
+          id: `${ws}-d`,
+          executionId: e1,
+          stepIndex: 3,
+          createdAt: 30,
+          status: 'complete',
+          grade: 5,
+          agentKind: 'architect',
+        }),
+      )
+
+      // Page over the whole set two rows at a time and assert nothing is skipped or repeated.
+      const first = await repo.listPage(ws, { limit: 2 })
+      expect(first.map((g) => g.id)).toEqual([`${ws}-d`, `${ws}-c`])
+      const cursorRow = first[first.length - 1]
+      const second = await repo.listPage(ws, {
+        limit: 2,
+        cursor: { createdAt: cursorRow?.createdAt ?? 0, id: cursorRow?.id ?? '' },
+      })
+      expect(second.map((g) => g.id)).toEqual([`${ws}-b`, `${ws}-a`])
+
+      // Each filter is applied by the store, not by the caller.
+      expect((await repo.listPage(ws, { limit: 10, status: 'complete' })).map((g) => g.id)).toEqual(
+        [`${ws}-d`],
+      )
+      expect(
+        (await repo.listPage(ws, { limit: 10, agentKind: 'architect' })).map((g) => g.id),
+      ).toEqual([`${ws}-d`])
+      expect((await repo.listPage(ws, { limit: 10, since: 20 })).map((g) => g.id)).toEqual([
+        `${ws}-d`,
+        `${ws}-c`,
+        `${ws}-b`,
+      ])
+      // Another workspace's gradings are never in the page.
+      const { ws: other } = ids()
+      await repo.upsert(other, grading({ id: `${other}-x`, executionId: e1, createdAt: 99 }))
+      expect((await repo.listPage(ws, { limit: 10 })).map((g) => g.id)).not.toContain(`${other}-x`)
+    })
+
+    it('acknowledges a settled grading once, refuses an unsettled one, and clears on request', async () => {
+      const repo = makeGradingRepo()
+      const { ws, e1 } = ids()
+      await repo.upsert(
+        ws,
+        grading({
+          id: `${ws}-done`,
+          executionId: e1,
+          stepIndex: 0,
+          status: 'complete',
+          grade: 3,
+          createdAt: 10,
+        }),
+      )
+      await repo.upsert(
+        ws,
+        grading({
+          id: `${ws}-live`,
+          executionId: e1,
+          stepIndex: 1,
+          status: 'running',
+          createdAt: 11,
+        }),
+      )
+
+      const acked = await repo.setAcknowledgement(ws, `${ws}-done`, {
+        at: 500,
+        by: 'usr_1',
+        note: 'filed as CF-12',
+      })
+      expect(acked?.acknowledgedAt).toBe(500)
+      expect(acked?.acknowledgedBy).toBe('usr_1')
+      expect(acked?.acknowledgementNote).toBe('filed as CF-12')
+
+      // A repeat leaves the FIRST acknowledgement standing, so the stamp keeps naming the triage
+      // rather than the last retry.
+      const again = await repo.setAcknowledgement(ws, `${ws}-done`, {
+        at: 900,
+        by: 'usr_2',
+        note: 'second',
+      })
+      expect(again?.acknowledgedAt).toBe(500)
+      expect(again?.acknowledgedBy).toBe('usr_1')
+
+      // The grading sweep's own write must not disturb it: a re-graded row keeps its triage.
+      await repo.upsert(
+        ws,
+        grading({
+          id: `${ws}-done`,
+          executionId: e1,
+          stepIndex: 0,
+          status: 'complete',
+          grade: 5,
+          summary: 're-graded',
+          updatedAt: 1000,
+        }),
+      )
+      const regraded = await repo.get(ws, `${ws}-done`)
+      expect(regraded?.summary).toBe('re-graded')
+      expect(regraded?.acknowledgedAt).toBe(500)
+
+      // An unsettled grading cannot be acknowledged: the store refuses it, not just the service.
+      const live = await repo.setAcknowledgement(ws, `${ws}-live`, {
+        at: 500,
+        by: 'usr_1',
+        note: null,
+      })
+      expect(live?.acknowledgedAt).toBeNull()
+
+      // The acknowledged/unacknowledged filter reads the stored state.
+      expect((await repo.listPage(ws, { limit: 10, acknowledged: true })).map((g) => g.id)).toEqual(
+        [`${ws}-done`],
+      )
+      expect(
+        (await repo.listPage(ws, { limit: 10, acknowledged: false })).map((g) => g.id),
+      ).toEqual([`${ws}-live`])
+
+      // Clearing puts it back on the backlog, all three columns together.
+      const cleared = await repo.setAcknowledgement(ws, `${ws}-done`, null)
+      expect(cleared?.acknowledgedAt).toBeNull()
+      expect(cleared?.acknowledgedBy).toBeNull()
+      expect(cleared?.acknowledgementNote).toBeNull()
+
+      // An id this workspace does not hold answers null rather than inventing a row.
+      expect(await repo.setAcknowledgement(ws, `${ws}-missing`, null)).toBeNull()
     })
 
     it('keeps verified-combo streak/verified state per key', async () => {

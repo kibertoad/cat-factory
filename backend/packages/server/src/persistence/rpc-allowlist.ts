@@ -889,6 +889,13 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // The single-grade read behind the Kaizen screen's detail view. Workspace-keyed on arg0 like
     // its siblings; it was the last read on this repo a node could not serve.
     get: { scope: { kind: 'workspace', arg: 0 } },
+    // The public entry surface (`GET /api/v1/kaizen/entries`) and its acknowledgement write. Both
+    // take the workspaceId as arg0 (the `workspace` rule). They are `remote` rather than local for
+    // the reason the reads above are: the gradings are org state written by whichever deployment
+    // ran the graded work, so a mothership-mode node reading its own store would answer an
+    // improvement loop with an empty backlog and no way to tell that from a clean one.
+    listPage: { scope: { kind: 'workspace', arg: 0 } },
+    setAcknowledgement: { scope: { kind: 'workspace', arg: 0 } },
   },
   // Mixed (workspaceId + blockId/stage): the workspace arg stays the scope key.
   requirementReviewRepository: {

@@ -102,6 +102,14 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.risk_policy_not_inherited',
     descriptionKey: 'errors.conflict.description.risk_policy_not_inherited',
   },
+  // Raised only by the public `/api/v1/kaizen/entries/:id/acknowledge` route today, so no SPA
+  // action reaches it. Mapped all the same, because the map is exhaustive over the wire
+  // vocabulary rather than over the subset this app happens to trigger: the day a Kaizen screen
+  // grows an acknowledge button, the copy is already here rather than an untranslated fallback.
+  kaizen_entry_not_settled: {
+    titleKey: 'errors.conflict.title.kaizen_entry_not_settled',
+    descriptionKey: 'errors.conflict.description.kaizen_entry_not_settled',
+  },
   task_limit_reached: {
     titleKey: 'errors.conflict.title.task_limit_reached',
     descriptionKey: 'errors.conflict.description.task_limit_reached',
