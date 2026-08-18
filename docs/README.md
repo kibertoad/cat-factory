@@ -88,6 +88,11 @@ of the product.
   [`deploy/preview`](../deploy/preview).
 - [`internal/localization.md`](./internal/localization.md): i18n status and the
   migration plan.
+- [`internal/external-api-sweep.md`](./internal/external-api-sweep.md): every
+  hand-written third-party API call checked against the vendor's live docs, with a
+  verdict each. **Regenerated wholesale** by the `external-api-sweep` skill, so it
+  is always the latest sweep rather than a point-in-time record; its header carries
+  the commit swept, because "still correct" is a claim about a tree.
 
 ### Point-in-time records
 
