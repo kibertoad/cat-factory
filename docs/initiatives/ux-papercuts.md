@@ -27,6 +27,15 @@ with a cursor held for the drag). This document catalogs UX papercuts
 verified against the code at the referenced `file:line` (line numbers drift as the
 tree moves: treat them as anchors, not gospel).
 
+**Re-audited 2026-08-18.** Every then-open item was re-verified against HEAD and the
+statuses below updated in place: UX-57 is closed by the error-toast funnel work,
+UX-27/49/51/60 re-graded partial, and UX-51's surface is now the risk-policy library.
+A second systematic sweep covered the ~190 components added since the first audit
+(the tutorial system, initiative planning/tracker, PR review, the environment wizard,
+foundational services, binary candidates, and the new settings panels): its findings
+are sections G-K (UX-78..UX-111), verified the same way; anchors there are from
+2026-08-18.
+
 ## Goal & rationale
 
 The product's core flows (board, pipelines, review gates, integrations) are
@@ -69,6 +78,13 @@ per-file patches:
    error states with no retry (UX-70..UX-76).
 7. **Raw internal identifiers leaking into UI**: model ids, agent-kind enums,
    backend error prose (UX-36, UX-37, UX-57).
+8. **(2026-08-18) Primitive adoption stalls at the primitive.** Every shared seam the
+   first audit produced exists and works (`IconButton`, `SecretInput`, `CopyButton`,
+   `MarkdownProse`, `useConfirm`/`useConfirmAction`, `useUnsavedGuard`,
+   `useResultView.onClose`, per-row in-flight sets, the error-with-Retry store shape),
+   and the surfaces built after them mostly bypass them (sections G-K). The durable
+   fix is an adoption sweep plus an enforcement hook (a lint rule or a review
+   checklist entry per primitive), not another primitive.
 
 ---
 
@@ -139,9 +155,11 @@ per-file patches:
   that task's focus view (`ui.focus`, the same gesture the card's review action uses),
   while a double-click on frame chrome `focusFrame`s the frame; centres the camera and
   zooms in, a quick "focus this service" gesture. Epics (non-containers) stay a no-op.
-- **UX-10: Transient view state.** `stores/ui.ts:34,239,244`: `selectedBlockId`,
-  `zoom`, `expandedFrames` are plain refs; `BoardCanvas.vue:178-181` only does
-  `fit-view-on-init`. Fix: persist per-workspace (localStorage).
+- **UX-10: Transient view state.** `selectedBlockId` and `zoom` are plain refs
+  (the store split; they now live in `stores/ui/navigation.ts:16-20`);
+  `BoardCanvas.vue:229-232` only does `fit-view-on-init`. Fix: persist
+  per-workspace (localStorage). The `expandedFrames` clause is obsolete: frames
+  are always expanded and that set was deleted.
 - **UX-11, No refit on workspace switch.** `BoardCanvas.vue:181`. Switching
   workspaces swaps frames without re-fitting; user can land on empty canvas and
   think the workspace is blank. Fix: `fitView()` on workspace change.
@@ -193,22 +211,22 @@ per-file patches:
 
 ## B. Modals, forms & inputs
 
-| ID    | Sev | Status | Finding                                                                            |
-| ----- | --- | ------ | ---------------------------------------------------------------------------------- |
-| UX-18 | P1  | done   | Content-heavy modals discard all typed input on Escape/backdrop click              |
-| UX-19 | P2  | done   | No show/hide toggle on any password/secret field (systemic)                        |
-| UX-20 | P2  | done   | Provider API key entered in a plaintext, unmasked textarea (several surfaces)      |
-| UX-21 | P2  | done   | `unlinkSource` (fragment library) destroys a synced source with no confirmation    |
-| UX-22 | P2  | todo   | Reset-password validation is submit-only, no inline feedback                       |
-| UX-23 | P2  | done   | Slack member-mapping rows keyed by index; incomplete rows silently dropped on save |
-| UX-24 | P2  | todo   | Datadog connection can't be updated without re-pasting both write-only keys        |
-| UX-25 | P2  | done   | DecisionModal options: fire-and-forget, no pending state, double-click hazard      |
-| UX-26 | P3  | todo   | No autofocus on first field of login/reset/connect modals                          |
-| UX-27 | P3  | todo   | Disabled submit buttons don't state why (min-length rules invisible)               |
-| UX-28 | P3  | todo   | No character counters where the backend enforces length limits                     |
-| UX-29 | P3  | done   | Fragment library: one global loading flag spins every row's buttons                |
-| UX-30 | P3  | done   | Slack "Add to Slack" OAuth button has no pending state                             |
-| UX-31 | P3  | todo   | "Edit" on list items doesn't scroll/focus the offscreen edit form                  |
+| ID    | Sev | Status  | Finding                                                                            |
+| ----- | --- | ------- | ---------------------------------------------------------------------------------- |
+| UX-18 | P1  | done    | Content-heavy modals discard all typed input on Escape/backdrop click              |
+| UX-19 | P2  | done    | No show/hide toggle on any password/secret field (systemic)                        |
+| UX-20 | P2  | done    | Provider API key entered in a plaintext, unmasked textarea (several surfaces)      |
+| UX-21 | P2  | done    | `unlinkSource` (fragment library) destroys a synced source with no confirmation    |
+| UX-22 | P2  | todo    | Reset-password validation is submit-only, no inline feedback                       |
+| UX-23 | P2  | done    | Slack member-mapping rows keyed by index; incomplete rows silently dropped on save |
+| UX-24 | P2  | todo    | Datadog connection can't be updated without re-pasting both write-only keys        |
+| UX-25 | P2  | done    | DecisionModal options: fire-and-forget, no pending state, double-click hazard      |
+| UX-26 | P3  | todo    | No autofocus on first field of login/reset/connect modals                          |
+| UX-27 | P3  | partial | Disabled submit buttons don't state why (min-length rules invisible)               |
+| UX-28 | P3  | todo    | No character counters where the backend enforces length limits                     |
+| UX-29 | P3  | done    | Fragment library: one global loading flag spins every row's buttons                |
+| UX-30 | P3  | done    | Slack "Add to Slack" OAuth button has no pending state                             |
+| UX-31 | P3  | todo    | "Edit" on list items doesn't scroll/focus the offscreen edit form                  |
 
 - **UX-18: Dirty modals discard input. DONE.** A shared `composables/useUnsavedGuard.ts`
   seam routes a controlled `UModal`'s dismiss paths (Escape, backdrop, Cancel) through a
@@ -267,9 +285,12 @@ per-file patches:
 - **UX-26: Missing autofocus.** `LoginScreen.vue:314`, `ResetPasswordScreen.vue:79`,
   `DocumentSourceConnectModal`, `DocumentImportModal`, `BootstrapModal` first
   inputs. Good counter-examples: `AddTaskModal:472`, `RecurringPipelineModal:147`.
-- **UX-27: Unexplained disabled buttons.** `PersonalCredentialModal.vue:126`
-  (`password.length < 6`), `PersonalSubscriptionSection.vue:107,260`,
-  `ResetPasswordScreen`: greyed submit with no "minimum N characters" helper text.
+- **UX-27: Unexplained disabled buttons. PARTIAL.** `PersonalSubscriptionSection.vue`
+  now derives a single `disabledReason` computed (`:123-133`) bound to both
+  `:disabled` and a visible line beside the button, so state and reason can't
+  disagree (the UX-40 shape; copy it for the rest). Still open:
+  `PersonalCredentialModal.vue:141` (`password.length < 6` with no helper text)
+  and `ResetPasswordScreen` (the >=8 rule invisible until submit; see UX-22).
 - **UX-28, No counters on bounded fields.** `bootstrap/BootstrapModal.vue:90-97`
   errors on repo-name >100 chars but the input has no `maxlength`/counter;
   description/instructions have neither.
@@ -395,25 +416,25 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
 
 ## D. Settings, keys & integrations
 
-| ID    | Sev | Status | Finding                                                                                            |
-| ----- | --- | ------ | -------------------------------------------------------------------------------------------------- |
-| UX-45 | P1  | todo   | Direct provider API keys saved without any validation probe                                        |
-| UX-46 | P2  | todo   | Connected keys show no last-4 / created-date identity hint                                         |
-| UX-47 | P2  | todo   | Key-removal confirm is generic: doesn't name the key                                               |
-| UX-48 | P2  | todo   | Datadog/incident connections: no Test button, no key-page links, no scopes stated                  |
-| UX-49 | P2  | todo   | 428 password modal never explains the 40h client-side password caching                             |
-| UX-50 | P2  | todo   | Model pickers are unsearchable dropdowns (catalog can be 300+ models)                              |
-| UX-51 | P2  | todo   | Merge presets: % semantics not shown; no "used by" / default hint                                  |
-| UX-52 | P2  | todo   | High-blast-radius disconnects (GitHub App) are one accidental Enter away                           |
-| UX-53 | P2  | todo   | No unsaved-changes protection in settings panels (tab switch / Escape discards)                    |
-| UX-54 | P3  | todo   | Manual GitHub installation-id field gives no hint where the id comes from                          |
-| UX-55 | P3  | todo   | Vendor credential steps are plain text, no "create token" link                                     |
-| UX-56 | P3  | todo   | Mixed save granularity inside WorkspaceSettingsPanel (one Save for 5 sections; Budget separate)    |
-| UX-57 | P3  | todo   | Raw backend error text piped verbatim into toasts/status across settings                           |
-| UX-58 | P3  | todo   | Local runner endpoints savable without a (re)successful test after URL edits                       |
-| UX-59 | P3  | todo   | Slack member map requires hand-pasting raw `Uxxxx`/GitHub ids, no lookup                           |
-| UX-60 | P3  | todo   | Password modal doesn't name the run/task it gates; expiry date field doesn't state its consequence |
-| UX-61 | P3  | todo   | AI-onboarding modal: no explicit skip/later button; operator note nearly invisible                 |
+| ID    | Sev | Status  | Finding                                                                                            |
+| ----- | --- | ------- | -------------------------------------------------------------------------------------------------- |
+| UX-45 | P1  | todo    | Direct provider API keys saved without any validation probe                                        |
+| UX-46 | P2  | todo    | Connected keys show no last-4 / created-date identity hint                                         |
+| UX-47 | P2  | todo    | Key-removal confirm is generic: doesn't name the key                                               |
+| UX-48 | P2  | todo    | Datadog/incident connections: no Test button, no key-page links, no scopes stated                  |
+| UX-49 | P2  | partial | 428 password modal never explains the 40h client-side password caching                             |
+| UX-50 | P2  | todo    | Model pickers are unsearchable dropdowns (catalog can be 300+ models)                              |
+| UX-51 | P2  | partial | Merge presets: % semantics not shown; no "used by" / default hint                                  |
+| UX-52 | P2  | todo    | High-blast-radius disconnects (GitHub App) are one accidental Enter away                           |
+| UX-53 | P2  | todo    | No unsaved-changes protection in settings panels (tab switch / Escape discards)                    |
+| UX-54 | P3  | todo    | Manual GitHub installation-id field gives no hint where the id comes from                          |
+| UX-55 | P3  | todo    | Vendor credential steps are plain text, no "create token" link                                     |
+| UX-56 | P3  | todo    | Mixed save granularity inside WorkspaceSettingsPanel (one Save for 5 sections; Budget separate)    |
+| UX-57 | P3  | done    | Raw backend error text piped verbatim into toasts/status across settings                           |
+| UX-58 | P3  | todo    | Local runner endpoints savable without a (re)successful test after URL edits                       |
+| UX-59 | P3  | todo    | Slack member map requires hand-pasting raw `Uxxxx`/GitHub ids, no lookup                           |
+| UX-60 | P3  | partial | Password modal doesn't name the run/task it gates; expiry date field doesn't state its consequence |
+| UX-61 | P3  | todo    | AI-onboarding modal: no explicit skip/later button; operator note nearly invisible                 |
 
 - **UX-45: Unvalidated keys.** `providers/ApiKeysSection.vue:179` +
   `stores/apiKeys.ts:38-43`: pasting a direct key POSTs and toasts "Connected"
@@ -452,19 +473,39 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
   `MergeThresholdsPanel.vue` (drafts :46), `SlackPanel.vue` (:43-59) all hold local
   edits discarded on Escape/backdrop/tab-switch with no warning. (Same theme as
   UX-18/UX-33.)
-- **UX-54..UX-61: smaller settings polish.** Manual installation-id field
-  (`github/GitHubConnect.vue:178-192`) needs a "where do I find this" link;
-  `VendorCredentialsModal.vue:203-207` steps should link the vendor console;
-  `WorkspaceSettingsPanel.vue:359-369` vs `:411-421` mixed save scopes;
-  raw `e.message` in toasts across `ApiKeysSection.vue:205`, `SlackPanel.vue:63-70`,
-  `ObservabilityConnectionPanel.vue:38-45`, `VendorCredentialsModal.vue:132-138`,
-  `ProviderConnectionTab.vue:153,231`, `OpenRouterCatalogPanel.vue:344`;
-  `LocalModelEndpointsPanel.vue:117-127` allows saving an endpoint whose URL
-  changed since the last green probe; `SlackPanel.vue:292-311` member ids are
-  hand-typed with placeholders only; `PersonalCredentialModal.vue:50-61` doesn't
-  name the gated task and `PersonalSubscriptionSection.vue:253-255` doesn't state
-  what expiry does; `AiProviderOnboardingModal.vue:103-105` buries the operator
-  note at `text-[11px]` and offers no explicit skip.
+- **UX-49: Undisclosed password cache. PARTIAL (re-verified 2026-08-18).**
+  `personalCredential.passwordBody` now discloses the cache exists ("so you won't
+  be asked again for a while") but not its ~40h duration
+  (`stores/personalSubscriptions.ts:48-49`), and there is still no "don't
+  remember" opt-out (`cachePassword` is unconditional).
+- **UX-51: Opaque preset semantics. PARTIAL, surface renamed.**
+  `MergeThresholdsPanel` became the risk-policy library (`settings/RiskPolicyPanel.vue`
+  - `RiskPolicyEditorRow.vue`, #958). Fixed there: the field labels carry the `%`
+    unit and the panel intro explains 0-100 scoring; default / unattended-default
+    badges with promote buttons exist. Still open: nothing shows which tasks USE a
+    policy.
+- **UX-57: Raw error toasts. DONE.** The `usePipelineErrorToast().present()` funnel
+  now translates every failure title + status-class/reason description, keeps the
+  backend prose, validation issues and `requestId` behind a "Show details"
+  disclosure, and makes the toast sticky and copyable. All six surfaces named by
+  the audit route through it, and `settings/ConnectionTestVerdict.vue` gives inline
+  probe verdicts a translated headline with the raw prose demoted to a detail line.
+- **UX-60: PARTIAL.** Renewal nudges now exist (`renewalNotices`, "expired / renews
+  in N days") and the field is labeled "Subscription renews on (optional)", but the
+  field still has no `:description` stating the consequence, and the 428 modal
+  still names only the vendor, never the gated run/task (`pending` carries
+  `vendor`/`reason`/`retry` only).
+- **UX-54/55/56/58/59/61: smaller settings polish, all still open (re-verified
+  2026-08-18).** Manual installation-id field (`github/GitHubConnect.vue:169-184`)
+  needs a "where do I find this" link; `VendorCredentialsModal.vue:234-239` steps
+  should link the vendor console (`ApiKeysSection.vue:323-332` shows the pattern);
+  `WorkspaceSettingsPanel.vue` now has TEN sections behind one Save (`:650-657`)
+  while eight sibling tabs save their own way, so UX-56 got worse;
+  `LocalModelEndpointsPanel.vue:219-243` still saves an endpoint whose URL changed
+  since the last green probe (`tested` is only reset by `seedDraft`);
+  `SlackPanel.vue:327-339` member ids are hand-typed with placeholders only;
+  `AiProviderOnboardingModal.vue:121-123` still buries the operator note at
+  `text-[11px]` and offers no explicit skip.
 
 ## E. Async state, realtime & error surfacing
 
@@ -574,6 +615,296 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
 
 ---
 
+Sections G-K are the 2026-08-18 sweep of surfaces added after the first audit.
+Anchors are from that date.
+
+## G. Result windows & gate surfaces (2026-08-18)
+
+| ID    | Sev | Status | Finding                                                                                  |
+| ----- | --- | ------ | ---------------------------------------------------------------------------------------- |
+| UX-78 | P1  | todo   | Review-friction "Create anyway" double-submits: two tasks, two runs                      |
+| UX-79 | P1  | todo   | Fork-decision / follow-up / binary-candidates / initiative-review windows discard drafts |
+| UX-80 | P1  | todo   | Binary-candidates gate: cards not keyboard-operable; blank body when state is missing    |
+| UX-81 | P1  | todo   | CreateInitiativeModal lacks the unsaved guard its sibling AddTaskModal has               |
+| UX-82 | P2  | todo   | Initiative-planning / doc-interview persists fail silently (no toast, no state)          |
+| UX-83 | P2  | todo   | Typed text cleared before the call settles; stack edit overwrites the add form           |
+| UX-84 | P2  | todo   | Initiative checkpoint Cancel and PR-review finding Dismiss are unconfirmed               |
+| UX-85 | P3  | todo   | PR-review Post/Finish lack `:loading`; follow-up Dismiss missing the permission gate     |
+
+- **UX-78: Friction-dialog double submit.** `board/ReviewFrictionDialog.vue:102-110`
+  "Create anyway" calls `ctx.onConfirm()` with no `:loading`/`:disabled`, and
+  `AddTaskModal.vue` `submitCreate` (`:694`) sets `saving` but never checks it on
+  entry; the first await resolves attachments (seconds), so a double click files two
+  tasks and starts two pipeline runs. Fix: thread the modal's `saving` into the
+  friction context and add an entry guard.
+- **UX-79: Draft loss on close.** `useResultView`'s `onClose` hook (the UX-33 seam)
+  is unused by the new windows that hold drafts: `forkDecision/ForkDecisionWindow.vue:28`
+  (`customText`/`note`/`chatInput`), `followUp/FollowUpWindow.vue:26` (per-question
+  answers, no blur-persist either), `binaryCandidates/BinaryCandidatesWindow.vue:69-72`
+  (`note` + per-candidate store-as aliases), and the initiative tracker host registers
+  none while `InitiativePlanReview.vue:75-89` / `InitiativePlanDecision.vue:39` hold
+  per-block plan comments plus the overall feedback. Escape or a backdrop click
+  discards all of it. Fix: `onClose` flushes (or a dirty-check confirm), exactly as
+  the review windows do.
+- **UX-80: Binary-candidates gate blocked for keyboard users.** The candidate card is
+  a `<div @click="toggle(row.id)">` with no role/tabindex/key handler and no radio or
+  checkbox inside (`BinaryCandidatesWindow.vue:186-197`), and selecting is the only
+  way to keep an asset, so the gate cannot be completed by keyboard at all. The body
+  is also `<div v-if="view">` with no `v-else` (`:143`), so a missing/failed load
+  renders a titled shell with a blank body and no retry.
+  `ForkDecisionWindow.vue:198,342-348` has both halves right; copy it.
+- **UX-81: Unguarded initiative modal.** `board/CreateInitiativeModal.vue:37-42`
+  closes straight through the store: Escape/backdrop discards title, goal, every
+  descriptor field and staged context attachment, and the `watch(open)` reset wipes
+  them on reopen. Wire `useUnsavedGuard` (`AddTaskModal.vue:615` is the model).
+- **UX-82: Silent persist failures.** `initiative/InitiativePlanningWindow.vue:146-186`
+  and `docs/DocInterviewWindow.vue:95-111` never catch; the backing stores rethrow
+  (`stores/initiative/planning.ts:34-44`, `stores/docInterview.ts:41-47`) and no
+  global handler exists, so a failed answer-save clears the spinner, restores the
+  questions and says nothing: indistinguishable from a no-op, with the answers never
+  stored. Fix: try/catch into `usePipelineErrorToast().present`.
+- **UX-83: Typed text cleared too early.** `prReview/PrReviewWindow.vue:247-253`
+  clears `challengeText` BEFORE awaiting the challenge call, so on failure the typed
+  concern must be retyped; `settings/RiskPolicyCreateForm.vue:36-54` clears the name
+  on emit, before the parent's create settles; `settings/SharedStacksPanel.vue:117-131`
+  `startEdit` overwrites the add form in place, discarding whatever was typed there.
+  Fix: clear on the success path only; confirm before repurposing a dirty form.
+- **UX-84: Unconfirmed NO_GO.** The checkpoint Cancel button
+  (`initiative/InitiativeTrackerWindow.vue:343-349`) stops the whole initiative's
+  execution loop on one click, sitting directly beside Resume; the per-finding
+  Dismiss in `PrReviewWindow.vue:747-755` removes a reviewer finding entirely with
+  no confirm and no undo. Route both through `useConfirm({ variant: 'destructive' })`.
+- **UX-85: Missing pending/permission affordances.** Only "Fix" carries `:loading`
+  in `PrReviewWindow.vue:823-842` (Post and Finish just grey out, reading as dead
+  buttons); the follow-up branch's Dismiss (`followUp/FollowUpWindow.vue:238-246`)
+  is the one action in its window missing the `canExecuteRuns` disable + title, so
+  a viewer-role user learns from a raw inline error.
+
+## H. Environment wizard & foundational services (2026-08-18)
+
+| ID    | Sev | Status | Finding                                                                               |
+| ----- | --- | ------ | ------------------------------------------------------------------------------------- |
+| UX-86 | P1  | todo   | Wizard "Done" is always enabled beside Save and discards the whole recipe             |
+| UX-87 | P2  | todo   | Analysis wedges on "running" forever when the run is done but the draft unparseable   |
+| UX-88 | P2  | todo   | Review step: raw-editor toggle and "Apply analyst draft" silently discard edits       |
+| UX-89 | P1  | todo   | Foundational manager tab switch destroys the registry draft (UTabs unmount default)   |
+| UX-90 | P2  | todo   | Registry form: index-keyed contract rows, unconfirmed Cancel, unexplained Save lock   |
+| UX-91 | P2  | todo   | Foundational/skill-library loads render any failure as "not wired on this deployment" |
+| UX-92 | P3  | todo   | Preflight badge shows the raw pass/warn/fail enum; review-step Next has no reason     |
+
+- **UX-86: Done discards the recipe.** `environments/steps/EnvSaveStep.vue:95-107`:
+  `exit('advance')` completes the journey and clears its persisted blob whether or
+  not Save ran, sitting directly beside Save. Gate Done on `store.saved`, or confirm
+  when `!store.saved`.
+- **UX-87: Analysis spinner can wedge forever.** `stores/environmentWizard.ts:165-172`:
+  only `run.status === 'failed'` maps to `failed`, so a run that finishes `done` with
+  an absent/unparseable `result.custom` leaves `analysisStatus` at `running`, the
+  review step spinning and its button disabled with no error and no retry. Treat
+  done-with-no-draft as `failed`.
+- **UX-88: Review-step edits silently replaced.** `EnvReviewStep.vue:96-99`: closing
+  the raw-recipe editor drops `rawText` (reopening re-serialises from the store), so
+  hand-edited JSON never "Applied" vanishes; `:200-209` "Apply analyst draft" replaces
+  the recipe wholesale (`stores/environmentWizard/flow.ts:69-74`), discarding the
+  compose-file/profile/seed toggles already set, with no warning, no undo and no
+  toast saying what changed.
+- **UX-89: Tab switch destroys the foundational draft.**
+  `foundational/FoundationalServiceManager.vue:91-119`: @nuxt/ui `UTabs` defaults
+  `unmountOnHide: true`, so switching from the registry tab and back destroys
+  `FoundationalServiceRegistry`'s draft, including pasted OpenAPI contract bodies.
+  Set `:unmount-on-hide="false"` or lift the draft into a store. (Check every other
+  `UTabs` holding form state for the same trap.)
+- **UX-90: Registry form integrity.** `FoundationalServiceRegistry.vue:281`: contract
+  rows are `v-for` keyed by index with `removeContract(i)` (the UX-23 rebind bug, on
+  pasted contract documents); Cancel (`:317-326`) discards the whole draft with no
+  confirm; Save is disabled by one aggregate `draftValid` with no per-field or
+  summary explanation of what is missing.
+- **UX-91: Failure rendered as "unavailable".** `stores/foundationalServices.ts:107-119`
+  and `stores/skillLibrary.ts:64-65` set `available = false` on ANY error, so a
+  transient 500 renders the "deployment has not wired this" copy with no retry: the
+  exact misattribution the UX-77 reason-copy rule exists to prevent. Split settled
+  503 from transient failure (the `capabilityCredentials`/`toolServers`/`publicApiKeys`
+  stores are the in-tree pattern). The same conflation exists across ~15 availability
+  probes; the review-window stores (`requirements`/`clarity`) are the sharpest,
+  since a blip on open leaves a reviewer looking at an un-advanceable empty gate.
+- **UX-92: Raw enum + unexplained lock.** `EnvPreflightStep.vue:85-87` renders
+  `{{ r.status }}` (`pass|warn|fail`) raw while mapping the same enum to a colour two
+  lines above; `EnvReviewStep.vue:369-377` "Next" is disabled with no title and the
+  body is `v-if`-hidden when detection produced nothing, so the disabled button is
+  the only thing on screen.
+
+## I. Destructive actions & per-row feedback (2026-08-18)
+
+| ID    | Sev | Status | Finding                                                                                      |
+| ----- | --- | ------ | -------------------------------------------------------------------------------------------- |
+| UX-93 | P1  | todo   | Pipeline-health Delete/Remove is unconfirmed and irreversible                                |
+| UX-94 | P1  | todo   | Test-secret rows keyed by index: a middle-row delete can save the wrong secret under a key   |
+| UX-95 | P2  | todo   | One-click destructives: stack Stop, tutorial reset, template unlink, MCP disconnect, archive |
+| UX-96 | P2  | todo   | More index-keyed editable rows: validation commands, frontend bindings, failure-kind rules   |
+| UX-97 | P2  | todo   | One shared busy flag spins every row's buttons on five panels                                |
+| UX-98 | P3  | todo   | Immediate-persist config unlinks with no confirm                                             |
+| UX-99 | P3  | todo   | Member role/access-mode changes are silent; the access-mode widen is unconfirmed             |
+
+- **UX-93: Unconfirmed irreversible delete.** `pipeline/PipelineHealthModal.vue:187,230`:
+  `remove`/`removeRetired` call `pipelines.removePipeline(id)` on first click with no
+  `useConfirm()`; the file's own comment calls this "the one irreversible action on
+  this screen" (a retired built-in cannot be reseeded back). Confirm-gate both,
+  naming the pipeline.
+- **UX-94: Mis-keyed secret rows.** `panels/inspector/ServiceTestSecrets.vue:170`:
+  `:key="index"` wraps `v-model="row.key"` plus a masked `SecretInput` value and
+  `removeRow(index)`; deleting a middle row rebinds a neighbour's inputs, and the
+  masking makes the rebind invisible, so the wrong secret can be saved under the
+  wrong key. Stable `uid` per row (the UX-23 convention).
+- **UX-95: One-click destructives.** `settings/SharedStacksPanel.vue:316-327` "Stop"
+  tears down workspace-wide infra that live previews attach to (the Delete beside it
+  IS confirmed); `tutorial/TutorialCatalogue.vue:140-150` "Reset progress" wipes
+  local AND server progress; `documents/DocumentTemplatesModal.vue:77` unlinks a
+  template/exemplar from an X button; `settings/ToolServerChecklist.vue:81` revokes
+  an MCP OAuth grant (re-granting is a full vendor round-trip);
+  `sandbox/SandboxPanel.vue:254,620` archives a candidate prompt, from a button that
+  is also an unlabeled red icon. All want `useConfirm`/`confirmAction` naming the
+  target.
+- **UX-96: More index-keyed rows.** `panels/inspector/ServiceValidationConfig.vue:242`,
+  `panels/inspector/FrontendConfig.vue:552` (blur-committed by index), and
+  `layout/AccountFailureKindRules.vue:177` (`patch(index, ...)`), plus the registry
+  rows in UX-90. Same fix as UX-23/94.
+- **UX-97: Shared busy flag.** One `busy` ref bound to every row's `:loading`/
+  `:disabled`: `settings/ApiTokensPanel.vue:286`, `settings/ConsensusGroupsSection.vue:264`,
+  `documents/DocumentTemplatesModal.vue:157,194,220,231` (rows cross-spin with both
+  submit buttons), `settings/PackageRegistriesPanel.vue:145,209`,
+  `layout/WorkspaceMembersSettings.vue:191,200,235` (removing one member greys every
+  role select). The UX-29 `withRow` per-key pattern is already re-implemented in
+  `PipelineHealthModal.vue:31-48`; extract and reuse it.
+- **UX-98: Unconfirmed config unlinks.** `panels/inspector/ServiceConnections.vue:66`,
+  `panels/inspector/FrontendConfig.vue:105`, `panels/inspector/TaskAprioriBranches.vue:96`,
+  `settings/ServiceFragmentDefaultsPanel.vue:50` each PATCH away named user work on
+  first click. Low blast radius (re-addable), so a confirm or an undo toast.
+- **UX-99: Silent membership changes.** `layout/WorkspaceMembersSettings.vue:80-101`:
+  `updateRole` and `setAccessMode` produce no toast (add and remove both do), and
+  flipping the access mode instantly opens a restricted board to every account
+  member with no confirmation.
+
+## J. Failure rendered as absence, in stores (2026-08-18)
+
+Extends section E to loaders added after it landed. The compliant shape is in-tree:
+`prReview`/`forkDecision`/`judge`/`binaryCandidates` record an error their window
+renders with Retry.
+
+| ID     | Sev | Status | Finding                                                                            |
+| ------ | --- | ------ | ---------------------------------------------------------------------------------- |
+| UX-100 | P2  | todo   | Loads with no error state render as confident empty claims (7 stores)              |
+| UX-101 | P2  | todo   | Search-query telemetry load swallowed while all four sibling loaders record errors |
+| UX-102 | P2  | todo   | environments.load failure flips every service binding to "service offline"         |
+| UX-103 | P2  | todo   | Merge track-record load failure reads as "no data yet" under the auto-merge editor |
+| UX-104 | P2  | todo   | Failed loads misattributed: wrong toast key, or toast-then-empty-state             |
+| UX-105 | P2  | todo   | Fire-and-forget mutations: confirmed deletes and initiative controls fail silently |
+
+- **UX-100: Empty claims over failed loads.** No catch and no error ref, so the empty
+  state claims "none exists": `stores/docInterview.ts:34-38` ("no session yet" over a
+  run genuinely parked on interviewer questions), `stores/consensus.ts:60-61` ("no
+  consensus session ran" over a failed transcript fetch), `stores/initiative.ts:153-164`
+  and `stores/kaizen.ts:80-83,106-109` (rethrow anything non-503 into a `void` call),
+  `stores/github.ts:136-151` (the panel then says the installation grants access to
+  no repositories), `stores/vendorCredentials.ts:23-32` ("no vendor credentials
+  connected", inviting a duplicate paste of a live token), `stores/apiKeys.ts:23-36`
+  (`.catch(() => ({ keys: [] }))` with no comment, plus a try/finally-only `load`).
+- **UX-101: The one swallowed telemetry loader.** `stores/observability.ts:191-192`:
+  `loadSearchQueries` is a bare catch while all four sibling loaders in the same
+  store record per-key errors with Retry; `observability.noSearch` then affirms the
+  agent performed no web searches. Mirror `loadContext` (UX-75).
+- **UX-102: Bindings misread an outage.** `stores/environments.ts:28-38` keeps
+  last-known handles on error, which on FIRST load is the empty list, so
+  `FrontendBindingsResolved.vue:102-104` renders every service-sourced binding as
+  the amber "service offline" row from a request that never landed. Record a
+  `loadError` and render "could not resolve bindings" with Retry.
+- **UX-103: Auto-merge evidence reads "none".** `stores/mergeTrackRecords.ts:39-48`
+  is try/finally only and `byClass` zero-fills, so `settings/MergeClassRulesEditor.vue:118-120`
+  shows "no data yet" on every change class exactly where an operator decides to
+  widen an auto-merge rule; three call sites `void` the load. Record a failure and
+  leave `loaded` false so "not fetched" and "no records" stay distinct.
+- **UX-104: Misattributed load failures.** `settings/TaskTypeSuppressionsPanel.vue:34,71-73`
+  reports a failed LOAD with the `saveFailed` key, then renders "no operations
+  registered"; `layout/AccountRiskPolicySettings.vue:38-44,104-106` toasts then tells
+  an admin the account has no merge policies; `documents/DocumentTemplatesModal.vue:36-38,99-110`
+  toasts then offers "Import a document first" for documents that exist. Each needs a
+  failed-read branch + Retry (`RiskPolicyPanel.vue:224-230` has one).
+- **UX-105: Fire-and-forget mutations.** `composables/usePipelineLibraryActions.ts:64`:
+  `void pipelines.removePipeline(p.id)` after the destructive confirm, and the store
+  doesn't catch, so a failed delete leaves the row in place with no word (the file's
+  own docstring claims each action reports its failure); the same file's `:27-29,76-78`
+  hand-build bare error toasts while `:46` correctly uses `present`.
+  `panels/inspector/InitiativeInspector.vue:44-46` `void initiatives.control(...)`:
+  Pause/Resume/Cancel on a running initiative can fail with the badge never changing
+  and no toast.
+
+## K. Convention adoption gaps, systemic (2026-08-18)
+
+The re-audit's headline (cross-cutting theme 8): the primitives all exist; the
+surfaces built after them don't use them.
+
+| ID     | Sev | Status | Finding                                                                             |
+| ------ | --- | ------ | ----------------------------------------------------------------------------------- |
+| UX-106 | P2  | todo   | Icon-only UButtons with no accessible name: 26 sites in 19 files; IconButton in 4   |
+| UX-107 | P2  | todo   | Disabled controls whose reason lives only in `:title` (64 sites of one predicate)   |
+| UX-108 | P2  | todo   | Agent prose still raw `whitespace-pre-wrap` in ~17 sites across 12 files            |
+| UX-109 | P2  | todo   | Keyboard-dead clickable elements (7 sites; one is the only way to open step detail) |
+| UX-110 | P2  | todo   | Raw internals rendered: agent-kind enums, model refs, server/item/run ids           |
+| UX-111 | P3  | todo   | Stragglers: one bare password input, one raw error toast, hover-only controls       |
+
+- **UX-106: IconButton unadopted.** `common/IconButton.vue` is imported by 4
+  components; 26 icon-only `<UButton icon>` sites across 19 files carry no label,
+  title or aria-label (worst offenders: `FragmentLibraryManager` x5,
+  `TaskRunSettings` x4, `BootstrapModal` x2; several are destructive trash glyphs),
+  plus three fully-raw icon buttons (`context/ContextAttachmentFields.vue:291,399`,
+  `pipeline/PipelineBuilder.vue:493`). Sweep them through the primitive; consider a
+  lint rule so the count stops regrowing. The title-only holdouts UX-62 left as-is
+  can join opportunistically.
+- **UX-107: Reasons trapped in `:title`.** 64 occurrences of
+  `:title="t('access.noRunExecute')"` across 19 files sit on disabled controls with
+  the reason rendered nowhere visible; a disabled button never fires hover (the
+  UX-40 rule), so a viewer-role user sees every gate action greyed with no stated
+  why. One shared visible hint per action rail, derived from the same
+  `access.canExecuteRuns` predicate. Same defect with other reasons:
+  `docs/DocInterviewWindow.vue:258-259` (`continueBlockedReason` bound only to
+  title), `settings/ConsensusGroupsSection.vue:374-382` (the min-2-participants rule
+  unstated), `board/nodes/InitiativeCard.vue:139-152` (planning preset missing: the
+  only start affordance is permanently disabled and the title restates the label).
+- **UX-108: Prose still flat.** Model-written markdown rendered as plain text: the
+  doc-interview converged brief (`DocInterviewWindow.vue:185-188`, a `<pre>`), fork
+  approaches and agent chat turns (`ForkDecisionWindow.vue:216,288`), follow-up
+  detail (`FollowUpWindow.vue:153`), clarification detail/recommendation
+  (`common/ClarificationItem.vue:60,142`), effort and reproduction report summaries
+  (`StepEffortReport.vue:69,78`, `StepReproductionReport.vue:84,93`), initiative
+  goal/analysis (`InitiativeTrackerWindow.vue:363,387`, `InitiativeInspector.vue:60`),
+  ralph attempt summaries (`RalphLoopResultView.vue:237`), the gate helper's report
+  (`GateResultView.vue:426`). The value-vs-prose rule stands: `suggestedFix` and the
+  `lastFailureSummary` blocks correctly stay preformatted.
+- **UX-109: Keyboard-dead click targets.** `pipeline/PipelineProgress.vue:339` (the
+  `<div @click>` step row is the ONLY way to open a step's detail; UX-42 fixed the
+  restart button inside it but not the row), `media/ImageCompare.vue:220,228` (a
+  hover-only `<span @click>` NESTED inside a button, invalid interactive HTML, plus
+  a `<div>` drop zone), `panels/inspector/ContainerSummary.vue:36,68` (`<li @click>`
+  rows), `panels/StepRunMeta.vue:135` (a click-to-copy `<p>`; should be
+  `CopyButton`), `sandbox/SandboxPanel.vue:482` (`<tr @click>`). Real buttons with
+  `focus-visible:ring-2`.
+- **UX-110: Raw internals.** `panels/OperatorDashboardPanel.vue:360-363` renders raw
+  `gateKind`/`helperKind` enums as the gate table's labels (the same file maps
+  failure kinds through a key map two lines up) and `:168-171` renders the store's
+  raw `e.message` as the error state's ONLY copy; `tasks/BugHuntModal.vue:507-509`
+  prints the raw `provider:model` ref where `models.labelForRef()` exists for
+  exactly this; `settings/McpOAuthCallbackScreen.vue:81` interpolates the internal
+  `serverId` into the success headline; `initiative/InitiativeTrackerWindow.vue:448-453,599`
+  shows planner item ids as dependency/deviation references instead of resolving
+  them to titles; `panels/ReportsPanel.vue:73-76` falls back to the run UUID as a
+  spend row's primary label.
+- **UX-111: Stragglers.** `settings/CloudflareHandlerSection.vue:215-217` is the last
+  bare `<UInput type="password">` in the tree (21 files use `SecretInput`);
+  `bootstrap/BootstrapModal.vue:248-252` is the last hand-built raw-prose error
+  toast (route through `present()`); `pipeline/PipelineBuilder.vue:1265` hides the
+  per-pipeline default/archive/delete controls behind `opacity-0 group-hover` with
+  no focus reveal (the UX-42 classes fix it).
+
+---
+
 ## Verified good patterns (preserve these; copy them when fixing)
 
 - Optimistic mutations in `stores/board.ts` snapshot and roll back with toasts;
@@ -600,14 +931,19 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
 
 ## Suggested fix order
 
-1. **P1 batch (flow-blocking / data loss):** UX-32 (hidden gate actions), UX-18 +
-   UX-33 (discarded input), UX-01/02/03 (delete & reparent without undo), UX-70
-   (silently non-live board), UX-45 (unvalidated keys), UX-62 (unnamed close buttons).
-2. **Shared primitives:** dirty-modal seam, `IconButton` wrapper, clipboard+toast
-   helper, secret-input-with-reveal component: these unlock whole clusters of P2s.
-3. **P2 sweeps by section** (one PR per section above), then P3 polish
-   opportunistically when touching the files anyway (per the i18n "lift copy when
-   you touch a component" convention).
+The 2026-07 P1 batch is done except UX-45. As of the 2026-08-18 re-audit:
+
+1. **P1 batch (data loss / blocked flows):** UX-78 (double submit), UX-79/81
+   (result-window and initiative-modal draft loss), UX-80 (keyboard-blocked gate),
+   UX-86/89 (wizard Done and foundational tab draft loss), UX-93/94 (unconfirmed
+   irreversible delete, mis-keyed secret rows), plus the long-standing UX-45.
+2. **Adoption sweeps with an enforcement hook** (UX-106..UX-109, UX-95..UX-98):
+   each is one primitive applied across N call sites; land the sweep with a lint
+   rule or guard where one is cheap, or the count regrows (theme 8).
+3. **Failure-as-absence store sweep** (UX-91, UX-100..UX-105): the UX-75
+   error-with-Retry shape, one PR over the listed stores.
+4. **P2/P3 polish** opportunistically when touching the files anyway (per the i18n
+   "lift copy when you touch a component" convention).
 
 ## Conventions & gotchas carried between iterations
 
@@ -794,6 +1130,15 @@ group-hover:opacity-100` control is invisible to keyboard/touch; add
   the same PR (removing the two dead `clarity.*` keys above meant editing all 8 locales).
 - Frontend fixes to `@cat-factory/app` need a changeset (patch), and any new
   interactive affordance covered by e2e wants a `data-testid`.
-- Line references are from the 2026-07-02 audit; re-verify anchors before editing.
+- **`UTabs` unmounts hidden tab panels by default** (@nuxt/ui `unmountOnHide: true`),
+  so any tab panel holding local form/draft state loses it on a tab switch. Pass
+  `:unmount-on-hide="false"` or lift the draft into a store (UX-89).
+- **An availability probe splits SETTLED refusals from TRANSIENT failures.** Only a
+  503 (capability unwired) may set `available = false`; any other error is recorded
+  as a load error with a Retry, or the copy blames the operator's configuration for
+  an outage (UX-91). The `capabilityCredentials`/`toolServers`/`publicApiKeys`
+  stores are the in-tree pattern.
+- Line references in sections A-F are from the 2026-07-02 audit (partially refreshed
+  2026-08-18), in sections G-K from 2026-08-18; re-verify anchors before editing.
 - Findings marked as corroborated by two independent audit passes: UX-13, UX-25,
   UX-19/20 (secrets), UX-01 (delete/undo).
