@@ -21,6 +21,12 @@ export const useBinaryCandidatesStore = defineStore('binaryCandidates', () => {
 
   /** True while a keep call is in flight (drives the button spinner / disabled state). */
   const keeping = ref(false)
+  /**
+   * True while the warm-up read is in flight. The window renders no state until it settles, and
+   * "still fetching" must not render as the "nothing to choose between" empty state: on this
+   * surface that empty state is a claim the run generated nothing to compare.
+   */
+  const loading = ref(false)
   /** The last error message from an action, surfaced inline; cleared on the next action. */
   const error = ref<string | null>(null)
 
@@ -48,9 +54,14 @@ export const useBinaryCandidatesStore = defineStore('binaryCandidates', () => {
     if (step) step.binaryCandidates = state
   }
 
-  /** Warm the live state from the GET (the stream also keeps it fresh). Best-effort. */
+  /**
+   * Warm the live state from the GET (the stream also keeps it fresh). The failure is RECORDED
+   * rather than swallowed: with no state on the step, a failed read and a run that produced no
+   * candidates are the same `null` and opposite facts, and only one of them is worth a Retry.
+   */
   async function load(executionId: string): Promise<void> {
     error.value = null
+    loading.value = true
     try {
       await execution.echoAfter(
         executionId,
@@ -61,6 +72,8 @@ export const useBinaryCandidatesStore = defineStore('binaryCandidates', () => {
       )
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load'
+    } finally {
+      loading.value = false
     }
   }
 
@@ -85,5 +98,5 @@ export const useBinaryCandidatesStore = defineStore('binaryCandidates', () => {
     }
   }
 
-  return { keeping, error, load, keep }
+  return { keeping, loading, error, load, keep }
 })

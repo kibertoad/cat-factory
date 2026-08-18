@@ -4602,7 +4602,8 @@
     "status": {
       "awaiting": "En attente de réponses",
       "done": "Terminé"
-    }
+    },
+    "saveFailed": "Impossible d’enregistrer votre réponse"
   },
   "documents": {
     "picker": {
@@ -8030,6 +8031,10 @@
       "undeclared": "L’étape n’a jamais déclaré ses candidats, il n’y avait donc rien à comparer. L’exécution a continué.",
       "parseFailed": "La déclaration de candidats de l’étape était illisible, il n’y avait donc rien à comparer. L’exécution a continué.",
       "noCandidates": "L’étape n’a préparé aucun candidat, il n’y avait donc rien à comparer. L’exécution a continué."
-    }
+    },
+    "empty": {
+      "title": "Rien à comparer"
+    },
+    "loadFailed": "Impossible de charger les candidats générés."
   }
 }

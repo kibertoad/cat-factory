@@ -4763,7 +4763,8 @@
     "status": {
       "awaiting": "Awaiting answers",
       "done": "Done"
-    }
+    },
+    "saveFailed": "Could not save your answer"
   },
   "documents": {
     "picker": {
@@ -8319,6 +8320,10 @@
       "undeclared": "The step never declared its candidates, so there was nothing to compare. The run continued.",
       "parseFailed": "The step’s candidate declaration could not be read, so there was nothing to compare. The run continued.",
       "noCandidates": "The step staged no candidates, so there was nothing to compare. The run continued."
-    }
+    },
+    "empty": {
+      "title": "Nothing to compare"
+    },
+    "loadFailed": "Could not load the generated candidates."
   }
 }

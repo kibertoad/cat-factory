@@ -19,6 +19,9 @@ const { invalid, outdated, newPipelines, retired, hasIssues } = usePipelineHealt
 // Dumping `error.message` instead would put untranslated backend prose in front of every non-English
 // user — on the one screen whose whole purpose is telling them what to do next.
 const { present } = usePipelineErrorToast()
+// Deleting is the one irreversible action on this screen (see the note above `reseedAll`), so it
+// routes through the shared destructive confirm rather than firing on first click.
+const { confirmAction, toastDone } = useConfirmAction()
 
 const open = computed({
   get: () => ui.pipelineHealthOpen,
@@ -33,13 +36,16 @@ const isBusy = (id: string) => busy.value.has(id)
 const anyBusy = computed(() => busy.value.size > 0)
 
 /** `failTitleKey` is an i18n KEY (not resolved copy) — `present` uses it only when the failure has
- *  no mapped conflict reason of its own. */
+ *  no mapped conflict reason of its own. Resolves `true` only when the action actually settled, so
+ *  a caller can withhold its success toast on a refusal. */
 async function run(id: string, action: () => Promise<unknown>, failTitleKey: string) {
   busy.value = new Set(busy.value).add(id)
   try {
     await action()
+    return true
   } catch (e) {
     present(e, failTitleKey)
+    return false
   } finally {
     const next = new Set(busy.value)
     next.delete(id)
@@ -49,18 +55,32 @@ async function run(id: string, action: () => Promise<unknown>, failTitleKey: str
 
 const reseed = (id: string) =>
   run(id, () => pipelines.reseed(id), 'pipeline.health.toast.reseedFailed')
-const remove = (id: string) =>
-  run(id, () => pipelines.removePipeline(id), 'pipeline.health.toast.deleteFailed')
+
+/**
+ * Confirm, then delete. Both removal buttons land here (UX-93): a reseed restores what the catalog
+ * says, but a delete is the one irreversible action on this screen — a built-in the catalog no
+ * longer defines cannot be reseeded back — and it used to fire on first click, one stray Enter away
+ * from destroying a workspace's pipeline. The confirm NAMES the pipeline, because the two sections
+ * render several rows of near-identical buttons and "which one did I just delete" is unanswerable
+ * afterwards.
+ */
+async function confirmRemove(pipeline: { id: string; name: string }, failTitleKey: string) {
+  if (!(await confirmAction('remove', pipeline.name))) return
+  if (await run(pipeline.id, () => pipelines.removePipeline(pipeline.id), failTitleKey))
+    toastDone('remove', pipeline.name)
+}
+
+const remove = (pipeline: { id: string; name: string }) =>
+  confirmRemove(pipeline, 'pipeline.health.toast.deleteFailed')
 // Same call as `remove`, different failure copy: the retired section says "Remove" (the pipeline is
 // gone from the catalog), so a failure toast reading "could not DELETE" would name an action the
 // user was never offered. This is only the FALLBACK title — the likely failure here is a recurring
 // schedule still pointing at the pipeline, which arrives as a 409 the presenter words itself.
-const removeRetired = (id: string) =>
-  run(id, () => pipelines.removePipeline(id), 'pipeline.health.toast.removeFailed')
+const removeRetired = (pipeline: { id: string; name: string }) =>
+  confirmRemove(pipeline, 'pipeline.health.toast.removeFailed')
 
-// Removals are deliberately per-row with no bulk twin, unlike the reseeds below: a reseed restores
-// what the catalog says, while a delete is the one irreversible action on this screen (a built-in
-// the catalog no longer defines cannot be reseeded back). One click per pipeline is the point.
+// Removals are deliberately per-row with no bulk twin, unlike the reseeds below: one confirmed
+// click per pipeline is the point.
 
 /** Reseed every reseedable pipeline (new + outdated built-ins + invalid built-ins) in one go. */
 async function reseedAll() {
@@ -184,7 +204,7 @@ const reseedableCount = computed(
                   icon="i-lucide-trash-2"
                   :loading="isBusy(h.pipeline.id)"
                   :disabled="anyBusy"
-                  @click="remove(h.pipeline.id)"
+                  @click="remove(h.pipeline)"
                 >
                   {{ t('pipeline.health.delete') }}
                 </UButton>
@@ -227,7 +247,7 @@ const reseedableCount = computed(
                 icon="i-lucide-trash-2"
                 :loading="isBusy(r.pipeline.id)"
                 :disabled="anyBusy"
-                @click="removeRetired(r.pipeline.id)"
+                @click="removeRetired(r.pipeline)"
               >
                 {{ t('pipeline.health.remove') }}
               </UButton>

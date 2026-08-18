@@ -13,7 +13,7 @@
 // an edit typed over it would reach nothing, and the engine refuses it outright
 // (`outputIsRendered` → 422). Requesting changes is the route for a correction, which is why an
 // anchored comment is worth having: it quotes the planner's own text back to it on the re-plan.
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import type { RequestStepChangesInput } from '@cat-factory/contracts'
 
 const props = defineProps<{
@@ -30,14 +30,27 @@ const props = defineProps<{
   comments?: RequestStepChangesInput['comments']
 }>()
 
-/** A send-back succeeded: the surface drops its anchored drafts (the feedback is cleared here). */
-const emit = defineEmits<{ sent: [] }>()
+const emit = defineEmits<{
+  /** A send-back succeeded: the surface drops its anchored drafts (the feedback is cleared here). */
+  sent: []
+  /**
+   * Whether unsent feedback is typed here right now. Reported UPWARD because the field lives two
+   * components below the window that owns closing, and the window is what Escape and a backdrop
+   * click reach (UX-79) — without this the host has no way to know a review is in progress.
+   */
+  'update:dirty': [boolean]
+}>()
 
 const execution = useExecutionStore()
 const { t } = useI18n()
 
 const feedback = ref('')
 const submitting = ref(false)
+
+watch(feedback, (value) => emit('update:dirty', value.trim().length > 0))
+// The gate resolving unmounts this surface; retract the claim rather than leaving the host holding
+// a dirty flag for a field that no longer exists.
+onUnmounted(() => emit('update:dirty', false))
 
 /** Changes can only be requested with something to act on — an empty send would re-plan blind. */
 const canRequestChanges = computed(

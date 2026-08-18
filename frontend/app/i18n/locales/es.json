@@ -4602,7 +4602,8 @@
     "status": {
       "awaiting": "Esperando respuestas",
       "done": "Hecho"
-    }
+    },
+    "saveFailed": "No se pudo guardar tu respuesta"
   },
   "documents": {
     "picker": {
@@ -8030,6 +8031,10 @@
       "undeclared": "El paso nunca declaró sus candidatos, así que no había nada que comparar. La ejecución continuó.",
       "parseFailed": "No se pudo leer la declaración de candidatos del paso, así que no había nada que comparar. La ejecución continuó.",
       "noCandidates": "El paso no preparó ningún candidato, así que no había nada que comparar. La ejecución continuó."
-    }
+    },
+    "empty": {
+      "title": "Nada que comparar"
+    },
+    "loadFailed": "No se pudieron cargar los candidatos generados."
   }
 }

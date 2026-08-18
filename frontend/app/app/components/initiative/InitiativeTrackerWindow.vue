@@ -136,6 +136,21 @@ const { planApproval } = useInitiativePlanning(() => blockId.value ?? '')
  */
 const planDocument = computed(() => planReviewDocument(planApproval.value))
 
+/**
+ * Confirm before discarding an in-progress plan review (UX-79). While a plan gate is parked this
+ * window hands its whole body to `InitiativePlanReview`, which holds anchored per-block comments
+ * and the overall feedback — the reviewer's actual work, held only in the browser until Send back
+ * is pressed, on a surface Escape and a backdrop click both close. The review reports its own
+ * dirtiness upward (it lives two components down); this is the only place that can act on it.
+ */
+const planReviewDirty = ref(false)
+const { requestClose } = useUnsavedGuard({
+  open,
+  close: () => close(),
+  // Only meaningful while the review is the thing on screen: the tracker body itself edits nothing.
+  snapshot: () => (planApproval.value && planDocument.value ? planReviewDirty.value : false),
+})
+
 const policyRules = computed(() => initiative.value?.policy?.rules ?? [])
 function ruleAxes(rule: { minComplexity?: number; minRisk?: number; minImpact?: number }): string {
   const axes = [
@@ -246,7 +261,7 @@ async function savePolicy() {
     :subtitle="t('initiative.tracker.subtitle')"
     width="full"
     testid="initiative-tracker-window"
-    @close="close"
+    @close="requestClose"
   >
     <template #header-extras>
       <div v-if="progress" class="flex items-center gap-2" data-testid="initiative-progress">
@@ -277,6 +292,7 @@ async function savePolicy() {
       :instance-id="planApproval.instanceId"
       :can-execute="access.canExecuteRuns.value"
       :plan-document="planDocument"
+      @update:dirty="planReviewDirty = $event"
     >
       <template v-if="runMeta" #run-details>
         <StepRunMeta v-bind="runMeta" />

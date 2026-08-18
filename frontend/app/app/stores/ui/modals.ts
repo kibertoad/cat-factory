@@ -74,6 +74,17 @@ export interface ReviewFrictionModalContext {
   debt: ReviewDebtRow[]
   /** Retry the create with `acknowledgeReviewDebt` — present only for the soft `warn` tier. */
   onConfirm: (() => void) | null
+  /**
+   * Whether the opener's create is in flight right now, so "Create anyway" can show its spinner and
+   * refuse a second click (UX-78). A GETTER over the opener's own `saving` ref rather than a copied
+   * boolean: the dialog's context object is captured once at open, so a snapshot would be frozen at
+   * `false` for the whole retry. Reading it inside a `computed` keeps the reactivity.
+   *
+   * Load-bearing, not cosmetic: the retry's first await resolves the staged context attachments
+   * (a network round-trip per item), so a second click during that window filed a SECOND task and
+   * started a second pipeline run against the same request.
+   */
+  pending?: () => boolean
 }
 
 /** Clears both hub came-from markers; injected into the slices whose `open*` handlers reset them. */

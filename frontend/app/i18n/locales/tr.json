@@ -4602,7 +4602,8 @@
     "status": {
       "awaiting": "Yanıt bekleniyor",
       "done": "Tamamlandı"
-    }
+    },
+    "saveFailed": "Yanıtınız kaydedilemedi"
   },
   "documents": {
     "picker": {
@@ -8030,6 +8031,10 @@
       "undeclared": "Adım adaylarını hiç bildirmedi, bu yüzden karşılaştırılacak bir şey yoktu. Çalıştırma devam etti.",
       "parseFailed": "Adımın aday bildirimi okunamadı, bu yüzden karşılaştırılacak bir şey yoktu. Çalıştırma devam etti.",
       "noCandidates": "Adım hiç aday hazırlamadı, bu yüzden karşılaştırılacak bir şey yoktu. Çalıştırma devam etti."
-    }
+    },
+    "empty": {
+      "title": "Karşılaştırılacak bir şey yok"
+    },
+    "loadFailed": "Üretilen adaylar yüklenemedi."
   }
 }

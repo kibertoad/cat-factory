@@ -30,9 +30,15 @@ const docInterview = useDocInterviewStore()
 const execution = useExecutionStore()
 const { t } = useI18n()
 const access = useWorkspaceAccess()
+const { present } = usePipelineErrorToast()
 
 const { open, blockId, close } = useResultView('doc-interview', {
   onOpen: ({ blockId }) => void docInterview.load(blockId),
+  // Persist any typed-but-unsubmitted answer before the view tears down (X, backdrop, Escape), so
+  // closing the window never silently drops it (UX-79). The flush seam is right here rather than a
+  // discard prompt because saving ONE answer is a plain save: it records the reply without
+  // resolving the interview, which is what the window's own two commands do.
+  onClose: () => flushDrafts(),
 })
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
@@ -91,20 +97,51 @@ const continueBlockedReason = computed(() => {
   return undefined
 })
 
-/** Persist one answer if its draft differs from what's recorded. */
-async function persist(q: { id?: string; key: string; answer?: string }) {
+/**
+ * Persist one answer if its draft differs from what's recorded. The block id is threaded in rather
+ * than read off the reactive ref, so a flush started as the window closes still writes to the right
+ * board: `blockId` goes null the moment the view tears down.
+ */
+async function persist(block: string, q: { id?: string; key: string; answer?: string }) {
   const id = q.id
-  if (!id || !blockId.value) return
+  if (!id) return
   const next = (drafts[q.key] ?? '').trim()
   if (!next || next === (q.answer ?? '').trim()) return
-  await docInterview.answerQuestion(blockId.value, id, next)
+  await docInterview.answerQuestion(block, id, next)
+}
+
+/**
+ * The blur handler: save this one answer against the block that is open right now. Reports its own
+ * failure — the call is detached (Vue discards a handler's returned promise), so without this a
+ * failed save is an unhandled rejection and the user is told nothing.
+ */
+function persistOnBlur(q: { id?: string; key: string; answer?: string }): void {
+  const block = blockId.value
+  if (block) void persist(block, q).catch((error) => present(error, 'docInterview.saveFailed'))
+}
+
+/**
+ * Persist every dirty draft. Snapshots the block id and the question list up front for the reason
+ * above, and runs detached so it can be called from the synchronous close hook.
+ */
+function flushDrafts(): void {
+  const block = blockId.value
+  if (!block) return
+  const list = questions.value
+  void (async () => {
+    for (const q of list) await persist(block, q)
+    // The store rethrows, and this runs detached from any caller — so the failure is REPORTED here
+    // rather than becoming an unhandled rejection. A close-time flush is the one path with no
+    // button left on screen to have reported it.
+  })().catch((error) => present(error, 'docInterview.saveFailed'))
 }
 
 /** Flush all dirty drafts, then run a window action (continue / proceed). */
 async function flushThen(action: (id: string) => Promise<unknown>) {
-  if (!blockId.value) return
-  for (const q of questions.value) await persist(q)
-  await action(blockId.value)
+  const block = blockId.value
+  if (!block) return
+  for (const q of questions.value) await persist(block, q)
+  await action(block)
 }
 
 const onContinue = () => flushThen((id) => docInterview.continueInterview(id))
@@ -213,7 +250,7 @@ const onProceed = () => flushThen((id) => docInterview.proceedInterview(id))
               :placeholder="t('docInterview.answerPlaceholder')"
               class="w-full"
               data-testid="doc-interview-answer"
-              @blur="persist(q)"
+              @blur="persistOnBlur(q)"
             />
           </li>
         </ul>

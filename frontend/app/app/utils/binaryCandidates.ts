@@ -128,6 +128,31 @@ export function binaryCandidateHasWarnings(view: BinaryCandidateView): boolean {
 }
 
 /**
+ * Why the window has no comparison to render. Three different facts that a single blank body
+ * conflated (UX-80), each needing a different reaction from the reader: wait, retry, or accept that
+ * the run compared nothing. `nothing_compared` is a CLAIM about the run, so it is only ever the
+ * answer once the read has settled and not failed.
+ */
+export type BinaryCandidateAbsence = 'loading' | 'load_failed' | 'nothing_compared'
+
+/**
+ * The absence to render when {@link binaryCandidateView} produced nothing.
+ *
+ * Precedence is the point, and it is stated here rather than in the template's branch order: an
+ * in-flight read outranks a stale error from the previous attempt (so a Retry does not keep showing
+ * the failure it is busy clearing), and a recorded error outranks emptiness (so a request that
+ * never landed cannot render as "this run generated nothing to compare").
+ */
+export function binaryCandidateAbsence(
+  loading: boolean,
+  error: string | null | undefined,
+): BinaryCandidateAbsence {
+  if (loading) return 'loading'
+  if (error) return 'load_failed'
+  return 'nothing_compared'
+}
+
+/**
  * State → the i18n key for the line explaining why no choice was offered.
  *
  * An exhaustive `Record` over the reason vocabulary, so a fourth reason fails the typecheck here

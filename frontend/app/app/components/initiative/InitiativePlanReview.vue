@@ -25,7 +25,7 @@
 // for the outline/collapse/scroll-spy, `useProseComments` for the anchoring, `InitiativePlanDecision`
 // for the two commands, and the global `.reader-prose` sheet for the presentation — so the surfaces
 // cannot drift.
-import { ref, watch } from 'vue'
+import { onUnmounted, ref, watch } from 'vue'
 import type { StepApproval } from '~/types/execution'
 import { useStepProse } from '~/composables/useStepProse'
 import { useProseComments } from '~/composables/useProseComments'
@@ -96,6 +96,20 @@ watch(
     prose.reset()
   },
 )
+
+/**
+ * Whether this review holds work that is not on the server yet, relayed to the window that owns
+ * closing (UX-79). Three things count and all three are lost on a stray Escape: anchored comments
+ * already placed, a comment being typed, and the decision's overall feedback. They are reported
+ * rather than auto-sent, because sending them RESOLVES the gate and re-plans the initiative.
+ */
+const emit = defineEmits<{ 'update:dirty': [boolean] }>()
+const decisionDirty = ref(false)
+watch(
+  () => decisionDirty.value || planComments.value.length > 0 || draftBody.value.trim().length > 0,
+  (dirty) => emit('update:dirty', dirty),
+)
+onUnmounted(() => emit('update:dirty', false))
 
 /** Whether the sidebar's run-details stack is expanded (it is, until a reviewer wants the outline). */
 const runDetailsOpen = ref(true)
@@ -386,6 +400,7 @@ async function copyPlan() {
         :can-execute="canExecute"
         :comments="wireComments"
         @sent="resetComments"
+        @update:dirty="decisionDirty = $event"
       />
     </aside>
   </div>

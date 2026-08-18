@@ -258,6 +258,18 @@ async function onDismiss(id: string): Promise<void> {
   if (challengeForId.value === id) cancelChallenge()
   await prReview.dismiss(inst, id).catch(() => {})
 }
+
+/**
+ * Confirm before discarding a drafted challenge (UX-79). The concern box is open against exactly
+ * one finding, its text is held here until Send, and this window closes on Escape and on a backdrop
+ * click. Auto-sending it instead would spend a reviewer turn on the user's behalf.
+ */
+const { requestClose } = useUnsavedGuard({
+  open,
+  close: () => close(),
+  saving: () => working.value,
+  snapshot: () => challengeText.value.trim(),
+})
 </script>
 
 <template>
@@ -269,7 +281,7 @@ async function onDismiss(id: string): Promise<void> {
     :subtitle="t('prReview.subtitle')"
     width="full"
     testid="pr-review-window"
-    @close="close"
+    @close="requestClose"
   >
     <template v-if="state?.prUrl" #header-extras>
       <a

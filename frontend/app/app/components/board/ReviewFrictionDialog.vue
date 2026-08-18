@@ -53,7 +53,13 @@ function goReview() {
   }
 }
 
+// True while the opener's create is actually in flight. Read through the context's getter inside a
+// computed so it tracks the opener's own `saving` ref (UX-78) — the context object itself is
+// captured once at open, so a copied boolean would never update.
+const pending = computed(() => ctx.value?.pending?.() ?? false)
+
 function createAnyway() {
+  if (pending.value) return
   ctx.value?.onConfirm?.()
 }
 </script>
@@ -104,11 +110,20 @@ function createAnyway() {
             color="neutral"
             variant="subtle"
             size="sm"
+            :loading="pending"
+            :disabled="pending"
+            data-testid="review-friction-create-anyway"
             @click="createAnyway"
           >
             {{ t('errors.reviewFriction.createAnyway') }}
           </UButton>
-          <UButton color="primary" size="sm" icon="i-lucide-list-checks" @click="goReview">
+          <UButton
+            color="primary"
+            size="sm"
+            icon="i-lucide-list-checks"
+            :disabled="pending"
+            @click="goReview"
+          >
             {{ t('errors.reviewFriction.goReview') }}
           </UButton>
         </div>

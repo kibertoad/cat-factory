@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import type { Block } from '~/types/domain'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
+import { uid } from '~/utils/catalog'
 
 // Per-service (frame) SENSITIVE test credentials: a genuinely secret token a Tester needs
 // to exercise a third-party integration (e.g. a Stripe API key). Unlike the non-sensitive
@@ -25,6 +26,13 @@ const { confirmAction, toastDone } = useConfirmAction()
 const busy = ref(false)
 
 interface DraftRow {
+  /**
+   * Client-only stable row identity (UX-94, the UX-23 convention). The `v-for` MUST key on this
+   * rather than the array index: an index key rebinds a deleted row's inputs onto its neighbour,
+   * and because the value field is masked that rebind is invisible — so removing a middle row
+   * could save one secret's value under the next row's key.
+   */
+  uid: string
   key: string
   description: string
   value: string
@@ -34,7 +42,7 @@ const draft = reactive<{ rows: DraftRow[] }>({ rows: [] })
 const configured = computed(() => store.entriesForBlock(props.block.id))
 const available = computed(() => store.available !== false)
 
-const blankRow = (): DraftRow => ({ key: '', description: '', value: '' })
+const blankRow = (): DraftRow => ({ uid: uid('sec'), key: '', description: '', value: '' })
 
 // Load this frame's configured refs once, then (re)hydrate the editor from them. Runs again
 // after a save/clear (the store refs change) so the just-typed secret values don't linger in
@@ -46,7 +54,7 @@ watch(
   configured,
   (entries) => {
     draft.rows = entries.length
-      ? entries.map((e) => ({ key: e.key, description: e.description, value: '' }))
+      ? entries.map((e) => ({ uid: uid('sec'), key: e.key, description: e.description, value: '' }))
       : [blankRow()]
   },
   { immediate: true },
@@ -87,8 +95,10 @@ const canSave = computed(
 function addRow() {
   draft.rows.push(blankRow())
 }
-function removeRow(index: number) {
-  draft.rows.splice(index, 1)
+/** Remove by row identity, so it can never be read against a stale index. */
+function removeRow(rowUid: string) {
+  const at = draft.rows.findIndex((r) => r.uid === rowUid)
+  if (at >= 0) draft.rows.splice(at, 1)
 }
 
 async function save() {
@@ -166,9 +176,10 @@ async function clearAll() {
     </p>
 
     <div class="space-y-3">
+      <!-- Keyed by the row's own `uid`, never the index — see DraftRow.uid. -->
       <div
         v-for="(row, index) in draft.rows"
-        :key="index"
+        :key="row.uid"
         class="space-y-2 rounded-md border border-slate-800 p-2.5"
         :data-testid="`test-secret-row-${index}`"
       >
@@ -198,7 +209,7 @@ async function clearAll() {
             class="mt-5 shrink-0"
             :aria-label="t('inspector.testSecrets.removeRow')"
             :data-testid="`test-secret-remove-${index}`"
-            @click="removeRow(index)"
+            @click="removeRow(row.uid)"
           />
         </div>
 

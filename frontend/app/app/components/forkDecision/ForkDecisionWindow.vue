@@ -106,6 +106,27 @@ async function onSend() {
   chatInput.value = ''
   await forkDecision.chat(id, text).catch(() => {})
 }
+
+/**
+ * Confirm before discarding typed input (UX-79). A custom approach, a steering note and an
+ * unsent chat question are all things the human WROTE, none of them are persisted anywhere until
+ * the matching button is pressed, and this window is dismissible by Escape and by a backdrop
+ * click. Flushing them instead is not an option: sending a chat turn spends the run's bounded
+ * human-turn budget and choosing a fork commits the whole decision, so an accidental dismissal
+ * must never do either on the user's behalf. A window with nothing typed closes as before.
+ */
+const { requestClose } = useUnsavedGuard({
+  open,
+  close: () => close(),
+  saving: () => forkDecision.choosing,
+  snapshot: () => ({
+    // Only counts while the custom path is actually selected — text left in the box under a
+    // proposed fork is not part of the decision being made and would prompt for nothing.
+    custom: selected.value === 'custom' ? customText.value.trim() : '',
+    note: note.value.trim(),
+    chat: chatInput.value.trim(),
+  }),
+})
 </script>
 
 <template>
@@ -117,7 +138,7 @@ async function onSend() {
     :subtitle="t('forkDecision.subtitle')"
     width="3xl"
     testid="fork-decision-window"
-    @close="close"
+    @close="requestClose"
   >
     <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
       <!-- Proposing: the read-only proposer is still working. -->
@@ -352,7 +373,7 @@ async function onSend() {
       v-if="interactive"
       class="flex items-center justify-end gap-2 border-t border-slate-800 px-5 py-3"
     >
-      <UButton color="neutral" variant="ghost" size="sm" @click="close">
+      <UButton color="neutral" variant="ghost" size="sm" @click="requestClose">
         {{ t('common.cancel') }}
       </UButton>
       <UButton

@@ -22,6 +22,7 @@ import { useBoardStore } from '~/stores/board'
 import { useBinaryCandidatesStore } from '~/stores/binaryCandidates'
 import {
   BINARY_CANDIDATE_NO_CHOICE_KEYS,
+  binaryCandidateAbsence,
   binaryCandidateHasWarnings,
   binaryCandidateView,
 } from '~/utils/binaryCandidates'
@@ -45,6 +46,12 @@ const { open, blockId, instanceId, stepIndex, close } = useResultView('binary-ca
   },
 })
 
+/** Re-run the warm-up read after a failed one (the Retry beside the error state). */
+function retryLoad(): void {
+  const id = instanceId.value
+  if (id) void candidates.load(id)
+}
+
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const headerTitle = computed(() =>
   block.value
@@ -59,6 +66,8 @@ const step = computed(() => {
   return instance.value.steps[stepIndex.value] ?? null
 })
 const view = computed(() => binaryCandidateView(step.value))
+/** Which of the three no-comparison states the body renders; see `binaryCandidateAbsence`. */
+const absence = computed(() => binaryCandidateAbsence(candidates.loading, candidates.error))
 const warnings = computed(() => (view.value ? binaryCandidateHasWarnings(view.value) : false))
 const noChoiceKey = computed(() => {
   const reason = view.value?.state.noChoiceReason
@@ -96,6 +105,15 @@ function toggle(id: string): void {
 }
 
 /**
+ * The accessible name for a candidate's select control. Ticking one is the ONLY way to keep an
+ * asset, so this control is the gate's critical path and cannot be an unlabelled input: falls back
+ * through what the agent actually declared, ending at the id, which is always present.
+ */
+function candidateLabel(row: { label?: string; subject?: string; generator?: string; id: string }) {
+  return row.label ?? row.subject ?? row.generator ?? row.id
+}
+
+/**
  * Whether the request would be accepted. Mirrors the backend's own refusals rather than only
  * disabling on emptiness: keeping several candidates under one name would store one artifact and
  * report several, so the alias requirement is stated here, where it can be fixed, instead of
@@ -125,8 +143,37 @@ async function onKeep() {
     return alias ? { candidateId, storeAs: alias } : { candidateId }
   })
   const text = note.value.trim()
-  await candidates.keep(id, { keep, ...(text ? { note: text } : {}) }).catch(() => {})
+  const kept = await candidates
+    .keep(id, { keep, ...(text ? { note: text } : {}) })
+    .then(() => true)
+    // The store records the message; the inline error strip below renders it.
+    .catch(() => false)
+  // Drop the drafts only once they are actually recorded — the window stays open as the RECORD of
+  // the decision, and leaving a submitted note in the box would make the unsaved guard below prompt
+  // over text that is already saved.
+  if (kept) {
+    note.value = ''
+    aliases.value = {}
+  }
 }
+
+/**
+ * Confirm before discarding a typed rationale or a store-as alias (UX-79). The note is the only
+ * place the reasoning behind this choice is ever written down, and the aliases are what keeps two
+ * candidates from overwriting each other, so an Escape or a stray backdrop click used to cost work
+ * with no way to get it back. Nothing typed still closes straight through.
+ */
+const { requestClose } = useUnsavedGuard({
+  open,
+  close: () => close(),
+  saving: () => candidates.keeping,
+  snapshot: () => ({
+    note: note.value.trim(),
+    // Only the aliases of candidates still ticked count: one left behind on an unticked candidate
+    // is not going anywhere on Keep either, so prompting over it would be a false alarm.
+    aliases: selected.value.map((id) => (aliases.value[id] ?? '').trim()).filter(Boolean),
+  }),
+})
 </script>
 
 <template>
@@ -138,7 +185,7 @@ async function onKeep() {
     :subtitle="t('binaryCandidates.subtitle')"
     width="5xl"
     testid="binary-candidates-window"
-    @close="close"
+    @close="requestClose"
   >
     <div v-if="view" class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
       <!-- Why there was nothing to choose between. Its own line per reason: a model that never
@@ -187,14 +234,37 @@ async function onKeep() {
             v-for="row in group.rows"
             :key="row.id"
             class="rounded border p-2 transition"
-            :class="
+            :class="[
               selected.includes(row.id) || row.kept
                 ? 'border-sky-400/60 bg-sky-500/5'
-                : 'border-slate-700/60'
-            "
+                : 'border-slate-700/60',
+              view.awaiting ? 'cursor-pointer' : '',
+            ]"
             data-testid="binary-candidate-card"
             @click="toggle(row.id)"
           >
+            <!-- The REAL control, not the card's click handler: ticking a candidate is the only
+                 way to keep an asset, so without a focusable input the gate could not be completed
+                 by keyboard at all (UX-80). `@click.stop` keeps the input's own click from also
+                 bubbling into the card's toggle, which would cancel itself out on a checkbox. The
+                 whole window is ONE radio group in single-select mode, because `toggle` replaces
+                 the selection across every subject rather than per group. -->
+            <label
+              v-if="view.awaiting"
+              class="mb-1.5 flex cursor-pointer items-center gap-2 text-[11px] text-slate-400"
+            >
+              <input
+                :type="view.multiSelect ? 'checkbox' : 'radio'"
+                name="binary-candidate"
+                class="accent-sky-500"
+                :checked="selected.includes(row.id)"
+                :aria-label="candidateLabel(row)"
+                data-testid="binary-candidate-select"
+                @click.stop
+                @change="toggle(row.id)"
+              />
+              <span class="truncate">{{ candidateLabel(row) }}</span>
+            </label>
             <!-- Staged through the platform's OWN asset storage: we hold the bytes, so the card
                  renders them (and offers to open or save one) rather than waiting for a public
                  link the shipped storage never issues. Checked first because a candidate can
@@ -291,6 +361,46 @@ async function onKeep() {
           </UButton>
         </div>
       </div>
+    </div>
+
+    <!-- No state on the step. The three ways that happens need different reactions, so they render
+         as three different things rather than as the blank body this window used to leave behind
+         (UX-80): the read is still in flight, the read FAILED (offer a Retry), or the step genuinely
+         compared nothing. Collapsing the middle one into the last would put "nothing to compare" in
+         front of a person whose candidates exist and were simply not fetched. -->
+    <div
+      v-else-if="absence === 'loading'"
+      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-slate-400"
+      data-testid="binary-candidates-loading"
+    >
+      <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
+    </div>
+    <div
+      v-else-if="absence === 'load_failed'"
+      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-slate-400"
+      data-testid="binary-candidates-load-error"
+    >
+      <UIcon name="i-lucide-triangle-alert" class="h-8 w-8 text-amber-400/70" />
+      <p class="text-sm">{{ t('binaryCandidates.loadFailed') }}</p>
+      <p class="max-w-md break-words text-[11px] text-slate-500">{{ candidates.error }}</p>
+      <UButton
+        size="xs"
+        color="neutral"
+        variant="subtle"
+        icon="i-lucide-refresh-cw"
+        data-testid="binary-candidates-retry"
+        @click="retryLoad"
+      >
+        {{ t('common.retry') }}
+      </UButton>
+    </div>
+    <div
+      v-else
+      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-slate-400"
+      data-testid="binary-candidates-empty"
+    >
+      <UIcon name="i-lucide-images" class="h-8 w-8 opacity-40" />
+      <p class="text-sm">{{ t('binaryCandidates.empty.title') }}</p>
     </div>
   </ResultWindowShell>
 </template>

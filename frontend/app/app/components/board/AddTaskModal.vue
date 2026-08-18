@@ -694,6 +694,12 @@ async function add() {
 async function submitCreate(acknowledgeReviewDebt: boolean) {
   const containerId = ui.addTaskContainerId
   if (!containerId) return
+  // Entry guard (UX-78). `saving` gates the form's own Add button, but the friction dialog's
+  // "Create anyway" is a SECOND entry point into this same function, and the first await below is
+  // a network round-trip per staged attachment — long enough for a second click to file a second
+  // task and start a second pipeline run. The dialog also disables its button; this is the
+  // authoritative half, since it holds for any future caller.
+  if (saving.value) return
   saving.value = true
   try {
     // Attachments are fetched BEFORE the task is written. A page that moved, a token without
@@ -825,6 +831,9 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
     threshold: typeof details.threshold === 'number' ? details.threshold : null,
     debt,
     onConfirm: isWarn ? () => void submitCreate(true) : null,
+    // A getter, not a snapshot: the dialog reads it inside a computed so its button spins and
+    // locks for as long as the retry actually runs (UX-78).
+    pending: () => saving.value,
   })
 }
 </script>

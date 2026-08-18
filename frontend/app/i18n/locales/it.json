@@ -6189,7 +6189,8 @@
     "status": {
       "awaiting": "In attesa di risposte",
       "done": "Fatto"
-    }
+    },
+    "saveFailed": "Impossibile salvare la tua risposta"
   },
   "gates": {
     "subtitle": {
@@ -8030,6 +8031,10 @@
       "undeclared": "Il passo non ha mai dichiarato i suoi candidati, quindi non c’era nulla da confrontare. L’esecuzione è proseguita.",
       "parseFailed": "La dichiarazione dei candidati del passo non era leggibile, quindi non c’era nulla da confrontare. L’esecuzione è proseguita.",
       "noCandidates": "Il passo non ha preparato alcun candidato, quindi non c’era nulla da confrontare. L’esecuzione è proseguita."
-    }
+    },
+    "empty": {
+      "title": "Nulla da confrontare"
+    },
+    "loadFailed": "Impossibile caricare i candidati generati."
   }
 }

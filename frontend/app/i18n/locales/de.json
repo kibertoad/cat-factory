@@ -6189,7 +6189,8 @@
     "status": {
       "awaiting": "Warten auf Antworten",
       "done": "Fertig"
-    }
+    },
+    "saveFailed": "Antwort konnte nicht gespeichert werden"
   },
   "gates": {
     "subtitle": {
@@ -8030,6 +8031,10 @@
       "undeclared": "Der Schritt hat seine Kandidaten nie deklariert, es gab also nichts zu vergleichen. Der Lauf ging weiter.",
       "parseFailed": "Die Kandidaten-Deklaration des Schritts war nicht lesbar, es gab also nichts zu vergleichen. Der Lauf ging weiter.",
       "noCandidates": "Der Schritt hat keine Kandidaten bereitgestellt, es gab also nichts zu vergleichen. Der Lauf ging weiter."
-    }
+    },
+    "empty": {
+      "title": "Nichts zu vergleichen"
+    },
+    "loadFailed": "Die erzeugten Kandidaten konnten nicht geladen werden."
   }
 }

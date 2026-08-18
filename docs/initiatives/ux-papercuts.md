@@ -36,6 +36,13 @@ foundational services, binary candidates, and the new settings panels): its find
 are sections G-K (UX-78..UX-111), verified the same way; anchors there are from
 2026-08-18.
 
+**2026-08-18, highest-impact P1 slice.** UX-78, UX-79, UX-80, UX-93 and UX-94 landed
+together: the double-submit that filed two tasks and started two pipeline runs, the
+draft loss across every result window (thirteen of them, not the four UX-79 named),
+the keyboard-uncompletable binary-candidates gate and its blank body, the unconfirmed
+irreversible pipeline delete, and the index-keyed secret rows that could save one
+secret's value under another's key. Each item's entry below records what shipped.
+
 ## Goal & rationale
 
 The product's core flows (board, pipelines, review gates, integrations) are
@@ -622,37 +629,53 @@ Anchors are from that date.
 
 | ID    | Sev | Status | Finding                                                                                  |
 | ----- | --- | ------ | ---------------------------------------------------------------------------------------- |
-| UX-78 | P1  | todo   | Review-friction "Create anyway" double-submits: two tasks, two runs                      |
-| UX-79 | P1  | todo   | Fork-decision / follow-up / binary-candidates / initiative-review windows discard drafts |
-| UX-80 | P1  | todo   | Binary-candidates gate: cards not keyboard-operable; blank body when state is missing    |
+| UX-78 | P1  | done   | Review-friction "Create anyway" double-submits: two tasks, two runs                      |
+| UX-79 | P1  | done   | Fork-decision / follow-up / binary-candidates / initiative-review windows discard drafts |
+| UX-80 | P1  | done   | Binary-candidates gate: cards not keyboard-operable; blank body when state is missing    |
 | UX-81 | P1  | todo   | CreateInitiativeModal lacks the unsaved guard its sibling AddTaskModal has               |
 | UX-82 | P2  | todo   | Initiative-planning / doc-interview persists fail silently (no toast, no state)          |
 | UX-83 | P2  | todo   | Typed text cleared before the call settles; stack edit overwrites the add form           |
 | UX-84 | P2  | todo   | Initiative checkpoint Cancel and PR-review finding Dismiss are unconfirmed               |
 | UX-85 | P3  | todo   | PR-review Post/Finish lack `:loading`; follow-up Dismiss missing the permission gate     |
 
-- **UX-78: Friction-dialog double submit.** `board/ReviewFrictionDialog.vue:102-110`
-  "Create anyway" calls `ctx.onConfirm()` with no `:loading`/`:disabled`, and
-  `AddTaskModal.vue` `submitCreate` (`:694`) sets `saving` but never checks it on
-  entry; the first await resolves attachments (seconds), so a double click files two
-  tasks and starts two pipeline runs. Fix: thread the modal's `saving` into the
-  friction context and add an entry guard.
-- **UX-79: Draft loss on close.** `useResultView`'s `onClose` hook (the UX-33 seam)
-  is unused by the new windows that hold drafts: `forkDecision/ForkDecisionWindow.vue:28`
-  (`customText`/`note`/`chatInput`), `followUp/FollowUpWindow.vue:26` (per-question
-  answers, no blur-persist either), `binaryCandidates/BinaryCandidatesWindow.vue:69-72`
-  (`note` + per-candidate store-as aliases), and the initiative tracker host registers
-  none while `InitiativePlanReview.vue:75-89` / `InitiativePlanDecision.vue:39` hold
-  per-block plan comments plus the overall feedback. Escape or a backdrop click
-  discards all of it. Fix: `onClose` flushes (or a dirty-check confirm), exactly as
-  the review windows do.
-- **UX-80: Binary-candidates gate blocked for keyboard users.** The candidate card is
-  a `<div @click="toggle(row.id)">` with no role/tabindex/key handler and no radio or
-  checkbox inside (`BinaryCandidatesWindow.vue:186-197`), and selecting is the only
-  way to keep an asset, so the gate cannot be completed by keyboard at all. The body
-  is also `<div v-if="view">` with no `v-else` (`:143`), so a missing/failed load
-  renders a titled shell with a blank body and no retry.
-  `ForkDecisionWindow.vue:198,342-348` has both halves right; copy it.
+- **UX-78: Friction-dialog double submit. DONE.** The friction context now carries a
+  `pending()` GETTER over the opener's own `saving` ref (a copied boolean would be
+  frozen at `false`: the context object is captured once at open), which the dialog
+  reads inside a `computed` to drive `:loading`/`:disabled` on "Create anyway".
+  `submitCreate` also got the authoritative half, an entry guard on `saving`, so the
+  refusal holds for any future caller of that second entry point.
+- **UX-79: Draft loss on close. DONE, and wider than the four surfaces above.** A
+  systematic pass over every `ResultWindowShell` consumer found **thirteen** windows
+  holding unsubmitted input and only two (requirements, clarity) handling it. All
+  thirteen now do, split by what the draft's submit button actually does:
+  - **flush** (`useResultView({ onClose })`) where recording a draft is a PLAIN SAVE
+    that decides nothing: requirements, clarity, and the doc interview (whose
+    `persist` now takes the block id explicitly, because `blockId` goes null the
+    moment the view tears down and a close-time flush would otherwise write nowhere).
+  - **confirm** (`useUnsavedGuard` in front of the shell's close) where the only
+    button carrying the draft also RESOLVES something: fork-decision, follow-up,
+    binary-candidates, the initiative tracker, judge, PR-review, brainstorm, the
+    human-review gate, human-test and visual-confirm. Auto-sending on Escape was
+    never an option here: it would spend a bounded chat turn, keep an artifact, or
+    resolve a parked gate on the user's behalf.
+    The initiative tracker's drafts live two components down, so `InitiativePlanReview`
+    and `InitiativePlanDecision` report dirtiness upward through `update:dirty`
+    (retracted on unmount, so a resolved gate can't leave the host holding a stale flag).
+    `ResultWindowDrafts.logic.spec.ts` is the enforcement hook (theme 8): it names every
+    window's disposition, fails on a stale or missing row, fails on a draft-holding
+    window whose close goes straight through, AND fails on a window declared draft-free
+    that grew a textarea. That last assertion is what found the gate/human-test/
+    visual-confirm three, which no manual sweep had listed.
+- **UX-80: Binary-candidates gate blocked for keyboard users. DONE.** Each card now
+  carries a real labelled `<input type="radio"|"checkbox">` (the window is ONE radio
+  group, because `toggle` replaces the selection across every subject rather than per
+  group), with `@click.stop` on it so the input's own click can't also bubble into the
+  card's toggle and cancel itself out on a checkbox. The card's pointer handler stays.
+  The blank body is now three branches, not one: `binaryCandidateAbsence()` (pure,
+  tested) states the precedence — an in-flight read outranks a stale error so a Retry
+  isn't showing the failure it is clearing, and a recorded error outranks emptiness so
+  a request that never landed cannot render as "this run compared nothing". The store
+  gained the `loading` flag and records its load failure for the Retry.
 - **UX-81: Unguarded initiative modal.** `board/CreateInitiativeModal.vue:37-42`
   closes straight through the store: Escape/backdrop discards title, goal, every
   descriptor field and staged context attachment, and the `watch(open)` reset wipes
@@ -736,24 +759,23 @@ Anchors are from that date.
 
 | ID    | Sev | Status | Finding                                                                                      |
 | ----- | --- | ------ | -------------------------------------------------------------------------------------------- |
-| UX-93 | P1  | todo   | Pipeline-health Delete/Remove is unconfirmed and irreversible                                |
-| UX-94 | P1  | todo   | Test-secret rows keyed by index: a middle-row delete can save the wrong secret under a key   |
+| UX-93 | P1  | done   | Pipeline-health Delete/Remove is unconfirmed and irreversible                                |
+| UX-94 | P1  | done   | Test-secret rows keyed by index: a middle-row delete can save the wrong secret under a key   |
 | UX-95 | P2  | todo   | One-click destructives: stack Stop, tutorial reset, template unlink, MCP disconnect, archive |
 | UX-96 | P2  | todo   | More index-keyed editable rows: validation commands, frontend bindings, failure-kind rules   |
 | UX-97 | P2  | todo   | One shared busy flag spins every row's buttons on five panels                                |
 | UX-98 | P3  | todo   | Immediate-persist config unlinks with no confirm                                             |
 | UX-99 | P3  | todo   | Member role/access-mode changes are silent; the access-mode widen is unconfirmed             |
 
-- **UX-93: Unconfirmed irreversible delete.** `pipeline/PipelineHealthModal.vue:187,230`:
-  `remove`/`removeRetired` call `pipelines.removePipeline(id)` on first click with no
-  `useConfirm()`; the file's own comment calls this "the one irreversible action on
-  this screen" (a retired built-in cannot be reseeded back). Confirm-gate both,
-  naming the pipeline.
-- **UX-94: Mis-keyed secret rows.** `panels/inspector/ServiceTestSecrets.vue:170`:
-  `:key="index"` wraps `v-model="row.key"` plus a masked `SecretInput` value and
-  `removeRow(index)`; deleting a middle row rebinds a neighbour's inputs, and the
-  masking makes the rebind invisible, so the wrong secret can be saved under the
-  wrong key. Stable `uid` per row (the UX-23 convention).
+- **UX-93: Unconfirmed irreversible delete. DONE.** Both removal buttons route through
+  one `confirmRemove` on `useConfirmAction`'s `remove` shape, which NAMES the pipeline
+  (the two sections render rows of near-identical buttons, and "which one did I just
+  delete" is unanswerable afterwards). The shared `run` helper now reports whether the
+  action settled, so the success toast is withheld on a refusal rather than claiming a
+  delete the 409 refused.
+- **UX-94: Mis-keyed secret rows. DONE.** Each draft row carries a stable client-only
+  `uid` (the UX-23 convention) that the `v-for` keys on, and `removeRow` takes that uid
+  rather than an index, so the removal can never be read against a stale position.
 - **UX-95: One-click destructives.** `settings/SharedStacksPanel.vue:316-327` "Stop"
   tears down workspace-wide infra that live previews attach to (the Delete beside it
   IS confirmed); `tutorial/TutorialCatalogue.vue:140-150` "Reset progress" wipes
@@ -933,10 +955,12 @@ surfaces built after them don't use them.
 
 The 2026-07 P1 batch is done except UX-45. As of the 2026-08-18 re-audit:
 
-1. **P1 batch (data loss / blocked flows):** UX-78 (double submit), UX-79/81
-   (result-window and initiative-modal draft loss), UX-80 (keyboard-blocked gate),
-   UX-86/89 (wizard Done and foundational tab draft loss), UX-93/94 (unconfirmed
-   irreversible delete, mis-keyed secret rows), plus the long-standing UX-45.
+1. **P1 batch (data loss / blocked flows).** UX-78, UX-79, UX-80, UX-93 and UX-94 are
+   done. Still open: UX-81 (initiative-modal draft loss), UX-86/89 (wizard Done and
+   foundational tab draft loss), plus the long-standing UX-45. UX-81/86/89 are the
+   same defect as UX-79 on surfaces that are not result windows, so they take
+   `useUnsavedGuard` the same way (UX-89 is the narrower `:unmount-on-hide="false"`
+   fix); the guard spec added for UX-79 does not reach them.
 2. **Adoption sweeps with an enforcement hook** (UX-106..UX-109, UX-95..UX-98):
    each is one primitive applied across N call sites; land the sweep with a lint
    rule or guard where one is cheap, or the count regrows (theme 8).
@@ -947,6 +971,28 @@ The 2026-07 P1 batch is done except UX-45. As of the 2026-08-18 re-audit:
 
 ## Conventions & gotchas carried between iterations
 
+- **An unsubmitted draft gets a FLUSH or a CONFIRM, and which one is decided by what the
+  submit button does, never by convenience.** Flush (`useResultView({ onClose })`) is only
+  correct when recording the draft decides nothing else: the review windows and the doc
+  interview each persist one answer at a time, so writing on the way out is what the user
+  meant. Everywhere else the only button carrying the draft also resolves a gate, spends a
+  bounded chat turn, keeps an artifact or re-runs an agent, and a stray Escape may not do
+  that on someone's behalf: those take `useUnsavedGuard` in front of the close. Two traps.
+  A flush must capture the ids it needs SYNCHRONOUSLY (`blockId` and the derived state go
+  null the instant the view tears down, so an awaited loop reading them writes nowhere),
+  and it must report its own failure, because a close-time flush is the one path with no
+  button left on screen to have reported it. A guard's `snapshot()` must exclude a draft
+  that is no longer submittable (an alias on an unticked candidate, an answer to an item
+  decided elsewhere), or it prompts over work that was going nowhere anyway.
+- **A draft two components below the window that owns closing reports UPWARD.** The
+  initiative plan review holds anchored comments and feedback inside a child of a child;
+  it emits `update:dirty` and RETRACTS it on unmount, so a gate that resolves cannot leave
+  the host prompting over a field that no longer exists.
+- **The adoption guard has to assert the INVERSE too.** A table naming each surface's
+  disposition rots into a list of what someone once believed unless something fails when a
+  surface declared draft-free grows a textarea. That assertion (in
+  `ResultWindowDrafts.logic.spec.ts`) is what found three draft-holding windows no manual
+  sweep had listed.
 - **Undo pattern = deferred destructive action, not client-only rollback.** A "real"
   undo can't just `reattach` the client cache after a successful server delete: a coarse
   `board` refresh (`useWorkspaceStream` → `workspace.refresh()`) would re-fetch the block
