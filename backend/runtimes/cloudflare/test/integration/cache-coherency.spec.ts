@@ -158,6 +158,10 @@ describe('workerAppCaches host', () => {
     await bag.workspaceSettings.get(group, group, load)
     expect(loads).toBe(2)
   })
+  // How long the cross-invocation case waits for both reads to park before giving up and letting
+  // the assertion speak. Generous on purpose: it is a deadlock ceiling, never the thing a passing
+  // run waits on.
+  const PARK_CEILING_MS = 5_000
   // The Worker-specific half of the cross-invocation rule (`invocationScopedLoads.ts`): the bag
   // outlives every invocation, so a cache MISS may not join a load another invocation started:
   // workerd destroys the joining invocation with "Cannot perform I/O on behalf of a different
@@ -170,9 +174,20 @@ describe('workerAppCaches host', () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve
     })
+    // Both reads have to clear their coherency probe and park in their OWN load before the gate
+    // opens. Releasing earlier lets the first load finish and PUBLISH, which turns the second read
+    // into a cache HIT that never loads at all, and reports one load for a reason this test is not
+    // about. So the wait is on that condition rather than on a clock: a fixed sleep sized the two
+    // probes by guesswork and lost the race on a loaded CI runner, failing as though the
+    // cross-invocation rule had regressed.
+    let secondParked!: () => void
+    const bothParked = new Promise<void>((resolve) => {
+      secondParked = resolve
+    })
     let loads = 0
     const load = async () => {
       loads += 1
+      if (loads === 2) secondParked()
       await gate
       return { settings: null }
     }
@@ -182,10 +197,11 @@ describe('workerAppCaches host', () => {
       bag.workspaceSettings.get('cachegen_split', 'cachegen_split', load),
       bag.workspaceSettings.get('cachegen_split', 'cachegen_split', load),
     ])
-    // Both reads clear their coherency probe and park in the load before the gate opens;
-    // releasing earlier would let the first finish and PUBLISH, turning the second into a hit
-    // and hiding whichever answer this test is after.
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    // The ceiling is not a race window: the passing path resolves `bothParked` as soon as the
+    // second load is entered. It exists so a REGRESSION (the second read joining the first) fails
+    // on the assertion below, naming what broke, rather than hanging here until the suite times
+    // out with nothing to say.
+    await Promise.race([bothParked, new Promise((resolve) => setTimeout(resolve, PARK_CEILING_MS))])
     release()
     await both
     expect(loads).toBe(2)
