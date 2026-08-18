@@ -29,7 +29,8 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   per-class rollups, and the reviewer-effort TAG a landed pull request earned; the tag at `write`,
   not the `admin` that `act` needs, since tagging merges nothing), `PublicKaizenController` (the
   KAIZEN entry backlog: every post-run grading of an agent step as a workspace-wide keyset page
-  naming no run up front, plus the acknowledgement that takes one off `?acknowledged=false`; the
+  naming no run up front, plus the acknowledgement that takes one off
+  `?acknowledged=false&settled=true`; the
   acknowledge at `write` for the same reason the effort tag is, and the JOIN that makes an entry
   actionable lives in orchestration's `KaizenEntryReader`, not here), `PublicSpendController` (the
   `read`-scoped **spend analytics** read at `/api/v1/usage/spend`: one dimension of

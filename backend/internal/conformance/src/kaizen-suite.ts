@@ -295,24 +295,31 @@ export function defineKaizenSuite(
         }),
       )
 
-      const acked = await repo.setAcknowledgement(ws, `${ws}-done`, {
-        at: 500,
-        by: 'usr_1',
-        note: 'filed as CF-12',
-      })
+      const acked = await repo.setAcknowledgement(
+        ws,
+        `${ws}-done`,
+        { by: 'usr_1', note: 'filed as CF-12' },
+        500,
+      )
       expect(acked?.acknowledgedAt).toBe(500)
       expect(acked?.acknowledgedBy).toBe('usr_1')
       expect(acked?.acknowledgementNote).toBe('filed as CF-12')
+      // The row's own change stamp moves with the triage. Without it a consumer watermarking on
+      // `max(updatedAt)` (which the field's own contract invites) never sees triage state move.
+      expect(acked?.updatedAt).toBe(500)
 
       // A repeat leaves the FIRST acknowledgement standing, so the stamp keeps naming the triage
       // rather than the last retry.
-      const again = await repo.setAcknowledgement(ws, `${ws}-done`, {
-        at: 900,
-        by: 'usr_2',
-        note: 'second',
-      })
+      const again = await repo.setAcknowledgement(
+        ws,
+        `${ws}-done`,
+        { by: 'usr_2', note: 'second' },
+        900,
+      )
       expect(again?.acknowledgedAt).toBe(500)
       expect(again?.acknowledgedBy).toBe('usr_1')
+      // A no-op write touches nothing at all, `updated_at` included.
+      expect(again?.updatedAt).toBe(500)
 
       // The grading sweep's own write must not disturb it: a re-graded row keeps its triage.
       await repo.upsert(
@@ -332,12 +339,25 @@ export function defineKaizenSuite(
       expect(regraded?.acknowledgedAt).toBe(500)
 
       // An unsettled grading cannot be acknowledged: the store refuses it, not just the service.
-      const live = await repo.setAcknowledgement(ws, `${ws}-live`, {
-        at: 500,
-        by: 'usr_1',
-        note: null,
-      })
+      const live = await repo.setAcknowledgement(ws, `${ws}-live`, { by: 'usr_1', note: null }, 500)
       expect(live?.acknowledgedAt).toBeNull()
+      // Refused means nothing was written: a running grading keeps the staleness stamp the sweep
+      // re-drives it on, rather than having it pushed out by a rejected acknowledgement.
+      expect(live?.updatedAt).toBe(1)
+
+      // `settled` selects exactly the rows the acknowledge write accepts, which is what makes
+      // `acknowledged: false, settled: true` a backlog a caller can drain without hitting 409s.
+      expect((await repo.listPage(ws, { limit: 10, settled: true })).map((g) => g.id)).toEqual([
+        `${ws}-done`,
+      ])
+      expect((await repo.listPage(ws, { limit: 10, settled: false })).map((g) => g.id)).toEqual([
+        `${ws}-live`,
+      ])
+      expect(
+        (await repo.listPage(ws, { limit: 10, acknowledged: false, settled: true })).map(
+          (g) => g.id,
+        ),
+      ).toEqual([])
 
       // The acknowledged/unacknowledged filter reads the stored state.
       expect((await repo.listPage(ws, { limit: 10, acknowledged: true })).map((g) => g.id)).toEqual(
@@ -347,14 +367,21 @@ export function defineKaizenSuite(
         (await repo.listPage(ws, { limit: 10, acknowledged: false })).map((g) => g.id),
       ).toEqual([`${ws}-live`])
 
-      // Clearing puts it back on the backlog, all three columns together.
-      const cleared = await repo.setAcknowledgement(ws, `${ws}-done`, null)
+      // Clearing puts it back on the backlog, all three columns together, and is a change like
+      // any other.
+      const cleared = await repo.setAcknowledgement(ws, `${ws}-done`, null, 1500)
       expect(cleared?.acknowledgedAt).toBeNull()
       expect(cleared?.acknowledgedBy).toBeNull()
       expect(cleared?.acknowledgementNote).toBeNull()
+      expect(cleared?.updatedAt).toBe(1500)
+
+      // Clearing what was never acknowledged writes nothing, so an unsettled row's staleness
+      // stamp survives a spurious undo.
+      const noop = await repo.setAcknowledgement(ws, `${ws}-live`, null, 2000)
+      expect(noop?.updatedAt).toBe(1)
 
       // An id this workspace does not hold answers null rather than inventing a row.
-      expect(await repo.setAcknowledgement(ws, `${ws}-missing`, null)).toBeNull()
+      expect(await repo.setAcknowledgement(ws, `${ws}-missing`, null, 2000)).toBeNull()
     })
 
     it('keeps verified-combo streak/verified state per key', async () => {
@@ -377,6 +404,29 @@ export function defineKaizenSuite(
       expect(stored?.verified).toBe(true)
       expect(stored?.verifiedAt).toBe(42)
       expect((await repo.listByWorkspace(ws)).map((c) => c.comboKey)).toContain(key)
+    })
+
+    it('reads a named set of combo keys, ignoring the rest of the library', async () => {
+      const repo = makeComboRepo()
+      const { ws } = ids()
+      const wanted = `coder|m|1-${ws}`
+      const other = `architect|m|2-${ws}`
+      await repo.upsert(ws, combo({ comboKey: wanted, consecutiveHighGrades: 3 }))
+      await repo.upsert(ws, combo({ comboKey: other, consecutiveHighGrades: 1 }))
+
+      // What the public entry surface joins a page against: the keys it names, and only those.
+      // A key nothing has recorded is simply absent rather than a null placeholder.
+      const found = await repo.listByKeys(ws, [wanted, `never|graded|9-${ws}`])
+      expect(found.map((c) => c.comboKey)).toEqual([wanted])
+      expect(found[0]?.consecutiveHighGrades).toBe(3)
+
+      // Empty input costs no query and answers empty.
+      expect(await repo.listByKeys(ws, [])).toEqual([])
+
+      // Another workspace's combo never leaks in, even when it shares the key.
+      const { ws: neighbour } = ids()
+      await repo.upsert(neighbour, combo({ comboKey: wanted, consecutiveHighGrades: 99 }))
+      expect((await repo.listByKeys(ws, [wanted]))[0]?.consecutiveHighGrades).toBe(3)
     })
   })
 }

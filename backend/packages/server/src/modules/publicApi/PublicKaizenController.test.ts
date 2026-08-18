@@ -3,6 +3,7 @@ import type {
   PublicKaizenEntry,
   PublicKaizenEntryList,
 } from '@cat-factory/contracts'
+import { isSettledKaizenStatus } from '@cat-factory/contracts'
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import { handleError } from '../../http/errorHandler.js'
@@ -53,12 +54,20 @@ function harness(opts: { scope?: string; rows?: KaizenGrading[] } = {}) {
   const rows = new Map((opts.rows ?? [grading({ id: 'kzn_1' })]).map((row) => [row.id, row]))
   const kaizen = {
     service: {
-      listEntries: async (_ws: string, query: { limit: number; acknowledged?: boolean }) =>
+      listEntries: async (
+        _ws: string,
+        query: { limit: number; acknowledged?: boolean; settled?: boolean },
+      ) =>
         [...rows.values()]
           .filter((row) =>
             query.acknowledged === undefined
               ? true
               : query.acknowledged === (row.acknowledgedAt !== null),
+          )
+          .filter((row) =>
+            query.settled === undefined
+              ? true
+              : query.settled === isSettledKaizenStatus(row.status),
           )
           .sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : -1))
           .slice(0, query.limit)
@@ -176,6 +185,29 @@ describe('the public Kaizen entry surface', () => {
     })
     // A full page hands back a cursor; a client pages until it comes back null.
     expect(page.nextCursor).toBeTruthy()
+  })
+
+  it('passes the settled filter through, so the backlog holds only acknowledgeable entries', async () => {
+    const call = harness({
+      rows: [
+        grading({ id: 'kzn_done', createdAt: 20 }),
+        grading({ id: 'kzn_live', createdAt: 30, status: 'running', grade: null }),
+      ],
+    })
+
+    // `acknowledged=false` alone is the whole outstanding set, mid-flight gradings included, and
+    // the acknowledge route refuses those with a 409.
+    const outstanding = await call('/kaizen/entries?acknowledged=false')
+    expect((outstanding.body as PublicKaizenEntryList).entries.map((e) => e.entryId)).toEqual([
+      'kzn_live',
+      'kzn_done',
+    ])
+
+    // Adding `settled=true` narrows it to what can actually be acted on.
+    const drainable = await call('/kaizen/entries?acknowledged=false&settled=true')
+    expect((drainable.body as PublicKaizenEntryList).entries.map((e) => e.entryId)).toEqual([
+      'kzn_done',
+    ])
   })
 
   it('refuses a malformed cursor rather than silently serving page one again', async () => {

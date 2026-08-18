@@ -790,8 +790,8 @@ export {
  * given; absent → the module isn't built and no grading is scheduled.
  */
 export function createKaizenModule(deps: CoreDependencies): KaizenModule | undefined {
-  const { kaizenGradingRepository, kaizenVerifiedComboRepository, serviceRepository } = deps
-  if (!kaizenGradingRepository || !kaizenVerifiedComboRepository || !serviceRepository) {
+  const { kaizenGradingRepository, kaizenVerifiedComboRepository } = deps
+  if (!kaizenGradingRepository || !kaizenVerifiedComboRepository) {
     return undefined
   }
   if (!deps.llmCallMetricRepository || !deps.agentContextObservability) return undefined
@@ -800,7 +800,6 @@ export function createKaizenModule(deps: CoreDependencies): KaizenModule | undef
     kaizenGradingRepository,
     kaizenVerifiedComboRepository,
     blockRepository: deps.blockRepository,
-    serviceRepository,
     llmCallMetricRepository: deps.llmCallMetricRepository,
     agentContextObservability: deps.agentContextObservability,
     workspaceSettingsRepository: deps.workspaceSettingsRepository,

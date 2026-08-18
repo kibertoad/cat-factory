@@ -22,6 +22,9 @@ public record KaizenListEntriesQuery(
     @Nullable ListPublicKaizenEntriesAcknowledged acknowledged,
 
     /** Null means "not sent". */
+    @Nullable ListPublicKaizenEntriesAcknowledged settled,
+
+    /** Null means "not sent". */
     @Nullable PublicKaizenEntryStatus status,
 
     /** Null means "not sent". */
@@ -53,6 +56,9 @@ public record KaizenListEntriesQuery(
         if (acknowledged != null) {
             out.put("acknowledged", String.valueOf(acknowledged));
         }
+        if (settled != null) {
+            out.put("settled", String.valueOf(settled));
+        }
         if (status != null) {
             out.put("status", String.valueOf(status));
         }
@@ -70,6 +76,7 @@ public record KaizenListEntriesQuery(
         private @Nullable Integer limit;
         private @Nullable String cursor;
         private @Nullable ListPublicKaizenEntriesAcknowledged acknowledged;
+        private @Nullable ListPublicKaizenEntriesAcknowledged settled;
         private @Nullable PublicKaizenEntryStatus status;
         private @Nullable String agentKind;
         private @Nullable Integer since;
@@ -89,6 +96,12 @@ public record KaizenListEntriesQuery(
         /** Set {@code acknowledged}. */
         public Builder acknowledged(@Nullable ListPublicKaizenEntriesAcknowledged acknowledged) {
             this.acknowledged = acknowledged;
+            return this;
+        }
+
+        /** Set {@code settled}. */
+        public Builder settled(@Nullable ListPublicKaizenEntriesAcknowledged settled) {
+            this.settled = settled;
             return this;
         }
 
@@ -112,7 +125,7 @@ public record KaizenListEntriesQuery(
 
         /** Build the {@link KaizenListEntriesQuery}. */
         public KaizenListEntriesQuery build() {
-            return new KaizenListEntriesQuery(limit, cursor, acknowledged, status, agentKind, since);
+            return new KaizenListEntriesQuery(limit, cursor, acknowledged, settled, status, agentKind, since);
         }
     }
 }

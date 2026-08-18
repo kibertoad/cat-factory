@@ -2531,7 +2531,7 @@ class KaizenResource:
         )
         return PublicKaizenEntry.from_dict(raw)
 
-    def list_entries(self, *, limit: int | None = None, cursor: str | None = None, acknowledged: ListPublicKaizenEntriesAcknowledged | None = None, status: PublicKaizenEntryStatus | None = None, agent_kind: str | None = None, since: int | None = None, timeout: float | None = None) -> PublicKaizenEntryList:
+    def list_entries(self, *, limit: int | None = None, cursor: str | None = None, acknowledged: ListPublicKaizenEntriesAcknowledged | None = None, settled: ListPublicKaizenEntriesAcknowledged | None = None, status: PublicKaizenEntryStatus | None = None, agent_kind: str | None = None, since: int | None = None, timeout: float | None = None) -> PublicKaizenEntryList:
         """List the workspace's Kaizen entries
         Every post-run grading the workspace has produced, newest first and
         keyset-paginated, with no run or task named up front. A Kaizen entry is the platform
@@ -2541,21 +2541,25 @@ class KaizenResource:
         the context a follow-up needs (the run and step it came from, the agent kind, the
         resolved model, the prompt version, the board task and its service, and where the
         combo stands in its verification streak), so acting on one does not mean opening the
-        app first. Filter with `acknowledged=false` for the untriaged backlog, `status` for
-        what has settled (a `failed` grading names a deployment problem, such as prompt
-        recording being off), `agentKind` for one role, and `since` for an incremental
-        sweep. A task deleted since the run reports `task: null` rather than a blank title.
+        app first. Filter with `acknowledged=false&settled=true` for the drainable backlog
+        (every entry in it is one the acknowledge route accepts; `acknowledged=false` alone
+        also returns gradings still in flight, which that route refuses with `409`),
+        `settled=true` for everything the grader has finished with whatever it concluded (a
+        `failed` grading names a deployment problem, such as prompt recording being off, and
+        is worth acting on), `status` for one exact grading state, `agentKind` for one role,
+        and `since` for an incremental sweep. A task deleted since the run reports `task:
+        null` rather than a blank title.
         `GET /api/v1/kaizen/entries` (operation `listPublicKaizenEntries`).
         """
         raw = self._transport.request(
             "GET",
             f"/api/v1/kaizen/entries",
-            query={"limit": limit, "cursor": cursor, "acknowledged": acknowledged, "status": status, "agentKind": agent_kind, "since": since},
+            query={"limit": limit, "cursor": cursor, "acknowledged": acknowledged, "settled": settled, "status": status, "agentKind": agent_kind, "since": since},
             timeout=timeout,
         )
         return PublicKaizenEntryList.from_dict(raw)
 
-    def list_entries_all(self, *, limit: int | None = None, cursor: str | None = None, acknowledged: ListPublicKaizenEntriesAcknowledged | None = None, status: PublicKaizenEntryStatus | None = None, agent_kind: str | None = None, since: int | None = None, timeout: float | None = None) -> Iterator[Any]:
+    def list_entries_all(self, *, limit: int | None = None, cursor: str | None = None, acknowledged: ListPublicKaizenEntriesAcknowledged | None = None, settled: ListPublicKaizenEntriesAcknowledged | None = None, status: PublicKaizenEntryStatus | None = None, agent_kind: str | None = None, since: int | None = None, timeout: float | None = None) -> Iterator[Any]:
         """Every `entries` across every page of `list_entries()`, as they arrive.
         Follows `next_cursor` until the server reports no further page. A page may
         legitimately come back empty while `next_cursor` is still set, so this pages until
@@ -2564,7 +2568,7 @@ class KaizenResource:
         """
         page_cursor = cursor
         while True:
-            page = self.list_entries(limit=limit, acknowledged=acknowledged, status=status, agent_kind=agent_kind, since=since, cursor=page_cursor, timeout=timeout)
+            page = self.list_entries(limit=limit, acknowledged=acknowledged, settled=settled, status=status, agent_kind=agent_kind, since=since, cursor=page_cursor, timeout=timeout)
             yield from page.entries
             if not page.next_cursor:
                 return

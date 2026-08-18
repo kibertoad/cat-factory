@@ -15,7 +15,6 @@ import type {
   KaizenGradingRepository,
   KaizenVerifiedCombo,
   KaizenVerifiedComboRepository,
-  Service,
 } from '@cat-factory/kernel'
 import { ConflictError, NotFoundError } from '@cat-factory/kernel'
 
@@ -26,14 +25,19 @@ import { ConflictError, NotFoundError } from '@cat-factory/kernel'
 //
 // Two things shape it:
 //
-//  1. **The context is resolved in BATCHES, never per entry.** A page is up to 100 gradings, and
-//     the board coordinates each one needs (its task, that task's service, the service's title)
-//     are three chunked reads for the whole page rather than three per row, with the combo library
-//     a fourth (its size is bounded by the kinds and models a workspace has actually run). The
-//     alternative that looks simpler, loading the workspace's whole block list and walking each
-//     entry's ancestry in memory, is what `getServiceTask` does for ONE task and is an unbounded
-//     read here.
-//  2. **A resolved fact that is gone is NULL, never a substitute.** A task deleted since the run
+//  1. **The context is resolved in BATCHES, never per entry, and never workspace-wide.** A page is
+//     up to 100 gradings, and everything it needs comes back in a bounded handful of chunked
+//     reads: one per LEVEL of the board hierarchy to walk the graded blocks up to their service
+//     frames, plus one for exactly the combo keys the page names. Neither of the shapes it
+//     replaces is affordable at this scale: a per-row lookup is the N+1 this codebase bans, and a
+//     whole-workspace read (every block, or the entire combo library) makes a single-entry point
+//     read pay for the size of the board.
+//  2. **The service is resolved by board ANCESTRY**, the same walk `getServiceTask` and
+//     `resolveRepoTarget` do, because that is what `serviceId` means everywhere else on
+//     `/api/v1`. It is done with batched reads per level rather than by loading the workspace's
+//     blocks: containment is at most `task` under `module` under `frame`, so the walk terminates
+//     in a bounded number of reads over exactly the ids it still needs.
+//  3. **A resolved fact that is gone is NULL, never a substitute.** A task deleted since the run
 //     answers `task: null`, and a combo nothing has recorded answers `combo: null`, rather than an
 //     empty title or a zeroed streak that would read as a task with no name and a combo that has
 //     never scored well.
@@ -41,13 +45,13 @@ import { ConflictError, NotFoundError } from '@cat-factory/kernel'
 /** What the entry surface needs from its stores, bound by the service that owns them. */
 export interface KaizenEntryDeps {
   gradings: Pick<KaizenGradingRepository, 'get' | 'listPage' | 'setAcknowledgement'>
-  combos: Pick<KaizenVerifiedComboRepository, 'listByWorkspace'>
-  /** Resolve blocks by id across workspaces, with the account service each belongs to. */
-  findBlocks: (
-    blockIds: string[],
-  ) => Promise<Array<{ workspaceId: string; serviceId: string | null; block: Block }>>
-  /** Resolve account services by id (for the frame block each one owns). */
-  listServices: (serviceIds: string[]) => Promise<Service[]>
+  combos: Pick<KaizenVerifiedComboRepository, 'listByKeys'>
+  /**
+   * Resolve blocks by id in one batched read, across workspaces: a graded task can live on a
+   * service another workspace owns and this board only mounts, so the lookup is by id rather than
+   * scoped to the entry's own workspace. Ids with no block come back absent.
+   */
+  findBlocks: (blockIds: string[]) => Promise<Block[]>
   clock: Clock
 }
 
@@ -56,6 +60,7 @@ export interface KaizenEntryQuery {
   limit: number
   cursor?: { createdAt: number; id: string }
   acknowledged?: boolean
+  settled?: boolean
   status?: KaizenGradingStatus
   agentKind?: string
   since?: number
@@ -110,10 +115,13 @@ export class KaizenEntryReader {
         { entryId, status: grading.status },
       )
     }
+    // One clock read stamps both `acknowledgedAt` and `updatedAt`, so the row cannot claim to have
+    // been acknowledged after the last time it changed.
     const updated = await this.deps.gradings.setAcknowledgement(
       workspaceId,
       entryId,
-      input.acknowledged ? { at: this.deps.clock.now(), by: input.actor, note: input.note } : null,
+      input.acknowledged ? { by: input.actor, note: input.note } : null,
+      this.deps.clock.now(),
     )
     // Null here means the row went away between the read above and the write: the same fact the
     // read refuses, answered the same way rather than as a write that silently did nothing.
@@ -129,59 +137,100 @@ export class KaizenEntryReader {
     gradings: KaizenGrading[],
   ): Promise<PublicKaizenEntry[]> {
     if (gradings.length === 0) return []
+    // The combo read names exactly the keys on this page. `listByWorkspace` would answer the same
+    // question by reading the workspace's whole combo library, which a one-entry point read pays
+    // in full and which grows with every kind, model and prompt version the workspace has run.
     const [tasks, combos] = await Promise.all([
       this.resolveTasks(gradings.map((g) => g.blockId)),
-      this.deps.combos.listByWorkspace(workspaceId),
+      this.deps.combos.listByKeys(workspaceId, [...new Set(gradings.map((g) => g.comboKey))]),
     ])
     const comboByKey = new Map(combos.map((combo) => [combo.comboKey, combo]))
     return gradings.map((grading) => toPublicEntry(grading, tasks, comboByKey))
   }
 
   /**
-   * The board context per task id: the task block, its enclosing service frame and that frame's
-   * title, in three chunked reads for the whole page.
+   * The board context per graded block: the block itself, its enclosing service frame and that
+   * frame's title, walked up the containment tree in batched reads (one per level).
    *
-   * The frame is reached through the block's OWN account service rather than by walking parents,
-   * because `Service.frameBlockId` states it directly and an ancestry walk would need every
-   * intermediate block. A task whose block carries no service (a headless job's anchor, a board
-   * block older than services) resolves to a task with a null service, which is the truth about it.
+   * Ancestry rather than the block's own account-service stamp, because ancestry is what
+   * `serviceId` MEANS on this API: `GET /api/v1/services/{id}/tasks` and `GET /api/v1/tasks/{id}`
+   * both resolve it that way (`serviceOf`), and a board block that carries no service stamp (one
+   * predating services, or a workspace-local board) still sits under a frame. Reading the stamp
+   * instead made the same task report a service on one endpoint and null here.
+   *
+   * The walk is batched rather than done over the workspace's whole block list: each pass resolves
+   * exactly the parent ids it does not yet hold, and containment bottoms out at `frame`, so it
+   * settles within {@link MAX_ANCESTRY_HOPS} reads. Already-resolved ids are never re-read, which
+   * is also what stops a cycle in stored data from looping.
    */
   private async resolveTasks(blockIds: string[]): Promise<Map<string, PublicKaizenEntryTask>> {
     const wanted = [...new Set(blockIds)]
-    const blocks = await this.deps.findBlocks(wanted)
-    const serviceIds = [...new Set(blocks.map((b) => b.serviceId).filter(isNonEmpty))]
-    const services = serviceIds.length ? await this.deps.listServices(serviceIds) : []
-    const frameBlockIdByService = new Map(services.map((s) => [s.id, s.frameBlockId]))
-    // The frames the page's tasks live under, minus the ones the first read already returned (a
-    // grading anchored on the frame itself, which is how a blueprint or bootstrap run is graded).
-    const knownBlocks = new Map(blocks.map((b) => [b.block.id, b.block]))
-    const missingFrameIds = [...new Set(frameBlockIdByService.values())].filter(
-      (id) => !knownBlocks.has(id),
-    )
-    const frames = missingFrameIds.length ? await this.deps.findBlocks(missingFrameIds) : []
-    for (const frame of frames) knownBlocks.set(frame.block.id, frame.block)
+    if (wanted.length === 0) return new Map()
+    const resolved = new Map<string, Block>()
+    let frontier = wanted
+    for (let hop = 0; hop <= MAX_ANCESTRY_HOPS && frontier.length > 0; hop++) {
+      const found = await this.deps.findBlocks(frontier)
+      for (const block of found) resolved.set(block.id, block)
+      frontier = [
+        ...new Set(
+          found
+            .filter((block) => block.level !== 'frame')
+            .map((block) => block.parentId)
+            .filter(isUnresolvedParent(resolved)),
+        ),
+      ]
+    }
 
     const out = new Map<string, PublicKaizenEntryTask>()
-    for (const { block, serviceId } of blocks) {
-      const frameBlockId = serviceId ? (frameBlockIdByService.get(serviceId) ?? null) : null
+    for (const id of wanted) {
+      const block = resolved.get(id)
+      if (!block) continue
+      // Id and title come off the SAME resolved frame, so a caller is never handed a `serviceId`
+      // that `GET /api/v1/services/{serviceId}` cannot answer for. A chain that reaches no frame
+      // (a block outside any service, or one whose parent has been deleted) answers null for both.
+      const frame = frameOf(block, resolved)
       out.set(block.id, {
         title: block.title,
         status: block.status,
-        serviceId: frameBlockId,
-        serviceTitle: frameBlockId ? (knownBlocks.get(frameBlockId)?.title ?? null) : null,
+        serviceId: frame?.id ?? null,
+        serviceTitle: frame?.title ?? null,
       })
     }
     return out
   }
 }
 
+/**
+ * How many batched reads the ancestry walk may take before it stops.
+ *
+ * Containment is `task` under `module` under `frame` (`canReparent` admits nothing deeper), so two
+ * hops reach a frame from the deepest block and the third is headroom against a level added later.
+ * It bounds the READS; termination itself comes from never re-reading an id already resolved.
+ */
+const MAX_ANCESTRY_HOPS = 3
+
+/** The service frame a block sits under, walked over already-resolved blocks; undefined if none. */
+function frameOf(block: Block, resolved: Map<string, Block>): Block | undefined {
+  let cur: Block | undefined = block
+  const seen = new Set<string>()
+  while (cur && cur.level !== 'frame') {
+    if (seen.has(cur.id)) return undefined
+    seen.add(cur.id)
+    cur = cur.parentId ? resolved.get(cur.parentId) : undefined
+  }
+  return cur
+}
+
+/** The parent ids a walk pass still has to read: present, and not already resolved. */
+function isUnresolvedParent(
+  resolved: Map<string, Block>,
+): (parentId: string | null | undefined) => parentId is string {
+  return (parentId): parentId is string => !!parentId && !resolved.has(parentId)
+}
+
 /** The 404 both the point read and the acknowledge write answer for an id this workspace lacks. */
 function entryNotFound(entryId: string): NotFoundError {
   return new NotFoundError('KaizenEntry', entryId, { reason: KAIZEN_ENTRY_NOT_FOUND_REASON })
-}
-
-function isNonEmpty(value: string | null): value is string {
-  return !!value
 }
 
 /** Project one grading plus its resolved context onto the wire entry. */

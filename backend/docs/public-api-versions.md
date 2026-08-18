@@ -885,9 +885,15 @@ one.
 
 Hence the second half, and the one part that is not merely a projection: an entry now carries
 `acknowledged` / `acknowledgedAt` / `acknowledgedBy` / `acknowledgementNote`, written ONLY through
-this surface and never by the grading sweep. `?acknowledged=false` is the queue, and acknowledging
-is what shrinks it. A re-graded row keeps its acknowledgement, so the queue never re-fills behind a
-consumer's back.
+this surface and never by the grading sweep. `?acknowledged=false&settled=true` is the queue, and
+acknowledging is what shrinks it. A re-graded row keeps its acknowledgement, so the queue never
+re-fills behind a consumer's back.
+
+`settled` is a filter of its own beside `status` because the drainable backlog is a SET rather than
+one state: it selects exactly the gradings the acknowledge write accepts, from the same definition
+that write is gated on. Spelling it as `status=complete` would silently drop the `failed` entries,
+which are the ones naming a deployment-level problem, and a client-side union of two `status` calls
+would miss any settled state added later.
 
 Two refusal reasons are new, both on `error.details.reason`: `kaizen_entry_not_found` (a 404 shared
 by the point read and the acknowledge write, so one value covers both doors) and
@@ -899,3 +905,10 @@ it.
 Additive throughout: no existing field changed type or meaning, and `KaizenGrading` on the
 session-authed surface gained the same acknowledgement fields, which is an internal shape rather
 than part of this contract.
+
+`task.serviceId` is resolved by walking board ancestry to the enclosing service frame, the same way
+`GET /api/v1/services/{serviceId}/tasks` and `GET /api/v1/tasks/{taskId}` resolve it, so one task
+cannot report a different service depending on which endpoint is asked. It and `task.serviceTitle`
+are non-null together, both read off the one resolved frame, so a caller is never handed a
+`serviceId` that `GET /api/v1/services/{serviceId}` cannot answer for. The entry's task `status` is
+the same closed vocabulary `/api/v1/tasks` publishes, not the internal board one it mirrors.

@@ -932,6 +932,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // mode until the Phase 5 telemetry/local-first sync lands.
   kaizenVerifiedComboRepository: {
     getByKey: { scope: { kind: 'workspace', arg: 0 } },
+    // The batched read the public entry surface joins a page of gradings against. Same org state
+    // and same workspace-keyed rule as its single-key sibling.
+    listByKeys: { scope: { kind: 'workspace', arg: 0 } },
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     // The streak write the grading sweep records once a combo verifies. Best-effort, which is
     // exactly why it was easy to leave off and wrong to: a swallowed `unknown_method` means a

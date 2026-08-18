@@ -2134,16 +2134,28 @@ recommendations enough times in a row is VERIFIED and stops being graded.
 makes the caller supply a run first (the app's Kaizen screen is per board and bounded, the run window
 is per run), which is the one thing a consumer asking "what has the platform learned about my agents"
 cannot know: finding out is the question. Filters compose and are applied in SQL: `acknowledged`
-(`false` for the untriaged backlog), `status`, `agentKind`, `since` (epoch ms, created-at-or-after),
-plus `limit` (1..100, default 25) and `cursor`. Ordering is `createdAt DESC, entryId DESC` and the
-cursor is a keyset on that composite, so a finished run scheduling one grading per step in the same
-millisecond cannot lose rows between pages.
+(`false` for what nobody has triaged), `settled` (`true` for what the grader has finished with,
+whatever it concluded), `status` (one exact grading state), `agentKind`, `since` (epoch ms,
+created-at-or-after), plus `limit` (1..100, default 25) and `cursor`. Ordering is
+`createdAt DESC, entryId DESC` and the cursor is a keyset on that composite, so a finished run
+scheduling one grading per step in the same millisecond cannot lose rows between pages.
+
+**`?acknowledged=false&settled=true` is the drainable backlog**, and it is the query a loop should
+poll. `acknowledged=false` alone also returns gradings still in flight, which the acknowledge route
+refuses with a `409`; narrowing with `status=complete` instead drops the `failed` entries, which are
+the ones naming a deployment problem. `settled` is the same predicate the acknowledge write is gated
+on, read from the same definition, so every entry the filter returns is one that write accepts and a
+grading state added later cannot make the two disagree.
 
 **An entry carries the context a follow-up needs**, so acting on one takes no second lookup and no
 browser: `runId` + `stepIndex` (the graded step), `agentKind`, `model` as RESOLVED at dispatch,
 `promptVersion`, `comboKey` and the `combo` streak behind it, `grade`, `summary`, `recommendations`,
 `graderModel`, and `taskId` plus a resolved `task` (its title, board status, and the `serviceId` /
-`serviceTitle` of the enclosing service frame). The run's own detail is deliberately NOT copied here:
+`serviceTitle` of the enclosing service frame, walked up the board the same way
+`GET /api/v1/services/:serviceId/tasks` and `GET /api/v1/tasks/:taskId` resolve it, so one task
+never reports a different service depending on which endpoint is asked). `task.serviceId` and
+`task.serviceTitle` are non-null together: both are read off the one resolved frame, so a caller is
+never handed an id `GET /api/v1/services/:serviceId` cannot answer for. The run's own detail is deliberately NOT copied here:
 `runId` joins onto [`/api/v1/debug/runs/:runId`](./debug-api.md), which owns that and stays current
 in a way a copy could not.
 
@@ -2172,7 +2184,9 @@ otherwise, so a follow-up always has somebody to go back to.
 **Acknowledgement survives a re-grade.** The grading sweep owns the grade and re-writes the row on
 every transition; acknowledgement is written only through this surface. A row that is graded again
 keeps whatever was recorded about it, which is what lets a poll loop treat `acknowledged=false` as a
-queue that only ever shrinks by somebody's decision.
+queue that only ever shrinks by somebody's decision. `updatedAt` moves with an acknowledgement as
+with any other change to the row, so it is usable as a change watermark; a repeat acknowledgement
+and a cleared-when-nothing-was-set write nothing at all, and leave it where it stood.
 
 Refusals carry `error.details.reason`: `kaizen_entry_not_found` (the id names no entry this workspace
 holds, from both the point read and the acknowledge write, so a client branches on one value
@@ -2184,7 +2198,7 @@ Retry once it settles. A deployment that wired no Kaizen module answers `503`.
 
 ```sh
 # The loop: drain what nobody has looked at, newest first.
-curl -s -H "$AUTH" "$BASE/api/v1/kaizen/entries?acknowledged=false&status=complete&limit=50" \
+curl -s -H "$AUTH" "$BASE/api/v1/kaizen/entries?acknowledged=false&settled=true&limit=50" \
   | jq '.entries[] | {entryId, agentKind, model, grade, recommendations, runId}'
 
 # Act on one (file a ticket, edit a prompt), then take it off the backlog.

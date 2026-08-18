@@ -15,7 +15,6 @@ import type {
   ModelProviderResolver,
   ModelRef,
   PipelineStep,
-  ServiceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import {
@@ -47,8 +46,6 @@ export interface KaizenServiceDependencies {
   kaizenGradingRepository: KaizenGradingRepository
   kaizenVerifiedComboRepository: KaizenVerifiedComboRepository
   blockRepository: BlockRepository
-  /** Resolves the account service a graded task belongs to, for the public entry surface. */
-  serviceRepository: ServiceRepository
   llmCallMetricRepository: LlmCallMetricRepository
   /** Reads the complete context each step was given (system/user prompts + injected files). */
   agentContextObservability: AgentContextObservabilityService
@@ -101,8 +98,10 @@ export class KaizenService {
     this.entries = new KaizenEntryReader({
       gradings: deps.kaizenGradingRepository,
       combos: deps.kaizenVerifiedComboRepository,
-      findBlocks: (blockIds) => deps.blockRepository.findByIds(blockIds),
-      listServices: (serviceIds) => deps.serviceRepository.listByIds(serviceIds),
+      // The reader walks ancestry itself and needs only the blocks; the home workspace and account
+      // service the batched read also carries answer questions it does not ask.
+      findBlocks: async (blockIds) =>
+        (await deps.blockRepository.findByIds(blockIds)).map((found) => found.block),
       clock: deps.clock,
     })
   }

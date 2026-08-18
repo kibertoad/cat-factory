@@ -13,7 +13,19 @@ import type {
   KaizenVerifiedComboRepository,
 } from '@cat-factory/kernel'
 import { KAIZEN_SETTLED_STATUSES } from '@cat-factory/contracts'
-import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, or, type SQL } from 'drizzle-orm'
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  notInArray,
+  or,
+  type SQL,
+} from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
 import { kaizenGradings, kaizenVerifiedCombos } from '../../db/schema.js'
 
@@ -155,6 +167,7 @@ export class DrizzleKaizenGradingRepository implements KaizenGradingRepository {
       limit: number
       cursor?: { createdAt: number; id: string }
       acknowledged?: boolean
+      settled?: boolean
       status?: KaizenGradingStatus
       agentKind?: string
       since?: number
@@ -181,6 +194,16 @@ export class DrizzleKaizenGradingRepository implements KaizenGradingRepository {
           : isNull(kaizenGradings.acknowledged_at),
       )
     }
+    if (opts.settled !== undefined) {
+      // The same set the acknowledge write is gated on, from the same constant, so the backlog a
+      // caller drains and the rows that write accepts cannot drift apart. Mirrors the D1 repository.
+      const settled = [...KAIZEN_SETTLED_STATUSES]
+      filters.push(
+        opts.settled
+          ? inArray(kaizenGradings.status, settled)
+          : notInArray(kaizenGradings.status, settled),
+      )
+    }
     if (opts.status) filters.push(eq(kaizenGradings.status, opts.status))
     if (opts.agentKind) filters.push(eq(kaizenGradings.agent_kind, opts.agentKind))
     if (opts.since !== undefined) filters.push(gte(kaizenGradings.created_at, opts.since))
@@ -196,19 +219,22 @@ export class DrizzleKaizenGradingRepository implements KaizenGradingRepository {
   async setAcknowledgement(
     workspaceId: string,
     id: string,
-    ack: { at: number; by: string | null; note: string | null } | null,
+    ack: { by: string | null; note: string | null } | null,
+    now: number,
   ): Promise<KaizenGrading | null> {
     if (ack) {
       // Guarded in the statement rather than by a pre-check: the `acknowledged_at IS NULL` term
       // makes a repeat acknowledgement a no-op (so the stamp keeps naming the FIRST triage), and
       // the status list refuses a row the grader is still working on, with no window between a
-      // check and the write. Mirrors the D1 repository.
+      // check and the write. `updated_at` moves with it, so a consumer watermarking on it sees
+      // triage state change. Mirrors the D1 repository.
       await this.db
         .update(kaizenGradings)
         .set({
-          acknowledged_at: ack.at,
+          acknowledged_at: now,
           acknowledged_by: ack.by,
           acknowledgement_note: ack.note,
+          updated_at: now,
         })
         .where(
           and(
@@ -219,10 +245,24 @@ export class DrizzleKaizenGradingRepository implements KaizenGradingRepository {
           ),
         )
     } else {
+      // Guarded on there being an acknowledgement to clear, so clearing one that was never
+      // recorded writes nothing at all rather than touching `updated_at` on a row (a `running`
+      // grading, say) whose staleness stamp the sweep reads to decide what to re-drive.
       await this.db
         .update(kaizenGradings)
-        .set({ acknowledged_at: null, acknowledged_by: null, acknowledgement_note: null })
-        .where(and(eq(kaizenGradings.workspace_id, workspaceId), eq(kaizenGradings.id, id)))
+        .set({
+          acknowledged_at: null,
+          acknowledged_by: null,
+          acknowledgement_note: null,
+          updated_at: now,
+        })
+        .where(
+          and(
+            eq(kaizenGradings.workspace_id, workspaceId),
+            eq(kaizenGradings.id, id),
+            isNotNull(kaizenGradings.acknowledged_at),
+          ),
+        )
     }
     return this.get(workspaceId, id)
   }
@@ -301,6 +341,20 @@ export class DrizzleKaizenVerifiedComboRepository implements KaizenVerifiedCombo
       )
       .limit(1)
     return rows[0] ? rowToKaizenVerifiedCombo(rows[0]) : null
+  }
+
+  async listByKeys(workspaceId: string, comboKeys: string[]): Promise<KaizenVerifiedCombo[]> {
+    if (comboKeys.length === 0) return []
+    const rows = await this.db
+      .select()
+      .from(kaizenVerifiedCombos)
+      .where(
+        and(
+          eq(kaizenVerifiedCombos.workspace_id, workspaceId),
+          inArray(kaizenVerifiedCombos.combo_key, [...new Set(comboKeys)]),
+        ),
+      )
+    return rows.map(rowToKaizenVerifiedCombo)
   }
 
   async upsert(workspaceId: string, combo: KaizenVerifiedCombo): Promise<void> {

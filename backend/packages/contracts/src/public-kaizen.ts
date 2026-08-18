@@ -1,6 +1,6 @@
 import * as v from 'valibot'
 import { kaizenGradingStatusSchema } from './kaizen.js'
-import { blockStatusSchema } from './primitives.js'
+import { publicTaskStatusSchema } from './public-api.js'
 import {
   booleanQuerySchema,
   cursorSchema,
@@ -58,14 +58,32 @@ export const KAIZEN_ENTRY_NOT_SETTLED_REASON = 'kaizen_entry_not_settled'
  */
 export const publicKaizenEntryTaskSchema = v.object({
   title: v.string(),
-  /** The task's board lifecycle status (`planned` / `in_progress` / `done` / …). */
-  status: blockStatusSchema,
   /**
-   * The enclosing service frame (`GET /api/v1/services`), or null for a task outside one — a
-   * headless job's anchor, or a board block that predates services.
+   * The task's board lifecycle status, in the SAME vocabulary `/api/v1/tasks` speaks
+   * (`publicTaskStatusSchema`) rather than the internal block one it happens to mirror today.
+   *
+   * Typed against the public picklist on purpose: the two are separate closed vocabularies
+   * precisely so the board can gain a status without that widening `/api/v1` by accident. Reading
+   * the internal one here would publish the new member with no version decision, and would let two
+   * endpoints answer differently about the same task. Adding a member internally now fails to
+   * compile until somebody decides what the public surface says about it.
+   */
+  status: publicTaskStatusSchema,
+  /**
+   * The enclosing service frame (`GET /api/v1/services/{serviceId}`), or null for a task outside
+   * one — a headless job's anchor, or a board block that predates services.
+   *
+   * Resolved by walking the block's parent chain to its service frame, which is how every other
+   * `/api/v1` surface answers the same question (`GET /api/v1/services/{serviceId}/tasks`,
+   * `GET /api/v1/tasks/{taskId}`). Deriving it any other way would let one task report a service
+   * here and a different answer (or none) there, for the same board.
    */
   serviceId: v.nullable(v.string()),
-  /** That service's title, when it resolved. */
+  /**
+   * That service's title. Non-null exactly when `serviceId` is: both are read off the SAME
+   * resolved frame block, so a caller never receives an id that `GET /api/v1/services/{serviceId}`
+   * cannot answer for.
+   */
   serviceTitle: v.nullable(v.string()),
 })
 export type PublicKaizenEntryTask = v.InferOutput<typeof publicKaizenEntryTaskSchema>
@@ -162,9 +180,10 @@ export type PublicKaizenEntryList = v.InferOutput<typeof publicKaizenEntryListSc
  * `createdAt`, keyset-paged on `(createdAt, entryId)` so a burst of gradings sharing a
  * millisecond cannot lose rows between pages.
  *
- * The filters are the four questions an improvement loop actually asks, each pushed into SQL:
- * what is untriaged, what settled, what a given agent kind is being told, and what is new since
- * the last sweep. They compose (`?acknowledged=false&status=complete` is the working backlog).
+ * The filters are the questions an improvement loop actually asks, each pushed into SQL: what is
+ * untriaged, what the grader has finished with, what one agent kind is being told, and what is new
+ * since the last sweep. They compose, and `?acknowledged=false&settled=true` is the working
+ * backlog: every entry in it is one the acknowledge route accepts.
  */
 export const listPublicKaizenEntriesQuerySchema = v.object({
   /** Rows per page (1..100); omitted → 25. */
@@ -173,7 +192,20 @@ export const listPublicKaizenEntriesQuerySchema = v.object({
   cursor: v.optional(cursorSchema),
   /** `false` for the untriaged backlog, `true` for what has been handled; omitted → both. */
   acknowledged: v.optional(booleanQuerySchema),
-  /** Return only entries whose grading is in this state. */
+  /**
+   * `true` for entries the grader has FINISHED with (whatever it concluded), `false` for those
+   * still scheduled or running; omitted → both.
+   *
+   * The filter that makes `?acknowledged=false&settled=true` an actionable backlog: every row it
+   * returns is one the acknowledge route will accept, where `?acknowledged=false` alone also
+   * returns gradings mid-flight that it refuses with `409 kaizen_entry_not_settled`. It is a
+   * separate question from `status` because the settled SET is what the write is gated on, and
+   * spelling it as `status=complete` drops the `failed` entries (which usually name a deployment
+   * problem, and are the ones most worth acting on) while a client-side union of the two would
+   * silently miss any settled state added later.
+   */
+  settled: v.optional(booleanQuerySchema),
+  /** Return only entries whose grading is in this exact state. */
   status: v.optional(kaizenGradingStatusSchema),
   /** Return only entries grading this agent kind. */
   agentKind: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))),

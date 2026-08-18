@@ -90,6 +90,7 @@ export function publicKaizenController(): Hono<AppEnv> {
       limit: limit + 1,
       ...(cursor ? { cursor } : {}),
       ...(query.acknowledged === undefined ? {} : { acknowledged: query.acknowledged }),
+      ...(query.settled === undefined ? {} : { settled: query.settled }),
       ...(query.status ? { status: query.status } : {}),
       ...(query.agentKind ? { agentKind: query.agentKind } : {}),
       ...(query.since === undefined ? {} : { since: query.since }),

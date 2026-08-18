@@ -19,11 +19,19 @@ The gradings already existed and were already rendered, so this is a shape chang
 exist was a way to read them without naming a run or a task first, which is exactly what a caller
 asking "what has the platform learned about my agents" cannot supply, and a way to record that one
 had been dealt with, without which every poll re-reports the same backlog. The list is
-keyset-paginated and workspace-wide, filters (`acknowledged`, `status`, `agentKind`, `since`)
-compose in SQL, and an entry carries the run, step, agent kind, resolved model, prompt version,
-combo streak, grade, recommendations and board task, so acting on one needs no second lookup.
+keyset-paginated and workspace-wide, filters (`acknowledged`, `settled`, `status`, `agentKind`,
+`since`) compose in SQL, and an entry carries the run, step, agent kind, resolved model, prompt
+version, combo streak, grade, recommendations and board task, so acting on one needs no second
+lookup. `?acknowledged=false&settled=true` is the drainable backlog: `settled` reads the same
+definition the acknowledge write is gated on, so every entry it returns is one that write accepts.
 
 `KaizenGrading` gains `acknowledgedAt` / `acknowledgedBy` / `acknowledgementNote` on both runtimes
 (D1 migration 0095 ⇄ a Drizzle migration). They are written ONLY by the new acknowledge route: the
 grading sweep's upsert leaves them alone, so a re-graded row keeps its triage. Existing rows read as
-unacknowledged, which is what they are.
+unacknowledged, which is what they are. An acknowledgement moves the row's `updatedAt` with it, so
+that field stays usable as a change watermark; a repeat acknowledgement, and a clear where nothing
+was acknowledged, write nothing at all.
+
+`KaizenVerifiedComboRepository` gains a batched `listByKeys` (both facades, `remote` for mothership
+mode) so the entry join names the combo keys a page holds rather than reading the workspace's whole
+combo library on every call, including single-entry point reads.

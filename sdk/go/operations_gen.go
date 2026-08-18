@@ -386,6 +386,8 @@ type KaizenListEntriesQuery struct {
 	Cursor *string
 	// Acknowledged zero value means "not sent".
 	Acknowledged *ListPublicKaizenEntriesAcknowledged
+	// Settled zero value means "not sent".
+	Settled *ListPublicKaizenEntriesAcknowledged
 	// Status zero value means "not sent".
 	Status *PublicKaizenEntryStatus
 	// AgentKind zero value means "not sent".
@@ -407,6 +409,9 @@ func (q *KaizenListEntriesQuery) values() map[string]string {
 	}
 	if q.Acknowledged != nil {
 		out["acknowledged"] = fmt.Sprintf("%v", *q.Acknowledged)
+	}
+	if q.Settled != nil {
+		out["settled"] = fmt.Sprintf("%v", *q.Settled)
 	}
 	if q.Status != nil {
 		out["status"] = fmt.Sprintf("%v", *q.Status)
@@ -3170,10 +3175,13 @@ func (s *KaizenService) GetEntry(ctx context.Context, entryID string) (*PublicKa
 // ran. Each entry carries the context a follow-up needs (the run and step it came from, the agent
 // kind, the resolved model, the prompt version, the board task and its service, and where the
 // combo stands in its verification streak), so acting on one does not mean opening the app first.
-// Filter with `acknowledged=false` for the untriaged backlog, `status` for what has settled (a
-// `failed` grading names a deployment problem, such as prompt recording being off), `agentKind`
-// for one role, and `since` for an incremental sweep. A task deleted since the run reports `task:
-// null` rather than a blank title.
+// Filter with `acknowledged=false&settled=true` for the drainable backlog (every entry in it is
+// one the acknowledge route accepts; `acknowledged=false` alone also returns gradings still in
+// flight, which that route refuses with `409`), `settled=true` for everything the grader has
+// finished with whatever it concluded (a `failed` grading names a deployment problem, such as
+// prompt recording being off, and is worth acting on), `status` for one exact grading state,
+// `agentKind` for one role, and `since` for an incremental sweep. A task deleted since the run
+// reports `task: null` rather than a blank title.
 // GET /api/v1/kaizen/entries (operation listPublicKaizenEntries).
 func (s *KaizenService) ListEntries(ctx context.Context, query *KaizenListEntriesQuery) (*PublicKaizenEntryList, error) {
 	req := requestSpec{

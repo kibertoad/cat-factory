@@ -233,6 +233,7 @@ const QUERY_KAIZEN_LIST_ENTRIES: readonly GatekeeperQueryParam[] = [
   { name: 'limit', required: false },
   { name: 'cursor', required: false },
   { name: 'acknowledged', required: false },
+  { name: 'settled', required: false },
   { name: 'status', required: false },
   { name: 'agentKind', required: false },
   { name: 'since', required: false },

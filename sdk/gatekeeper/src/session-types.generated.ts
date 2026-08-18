@@ -612,7 +612,7 @@ export const SESSION_METHOD_SIGNATURES: readonly SessionMethodSignature[] = [
   {
     name: 'kaizen_list_entries',
     doc: '  /**\n   * List the workspace\'s Kaizen entries\n   *\n   * `GET /api/v1/kaizen/entries`, scope floor `read`.\n   */\n',
-    signature: '  kaizen_list_entries(args?: { limit?: string | number | boolean; cursor?: string | number | boolean; acknowledged?: string | number | boolean; status?: string | number | boolean; agentKind?: string | number | boolean; since?: string | number | boolean }): Promise<unknown>\n',
+    signature: '  kaizen_list_entries(args?: { limit?: string | number | boolean; cursor?: string | number | boolean; acknowledged?: string | number | boolean; settled?: string | number | boolean; status?: string | number | boolean; agentKind?: string | number | boolean; since?: string | number | boolean }): Promise<unknown>\n',
   },
   {
     name: 'keys_create',
