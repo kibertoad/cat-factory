@@ -15,7 +15,9 @@ import { createWorkersAI } from 'workers-ai-provider'
 
 const DEFAULT_BASE_URLS: Record<string, string> = {
   qwen: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
-  deepseek: 'https://api.deepseek.com/v1',
+  // The bare host, matching `DEEPSEEK_BASE_URL` in `@cat-factory/agents`: it is what DeepSeek
+  // documents, and the `/v1` this carried appears on no current DeepSeek page.
+  deepseek: 'https://api.deepseek.com',
   moonshot: 'https://api.moonshot.ai/v1',
   openai: 'https://api.openai.com/v1',
 }

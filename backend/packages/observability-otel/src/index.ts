@@ -51,6 +51,14 @@ const STATUS_ERROR = 2
 export interface OtelSinkConfig {
   /** OTLP/HTTP base URL, e.g. `http://collector:4318` (the `/v1/*` paths are appended). */
   endpoint: string
+  /**
+   * Whether the destination takes `/v1/metrics` as well as `/v1/traces`. Default true.
+   *
+   * Not every OTLP endpoint is a general collector: a trace BACKEND may implement the traces
+   * signal alone (Langfuse does), and posting metrics there earns a 404 per generation. Off means
+   * the metrics payload is never built, rather than built and dropped.
+   */
+  exportMetrics?: boolean
   /** Extra headers merged onto every request (auth tokens, tenant ids, …). */
   headers?: Record<string, string>
   /** OTLP resource `service.name`; defaults to `cat-factory`. */
@@ -86,7 +94,7 @@ function encodeSpan(span: MappedSpan): Record<string, unknown> {
 
 export class OtelTraceSink implements LlmTraceSink {
   private readonly tracesEndpoint: string
-  private readonly metricsEndpoint: string
+  private readonly metricsEndpoint: string | null
   private readonly headers: Record<string, string>
   private readonly serviceName: string
   private readonly logger?: Logger
@@ -95,7 +103,7 @@ export class OtelTraceSink implements LlmTraceSink {
   constructor(config: OtelSinkConfig) {
     const base = config.endpoint.replace(/\/+$/, '')
     this.tracesEndpoint = `${base}/v1/traces`
-    this.metricsEndpoint = `${base}/v1/metrics`
+    this.metricsEndpoint = config.exportMetrics === false ? null : `${base}/v1/metrics`
     this.headers = { 'content-type': 'application/json', ...config.headers }
     this.serviceName = config.serviceName || DEFAULT_SERVICE_NAME
     this.logger = config.logger
@@ -108,9 +116,11 @@ export class OtelTraceSink implements LlmTraceSink {
 
   async recordGeneration(event: LlmGenerationEvent): Promise<void> {
     const span = mapGeneration(event)
-    const metrics = mapGenerationMetrics(event)
     // Traces and metrics go to distinct OTLP endpoints (two POSTs), each best-effort.
-    await Promise.all([this.sendSpans([span]), this.sendMetrics(metrics)])
+    await Promise.all([
+      this.sendSpans([span]),
+      this.metricsEndpoint ? this.sendMetrics(mapGenerationMetrics(event)) : Promise.resolve(),
+    ])
   }
 
   async recordToolSpans(context: LlmToolSpanContext, spans: LlmToolSpan[]): Promise<void> {
@@ -146,6 +156,7 @@ export class OtelTraceSink implements LlmTraceSink {
   }
 
   private async sendMetrics(metrics: ReturnType<typeof mapGenerationMetrics>): Promise<void> {
+    if (!this.metricsEndpoint) return
     const startNano = toUnixNano(metrics.startTimeMs)
     const timeNano = toUnixNano(metrics.endTimeMs)
     const payload = {

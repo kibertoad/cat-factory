@@ -344,8 +344,13 @@ export function mergeabilityFromStatus(
       case 'unchecked':
         return { mergeable: null, mergeableState: detailedStatus }
       default:
-        // not_open | draft_status | discussions_not_resolved | ci_must_pass |
-        // ci_still_running | need_rebase | broken_status | commits_status | …
+        // An OPEN vocabulary, deliberately caught rather than enumerated: GitLab keeps adding
+        // members (`security_policy_pipeline_check`, `security_policy_violations`,
+        // `approvals_syncing`, `merge_time`, `jira_association_missing`, `not_open`,
+        // `commits_status`, `merge_request_blocked` all postdate the original set), and every one
+        // of them means the same thing to this caller. The three cases above are the ones the gate
+        // ACTS on; a value it has never heard of is not-mergeable-and-not-a-conflict, which is the
+        // disposition that neither escalates a conflict-resolver nor claims the merge is clean.
         return { mergeable: false, mergeableState: 'blocked' }
     }
   }

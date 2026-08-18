@@ -94,7 +94,7 @@ export interface GoogleOAuthConfig {
   redirectUrl: string
   /** OAuth host (authorize/token); defaults to Google's. */
   oauthBase?: string
-  /** Userinfo API base; defaults to Google's. */
+  /** Userinfo API base; defaults to Google's published `userinfo_endpoint` host. */
   apiBase?: string
 }
 

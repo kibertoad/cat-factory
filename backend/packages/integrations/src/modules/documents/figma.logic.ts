@@ -58,11 +58,17 @@ const FIGMA_OAUTH_SCOPES = ['file_content:read', 'file_variables:read'] as const
  * The authorize host is `www.figma.com` (the consent screen a person sees) while both token
  * endpoints are on the API host this provider is already pinned to, so a refresh crosses no host
  * the credential does not already reach.
+ *
+ * A refresh goes to `/v1/oauth/token`, the SAME endpoint as the code exchange: "Previously, you
+ * used the `https://api.figma.com/v1/oauth/refresh` endpoint... Now, when you refresh your OAuth
+ * tokens, you should use the `https://api.figma.com/v1/oauth/token` endpoint" (changelog
+ * 2025-05-16, read 2026-08-18). The legacy path is "supported for now" with no retirement date,
+ * which is exactly the kind of pin that breaks on a vendor's clock rather than on a deploy.
  */
 export const FIGMA_OAUTH: DocumentSourceOAuthSpec = {
   authorizeUrl: 'https://www.figma.com/oauth',
   tokenUrl: `https://${FIGMA_API_HOST}/v1/oauth/token`,
-  refreshUrl: `https://${FIGMA_API_HOST}/v1/oauth/refresh`,
+  refreshUrl: `https://${FIGMA_API_HOST}/v1/oauth/token`,
   scopes: FIGMA_OAUTH_SCOPES,
   // Figma joins scopes with commas, not the RFC's space.
   scopeSeparator: ',',
@@ -79,7 +85,7 @@ export const FIGMA_DESCRIPTOR: DocumentSourceDescriptor = {
       label: 'Personal access token',
       secret: true,
       placeholder: 'figd_…',
-      help: 'Create a personal access token at figma.com → Settings → Security → Personal access tokens (file_content + file_variables read scopes). Design tokens require an Enterprise plan; without it the tokens section is simply omitted.',
+      help: 'Create a personal access token at figma.com → Settings → Security → Personal access tokens (file_content + file_variables read scopes). Figma caps a new token at 90 days, so this credential expires on a clock and design imports stop until it is replaced; connecting through OAuth instead renews itself, and an organisation can use a plan access token that outlives any one person. Design tokens require an Enterprise plan; without it the tokens section is simply omitted.',
     },
   ],
   refLabel: 'Figma file or frame URL',

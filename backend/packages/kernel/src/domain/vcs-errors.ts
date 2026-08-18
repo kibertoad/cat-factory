@@ -205,6 +205,13 @@ function gitlabRemedy(ctx: VcsHttpErrorContext): string | undefined {
   if (status === 429) {
     return `Cause: the GitLab API rate limit was exceeded. Fix: wait before retrying. See ${docs.vcsProviders}.`
   }
+  if (status === 413) {
+    // GitLab 18.4+ added size limits to the repository commits and files endpoints, enforced per
+    // instance. Without its own branch this reads as the generic failure, which sends an operator
+    // to look at the token: nothing about the credential changes the answer, and the response is
+    // the same for every retry.
+    return `Cause: GitLab refused this read as too large — recent releases cap the size of a repository files or commits response, and the cap is set per instance. Fix: read a smaller file or a narrower commit range; a self-managed instance can raise the limit in its application settings. See ${docs.vcsProviders}.`
+  }
   if (status === 403) {
     return `Cause: the GitLab token lacks the required scope or role for this call. Fix: it needs the \`api\` scope and at least the Developer or Maintainer role on the project. See ${docs.vcsProviders}.`
   }

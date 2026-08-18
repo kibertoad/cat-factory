@@ -220,9 +220,15 @@ async function fetchProtectedResourceMetadata(
 }
 
 /**
- * The authorization server's own metadata, over the three well-known locations in the order the
- * specs put them: RFC 8414's path-INSERTING form, its path-appending sibling, then OpenID Connect
- * discovery, which many vendors publish and no OAuth-only client would otherwise find.
+ * The authorization server's own metadata, over the three well-known locations the MCP
+ * authorization spec names, in its order: RFC 8414's path-INSERTING form, then OpenID Connect
+ * discovery in its path-inserting form, then OIDC's path-APPENDING form.
+ *
+ * Two of those used to be wrong. The OIDC path-insert location was missing entirely, which is the
+ * one an issuer with a path is most likely to publish, and the walk instead tried
+ * `{origin}{path}/.well-known/oauth-authorization-server`, a location neither RFC 8414 nor the MCP
+ * spec documents: an undocumented probe costs a round trip on every discovery and can only ever be
+ * answered by a server that is guessing back.
  */
 async function fetchAuthorizationServerMetadata(
   issuer: string,
@@ -239,13 +245,31 @@ async function fetchAuthorizationServerMetadata(
   const path = url.pathname.replace(/\/+$/, '')
   for (const candidate of [
     `${url.origin}/.well-known/oauth-authorization-server${path}`,
-    `${url.origin}${path}/.well-known/oauth-authorization-server`,
+    `${url.origin}/.well-known/openid-configuration${path}`,
     `${url.origin}${path}/.well-known/openid-configuration`,
   ]) {
     const body = await getJson(candidate)
-    if (body) return body
+    if (body && issuerMatches(body, issuer)) return body
   }
   return undefined
+}
+
+/**
+ * RFC 8414 §3.3: the `issuer` in a fetched metadata document MUST be identical to the issuer the
+ * document was fetched for. Skipping the check is what lets a host that serves someone else's
+ * metadata at a well-known path redirect this client's authorization and token requests: the
+ * document names the endpoints, so whoever writes it chooses where the user is sent.
+ *
+ * Compared with one trailing slash tolerated on either side, which is the only divergence a
+ * correct server realistically has (an issuer written as an origin, published without the slash).
+ * A document that omits `issuer` entirely fails: an absent claim cannot be checked, and the
+ * MISSING half is what the spec added the requirement for.
+ */
+function issuerMatches(metadata: Record<string, unknown>, issuer: string): boolean {
+  const declared = metadata.issuer
+  if (typeof declared !== 'string') return false
+  const trim = (value: string): string => value.replace(/\/+$/, '')
+  return trim(declared) === trim(issuer)
 }
 
 /** The `authorization_servers` list of a protected-resource document, as strings. */

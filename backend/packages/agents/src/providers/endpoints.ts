@@ -6,8 +6,24 @@ import { isLocalRunner } from '@cat-factory/contracts'
 // LLM proxy resolve them from the same base URLs and keys: one source of truth for
 // "where does provider X live". Each is overridable per deployment (a self-hosted
 // gateway, a regional endpoint, or a local stub in tests).
+/**
+ * Alibaba's LEGACY SHARED domain, labelled as such by Alibaba: "Legacy shared domain. Still
+ * available; migration to a workspace-dedicated domain is recommended." No deprecation date.
+ *
+ * It stays the default because the replacement,
+ * `https://{WorkspaceId}.{region}.maas.aliyuncs.com/compatible-mode/v1`, is a fact about the
+ * DEPLOYMENT's workspace and region that no default can know. A deployment that has one sets
+ * `QWEN_BASE_URL`, which is the same override every entry in the table below takes.
+ */
 export const QWEN_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1'
-export const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1'
+/**
+ * The bare host, which is what DeepSeek documents: its quick-start gives
+ * `base_url = https://api.deepseek.com` and its curl example posts to
+ * `https://api.deepseek.com/chat/completions`. The `/v1` this used to carry appears on no current
+ * DeepSeek page: it was tolerated rather than published, and the newer Anthropic-compatible path
+ * hangs off the bare host too.
+ */
+export const DEEPSEEK_BASE_URL = 'https://api.deepseek.com'
 export const MOONSHOT_BASE_URL = 'https://api.moonshot.ai/v1'
 export const OPENAI_BASE_URL = 'https://api.openai.com/v1'
 export const XAI_BASE_URL = 'https://api.x.ai/v1'
@@ -168,6 +184,16 @@ export function cloudflareRestBaseUrl(opts: { accountId: string; gateway?: strin
     ? `https://gateway.ai.cloudflare.com/v1/${opts.accountId}/${opts.gateway}/workers-ai/v1`
     : `https://api.cloudflare.com/client/v4/accounts/${opts.accountId}/ai/v1`
 }
+// The GATEWAY branch above is on borrowed time, and what replaces it is not a URL swap. Nothing
+// Cloudflare currently publishes shows a `workers-ai/v1` segment: the Workers AI provider page
+// documents only the direct `api.cloudflare.com/client/v4/...` form (the branch below it, which is
+// verified), and the gateway's OpenAI-compatible route is now documented as
+// `gateway.ai.cloudflare.com/v1/{account}/{gateway}/compat` with `workers-ai/<model>` in the MODEL
+// FIELD rather than as a path segment. So migrating means rewriting the model string as well as
+// the base URL, in the inline resolver AND on the proxy's forward path (which passes the
+// container's body through untouched), and neither can be verified from here without a live
+// gateway. Left as-is deliberately, with the evidence recorded, rather than swapped half-way.
+// Read 2026-08-18: https://developers.cloudflare.com/ai-gateway/usage/chat-completion/
 
 /**
  * Providers the container LLM proxy can serve, so a container agent's locked model

@@ -77,7 +77,8 @@ export const nanoBananaGenerator = defineBinaryGenerator({
   // APIs split the same work across two calls or lack a piece of it.
   //
   //  - `reference-image` / `multi-reference`: `image` blocks in `input`, up to fourteen on one
-  //    request.
+  //    request on the lite model and fewer on the others, which also differ in whether a
+  //    CHARACTER or a STYLE reference counts at all. The contract states the per-model split.
   //  - `instruction-edit`: the same operation, an `image` block plus a `text` block saying what to
   //    change. Editing is not a separate endpoint here, which is what makes "the same character,
   //    now facing left" a request rather than a re-roll.
@@ -125,13 +126,13 @@ export const nanoBananaGenerator = defineBinaryGenerator({
       document: NANO_BANANA_OPENAPI,
     }),
   ],
-  description: `Generates and EDITS images from a written brief and up to fourteen reference images, and hands the bytes back on the same call. Two things make it worth reaching for: it renders long, legible text inside a picture better than most image APIs (signage, UI mockups, labelled diagrams, a title card that has to say the actual title), and it edits conversationally, so "the same character, now facing left, keep the armour" is a request rather than a re-roll.
+  description: `Generates and EDITS images from a written brief and up to fourteen reference images (the cap and the kinds allowed differ per model), and hands the bytes back on the same call. Two things make it worth reaching for: it renders long, legible text inside a picture better than most image APIs (signage, UI mockups, labelled diagrams, a title card that has to say the actual title), and it edits conversationally, so "the same character, now facing left, keep the armour" is a request rather than a re-roll.
 
 ## Which model
 
 | Model | Resolutions | ~Cost / image | Use it for |
 | --- | --- | --- | --- |
-| **\`gemini-3.1-flash-lite-image\`** | 1K only | $0.034 | Drafting and thumbnails, where several cheap tries beat one considered one. |
+| **\`gemini-3.1-flash-lite-image\`** | 1K only | $0.0336 | Drafting and thumbnails, where several cheap tries beat one considered one. |
 | **\`gemini-3.1-flash-image\`** | 512px, 1K, 2K, 4K | $0.045-0.151 | The default. Everything that is not specifically a typography or identity problem. |
 | **\`gemini-3-pro-image\`** | 1K, 2K, 4K | $0.134-0.24 | The image you keep when it has words in it, or when a character has to survive into a set. |
 
@@ -139,7 +140,7 @@ Cost is per IMAGE and rises with resolution, so the size is the budget. \`image_
 
 ## Getting the same thing twice
 
-Reference images, and a conversation. Up to fourteen ride a single request (the pro model reads them as roughly six objects, five characters and three style references), which is how a character, a prop or a palette survives into a second generation. Reusing a \`seed\` holds a composition while the prompt changes; it does not hold a subject.
+Reference images, and a conversation. How many ride one request, and what they may BE, is per model rather than one universal cap: the lite model takes up to 14 object references and no characters or style; flash takes up to 10 objects, 4 characters and 3 style references; pro takes up to 6 objects and 5 characters, and no style references at all. That is how a character, a prop or a palette survives into a second generation, and it is also why a set built on style references cannot be finished on the pro model. Reusing a \`seed\` holds a composition while the prompt changes; it does not hold a subject.
 
 ## What it is not for
 
@@ -162,11 +163,11 @@ Reference images, and a conversation. Up to fourteen ride a single request (the 
 2. Size the request from the TARGET. \`image_size\` takes \`512px\`, \`1K\`, \`2K\` or \`4K\` and \`aspect_ratio\` takes one of ten fixed ratios, so pick the smallest bucket that covers what the step asked for and resize the bytes afterwards rather than expecting an exact pixel count.
 3. Send the brief as one \`text\` block describing the PICTURE: subject, framing, materials, lighting, and the words to render if any. A paragraph beats a keyword list here, and text in the brief is rendered literally.
 4. Set \`response_format\` deliberately: \`"type": "image"\` so the model does not answer in prose, and \`mime_type\` \`image/png\` for flat colour, transparency or anything a later step cuts up. \`image/jpeg\` only for a finished photographic image.
-5. Leave \`thinking_level\` at \`minimal\` for a brief that already says what the picture is; raise it to \`high\` for dense composition or a lot of in-image text. The interim images it draws are not charged, but the thinking tokens are.
+5. Leave \`thinking_level\` at \`minimal\` for a brief that already says what the picture is; raise it to \`high\` for dense composition or a lot of in-image text. Those two are the only levels, and the field is documented for \`gemini-3.1-flash-image\`. The interim images it draws are not charged, but the thinking tokens are.
 6. **Check that you got an image.** A declined request is not an error status: it answers 200 with \`output_text\` explaining and NO \`output_image\`. Treat that as terminal and REWRITE the brief, since resubmitting the same words buys the same refusal at the same price.
 7. Decode \`output_image.data\` from raw base64 (there is no \`data:\` prefix) and store the bytes, using \`output_image.mime_type\` as the content type rather than the one you asked for. Read \`usage.total_output_tokens\` for what it cost; it is the only accounting this API gives.
 
-**Where this step's generation options land on this API.** The brief lists them once, in the platform's words; these are the fields that carry them here, and all of them ride the ONE request. Reference images are \`image\` blocks in \`input\`, up to fourteen, as raw base64 \`data\` rather than a \`uri\`. An instruction edit is an \`image\` block plus the \`text\` block saying what to change; there is no separate edit operation to switch to. A fixed seed is \`generation_config.seed\`. An aspect ratio is \`response_format.aspect_ratio\`, whose ten values are the whole of the list. A negative prompt, a masked edit, a transparent background and a tiling texture have no parameter here at all: report any of them as unmet rather than writing them into the brief and hoping.
+**Where this step's generation options land on this API.** The brief lists them once, in the platform's words; these are the fields that carry them here, and all of them ride the ONE request. Reference images are \`image\` blocks in \`input\`, as raw base64 \`data\` rather than a \`uri\`, up to the chosen model's cap (14 objects on lite; 10 objects + 4 characters + 3 style on flash; 6 objects + 5 characters on pro). An instruction edit is an \`image\` block plus the \`text\` block saying what to change; there is no separate edit operation to switch to. A fixed seed is \`generation_config.seed\`. An aspect ratio is \`response_format.aspect_ratio\`, whose ten values are the whole of the list. A negative prompt, a masked edit, a transparent background and a tiling texture have no parameter here at all: report any of them as unmet rather than writing them into the brief and hoping.
 
 **Holding a set together.** Send the first image back as an \`image\` block in the next request's \`input\`, alongside the text that says what to change: that is the edit path, and it is how a turnaround or a variant stays the same character. Send bytes as base64 \`data\` rather than \`uri\`, because Google fetches a \`uri\` from its own network and cannot read a link that needs the platform's credentials.
 

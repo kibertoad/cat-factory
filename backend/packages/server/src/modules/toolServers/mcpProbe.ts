@@ -253,7 +253,10 @@ async function discover(ctx: Exchange): Promise<DiscoverAttempt> {
     const verdict = readEraVerdict(answer.frame)
     if (verdict.verdict === 'retry') return { kind: 'retry', version: verdict.version }
     if (verdict.verdict === 'report') {
-      return { kind: 'failure', failure: { status: 'protocol_error', error: redact(verdict.error) } }
+      return {
+        kind: 'failure',
+        failure: { status: 'protocol_error', error: redact(verdict.error) },
+      }
     }
     return { kind: 'legacy' }
   }

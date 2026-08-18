@@ -146,7 +146,11 @@ describe('probeMcpHttpServer', () => {
   it('speaks the MODERN dialect to a server that answers server/discover', async () => {
     const { doFetch, sent } = stubFetch([
       json(DISCOVER),
-      json({ jsonrpc: '2.0', id: 2, result: { resultType: 'complete', tools: [{ name: 'search' }] } }),
+      json({
+        jsonrpc: '2.0',
+        id: 2,
+        result: { resultType: 'complete', tools: [{ name: 'search' }] },
+      }),
     ])
 
     const outcome = await probeMcpHttpServer(target, { fetch: doFetch })
@@ -229,7 +233,11 @@ describe('probeMcpHttpServer', () => {
 
   it('takes the server identity off a modern result when discovery named none', async () => {
     const { doFetch } = stubFetch([
-      json({ jsonrpc: '2.0', id: 1, result: { resultType: 'complete', supportedVersions: ['2026-07-28'] } }),
+      json({
+        jsonrpc: '2.0',
+        id: 1,
+        result: { resultType: 'complete', supportedVersions: ['2026-07-28'] },
+      }),
       json({
         jsonrpc: '2.0',
         id: 2,
@@ -375,7 +383,12 @@ describe('probeMcpHttpServer', () => {
     expect(outcome).toMatchObject({ status: 'ok', tools: ['a', 'b', 'c'], toolsComplete: false })
     expect((sent[4]!.body as { params: { cursor: string } }).params.cursor).toBe('c1')
   })
+})
 
+// The other half of the probe's product: every reason it can fail, told apart. An operator gets a
+// CAUSE rather than a boolean, so each of `unreachable` / `http_error` / `protocol_error` has to be
+// reachable from the shape that really produces it, and a refusal must not be mistaken for an era.
+describe('probeMcpHttpServer failures', () => {
   it('reports a transport failure as unreachable, distinct from a status', async () => {
     const { doFetch } = stubFetch([
       () => {

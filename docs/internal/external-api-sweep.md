@@ -4,6 +4,10 @@
 - **Commit**: `97da5e99d`
 - **Previous sweep**: none (first sweep)
 - **Run by**: the `external-api-sweep` skill
+- **Follow-ups**: all fourteen are addressed. What each turned into, including the three that
+  resolved to a deliberate decision NOT to change anything, is in [Follow-ups](#follow-ups). The
+  findings below are left as the sweep recorded them on the date above: a record edited to match
+  what was later done stops being evidence of what was found.
 
 Every hand-written call this repo makes against a service we do not run, checked against the
 vendor's live documentation. Nothing in CI can see a vendor move a path, retire a version or
@@ -1202,28 +1206,55 @@ settle.
 
 ## Follow-ups
 
-The sweep records; it does not refactor. Each of these lands as its own PR.
+The sweep records; it does not refactor. **Every follow-up below is now addressed**, in one PR
+rather than fourteen, with the `Status` column saying what each one turned into. Three of them
+resolved to a decision NOT to make the change, each for a reason the sweep itself could not have
+had, and those are the rows worth reading: a sweep that only records what it changed leaves the
+next one free to re-propose what was already weighed and refused.
 
-| #   | Fix                                                                                                                                                                                                           | Verdict driving it                |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| 1   | Move Confluence page reads to `GET /wiki/api/v2/pages/{id}` (body and version), keep CQL search on v1                                                                                                         | Broken, High                      |
-| 2   | Design and land incident.io enrichment against an endpoint that exists, and replace the bare `catch {}` at `gates.ts:347` with `runBestEffort` so the next such break is visible                              | Broken, Medium                    |
-| 3   | Bring the MCP probe to revision `2026-07-28` (per-request `_meta`, `Mcp-Method`/`Mcp-Name`, `server/discover`), with a dual-era fallback                                                                      | Broken, High                      |
-| 4   | Retarget Langfuse at its OTLP endpoint using the existing exporter, before 2026-11-16                                                                                                                         | Deprecated with a date            |
-| 5   | Repoint Google userinfo at `openidconnect.googleapis.com/v1/userinfo`, ideally reading all three URLs from the cached discovery document                                                                      | Drifting, High                    |
-| 6   | Correct the Gemini contract: narrow `thinking_level` to `minimal`/`high`, fix the reference-image split per model, add the 401 `UNAUTHENTICATED` response, publish lite's `$30`/1M rate, and move to GA `/v1` | Drifting, Medium                  |
-| 7   | Fix the Datadog monitor state-change read (`group_states=all` plus `state.groups[*].last_triggered_ts`), or stop reporting a time we cannot get                                                               | Drifting, Medium                  |
-| 8   | Move Figma refresh to `/v1/oauth/token`; plan for the 90-day PAT ceiling                                                                                                                                      | Drifting, Medium                  |
-| 9   | Fix the MCP authorization-server probe list (add the OIDC path-insert location, drop the undocumented one, add the `issuer`-equality check)                                                                   | Drifting, Medium                  |
-| 10  | Treat Linear rate limiting as 400 `RATELIMITED`, and hedge `sort` with documented `orderBy`                                                                                                                   | Drifting, Medium                  |
-| 11  | Read OTLP `partialSuccess` instead of treating 200 as full acceptance                                                                                                                                         | Current, but a degrade-loudly gap |
-| 12  | Classify GitLab 413/429 on commits and files reads; fix the `/auth/pat` doc hint; treat `detailed_merge_status` as an open vocabulary                                                                         | Current, with drift               |
-| 13  | Settle the Cloudflare AI Gateway Workers AI path, moving to the documented `/compat/chat/completions` plus a model-prefixed id if the `workers-ai/v1` segment is gone                                         | Drifting, Medium                  |
-| 14  | Drop the undocumented `/v1` from the DeepSeek base; expose DashScope's workspace-dedicated domain as config rather than pinning the legacy shared host                                                        | Drifting, Low                     |
+| #   | Fix                                                                                                                                                                                                           | Verdict driving it                | Status                                         |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ---------------------------------------------- |
+| 1   | Move Confluence page reads to `GET /wiki/api/v2/pages/{id}` (body and version), keep CQL search on v1                                                                                                         | Broken, High                      | Landed                                         |
+| 2   | Design and land incident.io enrichment against an endpoint that exists, and replace the bare `catch {}` at `gates.ts:347` with `runBestEffort` so the next such break is visible                              | Broken, Medium                    | Landed, as `POST /v2/actions`                  |
+| 3   | Bring the MCP probe to revision `2026-07-28` (per-request `_meta`, `Mcp-Method`/`Mcp-Name`, `server/discover`), with a dual-era fallback                                                                      | Broken, High                      | Landed, dual-era                               |
+| 4   | Retarget Langfuse at its OTLP endpoint using the existing exporter, before 2026-11-16                                                                                                                         | Deprecated with a date            | Landed                                         |
+| 5   | Repoint Google userinfo at `openidconnect.googleapis.com/v1/userinfo`, ideally reading all three URLs from the cached discovery document                                                                      | Drifting, High                    | Landed (path only, not via discovery)          |
+| 6   | Correct the Gemini contract: narrow `thinking_level` to `minimal`/`high`, fix the reference-image split per model, add the 401 `UNAUTHENTICATED` response, publish lite's `$30`/1M rate, and move to GA `/v1` | Drifting, Medium                  | Landed, except the GA path move                |
+| 7   | Fix the Datadog monitor state-change read (`group_states=all` plus `state.groups[*].last_triggered_ts`), or stop reporting a time we cannot get                                                               | Drifting, Medium                  | Landed                                         |
+| 8   | Move Figma refresh to `/v1/oauth/token`; plan for the 90-day PAT ceiling                                                                                                                                      | Drifting, Medium                  | Landed, plus a website warning                 |
+| 9   | Fix the MCP authorization-server probe list (add the OIDC path-insert location, drop the undocumented one, add the `issuer`-equality check)                                                                   | Drifting, Medium                  | Landed                                         |
+| 10  | Treat Linear rate limiting as 400 `RATELIMITED`, and hedge `sort` with documented `orderBy`                                                                                                                   | Drifting, Medium                  | Half landed: no `orderBy` hedge                |
+| 11  | Read OTLP `partialSuccess` instead of treating 200 as full acceptance                                                                                                                                         | Current, but a degrade-loudly gap | Landed                                         |
+| 12  | Classify GitLab 413/429 on commits and files reads; fix the `/auth/pat` doc hint; treat `detailed_merge_status` as an open vocabulary                                                                         | Current, with drift               | Landed                                         |
+| 13  | Settle the Cloudflare AI Gateway Workers AI path, moving to the documented `/compat/chat/completions` plus a model-prefixed id if the `workers-ai/v1` segment is gone                                         | Drifting, Medium                  | Refused: evidence recorded instead             |
+| 14  | Drop the undocumented `/v1` from the DeepSeek base; expose DashScope's workspace-dedicated domain as config rather than pinning the legacy shared host                                                        | Drifting, Low                     | Landed (DashScope: the override IS the config) |
 
-Two notes on how these land. Follow-up 3 touches no harness file, but any fix under
-`backend/internal/executor-harness/src/` (the GitHub pin lives there at `vcs-api.ts:266,460,495`)
-bumps the runner image and the pinned tag everywhere it appears, which makes it a separate and
-heavier PR by construction. And follow-up 1 changes a failure mode an operator can act on, so it
-carries a website PR first under ADR 0051 if any catfactory.ai page describes Confluence document
-sources.
+**The three that were refused, and why.** Each was re-checked against the vendor's live docs while
+being implemented, and each turned out to be a change the sweep would not have proposed had it read
+the page the implementation had to read.
+
+- **6, the `/v1beta` to `/v1` move.** Google's version page does say the Interactions API is
+  generally available in `v1`, but its image-generation page's own curl example still posts to
+  `/v1beta/interactions`, and no page shows an image request against `/v1`. An agent composes its
+  request from our hand-written contract alone, so transcribing a path the vendor's own worked
+  example contradicts would trade a working call for a tidier one.
+- **10, hedging `sort` with `orderBy`.** `sort` is annotated `[INTERNAL]` and that is a real
+  dependency, but it carries no deprecation and it is the only argument that states a DIRECTION:
+  Linear documents no direction for `orderBy` at all. Swapping would trade a stated ascending order
+  for an unstated one on the query whose whole correctness is the order.
+- **13, the Cloudflare AI Gateway path.** Settled as far as evidence goes: nothing Cloudflare
+  currently publishes shows a `workers-ai/v1` segment, and the gateway's OpenAI-compatible route is
+  documented as `/compat/chat/completions` with `workers-ai/<model>` in the MODEL field. That makes
+  the migration a two-part change (base URL AND model string) touching the inline resolver and the
+  proxy's forward path, which passes the container's body through untouched, and neither half can be
+  verified from here without a live gateway. The evidence is recorded at the call site instead of
+  the change being made half-way.
+
+One note on what did NOT come here. Any fix under `backend/internal/executor-harness/src/` (the
+GitHub pin lives there at `vcs-api.ts:266,460,495`) bumps the runner image and the pinned tag
+everywhere it appears, which makes it a separate and heavier PR by construction. Nothing in this
+round touched it.
+
+Two website PRs went first under ADR 0051, for the two facts an operator can act on and nothing in
+the deployment would tell them: Figma's 90-day personal-access-token ceiling, and the self-hosted
+Langfuse version (v3.22.0) that serves the OpenTelemetry endpoint traces now go to.

@@ -32,7 +32,9 @@ const ACTIVE_STATUS_CATEGORIES = ['triage', 'live', 'paused'] as const
 
 /** Whether a listed incident is in one of {@link ACTIVE_STATUS_CATEGORIES}. */
 function isActiveCategory(category: string | undefined): boolean {
-  return category === undefined || (ACTIVE_STATUS_CATEGORIES as readonly string[]).includes(category)
+  return (
+    category === undefined || (ACTIVE_STATUS_CATEGORIES as readonly string[]).includes(category)
+  )
 }
 
 export interface IncidentIoEnrichmentProviderOptions {
@@ -99,7 +101,8 @@ export class IncidentIoEnrichmentProvider implements IncidentEnrichmentProvider 
     let after: string | undefined
     for (let page = 0; page < 4; page++) {
       const params = new URLSearchParams({ page_size: '50' })
-      for (const category of ACTIVE_STATUS_CATEGORIES) params.append('status_category[one_of]', category)
+      for (const category of ACTIVE_STATUS_CATEGORIES)
+        params.append('status_category[one_of]', category)
       if (after) params.set('after', after)
       const res = await this.fetchImpl(`${this.apiBase}/v2/incidents?${params.toString()}`, {
         method: 'GET',

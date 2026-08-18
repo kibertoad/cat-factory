@@ -347,7 +347,10 @@ async function enrichIncident(
     ctx.logger,
     'gate.postReleaseHealth.enrichIncident',
     () =>
-      incidentEnrichment.enrich({ workspaceId, signalIds: signals.map((s) => s.id), since }, update),
+      incidentEnrichment.enrich(
+        { workspaceId, signalIds: signals.map((s) => s.id), since },
+        update,
+      ),
     { workspaceId, blockId: block.id },
   )
 }

@@ -19,7 +19,7 @@ export interface DatadogMonitorState {
   id: string
   name: string
   overallState: string | undefined
-  /** When `overall_state` last changed (epoch ms), if Datadog reported it. */
+  /** When the monitor last triggered (epoch ms), if any group reported it. */
   stateModifiedMs?: number
 }
 
@@ -70,8 +70,8 @@ function pickSloTarget(thresholds: Record<string, { target?: number }>): number 
 }
 
 /**
- * Parse a Datadog timestamp (`overall_state_modified` is an ISO-8601 string, but some
- * endpoints report epoch seconds) into epoch ms. Returns undefined when absent/unparseable.
+ * Parse a Datadog timestamp into epoch ms. Monitor state timestamps are epoch SECONDS; other
+ * endpoints report ISO-8601. Returns undefined when absent or unparseable.
  */
 function parseDatadogTimestamp(value: string | number | undefined): number | undefined {
   if (typeof value === 'number') return Number.isFinite(value) ? value * 1000 : undefined
@@ -80,6 +80,25 @@ function parseDatadogTimestamp(value: string | number | undefined): number | und
     return Number.isNaN(ms) ? undefined : ms
   }
   return undefined
+}
+
+/**
+ * The most recent trigger across a monitor's groups, in epoch ms.
+ *
+ * A multi-group monitor alerts per group, so the question the gate asks ("did this start after
+ * the release marker?") is answered by the LATEST trigger: one group that triggered after the
+ * release makes the alert this release's, whatever the others did earlier. Undefined when no
+ * group carries a timestamp, which the caller reads as unknown rather than as old.
+ */
+function latestTriggeredMs(
+  groups: Record<string, { last_triggered_ts?: number }> | undefined,
+): number | undefined {
+  let latest: number | undefined
+  for (const group of Object.values(groups ?? {})) {
+    const ms = parseDatadogTimestamp(group.last_triggered_ts)
+    if (ms !== undefined && (latest === undefined || ms > latest)) latest = ms
+  }
+  return latest
 }
 
 export class DatadogClient {
@@ -92,14 +111,24 @@ export class DatadogClient {
     this.fetchImpl = options.fetchImpl ?? fetch
   }
 
-  /** Read a monitor's overall state + when it last changed (`GET /api/v1/monitor/{id}`). */
+  /**
+   * Read a monitor's overall state and when it last triggered (`GET /api/v1/monitor/{id}`).
+   *
+   * `group_states=all` is what makes the second half answerable. This used to read
+   * `overall_state_modified`, a field Datadog's v1 `Monitor` schema does not define (it appears
+   * only on Synthetics v2), so the transition time was silently ALWAYS absent: the gate then
+   * attributed every standing alert to the release it was watching, because "unknown" is
+   * deliberately treated as "escalate". The documented timestamps are per GROUP, under
+   * `state.groups.<group>.last_triggered_ts` in epoch seconds, and `state` is populated only when
+   * the request asks for it.
+   */
   async getMonitor(id: string): Promise<DatadogMonitorState> {
     const data = await this.get<{
       name?: string
       overall_state?: string
-      overall_state_modified?: string | number
-    }>(`/api/v1/monitor/${id}`)
-    const stateModifiedMs = parseDatadogTimestamp(data.overall_state_modified)
+      state?: { groups?: Record<string, { last_triggered_ts?: number }> }
+    }>(`/api/v1/monitor/${id}?group_states=all`)
+    const stateModifiedMs = latestTriggeredMs(data.state?.groups)
     return {
       id,
       name: data.name ?? `monitor ${id}`,

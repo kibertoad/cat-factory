@@ -56,7 +56,10 @@ export const CLIENT_INFO = { name: 'cat-factory-tool-server-probe', version: '1'
 /** Which dialect the exchange is speaking. Decided once per server, then held for every request. */
 export type McpEra = { era: 'modern'; version: string } | { era: 'legacy' }
 
-export const MODERN_ERA = { era: 'modern', version: MODERN_PROTOCOL_VERSION } as const satisfies McpEra
+export const MODERN_ERA = {
+  era: 'modern',
+  version: MODERN_PROTOCOL_VERSION,
+} as const satisfies McpEra
 export const LEGACY_ERA = { era: 'legacy' } as const satisfies McpEra
 
 /**
@@ -168,9 +171,10 @@ export function readEraVerdict(frame: Record<string, unknown> | undefined): EraV
   const error = frame && isRecord(frame.error) ? frame.error : undefined
   const code = typeof error?.code === 'number' ? error.code : undefined
   if (code === UNSUPPORTED_PROTOCOL_VERSION) {
-    const supported = isRecord(error?.data) && Array.isArray(error.data.supported)
-      ? error.data.supported.filter((v): v is string => typeof v === 'string')
-      : []
+    const supported =
+      isRecord(error?.data) && Array.isArray(error.data.supported)
+        ? error.data.supported.filter((v): v is string => typeof v === 'string')
+        : []
     const mutual = MODERN_PROTOCOL_VERSIONS.find((version) => supported.includes(version))
     if (mutual) return { verdict: 'retry', version: mutual }
     // The server is modern and speaks none of our revisions. Falling back to `initialize` here

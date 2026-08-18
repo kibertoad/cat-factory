@@ -57,7 +57,11 @@ describe('IncidentIoEnrichmentProvider', () => {
     await instance.enrich(query, update)
 
     const list = new URL(calls[0]!.url)
-    expect(list.searchParams.getAll('status_category[one_of]')).toEqual(['triage', 'live', 'paused'])
+    expect(list.searchParams.getAll('status_category[one_of]')).toEqual([
+      'triage',
+      'live',
+      'paused',
+    ])
     // One page is enough for a workspace with one live incident: the filter did the narrowing.
     expect(calls.filter((c) => c.url.includes('/v2/incidents'))).toHaveLength(1)
   })

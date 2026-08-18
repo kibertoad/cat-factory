@@ -38,15 +38,22 @@
 // without failing anything:
 //
 //   - the three image model ids, and the resolutions each supports (Lite is 1K only);
-//   - 14 reference images, and the per-model split between objects, characters and style refs;
+//   - the per-model reference-image caps, which differ by KIND as well as by count;
 //   - the ten aspect ratios and the four `image_size` values;
-//   - the per-image prices in the generator's description, and the $60 / $120 per 1M output
+//   - the per-image prices in the generator's description, and the $30 / $60 / $120 per 1M output
 //     token rates behind them;
 //   - SynthID watermarking of every generated image.
 //
 // A vendor that changes one of these ships an integration that still compiles, still passes, and
 // is wrong at dispatch. Re-read them against https://ai.google.dev/gemini-api/docs/image-generation
 // when touching this file.
+//
+// THE PATH STAYS `/v1beta` DELIBERATELY. Google's version page says "the Interactions API and its
+// core features are generally available in `v1`", but its image-generation page's own curl example
+// still posts to `https://generativelanguage.googleapis.com/v1beta/interactions`, and no page
+// shows an image request against `/v1`. An agent composes its request from THIS document alone, so
+// transcribing a path the vendor's own worked example contradicts would trade a working call for a
+// tidier one. Move it when a v1 image example exists to copy (read 2026-08-18).
 
 import type { OpenAPIV3_1 } from 'openapi-types'
 
@@ -94,6 +101,7 @@ export const NANO_BANANA_OPENAPI: Record<string, unknown> = {
             },
           },
           '400': { $ref: '#/components/responses/BadRequest' },
+          '401': { $ref: '#/components/responses/Unauthenticated' },
           '403': { $ref: '#/components/responses/PermissionDenied' },
           '429': { $ref: '#/components/responses/RateLimited' },
           '500': { $ref: '#/components/responses/ServerError' },
@@ -116,10 +124,20 @@ export const NANO_BANANA_OPENAPI: Record<string, unknown> = {
     responses: {
       BadRequest: {
         description:
-          'The request was rejected. `INVALID_ARGUMENT` is a malformed body, and also what an ' +
-          'invalid API key returns, so read `error.message` rather than assuming the body is at ' +
-          'fault. `FAILED_PRECONDITION` is billing not enabled on the project, which every image ' +
-          'model requires since none has a free tier.',
+          'The request was rejected on its own contents. `INVALID_ARGUMENT` is a malformed body, ' +
+          'a field this API does not accept, or a combination it cannot serve (a larger ' +
+          '`image_size` on the lite model, say). It is NOT what a bad credential returns, which ' +
+          'is a 401: read `error.message` and fix the request. `FAILED_PRECONDITION` is billing ' +
+          'not enabled on the project, which every image model requires since none has a free ' +
+          'tier.',
+        content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } },
+      },
+      Unauthenticated: {
+        description:
+          '`UNAUTHENTICATED`: the API key is missing, malformed or invalid. Retrying and ' +
+          'rewriting the request both fail identically, and no key can be invented: report the ' +
+          'credential as the gap. Distinct from the 403 below, which is a VALID key without an ' +
+          'entitlement.',
         content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } },
       },
       PermissionDenied: {
@@ -157,9 +175,12 @@ export const NANO_BANANA_OPENAPI: Record<string, unknown> = {
             type: 'array',
             description:
               'The prompt, as an ordered list of blocks. One `text` block is the brief; each ' +
-              '`image` block is a reference the model composes from or edits, up to 14 of them ' +
-              'on one request (the pro model reads them as roughly six objects, five characters ' +
-              'and three style references).',
+              '`image` block is a reference the model composes from or edits. How many, and of ' +
+              'what, is PER MODEL rather than one universal cap: ' +
+              '`gemini-3.1-flash-lite-image` takes up to 14 object references and neither ' +
+              'characters nor style; `gemini-3.1-flash-image` takes up to 10 objects, 4 ' +
+              'characters and 3 style references; `gemini-3-pro-image` takes up to 6 objects and ' +
+              '5 characters, and no style references at all.',
             items: { $ref: '#/components/schemas/InputBlock' },
           },
           response_format: { $ref: '#/components/schemas/ImageResponseFormat' },
@@ -267,11 +288,13 @@ export const NANO_BANANA_OPENAPI: Record<string, unknown> = {
         properties: {
           thinking_level: {
             type: 'string',
-            enum: ['minimal', 'low', 'medium', 'high'],
+            enum: ['minimal', 'high'],
             description:
-              'How much the model reasons before drawing. `minimal` is the default and is right ' +
-              'for a brief that already says what the picture is; `high` earns its keep on ' +
-              'composition-heavy work and on images with a lot of text in them. The interim ' +
+              'How much the model reasons before drawing, and documented for ' +
+              '`gemini-3.1-flash-image` alone. `minimal` is the default and is right for a brief ' +
+              'that already says what the picture is; `high` earns its keep on ' +
+              'composition-heavy work and on images with a lot of text in them. Those are the ' +
+              'only two levels: `low` and `medium` are not values this API accepts. The interim ' +
               'images it draws while thinking are not charged, but the thinking TOKENS are.',
           },
           seed: {
