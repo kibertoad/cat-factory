@@ -5,6 +5,7 @@ import { descriptorFieldValuesSchema } from './form-fields.js'
 import { notificationSchema } from './notifications.js'
 import { blockTypeSchema, createTaskTypeSchema, taskTypeSchema } from './primitives.js'
 import { publicApiScopeSchema } from './public-api-keys.js'
+import { cursorSchema, epochMsQuerySchema, pageLimitSchema } from './public-paging.js'
 import { taskSourceKindSchema } from './tasks.js'
 
 // ---------------------------------------------------------------------------
@@ -24,42 +25,12 @@ import { taskSourceKindSchema } from './tasks.js'
 // internals are never leaked: these are deliberately small projections of a `Block`.
 // ---------------------------------------------------------------------------
 
-// ---- shared pagination primitives (used by every bounded list on this surface) ----
-
-/**
- * An OPAQUE keyset pagination cursor. Callers must treat it as a black box and echo it back
- * verbatim — its encoding is an implementation detail (today a base64url `<sortKey>|<id>` pair)
- * that may change. Keyset, not offset: an offset page shifts under concurrent inserts, silently
- * skipping or repeating rows, which is exactly what a polling integration must never see.
- */
-const cursorSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))
-
-/**
- * Rows one page may return. Arrives as a query STRING, so it is digit-checked BEFORE the numeric
- * coercion — `Number()` alone also accepts `1e9`, `0x64` and `' '`, which would read as plausible
- * limits rather than the 400 a malformed request deserves. The hard `maxValue` is what makes the
- * bound a real backstop rather than a suggestion (a caller cannot ask for the whole table back by
- * passing a huge limit).
- */
-const pageLimitSchema = v.pipe(
-  v.string(),
-  v.regex(/^\d+$/, 'Must be a whole number'),
-  v.transform(Number),
-  v.number(),
-  v.integer(),
-  v.minValue(1),
-  v.maxValue(100),
-)
-
-/** An epoch-ms query filter: digits only, for the same reason as {@link pageLimitSchema}. */
-const epochMsQuerySchema = v.pipe(
-  v.string(),
-  v.regex(/^\d+$/, 'Must be a whole number of epoch milliseconds'),
-  v.transform(Number),
-  v.number(),
-  v.integer(),
-  v.minValue(0),
-)
+// ---- shared pagination primitives ----
+//
+// Read from `./public-paging.js` rather than declared here: the cursor encoding, the page-limit
+// ceiling and the epoch-ms filter are ONE contract across every bounded list on this surface
+// (`backend/docs/public-api.md`, "Pagination"), and a local copy is how one endpoint's ceiling
+// comes to differ from its neighbour's.
 
 /** Start a headless job (run a public, inline pipeline against a brief). */
 export const createPublicJobSchema = v.object({

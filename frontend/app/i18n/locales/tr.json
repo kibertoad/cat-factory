@@ -682,7 +682,8 @@
         "submission_not_allowed": "Bu çalışma için birleştirmeye izin verilmiyor",
         "webhook_limit_reached": "Webhook sınırına ulaşıldı",
         "risk_policy_inherited": "Bu ilke hesaba ait",
-        "risk_policy_not_inherited": "Bu ilke bu panoya ait"
+        "risk_policy_not_inherited": "Bu ilke bu panoya ait",
+        "kaizen_entry_not_settled": "Kaizen kaydı henüz değerlendirilmedi"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -723,7 +724,8 @@
         "submission_not_allowed": "Bu görevin birleştirme politikası, çalışmayı başlatan rolün bu tür bir değişikliği birleştirmesine izin vermiyor. Rolü buna izin veren bir takım arkadaşı birleştirebilir ya da bir yönetici birleştirme ön ayarındaki politikayı genişletebilir.",
         "webhook_limit_reached": "Bu çalışma alanında zaten en fazla sayıda giden webhook kayıtlı. Artık ihtiyaç duymadığınız birini kaldırın ve bunu yeniden kaydedin.",
         "risk_policy_inherited": "Hesaptaki tüm panolarla paylaşıldığı için buradan değiştirilemez. Bu panoya kopyalayıp kopyayı düzenleyin.",
-        "risk_policy_not_inherited": "Zaten bu panonun kendi ilkesi: doğrudan düzenleyin ya da artık sunulmasını istemiyorsanız silin."
+        "risk_policy_not_inherited": "Zaten bu panonun kendi ilkesi: doğrudan düzenleyin ya da artık sunulmasını istemiyorsanız silin.",
+        "kaizen_entry_not_settled": "Değerlendirmesi hâlâ sırada veya sürüyor, bu yüzden onaylanacak bir öneri yok. Tamamlandığında yeniden deneyin."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",

@@ -94,6 +94,26 @@ expectMutuallyAssignable<
   v.InferOutput<typeof contracts.updatePublicTaskSchema>
 >()
 expectMutuallyAssignable<sdk.PublicRun, v.InferOutput<typeof contracts.publicRunSchema>>()
+expectMutuallyAssignable<
+  sdk.PublicKaizenEntry,
+  v.InferOutput<typeof contracts.publicKaizenEntrySchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicKaizenEntryTask,
+  v.InferOutput<typeof contracts.publicKaizenEntryTaskSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicKaizenEntryCombo,
+  v.InferOutput<typeof contracts.publicKaizenEntryComboSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicKaizenEntryList,
+  v.InferOutput<typeof contracts.publicKaizenEntryListSchema>
+>()
+expectMutuallyAssignable<
+  sdk.AcknowledgeKaizenEntry,
+  v.InferOutput<typeof contracts.acknowledgeKaizenEntrySchema>
+>()
 expectMutuallyAssignable<sdk.PublicPipeline, v.InferOutput<typeof contracts.publicPipelineSchema>>()
 expectMutuallyAssignable<
   sdk.PublicPipelineList,
@@ -436,6 +456,11 @@ const ASSERTED_COMPONENTS = [
   'StartPublicTask',
   'UpdatePublicTask',
   'PublicRun',
+  'PublicKaizenEntry',
+  'PublicKaizenEntryTask',
+  'PublicKaizenEntryCombo',
+  'PublicKaizenEntryList',
+  'AcknowledgeKaizenEntry',
   'PublicPipeline',
   'PublicPipelineList',
   'Notification',

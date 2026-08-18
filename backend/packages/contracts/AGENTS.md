@@ -28,6 +28,13 @@ top-level files are the domain contracts.
   renaming its `blockId`/`executionId` to the `taskId`/`runId` the public surface addresses things
   by. The ROLLUPS beside it are served verbatim from that module rather than re-projected, so the
   preset editor and an integration cannot report different auto-merge shares for one workspace.
+- `public-kaizen.ts`: the external projection of a Kaizen grading (`kaizen.ts`), renaming its
+  `blockId`/`executionId` to the `taskId`/`runId` the public surface addresses things by and joining
+  on the board + combo context that makes one actionable. Its `taskId` and nullable `task` are two
+  facts on purpose: the id the row RECORDED against what the board says now.
+- `public-paging.ts`: the cursor, page-limit, epoch-ms and boolean query primitives EVERY bounded
+  `/api/v1` list shares. One module because they are the surface's pagination contract rather than a
+  per-endpoint detail; a local copy is how one list's ceiling comes to differ from its neighbour's.
 - `events.ts`: the `WorkspaceEvent` union pushed to the SPA; `errors.ts`: the `reason`/`code`
   vocabulary the SPA maps to i18n keys. Both axes are declared here: `DOMAIN_ERROR_CODES` /
   `API_ERROR_CODES` are the STATUS CLASS on `error.code` (kernel's `DomainErrorCode` is derived

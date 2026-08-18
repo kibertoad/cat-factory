@@ -223,6 +223,13 @@ export const CONFLICT_REASONS = [
   // states need opposite copy ("delete it instead" against "clone it to edit it here"), so one
   // reason could not describe both.
   'risk_policy_not_inherited',
+  // A caller tried to ACKNOWLEDGE a Kaizen entry the grader has not settled yet (it is still
+  // `scheduled` or `running`, so it carries no grade and no recommendations). Its own reason
+  // rather than a 404 because the entry exists and the answer is "retry once it has run": marking
+  // it triaged now would take it off the backlog before there was anything to read, and the
+  // recommendations would then land on a row nobody looks at again. `details.status` names where
+  // the grading actually is.
+  'kaizen_entry_not_settled',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

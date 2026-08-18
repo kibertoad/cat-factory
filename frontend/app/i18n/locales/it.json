@@ -5971,7 +5971,8 @@
         "submission_not_allowed": "Unione non consentita per questa esecuzione",
         "webhook_limit_reached": "Limite di webhook raggiunto",
         "risk_policy_inherited": "Questo criterio appartiene all'account",
-        "risk_policy_not_inherited": "Questo criterio appartiene a questa bacheca"
+        "risk_policy_not_inherited": "Questo criterio appartiene a questa bacheca",
+        "kaizen_entry_not_settled": "La voce Kaizen non è ancora stata valutata"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -6012,7 +6013,8 @@
         "submission_not_allowed": "La politica di unione di questa attività non consente al ruolo che ha avviato l'esecuzione di unire questo tipo di modifica. Un collega il cui ruolo lo consente può farlo, oppure un amministratore può ampliare la politica nel preset di unione.",
         "webhook_limit_reached": "Questo spazio di lavoro ha già registrato il numero massimo di webhook in uscita. Rimuovine uno che non ti serve più, poi registra di nuovo questo.",
         "risk_policy_inherited": "È condiviso con tutte le bacheche dell'account, quindi non può essere modificato da qui. Clonalo in questa bacheca e modifica la copia.",
-        "risk_policy_not_inherited": "È già il criterio proprio di questa bacheca: modificalo direttamente, oppure eliminalo se non vuoi più che venga offerto."
+        "risk_policy_not_inherited": "È già il criterio proprio di questa bacheca: modificalo direttamente, oppure eliminalo se non vuoi più che venga offerto.",
+        "kaizen_entry_not_settled": "La sua valutazione è ancora in coda o in corso, quindi non ci sono raccomandazioni da confermare. Riprova quando sarà terminata."
       },
       "action": {
         "connectGitHub": "Collega GitHub",

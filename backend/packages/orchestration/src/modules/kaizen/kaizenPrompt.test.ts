@@ -22,6 +22,9 @@ const GRADING: KaizenGrading = {
   recommendations: [],
   graderModel: null,
   error: null,
+  acknowledgedAt: null,
+  acknowledgedBy: null,
+  acknowledgementNote: null,
   createdAt: 0,
   updatedAt: 0,
 }

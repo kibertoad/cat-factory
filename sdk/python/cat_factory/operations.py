@@ -18,6 +18,7 @@ from .errors import _repeated_cursor
 from .models import (
     _encode,
     _enum,
+    AcknowledgeKaizenEntry,
     ActPublicNotificationRequest,
     AddPublicTaskDependencyRequest,
     AttachPublicTaskDocumentRequest,
@@ -52,6 +53,7 @@ from .models import (
     ListPublicAvailableReposResponse,
     ListPublicEnvironmentConnectionsResponse,
     ListPublicJobsResponse,
+    ListPublicKaizenEntriesAcknowledged,
     ListPublicMergeClassRollupsResponse,
     ListPublicModelPresetsResponse,
     ListPublicReposResponse,
@@ -77,6 +79,9 @@ from .models import (
     PublicJob,
     PublicJobAccepted,
     PublicJobStatus,
+    PublicKaizenEntry,
+    PublicKaizenEntryList,
+    PublicKaizenEntryStatus,
     PublicNotificationList,
     PublicNotificationWebhook,
     PublicNotificationWebhookList,
@@ -2479,6 +2484,99 @@ class MergeRecordsResource:
         return GetPublicMergeRecordResponse.from_dict(raw)
 
 
+class KaizenResource:
+    """The platform's own improvement backlog: every post-run grading of an agent step, with
+    the agent kind, model, prompt version and run it came from, what the grader recommended
+    changing, and whether anybody has acted on it yet. Reading takes a `read` key and
+    acknowledging one a `write` key: neither runs anything.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def acknowledge_entry(self, entry_id: str, body: AcknowledgeKaizenEntry | None = None, *, timeout: float | None = None) -> PublicKaizenEntry:
+        """Acknowledge a Kaizen entry
+        Record that this entry has been triaged, optionally with a note (a ticket id, why it
+        was dismissed), and take it out of the `acknowledged=false` backlog. Send
+        `{"acknowledged": false}` to undo. A `write` key, not an `admin` one: acknowledging
+        starts nothing and merges nothing. Acknowledging twice is a no-op that returns the
+        row unchanged, so `acknowledgedAt` keeps naming the FIRST triage rather than the
+        last retry. An entry whose grading has not settled yet is refused `409` with
+        `details.reason: "kaizen_entry_not_settled"` (there are no recommendations to have
+        read), and an unknown id is `404` with `details.reason: "kaizen_entry_not_found"`.
+        `POST /api/v1/kaizen/entries/{entryId}/acknowledge` (operation
+        `acknowledgePublicKaizenEntry`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/kaizen/entries/{_quote(entry_id)}/acknowledge",
+            body={} if body is None else _encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicKaizenEntry.from_dict(raw)
+
+    def get_entry(self, entry_id: str, *, timeout: float | None = None) -> PublicKaizenEntry:
+        """Get one Kaizen entry
+        The same entry addressed by its own id, for a caller that stored one (on a ticket it
+        filed, say) and wants the current grade, recommendations and triage state without
+        re-paging the list. Scoped to the calling key’s workspace.
+        `GET /api/v1/kaizen/entries/{entryId}` (operation `getPublicKaizenEntry`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/kaizen/entries/{_quote(entry_id)}",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicKaizenEntry.from_dict(raw)
+
+    def list_entries(self, *, limit: int | None = None, cursor: str | None = None, acknowledged: ListPublicKaizenEntriesAcknowledged | None = None, settled: ListPublicKaizenEntriesAcknowledged | None = None, status: PublicKaizenEntryStatus | None = None, agent_kind: str | None = None, since: int | None = None, timeout: float | None = None) -> PublicKaizenEntryList:
+        """List the workspace's Kaizen entries
+        Every post-run grading the workspace has produced, newest first and
+        keyset-paginated, with no run or task named up front. A Kaizen entry is the platform
+        grading its OWN work: after a run finishes, each completed agent step is judged on
+        how smooth or chaotic the interaction was (1..5) and what would make it better,
+        keyed by the `(agentKind, model, promptVersion)` combo it ran. Each entry carries
+        the context a follow-up needs (the run and step it came from, the agent kind, the
+        resolved model, the prompt version, the board task and its service, and where the
+        combo stands in its verification streak), so acting on one does not mean opening the
+        app first. Filter with `acknowledged=false&settled=true` for the drainable backlog
+        (every entry in it is one the acknowledge route accepts; `acknowledged=false` alone
+        also returns gradings still in flight, which that route refuses with `409`),
+        `settled=true` for everything the grader has finished with whatever it concluded (a
+        `failed` grading names a deployment problem, such as prompt recording being off, and
+        is worth acting on), `status` for one exact grading state, `agentKind` for one role,
+        and `since` for an incremental sweep. A task deleted since the run reports `task:
+        null` rather than a blank title.
+        `GET /api/v1/kaizen/entries` (operation `listPublicKaizenEntries`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/kaizen/entries",
+            query={"limit": limit, "cursor": cursor, "acknowledged": acknowledged, "settled": settled, "status": status, "agentKind": agent_kind, "since": since},
+            timeout=timeout,
+        )
+        return PublicKaizenEntryList.from_dict(raw)
+
+    def list_entries_all(self, *, limit: int | None = None, cursor: str | None = None, acknowledged: ListPublicKaizenEntriesAcknowledged | None = None, settled: ListPublicKaizenEntriesAcknowledged | None = None, status: PublicKaizenEntryStatus | None = None, agent_kind: str | None = None, since: int | None = None, timeout: float | None = None) -> Iterator[Any]:
+        """Every `entries` across every page of `list_entries()`, as they arrive.
+        Follows `next_cursor` until the server reports no further page. A page may
+        legitimately come back empty while `next_cursor` is still set, so this pages until
+        the cursor is None rather than stopping at the first empty page.
+        Yields items of `PublicKaizenEntryList.entries`.
+        """
+        page_cursor = cursor
+        while True:
+            page = self.list_entries(limit=limit, acknowledged=acknowledged, settled=settled, status=status, agent_kind=agent_kind, since=since, cursor=page_cursor, timeout=timeout)
+            yield from page.entries
+            if not page.next_cursor:
+                return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
+            page_cursor = page.next_cursor
+
+
 class KeysResource:
     """The workspace's own API keys: provision one headlessly, list them, revoke one (and what
     it minted).
@@ -2564,5 +2662,6 @@ def build_resources(transport: Transport) -> dict[str, Any]:
         "debug": DebugResource(transport),
         "evidence": EvidenceResource(transport),
         "merge_records": MergeRecordsResource(transport),
+        "kaizen": KaizenResource(transport),
         "keys": KeysResource(transport),
     }

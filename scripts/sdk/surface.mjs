@@ -183,6 +183,11 @@ const SURFACE = {
   listPublicMergeClassRollups: { group: 'mergeRecords', method: 'listRollups' },
   tagPublicMergeReviewEffort: { group: 'mergeRecords', method: 'tagEffort' },
 
+  // ---- Kaizen entries (`read` to consume the backlog, `write` to acknowledge one) ----------
+  listPublicKaizenEntries: { group: 'kaizen', method: 'listEntries', paginates: 'entries' },
+  getPublicKaizenEntry: { group: 'kaizen', method: 'getEntry' },
+  acknowledgePublicKaizenEntry: { group: 'kaizen', method: 'acknowledgeEntry' },
+
   // ---- Headless key provisioning (`admin` scope) ------------------------------------------
   listPublicKeys: { group: 'keys', method: 'list' },
   createPublicKey: { group: 'keys', method: 'create' },
@@ -348,6 +353,8 @@ export const GROUP_DOCS = {
     "What a run proved: the engine's verification report, the outcome summary behind it, and the artifacts it captured, bytes included.",
   mergeRecords:
     'The evidence behind the auto-merge policy: what kind of change each merged run made, what the merger scored it, what happened to the pull request, and how much review a human actually spent, plus the per-class rollups that justify widening a rule. Reading takes a `read` key and recording an effort tag a `write` one: neither merges anything.',
+  kaizen:
+    "The platform's own improvement backlog: every post-run grading of an agent step, with the agent kind, model, prompt version and run it came from, what the grader recommended changing, and whether anybody has acted on it yet. Reading takes a `read` key and acknowledging one a `write` key: neither runs anything.",
   keys: "The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted).",
 }
 

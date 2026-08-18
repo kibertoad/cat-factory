@@ -682,7 +682,8 @@
         "submission_not_allowed": "Scalanie niedozwolone dla tego uruchomienia",
         "webhook_limit_reached": "Osiągnięto limit webhooków",
         "risk_policy_inherited": "Ta zasada należy do konta",
-        "risk_policy_not_inherited": "Ta zasada należy do tej tablicy"
+        "risk_policy_not_inherited": "Ta zasada należy do tej tablicy",
+        "kaizen_entry_not_settled": "Wpis Kaizen nie został jeszcze oceniony"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -723,7 +724,8 @@
         "submission_not_allowed": "Polityka scalania tego zadania nie pozwala roli, która rozpoczęła to uruchomienie, scalić tego typu zmiany. Może to zrobić osoba o odpowiedniej roli albo administrator może rozszerzyć politykę w ustawieniu scalania.",
         "webhook_limit_reached": "Ta przestrzeń robocza ma już zarejestrowaną maksymalną liczbę wychodzących webhooków. Usuń jeden, którego już nie potrzebujesz, a następnie zarejestruj ten ponownie.",
         "risk_policy_inherited": "Jest wspólna dla wszystkich tablic konta, więc nie można jej tu zmienić. Sklonuj ją do tej tablicy i edytuj kopię.",
-        "risk_policy_not_inherited": "To już własna zasada tej tablicy: edytuj ją bezpośrednio albo usuń, jeśli nie ma być dłużej oferowana."
+        "risk_policy_not_inherited": "To już własna zasada tej tablicy: edytuj ją bezpośrednio albo usuń, jeśli nie ma być dłużej oferowana.",
+        "kaizen_entry_not_settled": "Jego ocena wciąż czeka w kolejce lub trwa, więc nie ma rekomendacji do potwierdzenia. Spróbuj ponownie po jej zakończeniu."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",

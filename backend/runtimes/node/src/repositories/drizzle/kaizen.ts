@@ -12,7 +12,20 @@ import type {
   KaizenVerifiedCombo,
   KaizenVerifiedComboRepository,
 } from '@cat-factory/kernel'
-import { and, desc, eq, lt, or } from 'drizzle-orm'
+import { KAIZEN_SETTLED_STATUSES } from '@cat-factory/contracts'
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  notInArray,
+  or,
+  type SQL,
+} from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
 import { kaizenGradings, kaizenVerifiedCombos } from '../../db/schema.js'
 
@@ -34,6 +47,9 @@ function rowToKaizenGrading(row: KaizenGradingRow): KaizenGrading {
     recommendations: parseJsonArray<string>(row.recommendations ?? '[]'),
     graderModel: row.grader_model,
     error: row.error,
+    acknowledgedAt: row.acknowledged_at,
+    acknowledgedBy: row.acknowledged_by,
+    acknowledgementNote: row.acknowledgement_note,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -50,6 +66,10 @@ export class DrizzleKaizenGradingRepository implements KaizenGradingRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async upsert(workspaceId: string, grading: KaizenGrading): Promise<void> {
+    // The acknowledgement columns are set on INSERT and deliberately absent from the conflict SET
+    // list below: the sweep re-writes this row on every grader transition, and folding them in
+    // would erase a triage the moment a grading was re-run. `setAcknowledgement` is their only
+    // writer. Mirrors the D1 repository.
     const values = {
       workspace_id: workspaceId,
       id: grading.id,
@@ -66,6 +86,9 @@ export class DrizzleKaizenGradingRepository implements KaizenGradingRepository {
       recommendations: JSON.stringify(grading.recommendations),
       grader_model: grading.graderModel,
       error: grading.error,
+      acknowledged_at: grading.acknowledgedAt,
+      acknowledged_by: grading.acknowledgedBy,
+      acknowledgement_note: grading.acknowledgementNote,
       created_at: grading.createdAt,
       updated_at: grading.updatedAt,
     }
@@ -136,6 +159,112 @@ export class DrizzleKaizenGradingRepository implements KaizenGradingRepository {
       .orderBy(desc(kaizenGradings.created_at))
       .limit(limit)
     return rows.map(rowToKaizenGrading)
+  }
+
+  async listPage(
+    workspaceId: string,
+    opts: {
+      limit: number
+      cursor?: { createdAt: number; id: string }
+      acknowledged?: boolean
+      settled?: boolean
+      status?: KaizenGradingStatus
+      agentKind?: string
+      since?: number
+    },
+  ): Promise<KaizenGrading[]> {
+    const filters: SQL[] = [eq(kaizenGradings.workspace_id, workspaceId)]
+    if (opts.cursor) {
+      // The keyset is the composite the ORDER BY uses, so gradings sharing a millisecond (every
+      // step of one run is scheduled at once) page without losing the ties.
+      filters.push(
+        or(
+          lt(kaizenGradings.created_at, opts.cursor.createdAt),
+          and(
+            eq(kaizenGradings.created_at, opts.cursor.createdAt),
+            lt(kaizenGradings.id, opts.cursor.id),
+          ),
+        ) as SQL,
+      )
+    }
+    if (opts.acknowledged !== undefined) {
+      filters.push(
+        opts.acknowledged
+          ? isNotNull(kaizenGradings.acknowledged_at)
+          : isNull(kaizenGradings.acknowledged_at),
+      )
+    }
+    if (opts.settled !== undefined) {
+      // The same set the acknowledge write is gated on, from the same constant, so the backlog a
+      // caller drains and the rows that write accepts cannot drift apart. Mirrors the D1 repository.
+      const settled = [...KAIZEN_SETTLED_STATUSES]
+      filters.push(
+        opts.settled
+          ? inArray(kaizenGradings.status, settled)
+          : notInArray(kaizenGradings.status, settled),
+      )
+    }
+    if (opts.status) filters.push(eq(kaizenGradings.status, opts.status))
+    if (opts.agentKind) filters.push(eq(kaizenGradings.agent_kind, opts.agentKind))
+    if (opts.since !== undefined) filters.push(gte(kaizenGradings.created_at, opts.since))
+    const rows = await this.db
+      .select()
+      .from(kaizenGradings)
+      .where(and(...filters))
+      .orderBy(desc(kaizenGradings.created_at), desc(kaizenGradings.id))
+      .limit(opts.limit)
+    return rows.map(rowToKaizenGrading)
+  }
+
+  async setAcknowledgement(
+    workspaceId: string,
+    id: string,
+    ack: { by: string | null; note: string | null } | null,
+    now: number,
+  ): Promise<KaizenGrading | null> {
+    if (ack) {
+      // Guarded in the statement rather than by a pre-check: the `acknowledged_at IS NULL` term
+      // makes a repeat acknowledgement a no-op (so the stamp keeps naming the FIRST triage), and
+      // the status list refuses a row the grader is still working on, with no window between a
+      // check and the write. `updated_at` moves with it, so a consumer watermarking on it sees
+      // triage state change. Mirrors the D1 repository.
+      await this.db
+        .update(kaizenGradings)
+        .set({
+          acknowledged_at: now,
+          acknowledged_by: ack.by,
+          acknowledgement_note: ack.note,
+          updated_at: now,
+        })
+        .where(
+          and(
+            eq(kaizenGradings.workspace_id, workspaceId),
+            eq(kaizenGradings.id, id),
+            isNull(kaizenGradings.acknowledged_at),
+            inArray(kaizenGradings.status, [...KAIZEN_SETTLED_STATUSES]),
+          ),
+        )
+    } else {
+      // Guarded on there being an acknowledgement to clear, so clearing one that was never
+      // recorded writes nothing at all rather than touching `updated_at` on a row (a `running`
+      // grading, say) whose staleness stamp the sweep reads to decide what to re-drive.
+      await this.db
+        .update(kaizenGradings)
+        .set({
+          acknowledged_at: null,
+          acknowledged_by: null,
+          acknowledgement_note: null,
+          updated_at: now,
+        })
+        .where(
+          and(
+            eq(kaizenGradings.workspace_id, workspaceId),
+            eq(kaizenGradings.id, id),
+            isNotNull(kaizenGradings.acknowledged_at),
+          ),
+        )
+    }
+    return this.get(workspaceId, id)
   }
 
   async listPending(
@@ -212,6 +341,20 @@ export class DrizzleKaizenVerifiedComboRepository implements KaizenVerifiedCombo
       )
       .limit(1)
     return rows[0] ? rowToKaizenVerifiedCombo(rows[0]) : null
+  }
+
+  async listByKeys(workspaceId: string, comboKeys: string[]): Promise<KaizenVerifiedCombo[]> {
+    if (comboKeys.length === 0) return []
+    const rows = await this.db
+      .select()
+      .from(kaizenVerifiedCombos)
+      .where(
+        and(
+          eq(kaizenVerifiedCombos.workspace_id, workspaceId),
+          inArray(kaizenVerifiedCombos.combo_key, [...new Set(comboKeys)]),
+        ),
+      )
+    return rows.map(rowToKaizenVerifiedCombo)
   }
 
   async upsert(workspaceId: string, combo: KaizenVerifiedCombo): Promise<void> {

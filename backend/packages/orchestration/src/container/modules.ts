@@ -791,7 +791,9 @@ export {
  */
 export function createKaizenModule(deps: CoreDependencies): KaizenModule | undefined {
   const { kaizenGradingRepository, kaizenVerifiedComboRepository } = deps
-  if (!kaizenGradingRepository || !kaizenVerifiedComboRepository) return undefined
+  if (!kaizenGradingRepository || !kaizenVerifiedComboRepository) {
+    return undefined
+  }
   if (!deps.llmCallMetricRepository || !deps.agentContextObservability) return undefined
 
   const service = new KaizenService({

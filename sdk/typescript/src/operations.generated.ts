@@ -10,6 +10,7 @@ import type { RequestOptions, Transport } from './http.ts'
 import { encodePathSegment } from './http.ts'
 import { repeatedCursorError } from './errors.ts'
 import type {
+  AcknowledgeKaizenEntry,
   ActPublicNotificationRequest,
   AddPublicTaskDependencyRequest,
   AttachPublicTaskDocumentRequest,
@@ -44,6 +45,7 @@ import type {
   ListPublicAvailableReposResponse,
   ListPublicEnvironmentConnectionsResponse,
   ListPublicJobsResponse,
+  ListPublicKaizenEntriesAcknowledged,
   ListPublicMergeClassRollupsResponse,
   ListPublicModelPresetsResponse,
   ListPublicReposResponse,
@@ -69,6 +71,9 @@ import type {
   PublicJob,
   PublicJobAccepted,
   PublicJobStatus,
+  PublicKaizenEntry,
+  PublicKaizenEntryList,
+  PublicKaizenEntryStatus,
   PublicNotificationList,
   PublicNotificationWebhook,
   PublicNotificationWebhookList,
@@ -200,6 +205,17 @@ export type JobsListQuery = {
   limit?: number
   cursor?: string
   status?: PublicJobStatus
+  since?: number
+}
+
+/** Query parameters for `client.kaizen.listEntries()`. */
+export type KaizenListEntriesQuery = {
+  limit?: number
+  cursor?: string
+  acknowledged?: ListPublicKaizenEntriesAcknowledged
+  settled?: ListPublicKaizenEntriesAcknowledged
+  status?: PublicKaizenEntryStatus
+  agentKind?: string
   since?: number
 }
 
@@ -2081,6 +2097,72 @@ export class MergeRecordsResource {
   }
 }
 
+/** The platform's own improvement backlog: every post-run grading of an agent step, with the agent kind, model, prompt version and run it came from, what the grader recommended changing, and whether anybody has acted on it yet. Reading takes a `read` key and acknowledging one a `write` key: neither runs anything. */
+export class KaizenResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Acknowledge a Kaizen entry
+   * Record that this entry has been triaged, optionally with a note (a ticket id, why it was dismissed), and take it out of the `acknowledged=false` backlog. Send `{"acknowledged": false}` to undo. A `write` key, not an `admin` one: acknowledging starts nothing and merges nothing. Acknowledging twice is a no-op that returns the row unchanged, so `acknowledgedAt` keeps naming the FIRST triage rather than the last retry. An entry whose grading has not settled yet is refused `409` with `details.reason: "kaizen_entry_not_settled"` (there are no recommendations to have read), and an unknown id is `404` with `details.reason: "kaizen_entry_not_found"`.
+   * `POST /api/v1/kaizen/entries/{entryId}/acknowledge` — operation `acknowledgePublicKaizenEntry`.
+   */
+  acknowledgeEntry(entryId: string, body: AcknowledgeKaizenEntry = {}, options: RequestOptions = {}): Promise<PublicKaizenEntry> {
+    return this.#transport.request<PublicKaizenEntry>({
+      method: 'POST',
+      path: `/api/v1/kaizen/entries/${encodePathSegment(entryId)}/acknowledge`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Get one Kaizen entry
+   * The same entry addressed by its own id, for a caller that stored one (on a ticket it filed, say) and wants the current grade, recommendations and triage state without re-paging the list. Scoped to the calling key’s workspace.
+   * `GET /api/v1/kaizen/entries/{entryId}` — operation `getPublicKaizenEntry`.
+   */
+  getEntry(entryId: string, options: RequestOptions = {}): Promise<PublicKaizenEntry> {
+    return this.#transport.request<PublicKaizenEntry>({
+      method: 'GET',
+      path: `/api/v1/kaizen/entries/${encodePathSegment(entryId)}`,
+      options,
+    })
+  }
+
+  /**
+   * List the workspace's Kaizen entries
+   * Every post-run grading the workspace has produced, newest first and keyset-paginated, with no run or task named up front. A Kaizen entry is the platform grading its OWN work: after a run finishes, each completed agent step is judged on how smooth or chaotic the interaction was (1..5) and what would make it better, keyed by the `(agentKind, model, promptVersion)` combo it ran. Each entry carries the context a follow-up needs (the run and step it came from, the agent kind, the resolved model, the prompt version, the board task and its service, and where the combo stands in its verification streak), so acting on one does not mean opening the app first. Filter with `acknowledged=false&settled=true` for the drainable backlog (every entry in it is one the acknowledge route accepts; `acknowledged=false` alone also returns gradings still in flight, which that route refuses with `409`), `settled=true` for everything the grader has finished with whatever it concluded (a `failed` grading names a deployment problem, such as prompt recording being off, and is worth acting on), `status` for one exact grading state, `agentKind` for one role, and `since` for an incremental sweep. A task deleted since the run reports `task: null` rather than a blank title.
+   * `GET /api/v1/kaizen/entries` — operation `listPublicKaizenEntries`.
+   */
+  listEntries(query: KaizenListEntriesQuery = {}, options: RequestOptions = {}): Promise<PublicKaizenEntryList> {
+    return this.#transport.request<PublicKaizenEntryList>({
+      method: 'GET',
+      path: `/api/v1/kaizen/entries`,
+      query,
+      options,
+    })
+  }
+
+  /**
+   * Every `entries` across every page of `listEntries()`.
+   * Follows `nextCursor` until the server reports no further page. The cursor is opaque
+   * and carries a position, never authority — each page re-applies the key's full scope.
+   */
+  async *listEntriesAll(query: KaizenListEntriesQuery = {}, options: RequestOptions = {}): AsyncGenerator<PublicKaizenEntryList['entries'][number]> {
+    let cursor: string | undefined = query.cursor
+    for (;;) {
+      const page = await this.listEntries({ ...query, cursor }, options)
+      for (const item of page.entries) yield item
+      if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
+      cursor = page.nextCursor
+    }
+  }
+}
+
 /** The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted). */
 export class KeysResource {
   readonly #transport: Transport
@@ -2181,6 +2263,8 @@ export abstract class CatFactoryResources {
   readonly evidence: EvidenceResource
   /** The evidence behind the auto-merge policy: what kind of change each merged run made, what the merger scored it, what happened to the pull request, and how much review a human actually spent, plus the per-class rollups that justify widening a rule. Reading takes a `read` key and recording an effort tag a `write` one: neither merges anything. */
   readonly mergeRecords: MergeRecordsResource
+  /** The platform's own improvement backlog: every post-run grading of an agent step, with the agent kind, model, prompt version and run it came from, what the grader recommended changing, and whether anybody has acted on it yet. Reading takes a `read` key and acknowledging one a `write` key: neither runs anything. */
+  readonly kaizen: KaizenResource
   /** The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted). */
   readonly keys: KeysResource
 
@@ -2206,6 +2290,7 @@ export abstract class CatFactoryResources {
     this.debug = new DebugResource(transport)
     this.evidence = new EvidenceResource(transport)
     this.mergeRecords = new MergeRecordsResource(transport)
+    this.kaizen = new KaizenResource(transport)
     this.keys = new KeysResource(transport)
   }
 }

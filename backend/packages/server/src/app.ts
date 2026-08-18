@@ -122,6 +122,7 @@ import { publicDebugController } from './modules/publicApi/PublicDebugController
 import { publicEvidenceController } from './modules/publicApi/PublicEvidenceController.js'
 import { publicSpecController } from './modules/publicApi/PublicSpecController.js'
 import { publicMergeEvidenceController } from './modules/publicApi/PublicMergeEvidenceController.js'
+import { publicKaizenController } from './modules/publicApi/PublicKaizenController.js'
 import { publicDiscoveryController } from './modules/publicApi/PublicDiscoveryController.js'
 import { publicSpendController } from './modules/publicApi/PublicSpendController.js'
 import { publicKeyController } from './modules/publicApi/PublicKeyController.js'
@@ -191,6 +192,11 @@ function registerPublicApiControllers<E extends AppEnv>(app: Hono<E>): void {
   // `write`, since recording how much review a landed PR took merges nothing. See
   // backend/docs/adr/0046-merge-track-record.md.
   app.route('/', publicMergeEvidenceController())
+  // The public KAIZEN surface (`/api/v1/kaizen/entries`): every post-run grading the workspace has
+  // produced, paginated and filterable without naming a run first, plus the acknowledgement that
+  // takes one off the backlog. Reads are `read`; acknowledging is `write`, since recording that a
+  // recommendation was triaged starts nothing. See backend/docs/public-api.md.
+  app.route('/', publicKaizenController())
   // The public SPEND-ANALYTICS read (`/api/v1/usage/spend`): the workspace's money over a window
   // sliced by repository, ticket, run or step kind: the TCO question the period breakdown on
   // `/api/v1/usage` carries no axis for. `read` scope. See backend/docs/public-api.md.

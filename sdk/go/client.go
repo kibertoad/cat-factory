@@ -126,6 +126,9 @@ type Client struct {
 	// The evidence behind the auto-merge policy: per-run merge decisions, the per-class
 	// rollups, and the reviewer-effort tag a landed pull request earned.
 	MergeRecords *MergeRecordsService
+	// The platform's own improvement backlog: post-run gradings of each agent step, and the
+	// acknowledgement that takes one off the backlog.
+	Kaizen *KaizenService
 	// The workspace's own API keys.
 	Keys *KeysService
 }
@@ -190,6 +193,7 @@ func New(options Options) (*Client, error) {
 	client.Me = &MeService{client: client}
 	client.Evidence = &EvidenceService{client: client}
 	client.MergeRecords = &MergeRecordsService{client: client}
+	client.Kaizen = &KaizenService{client: client}
 	client.Keys = &KeysService{client: client}
 	if options.PersonalPassword != "" {
 		client.SetPersonalPassword(options.PersonalPassword)
