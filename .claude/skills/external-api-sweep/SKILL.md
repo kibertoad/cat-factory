@@ -32,14 +32,22 @@ worth less than no verdict, because it reads as checked.
 rather than reciting it, but so a reader knows the shape: the vendor REST/GraphQL clients (GitHub,
 GitLab, Jira, Confluence, Linear, Notion, Figma, Zeplin, Slack, Datadog, incident.io, PagerDuty,
 Cloudflare, SendGrid, Resend, Brave Search, SearXNG, Langfuse, the OTLP collector protocol, the
-Kubernetes API), every hand-rolled OAuth surface, the npm registry read in
-`scripts/check-release-versions.mjs`, and two things whose base URL is configured but whose wire
-shape is still ours: the `${upstream.baseURL}/chat/completions` the LLM proxy appends, and the
-per-provider base URLs typed out in `backend/packages/agents/src/providers/endpoints.ts` (the SDK
-sends the request, but the host and the `/v1` suffix are ours to get wrong).
+Kubernetes API), every hand-rolled OAuth surface, the OpenRouter catalog read, the MCP `initialize` /
+`tools/list` handshake `mcpProbe.ts` runs against an arbitrary tool server, the npm registry read in
+`scripts/check-release-versions.mjs`, and three things whose base URL is configured or whose request
+somebody else sends while the wire shape stays ours: the `${upstream.baseURL}/chat/completions` the
+LLM proxy appends, the per-provider base URLs typed out in
+`backend/packages/agents/src/providers/endpoints.ts` and `kernel/src/domain/models.ts` (the SDK sends
+the request, but the host and the `/v1` suffix are ours to get wrong), and the Gemini image API that
+`backend/packages/binary-generators/` hand-describes for an AGENT to call: paths, the `x-goog-api-key`
+header rule, the parameter names and the response fields, all sent verbatim by something that never
+reads a vendor page.
 
 **OAuth is more than one directory.** `backend/packages/server/src/auth/` holds the GitHub, Google
-and Linear flows, and three more live outside it: `DocumentSourceOAuthService.ts` runs the
+and Linear flows plus a hand-rolled OIDC client in `auth/oidc/`: RFC 8414 discovery, the JWKS read,
+the token exchange and userinfo, against whatever IdP a deployment points it at. That one carries
+every SSO login in a deployment, so a relocated well-known document is a total sign-in outage.
+Three more live outside the directory: `DocumentSourceOAuthService.ts` runs the
 authorization-code and refresh exchanges for Figma, Zeplin and Notion against the endpoints its
 `*.logic.ts` siblings declare; `modules/mcpOAuth/mcpOAuthClient.ts` is hand-rolled on `fetch` and
 walks the RFC 8414 / RFC 9728 well-known metadata locations against arbitrary vendor MCP servers
@@ -50,9 +58,11 @@ Well-known paths and dynamic client registration are exactly the spec surface ve
 
 - **SDK-mediated calls.** `@ai-sdk/*`, `ai`, `workers-ai-provider`, `@aws-sdk/*`, the database
   drivers. The SDK owns the wire shape, so currency there is a dependency bump under the
-  `minimumReleaseAge` rules, not this sweep. Name the boundary: an SDK we PIN to an old major
-  (the Vercel AI SDK family is held to the major that pairs with `workers-ai-provider`) is a
-  finding for the dependency sweep, and this record may point at it in one line.
+  `minimumReleaseAge` rules, not this sweep; §1's listing marks these `kind: sdk` rather than
+  dropping them, so "excluded" and "overlooked" cannot read the same. Name the boundary: an SDK we
+  PIN to an old major (the Vercel AI SDK family is held to the major that pairs with
+  `workers-ai-provider`) is a finding for the dependency sweep, and this record may point at it in
+  one line.
 - **Our own surfaces**: `/api/v1`, `/internal/*`, the runner and container HTTP, the persistence
   RPC. Those are governed by the public-API stability rules in CLAUDE.md.
 - **Build-time supply chain**: the `download.docker.com` apt repo, `repo1.maven.org`,
@@ -67,36 +77,52 @@ moved past, and an entry that quietly disappeared from the code is exactly what 
 hides. Re-derive every run, then diff against the old record to produce the "since last sweep"
 section.
 
-**Do not retype the derivation; run it.** The call-site walk lives in
+**Do not retype the derivation; run it.** The walk lives in
 `scripts/check-external-api-inventory.mjs`, which CI also runs as a guard:
 
 ```
 node scripts/check-external-api-inventory.mjs --list
 ```
 
-It walks every non-test source file under `backend/`, `frontend/`, `scripts/` and `sdk/` for an
-outbound call in call position, and its `CLASSIFICATION` map accounts for each one as a vendor
-surface (naming whose docs settle it) or as one of ours (naming why no vendor page can make it
-wrong). Read the map: it IS the vendor list, and its `internal` reasons are the exclusions the
-record's scope section owes its reader. Because CI checks it, a call site classified nowhere fails
-the pull request that adds it, so an integration landing BETWEEN sweeps cannot sit unswept for
-months. That is the half a periodic job structurally cannot cover.
+It reads every non-test source file under `backend/`, `deploy/`, `frontend/`, `scripts/` and `sdk/`,
+and finds an external surface two ways, because each is blind to what the other sees. A CALL SITE is
+one we send: the global, our `safeFetch` / host-pinned wrappers, and any file that resolves or types
+an injected transport, which is the only thing that catches a call through a locally bound alias
+(`const doFetch = deps.fetch ?? fetch`, `ctx.fetch(url)`). An ENDPOINT DECLARATION is one something
+ELSE sends to: a binary generator's descriptor an AGENT calls with its own credential, a provider
+base URL the AI SDK appends a path to. A call-site walk structurally cannot see the second, which is
+how a hand-written Gemini image contract sat outside an inventory that reported itself complete.
 
-Two things it will not tell you, so grep for them too:
+Each line is `kind`, `vendors`, `signal`, `hosts`, `path`, so the summary table's vendor, host and
+call-site columns are read OFF it rather than reassembled by hand. `kind` is `vendor` (swept here,
+`vendors` naming whose docs settle it), `internal` (stays inside something this repo defines) or
+`sdk` (does leave the building, but on a wire shape a pinned dependency owns, so a version bump owns
+it, not this sweep). Read the map behind the listing: it IS the vendor list, and its `internal` and
+`sdk` reasons are the exclusions the record's scope section owes its reader. Because CI checks the
+same directions, a surface classified nowhere fails the pull request that adds it, so an integration
+landing BETWEEN sweeps cannot sit unswept for months. That is the half a periodic job structurally
+cannot cover.
 
-- **Hosts and base URLs**, which decide what a verdict is ABOUT. ``https?://[^\s'"`)]+`` in
-  non-test source, wide enough for a template literal (`https://${ZEPLIN_API_HOST}/v1` is invisible
-  to a `[a-z0-9.-]` host pattern), plus `(API_HOST|API_BASE|BASE_URL)\s*=` for the hosts that never
-  appear with a scheme (`figma.logic.ts` holds a bare `'api.figma.com'`).
-- **The version pins**: `api-version|Notion-Version|notion-version|/rest/api/|/api/v[0-9]|/v[0-9]+/|graphql`.
+One thing it will not tell you, so grep for it too:
+
+- **The version pins**:
+  `api-version|Notion-Version|notion-version|/rest/api/|/api/v[0-9]|/v[0-9]+[a-z]*/|/api/public/|version=[0-9]|vnd\.[a-z.+-]+\+json|graphql`.
   This is the one grep that finds a file which SENDS no request and still has to change when a pin
-  moves, the acceptance fakes being the live example.
+  moves. FOUR schemes, not one, and a pattern covering only the first two reported PagerDuty and
+  Langfuse as having no pin at all: a header (`x-github-api-version: 2022-11-28`), a path segment
+  (`/rest/api/3`, plus `/v1beta/`, which a `/v[0-9]+/` pattern misses), a MEDIA TYPE
+  (`application/vnd.pagerduty+json;version=2`), and a versionless path a vendor still relocates
+  (Langfuse's `/api/public/ingestion`).
 
-Then close the gaps none of the three reaches:
+Then close the gaps neither direction reaches:
 
 - **A base URL that only ever arrives from config.** Confluence composes
   `${credentials.baseUrl}/wiki/rest/api/content/...`, a self-hosted GitLab and a Jira site do the
   same. No host appears in the source at all, and the PATH is still ours to get wrong.
+- **A file that COMPOSES a vendor path and hands it on.** `kubernetes.logic.ts` builds
+  `/api/v1/namespaces/{ns}/pods` for a caller to send, so it declares no host and makes no call. The
+  version-pin grep is the only thing that finds one, deliberately: the pattern that would derive it
+  is `/api/v[0-9]`, which is also OUR api prefix on every controller and SPA store in the tree.
 - **The configured-but-unswept vendor.** Cross-check the derived list against
   [`docs/environment-variables.md`](../../../docs/environment-variables.md), the capability
   credential kinds (`modules/providers/userSecretKinds.ts`, `modules/capabilityCredentials/`) and
@@ -113,9 +139,10 @@ likeliest bad outcome of this sweep. GitHub is the worked example, and it is wor
 EXPORTS one, which `FetchGitHubClient.ts` and `viewerTokenReads.ts` import; `GitHubAppAuth.ts`,
 `FetchGitHubProvisioningClient.ts` and `auth/GitHubOAuth.ts` each declare a private one). The other
 NINE carry the literal inline, including the harness's own `vcs-api.ts`, `runtimes/local/src/github.ts`,
-two files under `modules/providers/`, and the two acceptance fakes that mirror the pin so the fake
-still matches. Counting the constants and stopping is the mistake: they reach five of fifteen files
-a version move must touch.
+two files under `modules/providers/`, and two under `backend/internal/acceptance/src/`, which are not
+fakes mirroring a pin: they SEND it, to `ACCEPTANCE_VCS_API_BASE ?? https://api.github.com`. Counting
+the constants and stopping is the mistake: they reach five of the fourteen files a version move must
+touch.
 
 Record for each entry: the vendor, the API and version, every `file:line` that talks to it, what
 the platform loses if it breaks, and whether the base URL is fixed or deployment-supplied (a
@@ -273,9 +300,9 @@ Docs-only, `docs:` prefix, empty changeset. Before opening:
 
 - `node scripts/check-doc-links.mjs` and `node scripts/check-doc-anchors.mjs` (the record links
   source files and headings).
-- `node scripts/check-external-api-inventory.mjs`. If the sweep found a call site the walk did not,
-  the fix is in that script's detector or its `CLASSIFICATION` map, and it belongs in THIS PR: the
-  next sweep inherits the tool, not the prose you worked around it with.
+- `node scripts/check-external-api-inventory.mjs`. If the sweep found a surface the walk did not,
+  the fix is in one of that script's two detectors or in its `CLASSIFICATION` map, and it belongs in
+  THIS PR: the next sweep inherits the tool, not the prose you worked around it with.
 - `node --test 'scripts/*.test.mjs'` when you touched the inventory script.
 - `pnpm lint:fix` from the root, once, whole tree.
 

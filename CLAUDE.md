@@ -580,7 +580,7 @@ recipe, release-PR re-sync, new-published-package checklist: [`docs/internal/rel
   imported by path ([`frontend/app/README.md`](./frontend/app/README.md#always-import-a-layer-component-explicitly)).
 - `node scripts/check-reserved-env-keys.mjs`: every variable in `docs/environment-variables.md` is RESERVED, so it can never be named as a capability credential.
 - `node scripts/check-gate-approval-raise.mjs`: every human-gate raise goes through `buildStepApproval`.
-- `node scripts/check-external-api-inventory.mjs`: every outbound HTTP call is classified as a vendor surface the external-API sweep verifies, or as one of ours with the reason.
+- `node scripts/check-external-api-inventory.mjs`: every outbound call, and every vendor endpoint declared for something ELSE to send, is a surface the external-API sweep verifies, one of ours, or an SDK's.
 - `node scripts/check-doc-links.mjs`, `check-doc-anchors.mjs`, `check-shipped-doc-links.mjs`: an ordinary markdown link, a doc URL built in CODE, and a shipped tarball's links each resolve to a file AND a heading.
 - `node scripts/check-{test-lane,conformance-group}-parity.mjs`: `pnpm test:quick` excludes what CI's no-DB lane does; every conformance group runs on every facade.
 - `node scripts/check-deploy-placeholders.mjs`: the `deploy/*` templates hold placeholders, never real ids.
