@@ -1,17 +1,18 @@
 import { test, expect } from './fixtures'
 import {
-  LIVE_TIMEOUT,
-  RUN_TERMINAL_TIMEOUT,
   createSeededWorkspace,
   createSimplePipeline,
   findRiskPolicyByName,
-  type RiskPolicyShape,
+  LIVE_TIMEOUT,
   openBoard,
   pinWorkspace,
   readBlockStatus,
+  RUN_TERMINAL_TIMEOUT,
+  selectTask,
   setFakeProfile,
   startRun,
   taskCard,
+  type RiskPolicyShape,
   useAdvancedInterfaceMode,
 } from './helpers'
 
@@ -146,7 +147,7 @@ test.describe('merge policy (authored in the UI, applied by the merger)', () => 
     // 2) PIN it on the task, through the inspector's own picker (the popover is teleported out of
     // the inspector, so the panel is located off the page).
     const card = taskCard(page, 'task_login')
-    await card.click()
+    await selectTask(card)
     const inspector = page.getByTestId('inspector-panel')
     await expect(inspector).toBeVisible({ timeout: LIVE_TIMEOUT })
     await inspector

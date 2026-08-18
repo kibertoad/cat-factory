@@ -372,8 +372,13 @@ function selectTask() {
     </div>
 
     <!-- title gets a full-width row so long titles wrap to two lines rather than
-         truncating to an unreadable stub; the full text stays available on hover. -->
+         truncating to an unreadable stub; the full text stays available on hover.
+
+         It is also the card's SELECTION affordance for tests: every action button below stops
+         propagation, so a click resolved to one of them never reaches `selectTask`, and the
+         title is the one always-rendered part of the body that no control can occupy. -->
     <div
+      data-testid="task-title"
       class="mt-1 line-clamp-2 break-words text-[11px] font-semibold leading-snug text-slate-100"
       :title="task.title"
     >

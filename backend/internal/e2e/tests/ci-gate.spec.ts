@@ -1,8 +1,9 @@
 import { test, expect } from './fixtures'
 import {
+  createSimplePipeline,
   LIVE_TIMEOUT,
   RUN_TERMINAL_TIMEOUT,
-  createSimplePipeline,
+  selectTask,
   setFakeProfile,
   startRun,
   taskCard,
@@ -43,7 +44,7 @@ test.describe('CI gate (ci-fixer loop)', () => {
     // The run goes live; open the inspector so the step list (with the ci gate) is mounted while
     // the fixer round is still working.
     await expect(card).toHaveAttribute('data-status', 'in_progress', { timeout: LIVE_TIMEOUT })
-    await card.click()
+    await selectTask(card)
 
     // LIVE: the ci gate step is listed. It probes red → dispatches the ci-fixer → re-probes green,
     // so a script that only ever went red would exhaust the budget and fail — reaching `done` is

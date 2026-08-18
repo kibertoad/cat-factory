@@ -332,9 +332,15 @@ const showOriginalDescription = ref(false)
        with the panel on top; the region now paints above at `z-40`, which only swaps which side
        loses). Sitting the panel below fixes it whichever way the stacking goes, and needs no
        left/right arithmetic to stay correct under RTL. -->
+  <!-- `data-inspector-block` names WHICH block the panel is showing, so a caller can tell a
+       panel left open on the previous selection from one that followed a new click. Deliberately
+       NOT `data-block-id`: that attribute is the board's card selector, which the canvas drivers
+       measure geometry through (`utils/blockRects.ts`), and a panel answering to it would offer
+       the arrows a rect that is not on the canvas at all. -->
   <div
     v-if="block && statusMeta && typeMeta"
     data-testid="inspector-panel"
+    :data-inspector-block="block.id"
     class="fixed inset-x-0 bottom-0 z-20 overflow-hidden rounded-t-2xl border border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur lg:absolute lg:inset-x-auto lg:bottom-auto lg:end-4 lg:top-16 lg:w-80 lg:rounded-2xl"
   >
     <div class="h-1.5 w-full" :style="{ backgroundColor: statusMeta.color }" />

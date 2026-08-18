@@ -377,15 +377,26 @@ the finding guessed at:
 
 - `modular/result-views.ts` statically imported all twenty-plus built-in result windows, so a board
   that opens none paid for every one, the review windows' prose readers included. They are
-  contributed as `defineAsyncComponent` entries now; the slot, the compile-time exhaustiveness
-  check and `StepResultViewHost`'s `<component :is>` mount are unchanged, because an async
-  component IS a `Component`.
+  contributed as async entries now; the slot, the compile-time exhaustiveness check and
+  `StepResultViewHost`'s `<component :is>` mount are unchanged, because an async component IS a
+  `Component`.
 - `AgentStepDetail` was the one always-mounted surface in `pages/index.vue` carrying a heavy chunk:
   its prose reader pulls markdown-it for output nothing can be reading until a step has been
   opened. It is store-gated now (`v-if="ui.stepDetail"`), like its ~40 lazy neighbours.
 
 Together: **2.14 MB -> 1.86 MB eager (-281 kB, -13%)**, with the deferred code landing in chunks
 fetched on the click that needs them.
+
+**Splitting a surface out means it can now FAIL to arrive, so every split goes through one seam.**
+`utils/asyncView.ts` wraps `defineAsyncComponent` with a shared failure notice, and the ~40
+pre-existing lazy panels moved onto it alongside the new windows. A hashed-chunk build makes a
+rejected loader routine rather than exotic: a deployment landing while a tab is open turns every
+not-yet-fetched chunk into a 404, and a bare `defineAsyncComponent` renders NOTHING for one. On
+these surfaces that blank is the screen a person approves or rejects a run from, so it reads as
+"there is nothing to review" instead of as a failure, which is the same absent-versus-empty rule
+the backend degrades by. The notice offers a reload rather than a retry, because the chunk the
+running document is asking for is gone from the origin and re-requesting the same URL cannot bring
+it back.
 
 **Remaining, and why it is not a one-line change.** markdown-it is still on the critical path, but
 no longer through an import a component could drop: the bundler groups CommonJS-interop modules

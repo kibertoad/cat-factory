@@ -52,6 +52,22 @@ describe('measureBlocks', () => {
     expect(measure).toHaveBeenCalledTimes(2)
   })
 
+  it('queries nothing until something is actually looked up', () => {
+    // The edge overlay builds a pass every awake frame of a pan and, on a board with no links
+    // of any kind, asks it for no card at all. Deferring is what keeps that pass free.
+    const root = document.createElement('div')
+    root.append(card('a'))
+    document.body.append(root)
+    const query = vi.spyOn(root, 'querySelectorAll')
+
+    const blocks = measureBlocks(root)
+    expect(query).not.toHaveBeenCalled()
+
+    blocks.elementFor('a')
+    blocks.elementFor('a')
+    expect(query).toHaveBeenCalledTimes(1)
+  })
+
   it('scopes the pass to the root it was given', () => {
     const outside = card('a')
     const root = document.createElement('div')

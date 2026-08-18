@@ -757,6 +757,11 @@
         "body": "L’intégration de déploiement de ce service a échoué au test de connexion : {detail}. Vérifiez son point de terminaison et ses identifiants, puis retestez la connexion pour l’exécuter.",
         "action": "Configurer l’infrastructure"
       }
+    },
+    "asyncView": {
+      "title": "Cette vue n'a pas pu être chargée",
+      "body": "Son code n'a pas pu être chargé. Cela signifie généralement que l'application a été mise à jour pendant que cet onglet était ouvert : les fichiers demandés par cette page ne sont plus sur le serveur. Rechargez pour obtenir la version actuelle.",
+      "reload": "Recharger"
     }
   },
   "personalSubscriptions": {

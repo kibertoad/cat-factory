@@ -865,6 +865,18 @@ non-bubbling `pointerleave` fired at a descendant is still seen, so only the can
 clears the pointer. Clearing on any descendant's would collapse the hovered card the moment the
 pointer crossed one of its inner elements.
 
+Two things review caught, both about the boundary of "unthrottled". The gesture listeners bind to
+the WINDOW, not to the canvas element: `useBlockDrag` tracks the pointer on the window precisely so
+a dragged card keeps following it past the canvas's edge, and the top overlay region and the
+inspector are SIBLINGS painted over the canvas, so a canvas-bound listener went silent for as long
+as the cursor crossed one of them and the arrows fell back to the 250ms mutation wake during the
+one interaction this design exists to keep smooth. Capture on the window sees the same events
+wherever they are dispatched, and the `pointerleave` check is on the TARGET, so it reads unchanged.
+And `measureBlocks` defers its query to the first lookup: the edge overlay builds a pass every awake
+frame and, on a board with no links of any kind, asks it for no card at all, where the per-link
+scans it replaced did no DOM work there either. Deferring keeps that in the helper, which both
+drivers inherit, rather than as a link-count guard at a call site a fifth overlay would miss.
+
 Not done here, deliberately: teaching the observer to ignore the overlays' own subtrees. The drivers
 already write their attributes outside its filter, so the wakes that would drop are the ones the
 rate limit now bounds anyway.

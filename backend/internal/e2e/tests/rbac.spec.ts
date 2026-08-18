@@ -4,6 +4,7 @@ import {
   openBoard,
   pinAuthedWorkspace,
   seedRbacScenario,
+  selectTask,
   taskCard,
   useAdvancedInterfaceMode,
 } from './helpers'
@@ -54,7 +55,7 @@ test.describe('workspace RBAC — viewer read-only vs admin escape hatch', () =>
 
     // A viewer can still INSPECT a task, but the Run trigger is locked with the read-only
     // reason — the run panel stays visible (a viewer sees runs), the control is just disabled.
-    await taskCard(page, 'task_login').click()
+    await selectTask(taskCard(page, 'task_login'))
     await expect(page.getByTestId('run-start')).toBeVisible()
     await expect(page.getByTestId('run-start')).toBeDisabled()
     await expect(page.getByTestId('run-blocked-reason')).toBeVisible()
@@ -89,7 +90,7 @@ test.describe('workspace RBAC — viewer read-only vs admin escape hatch', () =>
 
     // The Run trigger is live for an admin: no read-only lock, and the control is enabled
     // (the seeded `task_login` is runnable with no unmet dependencies).
-    await taskCard(page, 'task_login').click()
+    await selectTask(taskCard(page, 'task_login'))
     await expect(page.getByTestId('run-start')).toBeVisible()
     await expect(page.getByTestId('run-start')).toBeEnabled({ timeout: LIVE_TIMEOUT })
     await expect(page.getByTestId('run-blocked-reason')).toBeHidden()

@@ -17,6 +17,7 @@ import GitHubOnboarding from '~/components/github/GitHubOnboarding.vue'
 import CommandBar from '~/components/layout/CommandBar.vue'
 import PersonalCredentialModal from '~/components/providers/PersonalCredentialModal.vue'
 import ConfirmDialog from '~/components/common/ConfirmDialog.vue'
+import { defineAsyncView } from '~/utils/asyncView'
 import KeyboardShortcutsHelp from '~/components/common/KeyboardShortcutsHelp.vue'
 
 // The step-detail reader, mounted only while a step is open. It is the one always-mounted
@@ -24,128 +25,119 @@ import KeyboardShortcutsHelp from '~/components/common/KeyboardShortcutsHelp.vue
 // raw of the ~2.1 MB eager graph) purely to render an agent's output, which nothing can be
 // reading until a step has been opened. Store-gated like the panels below, so the reader loads
 // on the click that needs it.
-const AgentStepDetail = defineAsyncComponent(
-  () => import('~/components/panels/AgentStepDetail.vue'),
-)
+const AgentStepDetail = defineAsyncView(() => import('~/components/panels/AgentStepDetail.vue'))
 
-// Heavy, rarely-open panels — code-split into their own chunks via defineAsyncComponent
-// and mounted only while their ui open-flag is set (the v-if gates in the template), so
-// they stay out of the initial bundle and don't run setup/watchers while closed.
-const ObservabilityPanel = defineAsyncComponent(
+// Heavy, rarely-open panels, code-split into their own chunks via `defineAsyncView` and
+// mounted only while their ui open-flag is set (the v-if gates in the template), so they stay
+// out of the initial bundle and don't run setup/watchers while closed. The seam (rather than a
+// bare `defineAsyncComponent`) is what makes a chunk that 404s after a deploy say so.
+const ObservabilityPanel = defineAsyncView(
   () => import('~/components/panels/ObservabilityPanel.vue'),
 )
-const OperatorDashboardPanel = defineAsyncComponent(
+const OperatorDashboardPanel = defineAsyncView(
   () => import('~/components/panels/OperatorDashboardPanel.vue'),
 )
-const ReportsPanel = defineAsyncComponent(() => import('~/components/panels/ReportsPanel.vue'))
-const KaizenPanel = defineAsyncComponent(() => import('~/components/kaizen/KaizenPanel.vue'))
+const ReportsPanel = defineAsyncView(() => import('~/components/panels/ReportsPanel.vue'))
+const KaizenPanel = defineAsyncView(() => import('~/components/kaizen/KaizenPanel.vue'))
 // Occasional, externally store-gated surfaces — deferred to their own chunks like the
 // sibling document modals above. Each mounts only while its ui open-flag is set, so it
 // loads on first open instead of bloating the initial bundle.
-const BlockFocusView = defineAsyncComponent(() => import('~/components/focus/BlockFocusView.vue'))
-const TaskSourceConnectModal = defineAsyncComponent(
+const BlockFocusView = defineAsyncView(() => import('~/components/focus/BlockFocusView.vue'))
+const TaskSourceConnectModal = defineAsyncView(
   () => import('~/components/tasks/TaskSourceConnectModal.vue'),
 )
-const TaskImportModal = defineAsyncComponent(() => import('~/components/tasks/TaskImportModal.vue'))
-const BugHuntModal = defineAsyncComponent(() => import('~/components/tasks/BugHuntModal.vue'))
-const RecurringPipelineModal = defineAsyncComponent(
+const TaskImportModal = defineAsyncView(() => import('~/components/tasks/TaskImportModal.vue'))
+const BugHuntModal = defineAsyncView(() => import('~/components/tasks/BugHuntModal.vue'))
+const RecurringPipelineModal = defineAsyncView(
   () => import('~/components/board/RecurringPipelineModal.vue'),
 )
-const DocumentSourceConnectModal = defineAsyncComponent(
+const DocumentSourceConnectModal = defineAsyncView(
   () => import('~/components/documents/DocumentSourceConnectModal.vue'),
 )
-const DocumentImportModal = defineAsyncComponent(
+const DocumentImportModal = defineAsyncView(
   () => import('~/components/documents/DocumentImportModal.vue'),
 )
-const DocumentTemplatesModal = defineAsyncComponent(
+const DocumentTemplatesModal = defineAsyncView(
   () => import('~/components/documents/DocumentTemplatesModal.vue'),
 )
-const SpawnPreviewModal = defineAsyncComponent(
+const SpawnPreviewModal = defineAsyncView(
   () => import('~/components/documents/SpawnPreviewModal.vue'),
 )
-const StartFromDesignModal = defineAsyncComponent(
+const StartFromDesignModal = defineAsyncView(
   () => import('~/components/documents/StartFromDesignModal.vue'),
 )
-const BootstrapModal = defineAsyncComponent(
-  () => import('~/components/bootstrap/BootstrapModal.vue'),
-)
-const AddServiceFromRepoModal = defineAsyncComponent(
+const BootstrapModal = defineAsyncView(() => import('~/components/bootstrap/BootstrapModal.vue'))
+const AddServiceFromRepoModal = defineAsyncView(
   () => import('~/components/github/AddServiceFromRepoModal.vue'),
 )
-const GitHubPanel = defineAsyncComponent(() => import('~/components/github/GitHubPanel.vue'))
-const SlackPanel = defineAsyncComponent(() => import('~/components/slack/SlackPanel.vue'))
-const NotificationSettingsPanel = defineAsyncComponent(
+const GitHubPanel = defineAsyncView(() => import('~/components/github/GitHubPanel.vue'))
+const SlackPanel = defineAsyncView(() => import('~/components/slack/SlackPanel.vue'))
+const NotificationSettingsPanel = defineAsyncView(
   () => import('~/components/notifications/NotificationSettingsPanel.vue'),
 )
-const FragmentLibraryPanel = defineAsyncComponent(
+const FragmentLibraryPanel = defineAsyncView(
   () => import('~/components/fragments/FragmentLibraryPanel.vue'),
 )
-const FoundationalServicePanel = defineAsyncComponent(
+const FoundationalServicePanel = defineAsyncView(
   () => import('~/components/foundational/FoundationalServicePanel.vue'),
 )
 // Startup advisory for invalid / outdated pipelines — only mounted while open (auto-opened
 // at most once per session by the watcher below), so it stays out of the initial bundle.
-const PipelineHealthModal = defineAsyncComponent(
+const PipelineHealthModal = defineAsyncView(
   () => import('~/components/pipeline/PipelineHealthModal.vue'),
 )
 // Startup advisory for new / outdated built-in merge presets — same once-per-session pattern.
-const RiskPolicyHealthModal = defineAsyncComponent(
+const RiskPolicyHealthModal = defineAsyncView(
   () => import('~/components/settings/RiskPolicyHealthModal.vue'),
 )
 // Startup advisory for new / outdated built-in model presets — same once-per-session pattern.
-const ModelPresetHealthModal = defineAsyncComponent(
+const ModelPresetHealthModal = defineAsyncView(
   () => import('~/components/settings/ModelPresetHealthModal.vue'),
 )
-const IntegrationsHub = defineAsyncComponent(
-  () => import('~/components/layout/IntegrationsHub.vue'),
-)
-const ModelProvidersHub = defineAsyncComponent(
-  () => import('~/components/layout/ModelProvidersHub.vue'),
-)
-const PersonalSetupModal = defineAsyncComponent(
+const IntegrationsHub = defineAsyncView(() => import('~/components/layout/IntegrationsHub.vue'))
+const ModelProvidersHub = defineAsyncView(() => import('~/components/layout/ModelProvidersHub.vue'))
+const PersonalSetupModal = defineAsyncView(
   () => import('~/components/layout/PersonalSetupModal.vue'),
 )
-const WorkspaceSettingsPanel = defineAsyncComponent(
+const WorkspaceSettingsPanel = defineAsyncView(
   () => import('~/components/settings/WorkspaceSettingsPanel.vue'),
 )
-const AccountSettingsPanel = defineAsyncComponent(
+const AccountSettingsPanel = defineAsyncView(
   () => import('~/components/settings/AccountSettingsPanel.vue'),
 )
-const ObservabilityConnectionPanel = defineAsyncComponent(
+const ObservabilityConnectionPanel = defineAsyncView(
   () => import('~/components/settings/ObservabilityConnectionPanel.vue'),
 )
-const PackageRegistriesPanel = defineAsyncComponent(
+const PackageRegistriesPanel = defineAsyncView(
   () => import('~/components/settings/PackageRegistriesPanel.vue'),
 )
-const ApiTokensPanel = defineAsyncComponent(
-  () => import('~/components/settings/ApiTokensPanel.vue'),
-)
-const InfrastructureWindow = defineAsyncComponent(
+const ApiTokensPanel = defineAsyncView(() => import('~/components/settings/ApiTokensPanel.vue'))
+const InfrastructureWindow = defineAsyncView(
   () => import('~/components/settings/InfrastructureWindow.vue'),
 )
-const EnvironmentSetupWizard = defineAsyncComponent(
+const EnvironmentSetupWizard = defineAsyncView(
   () => import('~/components/environments/EnvironmentSetupWizard.vue'),
 )
-const ModelConfigurationPanel = defineAsyncComponent(
+const ModelConfigurationPanel = defineAsyncView(
   () => import('~/components/settings/ModelConfigurationPanel.vue'),
 )
-const LocalModelEndpointsPanel = defineAsyncComponent(
+const LocalModelEndpointsPanel = defineAsyncView(
   () => import('~/components/settings/LocalModelEndpointsPanel.vue'),
 )
-const SandboxPanel = defineAsyncComponent(() => import('~/components/sandbox/SandboxPanel.vue'))
-const UserSecretsSection = defineAsyncComponent(
+const SandboxPanel = defineAsyncView(() => import('~/components/sandbox/SandboxPanel.vue'))
+const UserSecretsSection = defineAsyncView(
   () => import('~/components/settings/UserSecretsSection.vue'),
 )
-const OpenRouterCatalogPanel = defineAsyncComponent(
+const OpenRouterCatalogPanel = defineAsyncView(
   () => import('~/components/settings/OpenRouterCatalogPanel.vue'),
 )
-const VendorCredentialsModal = defineAsyncComponent(
+const VendorCredentialsModal = defineAsyncView(
   () => import('~/components/providers/VendorCredentialsModal.vue'),
 )
-const AiProviderOnboardingModal = defineAsyncComponent(
+const AiProviderOnboardingModal = defineAsyncView(
   () => import('~/components/providers/AiProviderOnboardingModal.vue'),
 )
-const AiPresetMismatchDialog = defineAsyncComponent(
+const AiPresetMismatchDialog = defineAsyncView(
   () => import('~/components/providers/AiPresetMismatchDialog.vue'),
 )
 // The in-app tutorial: the launch prompt (auto-opened once for a user who never answered
@@ -153,19 +145,15 @@ const AiPresetMismatchDialog = defineAsyncComponent(
 // section or the palette, at any time), the coach-mark overlay that runs a tour, and the
 // contextual offer that raises the ONE walkthrough this board just made takeable. All
 // mount only while their store flag is set, so they cost the initial bundle nothing.
-const TutorialPrompt = defineAsyncComponent(
-  () => import('~/components/tutorial/TutorialPrompt.vue'),
-)
-const TutorialCatalogue = defineAsyncComponent(
+const TutorialPrompt = defineAsyncView(() => import('~/components/tutorial/TutorialPrompt.vue'))
+const TutorialCatalogue = defineAsyncView(
   () => import('~/components/tutorial/TutorialCatalogue.vue'),
 )
-const TutorialOverlay = defineAsyncComponent(
-  () => import('~/components/tutorial/TutorialOverlay.vue'),
-)
-const TutorialNudge = defineAsyncComponent(() => import('~/components/tutorial/TutorialNudge.vue'))
+const TutorialOverlay = defineAsyncView(() => import('~/components/tutorial/TutorialOverlay.vue'))
+const TutorialNudge = defineAsyncView(() => import('~/components/tutorial/TutorialNudge.vue'))
 // The first-run role question (Engineer / Product manager / Designer). Same shape as the tutorial
 // launch prompt: mounted only while its store flag is set, so an answered question costs nothing.
-const RolePrompt = defineAsyncComponent(() => import('~/components/layout/RolePrompt.vue'))
+const RolePrompt = defineAsyncView(() => import('~/components/layout/RolePrompt.vue'))
 
 const workspace = useWorkspaceStore()
 const github = useGitHubStore()
@@ -487,7 +475,15 @@ watch(
         <!-- Always-mounted, fast-path surfaces. -->
         <PipelineBuilder />
         <DecisionModal />
-        <AgentStepDetail v-if="ui.stepDetail" />
+        <!-- Code-split step-detail reader. Teleport + fade live here, not inside the component,
+             for the same reason the focus view's do: an inner Transition never animates the
+             mount its own v-if gate causes, and is unmounted before it could animate the
+             unmount. -->
+        <Teleport to="body">
+          <Transition name="reader-fade">
+            <AgentStepDetail v-if="ui.stepDetail" />
+          </Transition>
+        </Teleport>
         <StepResultViewHost />
         <!-- Consumer-contributed top-level overlays (extension slice D). Renders nothing until a
              consumer opens one via `ui.openOverlay` / `useAppOverlays().open(...)`. -->

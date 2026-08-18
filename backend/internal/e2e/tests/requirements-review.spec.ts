@@ -1,9 +1,10 @@
 import { test, expect } from './fixtures'
 import {
-  LIVE_TIMEOUT,
-  RUN_TERMINAL_TIMEOUT,
   createSimplePipeline,
+  LIVE_TIMEOUT,
   openAttention,
+  RUN_TERMINAL_TIMEOUT,
+  selectTask,
   setFakeProfile,
   startRun,
   taskCard,
@@ -98,9 +99,11 @@ test.describe('requirements review (the clarification loop)', () => {
     await page.getByTestId('requirements-incorporate').click()
     await expect(dialog).toBeHidden({ timeout: LIVE_TIMEOUT })
 
-    // Open the inspector's run panel while the cycle is still working (the card is parked, so a
-    // body click selects it rather than landing on an action button).
-    await card.click()
+    // Open the inspector's run panel while the cycle is still working. The card is parked, so
+    // its action row carries the Resolve affordance and a centre click can land on it, which
+    // re-opens the review window and selects NOTHING: `selectTask` takes the title instead and
+    // asserts the panel actually followed.
+    await selectTask(card)
 
     // LIVE: the re-review converges (the mock returns no further findings), so the gate step
     // SETTLES rather than re-parking — the one state that distinguishes a closed loop from a

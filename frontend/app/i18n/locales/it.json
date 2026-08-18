@@ -6041,6 +6041,11 @@
         "body": "L’integrazione di deployment di questo servizio non ha superato il test di connessione: {detail}. Controlla il suo endpoint e le credenziali, poi riprova la connessione per eseguirla.",
         "action": "Configura infrastruttura"
       }
+    },
+    "asyncView": {
+      "title": "Impossibile caricare questa vista",
+      "body": "Il suo codice non è stato caricato. Di solito significa che l'applicazione è stata aggiornata mentre questa scheda era aperta, quindi i file richiesti da questa pagina non sono più sul server. Ricarica per ottenere la versione attuale.",
+      "reload": "Ricarica"
     }
   },
   "slack": {

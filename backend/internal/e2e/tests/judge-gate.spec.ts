@@ -3,10 +3,11 @@ import { test, expect } from './fixtures'
 // through (`src/fakeJudge.ts`), so the pipeline this spec builds can never name a stale slug.
 import { SCOPE_JUDGE_KIND } from '@cat-factory/example-custom-agent'
 import {
-  LIVE_TIMEOUT,
-  RUN_TERMINAL_TIMEOUT,
   createSimplePipeline,
+  LIVE_TIMEOUT,
   openAttention,
+  RUN_TERMINAL_TIMEOUT,
+  selectTask,
   setFakeProfile,
   startRun,
   taskCard,
@@ -54,7 +55,7 @@ test.describe('registered judge (rubric verdict gate)', () => {
     const card = taskCard(page, 'task_login')
     await startRun(request, workspaceId, 'task_login', pipeline.id)
     await expect(card).toHaveAttribute('data-status', 'in_progress', { timeout: LIVE_TIMEOUT })
-    await card.click()
+    await selectTask(card)
 
     // LIVE: the judge step is listed (proof the manifest-registered kind reached the SPA at all)
     // and reaches `done`.

@@ -1,76 +1,65 @@
-import { defineAsyncComponent, type Component } from 'vue'
+import type { Component } from 'vue'
 import { defineModule } from '@modular-vue/core'
 import { RESULT_VIEW_IDS, type ResultViewId } from '@cat-factory/contracts'
 import type { ResultViewContribution } from './slots'
+import { defineAsyncView } from '~/utils/asyncView'
 
 /**
  * Every built-in window is CODE-SPLIT: a result window opens on a deliberate click (an agent
  * step, a gate, an outcome card), and there are more than twenty of them, so importing the
  * catalog statically put all of them plus their dependencies (markdown-it, the review windows'
- * prose readers) into the initial bundle of a board that may open none. `defineAsyncComponent`
+ * prose readers) into the initial bundle of a board that may open none. `defineAsyncView`
  * returns an ordinary `Component`, so the slot entry, the exhaustiveness check below and
  * `StepResultViewHost`'s `<component :is>` mount are unchanged; only the fetch moves to the
- * open. A consumer window may be contributed either way, and should copy this one.
+ * open. It wraps `defineAsyncComponent` with the shared failure notice, so a window whose chunk
+ * 404s after a deploy says so rather than opening onto nothing. A consumer window may be
+ * contributed either way, and should copy this one.
  */
-const OutcomeSummaryWindow = defineAsyncComponent(
+const OutcomeSummaryWindow = defineAsyncView(
   () => import('~/components/outcome/OutcomeSummaryWindow.vue'),
 )
-const RequirementsReviewWindow = defineAsyncComponent(
+const RequirementsReviewWindow = defineAsyncView(
   () => import('~/components/requirements/RequirementsReviewWindow.vue'),
 )
-const ClarityReviewWindow = defineAsyncComponent(
+const ClarityReviewWindow = defineAsyncView(
   () => import('~/components/clarity/ClarityReviewWindow.vue'),
 )
-const BrainstormWindow = defineAsyncComponent(
+const BrainstormWindow = defineAsyncView(
   () => import('~/components/brainstorm/BrainstormWindow.vue'),
 )
-const TestReportWindow = defineAsyncComponent(
-  () => import('~/components/testing/TestReportWindow.vue'),
-)
-const HumanTestWindow = defineAsyncComponent(
-  () => import('~/components/humanTest/HumanTestWindow.vue'),
-)
-const VisualConfirmationWindow = defineAsyncComponent(
+const TestReportWindow = defineAsyncView(() => import('~/components/testing/TestReportWindow.vue'))
+const HumanTestWindow = defineAsyncView(() => import('~/components/humanTest/HumanTestWindow.vue'))
+const VisualConfirmationWindow = defineAsyncView(
   () => import('~/components/visualConfirm/VisualConfirmationWindow.vue'),
 )
-const GateResultView = defineAsyncComponent(() => import('~/components/gates/GateResultView.vue'))
-const ConsensusSessionWindow = defineAsyncComponent(
+const GateResultView = defineAsyncView(() => import('~/components/gates/GateResultView.vue'))
+const ConsensusSessionWindow = defineAsyncView(
   () => import('~/components/consensus/ConsensusSessionWindow.vue'),
 )
-const GenericStructuredResultView = defineAsyncComponent(
+const GenericStructuredResultView = defineAsyncView(
   () => import('~/components/panels/GenericStructuredResultView.vue'),
 )
-const ServiceSpecWindow = defineAsyncComponent(
-  () => import('~/components/spec/ServiceSpecWindow.vue'),
-)
-const FollowUpWindow = defineAsyncComponent(
-  () => import('~/components/followUp/FollowUpWindow.vue'),
-)
-const BinaryCandidatesWindow = defineAsyncComponent(
+const ServiceSpecWindow = defineAsyncView(() => import('~/components/spec/ServiceSpecWindow.vue'))
+const FollowUpWindow = defineAsyncView(() => import('~/components/followUp/FollowUpWindow.vue'))
+const BinaryCandidatesWindow = defineAsyncView(
   () => import('~/components/binaryCandidates/BinaryCandidatesWindow.vue'),
 )
-const ForkDecisionWindow = defineAsyncComponent(
+const ForkDecisionWindow = defineAsyncView(
   () => import('~/components/forkDecision/ForkDecisionWindow.vue'),
 )
-const PrReviewWindow = defineAsyncComponent(
-  () => import('~/components/prReview/PrReviewWindow.vue'),
-)
-const MergerResultView = defineAsyncComponent(
-  () => import('~/components/panels/MergerResultView.vue'),
-)
-const InitiativeTrackerWindow = defineAsyncComponent(
+const PrReviewWindow = defineAsyncView(() => import('~/components/prReview/PrReviewWindow.vue'))
+const MergerResultView = defineAsyncView(() => import('~/components/panels/MergerResultView.vue'))
+const InitiativeTrackerWindow = defineAsyncView(
   () => import('~/components/initiative/InitiativeTrackerWindow.vue'),
 )
-const InitiativePlanningWindow = defineAsyncComponent(
+const InitiativePlanningWindow = defineAsyncView(
   () => import('~/components/initiative/InitiativePlanningWindow.vue'),
 )
-const DocInterviewWindow = defineAsyncComponent(
-  () => import('~/components/docs/DocInterviewWindow.vue'),
-)
-const RalphLoopResultView = defineAsyncComponent(
+const DocInterviewWindow = defineAsyncView(() => import('~/components/docs/DocInterviewWindow.vue'))
+const RalphLoopResultView = defineAsyncView(
   () => import('~/components/ralph/RalphLoopResultView.vue'),
 )
-const JudgeResultView = defineAsyncComponent(() => import('~/components/judge/JudgeResultView.vue'))
+const JudgeResultView = defineAsyncView(() => import('~/components/judge/JudgeResultView.vue'))
 
 /**
  * The first-party result-view registry (slice 2 of the modular-vue adoption —

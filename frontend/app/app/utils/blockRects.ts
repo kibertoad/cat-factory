@@ -13,8 +13,15 @@
  * `document.querySelector` returned before, so a card also rendered outside the canvas (the focus
  * view, the inspector) resolves to the same element it always did.
  *
- * It is deliberately a SNAPSHOT: geometry read inside one frame must not change halfway through
- * a pass, and the next pass builds a fresh one.
+ * The query itself is DEFERRED to the first lookup, so a pass that turns out to have nothing to
+ * resolve costs nothing. That is the common case rather than a corner: a board with no
+ * dependency, epic, frontend or connection link runs the edge overlay's pass on every awake
+ * frame of a pan and asks it for not one card, and the sweep it replaced did no DOM work there
+ * at all. Deferring keeps that property in the helper, where both drivers inherit it, rather
+ * than as a `links.length` guard at each call site that a fifth overlay would silently miss.
+ *
+ * It is still a SNAPSHOT: geometry read inside one frame must not change halfway through a pass,
+ * the query runs at most once whenever it runs, and the next pass builds a fresh one.
  */
 export type BlockMeasurements = {
   /** The rendered card for a block id, or null when nothing on the page renders it. */
@@ -26,16 +33,23 @@ export type BlockMeasurements = {
 export const BLOCK_ID_ATTRIBUTE = 'data-block-id'
 
 export function measureBlocks(root: ParentNode = document): BlockMeasurements {
-  const elements = new Map<string, HTMLElement>()
-  for (const el of root.querySelectorAll<HTMLElement>(`[${BLOCK_ID_ATTRIBUTE}]`)) {
-    const id = el.getAttribute(BLOCK_ID_ATTRIBUTE)
-    if (id && !elements.has(id)) elements.set(id, el)
+  let elements: Map<string, HTMLElement> | null = null
+
+  function index(): Map<string, HTMLElement> {
+    if (elements) return elements
+    const found = new Map<string, HTMLElement>()
+    for (const el of root.querySelectorAll<HTMLElement>(`[${BLOCK_ID_ATTRIBUTE}]`)) {
+      const id = el.getAttribute(BLOCK_ID_ATTRIBUTE)
+      if (id && !found.has(id)) found.set(id, el)
+    }
+    elements = found
+    return found
   }
 
   const rects = new WeakMap<Element, DOMRect>()
 
   return {
-    elementFor: (id) => elements.get(id) ?? null,
+    elementFor: (id) => index().get(id) ?? null,
     rectFor(el) {
       const cached = rects.get(el)
       if (cached) return cached

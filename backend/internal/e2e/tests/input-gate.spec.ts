@@ -1,10 +1,11 @@
 import { test, expect } from './fixtures'
 import {
-  LIVE_TIMEOUT,
-  RUN_TERMINAL_TIMEOUT,
   createSimplePipeline,
   createTask,
+  LIVE_TIMEOUT,
   openAttention,
+  RUN_TERMINAL_TIMEOUT,
+  selectTask,
   setFakeProfile,
   startRun,
   taskCard,
@@ -55,7 +56,7 @@ test.describe('pre-dispatch input gate', () => {
     // park is to go and edit the task, which is a board action, so it is a plain notice rather
     // than an overlay. Scoped to the inspector because the SAME notice also renders in the
     // step-detail rail (the third test opens both at once).
-    await card.click()
+    await selectTask(card)
     const notice = page.getByTestId('inspector-panel').getByTestId('input-gate-notice')
     await expect(notice).toBeVisible({ timeout: LIVE_TIMEOUT })
     await expect(notice).toHaveAttribute('data-tone', 'blocked')

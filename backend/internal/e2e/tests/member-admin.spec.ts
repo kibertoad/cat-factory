@@ -5,6 +5,7 @@ import {
   openBoard,
   pinAuthedWorkspace,
   seedTeamScenario,
+  selectTask,
   taskCard,
   useAdvancedInterfaceMode,
 } from './helpers'
@@ -105,7 +106,7 @@ test.describe('workspace access administration (the members roster)', () => {
     await expect(theirs.getByTestId('frame-add-task').first()).toBeVisible({
       timeout: LIVE_TIMEOUT,
     })
-    await taskCard(theirs, 'task_login').click()
+    await selectTask(taskCard(theirs, 'task_login'))
     const run = theirs.getByTestId('run-start')
     await expect(run).toBeVisible()
     await expect(run).toBeEnabled()

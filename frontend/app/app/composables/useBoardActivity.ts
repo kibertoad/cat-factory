@@ -23,7 +23,7 @@ import { createWakeGate } from '~/utils/boardWakeGate'
  *    board where measuring costs the most. The gesture and camera signals below are admitted
  *    unthrottled, so nothing the user is actually moving waits on an interval.
  *  - a `ResizeObserver` on the canvas, plus window `resize`: layout changes with no mutation.
- *  - pointer, wheel and scroll gestures on the canvas: the user moving something.
+ *  - pointer, wheel and scroll gestures, listened for on the WINDOW: the user moving something.
  *
  * What it does NOT catch is a reflow with no mutation and no gesture, such as a late-loading
  * image or font resizing a card. Those settle on the next pulse of any kind.
@@ -71,11 +71,12 @@ export function provideBoardActivity(container: Ref<HTMLElement | null>): BoardA
   /**
    * Track the pointer and pulse, in that order, off the SAME listener.
    *
-   * `pointerleave` does not bubble, but a capture-phase listener on the canvas still sees one
-   * fired at any descendant, and the pointer moving from a card onto the canvas around it is
-   * exactly that event. So only the canvas's OWN leave clears the position; treating a
-   * descendant's as "the pointer is gone" would collapse the hovered card the moment the pointer
-   * crossed one of its inner elements.
+   * `pointerleave` does not bubble, but a CAPTURE-phase listener sees one fired at any element
+   * below it, and the pointer moving from a card onto the canvas around it is exactly that
+   * event. So only the canvas's OWN leave clears the position; treating a descendant's as "the
+   * pointer is gone" would collapse the hovered card the moment the pointer crossed one of its
+   * inner elements. That check is on the TARGET, so it reads the same from the window as it did
+   * from the canvas.
    */
   const onGesture = (event: Event) => {
     if (event.type === 'pointerleave') {
@@ -101,6 +102,15 @@ export function provideBoardActivity(container: Ref<HTMLElement | null>): BoardA
   const resizes = new ResizeObserver(pulse)
   // `scroll` does not bubble, so it is caught in the capture phase; the gestures are
   // passive listeners because the pulse never wants to cancel one.
+  //
+  // They are bound to the WINDOW rather than to the canvas, because a drag does not end at the
+  // canvas's edge: `useBlockDrag` tracks the pointer on the window precisely so a card keeps
+  // following it, and the toolbar region and the inspector are SIBLINGS painted over the canvas,
+  // not descendants of it. Bound to the canvas, a drag whose cursor crossed one of them stopped
+  // delivering the gesture that keeps the measuring loops awake, and the arrows fell back to the
+  // rate-limited mutation wake for as long as the cursor was over it: a visible lag in the one
+  // interaction this pulse exists to keep smooth. Capture on the window sees every one of those
+  // events wherever it is dispatched, so nothing else about the handler changes.
   const gestures = [
     'pointerdown',
     'pointermove',
@@ -123,7 +133,7 @@ export function provideBoardActivity(container: Ref<HTMLElement | null>): BoardA
       attributeFilter: ['style', 'class'],
     })
     resizes.observe(el)
-    for (const type of gestures) el.addEventListener(type, onGesture, gestureOptions)
+    for (const type of gestures) window.addEventListener(type, onGesture, gestureOptions)
     window.addEventListener('resize', pulse)
   })
 
@@ -131,8 +141,7 @@ export function provideBoardActivity(container: Ref<HTMLElement | null>): BoardA
     mutations.disconnect()
     resizes.disconnect()
     renderWakes.cancel()
-    const el = container.value
-    for (const type of gestures) el?.removeEventListener(type, onGesture, gestureOptions)
+    for (const type of gestures) window.removeEventListener(type, onGesture, gestureOptions)
     window.removeEventListener('resize', pulse)
     subscribers.clear()
   })
