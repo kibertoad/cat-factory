@@ -454,6 +454,37 @@ describe('LocalProcessRunnerTransport: spawn, child env and shutdown', () => {
     vi.unstubAllEnvs()
   })
 
+  // `resolveEnv` is read AT SPAWN rather than captured at construction, because what it answers
+  // (the harness clone-host allow-list, derived from the deployment's source-control credential)
+  // follows a credential the sign-in screen can install while this transport is alive. One
+  // long-lived process serves every native job, so a value captured once would pin the allow-list
+  // to whatever was installed when the first native step happened to run.
+  it('reads resolveEnv on every spawn rather than capturing it once', async () => {
+    let host = 'gitlab.acme.dev'
+    const children = [fakeChild(), fakeChild()]
+    let spawned = 0
+    const spawnImpl = vi.fn(
+      (_cmd: string, _args: readonly string[], _opts: unknown) => children[spawned++]!,
+    )
+    const transport = mkTransport({
+      harnessEntry: '/h.js',
+      resolveEnv: () => ({ GITHUB_ALLOWED_HOSTS: host }),
+      spawnImpl: spawnImpl as unknown as typeof import('node:child_process').spawn,
+      fetchImpl: vi.fn(async () => new Response('ok', { status: 200 })) as unknown as typeof fetch,
+      pickPort: async () => 6011,
+    })
+    await transport.dispatch({ runId: 'r', jobId: 'j' }, {}, 'agent')
+    const first = spawnImpl.mock.calls[0]![2] as { env: Record<string, string | undefined> }
+    expect(first.env.GITHUB_ALLOWED_HOSTS).toBe('gitlab.acme.dev')
+
+    // The process dies and the next dispatch replaces it; the credential moved in between.
+    host = 'gitlab.other.dev'
+    children[0]!.emit('exit', 1)
+    await transport.dispatch({ runId: 'r2', jobId: 'j2' }, {}, 'agent')
+    const second = spawnImpl.mock.calls[1]![2] as { env: Record<string, string | undefined> }
+    expect(second.env.GITHUB_ALLOWED_HOSTS).toBe('gitlab.other.dev')
+  })
+
   it("inherits the full env when envMode is 'inherit' (the deploy harness's ambient tooling)", async () => {
     vi.stubEnv('KUBECONFIG', '/home/dev/.kube/config')
     const child = fakeChild()

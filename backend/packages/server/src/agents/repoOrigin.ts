@@ -1,4 +1,4 @@
-import { vcsWebBaseUrl } from '@cat-factory/kernel'
+import { type VcsProvider, vcsWebBaseUrl } from '@cat-factory/kernel'
 import type { GitLabConfig } from '../config/types.js'
 import type { RepoOrigin, ResolveRepoOrigin } from './repoTargeting.js'
 import { githubRepoOrigin } from './containerAgentBody.js'
@@ -27,25 +27,56 @@ export interface RepoOriginConfig {
 }
 
 /**
- * The clone origin for the provider a deployment's ENGINE actually reaches.
+ * Which provider a deployment's ENGINE reaches, and therefore the one every run-path seam that
+ * takes no workspace has to answer for.
  *
  * The rule mirrors `engineVcsClient` (`githubClient ?? gitlabEngineClient`) deliberately: the
- * client that opens the merge request and the URL the container clones have to name the same
- * host, and a GitHub App wins wherever both are configured. A deployment serving GitHub-App and
- * per-workspace-GitLab workspaces side by side therefore still clones GitHub for every run,
- * which is the same boundary the engine's own per-workspace routing sits behind: this seam takes
- * no workspace, so it could not answer per workspace even if it wanted to.
+ * client that opens the merge request, the URL the container clones and the client the
+ * checkout-free `RepoFiles` seams read through all have to name the same host, and a GitHub App
+ * wins wherever both are configured. A deployment serving GitHub-App and per-workspace-GitLab
+ * workspaces side by side therefore runs its engine on GitHub for every workspace, which is the
+ * boundary the deferred per-workspace routing slice sits behind: none of these seams takes a
+ * workspace, so none could answer per workspace even if it wanted to.
  *
- * A GitLab base the web derivation cannot invert THROWS at dispatch rather than falling back.
- * The fallback is `github.com`, so a quiet one sends the container to a real page belonging to
- * somebody else and reports whatever it checks out there as the run's repository; the throw
- * names the variable an operator has to fix. Same disposition as the SPA's link builders, one
- * step further because a checkout cannot be withheld.
+ * Stated ONCE here because three call sites share it, and a facade that derived it locally could
+ * bind a client for one provider beside a clone URL for the other.
+ */
+export function engineVcsProvider(config: RepoOriginConfig): VcsProvider {
+  return config.github.enabled || !config.gitlab.enabled ? 'github' : 'gitlab'
+}
+
+/**
+ * The clone origin for the provider a deployment's ENGINE actually reaches
+ * ({@link engineVcsProvider}).
+ *
+ * Two configurations THROW at dispatch rather than falling back, for one reason: the fallback is
+ * `github.com`, so a quiet one sends the container to a real page belonging to somebody else and
+ * reports whatever it checks out there as the run's repository. A checkout cannot be withheld the
+ * way the SPA withholds a link, so the disposition goes one step further and names what an
+ * operator has to fix.
+ *
+ * - **A GitLab base the web derivation cannot invert.** The message names the variable.
+ * - **A repo the engine's provider cannot reach.** `RepoTarget.provider` records where the repo
+ *   actually lives, so on a mixed deployment a row explicitly marked `gitlab` would otherwise be
+ *   handed a `github.com` URL for a same-named project that is not it. The dispatch credential is
+ *   wrong there too (the mint is the App registry's, with no per-provider routing), so there is no
+ *   correct URL to build for such a row on this path: it is the per-workspace routing slice, and
+ *   until that lands the honest answer is a refusal naming the repository. A row with NO provider
+ *   predates the column and reads as the deployment's own, so it never trips this.
  */
 export function deploymentRepoOrigin(config: RepoOriginConfig): ResolveRepoOrigin {
-  if (config.github.enabled || !config.gitlab.enabled) return githubRepoOrigin
-  const webBase = vcsWebBaseUrl('gitlab', config.gitlab.apiBase)
+  const provider = engineVcsProvider(config)
+  const webBase = provider === 'gitlab' ? vcsWebBaseUrl('gitlab', config.gitlab.apiBase) : undefined
   return (repo): RepoOrigin => {
+    if (repo.provider && repo.provider !== provider) {
+      throw new Error(
+        `'${repo.owner}/${repo.name}' is a ${repo.provider} repository, but this deployment's ` +
+          `engine reaches ${provider}, so there is no clone URL or credential for it. Runs ` +
+          `against ${repo.provider} repositories need a deployment whose engine is configured ` +
+          `for ${repo.provider}.`,
+      )
+    }
+    if (provider === 'github') return githubRepoOrigin(repo)
     if (!webBase) {
       throw new Error(
         `GITLAB_API_BASE ('${config.gitlab.apiBase}') names no web host, so the clone URL for ` +
@@ -70,9 +101,20 @@ export function deploymentRepoOrigin(config: RepoOriginConfig): ResolveRepoOrigi
  * A facade that wires {@link deploymentRepoOrigin} without this produces a run that fails at
  * checkout with a security refusal instead of a configuration message, which is why they are
  * stated together here rather than a host being spelled out at each wiring site.
+ *
+ * The value is a HOSTNAME, port excluded, because that is what the harness compares it against
+ * (`assertAllowedHost` matches `new URL(cloneUrl).hostname`). An instance served on a non-default
+ * port is the case that makes the difference visible: allow-listing `gitlab.internal:8080` never
+ * matches the `gitlab.internal` the harness looks up, so every clone is refused with no port
+ * anywhere in the message. On the Worker the value is derived rather than operator-set, so there
+ * would be nothing to correct it with.
+ *
+ * A facade that reaches the SAME instance on a second port therefore allow-lists it once, which is
+ * correct: the allow-list bounds where a credential may be SENT, and a port is not a trust
+ * boundary (anything that can answer on one port of a host can answer on another).
  */
 export function harnessGitLabHost(gitlab: RepoOriginConfig['gitlab']): string | undefined {
   if (!gitlab.enabled) return undefined
   const webBase = vcsWebBaseUrl('gitlab', gitlab.apiBase)
-  return webBase ? new URL(webBase).host : undefined
+  return webBase ? new URL(webBase).hostname : undefined
 }

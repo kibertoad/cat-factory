@@ -10,8 +10,8 @@ import { makeResolveRepoFilesForCoords } from '../src/agents/repoFiles.js'
 // uses to validate / bootstrap a provider's config file in a repo the operator names. It
 // matches the workspace's projected repos by owner+name and binds a checkout-free
 // RepoFiles over the wired GitHubClient — degrading to null (→ "no VCS connection") when
-// the workspace has no connection, the repo isn't projected, or the caller named a provider
-// the projection disagrees with.
+// the workspace has no connection, the repo isn't projected, the repo resolves to a provider
+// the BOUND client does not speak, or the caller named a provider the projection disagrees with.
 
 const REF = { owner: 'acme', repo: 'widgets' }
 
@@ -42,6 +42,7 @@ describe('makeResolveRepoFilesForCoords', () => {
   it('returns null when the workspace has no VCS connection', async () => {
     const resolve = makeResolveRepoFilesForCoords(
       fakeClient(),
+      'github',
       installationRepo(null),
       projectionRepo([{ owner: 'acme', name: 'widgets' }]),
     )
@@ -51,6 +52,7 @@ describe('makeResolveRepoFilesForCoords', () => {
   it('returns null when the named repo is not projected', async () => {
     const resolve = makeResolveRepoFilesForCoords(
       fakeClient(),
+      'github',
       installationRepo(42),
       projectionRepo([{ owner: 'acme', name: 'other' }]),
     )
@@ -61,6 +63,7 @@ describe('makeResolveRepoFilesForCoords', () => {
     const client = fakeClient()
     const resolve = makeResolveRepoFilesForCoords(
       client,
+      'github',
       installationRepo(42),
       projectionRepo([{ owner: 'acme', name: 'widgets', defaultBranch: 'trunk' }]),
     )
@@ -73,6 +76,7 @@ describe('makeResolveRepoFilesForCoords', () => {
   it('defaults the base branch to main when the projection carries none', async () => {
     const resolve = makeResolveRepoFilesForCoords(
       fakeClient(),
+      'github',
       installationRepo(42),
       projectionRepo([{ owner: 'acme', name: 'widgets' }]),
     )
@@ -87,6 +91,7 @@ describe('makeResolveRepoFilesForCoords', () => {
     const client = fakeClient()
     const resolve = makeResolveRepoFilesForCoords(
       client,
+      'gitlab',
       installationRepo(7, 'gitlab'),
       projectionRepo([{ owner: 'group/sub', name: 'widgets', provider: 'gitlab' }]),
     )
@@ -106,6 +111,7 @@ describe('makeResolveRepoFilesForCoords', () => {
   it('falls back to the connection provider for a row that carries none', async () => {
     const resolve = makeResolveRepoFilesForCoords(
       fakeClient(),
+      'gitlab',
       installationRepo(7, 'gitlab'),
       projectionRepo([{ owner: 'acme', name: 'widgets' }]),
     )
@@ -116,9 +122,28 @@ describe('makeResolveRepoFilesForCoords', () => {
   it('refuses coordinates whose named provider the projection disagrees with', async () => {
     const resolve = makeResolveRepoFilesForCoords(
       fakeClient(),
+      'github',
       installationRepo(42),
       projectionRepo([{ owner: 'acme', name: 'widgets', provider: 'github' }]),
     )
     expect(await resolve('ws1', { owner: 'acme', repo: 'widgets', provider: 'gitlab' })).toBeNull()
+  })
+
+  // The mixed deployment: a GitHub App is what the facade binds here, and a GitLab-connected
+  // workspace's repo is not reachable through it whether or not the caller names the provider.
+  // Reading it would mint an App token for a GitLab host, or hit a same-named GitHub project.
+  it('refuses a repo the bound client cannot read, however the caller names it', async () => {
+    const client = fakeClient()
+    const resolve = makeResolveRepoFilesForCoords(
+      client,
+      'github',
+      installationRepo(7, 'gitlab'),
+      projectionRepo([{ owner: 'group/sub', name: 'widgets', provider: 'gitlab' }]),
+    )
+    const coords = { owner: 'group/sub', repo: 'widgets' }
+    expect(await resolve('ws1', coords)).toBeNull()
+    expect(await resolve('ws1', { ...coords, provider: 'gitlab' })).toBeNull()
+    expect(await resolve('ws1', { ...coords, provider: 'github' })).toBeNull()
+    expect(client.getFileContent).not.toHaveBeenCalled()
   })
 })

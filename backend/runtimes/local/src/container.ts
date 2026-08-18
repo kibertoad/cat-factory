@@ -808,7 +808,11 @@ function buildLocalAgentTransports(params: {
     if (nativeAgents) {
       if (!routed) {
         routed = new NativeRoutingRunnerTransport(
-          () => (nativeProcessTransport ??= createLocalProcessTransportFromEnv(env)),
+          () =>
+            (nativeProcessTransport ??= createLocalProcessTransportFromEnv(
+              env,
+              credentials.current,
+            )),
           resolveContainerTransport,
         )
       }

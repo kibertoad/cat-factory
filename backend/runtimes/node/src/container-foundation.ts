@@ -222,6 +222,14 @@ export function resolveNodeContainerFoundation(options: NodeContainerOptions) {
   // from this deployment's own config, so a hosted GitLab-only deployment clones its GitLab host
   // rather than falling through to `githubRepoOrigin` and handing every container a `github.com`
   // URL for a project that lives elsewhere.
+  //
+  // The allow-list half (`harnessGitLabHost`) has NO wiring here on purpose, and its absence is
+  // the operator step this facade cannot take for them. Node dispatches to a workspace's
+  // SELF-HOSTED runner pool: the harness container is theirs, started by their infrastructure,
+  // and nothing in this process sets its environment. So a GitLab deployment sets
+  // `GITHUB_ALLOWED_HOSTS` on that container itself, documented in
+  // `docs/environment-variables.md` and on the website's runner-pool page. The Worker (which owns
+  // its containers) and local mode (which owns its transport) both derive and set it.
   const resolveRepoOrigin = options.resolveRepoOrigin ?? deploymentRepoOrigin(config)
 
   // Honour the workspace's model presets at run time (block-pinned > the task's

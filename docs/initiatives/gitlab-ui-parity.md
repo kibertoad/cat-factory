@@ -453,4 +453,16 @@ where it is derived.
   resolver, fixed in this PR to resolve a GitLab repo rather than refuse every caller that named
   one) all bind ONE deployment-level client. Each is correct for a single-provider deployment and
   wrong for a mixed one in the same way. Whatever routes the first should route all three, and a
-  fix that only reaches the gate client will leave two silent halves behind.
+  fix that only reaches the gate client will leave two silent halves behind. The rule they share is
+  `engineVcsProvider`, one exported function, so slice 10 has one place to replace rather than
+  three derivations to find.
+- **On a mixed deployment the two seams REFUSE rather than answer wrongly, which is what makes
+  slice 10 visible.** A repo row carries its own `provider`, so both know when the repository they
+  were handed is not one the bound client reaches. The dispositions differ because the callers do:
+  `deploymentRepoOrigin` THROWS, naming the repository, because a dispatch has no way to withhold a
+  checkout and a `github.com` URL for a row marked `gitlab` is the same wrong-project checkout the
+  un-invertible base case exists to prevent (the dispatch credential is wrong there too, since the
+  mint is the App registry's with no per-provider routing). `makeResolveRepoFilesForCoords` returns
+  null, the "no VCS connection" its callers already handle. Neither guesses, and a row that carries
+  NO provider predates the column and reads as the deployment's own, so neither trips on an older
+  workspace.

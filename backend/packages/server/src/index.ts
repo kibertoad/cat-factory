@@ -122,7 +122,7 @@ export { ensureWorkBranchViaRest, type EnsureWorkBranchInput } from './github/en
 // so a facade whose OWN resolver handles only the non-GitHub case can delegate the GitHub half
 // here instead of restating the URL, which would drift the moment this default learns anything.
 export { githubRepoOrigin } from './agents/containerAgentBody.js'
-export { deploymentRepoOrigin, harnessGitLabHost } from './agents/repoOrigin.js'
+export { deploymentRepoOrigin, engineVcsProvider, harnessGitLabHost } from './agents/repoOrigin.js'
 // The backend half of the harness filesystem contract, exported so the harness's conformity
 // suite can pin it against the harness's own independently-computed copy.
 export {

@@ -10,6 +10,7 @@ import type {
   ResolveRepoFiles,
   ResolveRunRepoContext,
   RunRepoContext,
+  VcsProvider,
 } from '@cat-factory/kernel'
 import { repoFilesCacheGroup } from '@cat-factory/kernel'
 import type {
@@ -329,14 +330,20 @@ export function makeResolveDeployCloneTarget(
  * its connection's provider rather than as `github`, so the fallback follows the connection
  * instead of the historical default.
  *
- * The remaining gap is the one the engine has generally: on a deployment serving BOTH a GitHub
- * App and per-workspace GitLab connections the facade binds the App client here, so a
- * GitLab-connected workspace resolves a context it cannot read. That is the per-workspace engine
- * routing slice (see `docs/initiatives/gitlab-ui-parity.md`), not something this function can
- * answer: it is handed one client and has no workspace-level routing of its own.
+ * Which is why `clientProvider` is stated rather than assumed. It is a fact about the client the
+ * FACADE bound ({@link engineVcsProvider}), and a repo the projection resolves to some OTHER
+ * provider is one this seam cannot read: on a deployment serving BOTH a GitHub App and
+ * per-workspace GitLab connections the App client is what gets bound here, so a GitLab-connected
+ * workspace's row would resolve to a context whose reads mint the wrong credential or hit a
+ * same-named GitHub project. Refusing it keeps the honest "no VCS connection" the caller already
+ * handles, and leaves closing the gap to the per-workspace engine routing slice
+ * (`docs/initiatives/gitlab-ui-parity.md`), which is the only thing that CAN close it: this
+ * function is handed one client and has no workspace-level routing of its own.
  */
 export function makeResolveRepoFilesForCoords(
   client: GitHubClient,
+  /** The provider {@link client} speaks, so a repo it cannot read is refused rather than bound. */
+  clientProvider: VcsProvider,
   installationRepository: Pick<GitHubInstallationRepository, 'getByWorkspace'>,
   repoProjectionRepository: Pick<RepoProjectionRepository, 'list'>,
 ): (
@@ -350,11 +357,15 @@ export function makeResolveRepoFilesForCoords(
     const match = repos.find((r) => r.owner === owner && r.name === repo)
     if (!match) return null
     // The row's own provider, falling back to the connection that projected it (rows predating
-    // the column carry none). A caller that NAMED a provider is making a claim about where the
-    // repo lives, so a disagreement is refused rather than resolved: binding a GitLab-named
-    // layer to a GitHub connection would read a different repository of the same name and report
-    // it as a match.
+    // the column carry none).
     const resolved = match.provider ?? installation.provider
+    // Two different questions, both answered by withholding the context. CAN this seam read the
+    // repo at all: the bound client speaks one provider, and one it does not speak is not
+    // reachable from here whatever the caller believes. And is the caller's own claim right: a
+    // caller that NAMED a provider is asserting where the repo lives, so a disagreement is
+    // refused rather than resolved, since binding a GitLab-named layer to a GitHub connection
+    // would read a different repository of the same name and report it as a match.
+    if (resolved !== clientProvider) return null
     if (provider && provider !== resolved) return null
     return {
       repo: makeRepoFiles(client, installation.installationId, { owner, repo }),

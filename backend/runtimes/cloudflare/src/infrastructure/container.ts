@@ -2,7 +2,6 @@ import {
   type Clock,
   type EmailSender,
   type ExecutionEventPublisher,
-  type GitHubClient,
   type IdGenerator,
   type NotificationChannel,
   NoopWorkRunner,
@@ -37,12 +36,7 @@ import {
   registeredToolSecretEnvironmentFallback,
   resolveRegisteredToolSecretResolver,
 } from './toolSecretResolver.js'
-import {
-  buildAppRegistry,
-  buildResolveRepoTarget,
-  buildResolveRepoTargets,
-  buildResolveRunInitiatorToken,
-} from './container-vcs-identity.js'
+import { buildAppRegistry, buildResolveRepoTarget } from './container-vcs-identity.js'
 // The App registry + repo-target resolvers moved to `container-vcs-identity.ts`; re-exported so
 // the sibling modules that already read them off the composition root keep one import surface.
 export { buildAppRegistry, buildResolveRepoTarget }
@@ -64,7 +58,6 @@ import {
 import { workerAppCaches } from './appCachesHost'
 import {
   FanOutEventPublisher,
-  PatPreferringAppRegistry,
   buildToolSecretChain,
   logger,
   buildInfrastructureCapabilities,
@@ -88,8 +81,6 @@ import { D1AccountInvitationRepository } from './repositories/D1AccountInvitatio
 import { D1PasswordResetTokenRepository } from './repositories/D1PasswordResetTokenRepository'
 import { D1EmailConnectionRepository } from './repositories/D1EmailConnectionRepository'
 import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository'
-import { D1RateLimitRepository } from './repositories/D1RateLimitRepository'
-import { D1DocumentRepository } from './repositories/D1DocumentRepository'
 import { D1EnvironmentConnectionRepository } from './repositories/D1EnvironmentConnectionRepository'
 import { D1CustomManifestTypeRepository } from './repositories/D1CustomManifestTypeRepository'
 import { D1EnvironmentRegistryRepository } from './repositories/D1EnvironmentRegistryRepository'
@@ -128,30 +119,16 @@ import { D1ReleaseHealthConfigRepository } from './repositories/D1ReleaseHealthC
 // then wires each gate's provider below.
 import {
   type GateProviderOverrides,
-  wireCiStatusProvider,
-  wireMergeabilityProvider,
   wireReleaseHealthProvider,
   wireIncidentEnrichment,
-  wirePullRequestReviewProvider,
-  wireDocQualityProvider,
 } from '@cat-factory/gates'
 import {
-  buildGitLabEngineClient,
   GitLabIdentityResolver,
   registerGitLab,
   StaticGitLabTokenSource,
 } from '@cat-factory/gitlab'
-import {
-  GitHubDocQualityProvider,
-  GitHubPrReportPublisher,
-  GitHubPullRequestReviewProvider,
-} from '@cat-factory/server'
-import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
-import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
-import { GitHubBranchUpdater } from './github/GitHubBranchUpdater'
-import { GitHubPullRequestMerger } from './github/GitHubPullRequestMerger'
+import { wireEngineVcsDeps } from './container-engine-vcs-deps'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
-import { FetchGitHubClient } from './github/FetchGitHubClient'
 import { D1FragmentBriefRepository } from './repositories/D1FragmentBriefRepository'
 import { D1PromptFragmentRepository } from './repositories/D1PromptFragmentRepository'
 import { D1FragmentSourceRepository } from './repositories/D1FragmentSourceRepository'
@@ -176,57 +153,6 @@ import type { D1Database } from '@cloudflare/workers-types'
 // package so the cross-runtime controllers can reference it.
 export type Container = ServerContainer
 
-/**
- * Build the merge-lifecycle ports. The notification repository + merge-preset
- * repository are wired unconditionally (the inbox + presets are always available);
- * the in-app delivery channel is wired only when the events binding is present
- * (else rows persist but nothing is pushed). The CI status provider + PR merger
- * need GitHub, so they're wired only when the App is configured — without them the
- * `ci` gate passes through and `done` is a board-only flip (graceful degradation).
- */
-/**
- * The GitHubClient the engine's gate / merge / RepoFiles paths read through: the GitHub App
- * (preferring the run initiator's per-user PAT when stored), else a GitLab-backed single-token
- * client (bridged onto the GitHubClient port). Undefined when neither is configured — the gates
- * then pass through. Shared by the merge-lifecycle and RepoFiles wiring so they resolve the SAME
- * provider, and so the GitLab fallback can't drift from the App path.
- */
-function selectEngineVcsClient(
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-  clock: Clock,
-  idGenerator: IdGenerator,
-): GitHubClient | undefined {
-  if (config.github.enabled && env.GITHUB_APP_PRIVATE_KEY) {
-    const baseRegistry = buildAppRegistry(env, config, db, clock)
-    // Prefer the run initiator's per-user PAT (when stored AND the workspace permits it) over
-    // the App token for the CI gate + merge reads; the engine sets the run's credential scope
-    // in ambient context around those boundaries (runWithInitiator). Falls back to the App
-    // token otherwise.
-    const resolveRunInitiatorToken = buildResolveRunInitiatorToken(env, db, clock)
-    const registry = resolveRunInitiatorToken
-      ? new PatPreferringAppRegistry(baseRegistry, resolveRunInitiatorToken)
-      : baseRegistry
-    return new FetchGitHubClient({
-      registry,
-      rateLimitRepository: new D1RateLimitRepository({ db, idGenerator }),
-      idGenerator,
-      clock,
-      apiBase: config.github.apiBase,
-    })
-  }
-  if (config.gitlab.enabled && env.GITLAB_TOKEN) {
-    return buildGitLabEngineClient({
-      token: env.GITLAB_TOKEN,
-      apiBase: config.gitlab.apiBase,
-      clock,
-      logger,
-    })
-  }
-  return undefined
-}
-
 /** What {@link selectMergeLifecycleDeps} needs. An options object rather than a positional tail:
  *  it already carried six parameters, and the notification channels it composes will keep
  *  growing (in-app, Slack, the outbound webhook, …) — a named bag stays readable and keeps the
@@ -246,6 +172,13 @@ export interface MergeLifecycleDepsInput {
   webhookChannel?: NotificationChannel
 }
 
+/**
+ * Build the merge-lifecycle ports. The notification repository + merge-preset repository are
+ * wired unconditionally (the inbox + presets are always available); the in-app delivery channel
+ * is wired only when the events binding is present (else rows persist but nothing is pushed).
+ * The VCS-backed halves need a source-control client, so they come from `wireEngineVcsDeps` and
+ * are absent when neither the App nor a GitLab token is configured.
+ */
 export function selectMergeLifecycleDeps(
   input: MergeLifecycleDepsInput,
 ): Partial<CoreDependencies> {
@@ -284,61 +217,11 @@ export function selectMergeLifecycleDeps(
     }),
   )
 
-  // The engine's CI gate + merge / mergeability / review providers read through a single
-  // GitHubClient. Prefer the GitHub App; else fall back to a GitLab-backed client (single-token,
-  // bridged onto the GitHubClient port) so a GitLab-only deployment gates on real CI and merges
-  // for real — parity with the App path and with local mode (keep the runtimes symmetric).
-  const githubClient = selectEngineVcsClient(env, config, db, clock, idGenerator)
-  if (githubClient) {
-    const resolveRepoTarget = buildResolveRepoTarget(db)
-    const blockRepository = new D1BlockRepository({ db })
-    // The `ci` / `conflicts` gates now live in `@cat-factory/gates`; wire their providers into
-    // the gate suite (deployment-global handles) instead of onto the engine's CoreDependencies.
-    wireCiStatusProvider(
-      providerRegistry,
-      new GitHubCiStatusProvider({ githubClient, resolveRepoTarget, blockRepository }),
-    )
-    wireMergeabilityProvider(
-      providerRegistry,
-      new GitHubMergeabilityProvider({ githubClient, resolveRepoTarget, blockRepository }),
-    )
-    wirePullRequestReviewProvider(
-      providerRegistry,
-      new GitHubPullRequestReviewProvider({ githubClient, resolveRepoTarget, blockRepository }),
-    )
-    wireDocQualityProvider(
-      providerRegistry,
-      new GitHubDocQualityProvider({
-        githubClient,
-        resolveRepoTarget,
-        blockRepository,
-        // The gate resolves a workspace-linked template (WS1) for the block's kind, so it checks
-        // against the SAME sections the doc-writer followed. Cheap query wrapper over the same D1.
-        documentRepository: new D1DocumentRepository({ db }),
-      }),
-    )
-    deps.branchUpdater = new GitHubBranchUpdater({
-      githubClient,
-      resolveRepoTarget,
-      blockRepository,
-    })
-    deps.pullRequestMerger = new GitHubPullRequestMerger({
-      githubClient,
-      resolveRepoTarget,
-      blockRepository,
-    })
-    // Keeps the engine-maintained verification report current on every pull request the run
-    // opened — the own-service one plus each peer repo's on a cross-service task. Reads through
-    // the same engine VCS client, so a GitLab-only deployment gets it too (runtime symmetry
-    // with the Node facade's `githubGateDeps`).
-    deps.prVerificationReportPublisher = new GitHubPrReportPublisher({
-      githubClient,
-      resolveRepoTarget,
-      resolveRepoTargets: buildResolveRepoTargets(db),
-      blockRepository,
-      logger,
-    })
-  }
+  // The engine's VCS-backed halves: the client every gate / merge / review path reads through,
+  // and the providers + publishers built over it. Its own module (`container-engine-vcs-deps.ts`),
+  // the Worker's counterpart to Node's `container-github-deps.ts`. Neither provider configured
+  // means an empty slice: the gates pass through and `done` is a board-only flip.
+  Object.assign(deps, wireEngineVcsDeps({ env, config, db, clock, idGenerator, providerRegistry }))
   return deps
 }
 
