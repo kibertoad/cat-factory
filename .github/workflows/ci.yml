@@ -536,6 +536,19 @@ jobs:
       - name: Guard conformance group parity
         run: node scripts/check-conformance-group-parity.mjs
 
+      # Requires every file that makes an outbound HTTP call to be classified as a VENDOR surface
+      # the external-API sweep verifies or an INTERNAL one it does not. Almost every third-party
+      # surface here is reached by hand (a path we typed, a header we pinned), so nothing else in
+      # CI can see the vendor move one, and the sweep that reads the vendor's live docs is only as
+      # good as its inventory. Left to regexes retyped each run it undercounts: the skill's own
+      # worked example found four GitHub API-version pins where the tree has fourteen, and two
+      # document providers were invisible to both of its greps. This is also the half the sweep
+      # cannot cover, since an integration landing BETWEEN sweeps is unswept for months, and it
+      # fails in that PR instead. Its fixtures run in the `node --test` step above. Pure node, no
+      # install, no network.
+      - name: Guard external API inventory
+        run: node scripts/check-external-api-inventory.mjs
+
       # Requires every workflow that gates on a runner image's sources to gate on the SAME list
       # `scripts/runner-images.mjs` declares that image is built from. The descriptors already
       # feed the tag guard and the tag sync; the path filters were the one copy left by hand, and

@@ -28,13 +28,23 @@ worth less than no verdict, because it reads as checked.
 
 ## What is in scope
 
-**In**: any place we hand-build a request against a service we do not run. Vendor REST/GraphQL
-(GitHub, GitLab, Jira, Linear, Notion, Slack, Datadog, incident.io, PagerDuty, SendGrid, Resend,
-Google Generative Language, OpenRouter, Langfuse, Brave Search), the OAuth/identity endpoints under
-`backend/packages/server/src/auth/`, the Kubernetes API paths we compose in
-`kubernetes-environment.logic.ts`, the package-registry reads in the harness and in
-`scripts/check-release-versions.mjs`, and the OpenAI-compatible wire shape the LLM proxy appends by
-hand (`${upstream.baseURL}/chat/completions`) even though its base URL is configured.
+**In**: any place we hand-build a request against a service we do not run. §1 derives the list
+rather than reciting it, but so a reader knows the shape: the vendor REST/GraphQL clients (GitHub,
+GitLab, Jira, Confluence, Linear, Notion, Figma, Zeplin, Slack, Datadog, incident.io, PagerDuty,
+Cloudflare, SendGrid, Resend, Brave Search, SearXNG, Langfuse, the OTLP collector protocol, the
+Kubernetes API), every hand-rolled OAuth surface, the npm registry read in
+`scripts/check-release-versions.mjs`, and two things whose base URL is configured but whose wire
+shape is still ours: the `${upstream.baseURL}/chat/completions` the LLM proxy appends, and the
+per-provider base URLs typed out in `backend/packages/agents/src/providers/endpoints.ts` (the SDK
+sends the request, but the host and the `/v1` suffix are ours to get wrong).
+
+**OAuth is more than one directory.** `backend/packages/server/src/auth/` holds the GitHub, Google
+and Linear flows, and three more live outside it: `DocumentSourceOAuthService.ts` runs the
+authorization-code and refresh exchanges for Figma, Zeplin and Notion against the endpoints its
+`*.logic.ts` siblings declare; `modules/mcpOAuth/mcpOAuthClient.ts` is hand-rolled on `fetch` and
+walks the RFC 8414 / RFC 9728 well-known metadata locations against arbitrary vendor MCP servers
+before three token calls; `modules/mcpAuthServer/` speaks the same vocabulary from the other side.
+Well-known paths and dynamic client registration are exactly the spec surface vendors move.
 
 **Out, and say so in the record rather than leaving the reader to wonder**:
 
@@ -46,8 +56,9 @@ hand (`${upstream.baseURL}/chat/completions`) even though its base URL is config
 - **Our own surfaces**: `/api/v1`, `/internal/*`, the runner and container HTTP, the persistence
   RPC. Those are governed by the public-API stability rules in CLAUDE.md.
 - **Build-time supply chain**: the `download.docker.com` apt repo, `repo1.maven.org`,
-  `https://get.k3s.io`. They break a build rather than a run, and they move on the image's
-  schedule. Excluded deliberately, named in the record's scope section.
+  `https://get.k3s.io`, and the registries a job's own `npm install` hits (the harness only WRITES
+  the npmrc that routes them; it reads no registry itself). They break a build rather than a run,
+  and they move on the image's schedule. Excluded deliberately, named in the record's scope section.
 
 ## 1. Derive the inventory, never inherit it
 
@@ -56,31 +67,55 @@ moved past, and an entry that quietly disappeared from the code is exactly what 
 hides. Re-derive every run, then diff against the old record to produce the "since last sweep"
 section.
 
-Start from call sites rather than from hosts, because a base URL that arrives from config still
-carries a hand-typed path:
+**Do not retype the derivation; run it.** The call-site walk lives in
+`scripts/check-external-api-inventory.mjs`, which CI also runs as a guard:
 
-- `await fetch\(|fetchImpl\(|globalThis\.fetch\(` across `backend/`, `scripts/`, `frontend/app/`,
-  excluding `*.test.ts` / `*.spec.ts` / `**/test/**`.
-- `https://[a-z0-9.-]+\.[a-z]{2,}` in non-test source, to catch the constants
-  (`LINEAR_GRAPHQL_URL`, `API_BASE`, the `apiBase ?? 'https://…'` defaults).
-- The version pins themselves: `api-version|Notion-Version|notion-version|/rest/api/|/api/v[0-9]|/v[0-9]+/|graphql`.
+```
+node scripts/check-external-api-inventory.mjs --list
+```
 
-Then close the three gaps a `backend/packages` grep structurally cannot see:
+It walks every non-test source file under `backend/`, `frontend/`, `scripts/` and `sdk/` for an
+outbound call in call position, and its `CLASSIFICATION` map accounts for each one as a vendor
+surface (naming whose docs settle it) or as one of ours (naming why no vendor page can make it
+wrong). Read the map: it IS the vendor list, and its `internal` reasons are the exclusions the
+record's scope section owes its reader. Because CI checks it, a call site classified nowhere fails
+the pull request that adds it, so an integration landing BETWEEN sweeps cannot sit unswept for
+months. That is the half a periodic job structurally cannot cover.
 
-- **`backend/internal/executor-harness/src/`.** The harness has its OWN VCS client (`vcs-api.ts`)
-  pinning `x-github-api-version: 2022-11-28` inline, and inside the package tree that same pin is
-  re-declared as a private `API_VERSION` constant in `githubHttpHelpers.ts`, `GitHubAppAuth.ts` and
-  `FetchGitHubProvisioningClient.ts`. One API, four pins, one of them outside the tree a package
-  grep walks. A shared API gets EVERY site listed in its row, because moving one and missing the
-  rest is the likeliest bad outcome of this sweep.
-- **`scripts/` and `frontend/app/`.** A registry read in a guard script is still an external API.
+Two things it will not tell you, so grep for them too:
+
+- **Hosts and base URLs**, which decide what a verdict is ABOUT. ``https?://[^\s'"`)]+`` in
+  non-test source, wide enough for a template literal (`https://${ZEPLIN_API_HOST}/v1` is invisible
+  to a `[a-z0-9.-]` host pattern), plus `(API_HOST|API_BASE|BASE_URL)\s*=` for the hosts that never
+  appear with a scheme (`figma.logic.ts` holds a bare `'api.figma.com'`).
+- **The version pins**: `api-version|Notion-Version|notion-version|/rest/api/|/api/v[0-9]|/v[0-9]+/|graphql`.
+  This is the one grep that finds a file which SENDS no request and still has to change when a pin
+  moves, the acceptance fakes being the live example.
+
+Then close the gaps none of the three reaches:
+
+- **A base URL that only ever arrives from config.** Confluence composes
+  `${credentials.baseUrl}/wiki/rest/api/content/...`, a self-hosted GitLab and a Jira site do the
+  same. No host appears in the source at all, and the PATH is still ours to get wrong.
 - **The configured-but-unswept vendor.** Cross-check the derived list against
   [`docs/environment-variables.md`](../../../docs/environment-variables.md), the capability
   credential kinds (`modules/providers/userSecretKinds.ts`, `modules/capabilityCredentials/`) and
-  `modules/tasks` / `modules/documents` / `modules/observability`. A vendor a deployment can
-  configure but whose call site your grep missed is the one hole this cross-check exists to close.
-  Assert the RELATION (every configurable vendor is either swept or excluded with a reason), never
-  a count.
+  every directory under `backend/packages/integrations/src/modules/` (there are more than thirty;
+  naming a handful here is how this cross-check quietly narrows to the vendors you already had). A vendor
+  a deployment can configure but whose call site the walk missed is what this cross-check exists to
+  close. Assert the RELATION (every configurable vendor is either swept or excluded with a reason),
+  never a count.
+
+**A shared API gets EVERY site listed in its row**, because moving one and missing the rest is the
+likeliest bad outcome of this sweep. GitHub is the worked example, and it is worse than it looks:
+`x-github-api-version: 2022-11-28` is sent from FOURTEEN non-test files. Five reach it through an
+`API_VERSION` identifier, and even those are four separate constants (`githubHttpHelpers.ts`
+EXPORTS one, which `FetchGitHubClient.ts` and `viewerTokenReads.ts` import; `GitHubAppAuth.ts`,
+`FetchGitHubProvisioningClient.ts` and `auth/GitHubOAuth.ts` each declare a private one). The other
+NINE carry the literal inline, including the harness's own `vcs-api.ts`, `runtimes/local/src/github.ts`,
+two files under `modules/providers/`, and the two acceptance fakes that mirror the pin so the fake
+still matches. Counting the constants and stopping is the mistake: they reach five of fifteen files
+a version move must touch.
 
 Record for each entry: the vendor, the API and version, every `file:line` that talks to it, what
 the platform loses if it breaks, and whether the base URL is fixed or deployment-supplied (a
@@ -112,8 +147,12 @@ Check, in this order (the first three are what actually breaks):
   documented one, and whether the vendor now returns retry headers we ignore.
 - **Error semantics we branch on.** Status codes and error bodies that steer a refusal or a retry.
 
-Past about six integrations, verify them one investigation at a time and keep each verdict with its
-citation rather than the search transcript.
+Past about six integrations this does not fit in one context, and serialising twenty vendors at two
+or more fetches each is forty round trips for no reason: the verifications share no state. Fan them
+out, one subagent per vendor, each returning its verdict WITH the page URL and the date it read and
+NOT the search transcript. That isolation is the point (a changelog is the bulkiest thing this
+skill reads and none of it needs to outlive the verdict). Ordering, severity and the record stay
+here.
 
 ## 3. Verdicts
 
@@ -134,6 +173,13 @@ One per integration, and the last two are not decoration:
 Severity is ours: breaks a run path with no fallback is High; an optional integration degrading
 (a missed Slack notification, dropped Langfuse traces) is Medium; ergonomics is Low.
 
+**The two axes order the table together, worst first: Broken, Deprecated with a date, Unverifiable,
+Drifting, Current; within a verdict by severity, then by vendor name.** Unverifiable outranks
+Drifting on purpose. An unchecked call may be either of the two above it, and filing it below a
+known-and-benign one is the same collapse the verdict exists to refuse. Fixing the order also
+matters because the "since the last sweep" diff is read off this table: with no defined order, two
+sweeps of an unchanged tree produce churn that reads as movement.
+
 ## 4. Opportunities, tied to a consumer
 
 The second half of the sweep, and the half that rots into a vendor press release if it is written
@@ -152,9 +198,17 @@ The highest-value shapes, given how this platform works:
   stated honestly.
 - **A narrower scope or a shorter-lived token** for a credential we already hold.
 
-For each, state the cost too: a new scope on an existing connection is a re-consent for every
-deployment, a new credential means a `docs/environment-variables.md` entry under the reserved-keys
-guard, and anything an operator must act on ships as a website PR first (ADR 0051).
+For each, state the cost too. A new scope on an existing connection is a re-consent for every
+deployment, and anything an operator must act on ships as a website PR first (ADR 0051).
+
+**A new credential costs one decision before either, and getting it backwards breaks the feature.**
+A deployment-level PLATFORM variable is documented in
+[`docs/environment-variables.md`](../../../docs/environment-variables.md), and that entry is what
+`check-reserved-env-keys.mjs` uses to RESERVE the name. A per-capability credential (ADR 0041) is
+the opposite case: it is declared by name on the agent kind or tool server and resolved through the
+kernel `ToolSecretResolver`, and documenting it in that file is precisely what would make it
+unusable, because `isReservedPlatformEnvKey` refuses a reserved name as a credential key. Say which
+of the two an opportunity needs; do not write "document the new variable" over both.
 
 ## 5. Write the record
 
@@ -168,7 +222,9 @@ write.
 The header carries, on its own lines: the sweep timestamp (`date -u +'%Y-%m-%d %H:%M UTC'`), the
 commit swept (`git rev-parse --short HEAD`), the previous sweep's date, and one line naming who ran
 it (the skill). A record without a commit is unusable, because "still correct" is a claim about a
-tree, not about a calendar.
+tree, not about a calendar. On the run that creates the file the previous date is written as
+`none (first sweep)`: never blank, never omitted, never invented. That line is what a later sweep
+reads to build its diff, so it is the last place an absent fact may look like a checked one.
 
 Then:
 
@@ -205,7 +261,8 @@ Two exceptions to how the handoff is made, neither of which changes that rule:
   for the next sweep.
 - **A fix touching `backend/internal/executor-harness/src/` bumps the runner image** and the pinned
   tag everywhere it appears (see CLAUDE.md, Releases & changesets). That makes it a separate,
-  heavier PR by construction, which is another reason the shared-API rows list both call sites.
+  heavier PR by construction, which is another reason a shared API's row lists every call site
+  rather than the tidy few that share a constant.
 
 Anything the sweep touches that spans several PRs earns a tracker under `docs/initiatives/`; a
 single adoption does not.
@@ -216,6 +273,10 @@ Docs-only, `docs:` prefix, empty changeset. Before opening:
 
 - `node scripts/check-doc-links.mjs` and `node scripts/check-doc-anchors.mjs` (the record links
   source files and headings).
+- `node scripts/check-external-api-inventory.mjs`. If the sweep found a call site the walk did not,
+  the fix is in that script's detector or its `CLASSIFICATION` map, and it belongs in THIS PR: the
+  next sweep inherits the tool, not the prose you worked around it with.
+- `node --test 'scripts/*.test.mjs'` when you touched the inventory script.
 - `pnpm lint:fix` from the root, once, whole tree.
 
 The description is a reviewer briefing: lead with the verdict counts and every Broken or
