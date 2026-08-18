@@ -1,9 +1,28 @@
 import { isAllowedMcpHttpUrl, redactSecrets } from '@cat-factory/kernel'
 import { MCP_PROBE_MAX_PAGES, MCP_PROBE_TIMEOUT_MS } from '@cat-factory/contracts'
+import {
+  dialectHeaders,
+  LEGACY_ERA,
+  legacyInitializeParams,
+  MODERN_ERA,
+  readDiscoverResult,
+  readEraVerdict,
+  readModernServerInfo,
+  requestParams,
+  type McpEra,
+  type ServerIdentity,
+} from './mcpDialect.js'
 
 // ---------------------------------------------------------------------------
 // A minimal Streamable-HTTP MCP CLIENT, for one purpose: ask a declared `http` tool server whether
-// it is there. `initialize`, `notifications/initialized`, then `tools/list` until the pages run out.
+// it is there. Open in the modern (stateless) dialect, fall back to the legacy handshake when
+// nothing modern answers, then `tools/list` until the pages run out.
+//
+// DUAL-ERA, because both revisions are live: `2026-07-28` deleted `initialize`,
+// `notifications/initialized` and the session header, and the spec's own matrix rates a legacy
+// client against a modern server as "Fails" with no fall-forward. The two dialects and the rule
+// that tells a modern refusal from a legacy one live in `mcpDialect.ts`; this file owns the
+// transport.
 //
 // Hand-rolled over `fetch` rather than built on `@modelcontextprotocol/sdk`'s client, and the reason
 // is the one slice 3 already recorded about the SERVING side: the backend's HTTP layer is typed
@@ -39,17 +58,6 @@ import { MCP_PROBE_MAX_PAGES, MCP_PROBE_TIMEOUT_MS } from '@cat-factory/contract
 // It never throws. Every failure is a discriminated outcome, because the whole point is to hand the
 // operator a CAUSE, and "the probe blew up" is not one.
 // ---------------------------------------------------------------------------
-
-/**
- * The protocol version the probe asks for.
- *
- * A literal rather than a read of the SDK's `LATEST_PROTOCOL_VERSION`, and drift is benign by the
- * protocol's own design: negotiation belongs to the SERVER, which answers with the requested version
- * when it speaks it and with one of its own when it does not. So a probe advertising something older
- * than the spec's latest still completes a handshake with a newer server, and the version this
- * reports is always the one the server chose rather than the one we asked for.
- */
-const PROBE_PROTOCOL_VERSION = '2025-11-25'
 
 /** Redirect hops one probe follows. Bounded because a redirect loop is the server's to author. */
 const MAX_REDIRECTS = 3
@@ -103,10 +111,16 @@ export type McpProbeFailure =
 
 export type McpProbeOutcome = McpProbeSuccess | McpProbeFailure
 
-/** One JSON-RPC exchange's result: the `result` object, or the reason there wasn't one. */
+/**
+ * One JSON-RPC exchange's result: the `result` object, or the reason there wasn't one.
+ *
+ * A failure carries the parsed `frame` when the body held one, plus the status it arrived with,
+ * because a modern server states WHICH refusal this is in a JSON-RPC error body served under a 400.
+ * Reading the era off the rendered prose instead would be parsing our own error message.
+ */
 type ExchangeOutcome =
   | { ok: true; result: Record<string, unknown> }
-  | { ok: false; failure: McpProbeFailure }
+  | { ok: false; failure: McpProbeFailure; frame?: Record<string, unknown> }
 
 /**
  * Speak MCP to `target` and report what happened.
@@ -128,6 +142,10 @@ export async function probeMcpHttpServer(
     session: new SessionHeaders(),
     signal: AbortSignal.timeout(timeoutMs),
     timeoutMs,
+    // Opened MODERN. The era is a property of the SERVER, not of a request, so it is decided once
+    // and then held for every later call: a `tools/list` sent in a dialect the discovery did not
+    // establish is the header-mismatch the spec answers with `-32020`.
+    era: MODERN_ERA,
   }
 
   const outcome = await handshakeAndList(ctx, deps.maxPages ?? MCP_PROBE_MAX_PAGES)
@@ -139,49 +157,155 @@ export async function probeMcpHttpServer(
   return outcome
 }
 
-/** The exchange itself: handshake, the required notification, then every page of `tools/list`. */
+/** The exchange itself: settle the era, then read every page of `tools/list` in that dialect. */
 async function handshakeAndList(ctx: Exchange, maxPages: number): Promise<McpProbeOutcome> {
+  const opened = await openServer(ctx)
+  if ('failure' in opened) return opened.failure
+
+  const listed = await listTools(ctx, maxPages)
+  if (!listed.ok) return listed.failure
+  // A modern server identifies itself in EVERY result's `_meta`, so a `server/discover` that named
+  // nothing is not the last chance to learn who answered.
+  const identity = opened.identity ?? listed.identity ?? { serverName: '', serverVersion: '' }
+  return {
+    status: 'ok',
+    ...identity,
+    protocolVersion: opened.protocolVersion,
+    tools: listed.tools,
+    toolsComplete: listed.complete,
+  }
+}
+
+/** What settling the era established: which revision is being spoken, and who said so. */
+interface OpenedServer {
+  protocolVersion: string
+  identity?: ServerIdentity
+}
+
+/**
+ * Decide which era this server speaks, leaving `ctx.era` set to it.
+ *
+ * Modern first, because that is the direction the spec gives for Streamable HTTP and the only one
+ * that reaches a server which has dropped `initialize`. One version retry is allowed, for the
+ * server that names a revision we also speak; beyond that a refusal is either reported (a modern
+ * server said no on grounds we control) or answered by the legacy handshake.
+ */
+async function openServer(ctx: Exchange): Promise<OpenedServer | { failure: McpProbeFailure }> {
+  const first = await discover(ctx)
+  if (first.kind !== 'retry') return settle(ctx, first)
+  ctx.era = { era: 'modern', version: first.version }
+  return settle(ctx, await discover(ctx))
+}
+
+async function settle(
+  ctx: Exchange,
+  attempt: DiscoverAttempt,
+): Promise<OpenedServer | { failure: McpProbeFailure }> {
+  switch (attempt.kind) {
+    case 'modern':
+      return {
+        protocolVersion: ctx.era.era === 'modern' ? ctx.era.version : '',
+        ...(attempt.identity ? { identity: attempt.identity } : {}),
+      }
+    case 'legacy':
+      return legacyHandshake(ctx)
+    case 'retry':
+      // A second `UnsupportedProtocolVersionError` after retrying the version the server itself
+      // named. Reported rather than retried again: the server is contradicting its own answer.
+      return {
+        failure: {
+          status: 'protocol_error',
+          error: `the server refused MCP ${attempt.version} after naming it as supported`,
+        },
+      }
+    case 'failure':
+      return { failure: attempt.failure }
+  }
+}
+
+type DiscoverAttempt =
+  | { kind: 'modern'; identity?: ServerIdentity }
+  | { kind: 'retry'; version: string }
+  | { kind: 'legacy' }
+  | { kind: 'failure'; failure: McpProbeFailure }
+
+/**
+ * Ask the modern `server/discover`, which every modern server MUST implement.
+ *
+ * Its answer is also the era test: a result carrying `supportedVersions` is proof of a modern
+ * server, one of the three MCP-reserved error codes is proof of a modern server refusing, and
+ * anything else (a `-32601`, an un-parseable 400, a 405) means nothing modern is there.
+ */
+async function discover(ctx: Exchange): Promise<DiscoverAttempt> {
+  const answer = await exchange(ctx, { id: 1, method: 'server/discover' })
+  if (answer.ok) {
+    const discovered = readDiscoverResult(answer.result)
+    // A 200 result that is not a `DiscoverResult` is not evidence of anything modern: an unrelated
+    // JSON-RPC endpoint answers that way too. Fall through to the legacy attempt, whose own
+    // refusal is what names "answering JSON-RPC but not MCP".
+    if (!discovered) return { kind: 'legacy' }
+    return { kind: 'modern', ...(discovered.identity ? { identity: discovered.identity } : {}) }
+  }
+  // The server spoke JSON-RPC, so its error code says which era answered: one of the three
+  // MCP-reserved codes is a modern server refusing, and anything else (`-32601`, "not
+  // initialized") is a server that never knew the method.
+  if (answer.frame) {
+    const verdict = readEraVerdict(answer.frame)
+    if (verdict.verdict === 'retry') return { kind: 'retry', version: verdict.version }
+    if (verdict.verdict === 'report') {
+      return { kind: 'failure', failure: { status: 'protocol_error', error: redact(verdict.error) } }
+    }
+    return { kind: 'legacy' }
+  }
+  // No frame to read an era off. A refused redirect, an unreadable body, a 401 and a 5xx are all
+  // facts about the ENDPOINT rather than about a dialect, and asking again in the other one spends
+  // the deadline twice for the same answer. Only the statuses a server really answers an unknown
+  // method with fall through to the handshake, which is the spec's own fallback trigger.
+  const status = answer.failure.status === 'http_error' ? answer.failure.httpStatus : undefined
+  if (status !== undefined && LEGACY_FALLBACK_STATUSES.has(status)) return { kind: 'legacy' }
+  return { kind: 'failure', failure: answer.failure }
+}
+
+/**
+ * The statuses that mean "this endpoint did not understand a modern request", as opposed to "this
+ * endpoint refused you". 400 is the spec's own fallback trigger; 404 and 405 are what an endpoint
+ * hosting only the deprecated shapes answers a POST of an unknown method with.
+ */
+const LEGACY_FALLBACK_STATUSES = new Set([400, 404, 405, 501])
+
+/** The pre-`2026-07-28` opening: `initialize`, then the notification a strict server demands. */
+async function legacyHandshake(
+  ctx: Exchange,
+): Promise<OpenedServer | { failure: McpProbeFailure }> {
+  ctx.era = LEGACY_ERA
   const handshake = await exchange(ctx, {
     id: 1,
     method: 'initialize',
-    params: initializeParams(),
+    params: legacyInitializeParams(),
   })
-  if (!handshake.ok) return handshake.failure
+  if (!handshake.ok) return { failure: handshake.failure }
 
   const negotiated = readHandshake(handshake.result)
   if (!negotiated) {
     return {
-      status: 'protocol_error',
-      error:
-        'the endpoint answered the handshake without a protocolVersion or serverInfo, so it is ' +
-        'answering JSON-RPC but is not an MCP server',
+      failure: {
+        status: 'protocol_error',
+        error:
+          'the endpoint answered neither a modern server/discover nor a handshake carrying a ' +
+          'protocolVersion and serverInfo, so it is answering JSON-RPC but is not an MCP server',
+      },
     }
   }
   ctx.session.protocolVersion = negotiated.protocolVersion
 
-  // The spec REQUIRES this notification before any other request, and a strict server rejects
-  // `tools/list` without it. It carries no id and expects no body (a `202` is the normal answer), so
-  // its outcome is only interesting when the transport itself failed.
+  // The legacy spec REQUIRES this notification before any other request, and a strict server
+  // rejects `tools/list` without it. It carries no id and expects no body (a `202` is the normal
+  // answer), so its outcome is only interesting when the transport itself failed.
   const notified = await notify(ctx, 'notifications/initialized')
-  if (notified) return notified
-
-  const listed = await listTools(ctx, maxPages)
-  if (!listed.ok) return listed.failure
-  return { status: 'ok', ...negotiated, tools: listed.tools, toolsComplete: listed.complete }
-}
-
-/**
- * What the probe says it is.
- *
- * `capabilities: {}` is honest and load-bearing: this client implements no roots, no sampling and no
- * elicitation, and a server that saw a capability declared here could legitimately try to use it
- * mid-handshake. `tools/list` needs none of them.
- */
-function initializeParams(): Record<string, unknown> {
+  if (notified) return { failure: notified }
   return {
-    protocolVersion: PROBE_PROTOCOL_VERSION,
-    capabilities: {},
-    clientInfo: { name: 'cat-factory-tool-server-probe', version: '1' },
+    protocolVersion: negotiated.protocolVersion,
+    identity: { serverName: negotiated.serverName, serverVersion: negotiated.serverVersion },
   }
 }
 
@@ -208,14 +332,20 @@ interface Exchange {
   signal: AbortSignal
   /** The deadline actually applied, so the prose names it rather than the default. */
   timeoutMs: number
+  /** The dialect every request is shaped in. Settled by {@link openServer}, then held. */
+  era: McpEra
 }
 
 /**
- * The per-session headers a Streamable-HTTP client must echo once it has them.
+ * The per-session headers a LEGACY Streamable-HTTP client must echo once it has them.
  *
  * A class rather than two locals because both are minted by the FIRST response and must reach every
  * later request; threading them by hand is exactly how a session-keeping server ends up 400ing the
  * request after the handshake with nothing naming why.
+ *
+ * Dead weight in the modern era on purpose: `2026-07-28` removed protocol-level sessions, and a
+ * server on it MUST NOT mint one. So nothing here is applied while the exchange is modern, and a
+ * dual-era server that echoes a session id at a modern request has it ignored rather than adopted.
  */
 class SessionHeaders {
   sessionId?: string
@@ -244,9 +374,11 @@ async function listTools(
   exchangeCtx: Exchange,
   maxPages: number,
 ): Promise<
-  { ok: true; tools: string[]; complete: boolean } | { ok: false; failure: McpProbeFailure }
+  | { ok: true; tools: string[]; complete: boolean; identity?: ServerIdentity }
+  | { ok: false; failure: McpProbeFailure }
 > {
   const tools: string[] = []
+  let identity: ServerIdentity | undefined
   let cursor: string | undefined
   for (let page = 0; page < maxPages; page++) {
     const answer = await exchange(exchangeCtx, {
@@ -255,6 +387,7 @@ async function listTools(
       ...(cursor ? { params: { cursor } } : {}),
     })
     if (!answer.ok) return { ok: false, failure: answer.failure }
+    identity ??= readModernServerInfo(answer.result)
     const listed = answer.result.tools
     if (!Array.isArray(listed)) {
       return {
@@ -270,11 +403,11 @@ async function listTools(
     }
     const next = answer.result.nextCursor
     cursor = typeof next === 'string' && next ? next : undefined
-    if (!cursor) return { ok: true, tools, complete: true }
+    if (!cursor) return { ok: true, tools, complete: true, ...(identity ? { identity } : {}) }
   }
   // A cursor survived the page bound: the list is a PREFIX, and saying so is what stops the caller
   // reporting a narrowed `allowedTools` entry as missing on the strength of a partial read.
-  return { ok: true, tools, complete: false }
+  return { ok: true, tools, complete: false, ...(identity ? { identity } : {}) }
 }
 
 /** One JSON-RPC REQUEST and its response. */
@@ -282,15 +415,23 @@ async function exchange(
   ctx: Exchange,
   message: { id: number; method: string; params?: Record<string, unknown> },
 ): Promise<ExchangeOutcome> {
-  const sent = await post(ctx, { jsonrpc: '2.0', ...message })
+  const params = requestParams(ctx.era, message.params)
+  const sent = await post(
+    ctx,
+    { jsonrpc: '2.0', id: message.id, method: message.method, ...(params ? { params } : {}) },
+    message.method,
+  )
   if (!sent.ok) return { ok: false, failure: sent.failure }
   const body = await readFrame(ctx, sent.response)
-  if (!body.ok) return { ok: false, failure: body.failure }
+  if (!body.ok) {
+    return { ok: false, failure: body.failure, ...(body.frame ? { frame: body.frame } : {}) }
+  }
   const frame = body.frame
   if (isRecord(frame.error)) {
     const detail = typeof frame.error.message === 'string' ? frame.error.message : 'no message'
     return {
       ok: false,
+      frame,
       failure: {
         status: 'protocol_error',
         error: `${message.method} was refused by the server: ${redact(detail)}`,
@@ -300,6 +441,7 @@ async function exchange(
   if (!isRecord(frame.result)) {
     return {
       ok: false,
+      frame,
       failure: {
         status: 'protocol_error',
         error: `${message.method} answered without a JSON-RPC result object`,
@@ -314,7 +456,7 @@ async function exchange(
  * has no response to inspect, and a server that answers it with a body is within its rights.
  */
 async function notify(ctx: Exchange, method: string): Promise<McpProbeFailure | undefined> {
-  const sent = await post(ctx, { jsonrpc: '2.0', method })
+  const sent = await post(ctx, { jsonrpc: '2.0', method }, method)
   if (!sent.ok) return sent.failure
   // Drain rather than parse: an unread body on a keep-alive connection is a leaked stream on Node,
   // and there is nothing in it this cares about.
@@ -339,7 +481,7 @@ async function endSession(ctx: Exchange): Promise<void> {
   try {
     const response = await ctx.doFetch(endpoint, {
       method: 'DELETE',
-      headers: requestHeaders(ctx),
+      headers: requestHeaders(ctx, null),
       redirect: 'manual',
       signal: ctx.signal,
     })
@@ -356,13 +498,14 @@ async function endSession(ctx: Exchange): Promise<void> {
 async function post(
   ctx: Exchange,
   frame: Record<string, unknown>,
+  method: string,
 ): Promise<{ ok: true; response: Response } | { ok: false; failure: McpProbeFailure }> {
   let url = ctx.target.url
   const carriesCredential = Object.keys(ctx.target.credentialHeaders).length > 0
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const sent = await send(ctx, url, frame)
+    const sent = await send(ctx, url, frame, method)
     if (!sent.ok) return sent
-    ctx.session.adopt(sent.response, url)
+    if (ctx.era.era === 'legacy') ctx.session.adopt(sent.response, url)
     if (!isRedirect(sent.response)) return sent
     const hopTo = nextHop(ctx, url, sent.response, carriesCredential)
     if (!hopTo.ok) return hopTo
@@ -382,13 +525,14 @@ async function send(
   ctx: Exchange,
   url: string,
   frame: Record<string, unknown>,
+  method: string,
 ): Promise<{ ok: true; response: Response } | { ok: false; failure: McpProbeFailure }> {
   try {
     return {
       ok: true,
       response: await ctx.doFetch(url, {
         method: 'POST',
-        headers: requestHeaders(ctx),
+        headers: requestHeaders(ctx, method),
         body: JSON.stringify(frame),
         redirect: 'manual',
         signal: ctx.signal,
@@ -414,12 +558,13 @@ async function send(
  * function's `accept` arrives at the server as ONE combined value, and a stream-first server then
  * negotiates against something neither side offered.
  */
-function requestHeaders(ctx: Exchange): Record<string, string> {
+function requestHeaders(ctx: Exchange, method: string | null): Record<string, string> {
   const headers = lowerCasedKeys({ ...ctx.target.headers, ...ctx.target.credentialHeaders })
   headers['content-type'] = 'application/json'
   headers.accept = 'application/json, text/event-stream'
-  ctx.session.apply(headers)
-  return headers
+  if (ctx.era.era === 'legacy') ctx.session.apply(headers)
+  // `null` is the session DELETE, which mirrors no JSON-RPC method because it carries no body.
+  return method === null ? headers : { ...headers, ...dialectHeaders(ctx.era, method) }
 }
 
 function lowerCasedKeys(headers: Record<string, string>): Record<string, string> {
@@ -522,11 +667,19 @@ function resolveHop(from: string, location: string): string | undefined {
 async function readFrame(
   ctx: Exchange,
   response: Response,
-): Promise<{ ok: true; frame: Record<string, unknown> } | { ok: false; failure: McpProbeFailure }> {
+): Promise<
+  | { ok: true; frame: Record<string, unknown> }
+  | { ok: false; failure: McpProbeFailure; frame?: Record<string, unknown> }
+> {
   if (!response.ok) {
     const body = await bodyText(response)
+    // A modern server states its refusal as a JSON-RPC error UNDER the 4xx (an unsupported version,
+    // a header mismatch), so the body is parsed as well as previewed. The verdict stays
+    // `http_error` either way: the era reader takes the frame, and everything else takes the status.
+    const frame = body ? parseFrame(body) : undefined
     return {
       ok: false,
+      ...(frame ? { frame } : {}),
       failure: {
         status: 'http_error',
         httpStatus: response.status,
@@ -675,6 +828,17 @@ function extractSseData(buffered: string): string | undefined {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** A body as a JSON-RPC frame, or undefined when it is neither JSON nor an object. */
+function parseFrame(raw: string): Record<string, unknown> | undefined {
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    const frame = Array.isArray(parsed) ? parsed[0] : parsed
+    return isRecord(frame) ? frame : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /** A thrown value as prose. `AbortSignal.timeout` rejects with a bare `TimeoutError`, so name it. */

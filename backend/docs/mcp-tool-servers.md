@@ -330,6 +330,16 @@ properties of it are design rather than usage:
 - **`not_probeable` is a refusal by NAME, not a failed attempt.** For a `stdio` server or a loopback
   URL the backend is a different machine from the run container, and a SUCCESS there would be the
   more misleading of the two outcomes.
+- **It is DUAL-ERA, and the era is a fact about the server rather than about a request.** Revision
+  `2026-07-28` deleted the `initialize` handshake, `notifications/initialized` and protocol-level
+  sessions: a modern request instead carries its version, client identity and capabilities in
+  `_meta` on every call, mirrors its method into an `Mcp-Method` header, and asks `server/discover`
+  for the identity the handshake used to return. The probe opens modern and falls back to the
+  handshake, which is the direction the spec prescribes for Streamable HTTP; the fallback trigger is
+  the BODY of a refusal, because a modern server also answers 400 for an unsupported version
+  (`-32022`), a header mismatch (`-32020`) and a missing client capability (`-32021`). Only those
+  three codes prove a modern server, so a `-32601` sends the probe to the handshake. The two
+  dialects live in `mcpDialect.ts`, apart from the transport that sends them.
 
 ## Operating `stdio` servers, and the security posture
 

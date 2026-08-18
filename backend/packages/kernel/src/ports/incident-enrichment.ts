@@ -1,3 +1,6 @@
+import { noopLogger, type Logger } from './logging.js'
+import { runBestEffort } from '../shared/best-effort.js'
+
 // Optional port for ENRICHING (not creating) an incident that an external
 // incident-management system (PagerDuty / incident.io) already opened from the
 // same Datadog monitors/SLOs the post-release-health gate watches. On a regression
@@ -42,20 +45,30 @@ export interface IncidentEnrichmentProvider {
 /**
  * Fans an enrichment out across several providers (PagerDuty + incident.io). Each is
  * matched + posted independently and isolated: one provider throwing (or not matching)
- * never blocks the others.
+ * never blocks the others. Isolated, but never silent: a provider that has NEVER worked
+ * looks exactly like a deployment with no incident tool wired unless the swallow names
+ * itself, which is how a POST to an incident.io endpoint that does not exist survived here.
  */
 export class CompositeIncidentEnrichmentProvider implements IncidentEnrichmentProvider {
-  constructor(private readonly providers: IncidentEnrichmentProvider[]) {}
+  private readonly log: Logger
+
+  constructor(
+    private readonly providers: IncidentEnrichmentProvider[],
+    logger?: Logger,
+  ) {
+    this.log = logger ?? noopLogger
+  }
 
   async enrich(query: IncidentMatchQuery, update: IncidentUpdate): Promise<void> {
     await Promise.all(
-      this.providers.map(async (provider) => {
-        try {
-          await provider.enrich(query, update)
-        } catch {
-          // best-effort: isolate each provider
-        }
-      }),
+      this.providers.map((provider) =>
+        runBestEffort(
+          this.log,
+          'incidentEnrichment.provider',
+          () => provider.enrich(query, update),
+          { workspaceId: query.workspaceId, provider: provider.constructor.name },
+        ),
+      ),
     )
   }
 }

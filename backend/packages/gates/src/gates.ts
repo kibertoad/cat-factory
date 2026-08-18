@@ -30,6 +30,7 @@ import {
   ON_CALL_AGENT_KIND,
   POST_RELEASE_HEALTH_AGENT_KIND,
   renderReleaseEvidence,
+  runBestEffort,
 } from '@cat-factory/kernel'
 import type { OnCallAssessment } from '@cat-factory/contracts'
 import { parseOnCallAssessment } from '@cat-factory/contracts'
@@ -339,14 +340,16 @@ async function enrichIncident(
       : 'cat-factory on-call investigated a post-release regression suspected from this change.',
     ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
   }
-  try {
-    await incidentEnrichment.enrich(
-      { workspaceId, signalIds: signals.map((s) => s.id), since },
-      update,
-    )
-  } catch {
-    // best-effort: a failing enrichment must not block the run or the notification
-  }
+  // Best-effort, and best-effort is the swallow plus the evidence. The bare `catch {}` this
+  // replaces is why a POST to an incident.io endpoint that does not exist went unnoticed: a
+  // capability that has never worked read exactly like a deployment with no incident tool wired.
+  await runBestEffort(
+    ctx.logger,
+    'gate.postReleaseHealth.enrichIncident',
+    () =>
+      incidentEnrichment.enrich({ workspaceId, signalIds: signals.map((s) => s.id), since }, update),
+    { workspaceId, blockId: block.id },
+  )
 }
 
 /**
