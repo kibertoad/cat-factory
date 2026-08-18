@@ -1,6 +1,6 @@
 # Initiative: GitLab product-surface parity (SPA)
 
-**Status:** in progress (connect flow landed end to end; browse, bootstrap and every repo link are provider-aware) · **Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (connect flow landed end to end; browse, bootstrap and every repo link are provider-aware; hosted runs now clone the GitLab host) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -60,6 +60,8 @@ pipelines entirely through the UI, at feature parity with GitHub.
 | 6   | Onboarding: provider choice step (GitHub App / GitHub PAT / GitLab PAT) in the connect onboarding                                                                                                                    | ⬜ todo |         |
 | 7   | OAuth-based GitLab connect (the `gitlab-parity.md` future-work item)                                                                                                                                                 | ⬜ todo |         |
 | 8   | e2e: GitLab-flavoured connect→add-service against a faked VCS boundary (MSW at the backend outbound boundary)                                                                                                        | ⬜ todo |         |
+| 9   | **Hosted clone origin**: both hosted facades derive the agent container's clone host from `GITLAB_API_BASE` instead of falling through to `github.com`, plus the harness allow-list that makes it usable             | ✅ done | this PR |
+| 10  | Per-workspace ENGINE routing: gate / merge / RepoFiles read the workspace's own connection rather than the single deployment token                                                                                   | ⬜ todo |         |
 
 ## Findings (slice 1 audit)
 
@@ -409,3 +411,58 @@ this before slice 4 (webhook setup) or 6 (the onboarding provider choice).
 - The projection tables are still GitHub-named (`github_repos`/`github_installations`) and
   intentionally reused as-is: do not block UI parity on renaming them (that fold is the
   separate, acknowledged Phase-1 entity-naming work).
+
+## Findings (slice 9: where a hosted GitLab run actually clones from)
+
+Slice 9 came out of a parity sweep rather than the checklist, and it is worth reading before slice
+10 (per-workspace engine routing), because it settles what a deployment-level provider fact is and
+where it is derived.
+
+- **`ResolveRepoOrigin` was wired by local mode ALONE, and the default is `github.com`.** The seam
+  exists precisely so a GitLab deployment's containers clone the right host, and both hosted facades
+  passed nothing, so every dispatch fell through to `githubRepoOrigin` with `provider: 'github'`. A
+  GitLab-only Node or Worker deployment gated on real GitLab CI and merged real merge requests while
+  handing each agent a `https://github.com/<group>/<project>.git` URL. The failure is a run that
+  cannot check out, on a deployment whose source control is visibly working everywhere else, which
+  is why the parity log's item 1 ("wire GitLab into the Node + Cloudflare gate/merge/sync paths")
+  read as complete: the CLONE path is not one of the three.
+- **A correct URL alone would still have been refused.** The harness only sends a clone credential
+  to a host on `allowedGithubHosts`, which defaults to github.com and is widened by
+  `GITHUB_ALLOWED_HOSTS`. Local mode set it (`harnessAllowedHosts`); neither hosted facade did.
+  Fixing one half without the other turns a wrong-host checkout into a security refusal, so
+  `deploymentRepoOrigin` and `harnessGitLabHost` are declared together in one module that says why.
+- **Both are DERIVED from `GITLAB_API_BASE` through `vcsWebBaseUrl`**, the same inversion the SPA's
+  repo/MR/issue links use. A second config variable was the obvious alternative and loses the same
+  way it lost in slice 5: it is a second thing to get wrong on exactly the self-managed deployments
+  this exists for, and it lets the host a container clones drift from the host a user is shown.
+  Deriving it also handed local mode a bug fix, since its own `new URL(apiBase).host` dropped the
+  path prefix of a relative-URL install.
+- **A base that does not invert THROWS at dispatch**, where every other consumer of this derivation
+  withholds. The disposition differs because the failure does: a withheld LINK is a missing
+  affordance, while a fallback CHECKOUT resolves to a real project on the public instance belonging
+  to somebody else, and the run reports whatever it found there as its repository. There is nothing
+  to withhold on a clone path, so the only honest options are the right host or a named refusal.
+  The allow-list half still answers `undefined` for the same base, because allow-listing gitlab.com
+  for a deployment that does not use it is a widening with no purpose.
+- **The rule is `engineVcsClient`'s, restated: the App wins wherever both are configured.** The
+  client that opens the request and the URL the container clones must name one host, and this seam
+  takes no workspace, so it could not answer per workspace even if it wanted to. That is what makes
+  it slice 10's problem rather than a special case here.
+- **Slice 10's shape is now visible in three places, not one.** The engine's gate/merge client, the
+  clone origin, and `makeResolveRepoFilesForCoords` (the environments module's block-less repo
+  resolver, fixed in this PR to resolve a GitLab repo rather than refuse every caller that named
+  one) all bind ONE deployment-level client. Each is correct for a single-provider deployment and
+  wrong for a mixed one in the same way. Whatever routes the first should route all three, and a
+  fix that only reaches the gate client will leave two silent halves behind. The rule they share is
+  `engineVcsProvider`, one exported function, so slice 10 has one place to replace rather than
+  three derivations to find.
+- **On a mixed deployment the two seams REFUSE rather than answer wrongly, which is what makes
+  slice 10 visible.** A repo row carries its own `provider`, so both know when the repository they
+  were handed is not one the bound client reaches. The dispositions differ because the callers do:
+  `deploymentRepoOrigin` THROWS, naming the repository, because a dispatch has no way to withhold a
+  checkout and a `github.com` URL for a row marked `gitlab` is the same wrong-project checkout the
+  un-invertible base case exists to prevent (the dispatch credential is wrong there too, since the
+  mint is the App registry's with no per-provider routing). `makeResolveRepoFilesForCoords` returns
+  null, the "no VCS connection" its callers already handle. Neither guesses, and a row that carries
+  NO provider predates the column and reads as the deployment's own, so neither trips on an older
+  workspace.

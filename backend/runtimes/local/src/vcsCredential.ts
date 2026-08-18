@@ -1,5 +1,7 @@
 import type { LocalVcsSetup, VcsProvider } from '@cat-factory/kernel'
 import { ConflictError, UnavailableError } from '@cat-factory/kernel'
+import { harnessGitLabHost } from '@cat-factory/server'
+import { GITLAB_PUBLIC_API_BASE } from '@cat-factory/gitlab'
 import { localDbPath } from './sqlite/db.js'
 import {
   type LocalVcsCredentialStore,
@@ -193,25 +195,37 @@ export function createLocalVcsCredentialSource(
 }
 
 /**
- * The host a GitLab deployment clones/pushes against, derived from `GITLAB_API_BASE`'s host (a
- * self-managed instance) or the public `gitlab.com`. Single source of truth for BOTH the clone URL
- * the server builds (`resolveRepoOrigin`) and the harness host allow-list, so they can never
- * disagree. Returns undefined unless the credential in use is a GitLab one.
+ * The GitLab config a local deployment's clone URL and harness allow-list are derived from, in the
+ * shape the shared `@cat-factory/server` derivation takes. `enabled` tracks the LIVE credential
+ * rather than an env flag, because local mode's provider is whichever PAT is installed.
+ *
+ * Local used to derive both from `new URL(apiBase).host` here. That answered the right thing for
+ * an instance at the root of its own host and the wrong thing for a relative-URL install
+ * (`https://acme.dev/gitlab/api/v4` cloned from `https://acme.dev/...`), and it was a second
+ * derivation beside the hosted facades' anyway. Both now read the ONE inversion (`vcsWebBaseUrl`),
+ * which is also what the SPA links with, so a local checkout and a rendered link cannot name
+ * different places.
+ */
+export function localGitLabConfig(
+  env: NodeJS.ProcessEnv,
+  credential: LocalVcsCredential | undefined,
+): { enabled: boolean; apiBase: string } {
+  return {
+    enabled: credential?.provider === 'gitlab',
+    apiBase: env.GITLAB_API_BASE?.trim() || GITLAB_PUBLIC_API_BASE,
+  }
+}
+
+/**
+ * The host a GitLab deployment clones/pushes against, or undefined unless the credential in use is
+ * a GitLab one. Feeds the harness host allow-list; the clone URL itself comes from
+ * `deploymentRepoOrigin` over the same {@link localGitLabConfig}, so the two cannot disagree.
  */
 export function gitlabVcsHost(
   env: NodeJS.ProcessEnv,
   credential: LocalVcsCredential | undefined,
 ): string | undefined {
-  if (credential?.provider !== 'gitlab') return undefined
-  const apiBase = env.GITLAB_API_BASE?.trim()
-  if (!apiBase) return 'gitlab.com'
-  try {
-    return new URL(apiBase).host
-  } catch {
-    // silent-catch-ok: an unparseable API base is already reported where it is CONFIGURED; here
-    // the honest fallback is the public host, which is what an unset value means too.
-    return 'gitlab.com'
-  }
+  return harnessGitLabHost(localGitLabConfig(env, credential))
 }
 
 /**

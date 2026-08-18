@@ -158,7 +158,7 @@ const LEGACY_ALLOWANCES = new Map([
   // 1014 -> 995 by extracting `dispatchTokenMint.ts`: the one mint three modules the root itself
   // pulls in were reading back out of it, which for `containers/deployJobDeps.ts` closed a real
   // import cycle.
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 995],
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 874],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)

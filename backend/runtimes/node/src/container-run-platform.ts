@@ -201,6 +201,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     sourced,
     registries,
     gitlabEngineClient,
+    resolveRepoOrigin,
     resolveWorkspaceModelDefault,
   } = foundation
   const { runnerBackendRegistry, agentKindRegistry, providerRegistry } = registries
@@ -289,7 +290,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     deployJobClientOverride: options.deployJobClient,
     disableDefaultDeployJobClient: options.disableDefaultDeployJobClient,
     resolveDeployCloneTargetOverride: options.resolveDeployCloneTarget,
-    resolveRepoOrigin: options.resolveRepoOrigin,
+    resolveRepoOrigin,
   })
   // The per-run agent-observability + web-search + sealed-secret services (agent-context /
   // search-query / harness-call telemetry sinks, the web-search upstream + availability
@@ -331,7 +332,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     ...(resolveRunInitiatorToken ? { resolveRunInitiatorToken } : {}),
     agentContextObservability: runServices.agentContextObservability,
     resolveWebSearchAvailability: runServices.resolveWebSearchAvailability,
-    resolveRepoOrigin: options.resolveRepoOrigin,
+    resolveRepoOrigin,
     resolvePackageRegistries: runServices.resolvePackageRegistries,
     resolveTestSecrets: runServices.resolveTestSecrets,
     ...executorCapabilityDeps,
@@ -373,7 +374,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     providerRegistry,
     resolveRepoTarget,
     resolveRepoTargets,
-    resolveRepoOrigin: options.resolveRepoOrigin,
+    resolveRepoOrigin,
     githubInstallationRepository,
     repoProjectionRepository,
     entityProjectionRepositories,

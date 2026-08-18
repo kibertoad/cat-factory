@@ -90,7 +90,19 @@ describe('gitlabVcsHost', () => {
     expect(gitlabVcsHost({ GITLAB_API_BASE: 'https://git.acme.com/api/v4' }, credential)).toBe(
       'git.acme.com',
     )
-    expect(gitlabVcsHost({ GITLAB_API_BASE: 'not a url' }, credential)).toBe('gitlab.com')
+    // A relative-URL install keeps its prefix in the clone URL and still allow-lists the bare host.
+    expect(gitlabVcsHost({ GITLAB_API_BASE: 'https://acme.dev/gitlab/api/v4' }, credential)).toBe(
+      'acme.dev',
+    )
+  })
+
+  // A base the shared inversion cannot read names no host, so nothing is allow-listed and the
+  // clone URL refuses to be built. Answering `gitlab.com` (which this used to do) allow-listed a
+  // host the deployment does not use, on exactly the misconfiguration an operator has to see.
+  it('names no host for a base it cannot invert', () => {
+    const credential = { provider: 'gitlab', token: 'x', origin: 'env' } as const
+    expect(gitlabVcsHost({ GITLAB_API_BASE: 'not a url' }, credential)).toBeUndefined()
+    expect(gitlabVcsHost({ GITLAB_API_BASE: 'https://acme.dev/proxy' }, credential)).toBeUndefined()
   })
 })
 

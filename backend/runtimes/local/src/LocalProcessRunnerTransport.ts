@@ -17,6 +17,7 @@ import { logger } from '@cat-factory/server'
 import { sanitizedChildEnv } from './childEnv.js'
 import { requireHarnessSharedSecret } from './config.js'
 import { recommendedHarnessVersion, verifyHarnessVersion } from './harnessVersion.js'
+import { type LocalVcsCredential, harnessAllowedHosts } from './vcsCredential.js'
 import {
   EVICTION_ERROR,
   type EvictionCause,
@@ -110,8 +111,13 @@ export interface LocalProcessRunnerTransportOptions {
    * a restart. The transport never invents one.
    */
   sharedSecret: string
-  /** Extra env for the harness process (e.g. GITHUB_ALLOWED_HOSTS). */
-  env?: Record<string, string>
+  /**
+   * Extra env for the harness process (e.g. GITHUB_ALLOWED_HOSTS), resolved on every spawn rather
+   * than captured once. Same shape as the container transport's `resolveEnv`, and for the same
+   * reason: which clone hosts the harness must accept follows the deployment's source-control
+   * credential, which is installable from the sign-in screen while this transport is alive.
+   */
+  resolveEnv?: () => Record<string, string>
   /**
    * What the harness child inherits from the parent's environment. `sanitized` (default)
    * projects it down to the {@link sanitizedChildEnv} allow-list so the orchestrator's
@@ -165,7 +171,7 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
   private readonly nodePath: string
   private readonly nodeArgs: string[]
   private readonly sharedSecret: string
-  private readonly extraEnv: Record<string, string>
+  private readonly resolveEnv: () => Record<string, string>
   private readonly envMode: 'sanitized' | 'inherit'
   private readonly fetchImpl: typeof fetch
   private readonly spawnImpl: typeof spawn
@@ -217,7 +223,7 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
     this.nodePath = options.nodePath ?? process.execPath
     this.nodeArgs = options.nodeArgs ?? []
     this.sharedSecret = options.sharedSecret
-    this.extraEnv = options.env ?? {}
+    this.resolveEnv = options.resolveEnv ?? (() => ({}))
     this.envMode = options.envMode ?? 'sanitized'
     this.fetchImpl = options.fetchImpl ?? fetch
     this.spawnImpl = options.spawnImpl ?? spawn
@@ -510,7 +516,7 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
     const child = this.spawnImpl(this.nodePath, [...this.nodeArgs, this.harnessEntry], {
       env: {
         ...base,
-        ...this.extraEnv,
+        ...this.resolveEnv(),
         PORT: String(port),
         HARNESS_SHARED_SECRET: this.sharedSecret,
         // This transport only ever connects over loopback, and the harness runs UNSANDBOXED
@@ -658,20 +664,36 @@ export function resolveHarnessEntry(env: NodeJS.ProcessEnv): string {
  * entry is resolved via {@link resolveHarnessEntry} (`LOCAL_HARNESS_ENTRY` overrides, else the
  * bundled `@cat-factory/executor-harness`). The native CLIs (`claude` / `codex`) must already be
  * installed on the host.
+ *
+ * `credential` is the deployment's source-control credential, read on each spawn for the harness
+ * clone-host allow-list, exactly as the container transport reads it per container start.
  */
 export function createLocalProcessTransportFromEnv(
   env: NodeJS.ProcessEnv,
+  credential?: () => LocalVcsCredential | undefined,
 ): LocalProcessRunnerTransport {
   const harnessEntry = resolveHarnessEntry(env)
   const nodeArgs = env.LOCAL_HARNESS_NODE_ARGS?.trim()
     ? env.LOCAL_HARNESS_NODE_ARGS.trim().split(/\s+/)
     : undefined
-  const allowedHosts = env.GITHUB_ALLOWED_HOSTS?.trim()
   return new LocalProcessRunnerTransport({
     harnessEntry,
     ...(nodeArgs ? { nodeArgs } : {}),
     sharedSecret: requireHarnessSharedSecret(env),
-    ...(allowedHosts ? { env: { GITHUB_ALLOWED_HOSTS: allowedHosts } } : {}),
+    // The same allow-list the CONTAINER transport widens, through the same derivation, because
+    // the harness applies the same check whichever way it was started: a GitLab deployment clones
+    // a GitLab host and the default list is github.com alone. Reading only the raw env variable
+    // here (which is what this did) left `LOCAL_NATIVE_AGENTS` as the one local path where a
+    // correctly-derived GitLab clone URL met an un-widened allow-list, so every native clone was
+    // refused for a reason that named no variable the developer had set.
+    //
+    // One long-lived process serves every native job, so the value it spawns with is the one it
+    // keeps: swapping the installed credential to a different HOST mid-session needs a restart,
+    // where the per-container transport picks it up on the next start.
+    resolveEnv: (): Record<string, string> => {
+      const allowedHosts = harnessAllowedHosts(env, credential?.())
+      return allowedHosts ? { GITHUB_ALLOWED_HOSTS: allowedHosts } : {}
+    },
     // Version handshake: check the spawned harness against the matched version. An explicit
     // LOCAL_HARNESS_ENTRY is a deliberate custom build, so a mismatch there is a warning.
     expectedVersion: recommendedHarnessVersion(),

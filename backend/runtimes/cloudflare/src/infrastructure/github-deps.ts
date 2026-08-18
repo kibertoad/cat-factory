@@ -94,6 +94,7 @@ export function selectGitHubDeps(
         ),
         resolveRepoFilesForCoords: makeResolveRepoFilesForCoords(
           engineClient,
+          'gitlab',
           githubInstallationRepository,
           new D1RepoProjectionRepository({ db }),
         ),
@@ -153,6 +154,9 @@ export function selectGitHubDeps(
     // config bootstrap (operator names owner+repo).
     resolveRepoFilesForCoords: makeResolveRepoFilesForCoords(
       githubClient,
+      // The raw App client, not `moduleClient`: a GitLab-connected workspace's repo is refused
+      // here rather than read through it (the per-workspace engine routing slice).
+      'github',
       githubInstallationRepository,
       new D1RepoProjectionRepository({ db }),
     ),
