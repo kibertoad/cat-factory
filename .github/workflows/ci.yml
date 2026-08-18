@@ -380,7 +380,14 @@ jobs:
     # PR-only pre-merge gate (see the block comment above): skipped on push to main.
     if: ${{ github.event_name != 'push' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # The guards themselves run in well under a minute; the budget is sized for the
+    # checkout below, which is the slow part. `fetch-depth: 0` makes actions/checkout
+    # fetch every tag as well as every branch (there is no input that opts out of the
+    # tags: the all-history refspec hard-codes `+refs/tags/*:refs/tags/*`), and this
+    # repo publishes a tag per package per release, so that is 20k+ refs. On a slow
+    # runner that fetch has taken over five minutes, which used to abort this job
+    # inside checkout with no guard having run, and read downstream as a red `Build`.
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
