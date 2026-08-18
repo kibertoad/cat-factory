@@ -142,14 +142,13 @@ const planDocument = computed(() => planReviewDocument(planApproval.value))
  * and the overall feedback — the reviewer's actual work, held only in the browser until Send back
  * is pressed, on a surface Escape and a backdrop click both close. The review reports its own
  * dirtiness upward (it lives two components down); this is the only place that can act on it.
+ *
+ * The tracker body has two drafts of its own, and both are typed values held here until their OWN
+ * Save: the follow-up promotion form's item title, and the policy form's two knobs (see
+ * `promoteState` / `policyState` below for why each is measured against what it was SEEDED with).
+ * The guard itself is registered at the bottom of this block, where all three are in scope.
  */
 const planReviewDirty = ref(false)
-const { requestClose } = useUnsavedGuard({
-  open,
-  close: () => close(),
-  // Only meaningful while the review is the thing on screen: the tracker body itself edits nothing.
-  snapshot: () => (planApproval.value && planDocument.value ? planReviewDirty.value : false),
-})
 
 const policyRules = computed(() => initiative.value?.policy?.rules ?? [])
 function ruleAxes(rule: { minComplexity?: number; minRisk?: number; minImpact?: number }): string {
@@ -176,6 +175,22 @@ function reportError(error: unknown) {
 // Follow-up promotion: an inline per-follow-up form (phase + optional title override).
 const promotingId = ref<string | null>(null)
 const promoteForm = reactive<{ phaseId: string; title: string }>({ phaseId: '', title: '' })
+/**
+ * What the promote form held the moment it opened.
+ *
+ * The unsaved guard below reports the form's DIVERGENCE from this rather than its contents, because
+ * both of this window's inline forms are seeded from what is already stored: an opened-but-untouched
+ * form is not unsaved work, and prompting over one would train the reader to dismiss the prompt.
+ */
+let promoteSeed = ''
+function promoteState(): string {
+  return JSON.stringify([promoteForm.phaseId, promoteForm.title])
+}
+/** The promote form's unsaved edit, or `''` when it is closed or untouched. */
+function promoteDraft(): string {
+  if (promotingId.value === null) return ''
+  return promoteState() === promoteSeed ? '' : promoteState()
+}
 
 function startPromote(followUp: InitiativeFollowUp) {
   const sourcePhase = (initiative.value?.items ?? []).find(
@@ -183,6 +198,7 @@ function startPromote(followUp: InitiativeFollowUp) {
   )?.phaseId
   promoteForm.phaseId = sourcePhase ?? phases.value[0]?.id ?? ''
   promoteForm.title = followUp.title
+  promoteSeed = promoteState()
   promotingId.value = followUp.id
 }
 
@@ -227,12 +243,23 @@ const policyForm = reactive<{ maxConcurrent: number; defaultPipelineId: string }
   maxConcurrent: 1,
   defaultPipelineId: '',
 })
+/** What the policy form held when it opened; see `promoteSeed` for why the guard compares to it. */
+let policySeed = ''
+function policyState(): string {
+  return JSON.stringify([policyForm.maxConcurrent, policyForm.defaultPipelineId])
+}
+/** The policy form's unsaved edit, or `''` when it is closed or untouched. */
+function policyDraft(): string {
+  if (!editingPolicy.value) return ''
+  return policyState() === policySeed ? '' : policyState()
+}
 
 function startEditPolicy() {
   const policy = initiative.value?.policy
   if (!policy) return
   policyForm.maxConcurrent = policy.maxConcurrent
   policyForm.defaultPipelineId = policy.defaultPipelineId
+  policySeed = policyState()
   editingPolicy.value = true
 }
 
@@ -250,6 +277,21 @@ async function savePolicy() {
     reportError(error)
   }
 }
+
+// Registered last on purpose: the snapshot reads the two inline forms above, and
+// `useUnsavedGuard` takes its baseline synchronously, so a `ref` declared further down would still
+// be in its temporal dead zone.
+const { requestClose } = useUnsavedGuard({
+  open,
+  close: () => close(),
+  snapshot: () => ({
+    // Only meaningful while the review is the thing on screen; with no parked gate the body below
+    // is what is rendered, and its own two forms are the drafts that count.
+    planReview: planApproval.value && planDocument.value ? planReviewDirty.value : false,
+    promote: promoteDraft(),
+    policy: policyDraft(),
+  }),
+})
 </script>
 
 <template>

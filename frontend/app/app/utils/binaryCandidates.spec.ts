@@ -114,25 +114,41 @@ describe('binaryCandidateHasWarnings', () => {
 })
 
 describe('binaryCandidateAbsence', () => {
-  // The window used to render a titled shell with a blank body for all three of these (UX-80).
+  const RUN = 'exec_1'
+
+  // The window used to render a titled shell with a blank body for all four of these (UX-80).
   // They are different facts, and only one of them is a claim about the RUN.
-  it('separates a read in flight, a failed read, and a run that compared nothing', () => {
-    expect(binaryCandidateAbsence(true, null)).toBe('loading')
-    expect(binaryCandidateAbsence(false, 'network down')).toBe('load_failed')
-    expect(binaryCandidateAbsence(false, null)).toBe('nothing_compared')
+  it('separates no run, a read in flight, a failed read, and a run that compared nothing', () => {
+    expect(binaryCandidateAbsence(false, null, null)).toBe('no_run')
+    expect(binaryCandidateAbsence(true, null, RUN)).toBe('loading')
+    expect(binaryCandidateAbsence(false, 'network down', RUN)).toBe('load_failed')
+    expect(binaryCandidateAbsence(false, null, RUN)).toBe('nothing_compared')
   })
 
   // A Retry re-enters `loading` while the PREVIOUS attempt's message is still recorded. Reporting
   // the stale failure over the live attempt would make the button look like it did nothing.
   it('lets a fresh attempt outrank the error it is clearing', () => {
-    expect(binaryCandidateAbsence(true, 'network down')).toBe('loading')
+    expect(binaryCandidateAbsence(true, 'network down', RUN)).toBe('loading')
   })
 
   // 'nothing_compared' renders "nothing to compare", which is a statement about what the run
   // produced. A request that never landed knows nothing about that, so it must never reach here.
   it('never claims emptiness on the strength of a request that failed', () => {
     for (const error of ['boom', 'Failed to load']) {
-      expect(binaryCandidateAbsence(false, error)).not.toBe('nothing_compared')
+      expect(binaryCandidateAbsence(false, error, RUN)).not.toBe('nothing_compared')
+    }
+  })
+
+  // With no run the warm-up read is never started, so the store's flags belong to some OTHER
+  // window's read. Reporting them here would describe a run nobody asked about, and falling through
+  // to emptiness would claim this run compared nothing without ever having looked.
+  it('never reports a state it did not read, nor emptiness, when there is no run', () => {
+    for (const loading of [true, false]) {
+      for (const error of [null, 'network down']) {
+        for (const run of [null, undefined, '']) {
+          expect(binaryCandidateAbsence(loading, error, run)).toBe('no_run')
+        }
+      }
     }
   })
 })

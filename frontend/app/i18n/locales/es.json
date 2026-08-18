@@ -4603,6 +4603,10 @@
       "awaiting": "Esperando respuestas",
       "done": "Hecho"
     },
+    "saveFailedCount": "No se pudieron guardar {count} de tus respuestas",
+    "continueFailed": "No se pudieron enviar tus respuestas",
+    "proceedFailed": "No se pudo iniciar el borrador",
+    "unanswerable": "Esta pregunta no tiene id, así que no se puede registrar ninguna respuesta para ella.",
     "saveFailed": "No se pudo guardar tu respuesta"
   },
   "documents": {
@@ -7082,6 +7086,11 @@
       "preparingHint": "La planificacion lee primero el repositorio para no preguntarte lo que el codigo ya responde. Las preguntas apareceran aqui cuando termine.",
       "failed": "La ejecucion de planificacion se detuvo",
       "failedHint": "Termino antes de que el planificador pudiera responder. Tus respuestas estan guardadas; vuelve a ejecutar la planificacion desde la iniciativa.",
+      "saveFailed": "No se pudo guardar tu respuesta",
+      "saveFailedCount": "No se pudieron guardar {count} de tus respuestas",
+      "continueFailed": "No se pudieron enviar tus respuestas",
+      "proceedFailed": "No se pudo iniciar la planificación",
+      "unanswerable": "Esta pregunta no tiene id, así que no se puede registrar ninguna respuesta para ella.",
       "answerPlaceholder": "Tu respuesta",
       "hint": "Enviar respuestas permite al planificador hacer mas preguntas; Planificar ahora redacta el plan con las respuestas actuales.",
       "unanswered": "Preguntas sin responder: {count}",
@@ -8031,6 +8040,10 @@
       "undeclared": "El paso nunca declaró sus candidatos, así que no había nada que comparar. La ejecución continuó.",
       "parseFailed": "No se pudo leer la declaración de candidatos del paso, así que no había nada que comparar. La ejecución continuó.",
       "noCandidates": "El paso no preparó ningún candidato, así que no había nada que comparar. La ejecución continuó."
+    },
+    "noRun": {
+      "title": "No hay ninguna ejecución que leer",
+      "hint": "Esta comparación está vinculada a una ejecución de la canalización. Ábrela desde la tarjeta o la cronología del paso que la generó para que se puedan cargar sus candidatos."
     },
     "empty": {
       "title": "Nada que comparar"

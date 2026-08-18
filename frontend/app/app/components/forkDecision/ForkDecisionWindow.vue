@@ -96,15 +96,33 @@ async function onChoose() {
     selected.value === 'custom'
       ? { custom: customText.value.trim(), note: noteText }
       : { forkId: selected.value!, note: noteText }
-  await forkDecision.choose(id, choice).catch(() => {})
+  const chosen = await forkDecision
+    .choose(id, choice)
+    .then(() => true)
+    // The store records the message; the inline error strip above renders it.
+    .catch(() => false)
+  // Drop the drafts once the decision is committed. The window stays open as the RECORD of what was
+  // chosen, so leaving the approach and the steering note in their boxes would have the unsaved
+  // guard below prompt to discard work that was submitted seconds ago.
+  if (chosen) {
+    customText.value = ''
+    note.value = ''
+  }
 }
 
 async function onSend() {
   const id = instanceId.value
   const text = chatInput.value.trim()
   if (!id || !text || !canChat.value) return
-  chatInput.value = ''
-  await forkDecision.chat(id, text).catch(() => {})
+  // Clear the box only once the turn is actually recorded: clearing first made a failed send cost
+  // the typed question, with nothing on screen saying the send had failed.
+  await forkDecision
+    .chat(id, text)
+    .then(() => {
+      chatInput.value = ''
+    })
+    // The store records the message; the inline error strip above renders it.
+    .catch(() => {})
 }
 
 /**

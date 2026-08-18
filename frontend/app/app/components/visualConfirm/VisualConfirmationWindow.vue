@@ -132,19 +132,18 @@ const hasFindings = computed(
  * Confirm before discarding the drafted findings (UX-79). Both halves count: the per-view notes are
  * anchored to a specific screenshot and cannot be reconstructed from memory, and the freeform box is
  * the overall verdict. They are composed into one findings string only when Request fix is pressed,
- * which resolves the gate and dispatches a fixer — so a stray Escape may not send them.
+ * which resolves the gate and dispatches a fixer, so a stray Escape may not send them.
+ *
+ * The snapshot is exactly what Request fix WOULD send, read off `buildFindings` rather than off the
+ * note map. A recapture returns a different pair set and never prunes `perViewNotes`, so a note left
+ * behind against a view that is gone is unsendable, and reporting it here would prompt to discard
+ * something the button could not have submitted anyway.
  */
 const { requestClose } = useUnsavedGuard({
   open,
   close: () => close(),
   saving: () => busy.value,
-  snapshot: () => ({
-    global: globalFindings.value.trim(),
-    perView: Object.entries(perViewNotes)
-      .map(([view, note]) => [view, (note ?? '').trim()] as const)
-      .filter(([, note]) => note)
-      .sort(([a], [b]) => a.localeCompare(b)),
-  }),
+  snapshot: () => buildFindings().structured,
 })
 
 /** Compose the per-view notes + freeform text into the fixer's findings (and a structured

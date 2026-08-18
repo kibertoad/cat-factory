@@ -46,10 +46,14 @@ const { open, blockId, instanceId, stepIndex, close } = useResultView('binary-ca
   },
 })
 
-/** Re-run the warm-up read after a failed one (the Retry beside the error state). */
+/**
+ * Re-run the warm-up read after a failed one (the Retry beside the error state). Refuses while one
+ * is already in flight: the store sequences its attempts so a superseded settle can't write, and
+ * this is the authoritative half, so the refusal holds for any future caller.
+ */
 function retryLoad(): void {
   const id = instanceId.value
-  if (id) void candidates.load(id)
+  if (id && !candidates.loading) void candidates.load(id)
 }
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
@@ -66,8 +70,14 @@ const step = computed(() => {
   return instance.value.steps[stepIndex.value] ?? null
 })
 const view = computed(() => binaryCandidateView(step.value))
-/** Which of the three no-comparison states the body renders; see `binaryCandidateAbsence`. */
-const absence = computed(() => binaryCandidateAbsence(candidates.loading, candidates.error))
+/**
+ * Which of the four no-comparison states the body renders; see `binaryCandidateAbsence`. The run id
+ * is part of the question: with no run there was no read, so neither the spinner nor "nothing to
+ * compare" would be about this window.
+ */
+const absence = computed(() =>
+  binaryCandidateAbsence(candidates.loading, candidates.error, instanceId.value),
+)
 const warnings = computed(() => (view.value ? binaryCandidateHasWarnings(view.value) : false))
 const noChoiceKey = computed(() => {
   const reason = view.value?.state.noChoiceReason
@@ -245,13 +255,21 @@ const { requestClose } = useUnsavedGuard({
           >
             <!-- The REAL control, not the card's click handler: ticking a candidate is the only
                  way to keep an asset, so without a focusable input the gate could not be completed
-                 by keyboard at all (UX-80). `@click.stop` keeps the input's own click from also
-                 bubbling into the card's toggle, which would cancel itself out on a checkbox. The
-                 whole window is ONE radio group in single-select mode, because `toggle` replaces
-                 the selection across every subject rather than per group. -->
+                 by keyboard at all (UX-80). The whole window is ONE radio group in single-select
+                 mode, because `toggle` replaces the selection across every subject rather than per
+                 group.
+
+                 `@click.stop` belongs on the LABEL, which is the element the card's own toggle has
+                 to be shielded from. On the input alone it stopped the wrong click: activating a
+                 label forwards a synthetic click to its input (which `.stop` there does not
+                 prevent, only its propagation), so a click on the label TEXT bubbled to the card
+                 and toggled, then the forwarded click toggled back. On a checkbox that nets to no
+                 change, which means no re-render, which leaves the box ticked over a candidate
+                 that is no longer selected. -->
             <label
               v-if="view.awaiting"
               class="mb-1.5 flex cursor-pointer items-center gap-2 text-[11px] text-slate-400"
+              @click.stop
             >
               <input
                 :type="view.multiSelect ? 'checkbox' : 'radio'"
@@ -260,7 +278,6 @@ const { requestClose } = useUnsavedGuard({
                 :checked="selected.includes(row.id)"
                 :aria-label="candidateLabel(row)"
                 data-testid="binary-candidate-select"
-                @click.stop
                 @change="toggle(row.id)"
               />
               <span class="truncate">{{ candidateLabel(row) }}</span>
@@ -363,11 +380,21 @@ const { requestClose } = useUnsavedGuard({
       </div>
     </div>
 
-    <!-- No state on the step. The three ways that happens need different reactions, so they render
-         as three different things rather than as the blank body this window used to leave behind
-         (UX-80): the read is still in flight, the read FAILED (offer a Retry), or the step genuinely
-         compared nothing. Collapsing the middle one into the last would put "nothing to compare" in
-         front of a person whose candidates exist and were simply not fetched. -->
+    <!-- No state on the step. The four ways that happens need different reactions, so they render
+         as four different things rather than as the blank body this window used to leave behind
+         (UX-80): there is no run to read, the read is still in flight, the read FAILED (offer a
+         Retry), or the step genuinely compared nothing. Collapsing any of the first three into the
+         last would put "nothing to compare" in front of a person whose candidates exist and were
+         simply not fetched. -->
+    <div
+      v-else-if="absence === 'no_run'"
+      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-slate-400"
+      data-testid="binary-candidates-no-run"
+    >
+      <UIcon name="i-lucide-unlink" class="h-8 w-8 opacity-40" />
+      <p class="text-sm">{{ t('binaryCandidates.noRun.title') }}</p>
+      <p class="max-w-md text-[11px] text-slate-500">{{ t('binaryCandidates.noRun.hint') }}</p>
+    </div>
     <div
       v-else-if="absence === 'loading'"
       class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-slate-400"

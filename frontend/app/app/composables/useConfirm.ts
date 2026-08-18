@@ -55,8 +55,13 @@ export function useConfirm() {
 
   // Called by the dialog when `open` flips to false without an explicit accept/cancel
   // (backdrop, Escape, unmount). Any still-pending promise resolves `false`.
+  //
+  // It also has to write `open` itself, exactly as `cancel` does: the dialog is CONTROLLED (its
+  // `v-model:open` reads this ref), so a dismissal that only settled the promise left a visible
+  // modal behind with no pending resolver, whose buttons then resolve nothing.
   function dismissed(): void {
-    if (resolver) settle(false)
+    open.value = false
+    settle(false)
   }
 
   return { open, current: readonly(current), confirm, accept, cancel, dismissed }

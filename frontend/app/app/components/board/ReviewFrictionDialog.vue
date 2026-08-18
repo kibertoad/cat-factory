@@ -12,10 +12,22 @@ const ui = useUiStore()
 
 const ctx = computed(() => ui.reviewFrictionContext)
 
+// True while the opener's create is actually in flight. Read through the context's getter inside a
+// computed so it tracks the opener's own `saving` ref (UX-78): the context object itself is
+// captured once at open, so a copied boolean would never update.
+//
+// While it holds, EVERY way out is closed, not just the buttons. Gating the two actions and leaving
+// Close, Escape and the backdrop live was the worse half of the asymmetry: it locked the safe exit
+// (go review the waiting tasks) and left open the one that tears the dialog down mid-create, so the
+// user could not tell whether a task had been filed.
+const pending = computed(() => ctx.value?.pending?.() ?? false)
+
 const open = computed({
   get: () => ctx.value !== null,
   set: (v: boolean) => {
-    if (!v) ui.closeReviewFriction()
+    // Refuse a USER dismissal while the create is in flight (see `pending`). The opener still closes
+    // this dialog directly through the store on success, so only the human's exits are gated.
+    if (!v && !pending.value) ui.closeReviewFriction()
   },
 })
 
@@ -53,11 +65,6 @@ function goReview() {
   }
 }
 
-// True while the opener's create is actually in flight. Read through the context's getter inside a
-// computed so it tracks the opener's own `saving` ref (UX-78) — the context object itself is
-// captured once at open, so a copied boolean would never update.
-const pending = computed(() => ctx.value?.pending?.() ?? false)
-
 function createAnyway() {
   if (pending.value) return
   ctx.value?.onConfirm?.()
@@ -65,7 +72,13 @@ function createAnyway() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="title" :ui="{ content: 'max-w-xl' }">
+  <UModal
+    v-model:open="open"
+    :title="title"
+    :dismissible="!pending"
+    :close="{ disabled: pending }"
+    :ui="{ content: 'max-w-xl' }"
+  >
     <template #body>
       <div v-if="ctx" class="space-y-5">
         <p class="text-sm text-slate-300">{{ body }}</p>
@@ -78,7 +91,8 @@ function createAnyway() {
             <li v-for="item in ctx.debt" :key="item.blockId">
               <button
                 type="button"
-                class="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-sm hover:bg-slate-800/60"
+                class="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-sm hover:bg-slate-800/60 disabled:opacity-50"
+                :disabled="pending"
                 @click="goToBlock(item.blockId)"
               >
                 <span class="truncate text-slate-200">
@@ -97,6 +111,8 @@ function createAnyway() {
             color="neutral"
             variant="ghost"
             size="sm"
+            :disabled="pending"
+            data-testid="review-friction-close"
             @click="
               () => {
                 open = false

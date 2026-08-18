@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 // a window wired `@close="close"` goes straight through all three — so a reviewer who tabbed away
 // mid-sentence lost the sentence, with nothing on screen having said so.
 //
-// The seams to fix it already existed and were used by exactly two of the thirteen windows that
+// The seams to fix it already existed and were used by exactly two of the fourteen windows that
 // needed them. That is the shape this file guards against: not a missing primitive, but a primitive the
 // next window silently doesn't reach for (the re-audit's cross-cutting theme 8). Nothing in the type
 // system can ask "does this window hold a draft?", so the table below is the answer, asserted
@@ -15,9 +15,10 @@ import { describe, expect, it } from 'vitest'
 //
 // The two sanctioned dispositions, and the rule for picking:
 //
-//   'flush'   — `useResultView({ onClose })`. For a draft whose save is a PLAIN SAVE: recording it
-//               changes nothing else, so writing it on the way out is what the user meant. The
-//               review windows and the doc interview persist one answer at a time.
+//   'flush'   — `useResultView({ onClose })`, then `useInterviewDrafts` or the review windows' own
+//               flush. For a draft whose save is a PLAIN SAVE: recording it changes nothing else, so
+//               writing it on the way out is what the user meant. The review windows and the two
+//               interview windows persist one answer at a time.
 //   'confirm' — `useUnsavedGuard` in front of the shell's close. For a draft whose only submit
 //               button also DECIDES something — resolves a gate, spends a bounded chat turn, keeps
 //               an artifact, re-runs an agent. A stray Escape may not do that on the user's behalf,
@@ -33,7 +34,7 @@ type Disposition = 'none' | 'flush' | 'confirm'
 /**
  * Every `ResultWindowShell` consumer and how it treats unsubmitted input. The `why` is the point for
  * anything other than 'none': it has to name the draft, because "this window has no draft" is the
- * claim that gets silently falsified when someone adds a textarea to it.
+ * claim that gets silently falsified when someone adds an input to it.
  */
 const WINDOWS: Record<string, { drafts: Disposition; why: string }> = {
   'binaryCandidates/BinaryCandidatesWindow.vue': {
@@ -70,12 +71,12 @@ const WINDOWS: Record<string, { drafts: Disposition; why: string }> = {
     why: 'the tester findings, the only record of what went wrong; Request fix resolves the gate',
   },
   'initiative/InitiativePlanningWindow.vue': {
-    drafts: 'none',
-    why: 'a planning-progress readout',
+    drafts: 'flush',
+    why: 'per-question answers, each recorded on its own (Submit / Plan now are separate commands)',
   },
   'initiative/InitiativeTrackerWindow.vue': {
     drafts: 'confirm',
-    why: 'it hands its body to the plan review, whose anchored comments + feedback send back a re-plan',
+    why: 'the plan review it hands its body to (anchored comments + feedback send back a re-plan), plus its own follow-up promotion and execution-policy forms',
   },
   'judge/JudgeResultView.vue': {
     drafts: 'confirm',
@@ -104,6 +105,15 @@ const WINDOWS: Record<string, { drafts: Disposition; why: string }> = {
   },
 }
 
+/**
+ * `v-model` bindings that are VIEW state rather than a draft, and may therefore appear in a window
+ * declared draft-free. Listed as EXACT bindings rather than matched by shape, because the point of
+ * the inverse assertion below is that a new binding is unknown until someone classifies it: the
+ * planning window's `v-model:answer="drafts[q.key]"` sat unnoticed in a 'none' row precisely because
+ * it looked enough like the lightbox pair to pass a shape test.
+ */
+const VIEW_STATE_BINDINGS = ['v-model:open="lightboxOpen"', 'v-model:index="lightboxIndex"']
+
 /** Every component that mounts the shell, keyed by its path relative to `app/components`. */
 function findConsumers(): Map<string, string> {
   const found = new Map<string, string>()
@@ -116,14 +126,57 @@ function findConsumers(): Map<string, string> {
   return found
 }
 
+/**
+ * The shell's OWN opening tag. Quote-aware, so a `>` inside an attribute value can't end it early,
+ * and bounded, so `@close` on a nested component further down the template can't be read as the
+ * shell's: an unbounded scan would let a window bypass the guard by binding its own close deeper in.
+ */
+function shellTag(source: string): string {
+  const start = source.indexOf('<ResultWindowShell')
+  if (start < 0) return ''
+  let quote: string | null = null
+  for (let i = start; i < source.length; i += 1) {
+    const char = source[i]!
+    if (quote) {
+      if (char === quote) quote = null
+      continue
+    }
+    if (char === '"' || char === "'") quote = char
+    else if (char === '>') return source.slice(start, i + 1)
+  }
+  return ''
+}
+
 /** What the component's `<ResultWindowShell>` binds its close to. */
 function closeBinding(source: string): string | null {
-  return /<ResultWindowShell[\s\S]*?@close="([^"]+)"/.exec(source)?.[1] ?? null
+  return /@close="([^"]+)"/.exec(shellTag(source))?.[1] ?? null
 }
 
 /** Whether the window registers the flush hook on its `useResultView` seam. */
 function registersFlushHook(source: string): boolean {
   return /useResultView\([\s\S]*?onClose:/.test(source)
+}
+
+/**
+ * Every state binding in the source: `v-model` with or without an argument, plus the explicit
+ * `:model-value` + `@update:model-value` pair that a per-row control inside a `v-for` has to use
+ * (which is the shape `BinaryCandidatesWindow`'s store-as aliases already have).
+ */
+function stateBindings(source: string): string[] {
+  const pattern = /(?:v-model(?::[\w-]+)?|:?model-value|@update:model-value)="[^"]*"/g
+  return [...source.matchAll(pattern)].map((match) => match[0])
+}
+
+/** A native form control, which holds typed input whether or not it carries a `v-model`. */
+function hasNativeControl(source: string): boolean {
+  return /<(?:input|textarea|select)\b/.test(source)
+}
+
+/** What makes this window suspect for a 'none' row, or `null` when nothing does. */
+function draftEvidence(source: string): string | null {
+  const bound = stateBindings(source).filter((binding) => !VIEW_STATE_BINDINGS.includes(binding))
+  if (bound.length > 0) return bound[0]!
+  return hasNativeControl(source) ? 'a native input/textarea/select' : null
 }
 
 describe('result-window draft handling', () => {
@@ -134,25 +187,41 @@ describe('result-window draft handling', () => {
     expect([...consumers.keys()].sort()).toEqual(Object.keys(WINDOWS).sort())
   })
 
-  // The defect UX-79 named: a window holding a draft whose close goes straight to `ui.closeResultView`.
-  it('routes every draft-holding window through a flush or a confirm', () => {
-    const offenders = [...consumers.entries()].filter(([file, source]) => {
-      const row = WINDOWS[file]!
-      if (row.drafts === 'none') return false
-      if (row.drafts === 'flush') return !registersFlushHook(source)
-      // 'confirm': the shell's close must reach the guard, not `useResultView`'s raw `close`.
-      return closeBinding(source) === 'close'
+  // Every assertion below reads its row through this, so an UNLISTED consumer fails the coverage
+  // test above with a message that names it, instead of crashing the rest of the file on a
+  // `Cannot read properties of undefined` that names nothing.
+  const rows = () =>
+    [...consumers.entries()].flatMap(([file, source]) => {
+      const row = WINDOWS[file]
+      return row ? [{ file, source, row }] : []
     })
-    expect(offenders.map(([file]) => file)).toEqual([])
+
+  // The defect UX-79 named: a window holding a draft whose close goes straight to `ui.closeResultView`.
+  // Asserted POSITIVELY — the disposition's own seam has to be present AND wired to the shell's own
+  // close. Merely checking that the binding is not the literal `close` passes a window that renamed
+  // its handler and still closed straight through.
+  it('wires every draft-holding window to the seam its disposition names', () => {
+    const offenders = rows().filter(({ source, row }) => {
+      if (row.drafts === 'flush') {
+        return !registersFlushHook(source) || closeBinding(source) !== 'close'
+      }
+      if (row.drafts === 'confirm') {
+        return !source.includes('useUnsavedGuard(') || closeBinding(source) !== 'requestClose'
+      }
+      return closeBinding(source) !== 'close'
+    })
+    expect(offenders.map(({ file }) => file)).toEqual([])
   })
 
-  // The inverse, and the one that actually rots: a window declared draft-free that grew a textarea.
-  // Without this the table degrades into a list of what someone once believed.
+  // The inverse, and the one that actually rots: a window declared draft-free that grew an input.
+  // Without this the table degrades into a list of what someone once believed. It reports WHAT it
+  // found, because "this file is suspect" alone sends the reader hunting.
   it('finds no unsubmitted input in a window declared draft-free', () => {
-    const suspects = [...consumers.entries()]
-      .filter(([file]) => WINDOWS[file]!.drafts === 'none')
-      .filter(([, source]) => /<(textarea|UTextarea)\b|v-model="drafts/.test(source))
-    expect(suspects.map(([file]) => file)).toEqual([])
+    const suspects = rows()
+      .filter(({ row }) => row.drafts === 'none')
+      .map(({ file, source }) => ({ file, evidence: draftEvidence(source) }))
+      .filter(({ evidence }) => evidence !== null)
+    expect(suspects).toEqual([])
   })
 
   // A row that says 'confirm'/'flush' but names no draft is a row nobody thought about.

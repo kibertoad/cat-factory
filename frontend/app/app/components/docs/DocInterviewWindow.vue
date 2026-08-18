@@ -16,7 +16,7 @@
 // identically before and after the click, which reads as the button having done nothing. The
 // phase below folds the document RUN's status in, so the wait is visible and a failed pass says
 // so instead of leaving the human staring at questions they already submitted.
-import { computed, reactive, watch } from 'vue'
+import { computed } from 'vue'
 import InterviewGateNotice from '~/components/common/InterviewGateNotice.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import {
@@ -30,7 +30,6 @@ const docInterview = useDocInterviewStore()
 const execution = useExecutionStore()
 const { t } = useI18n()
 const access = useWorkspaceAccess()
-const { present } = usePipelineErrorToast()
 
 const { open, blockId, close } = useResultView('doc-interview', {
   onOpen: ({ blockId }) => void docInterview.load(blockId),
@@ -38,7 +37,7 @@ const { open, blockId, close } = useResultView('doc-interview', {
   // closing the window never silently drops it (UX-79). The flush seam is right here rather than a
   // discard prompt because saving ONE answer is a plain save: it records the reply without
   // resolving the interview, which is what the window's own two commands do.
-  onClose: () => flushDrafts(),
+  onClose: () => flushOnClose(),
 })
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
@@ -51,18 +50,25 @@ const questions = computed(() =>
 )
 const pending = computed(() => questions.value.filter((q) => !(q.answer ?? '').trim()))
 
-// Per-question answer drafts, seeded from the entity and refreshed as new rounds arrive without
-// clobbering an answer the human is mid-edit on.
-const drafts = reactive<Record<string, string>>({})
-watch(
-  questions,
-  (list) => {
-    for (const q of list) {
-      if (!(q.key in drafts)) drafts[q.key] = q.answer ?? ''
-    }
-  },
-  { immediate: true },
-)
+// Per-question answer drafts, plus the two ways they leave the browser: one on blur, all of them on
+// the way out. The shared seam with the initiative planner's interviewer, which holds the same kind
+// of draft for the same reason; `useInterviewDrafts` records what a per-window copy kept getting
+// wrong, including the flush that used to abandon every answer after the first failed write.
+const { drafts, addressable, unanswered, saveAnswer, flushDrafts, flushThen } = useInterviewDrafts({
+  blockId: () => blockId.value,
+  questions: () => questions.value,
+  pending: () => pending.value,
+  write: (block, questionId, answer) => docInterview.answerQuestion(block, questionId, answer),
+  failureTitleKeys: { one: 'docInterview.saveFailed', many: 'docInterview.saveFailedCount' },
+})
+
+/**
+ * A hoisted indirection for the close hook above. The seam that owns `flushDrafts` needs the
+ * `blockId` this very `useResultView` call produces, so the hook cannot name the const directly.
+ */
+function flushOnClose(): void {
+  flushDrafts()
+}
 
 const resuming = computed(() => docInterview.resuming)
 
@@ -84,12 +90,6 @@ const phase = computed(() =>
 /** The interview converged: the synthesized authoring brief is what the window shows. */
 const converged = computed(() => phase.value === 'converged')
 
-/**
- * Questions still missing a drafted answer. Submit is only meaningful once this is empty — but a
- * disabled button with no stated reason is itself a "nothing happened", so the count is rendered.
- */
-const unanswered = computed(() => pending.value.filter((q) => !drafts[q.key]?.trim()).length)
-
 /** Why Submit is unavailable, or undefined when it is. RBAC first: it outranks a draft gap. */
 const continueBlockedReason = computed(() => {
   if (!access.canExecuteRuns.value) return t('access.noRunExecute')
@@ -97,55 +97,10 @@ const continueBlockedReason = computed(() => {
   return undefined
 })
 
-/**
- * Persist one answer if its draft differs from what's recorded. The block id is threaded in rather
- * than read off the reactive ref, so a flush started as the window closes still writes to the right
- * board: `blockId` goes null the moment the view tears down.
- */
-async function persist(block: string, q: { id?: string; key: string; answer?: string }) {
-  const id = q.id
-  if (!id) return
-  const next = (drafts[q.key] ?? '').trim()
-  if (!next || next === (q.answer ?? '').trim()) return
-  await docInterview.answerQuestion(block, id, next)
-}
-
-/**
- * The blur handler: save this one answer against the block that is open right now. Reports its own
- * failure — the call is detached (Vue discards a handler's returned promise), so without this a
- * failed save is an unhandled rejection and the user is told nothing.
- */
-function persistOnBlur(q: { id?: string; key: string; answer?: string }): void {
-  const block = blockId.value
-  if (block) void persist(block, q).catch((error) => present(error, 'docInterview.saveFailed'))
-}
-
-/**
- * Persist every dirty draft. Snapshots the block id and the question list up front for the reason
- * above, and runs detached so it can be called from the synchronous close hook.
- */
-function flushDrafts(): void {
-  const block = blockId.value
-  if (!block) return
-  const list = questions.value
-  void (async () => {
-    for (const q of list) await persist(block, q)
-    // The store rethrows, and this runs detached from any caller — so the failure is REPORTED here
-    // rather than becoming an unhandled rejection. A close-time flush is the one path with no
-    // button left on screen to have reported it.
-  })().catch((error) => present(error, 'docInterview.saveFailed'))
-}
-
-/** Flush all dirty drafts, then run a window action (continue / proceed). */
-async function flushThen(action: (id: string) => Promise<unknown>) {
-  const block = blockId.value
-  if (!block) return
-  for (const q of questions.value) await persist(block, q)
-  await action(block)
-}
-
-const onContinue = () => flushThen((id) => docInterview.continueInterview(id))
-const onProceed = () => flushThen((id) => docInterview.proceedInterview(id))
+const onContinue = () =>
+  flushThen((id) => docInterview.continueInterview(id), 'docInterview.continueFailed')
+const onProceed = () =>
+  flushThen((id) => docInterview.proceedInterview(id), 'docInterview.proceedFailed')
 </script>
 
 <template>
@@ -247,11 +202,21 @@ const onProceed = () => flushThen((id) => docInterview.proceedInterview(id))
               v-model="drafts[q.key]"
               :rows="2"
               autoresize
+              :disabled="!addressable(q)"
               :placeholder="t('docInterview.answerPlaceholder')"
               class="w-full"
               data-testid="doc-interview-answer"
-              @blur="persistOnBlur(q)"
+              @blur="saveAnswer(q)"
             />
+            <!-- The answer write addresses a question by id, so an exchange without one has nowhere
+                 for an answer to go. Saying so beats taking text the flush could only drop. -->
+            <p
+              v-if="!addressable(q)"
+              class="mt-1 text-[11px] text-amber-300"
+              data-testid="doc-interview-unanswerable"
+            >
+              {{ t('docInterview.unanswerable') }}
+            </p>
           </li>
         </ul>
       </template>

@@ -55,11 +55,21 @@ export const useBinaryCandidatesStore = defineStore('binaryCandidates', () => {
   }
 
   /**
+   * The most recent {@link load} attempt. Only the latest one may write `loading` or `error`: two
+   * reads do overlap (a Retry beside a window switching run, an open triggered while one is in
+   * flight), and a superseded attempt settling afterwards used to clear the spinner and stamp its
+   * own verdict over the newer read's. A slow failure landing after a fast success is the bad case,
+   * because it reports a load failure across candidates that are on screen.
+   */
+  let attempt = 0
+
+  /**
    * Warm the live state from the GET (the stream also keeps it fresh). The failure is RECORDED
    * rather than swallowed: with no state on the step, a failed read and a run that produced no
    * candidates are the same `null` and opposite facts, and only one of them is worth a Retry.
    */
   async function load(executionId: string): Promise<void> {
+    const mine = ++attempt
     error.value = null
     loading.value = true
     try {
@@ -71,9 +81,9 @@ export const useBinaryCandidatesStore = defineStore('binaryCandidates', () => {
         },
       )
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to load'
+      if (mine === attempt) error.value = e instanceof Error ? e.message : 'Failed to load'
     } finally {
-      loading.value = false
+      if (mine === attempt) loading.value = false
     }
   }
 

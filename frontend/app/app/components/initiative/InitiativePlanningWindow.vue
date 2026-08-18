@@ -22,7 +22,7 @@
 // identically before and after the click, which reads as the button having done nothing. The
 // phase below folds the planning RUN's status in, so the wait is visible and a failed pass says
 // so instead of leaving the human staring at questions they already submitted.
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import ClarificationItem from '~/components/common/ClarificationItem.vue'
 import InterviewGateNotice from '~/components/common/InterviewGateNotice.vue'
 import {
@@ -44,6 +44,11 @@ const { t } = useI18n()
 
 const { open, blockId, instanceId, stepIndex, close } = useResultView('initiative-planning', {
   onOpen: ({ blockId }) => void initiatives.load(blockId),
+  // Persist any typed-but-unsubmitted answer before the view tears down (X, backdrop, Escape), so
+  // closing the window never silently drops it (UX-79). A flush rather than a discard prompt because
+  // saving ONE answer is a plain save: it records the reply without resuming the interview, which is
+  // what this window's own two commands do.
+  onClose: () => flushOnClose(),
 })
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
@@ -76,18 +81,32 @@ const questions = computed(() =>
 /** Questions still needing an answer: not dismissed, and not yet answered (mirrors backend). */
 const pending = computed(() => questions.value.filter(isPendingQuestion))
 
-// Per-question answer drafts, seeded from the entity and refreshed as new rounds arrive
-// without clobbering an answer the human is mid-edit on.
-const drafts = reactive<Record<string, string>>({})
-watch(
-  questions,
-  (list) => {
-    for (const q of list) {
-      if (!(q.key in drafts)) drafts[q.key] = q.answer ?? ''
-    }
+// Per-question answer drafts, plus the two ways they leave the browser: one on blur, all of them on
+// the way out. The shared seam with the doc-authoring interviewer, which holds the same kind of draft
+// for the same reason; `useInterviewDrafts` records what a per-window copy kept getting wrong.
+//
+// `writable` is this window's own rule: a question set aside as not-relevant had its recorded answer
+// CLEARED, so writing a stale local draft back would silently re-answer it and leak it into the
+// converged digest.
+const { drafts, addressable, unanswered, saveAnswer, flushDrafts, flushThen } = useInterviewDrafts({
+  blockId: () => blockId.value,
+  questions: () => questions.value,
+  pending: () => pending.value,
+  write: (block, questionId, answer) => initiatives.answerQuestion(block, questionId, answer),
+  writable: (q) => q.status !== 'dismissed',
+  failureTitleKeys: {
+    one: 'initiative.planning.saveFailed',
+    many: 'initiative.planning.saveFailedCount',
   },
-  { immediate: true },
-)
+})
+
+/**
+ * A hoisted indirection for the close hook above. The seam that owns `flushDrafts` needs the
+ * `blockId` this very `useResultView` call produces, so the hook cannot name the const directly.
+ */
+function flushOnClose(): void {
+  flushDrafts()
+}
 
 /**
  * Render order (pending first — see `orderInterviewQuestions`), re-snapshotted ONLY when the
@@ -129,33 +148,6 @@ const phase = computed(() =>
       ),
 )
 
-/**
- * Questions still missing a drafted answer. Continue is only meaningful once this is empty — but a
- * disabled button with no stated reason is itself a "nothing happened", so the count is rendered.
- * A dismissed question doesn't count (it was set aside), so an all-dismissed round is trivially
- * answered.
- */
-const unanswered = computed(() => pending.value.filter((q) => !drafts[q.key]?.trim()).length)
-
-/**
- * Persist one answer if its draft differs from what's recorded. A `dismissed` question is skipped:
- * it was set aside (its server answer cleared), and the `flushThen` sweep on continue/proceed must
- * NOT write a stale local draft back to it — that would silently re-answer a not-relevant question
- * and leak it into the converged digest.
- */
-async function persist(q: {
-  id?: string
-  key: string
-  answer?: string
-  status?: 'open' | 'dismissed'
-}) {
-  const id = q.id
-  if (!id || !blockId.value || q.status === 'dismissed') return
-  const next = (drafts[q.key] ?? '').trim()
-  if (!next || next === (q.answer ?? '').trim()) return
-  await initiatives.answerQuestion(blockId.value, id, next)
-}
-
 /** Mark a question not-relevant / reopen it. */
 async function setStatus(q: { id?: string }, status: 'open' | 'dismissed') {
   if (!q.id || !blockId.value) return
@@ -168,22 +160,17 @@ async function recommend(q: { id?: string }) {
   await initiatives.recommendAnswer(blockId.value, q.id)
 }
 
-/** Adopt a suggested answer into the draft, then persist it. */
-async function useRecommendation(q: { id?: string; key: string; recommendation?: string | null }) {
+/** Adopt a suggested answer into the draft, then record it. */
+function useRecommendation(q: (typeof questions.value)[number]) {
   if (!q.recommendation) return
   drafts[q.key] = q.recommendation
-  await persist(q)
+  saveAnswer(q)
 }
 
-/** Flush all dirty drafts, then run a window action (continue / proceed). */
-async function flushThen(action: (id: string) => Promise<unknown>) {
-  if (!blockId.value) return
-  for (const q of questions.value) await persist(q)
-  await action(blockId.value)
-}
-
-const onContinue = () => flushThen((id) => initiatives.continuePlanning(id))
-const onProceed = () => flushThen((id) => initiatives.proceedPlanning(id))
+const onContinue = () =>
+  flushThen((id) => initiatives.continuePlanning(id), 'initiative.planning.continueFailed')
+const onProceed = () =>
+  flushThen((id) => initiatives.proceedPlanning(id), 'initiative.planning.proceedFailed')
 
 /**
  * The escape hatch for a planning run that stalled. It belongs HERE, not only in the inspector's
@@ -301,13 +288,24 @@ async function onDiscard() {
                 :dismissed="q.status === 'dismissed'"
                 :recommendation="q.recommendation"
                 :recommending="!!q.id && initiatives.recommending.has(q.id)"
+                :disabled="!addressable(q)"
                 :answer-placeholder="t('initiative.planning.answerPlaceholder')"
-                @persist="persist(q)"
+                @persist="saveAnswer(q)"
                 @dismiss="setStatus(q, 'dismissed')"
                 @reopen="setStatus(q, 'open')"
                 @recommend="recommend(q)"
                 @use-recommendation="useRecommendation(q)"
               />
+              <!-- Every action here addresses a question by id, so an exchange without one has
+                   nowhere for an answer (or a dismissal) to go. Saying so beats taking text the
+                   flush could only drop. -->
+              <p
+                v-if="!addressable(q)"
+                class="mt-1 text-[11px] text-amber-300"
+                data-testid="initiative-planning-unanswerable"
+              >
+                {{ t('initiative.planning.unanswerable') }}
+              </p>
             </li>
           </ul>
         </template>

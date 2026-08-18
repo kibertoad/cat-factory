@@ -248,9 +248,16 @@ async function submitChallenge(id: string): Promise<void> {
   const inst = instanceId.value
   if (!inst || !canResolve.value) return
   const question = challengeText.value.trim()
-  challengeForId.value = null
-  challengeText.value = ''
-  await prReview.challenge(inst, id, question || undefined).catch(() => {})
+  // Close the box only once the turn is actually recorded (UX-83): clearing first made a failed
+  // dispatch cost the typed concern, and left the guard below with nothing to protect.
+  await prReview
+    .challenge(inst, id, question || undefined)
+    .then(() => {
+      challengeForId.value = null
+      challengeText.value = ''
+    })
+    // The store records the message; the inline error strip renders it.
+    .catch(() => {})
 }
 async function onDismiss(id: string): Promise<void> {
   const inst = instanceId.value

@@ -128,25 +128,33 @@ export function binaryCandidateHasWarnings(view: BinaryCandidateView): boolean {
 }
 
 /**
- * Why the window has no comparison to render. Three different facts that a single blank body
- * conflated (UX-80), each needing a different reaction from the reader: wait, retry, or accept that
- * the run compared nothing. `nothing_compared` is a CLAIM about the run, so it is only ever the
- * answer once the read has settled and not failed.
+ * Why the window has no comparison to render. Four different facts that a single blank body
+ * conflated (UX-80), each needing a different reaction from the reader: nothing to read from, wait,
+ * retry, or accept that the run compared nothing. `nothing_compared` is a CLAIM about the run, so
+ * it is only ever the answer once a read of that run has settled and not failed.
  */
-export type BinaryCandidateAbsence = 'loading' | 'load_failed' | 'nothing_compared'
+export type BinaryCandidateAbsence = 'no_run' | 'loading' | 'load_failed' | 'nothing_compared'
 
 /**
  * The absence to render when {@link binaryCandidateView} produced nothing.
  *
- * Precedence is the point, and it is stated here rather than in the template's branch order: an
- * in-flight read outranks a stale error from the previous attempt (so a Retry does not keep showing
- * the failure it is busy clearing), and a recorded error outranks emptiness (so a request that
- * never landed cannot render as "this run generated nothing to compare").
+ * Precedence is the point, and it is stated here rather than in the template's branch order:
+ *
+ *  - No RUN outranks everything. The window is keyed to an execution and the warm-up read is
+ *    skipped without one, so `loading`/`error` can only be describing some other window's read;
+ *    reporting either would attribute a state to a run nobody asked about, and reporting emptiness
+ *    would claim this run compared nothing on the strength of never having looked.
+ *  - An in-flight read outranks a stale error from the previous attempt, so a Retry does not keep
+ *    showing the failure it is busy clearing.
+ *  - A recorded error outranks emptiness, so a request that never landed cannot render as "this run
+ *    generated nothing to compare".
  */
 export function binaryCandidateAbsence(
   loading: boolean,
   error: string | null | undefined,
+  executionId: string | null | undefined,
 ): BinaryCandidateAbsence {
+  if (!executionId) return 'no_run'
   if (loading) return 'loading'
   if (error) return 'load_failed'
   return 'nothing_compared'

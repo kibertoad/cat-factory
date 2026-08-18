@@ -34,6 +34,17 @@ const open = computed({
 const busy = ref<Set<string>>(new Set())
 const isBusy = (id: string) => busy.value.has(id)
 const anyBusy = computed(() => busy.value.size > 0)
+/**
+ * The pipeline whose confirm prompt is open, tracked apart from `busy` because a confirm is not work
+ * in flight: the row must not spin while the human reads the prompt.
+ *
+ * It still LOCKS every other control. `useConfirm` is a singleton, so a second Delete click
+ * supersedes the pending request and settles it `false`: the first pipeline was then silently not
+ * deleted, and nothing on screen said so.
+ */
+const confirmingId = ref<string | null>(null)
+/** True while any row is mid-action OR holding an open confirm. Every control here reads this. */
+const locked = computed(() => anyBusy.value || confirmingId.value !== null)
 
 /** `failTitleKey` is an i18n KEY (not resolved copy) — `present` uses it only when the failure has
  *  no mapped conflict reason of its own. Resolves `true` only when the action actually settled, so
@@ -65,7 +76,14 @@ const reseed = (id: string) =>
  * afterwards.
  */
 async function confirmRemove(pipeline: { id: string; name: string }, failTitleKey: string) {
-  if (!(await confirmAction('remove', pipeline.name))) return
+  // The entry guard is the authoritative half of the lock the buttons show: it holds for any future
+  // caller, and it is what makes "one confirmed click per pipeline" true rather than aspirational.
+  if (locked.value) return
+  confirmingId.value = pipeline.id
+  const confirmed = await confirmAction('remove', pipeline.name).finally(() => {
+    confirmingId.value = null
+  })
+  if (!confirmed) return
   if (await run(pipeline.id, () => pipelines.removePipeline(pipeline.id), failTitleKey))
     toastDone('remove', pipeline.name)
 }
@@ -137,7 +155,7 @@ const reseedableCount = computed(
                 variant="subtle"
                 icon="i-lucide-plus"
                 :loading="isBusy(p.id)"
-                :disabled="anyBusy"
+                :disabled="locked"
                 @click="reseed(p.id)"
               >
                 {{ t('pipeline.health.add') }}
@@ -191,7 +209,7 @@ const reseedableCount = computed(
                   variant="subtle"
                   icon="i-lucide-rotate-ccw"
                   :loading="isBusy(h.pipeline.id)"
-                  :disabled="anyBusy"
+                  :disabled="locked"
                   @click="reseed(h.pipeline.id)"
                 >
                   {{ t('pipeline.health.reseed') }}
@@ -203,7 +221,7 @@ const reseedableCount = computed(
                   variant="subtle"
                   icon="i-lucide-trash-2"
                   :loading="isBusy(h.pipeline.id)"
-                  :disabled="anyBusy"
+                  :disabled="locked"
                   @click="remove(h.pipeline)"
                 >
                   {{ t('pipeline.health.delete') }}
@@ -246,7 +264,7 @@ const reseedableCount = computed(
                 variant="subtle"
                 icon="i-lucide-trash-2"
                 :loading="isBusy(r.pipeline.id)"
-                :disabled="anyBusy"
+                :disabled="locked"
                 @click="removeRetired(r.pipeline)"
               >
                 {{ t('pipeline.health.remove') }}
@@ -284,7 +302,7 @@ const reseedableCount = computed(
                 variant="subtle"
                 icon="i-lucide-rotate-ccw"
                 :loading="isBusy(h.pipeline.id)"
-                :disabled="anyBusy"
+                :disabled="locked"
                 @click="reseed(h.pipeline.id)"
               >
                 {{ t('pipeline.health.reseed') }}
@@ -303,6 +321,7 @@ const reseedableCount = computed(
           variant="ghost"
           icon="i-lucide-rotate-ccw"
           :loading="anyBusy"
+          :disabled="locked"
           @click="reseedAll"
         >
           {{ t('pipeline.health.reseedAll', { count: reseedableCount }) }}
@@ -311,7 +330,7 @@ const reseedableCount = computed(
         <UButton
           color="neutral"
           variant="ghost"
-          :disabled="anyBusy"
+          :disabled="locked"
           @click="ui.closePipelineHealth()"
         >
           {{ hasIssues ? t('pipeline.health.dismiss') : t('pipeline.health.done') }}

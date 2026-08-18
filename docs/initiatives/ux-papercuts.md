@@ -36,12 +36,21 @@ foundational services, binary candidates, and the new settings panels): its find
 are sections G-K (UX-78..UX-111), verified the same way; anchors there are from
 2026-08-18.
 
-**2026-08-18, highest-impact P1 slice.** UX-78, UX-79, UX-80, UX-93 and UX-94 landed
-together: the double-submit that filed two tasks and started two pipeline runs, the
-draft loss across every result window (thirteen of them, not the four UX-79 named),
-the keyboard-uncompletable binary-candidates gate and its blank body, the unconfirmed
-irreversible pipeline delete, and the index-keyed secret rows that could save one
-secret's value under another's key. Each item's entry below records what shipped.
+**2026-08-18, highest-impact P1 slice.** UX-78, UX-79, UX-80, UX-82, UX-93 and UX-94
+landed together: the double-submit that filed two tasks and started two pipeline runs,
+the draft loss across every result window (fourteen of them, not the four UX-79 named),
+the keyboard-uncompletable binary-candidates gate and its blank body, the silent persist
+failures on the two interview windows, the unconfirmed irreversible pipeline delete, and
+the index-keyed secret rows that could save one secret's value under another's key. Each
+item's entry below records what shipped.
+
+Reviewing that slice found a second round of the same defects one layer down, all of
+which shipped with it: the shared confirm dialog could not be cancelled by Escape from
+inside a result window (and, once dismissed, stayed on screen resolving nothing), two
+guard snapshots reported drafts their own submit button could never send while a third
+missed two forms entirely, the candidate flush abandoned every answer after the first
+failed write, and a second Delete click silently cancelled the confirm already open.
+The lesson each of those carries is in the conventions section at the end.
 
 ## Goal & rationale
 
@@ -633,7 +642,7 @@ Anchors are from that date.
 | UX-79 | P1  | done   | Fork-decision / follow-up / binary-candidates / initiative-review windows discard drafts |
 | UX-80 | P1  | done   | Binary-candidates gate: cards not keyboard-operable; blank body when state is missing    |
 | UX-81 | P1  | todo   | CreateInitiativeModal lacks the unsaved guard its sibling AddTaskModal has               |
-| UX-82 | P2  | todo   | Initiative-planning / doc-interview persists fail silently (no toast, no state)          |
+| UX-82 | P2  | done   | Initiative-planning / doc-interview persists fail silently (no toast, no state)          |
 | UX-83 | P2  | todo   | Typed text cleared before the call settles; stack edit overwrites the add form           |
 | UX-84 | P2  | todo   | Initiative checkpoint Cancel and PR-review finding Dismiss are unconfirmed               |
 | UX-85 | P3  | todo   | PR-review Post/Finish lack `:loading`; follow-up Dismiss missing the permission gate     |
@@ -645,13 +654,17 @@ Anchors are from that date.
   `submitCreate` also got the authoritative half, an entry guard on `saving`, so the
   refusal holds for any future caller of that second entry point.
 - **UX-79: Draft loss on close. DONE, and wider than the four surfaces above.** A
-  systematic pass over every `ResultWindowShell` consumer found **thirteen** windows
+  systematic pass over every `ResultWindowShell` consumer found **fourteen** windows
   holding unsubmitted input and only two (requirements, clarity) handling it. All
-  thirteen now do, split by what the draft's submit button actually does:
+  fourteen now do, split by what the draft's submit button actually does:
   - **flush** (`useResultView({ onClose })`) where recording a draft is a PLAIN SAVE
-    that decides nothing: requirements, clarity, and the doc interview (whose
+    that decides nothing: requirements, clarity, and the two interview windows (whose
     `persist` now takes the block id explicitly, because `blockId` goes null the
     moment the view tears down and a close-time flush would otherwise write nowhere).
+    The initiative planner's interviewer is the fourteenth window, and it was found by
+    the guard rather than by a sweep: it holds the same per-question answers as the doc
+    interview through `ClarificationItem`'s `v-model:answer`, which the first version of
+    the inverse assertion could not see.
   - **confirm** (`useUnsavedGuard` in front of the shell's close) where the only
     button carrying the draft also RESOLVES something: fork-decision, follow-up,
     binary-candidates, the initiative tracker, judge, PR-review, brainstorm, the
@@ -662,36 +675,57 @@ Anchors are from that date.
     and `InitiativePlanDecision` report dirtiness upward through `update:dirty`
     (retracted on unmount, so a resolved gate can't leave the host holding a stale flag).
     `ResultWindowDrafts.logic.spec.ts` is the enforcement hook (theme 8): it names every
-    window's disposition, fails on a stale or missing row, fails on a draft-holding
-    window whose close goes straight through, AND fails on a window declared draft-free
-    that grew a textarea. That last assertion is what found the gate/human-test/
-    visual-confirm three, which no manual sweep had listed.
+    window's disposition, fails on a stale or missing row, asserts POSITIVELY that each
+    window is wired to the seam its disposition names, AND fails on a window declared
+    draft-free that holds any state binding or native control. Those two assertions found
+    the gate/human-test/visual-confirm three and then the planning window, none of which a
+    manual sweep had listed.
 - **UX-80: Binary-candidates gate blocked for keyboard users. DONE.** Each card now
   carries a real labelled `<input type="radio"|"checkbox">` (the window is ONE radio
   group, because `toggle` replaces the selection across every subject rather than per
-  group), with `@click.stop` on it so the input's own click can't also bubble into the
-  card's toggle and cancel itself out on a checkbox. The card's pointer handler stays.
-  The blank body is now three branches, not one: `binaryCandidateAbsence()` (pure,
-  tested) states the precedence — an in-flight read outranks a stale error so a Retry
-  isn't showing the failure it is clearing, and a recorded error outranks emptiness so
-  a request that never landed cannot render as "this run compared nothing". The store
-  gained the `loading` flag and records its load failure for the Retry.
+  group). The card's pointer handler stays, so `@click.stop` has to shield it from the
+  LABEL rather than from the input: activating a label FORWARDS a synthetic click to its
+  input, which `.stop` on the input does not prevent, so a click on the label text
+  toggled via the card and then toggled back via the forwarded change. On a checkbox that
+  nets to no change, so no re-render, so the box stays ticked over a candidate that is no
+  longer selected and Keep quietly keeps the wrong set.
+  The blank body is now four branches, not one: `binaryCandidateAbsence()` (pure, tested)
+  states the precedence. No RUN outranks everything (the window is keyed to an execution
+  and the warm-up read is skipped without one, so the store's flags describe somebody
+  else's read and emptiness would be a claim about a run nobody looked at); an in-flight
+  read outranks a stale error so a Retry isn't showing the failure it is clearing; and a
+  recorded error outranks emptiness so a request that never landed cannot render as "this
+  run compared nothing". The store gained the `loading` flag, records its load failure for
+  the Retry, and SEQUENCES its attempts, because a slow failure settling after a fast
+  success used to report a load failure over candidates already on screen.
 - **UX-81: Unguarded initiative modal.** `board/CreateInitiativeModal.vue:37-42`
   closes straight through the store: Escape/backdrop discards title, goal, every
   descriptor field and staged context attachment, and the `watch(open)` reset wipes
   them on reopen. Wire `useUnsavedGuard` (`AddTaskModal.vue:615` is the model).
-- **UX-82: Silent persist failures.** `initiative/InitiativePlanningWindow.vue:146-186`
-  and `docs/DocInterviewWindow.vue:95-111` never catch; the backing stores rethrow
-  (`stores/initiative/planning.ts:34-44`, `stores/docInterview.ts:41-47`) and no
-  global handler exists, so a failed answer-save clears the spinner, restores the
-  questions and says nothing: indistinguishable from a no-op, with the answers never
-  stored. Fix: try/catch into `usePipelineErrorToast().present`.
-- **UX-83: Typed text cleared too early.** `prReview/PrReviewWindow.vue:247-253`
-  clears `challengeText` BEFORE awaiting the challenge call, so on failure the typed
-  concern must be retyped; `settings/RiskPolicyCreateForm.vue:36-54` clears the name
-  on emit, before the parent's create settles; `settings/SharedStacksPanel.vue:117-131`
-  `startEdit` overwrites the add form in place, discarding whatever was typed there.
-  Fix: clear on the success path only; confirm before repurposing a dirty form.
+- **UX-82: Silent persist failures. DONE, and the two windows now share one seam.** Both
+  held byte-identical draft logic and were only ever fixed one at a time, which is how the
+  doc interview grew a close-time flush while the planner kept dropping answers on close.
+  `useInterviewDrafts` is that logic once: it seeds the drafts, saves one on blur, flushes
+  the dirty ones on the way out, and reports every failure through
+  `usePipelineErrorToast().present`. Three things it fixes that a per-window copy kept
+  losing: each answer settles INDEPENDENTLY (the old loop awaited straight through, so one
+  rejection dropped every answer after it, with the window already gone); the report names
+  HOW MANY were lost, because a close-time flush is the only path with no button left on
+  screen; and a pre-action flush WITHHOLDS the action when a write failed, rather than
+  submitting a missing answer as if it were there. It also renders the one case neither
+  window could ever save: `id` is optional on both wire shapes and the answer write
+  addresses a question BY id, so an exchange without one has its input disabled and says
+  why, and is excluded from the unanswered count that would otherwise disable Submit for
+  good.
+- **UX-83: Typed text cleared too early. PARTIAL.** Two of the four sites are fixed,
+  both in files the UX-79 slice already touched: `prReview/PrReviewWindow.vue`'s challenge
+  box and `forkDecision/ForkDecisionWindow.vue`'s chat box (a fourth site the original
+  entry did not list, found while reviewing that slice) now clear only on the success
+  path, so a failed send costs nothing and the inline error strip says what happened.
+  Still open: `settings/RiskPolicyCreateForm.vue:36-54` clears the name on emit, before
+  the parent's create settles; `settings/SharedStacksPanel.vue:117-131` `startEdit`
+  overwrites the add form in place, discarding whatever was typed there. Fix: clear on the
+  success path only; confirm before repurposing a dirty form.
 - **UX-84: Unconfirmed NO_GO.** The checkpoint Cancel button
   (`initiative/InitiativeTrackerWindow.vue:343-349`) stops the whole initiative's
   execution loop on one click, sitting directly beside Resume; the per-finding
@@ -772,7 +806,10 @@ Anchors are from that date.
   (the two sections render rows of near-identical buttons, and "which one did I just
   delete" is unanswerable afterwards). The shared `run` helper now reports whether the
   action settled, so the success toast is withheld on a refusal rather than claiming a
-  delete the 409 refused.
+  delete the 409 refused. An OPEN confirm also locks the screen, tracked apart from
+  `busy` so the row doesn't spin while the human reads the prompt: `useConfirm` is a
+  singleton, so a second Delete click superseded the pending request and settled it
+  `false`, which silently did not delete the first pipeline.
 - **UX-94: Mis-keyed secret rows. DONE.** Each draft row carries a stable client-only
   `uid` (the UX-23 convention) that the `v-for` keys on, and `removeRow` takes that uid
   rather than an index, so the removal can never be read against a stale position.
@@ -956,11 +993,12 @@ surfaces built after them don't use them.
 The 2026-07 P1 batch is done except UX-45. As of the 2026-08-18 re-audit:
 
 1. **P1 batch (data loss / blocked flows).** UX-78, UX-79, UX-80, UX-93 and UX-94 are
-   done. Still open: UX-81 (initiative-modal draft loss), UX-86/89 (wizard Done and
-   foundational tab draft loss), plus the long-standing UX-45. UX-81/86/89 are the
-   same defect as UX-79 on surfaces that are not result windows, so they take
-   `useUnsavedGuard` the same way (UX-89 is the narrower `:unmount-on-hide="false"`
-   fix); the guard spec added for UX-79 does not reach them.
+   done, and UX-82 rode along with them. Still open: UX-81 (initiative-modal draft loss),
+   UX-86/89 (wizard Done and foundational tab draft loss), plus the long-standing UX-45.
+   UX-81/86/89 are the same defect as UX-79 on surfaces that are not result windows, so
+   they take `useUnsavedGuard` the same way (UX-89 is the narrower
+   `:unmount-on-hide="false"` fix); the guard spec added for UX-79 does not reach them,
+   which is the gap to close when they land.
 2. **Adoption sweeps with an enforcement hook** (UX-106..UX-109, UX-95..UX-98):
    each is one primitive applied across N call sites; land the sweep with a lint
    rule or guard where one is cheap, or the count regrows (theme 8).
@@ -988,11 +1026,45 @@ The 2026-07 P1 batch is done except UX-45. As of the 2026-08-18 re-audit:
   initiative plan review holds anchored comments and feedback inside a child of a child;
   it emits `update:dirty` and RETRACTS it on unmount, so a gate that resolves cannot leave
   the host prompting over a field that no longer exists.
-- **The adoption guard has to assert the INVERSE too.** A table naming each surface's
-  disposition rots into a list of what someone once believed unless something fails when a
-  surface declared draft-free grows a textarea. That assertion (in
-  `ResultWindowDrafts.logic.spec.ts`) is what found three draft-holding windows no manual
-  sweep had listed.
+- **The adoption guard has to assert the INVERSE too, and the inverse has to be widER than
+  the shape you just fixed.** A table naming each surface's disposition rots into a list of
+  what someone once believed unless something fails when a surface declared draft-free grows
+  an input. The first version of that assertion (in `ResultWindowDrafts.logic.spec.ts`)
+  greped for a textarea, which is what the windows it had just fixed happened to use, and
+  it therefore could not see `v-model:answer="drafts[q.key]"` on a shared clarification
+  component or a `:model-value` pair on a per-row `UInput`. It now flags ANY state binding
+  or native control in a draft-free window, against a two-entry allow-list of view state
+  (the lightbox's `open`/`index`) that has to be extended by NAME, so a new binding is
+  unclassified until someone classifies it. Widening it found a fourteenth draft-holding
+  window immediately. The positive half matters as much: assert that the window is wired to
+  the seam its disposition NAMES, since "the close binding is not the literal `close`"
+  passes a window that renamed its handler and still closes straight through.
+- **A promise-based dialog is not exempt from the overlay STACK.** The shared confirm is a
+  Nuxt UI modal, so it never registered on the app's one `sharedOverlayStack`, so
+  `useModalBehavior` (which every result window's shell uses) still believed IT was topmost
+  and swallowed the Escape meant for the confirm: the shell preventDefault-ed and re-entered
+  its own close request, which supersedes the prompt the user was trying to cancel. It now
+  pushes a ticket for as long as it is up. The other half of that bug was in the dialog
+  itself: it is CONTROLLED, so a dismissal that settled the promise without writing `open`
+  left a visible modal behind with no resolver, whose buttons then resolved nothing.
+- **A guard's snapshot has to be exactly what the submit button WOULD send.** Over-broad and
+  under-broad both fail, quietly and in opposite directions. Over-broad prompts to discard
+  work that was already committed (a fork decision whose drafts were never cleared on
+  success) or that could never be sent (a per-view note whose view a recapture removed), and
+  each false alarm teaches the reader to dismiss the prompt. Under-broad is the original bug
+  again: the tracker's snapshot reported only the plan review and let Escape eat the two edit
+  forms in its own body. Deriving the snapshot from the send path (`buildFindings()`) is the
+  version that cannot drift; where that is not possible, an inline form measures its
+  DIVERGENCE from what it was SEEDED with, so an opened-but-untouched form is not "unsaved".
+- **A pending confirm has to lock the surface that raised it.** `useConfirm` is a singleton
+  and a new request supersedes the old one, settling it `false`, so any screen with two
+  buttons that both confirm can silently cancel the first prompt with the second click. The
+  lock is separate state from "work in flight": a row must not spin while its human reads the
+  prompt, but every OTHER control has to be shut, and the entry guard on the handler is the
+  authoritative half since it holds for callers the template doesn't know about. The mirror
+  image is a surface that gates the wrong exits: the friction dialog disabled its "go review"
+  escape hatch during a create while leaving Escape, the backdrop and Close live, so the safe
+  action was blocked and the one that hides the outcome was not.
 - **Undo pattern = deferred destructive action, not client-only rollback.** A "real"
   undo can't just `reattach` the client cache after a successful server delete: a coarse
   `board` refresh (`useWorkspaceStream` → `workspace.refresh()`) would re-fetch the block
