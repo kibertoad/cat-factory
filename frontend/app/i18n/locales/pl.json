@@ -4607,7 +4607,12 @@
     "status": {
       "awaiting": "Oczekiwanie na odpowiedzi",
       "done": "Gotowe"
-    }
+    },
+    "saveFailedCount": "Nie udało się zapisać {count} Twoich odpowiedzi",
+    "continueFailed": "Nie udało się przesłać Twoich odpowiedzi",
+    "proceedFailed": "Nie udało się rozpocząć szkicu",
+    "unanswerable": "To pytanie nie ma identyfikatora, więc nie można zapisać do niego odpowiedzi.",
+    "saveFailed": "Nie udało się zapisać odpowiedzi"
   },
   "documents": {
     "picker": {
@@ -7086,6 +7091,11 @@
       "preparingHint": "Planowanie najpierw czyta repozytorium, wiec nie zapyta Cie o to, co wynika z kodu. Pytania pojawia sie tutaj po zakonczeniu.",
       "failed": "Uruchomienie planowania zostalo przerwane",
       "failedHint": "Zakonczylo sie, zanim planista zdazyl odpowiedziec. Twoje odpowiedzi sa zapisane; uruchom planowanie ponownie z poziomu inicjatywy.",
+      "saveFailed": "Nie udało się zapisać odpowiedzi",
+      "saveFailedCount": "Nie udało się zapisać {count} Twoich odpowiedzi",
+      "continueFailed": "Nie udało się przesłać Twoich odpowiedzi",
+      "proceedFailed": "Nie udało się rozpocząć planowania",
+      "unanswerable": "To pytanie nie ma identyfikatora, więc nie można zapisać do niego odpowiedzi.",
       "answerPlaceholder": "Twoja odpowiedz",
       "hint": "Wyslij odpowiedzi pozwala planiscie zadac kolejne pytania; Zaplanuj teraz tworzy plan na podstawie dotychczasowych odpowiedzi.",
       "unanswered": "Pytania bez odpowiedzi: {count}",
@@ -8035,6 +8045,14 @@
       "undeclared": "Krok nigdy nie zadeklarował kandydatów, więc nie było czego porównywać. Przebieg trwał dalej.",
       "parseFailed": "Nie dało się odczytać deklaracji kandydatów tego kroku, więc nie było czego porównywać. Przebieg trwał dalej.",
       "noCandidates": "Krok nie przygotował żadnych kandydatów, więc nie było czego porównywać. Przebieg trwał dalej."
-    }
+    },
+    "noRun": {
+      "title": "Brak uruchomienia do odczytania",
+      "hint": "To porównanie jest powiązane z uruchomieniem potoku. Otwórz je z karty lub osi czasu kroku, który je wygenerował, aby można było wczytać kandydatów."
+    },
+    "empty": {
+      "title": "Nie ma czego porównywać"
+    },
+    "loadFailed": "Nie udało się wczytać wygenerowanych kandydatów."
   }
 }

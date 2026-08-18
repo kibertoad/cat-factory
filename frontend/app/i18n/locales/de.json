@@ -5689,6 +5689,11 @@
       "preparingHint": "Die Planung liest zuerst das Repository, damit Sie nicht nach dem gefragt werden, was der Code beantworten kann. Fragen erscheinen hier, sobald das erledigt ist.",
       "failed": "Der Planungslauf wurde abgebrochen",
       "failedHint": "Er endete, bevor der Planer antworten konnte. Ihre Antworten sind gespeichert; führen Sie die Planung von der Initiative aus erneut aus.",
+      "saveFailed": "Antwort konnte nicht gespeichert werden",
+      "saveFailedCount": "{count} Ihrer Antworten konnten nicht gespeichert werden",
+      "continueFailed": "Antworten konnten nicht gesendet werden",
+      "proceedFailed": "Die Planung konnte nicht gestartet werden",
+      "unanswerable": "Diese Frage hat keine ID, daher kann keine Antwort dazu gespeichert werden.",
       "answerPlaceholder": "Ihre Antwort",
       "hint": "Antworten senden lässt den Planer Rückfragen stellen; Jetzt planen entwirft den Plan mit den bisherigen Antworten.",
       "unanswered": "Unbeantwortete Fragen: {count}",
@@ -6194,7 +6199,12 @@
     "status": {
       "awaiting": "Warten auf Antworten",
       "done": "Fertig"
-    }
+    },
+    "saveFailedCount": "{count} Ihrer Antworten konnten nicht gespeichert werden",
+    "continueFailed": "Antworten konnten nicht gesendet werden",
+    "proceedFailed": "Der Entwurf konnte nicht gestartet werden",
+    "unanswerable": "Diese Frage hat keine ID, daher kann keine Antwort dazu gespeichert werden.",
+    "saveFailed": "Antwort konnte nicht gespeichert werden"
   },
   "gates": {
     "subtitle": {
@@ -8035,6 +8045,14 @@
       "undeclared": "Der Schritt hat seine Kandidaten nie deklariert, es gab also nichts zu vergleichen. Der Lauf ging weiter.",
       "parseFailed": "Die Kandidaten-Deklaration des Schritts war nicht lesbar, es gab also nichts zu vergleichen. Der Lauf ging weiter.",
       "noCandidates": "Der Schritt hat keine Kandidaten bereitgestellt, es gab also nichts zu vergleichen. Der Lauf ging weiter."
-    }
+    },
+    "noRun": {
+      "title": "Kein Lauf zum Auslesen",
+      "hint": "Dieser Vergleich ist an einen Pipeline-Lauf gebunden. Öffnen Sie ihn über die Karte oder die Zeitleiste des erzeugenden Schritts, damit die Kandidaten geladen werden können."
+    },
+    "empty": {
+      "title": "Nichts zu vergleichen"
+    },
+    "loadFailed": "Die erzeugten Kandidaten konnten nicht geladen werden."
   }
 }

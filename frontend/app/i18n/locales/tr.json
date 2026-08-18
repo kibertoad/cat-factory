@@ -4607,7 +4607,12 @@
     "status": {
       "awaiting": "Yanıt bekleniyor",
       "done": "Tamamlandı"
-    }
+    },
+    "saveFailedCount": "Yanıtlarınızdan {count} tanesi kaydedilemedi",
+    "continueFailed": "Yanıtlarınız gönderilemedi",
+    "proceedFailed": "Taslak başlatılamadı",
+    "unanswerable": "Bu sorunun kimliği yok, bu yüzden ona bir yanıt kaydedilemez.",
+    "saveFailed": "Yanıtınız kaydedilemedi"
   },
   "documents": {
     "picker": {
@@ -7086,6 +7091,11 @@
       "preparingHint": "Planlama once depoyu okur, boylece kodun yanitlayabilecegi seyler size sorulmaz. Sorular bittiginde burada gorunur.",
       "failed": "Planlama calismasi durdu",
       "failedHint": "Planlayici yanit veremeden sona erdi. Yanitlariniz kaydedildi; planlamayi girisimden yeniden calistirin.",
+      "saveFailed": "Yanıtınız kaydedilemedi",
+      "saveFailedCount": "Yanıtlarınızdan {count} tanesi kaydedilemedi",
+      "continueFailed": "Yanıtlarınız gönderilemedi",
+      "proceedFailed": "Planlama başlatılamadı",
+      "unanswerable": "Bu sorunun kimliği yok, bu yüzden ona bir yanıt kaydedilemez.",
       "answerPlaceholder": "Yanitiniz",
       "hint": "Yanitlari gonder, planlayicinin ek sorular sormasini saglar; Simdi planla, mevcut yanitlarla plani hazirlar.",
       "unanswered": "Yanitlanmamis sorular: {count}",
@@ -8035,6 +8045,14 @@
       "undeclared": "Adım adaylarını hiç bildirmedi, bu yüzden karşılaştırılacak bir şey yoktu. Çalıştırma devam etti.",
       "parseFailed": "Adımın aday bildirimi okunamadı, bu yüzden karşılaştırılacak bir şey yoktu. Çalıştırma devam etti.",
       "noCandidates": "Adım hiç aday hazırlamadı, bu yüzden karşılaştırılacak bir şey yoktu. Çalıştırma devam etti."
-    }
+    },
+    "noRun": {
+      "title": "Okunacak bir çalıştırma yok",
+      "hint": "Bu karşılaştırma bir pipeline çalıştırmasına bağlıdır. Adayların yüklenebilmesi için onu üreten adımın kartından veya zaman çizelgesinden açın."
+    },
+    "empty": {
+      "title": "Karşılaştırılacak bir şey yok"
+    },
+    "loadFailed": "Üretilen adaylar yüklenemedi."
   }
 }

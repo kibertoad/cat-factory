@@ -4768,7 +4768,12 @@
     "status": {
       "awaiting": "Awaiting answers",
       "done": "Done"
-    }
+    },
+    "saveFailedCount": "Could not save {count} of your answers",
+    "continueFailed": "Could not submit your answers",
+    "proceedFailed": "Could not start the draft",
+    "unanswerable": "This question carries no id, so an answer cannot be recorded against it.",
+    "saveFailed": "Could not save your answer"
   },
   "documents": {
     "picker": {
@@ -7345,6 +7350,11 @@
       "preparingHint": "Planning reads the repository first, so you are not asked what the code can answer. Questions appear here once that is done.",
       "failed": "The planning run stopped",
       "failedHint": "It ended before the planner could answer. Your answers are saved; re-run planning from the initiative to try again.",
+      "saveFailed": "Could not save your answer",
+      "saveFailedCount": "Could not save {count} of your answers",
+      "continueFailed": "Could not submit your answers",
+      "proceedFailed": "Could not start planning",
+      "unanswerable": "This question carries no id, so an answer cannot be recorded against it.",
       "answerPlaceholder": "Your answer",
       "hint": "Submit answers lets the planner ask follow-ups; Plan now drafts the plan with the answers so far.",
       "unanswered": "Unanswered questions: {count}",
@@ -8324,6 +8334,14 @@
       "undeclared": "The step never declared its candidates, so there was nothing to compare. The run continued.",
       "parseFailed": "The step’s candidate declaration could not be read, so there was nothing to compare. The run continued.",
       "noCandidates": "The step staged no candidates, so there was nothing to compare. The run continued."
-    }
+    },
+    "noRun": {
+      "title": "No run to read",
+      "hint": "This comparison is keyed to a pipeline run. Open it from the generating step's card or timeline so its candidates can be loaded."
+    },
+    "empty": {
+      "title": "Nothing to compare"
+    },
+    "loadFailed": "Could not load the generated candidates."
   }
 }

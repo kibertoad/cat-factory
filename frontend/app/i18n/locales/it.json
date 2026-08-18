@@ -5689,6 +5689,11 @@
       "preparingHint": "La pianificazione legge prima il repository, cosi non ti viene chiesto cio che il codice puo rispondere. Le domande compariranno qui al termine.",
       "failed": "L'esecuzione della pianificazione si e interrotta",
       "failedHint": "Si e conclusa prima che il pianificatore potesse rispondere. Le tue risposte sono salvate; riesegui la pianificazione dall'iniziativa.",
+      "saveFailed": "Impossibile salvare la tua risposta",
+      "saveFailedCount": "Impossibile salvare {count} delle tue risposte",
+      "continueFailed": "Impossibile inviare le tue risposte",
+      "proceedFailed": "Impossibile avviare la pianificazione",
+      "unanswerable": "Questa domanda non ha un id, quindi non è possibile registrarvi una risposta.",
       "answerPlaceholder": "La tua risposta",
       "hint": "Invia risposte consente al pianificatore di porre domande di follow-up; Pianifica ora redige il piano con le risposte fornite finora.",
       "unanswered": "Domande senza risposta: {count}",
@@ -6194,7 +6199,12 @@
     "status": {
       "awaiting": "In attesa di risposte",
       "done": "Fatto"
-    }
+    },
+    "saveFailedCount": "Impossibile salvare {count} delle tue risposte",
+    "continueFailed": "Impossibile inviare le tue risposte",
+    "proceedFailed": "Impossibile avviare la bozza",
+    "unanswerable": "Questa domanda non ha un id, quindi non è possibile registrarvi una risposta.",
+    "saveFailed": "Impossibile salvare la tua risposta"
   },
   "gates": {
     "subtitle": {
@@ -8035,6 +8045,14 @@
       "undeclared": "Il passo non ha mai dichiarato i suoi candidati, quindi non c’era nulla da confrontare. L’esecuzione è proseguita.",
       "parseFailed": "La dichiarazione dei candidati del passo non era leggibile, quindi non c’era nulla da confrontare. L’esecuzione è proseguita.",
       "noCandidates": "Il passo non ha preparato alcun candidato, quindi non c’era nulla da confrontare. L’esecuzione è proseguita."
-    }
+    },
+    "noRun": {
+      "title": "Nessuna esecuzione da leggere",
+      "hint": "Questo confronto è legato a un’esecuzione della pipeline. Aprilo dalla scheda o dalla cronologia del passo che l’ha generato, così i suoi candidati possono essere caricati."
+    },
+    "empty": {
+      "title": "Nulla da confrontare"
+    },
+    "loadFailed": "Impossibile caricare i candidati generati."
   }
 }

@@ -4607,7 +4607,12 @@
     "status": {
       "awaiting": "En attente de réponses",
       "done": "Terminé"
-    }
+    },
+    "saveFailedCount": "Impossible d’enregistrer {count} de vos réponses",
+    "continueFailed": "Impossible d’envoyer vos réponses",
+    "proceedFailed": "Impossible de lancer la rédaction",
+    "unanswerable": "Cette question n’a pas d’identifiant : aucune réponse ne peut y être enregistrée.",
+    "saveFailed": "Impossible d’enregistrer votre réponse"
   },
   "documents": {
     "picker": {
@@ -7086,6 +7091,11 @@
       "preparingHint": "La planification lit d'abord le depot afin de ne pas vous demander ce que le code peut repondre. Les questions apparaitront ici une fois termine.",
       "failed": "L'execution de planification s'est arretee",
       "failedHint": "Elle s'est terminee avant que le planificateur puisse repondre. Vos reponses sont enregistrees ; relancez la planification depuis l'initiative.",
+      "saveFailed": "Impossible d’enregistrer votre réponse",
+      "saveFailedCount": "Impossible d’enregistrer {count} de vos réponses",
+      "continueFailed": "Impossible d’envoyer vos réponses",
+      "proceedFailed": "Impossible de lancer la planification",
+      "unanswerable": "Cette question n’a pas d’identifiant : aucune réponse ne peut y être enregistrée.",
       "answerPlaceholder": "Votre reponse",
       "hint": "Envoyer les reponses permet au planificateur de poser des questions complementaires ; Planifier maintenant redige le plan avec les reponses actuelles.",
       "unanswered": "Questions sans reponse : {count}",
@@ -8035,6 +8045,14 @@
       "undeclared": "L’étape n’a jamais déclaré ses candidats, il n’y avait donc rien à comparer. L’exécution a continué.",
       "parseFailed": "La déclaration de candidats de l’étape était illisible, il n’y avait donc rien à comparer. L’exécution a continué.",
       "noCandidates": "L’étape n’a préparé aucun candidat, il n’y avait donc rien à comparer. L’exécution a continué."
-    }
+    },
+    "noRun": {
+      "title": "Aucune exécution à lire",
+      "hint": "Cette comparaison est liée à une exécution de pipeline. Ouvrez-la depuis la carte ou la chronologie de l’étape qui l’a produite pour que ses candidats puissent être chargés."
+    },
+    "empty": {
+      "title": "Rien à comparer"
+    },
+    "loadFailed": "Impossible de charger les candidats générés."
   }
 }

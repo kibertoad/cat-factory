@@ -89,6 +89,18 @@ const ROUND_OUTCOME_LABEL: Record<HumanTestRoundOutcome, string> = {
 const findings = ref('')
 const showFindings = ref(false)
 
+/**
+ * Confirm before discarding typed findings (UX-79). This box is what a human tester saw go wrong —
+ * the one record of it anywhere — held here until Request fix is pressed, on a window Escape and a
+ * backdrop click both close. Sending it on close would resolve the gate and dispatch a fixer.
+ */
+const { requestClose } = useUnsavedGuard({
+  open,
+  close: () => close(),
+  saving: () => busy.value,
+  snapshot: () => findings.value.trim(),
+})
+
 async function confirm() {
   if (!blockId.value) return
   await humanTest.confirm(blockId.value)
@@ -142,7 +154,7 @@ const canDestroy = computed(
     :title="headerTitle"
     :subtitle="phase ? t(PHASE_LABEL[phase]) : t('humanTest.subtitle')"
     width="3xl"
-    @close="close"
+    @close="requestClose"
   >
     <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
       <div

@@ -59,12 +59,42 @@ async function onQueue(item: FollowUpItem) {
 async function onAnswer(item: FollowUpItem) {
   const id = execId()
   const answer = (drafts[item.id] ?? '').trim()
-  if (id && answer) await followUps.answerItem(id, item.id, answer).catch(() => {})
+  if (!id || !answer) return
+  // Clear the draft only once the answer is actually recorded: clearing first would make a failed
+  // send cost the typed answer, and would also leave the unsaved guard below with nothing to protect.
+  await followUps
+    .answerItem(id, item.id, answer)
+    .then(() => {
+      delete drafts[item.id]
+    })
+    // The store records the message; the inline error strip renders it.
+    .catch(() => {})
 }
 async function onDismiss(item: FollowUpItem) {
   const id = execId()
   if (id) await followUps.dismissItem(id, item.id).catch(() => {})
 }
+
+/**
+ * Confirm before discarding typed answers (UX-79). Each draft answers a question the Coder is
+ * blocked on, is held only in this component until "Answer & send" is pressed, and the window is
+ * dismissible by Escape and by a backdrop click. Auto-sending them on close is deliberately NOT
+ * the fix: sending an answer DECIDES the item and re-arms the run, which is not something a stray
+ * Escape may do on the user's behalf.
+ */
+const { requestClose } = useUnsavedGuard({
+  open,
+  close: () => close(),
+  // Any item mid-action is about to rewrite the list; don't interrupt it with a prompt.
+  saving: () => followUps.acting.size > 0,
+  // Only drafts against items still awaiting a decision count: one left over from an item that has
+  // since been filed or dismissed elsewhere can no longer be sent anywhere.
+  snapshot: () =>
+    items.value
+      .filter((item) => item.status === 'pending')
+      .map((item) => (drafts[item.id] ?? '').trim())
+      .filter(Boolean),
+})
 
 // Exhaustive map of the item status enum → label key (literal keys keep the typed-key
 // drift guard live, vs a runtime-built `followUp.status.${status}`).
@@ -96,7 +126,7 @@ const STATUS_META: Record<
     :title="headerTitle"
     :subtitle="t('followUp.subtitle')"
     width="3xl"
-    @close="close"
+    @close="requestClose"
   >
     <template #header-extras>
       <UBadge :color="pendingCount > 0 ? 'warning' : 'success'" variant="subtle" size="sm">

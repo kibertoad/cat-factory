@@ -248,9 +248,16 @@ async function submitChallenge(id: string): Promise<void> {
   const inst = instanceId.value
   if (!inst || !canResolve.value) return
   const question = challengeText.value.trim()
-  challengeForId.value = null
-  challengeText.value = ''
-  await prReview.challenge(inst, id, question || undefined).catch(() => {})
+  // Close the box only once the turn is actually recorded (UX-83): clearing first made a failed
+  // dispatch cost the typed concern, and left the guard below with nothing to protect.
+  await prReview
+    .challenge(inst, id, question || undefined)
+    .then(() => {
+      challengeForId.value = null
+      challengeText.value = ''
+    })
+    // The store records the message; the inline error strip renders it.
+    .catch(() => {})
 }
 async function onDismiss(id: string): Promise<void> {
   const inst = instanceId.value
@@ -258,6 +265,18 @@ async function onDismiss(id: string): Promise<void> {
   if (challengeForId.value === id) cancelChallenge()
   await prReview.dismiss(inst, id).catch(() => {})
 }
+
+/**
+ * Confirm before discarding a drafted challenge (UX-79). The concern box is open against exactly
+ * one finding, its text is held here until Send, and this window closes on Escape and on a backdrop
+ * click. Auto-sending it instead would spend a reviewer turn on the user's behalf.
+ */
+const { requestClose } = useUnsavedGuard({
+  open,
+  close: () => close(),
+  saving: () => working.value,
+  snapshot: () => challengeText.value.trim(),
+})
 </script>
 
 <template>
@@ -269,7 +288,7 @@ async function onDismiss(id: string): Promise<void> {
     :subtitle="t('prReview.subtitle')"
     width="full"
     testid="pr-review-window"
-    @close="close"
+    @close="requestClose"
   >
     <template v-if="state?.prUrl" #header-extras>
       <a

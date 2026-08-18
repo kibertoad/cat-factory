@@ -75,6 +75,19 @@ async function submitFix() {
   fixInstructions.value = ''
 }
 
+/**
+ * Confirm before discarding drafted fix instructions (UX-79). The box is the only thing that tells
+ * the fixer WHAT to change, it is held here until Request fix is pressed, and this window closes on
+ * Escape and on a backdrop click. Sending it on close is not the fix: it resolves the human-review
+ * gate and dispatches an agent.
+ */
+const { requestClose } = useUnsavedGuard({
+  open,
+  close: () => close(),
+  saving: () => fixBusy.value,
+  snapshot: () => fixInstructions.value.trim(),
+})
+
 // The displayed "required approvals" is derived from the cached branch-protection count via
 // the gate's effective floor (`max(1, …)`, see review.logic.ts) rather than persisted twice.
 const requiredApprovals = computed(() => Math.max(1, gate.value?.requiredApprovingReviewCount ?? 1))
@@ -183,7 +196,7 @@ const conflictVerdict = computed(() => {
     :subtitle="subtitle"
     :step-ref="{ instanceId, stepIndex }"
     width="3xl"
-    @close="close"
+    @close="requestClose"
   >
     <template #header-extras>
       <UBadge

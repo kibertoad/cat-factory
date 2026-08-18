@@ -101,6 +101,19 @@ const DISPOSITION_LABELS = computed<
 
 const feedback = ref('')
 const busy = computed(() => judgeStore.resolving)
+
+/**
+ * Confirm before discarding typed guidance (UX-79). The feedback box is what a bounced producer is
+ * handed as its rework brief, it is held here until one of the three commands is pressed, and this
+ * window closes on Escape and on a backdrop click. Flushing it is not an option: every command that
+ * would carry it also RESOLVES the parked verdict.
+ */
+const { requestClose } = useUnsavedGuard({
+  open,
+  close: () => close(),
+  saving: () => busy.value,
+  snapshot: () => feedback.value.trim(),
+})
 const canAct = computed(() => awaiting.value && access.canExecuteRuns.value && !busy.value)
 
 async function act(choice: 'proceed' | 'bounce' | 'stop') {
@@ -120,7 +133,7 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
     :subtitle="t('judge.subtitle')"
     :step-ref="{ instanceId, stepIndex }"
     width="3xl"
-    @close="close"
+    @close="requestClose"
   >
     <template #header-extras>
       <UBadge

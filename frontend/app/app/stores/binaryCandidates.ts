@@ -21,6 +21,12 @@ export const useBinaryCandidatesStore = defineStore('binaryCandidates', () => {
 
   /** True while a keep call is in flight (drives the button spinner / disabled state). */
   const keeping = ref(false)
+  /**
+   * True while the warm-up read is in flight. The window renders no state until it settles, and
+   * "still fetching" must not render as the "nothing to choose between" empty state: on this
+   * surface that empty state is a claim the run generated nothing to compare.
+   */
+  const loading = ref(false)
   /** The last error message from an action, surfaced inline; cleared on the next action. */
   const error = ref<string | null>(null)
 
@@ -48,9 +54,24 @@ export const useBinaryCandidatesStore = defineStore('binaryCandidates', () => {
     if (step) step.binaryCandidates = state
   }
 
-  /** Warm the live state from the GET (the stream also keeps it fresh). Best-effort. */
+  /**
+   * The most recent {@link load} attempt. Only the latest one may write `loading` or `error`: two
+   * reads do overlap (a Retry beside a window switching run, an open triggered while one is in
+   * flight), and a superseded attempt settling afterwards used to clear the spinner and stamp its
+   * own verdict over the newer read's. A slow failure landing after a fast success is the bad case,
+   * because it reports a load failure across candidates that are on screen.
+   */
+  let attempt = 0
+
+  /**
+   * Warm the live state from the GET (the stream also keeps it fresh). The failure is RECORDED
+   * rather than swallowed: with no state on the step, a failed read and a run that produced no
+   * candidates are the same `null` and opposite facts, and only one of them is worth a Retry.
+   */
   async function load(executionId: string): Promise<void> {
+    const mine = ++attempt
     error.value = null
+    loading.value = true
     try {
       await execution.echoAfter(
         executionId,
@@ -60,7 +81,9 @@ export const useBinaryCandidatesStore = defineStore('binaryCandidates', () => {
         },
       )
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to load'
+      if (mine === attempt) error.value = e instanceof Error ? e.message : 'Failed to load'
+    } finally {
+      if (mine === attempt) loading.value = false
     }
   }
 
@@ -85,5 +108,5 @@ export const useBinaryCandidatesStore = defineStore('binaryCandidates', () => {
     }
   }
 
-  return { keeping, error, load, keep }
+  return { keeping, loading, error, load, keep }
 })

@@ -156,6 +156,24 @@ async function submitReply(item: BrainstormItem) {
   }
 }
 
+/**
+ * Confirm before discarding typed replies (UX-79). Each draft answers one of the brainstorm's open
+ * questions and the redo comment steers a re-run; both are held here until their own button is
+ * pressed, on a window Escape and a backdrop click both close. Sending them on close is not the
+ * fix: a reply RESOLVES an item and the redo comment starts another agent pass.
+ */
+const { requestClose } = useUnsavedGuard({
+  open,
+  close: () => close(),
+  saving: () => acting.value || reworking.value,
+  snapshot: () => ({
+    replies: Object.values(drafts.value)
+      .map((text) => text.trim())
+      .filter(Boolean),
+    redo: redoComment.value.trim(),
+  }),
+})
+
 async function setStatus(item: BrainstormItem, itemStatus: BrainstormItemStatus) {
   if (!session.value) return
   try {
@@ -247,7 +265,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
     :subtitle="block?.title"
     variant="centered"
     width="full"
-    @close="close"
+    @close="requestClose"
   >
     <template v-if="session" #header-extras>
       <UBadge color="neutral" variant="subtle" size="sm">
