@@ -32,9 +32,14 @@
 // directory-wide row is otherwise unable to fail, so a new vendor beside a swept one inherits its
 // verdict.
 //
-// Known limit, stated because a silent one reads as coverage: the walk reads JS/TS source. The
-// Python, Go and Java SDK transports are hand-written and unreadable to it, which is why `sdk/`
-// carries one entry arguing about what all four clients TALK TO rather than four derivations.
+// Two known limits, stated because a silent one reads as coverage. The walk reads JS/TS source, so
+// the hand-written Python, Go and Java SDK transports are unreadable to it, which is why `sdk/`
+// carries one entry arguing about what all four clients TALK TO rather than four derivations. And a
+// file that COMPOSES a vendor path onto a config-supplied base without sending it is invisible to
+// both directions: `kubernetes.logic.ts` builds `/api/v1/namespaces/{ns}/pods` for a caller to send,
+// and the only pattern that would find it is `/api/v[0-9]`, which is also OUR api prefix on every
+// controller, SPA store and SDK client in the tree. The sweep's version-pin grep is what finds
+// those, and its rule that a shared API lists EVERY call site is what keeps them attached.
 //
 // Usage:  node scripts/check-external-api-inventory.mjs          (check; exit 1 on drift)
 //         node scripts/check-external-api-inventory.mjs --list   (the derived inventory, as TSV)

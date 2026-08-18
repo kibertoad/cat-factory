@@ -119,6 +119,10 @@ Then close the gaps neither direction reaches:
 - **A base URL that only ever arrives from config.** Confluence composes
   `${credentials.baseUrl}/wiki/rest/api/content/...`, a self-hosted GitLab and a Jira site do the
   same. No host appears in the source at all, and the PATH is still ours to get wrong.
+- **A file that COMPOSES a vendor path and hands it on.** `kubernetes.logic.ts` builds
+  `/api/v1/namespaces/{ns}/pods` for a caller to send, so it declares no host and makes no call. The
+  version-pin grep is the only thing that finds one, deliberately: the pattern that would derive it
+  is `/api/v[0-9]`, which is also OUR api prefix on every controller and SPA store in the tree.
 - **The configured-but-unswept vendor.** Cross-check the derived list against
   [`docs/environment-variables.md`](../../../docs/environment-variables.md), the capability
   credential kinds (`modules/providers/userSecretKinds.ts`, `modules/capabilityCredentials/`) and
