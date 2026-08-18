@@ -46,6 +46,7 @@ import {
   makeToolCallRecorder,
 } from '@cat-factory/orchestration'
 import {
+  deploymentRepoOrigin,
   ensureWorkBranchViaRest,
   logger,
   createDefaultWebSearchUpstream,
@@ -518,6 +519,10 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
     // (block-pinned > workspace per-kind default > env routing > env default).
     resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db, deps.caches),
     resolveRepoTarget,
+    // Where the container clones from. Derived from the deployment's own config rather than left
+    // to the `githubRepoOrigin` default, so a GitLab-only Worker hands its containers the GitLab
+    // host it gates and merges on instead of a github.com URL for a project that lives elsewhere.
+    resolveRepoOrigin: deploymentRepoOrigin(config),
     // Multi-repo coding (service-connections phase 3): the implementer fans a cross-service
     // change out across the task's own repo + each connected involved-service repo.
     resolveRepoTargets: buildResolveRepoTargets(db),

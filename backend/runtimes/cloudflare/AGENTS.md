@@ -43,8 +43,11 @@ it only reaches the logger the Worker writes through while both imports resolve 
   (how this facade DELIVERS a notification: the Slack transport, the outbound
   notification-webhook feature, and the composition of everything that is not the in-app push;
   keep symmetric with Node's own), `container-vcs-identity.ts`
-  (the multi-App GitHub registry + the repo-target resolvers several siblings share) and
-  `tasks-deps.ts` (the task-source registry: Jira, Linear, and the two VCS-backed issue sources,
+  (the multi-App GitHub registry + the repo-target resolvers several siblings share),
+  `container-engine-vcs-deps.ts` (the client the engine's gate / merge / review paths read
+  through, plus every provider and publisher built over it, so a deployment with no source
+  control configured wires none of them; the counterpart to Node's `container-github-deps.ts`)
+  and `tasks-deps.ts` (the task-source registry: Jira, Linear, and the two VCS-backed issue sources,
   each fed its own provider's client). The
   executor and vcs-identity modules never import the root back (what they need from it arrives
   through `WorkerExecutorDeps`), so the module graph stays one-way.

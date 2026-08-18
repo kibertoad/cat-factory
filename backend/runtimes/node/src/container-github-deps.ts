@@ -424,6 +424,10 @@ export function selectNodeGitHubDeps(input: NodeGitHubDepsInput): NodeGitHubDeps
       // validation / config bootstrap (operator names owner+repo).
       resolveRepoFilesForCoords: makeResolveRepoFilesForCoords(
         engineVcsClient,
+        // Which provider the client bound one line up actually speaks, read off the binding
+        // itself so the two cannot drift: a repo the projection resolves to the other provider is
+        // refused here rather than read through a client that cannot reach it.
+        githubClient ? 'github' : 'gitlab',
         githubInstallationRepository,
         repoProjectionRepository,
       ),

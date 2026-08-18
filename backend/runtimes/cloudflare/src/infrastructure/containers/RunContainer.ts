@@ -1,7 +1,9 @@
 import { Container } from '@cloudflare/containers'
 import type { StopParams } from '@cloudflare/containers'
 import { runBestEffort } from '@cat-factory/kernel'
+import { harnessGitLabHost } from '@cat-factory/server'
 import type { Env } from '../env'
+import { loadGitLabConfig } from '../config/gitlab'
 import { logger } from '../observability/logger'
 import {
   clearStopCause,
@@ -33,12 +35,22 @@ export abstract class RunContainer extends Container<Env> {
   /** The harness HTTP server port (matches each image's Dockerfile ENTRYPOINT/EXPOSE). */
   override defaultPort = 8080
 
-  // When configured, hand the inbound-auth shared secret to the harness so it rejects any /jobs
-  // call that doesn't present the matching `x-harness-secret` header (which the transport
-  // sends). Omitted when unset, leaving the harness open as before.
-  override envVars: Record<string, string> = this.env.HARNESS_SHARED_SECRET
-    ? { HARNESS_SHARED_SECRET: this.env.HARNESS_SHARED_SECRET }
-    : {}
+  // Two env values, both omitted when unset so the harness keeps its own defaults:
+  //
+  //  - `HARNESS_SHARED_SECRET`: inbound auth, so the harness rejects any /jobs call that does
+  //    not present the matching `x-harness-secret` header (which the transport sends).
+  //  - `GITHUB_ALLOWED_HOSTS`: the harness will only send a clone/push credential to a host on
+  //    its allow-list, which defaults to github.com. A GitLab deployment's clone URL is
+  //    therefore refused at checkout unless its instance is named here. It is the sibling of
+  //    `deploymentRepoOrigin`, derived from the same `GITLAB_API_BASE` inversion so the host
+  //    dispatched to and the host allowed cannot disagree. (Local mode's `harnessAllowedHosts`
+  //    is the same widening on the transport it owns.)
+  override envVars: Record<string, string> = {
+    ...(this.env.HARNESS_SHARED_SECRET
+      ? { HARNESS_SHARED_SECRET: this.env.HARNESS_SHARED_SECRET }
+      : {}),
+    ...harnessHostEnv(this.env),
+  }
 
   // A job is dispatched, then polled every ~15s while it runs, so the instance stays warm for
   // the job's duration without holding a single request open. Polling is the ONLY thing that
@@ -248,4 +260,15 @@ function isJobDispatch(request: Request): boolean {
     // silent-catch-ok: an unparseable URL is not a dispatch, which is the whole question here.
     return false
   }
+}
+
+/**
+ * The harness clone-host allow-list entry this deployment needs, as env, or `{}` when it reaches
+ * no GitLab instance. Read straight off `Env` rather than through `loadConfig`, which validates
+ * the encryption key and the App private key and would turn an unrelated misconfiguration into a
+ * container that cannot start.
+ */
+function harnessHostEnv(env: Env): Record<string, string> {
+  const host = harnessGitLabHost(loadGitLabConfig(env))
+  return host ? { GITHUB_ALLOWED_HOSTS: host } : {}
 }

@@ -20,6 +20,7 @@ import {
   bedrockAllowListFromEnv,
   testEnvHasZeroConfigDefault,
   buildResolveRepoTarget,
+  deploymentRepoOrigin,
   makePreviewJobBuilder,
   type PersistenceRegistry,
   logger,
@@ -225,7 +226,9 @@ function wirePreviewModule(
         blockRepository: repos.blockRepository,
         resolveRepoTarget,
         mintInstallationToken: baseDeployMint,
-        ...(options.resolveRepoOrigin ? { resolveRepoOrigin: options.resolveRepoOrigin } : {}),
+        // The same expression the foundation resolves the run path's origin from, rather than
+        // the old `options`-only read that left a hosted GitLab preview cloning github.com.
+        resolveRepoOrigin: options.resolveRepoOrigin ?? deploymentRepoOrigin(config),
         sessionService: new ContainerSessionService({ secret: previewSessionSecret }),
         proxyBaseUrl: `${previewPublicUrl.replace(/\/+$/, '')}/v1`,
         ...(config.github.apiBase ? { githubApiBase: config.github.apiBase } : {}),

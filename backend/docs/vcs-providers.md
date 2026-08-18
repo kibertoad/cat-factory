@@ -29,7 +29,7 @@ user gets; the parity log states which gaps are deliberate, which are tracked, a
 conformance suite already pins. A gap closed in code is two edits: the log here and the matrix
 there.
 
-## The two facts that bite a change here
+## The three facts that bite a change here
 
 - **A provider's API base doubles as the WEB host** the SPA links repositories, merge/pull requests
   and issues to: `/api/v3` (GitHub Enterprise Server) and `/api/v4` (GitLab) are stripped,
@@ -42,6 +42,15 @@ there.
   (`GITLAB_TOKEN`, a GitHub App): a deployment reaching either provider with a PAT still has
   repositories to link, and local mode is exactly that shape. The opt-in governs the single-token
   engine connection alone, so gating the base read on it silently breaks local mode's links.
+- **The same inversion decides where an agent container CLONES from**, through
+  `deploymentRepoOrigin` (the `ResolveRepoOrigin` seam) plus `harnessGitLabHost` (the harness's
+  clone-credential allow-list, which defaults to github.com and refuses anything else). Both hosted
+  facades wire them and local mode reads the same derivation, so the host a run checks out and the
+  host a link points at cannot disagree. Two things follow. A base that does not invert THROWS here
+  rather than withholding, because a fallback to `github.com` checks out somebody else's project and
+  reports it as the run's repository. And the rule is `engineVcsClient`'s (the App wins wherever
+  both are configured), so a mixed deployment clones GitHub for every workspace until per-workspace
+  engine routing lands: see [`gitlab-parity.md`](./gitlab-parity.md)'s accepted gaps.
 
 Both providers can be configured on one deployment at once: a workspace's repos just need to
 resolve to the right connection. The naming rules that keep that true (never re-hardcode `github`,

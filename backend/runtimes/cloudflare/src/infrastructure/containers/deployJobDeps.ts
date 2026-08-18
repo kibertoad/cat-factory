@@ -1,6 +1,10 @@
 import type { Clock } from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
-import { makeResolveDeployCloneTarget, RunnerJobClient } from '@cat-factory/server'
+import {
+  deploymentRepoOrigin,
+  makeResolveDeployCloneTarget,
+  RunnerJobClient,
+} from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 import type { AppConfig } from '../config'
 import type { Env } from '../env'
@@ -49,12 +53,20 @@ export function selectDeployDeps(
     env.HARNESS_SHARED_SECRET?.trim() || undefined,
   )
   const registry = buildAppRegistry(env, config, db, clock)
+  const resolveRepoOrigin = deploymentRepoOrigin(config)
   return {
     deployJobClient: new RunnerJobClient(async () => deployTransport),
-    // Narrowed to the repo being rendered, like every other container dispatch.
+    // Narrowed to the repo being rendered, like every other container dispatch, and cloned from
+    // the SAME deployment origin the agent containers use rather than this seam's `github.com`
+    // default (runtime symmetry with Node's pool deploy wiring). The App gate above means the
+    // resolved origin is github.com in every configuration that reaches here, so the value is
+    // unchanged; what it adds is the refusal, so a manifests repo the projection marks as
+    // living on the other provider stops the render instead of checking out a same-named
+    // GitHub project and applying whatever manifests it finds there.
     resolveDeployCloneTarget: makeResolveDeployCloneTarget(
       buildResolveRepoTarget(db),
       workerDispatchTokenMint(registry),
+      { resolveCloneUrl: (t) => resolveRepoOrigin(t).cloneUrl },
     ),
   }
 }
