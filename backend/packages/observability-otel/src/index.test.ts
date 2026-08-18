@@ -367,6 +367,51 @@ describe('OtelTraceSink (fetch OTLP exporter)', () => {
     expect(stepSpan.traceId).toBe(rootSpan.traceId)
   })
 
+  it('names what a 200 REJECTED, rather than reading a partial success as a clean flush', async () => {
+    const answering = (body: string) =>
+      (async () => new Response(body, { status: 200 })) as unknown as typeof fetch
+    const logger = createRecordingLogger()
+    const sink = new OtelTraceSink({
+      endpoint: COLLECTOR,
+      logger,
+      fetchImpl: answering(
+        JSON.stringify({
+          partialSuccess: { rejectedSpans: '2', errorMessage: 'span limit exceeded' },
+        }),
+      ),
+    })
+
+    await sink.recordGeneration(baseEvent())
+
+    // The spec makes this load-bearing: a collector that dropped part of the batch answers 200,
+    // and silently dropped spans otherwise look exactly like a clean flush. The count arrives as
+    // a decimal STRING in the JSON encoding, which is legal and is why it is read as either.
+    const warned = logger.lines.find((l) => l.msg.includes('only in part'))
+    expect(warned?.fields).toMatchObject({ rejected: 2, detail: 'span limit exceeded' })
+  })
+
+  it('says nothing about a 200 that took the whole batch', async () => {
+    const logger = createRecordingLogger()
+    const answers = ['', '{}', JSON.stringify({ partialSuccess: {} })]
+    let call = 0
+    const sink = new OtelTraceSink({
+      endpoint: COLLECTOR,
+      logger,
+      fetchImpl: (async () =>
+        new Response(answers[call++ % answers.length], {
+          status: 200,
+        })) as unknown as typeof fetch,
+    })
+
+    await sink.recordGeneration(baseEvent())
+    await sink.recordGeneration(baseEvent())
+
+    // Full acceptance is spelled three ways in the wild (empty body, empty object, an empty
+    // `partialSuccess`), and a warning on any of them would train the reader to ignore the one
+    // that means something.
+    expect(logger.lines.filter((l) => l.level === 'warn')).toEqual([])
+  })
+
   it('never throws when the OTLP endpoint fails', async () => {
     const fetchImpl = (async () => {
       throw new Error('down')

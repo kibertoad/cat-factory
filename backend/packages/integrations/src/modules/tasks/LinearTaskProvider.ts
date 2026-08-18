@@ -339,6 +339,19 @@ export class LinearTaskProvider implements TaskSourceProvider {
       }
     } catch (err) {
       if (err instanceof LinearApiError) {
+        // BEFORE the status branches, because Linear answers an exhausted quota with HTTP 400 and
+        // a `RATELIMITED` code: reading the status alone would report a valid key as a broken
+        // request and send an operator to re-mint the one thing that was never at fault.
+        if (err.rateLimited) {
+          return {
+            source: 'linear',
+            ok: false,
+            status: 'rate_limited',
+            message:
+              'Linear is rate limiting this connection. The API key is valid and nothing needs ' +
+              'reconnecting; re-check in a few minutes.',
+          }
+        }
         if (err.status === 401) {
           return {
             source: 'linear',

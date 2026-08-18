@@ -8,14 +8,23 @@ when wired into a facade every LLM call: container-agent calls (through the LLM 
 agent): surfaces in Langfuse as a generation grouped under its run's trace, plus
 optional container tool spans.
 
-## Why fetch-only
+## What it is: the OTLP exporter, pointed at Langfuse
 
-The sink talks to Langfuse's public **ingestion API** (`POST /api/public/ingestion`,
-HTTP Basic auth, batched JSON events) using only the global `fetch` / `crypto` /
-`btoa`. It deliberately does **not** depend on the official `langfuse` Node SDK or any
-`@opentelemetry/*` package: those rely on Node-only APIs that are unavailable on the
-Cloudflare Worker runtime (workerd). Using the raw ingestion API keeps the sink
-byte-for-byte identical on both the Worker and Node facades.
+The sink is `@cat-factory/observability-otel`'s fetch-based OTLP/HTTP exporter with three
+Langfuse-specific decisions in its constructor: the endpoint `{baseUrl}/api/public/otel`
+(onto which the exporter appends `/v1/traces`), HTTP Basic auth over the key pair, and the
+`x-langfuse-ingestion-version: 4` header that v4 needs for real-time ingestion. Metrics
+are off, because Langfuse implements the traces signal only.
+
+It used to be its own client speaking Langfuse's batch **ingestion API**
+(`POST /api/public/ingestion`). That API is deprecated, sunsets on Langfuse Cloud on
+**2026-11-16**, and the `trace-create` / `generation-create` / `span-create` events it sent
+are already unsupported on the v4 data model. OTLP is the supported path and this repo
+already spoke it.
+
+Neither package depends on the official `langfuse` Node SDK or on any `@opentelemetry/*`
+package: those rely on Node-only APIs unavailable on the Cloudflare Worker runtime
+(workerd), which is what keeps the sink byte-for-byte identical on both facades.
 
 ## Behaviour
 

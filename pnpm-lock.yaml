@@ -635,6 +635,9 @@ importers:
       '@cat-factory/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@cat-factory/observability-otel':
+        specifier: workspace:*
+        version: link:../observability-otel
     devDependencies:
       typescript:
         specifier: 7.0.2

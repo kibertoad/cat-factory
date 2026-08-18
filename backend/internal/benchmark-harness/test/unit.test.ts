@@ -171,7 +171,7 @@ describe('endpoints', () => {
 
   it('derives direct-provider endpoints', () => {
     const ep = resolvePiEndpoint({ provider: 'deepseek', model: 'deepseek-chat' }, undefined, {})
-    expect(ep.baseUrl).toBe('https://api.deepseek.com/v1')
+    expect(ep.baseUrl).toBe('https://api.deepseek.com')
     expect(ep.keyEnv).toBe('DEEPSEEK_API_KEY')
   })
 

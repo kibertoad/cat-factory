@@ -1,6 +1,7 @@
 import type { AgentPresentation } from '@cat-factory/contracts'
 import type { Block, JudgeModelPin, JudgeVerdict, PipelineStep, RiskPolicy } from './types.js'
 import type { RaiseNotificationInput } from '../ports/notification-channel.js'
+import { noopLogger, type Logger } from '../ports/logging.js'
 import type { Clock } from '../ports/runtime.js'
 import type { RunInitiatorScope } from '../ports/user-secret-repositories.js'
 import {
@@ -224,6 +225,8 @@ export interface JudgeDefinition {
 export interface JudgeContext {
   /** The engine clock (monotonic-ish ms). */
   clock: Clock
+  /** The engine's logger, so a judge's best-effort work names its own failures. */
+  logger: Logger
   /** Read a block, e.g. to scope a rubric to a service. */
   getBlock(workspaceId: string, blockId: string): Promise<Block | null>
   /** Run a function under the run initiator's ambient context (per-user credentials). */
@@ -294,6 +297,7 @@ export function stubJudgeContext(
 ): JudgeContext {
   return {
     clock: { now: () => 0 },
+    logger: noopLogger,
     getBlock: async () => null,
     runInitiatorScope: (_initiatedBy, fn) => fn(),
     raiseNotification: async () => {},

@@ -108,6 +108,12 @@ export const LINEAR_SEARCH_ISSUES_QUERY = `query SearchIssues($term: String!) {
  * client-side sort of a newest-first page would pick the oldest of the newest —
  * wrong for a backlog larger than one page). Nodes carry `createdAt` so the
  * mapper can enforce the ordering deterministically regardless.
+ *
+ * `sort` is annotated `[INTERNAL]` in Linear's published schema, which is a dependency worth
+ * knowing about: it carries no `@deprecated` marker and no deadline, and it is the only argument
+ * that states a DIRECTION. The documented `orderBy: createdAt` is not a drop-in hedge, because
+ * Linear documents no direction for it, and swapping to it would trade a stated ascending order
+ * for an unstated one on the query whose whole correctness is the order.
  */
 export const LINEAR_INTAKE_ISSUES_QUERY = `query IntakeIssues($filter: IssueFilter, $first: Int!, $after: String) {
   issues(filter: $filter, first: $first, after: $after, sort: [{ createdAt: { order: Ascending } }]) {

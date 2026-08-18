@@ -5,6 +5,7 @@ import type {
   GateDefinition,
   GateRegistry,
   JudgeContext,
+  Logger,
   ProviderRegistry,
   RaiseNotificationInput,
   RunInitiatorScope,
@@ -29,6 +30,8 @@ import type {
 /** The engine collaborators both extension contexts close over. */
 export interface ExtensionContextDeps {
   clock: Clock
+  /** The dispatcher's scoped logger, so an extension's best-effort work names its own failures. */
+  logger: Logger
   getBlock(workspaceId: string, blockId: string): Promise<Block | null>
   runInitiatorScope: RunInitiatorScope
   /** Raise a human-actionable card; a no-op when no notification service is wired. */
@@ -45,6 +48,7 @@ export interface ExtensionContextDeps {
 export function makeGateContext(deps: ExtensionContextDeps): GateContext {
   return {
     clock: deps.clock,
+    logger: deps.logger,
     getBlock: (workspaceId, blockId) => deps.getBlock(workspaceId, blockId),
     runInitiatorScope: deps.runInitiatorScope,
     raiseNotification: (workspaceId, input) => deps.raiseNotification(workspaceId, input),

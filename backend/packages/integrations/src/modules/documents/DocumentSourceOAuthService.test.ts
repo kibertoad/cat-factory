@@ -242,7 +242,9 @@ describe('renewIfExpiring', () => {
         oauthExpiresAt: String(NOW + 30_000),
       }),
     )
-    expect(calls[0]?.url).toBe('https://api.figma.com/v1/oauth/refresh')
+    // The refresh goes to the SAME endpoint as the code exchange: Figma superseded
+    // `/v1/oauth/refresh` in May 2025 and keeps it alive with no retirement date.
+    expect(calls[0]?.url).toBe('https://api.figma.com/v1/oauth/token')
     expect(calls[0]?.params).toEqual({ grant_type: 'refresh_token', refresh_token: 'rt_1' })
     // Taking the response literally would strip the ability to renew AGAIN, turning a working
     // grant into a one-shot one.

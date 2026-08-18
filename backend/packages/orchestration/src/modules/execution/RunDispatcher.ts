@@ -1208,6 +1208,7 @@ export class RunDispatcher {
   private extensionContextDeps(): ExtensionContextDeps {
     return {
       clock: this.clock,
+      logger: this.log,
       getBlock: (workspaceId, blockId) => this.blockRepository.get(workspaceId, blockId),
       runInitiatorScope: this.runInitiatorScope,
       raiseNotification: async (workspaceId, input) => {

@@ -63,15 +63,84 @@ export async function postOtlp(opts: {
       body: JSON.stringify(opts.payload),
       signal: AbortSignal.timeout(opts.timeoutMs ?? SEND_TIMEOUT_MS),
     })
-    // OTLP/HTTP returns 200 on full success and may return 200 with a partial-success body;
-    // any non-2xx is a failure we only log — observability never breaks the caller.
     if (!res.ok) {
       opts.logger?.warn('otel: OTLP endpoint rejected batch', { scope: 'otel', status: res.status })
+      return
     }
+    await reportPartialSuccess(res, opts.logger)
   } catch (err) {
     opts.logger?.warn('otel: failed to POST OTLP batch', {
       scope: 'otel',
       err: getErrorMessage(err),
     })
+  }
+}
+
+/**
+ * A 2xx does NOT mean the collector took everything.
+ *
+ * OTLP's `partial_success` is load-bearing: a server that dropped some of the batch answers 200
+ * with a rejected count and a message, and it MAY warn about a batch it took whole (a zero
+ * rejected count beside a non-empty `error_message`). Treating any 200 as full acceptance made
+ * silently dropped spans look identical to a clean flush, which is the degrade-loudly rule with
+ * the vendor's own field sitting unread. Nothing here retries: the spec forbids retrying a partial
+ * success, and this exporter never retried anything.
+ */
+async function reportPartialSuccess(res: Response, logger: Logger | undefined): Promise<void> {
+  if (!logger) return
+  const partial = await readPartialSuccess(res)
+  if (!partial) return
+  const rejected =
+    partial.rejectedSpans ?? partial.rejectedDataPoints ?? partial.rejectedLogRecords ?? 0
+  if (!rejected && !partial.errorMessage) return
+  logger.warn('otel: OTLP endpoint accepted the batch only in part', {
+    scope: 'otel',
+    rejected,
+    ...(partial.errorMessage ? { detail: partial.errorMessage } : {}),
+  })
+}
+
+/** The `partialSuccess` block of an OTLP/JSON response, or undefined when there is none. */
+async function readPartialSuccess(res: Response): Promise<
+  | {
+      rejectedSpans?: number
+      rejectedDataPoints?: number
+      rejectedLogRecords?: number
+      errorMessage?: string
+    }
+  | undefined
+> {
+  // A collector answering 200 with an empty body is the ordinary full-acceptance case, and an
+  // unreadable body says nothing about what was accepted, so both read as "nothing to report".
+  const body = await res.text().catch(() => '')
+  if (!body.trim()) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(body)
+  } catch {
+    return undefined
+  }
+  if (typeof parsed !== 'object' || parsed === null) return undefined
+  const partial = (parsed as Record<string, unknown>).partialSuccess
+  if (typeof partial !== 'object' || partial === null) return undefined
+  const read = partial as Record<string, unknown>
+  // 64-bit counts arrive as decimal STRINGS in the JSON encoding, and either form is legal.
+  const count = (value: unknown): number | undefined => {
+    const n = typeof value === 'string' ? Number(value) : value
+    return typeof n === 'number' && Number.isFinite(n) ? n : undefined
+  }
+  return {
+    ...(count(read.rejectedSpans) !== undefined
+      ? { rejectedSpans: count(read.rejectedSpans) }
+      : {}),
+    ...(count(read.rejectedDataPoints) !== undefined
+      ? { rejectedDataPoints: count(read.rejectedDataPoints) }
+      : {}),
+    ...(count(read.rejectedLogRecords) !== undefined
+      ? { rejectedLogRecords: count(read.rejectedLogRecords) }
+      : {}),
+    ...(typeof read.errorMessage === 'string' && read.errorMessage
+      ? { errorMessage: read.errorMessage }
+      : {}),
   }
 }

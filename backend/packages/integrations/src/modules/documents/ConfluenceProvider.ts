@@ -13,6 +13,11 @@ import * as confluenceLogic from './confluence.logic.js'
 // ConfluenceProvider: the document-source provider for Confluence Cloud. It
 // authenticates with HTTP Basic (account email + API token), fetches a page in
 // storage format, and converts the body to the Markdown the planner consumes.
+//
+// Page reads go through Confluence Cloud REST **v2** (`/wiki/api/v2/pages/{id}`).
+// The v1 `/wiki/rest/api/content/{id}` this used to call was retired on 2025-04-30
+// under Atlassian's RFC-19 and is gone from the v1 reference; search is the one
+// call that stays on v1, because v2 publishes no search endpoint at all.
 // All Confluence-specific *pure* logic (ref parsing, base-URL SSRF guard,
 // XHTML → Markdown) lives in `@cat-factory/integrations` so it is unit-testable; this
 // class is the thin `fetch` shell around it. No SDK — fetch + `btoa` suffice.
@@ -36,8 +41,9 @@ export class ConfluenceApiError extends Error {
 const makeConfluenceError = (status: number, message: string): ConfluenceApiError =>
   new ConfluenceApiError(status, `Confluence: ${message}`)
 
-interface ContentResponse {
-  id?: string
+/** A v2 page. `id` is a string in v2 responses; older sites have been seen to send a number. */
+interface PageResponse {
+  id?: string | number
   title?: string
   version?: { number?: number }
   body?: { storage?: { value?: string } }
@@ -45,7 +51,7 @@ interface ContentResponse {
 }
 
 /** The page's monotonic version number as the opaque staleness token (`''` if absent). */
-function versionToken(json: ContentResponse): string {
+function versionToken(json: PageResponse): string {
   return json.version?.number !== undefined ? String(json.version.number) : ''
 }
 
@@ -80,13 +86,13 @@ export class ConfluenceProvider implements DocumentSourceProvider {
     _workspaceId: string | null,
   ): Promise<DocumentContent> {
     const base = credentials.baseUrl!.replace(/\/+$/, '')
-    // Expand the body AND the version so the fetched content carries its version token.
-    const json = await this.getContent(credentials, externalId, 'body.storage,version')
+    // v2 always carries `version`; `body-format` is what decides whether the XHTML rides along.
+    const json = await this.getPage(credentials, externalId, 'storage')
 
     const linkBase = json._links?.base ?? `${base}/wiki`
     const webui = json._links?.webui ?? ''
     return {
-      externalId: json.id!,
+      externalId: String(json.id),
       title: json.title ?? '(untitled)',
       url: `${linkBase}${webui}`,
       body: confluenceLogic.confluenceStorageToMarkdown(json.body?.storage?.value ?? ''),
@@ -95,26 +101,27 @@ export class ConfluenceProvider implements DocumentSourceProvider {
   }
 
   /**
-   * The cheap version probe: expand ONLY `version` (no `body.storage`), so the
-   * page's XHTML is neither transferred nor converted — the staleness check costs
-   * a metadata read, not a full fetch.
+   * The cheap version probe: omit `body-format`, so the page's XHTML is neither
+   * transferred nor converted and the staleness check costs a metadata read rather
+   * than a full fetch. v2 returns `version` on the page either way.
    */
   async probeVersion(
     credentials: DocumentCredentials,
     externalId: string,
     _workspaceId: string | null,
   ): Promise<string> {
-    return versionToken(await this.getContent(credentials, externalId, 'version'))
+    return versionToken(await this.getPage(credentials, externalId, null))
   }
 
-  /** Shared content read; `expand` selects how much of the page is materialised. */
-  private async getContent(
+  /** Shared page read; `bodyFormat` selects how much of the page is materialised. */
+  private async getPage(
     credentials: DocumentCredentials,
     externalId: string,
-    expand: string,
-  ): Promise<ContentResponse> {
+    bodyFormat: 'storage' | null,
+  ): Promise<PageResponse> {
     const base = credentials.baseUrl!.replace(/\/+$/, '')
-    const url = `${base}/wiki/rest/api/content/${encodeURIComponent(externalId)}?expand=${expand}`
+    const query = bodyFormat ? `?body-format=${bodyFormat}` : ''
+    const url = `${base}/wiki/api/v2/pages/${encodeURIComponent(externalId)}${query}`
     const auth = btoa(`${credentials.accountEmail}:${credentials.apiToken}`)
 
     const res = await safeFetch(
@@ -144,12 +151,12 @@ export class ConfluenceProvider implements DocumentSourceProvider {
     const text = await readCappedText(res, MAX_RESPONSE_BYTES, makeConfluenceError)
     const json = (() => {
       try {
-        return JSON.parse(text) as ContentResponse
+        return JSON.parse(text) as PageResponse
       } catch {
         return null
       }
     })()
-    if (!json || !json.id) {
+    if (!json || json.id === undefined || json.id === null || json.id === '') {
       throw new ConfluenceApiError(
         502,
         `Confluence returned an unexpected body for page ${externalId}`,
@@ -158,6 +165,10 @@ export class ConfluenceProvider implements DocumentSourceProvider {
     return json
   }
 
+  /**
+   * CQL search stays on v1 deliberately: RFC-19 did not retire
+   * `GET /wiki/rest/api/content/search`, and v2 publishes no search endpoint to move to.
+   */
   async search(credentials: DocumentCredentials, query: string): Promise<DocumentSearchResult[]> {
     const base = credentials.baseUrl!.replace(/\/+$/, '')
     const cql = encodeURIComponent(confluenceLogic.buildConfluenceSearchCql(query))

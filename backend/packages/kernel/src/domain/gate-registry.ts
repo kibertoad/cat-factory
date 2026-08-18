@@ -9,6 +9,7 @@ import type {
 import type { DescriptorField, DescriptorFieldValues } from '@cat-factory/contracts'
 import type { AgentRunResult } from '../ports/agent-executor.js'
 import type { RaiseNotificationInput } from '../ports/notification-channel.js'
+import { noopLogger, type Logger } from '../ports/logging.js'
 import type { Clock } from '../ports/runtime.js'
 import type { RunInitiatorScope } from '../ports/user-secret-repositories.js'
 import {
@@ -239,6 +240,12 @@ export interface GateDefinition {
 export interface GateContext {
   /** The engine clock (monotonic-ish ms), for time-windowed gates. */
   clock: Clock
+  /**
+   * The engine's logger, already scoped. Required rather than optional: a gate's best-effort
+   * work (an incident annotation, a notification) has to name its own failures, and an absent
+   * logger would make that silence the default.
+   */
+  logger: Logger
   /** Read a block, e.g. to gate only a release that actually shipped. */
   getBlock(workspaceId: string, blockId: string): Promise<Block | null>
   /** Run a function under the run initiator's ambient context (per-user credentials). */
@@ -435,6 +442,7 @@ export function stubGateContext(
 ): GateContext {
   return {
     clock: { now: () => 0 },
+    logger: noopLogger,
     getBlock: async () => null,
     runInitiatorScope: (_initiatedBy, fn) => fn(),
     raiseNotification: async () => {},

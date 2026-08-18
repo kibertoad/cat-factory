@@ -50,15 +50,35 @@ export function linearAuthFromCredentials(credentials: {
   throw new ValidationError('Linear connection has neither an OAuth token nor an API key')
 }
 
-/** Carries the HTTP status so callers can surface a meaningful error. */
+/**
+ * Carries the HTTP status so callers can surface a meaningful error, plus whether Linear said
+ * this was a RATE LIMIT.
+ *
+ * The flag exists because the status alone lies here, the same way it does for GitHub's primary
+ * limit: Linear answers an exhausted quota with **HTTP 400** and an error `code` of `RATELIMITED`,
+ * and documents no `Retry-After`. A caller testing `status === 429` therefore misses every rate
+ * limit Linear produces, and reports "the request was malformed" for one.
+ */
 export class LinearApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly rateLimited = false,
   ) {
     super(message)
     this.name = 'LinearApiError'
   }
+}
+
+/** A GraphQL error's machine-readable code, which Linear puts in `extensions` (and sometimes on the error). */
+function errorCodeOf(error: { code?: unknown; extensions?: { code?: unknown } }): string {
+  const code = error.extensions?.code ?? error.code
+  return typeof code === 'string' ? code : ''
+}
+
+/** Whether an error envelope says the quota is spent, by CODE rather than by status. */
+function isRateLimited(status: number, errors: GraphqlError[] | undefined): boolean {
+  return status === 429 || (errors ?? []).some((e) => errorCodeOf(e) === 'RATELIMITED')
 }
 
 /**
@@ -71,10 +91,17 @@ export type LinearFetchLike = (
   init: { method: string; headers: Record<string, string>; body: string },
 ) => Promise<{ ok: boolean; status: number; text(): Promise<string>; json(): Promise<unknown> }>
 
+/** One GraphQL error, with the machine-readable code Linear carries beside the prose. */
+interface GraphqlError {
+  message?: string
+  code?: unknown
+  extensions?: { code?: unknown }
+}
+
 /** A parsed GraphQL envelope: `data` on success, `errors[]` on failure. */
 interface GraphqlEnvelope<T> {
   data?: T | null
-  errors?: { message?: string }[]
+  errors?: GraphqlError[]
 }
 
 /**
@@ -85,13 +112,21 @@ interface GraphqlEnvelope<T> {
  */
 export function unwrapLinearData<T>(status: number, ok: boolean, parsed: unknown): T {
   const envelope = (parsed ?? {}) as GraphqlEnvelope<T>
+  const rateLimited = isRateLimited(status, envelope.errors)
+  // Named in the message as well as flagged, because a 400 reads as "we sent something wrong",
+  // which is the one thing a rate limit is not: the fix is to wait, not to change the request.
+  const limitNote = rateLimited ? ' (rate limited by Linear)' : ''
   if (!ok) {
     const detail = envelope.errors?.map((e) => e.message).join('; ')
-    throw new LinearApiError(status, `Linear GraphQL → ${status}${detail ? `: ${detail}` : ''}`)
+    throw new LinearApiError(
+      status,
+      `Linear GraphQL → ${status}${limitNote}${detail ? `: ${detail}` : ''}`,
+      rateLimited,
+    )
   }
   if (Array.isArray(envelope.errors) && envelope.errors.length > 0) {
     const detail = envelope.errors.map((e) => e.message ?? 'unknown error').join('; ')
-    throw new LinearApiError(status, `Linear GraphQL error: ${detail}`)
+    throw new LinearApiError(status, `Linear GraphQL error${limitNote}: ${detail}`, rateLimited)
   }
   if (envelope.data == null) {
     throw new LinearApiError(502, 'Linear GraphQL returned no data')

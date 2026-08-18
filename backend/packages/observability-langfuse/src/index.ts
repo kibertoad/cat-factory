@@ -1,59 +1,42 @@
-import { getErrorMessage } from '@cat-factory/kernel'
-import type {
-  LlmGenerationEvent,
-  LlmToolSpan,
-  LlmToolSpanContext,
-  LlmTraceSink,
-  Logger,
-} from '@cat-factory/kernel'
+import type { Logger } from '@cat-factory/kernel'
+import { OtelTraceSink } from '@cat-factory/observability-otel'
 
-// A fetch-based Langfuse trace sink. It speaks Langfuse's public **ingestion API**
-// (`POST /api/public/ingestion`, HTTP Basic auth = public:secret key, batched JSON
-// events) using only the global `fetch`/`crypto`/`btoa` — NO `langfuse` Node SDK and
-// NO `@opentelemetry/*`, both of which depend on Node-only APIs that are unavailable on
-// the Cloudflare Worker runtime (workerd). This keeps the sink byte-for-byte identical
-// across the Worker and Node facades, which is the whole reason it exists as its own
-// package: see `LlmTraceSink` in `@cat-factory/kernel`.
+// The opt-in Langfuse trace sink, which is now the OTLP exporter pointed at Langfuse.
 //
-// Observability must never break the product, so every method swallows its own errors
-// (logging at most a warning) and the caller additionally schedules the call off the
-// response path. A failed flush drops that batch; it never propagates.
+// It used to be its own fetch client speaking Langfuse's ingestion API
+// (`POST /api/public/ingestion`, batched `trace-create` / `generation-create` / `span-create`
+// events). That API is deprecated and sunsets on Langfuse Cloud on 2026-11-16, and the three event
+// types this sent are already unsupported on the v4 data model: "Trace, span, and generation events
+// via the legacy batch ingestion API are not supported on the v4 data model". The supported path is
+// OTLP, which this repo already speaks: `@cat-factory/observability-otel` hand-writes an OTLP/HTTP
+// JSON exporter for exactly the same three shapes, so the migration retargets an encoder rather
+// than writing one, and Langfuse becomes a DESTINATION instead of a second recording path.
 //
-// Each `recordGeneration` posts its own small ingestion batch rather than buffering
-// across calls. This is deliberate: the Worker runtime is stateless per request (there
-// is no durable cross-request buffer to flush, and a `waitUntil`-scheduled POST can't
-// outlive its request), so a per-call POST is the only shape that stays identical across
-// the Worker and Node facades. Tool spans, which the backend already accumulates per
-// poll, ARE sent as one batch. Langfuse's ingestion API is built for this volume.
+// What differs from a plain collector, and it is only these three things:
+//   - the endpoint is `{base}/api/public/otel`, so the exporter's own `/v1/traces` append lands on
+//     Langfuse's documented signal path;
+//   - auth is HTTP Basic over `publicKey:secretKey`, the same credential pair as before;
+//   - `x-langfuse-ingestion-version: 4` is required for real-time ingestion on v4. Without it the
+//     data still arrives, up to ten minutes late, which is the kind of delay that reads as data
+//     loss to whoever is watching a run.
 //
-// IMPACT ANALYSIS — why per-call POST is safe for the execution hot path:
-//   - NOT on the hot path. The proxied feeder runs under `executionCtx.waitUntil`
-//     (`LlmProxyController`), scheduled AFTER the container's chat-completion response
-//     is returned (on Node `waitUntil` is a plain fire-and-forget); the inline feeder
-//     (`InstrumentedModelProvider`) dispatches AFTER `generateText` resolves. Inside
-//     `LlmObservabilityService.record` the POST is then dispatched detached (not
-//     awaited), so even the `waitUntil` window never blocks on the Langfuse round trip.
-//     The only synchronous cost added to any path is one object build + `JSON.stringify`
-//     — microseconds, never the network call.
-//   - NOT a source of execution brittleness. Every error is swallowed + logged, the
-//     fetch is bounded by SEND_TIMEOUT_MS, and nothing in the run lifecycle reads the
-//     sink's result — a Langfuse outage / slowness / 4xx drops a batch and nothing else.
-//   - The costs that DO exist are telemetry-side, not run-side: +1 detached subrequest
-//     per proxy invocation (~2 of the Worker's 1000-subrequest budget), negligible
-//     `waitUntil` CPU (I/O-bound, timeout-capped), and N calls ⇒ N POSTs — a very chatty
-//     run could brush Langfuse ingestion rate limits and drop some batches, degrading
-//     telemetry COMPLETENESS only, never the run. (Tool spans are batched per poll, so
-//     they don't multiply.)
+// METRICS ARE OFF because Langfuse implements the traces signal only. Posting `/v1/metrics` there
+// would 404 once per generation, a per-call failure that says nothing about the deployment.
+//
+// The contract the two sinks share is unchanged and is documented on the exporter: observability
+// must never break the product, so every method swallows its own errors (logging at most a
+// warning), each POST is timeout-bounded, and a dropped batch is the worst case. No `langfuse` SDK
+// and no `@opentelemetry/*`: both depend on Node-only APIs that are unavailable on workerd, which
+// is why the fetch-based exporter exists at all.
+//
+// Read 2026-08-18: https://langfuse.com/docs/api, https://langfuse.com/docs/compatibility,
+// https://langfuse.com/integrations/native/opentelemetry
 
+/** Langfuse Cloud EU. The US, Japan and HIPAA clouds are the same shape on their own hosts. */
 const DEFAULT_BASE_URL = 'https://cloud.langfuse.com'
 
-/**
- * Hard ceiling on a single ingestion POST. Observability must never tie up the LLM
- * path: the proxied feeder records under the platform's `waitUntil` budget and the
- * inline feeder dispatches without awaiting, so a hung Langfuse endpoint must abort
- * rather than dangle. A dropped batch is the documented best-effort worst case.
- */
-const SEND_TIMEOUT_MS = 10_000
+/** Langfuse's OTLP path, onto which the exporter appends the `/v1/traces` signal segment. */
+const OTEL_PATH = '/api/public/otel'
 
 export interface LangfuseSinkConfig {
   /** Langfuse public key (`pk-lf-…`). */
@@ -62,165 +45,40 @@ export interface LangfuseSinkConfig {
   secretKey: string
   /** Host of the Langfuse instance. Default: Langfuse Cloud (`https://cloud.langfuse.com`). */
   baseUrl?: string
+  /** OTLP resource `service.name`, as it appears on the exported spans. */
+  serviceName?: string
   /** Optional logger for swallowed errors. */
   logger?: Logger
   /** Injectable fetch (tests); defaults to the global `fetch`. */
   fetchImpl?: typeof fetch
 }
 
-/** One event envelope in an ingestion batch. */
-interface IngestionEvent {
-  id: string
-  type: string
-  timestamp: string
-  body: Record<string, unknown>
-}
-
-function iso(ms: number): string {
-  return new Date(ms).toISOString()
-}
-
 function basicAuth(publicKey: string, secretKey: string): string {
   return `Basic ${btoa(`${publicKey}:${secretKey}`)}`
 }
 
-export class LangfuseTraceSink implements LlmTraceSink {
-  private readonly endpoint: string
-  private readonly authorization: string
-  private readonly logger?: Logger
-  private readonly fetchImpl: typeof fetch
-
+/**
+ * The OTLP exporter, configured for a Langfuse project.
+ *
+ * A subclass rather than a factory returning the base type, because a facade composing several
+ * sinks has to be able to say WHICH destination it wired: `CompositeTraceSink` holds a list, and
+ * two members of the same class are indistinguishable to the wiring assertions that keep the
+ * facades symmetric.
+ */
+export class LangfuseTraceSink extends OtelTraceSink {
   constructor(config: LangfuseSinkConfig) {
     const base = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '')
-    this.endpoint = `${base}/api/public/ingestion`
-    this.authorization = basicAuth(config.publicKey, config.secretKey)
-    this.logger = config.logger
-    this.fetchImpl = config.fetchImpl ?? fetch
-  }
-
-  async recordGeneration(event: LlmGenerationEvent): Promise<void> {
-    // Group every call of a run under one trace (keyed by the execution id); inline
-    // single-shot calls (no execution) become their own standalone trace.
-    const traceId = event.executionId ?? crypto.randomUUID()
-    const generation: Record<string, unknown> = {
-      id: crypto.randomUUID(),
-      traceId,
-      name: event.agentKind,
-      startTime: iso(event.startedAt),
-      endTime: iso(event.endedAt),
-      model: event.model,
-      usage: {
-        // Langfuse's `input` is the whole input side, so the three orthogonal classes are
-        // summed back for it; the split rides the metadata below, where a cache-read-dominated
-        // generation is still distinguishable from a fresh one.
-        input: event.promptTokens + event.cacheReadTokens + event.cacheWriteTokens,
-        output: event.completionTokens,
-        total: event.totalTokens,
-        unit: 'TOKENS',
+    super({
+      endpoint: `${base}${OTEL_PATH}`,
+      exportMetrics: false,
+      headers: {
+        authorization: basicAuth(config.publicKey, config.secretKey),
+        'x-langfuse-ingestion-version': '4',
       },
-      level: event.ok ? 'DEFAULT' : 'ERROR',
-      metadata: {
-        provider: event.provider,
-        agentKind: event.agentKind,
-        finishReason: event.finishReason,
-        freshInputTokens: event.promptTokens,
-        cacheReadTokens: event.cacheReadTokens,
-        cacheWriteTokens: event.cacheWriteTokens,
-        workspaceId: event.workspaceId,
-      },
-    }
-    // Prompt/response bodies are present only when prompt recording is on (the same
-    // `LLM_RECORD_PROMPTS` switch the local store honours): omit empty bodies entirely.
-    if (event.input) generation.input = event.input
-    if (event.output) generation.output = event.output
-    if (event.errorMessage) generation.statusMessage = event.errorMessage
-
-    await this.send([
-      {
-        id: crypto.randomUUID(),
-        type: 'trace-create',
-        timestamp: iso(event.endedAt),
-        body: {
-          id: traceId,
-          // A run trace is upserted by every call it groups, so keep the trace body
-          // stable across them: the per-call agent kind lives on each generation
-          // (its `name` + metadata), NOT as a trace tag that the next call would clobber.
-          name: event.executionId ? `run ${event.executionId}` : event.agentKind,
-          metadata: { workspaceId: event.workspaceId },
-        },
-      },
-      {
-        id: crypto.randomUUID(),
-        type: 'generation-create',
-        timestamp: iso(event.endedAt),
-        body: generation,
-      },
-    ])
-  }
-
-  async recordToolSpans(context: LlmToolSpanContext, spans: LlmToolSpan[]): Promise<void> {
-    // Tool spans are only meaningful as children of a run's trace.
-    if (!context.executionId || spans.length === 0) return
-    const traceId = context.executionId
-    const batch: IngestionEvent[] = spans.map((span) => ({
-      id: crypto.randomUUID(),
-      type: 'span-create',
-      timestamp: iso(span.endedAt),
-      body: {
-        id: crypto.randomUUID(),
-        traceId,
-        name: span.tool,
-        startTime: iso(span.startedAt),
-        endTime: iso(span.endedAt),
-        level: span.ok ? 'DEFAULT' : 'ERROR',
-        // The call's arguments and result go in Langfuse's own input/output slots rather than
-        // metadata, so the trajectory reads in the UI the way a generation's prompt does.
-        // Present only when the double gate allowed capture (upstream blanks them otherwise).
-        ...(span.args ? { input: span.args } : {}),
-        ...(span.result ? { output: span.result } : {}),
-        metadata: {
-          agentKind: context.agentKind,
-          // The ordinal a trajectory orders by: a tool loop routinely fires several calls inside
-          // one millisecond, so start time alone cannot sequence them. The dispatch rides with
-          // it because `seq` restarts at zero on each one, so a re-run's spans would otherwise
-          // be indistinguishable from the first round's.
-          ...(context.jobId ? { jobId: context.jobId } : {}),
-          ...(span.seq !== undefined ? { seq: span.seq } : {}),
-          ...(span.argsDropped ? { argsDroppedChars: span.argsDropped } : {}),
-          ...(span.resultDropped ? { resultDroppedChars: span.resultDropped } : {}),
-        },
-      },
-    }))
-    await this.send(batch)
-  }
-
-  private async send(batch: IngestionEvent[]): Promise<void> {
-    try {
-      const res = await this.fetchImpl(this.endpoint, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: this.authorization,
-        },
-        body: JSON.stringify({ batch }),
-        // Bound the request so a hung endpoint can't tie up the caller's waitUntil
-        // budget; an abort lands in the catch below and drops the batch (best-effort).
-        signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
-      })
-      // 207 = partial success (per-event errors in the body); anything else non-2xx is
-      // a hard failure. Either way we only log — observability never breaks the caller.
-      if (!res.ok && res.status !== 207) {
-        this.logger?.warn('langfuse: ingestion rejected batch', {
-          scope: 'langfuse',
-          status: res.status,
-        })
-      }
-    } catch (err) {
-      this.logger?.warn('langfuse: failed to post ingestion batch', {
-        scope: 'langfuse',
-        err: getErrorMessage(err),
-      })
-    }
+      ...(config.serviceName ? { serviceName: config.serviceName } : {}),
+      ...(config.logger ? { logger: config.logger } : {}),
+      ...(config.fetchImpl ? { fetchImpl: config.fetchImpl } : {}),
+    })
   }
 }
 

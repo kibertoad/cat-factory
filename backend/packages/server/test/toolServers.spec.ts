@@ -169,6 +169,9 @@ describe('collectDeclaredToolServers', () => {
 })
 
 describe('probeToolServer', () => {
+  // A MODERN (`2026-07-28`) server: `server/discover`, then `tools/list`. No handshake and no
+  // notification, because that revision deleted both. The probe's own spec is where each era's
+  // wire shape is pinned; these cases are about what `probeToolServer` does with the verdict.
   const okResponses = (tools: string[], nextCursor?: string) => {
     let call = 0
     return (async () => {
@@ -179,15 +182,17 @@ describe('probeToolServer', () => {
             jsonrpc: '2.0',
             id: 1,
             result: {
-              protocolVersion: '2025-06-18',
-              capabilities: {},
-              serverInfo: { name: 'tracker-mcp', version: '1.0.0' },
+              resultType: 'complete',
+              supportedVersions: ['2026-07-28'],
+              capabilities: { tools: {} },
+              _meta: {
+                'io.modelcontextprotocol/serverInfo': { name: 'tracker-mcp', version: '1.0.0' },
+              },
             },
           }),
           { headers: { 'content-type': 'application/json' } },
         )
       }
-      if (call === 2) return new Response(null, { status: 202 })
       return new Response(
         JSON.stringify({
           jsonrpc: '2.0',
@@ -227,7 +232,7 @@ describe('probeToolServer', () => {
       status: 'ok',
       serverName: 'tracker-mcp',
       serverVersion: '1.0.0',
-      protocolVersion: '2025-06-18',
+      protocolVersion: '2026-07-28',
       toolCount: 2,
       toolsComplete: true,
       // Both narrowed names exist, so nothing is unmatched.
@@ -477,8 +482,8 @@ describe('probeToolServer', () => {
 })
 
 /**
- * A compliant server's three responses (initialize, the notification's 202, tools/list), shared by
- * the OAuth cases below — the probe describe keeps its own copy scoped to its page-bound tests.
+ * A compliant MODERN server's two responses (`server/discover`, then `tools/list`), shared by the
+ * OAuth cases below. The probe describe keeps its own copy scoped to its page-bound tests.
  */
 function okResponsesForOAuth(): typeof fetch {
   let call = 0
@@ -490,15 +495,17 @@ function okResponsesForOAuth(): typeof fetch {
           jsonrpc: '2.0',
           id: 1,
           result: {
-            protocolVersion: '2025-06-18',
-            capabilities: {},
-            serverInfo: { name: 'linear-mcp', version: '1.0.0' },
+            resultType: 'complete',
+            supportedVersions: ['2026-07-28'],
+            capabilities: { tools: {} },
+            _meta: {
+              'io.modelcontextprotocol/serverInfo': { name: 'linear-mcp', version: '1.0.0' },
+            },
           },
         }),
         { headers: { 'content-type': 'application/json' } },
       )
     }
-    if (call === 2) return new Response(null, { status: 202 })
     return new Response(
       JSON.stringify({ jsonrpc: '2.0', id: 2, result: { tools: [{ name: 'list_issues' }] } }),
       { headers: { 'content-type': 'application/json' } },

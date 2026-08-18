@@ -177,10 +177,14 @@ export async function discoverMcpOAuthEndpoints(
     const resource = await fetchProtectedResourceMetadata(serverUrl, getJson)
     const issuers = resource ? authorizationServersOf(resource) : []
     // No protected-resource metadata is the common case for a server that predates RFC 9728, and
-    // the spec's own fallback is to treat the resource's origin as the issuer.
-    const candidates = issuers.length ? issuers : [new URL(serverUrl).origin]
-    for (const issuer of candidates) {
-      const metadata = await fetchAuthorizationServerMetadata(issuer, getJson)
+    // the spec's own fallback is to treat the resource's origin as the issuer. That origin is a
+    // GUESS this side made rather than an identifier anyone published, which is what the second
+    // argument below carries: see `issuerAccepted`.
+    const candidates: Array<{ issuer: string; source: IssuerSource }> = issuers.length
+      ? issuers.map((issuer) => ({ issuer, source: 'declared' as const }))
+      : [{ issuer: new URL(serverUrl).origin, source: 'origin-fallback' as const }]
+    for (const { issuer, source } of candidates) {
+      const metadata = await fetchAuthorizationServerMetadata(issuer, source, getJson)
       if (!metadata) continue
       const endpoints = readEndpoints(metadata)
       if (endpoints) return endpoints
@@ -220,12 +224,19 @@ async function fetchProtectedResourceMetadata(
 }
 
 /**
- * The authorization server's own metadata, over the three well-known locations in the order the
- * specs put them: RFC 8414's path-INSERTING form, its path-appending sibling, then OpenID Connect
- * discovery, which many vendors publish and no OAuth-only client would otherwise find.
+ * The authorization server's own metadata, over the three well-known locations the MCP
+ * authorization spec names, in its order: RFC 8414's path-INSERTING form, then OpenID Connect
+ * discovery in its path-inserting form, then OIDC's path-APPENDING form.
+ *
+ * Two of those used to be wrong. The OIDC path-insert location was missing entirely, which is the
+ * one an issuer with a path is most likely to publish, and the walk instead tried
+ * `{origin}{path}/.well-known/oauth-authorization-server`, a location neither RFC 8414 nor the MCP
+ * spec documents: an undocumented probe costs a round trip on every discovery and can only ever be
+ * answered by a server that is guessing back.
  */
 async function fetchAuthorizationServerMetadata(
   issuer: string,
+  source: IssuerSource,
   getJson: (url: string) => Promise<Record<string, unknown> | undefined>,
 ): Promise<Record<string, unknown> | undefined> {
   let url: URL
@@ -237,15 +248,58 @@ async function fetchAuthorizationServerMetadata(
     return undefined
   }
   const path = url.pathname.replace(/\/+$/, '')
-  for (const candidate of [
+  // DEDUPED, because the two OIDC forms collapse onto one URL for a path-less issuer, which is the
+  // ordinary case: probing it twice spends a round trip and a slot of the fetch budget to receive
+  // the same 404, in a walk whose whole cost is the round trips it makes.
+  const candidates = [
     `${url.origin}/.well-known/oauth-authorization-server${path}`,
-    `${url.origin}${path}/.well-known/oauth-authorization-server`,
+    `${url.origin}/.well-known/openid-configuration${path}`,
     `${url.origin}${path}/.well-known/openid-configuration`,
-  ]) {
+  ]
+  for (const candidate of new Set(candidates)) {
     const body = await getJson(candidate)
-    if (body) return body
+    if (body && issuerAccepted(body, issuer, source)) return body
   }
   return undefined
+}
+
+/**
+ * Where the issuer identifier being probed came from. A `declared` one was named by the resource's
+ * own protected-resource metadata; an `origin-fallback` one is this client's guess at an issuer for
+ * a server that publishes no such metadata.
+ */
+type IssuerSource = 'declared' | 'origin-fallback'
+
+/**
+ * RFC 8414 §3.3: the `issuer` in a fetched metadata document MUST be identical to the issuer
+ * identifier the document was fetched for. Skipping the check is what lets a host that serves
+ * someone else's metadata at a well-known path redirect this client's authorization and token
+ * requests: the document names the endpoints, so whoever writes it chooses where the user is sent.
+ *
+ * Which is why the equality binds a DECLARED issuer only. §3.3 compares the document against the
+ * issuer identifier the client was GIVEN, and in the origin fallback there is no such identifier:
+ * the origin is this client's own guess for a server that published no protected-resource
+ * metadata, so comparing a document against it tests the guess rather than the server. Enforcing
+ * it there refuses every deployment whose authorization server legitimately identifies as
+ * something else, a fronted IdP or a tenant path being the ordinary shapes, and it buys nothing to
+ * pay for that: no one named the origin as an issuer, and the endpoints that come out of the
+ * document still face `assertAllowedOAuthUrl` either way.
+ *
+ * The equality tolerates one trailing slash on either side, which is the only divergence a correct
+ * server realistically has (an issuer written as an origin, published without the slash). A
+ * document that omits `issuer` fails under BOTH sources: an absent claim is the missing half the
+ * spec added the requirement for, and a document without one is not AS metadata at all.
+ */
+function issuerAccepted(
+  metadata: Record<string, unknown>,
+  issuer: string,
+  source: IssuerSource,
+): boolean {
+  const declared = metadata.issuer
+  if (typeof declared !== 'string' || !declared) return false
+  if (source === 'origin-fallback') return true
+  const trim = (value: string): string => value.replace(/\/+$/, '')
+  return trim(declared) === trim(issuer)
 }
 
 /** The `authorization_servers` list of a protected-resource document, as strings. */

@@ -282,6 +282,15 @@ export type TaskSourceState = v.InferOutput<typeof taskSourceStateSchema>
  *   - `forbidden`     — authenticated but lacking the needed scope, e.g. the
  *                       GitHub App has no Issues permission (HTTP 403).
  *   - `unreachable`   — the source host could not be reached (network / DNS).
+ *   - `rate_limited`  — the credential is good and the quota is spent, so the fix
+ *                       is to wait rather than to reconnect. Its own verdict
+ *                       because the status a vendor answers with cannot say it:
+ *                       Linear reports an exhausted quota as HTTP 400 with a
+ *                       `RATELIMITED` error code, which reads as a malformed
+ *                       request, and GitHub's secondary limit arrives as a 403,
+ *                       which reads as a missing permission. Both send an
+ *                       operator to re-mint a credential that was never the
+ *                       problem.
  *   - `error`         — anything else (unexpected status or body).
  */
 export const taskSourceDiagnosticStatusSchema = v.picklist([
@@ -291,6 +300,7 @@ export const taskSourceDiagnosticStatusSchema = v.picklist([
   'auth_failed',
   'forbidden',
   'unreachable',
+  'rate_limited',
   'error',
 ])
 export type TaskSourceDiagnosticStatus = v.InferOutput<typeof taskSourceDiagnosticStatusSchema>

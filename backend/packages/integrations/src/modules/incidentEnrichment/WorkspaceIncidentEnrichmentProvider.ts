@@ -99,6 +99,6 @@ export class WorkspaceIncidentEnrichmentProvider implements IncidentEnrichmentPr
       providers.push(new IncidentIoEnrichmentProvider(credentials.incidentIo))
     }
     if (providers.length === 0) return null
-    return new CompositeIncidentEnrichmentProvider(providers)
+    return new CompositeIncidentEnrichmentProvider(providers, this.log)
   }
 }

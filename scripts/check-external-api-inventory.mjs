@@ -275,6 +275,10 @@ const CLASSIFICATION = [
     vendors: ['openai-compatible'],
   },
   {
+    // The PROTOCOL VERSION pins this surface is swept for live in the sibling `mcpDialect.ts`,
+    // which sends nothing itself and so is invisible to both detectors: it holds the modern and
+    // legacy revision strings, the `_meta` keys and the reserved error codes the probe reads an
+    // era off. A sweep of this row reads both files.
     path: 'backend/packages/server/src/modules/toolServers/mcpProbe.ts',
     kind: 'vendor',
     vendors: ['mcp'],
