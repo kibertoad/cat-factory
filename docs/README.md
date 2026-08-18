@@ -93,6 +93,12 @@ of the product.
   verdict each. **Regenerated wholesale** by the `external-api-sweep` skill, so it
   is always the latest sweep rather than a point-in-time record; its header carries
   the commit swept, because "still correct" is a claim about a tree.
+- [`internal/kaizen-tracker.md`](./internal/kaizen-tracker.md): what the
+  platform's own post-run graders have recommended about the agents this repo
+  ships, deduplicated into themes and checked against HEAD. **Appended to** by the
+  `kaizen-sweep` skill, which drains a deployment's Kaizen backlog through
+  `/api/v1/kaizen/entries`; the entry ledger at the foot of it is what keeps a
+  sweep incremental, so an entry is read and judged exactly once.
 
 ### Point-in-time records
 
