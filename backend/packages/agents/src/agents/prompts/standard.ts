@@ -15,7 +15,7 @@ import {
   renderTaskContext,
 } from '@cat-factory/kernel'
 import { PLATFORM_DELIVERY_CONTRACT } from './delivery-contract.js'
-import { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './shared.js'
+import { FINAL_ANSWER_IN_REPLY } from './shared.js'
 import * as templateSpecs from './standard-templates.generated.js'
 
 const Handlebars = HandlebarsRuntime as unknown as typeof import('handlebars')
@@ -28,10 +28,11 @@ const Handlebars = HandlebarsRuntime as unknown as typeof import('handlebars')
 //
 // Integration with the best-practice fragment system is by composition, not
 // duplication: the phase system prompt is the BASE that `composeSystemPrompt`
-// appends the user's selected fragment bodies onto, and each phase prompt
-// explicitly tells the agent to treat those appended standards as hard
-// requirements. So "what the agent should do" lives here and "which extra
-// standards apply" stays in @cat-factory/prompt-fragments.
+// appends the user's selected fragment bodies onto, and the FOLD carries the
+// imperative that they are hard requirements (`STANDARDS_FOOTER`), so a phase that
+// resolved no standards ends without a pointer to a section nobody injected. So
+// "what the agent should do" lives here and "which extra standards apply" stays in
+// @cat-factory/prompt-fragments.
 
 /** The four standard phases of building out a solution. */
 export type StandardPhase = 'design' | 'build' | 'review' | 'test'
@@ -59,8 +60,9 @@ export function phaseForKind(kind: AgentKind): StandardPhase | undefined {
 }
 
 // --- System prompts -------------------------------------------------------
-// Static role + approach guidance per phase. Each closes by deferring to the
-// best-practice standards that `composeSystemPrompt` appends below it.
+// Static role + approach guidance per phase. Any best-practice standards the block
+// selected are folded in below by `composeSystemPrompt`, which introduces its own
+// section rather than being announced from here.
 
 // The build phase runs in a container on a real checkout and ships its code through
 // a pull request — but the PUSH and the PR are the platform's job, not the agent's
@@ -87,8 +89,6 @@ const SYSTEM_PROMPTS: Record<StandardPhase, string> = {
     '- End with a short, ordered list of concrete implementation steps.',
     '',
     FINAL_ANSWER_IN_REPLY,
-    '',
-    STANDARDS_FOOTER,
   ].join('\n'),
   build: [
     'You are a senior engineer owning the BUILD of a building block.',
@@ -105,8 +105,6 @@ const SYSTEM_PROMPTS: Record<StandardPhase, string> = {
     '- The committed `spec/` splits its requirements by IMPLEMENTATION STATE, and the two halves mean opposite things. Requirements under an "established" heading are STANDING behaviour the service already honours: keep them working, and treat breaking one as a regression. Requirements under an "aspirational (not yet built)" heading are agreed but NOT yet true: do NOT assume the code already does them, do NOT read their absence as a bug to fix, and do NOT implement one unless THIS task asks for it. Building an aspirational requirement nobody asked you for is scope you were not given.',
     '',
     BUILD_DELIVERY_GATE,
-    '',
-    STANDARDS_FOOTER,
   ].join('\n'),
   review: [
     'You are a meticulous code reviewer owning the REVIEW of a building block.',
@@ -120,8 +118,6 @@ const SYSTEM_PROMPTS: Record<StandardPhase, string> = {
     '- If the work is sound, say so explicitly rather than inventing problems.',
     '',
     FINAL_ANSWER_IN_REPLY,
-    '',
-    STANDARDS_FOOTER,
   ].join('\n'),
   test: [
     'You are a pragmatic test engineer owning the TESTING of a building block.',
@@ -135,8 +131,6 @@ const SYSTEM_PROMPTS: Record<StandardPhase, string> = {
     '- Flag anything that is hard to test and how the design could change to fix that.',
     '',
     FINAL_ANSWER_IN_REPLY,
-    '',
-    STANDARDS_FOOTER,
   ].join('\n'),
 }
 

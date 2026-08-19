@@ -1,6 +1,7 @@
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { describe, expect, it } from 'vitest'
 import { composeBlockSystemPrompt, standardsDeliveredAsFiles } from './fragments.js'
+import { STANDARDS_FOOTER } from '../prompts/shared.js'
 
 // Best-practice standards are folded into the system prompt as SEPARATE, delimited, title-labelled
 // `<best-practice-standard>` blocks (not one `\n\n`-joined blob), so an agent can tell them apart and
@@ -10,6 +11,40 @@ describe('composeBlockSystemPrompt', () => {
   it('returns the base prompt unchanged when no fragments are resolved', () => {
     expect(composeBlockSystemPrompt('BASE', { resolvedFragments: [] }, 'prompt')).toBe('BASE')
     expect(composeBlockSystemPrompt('BASE', {}, 'prompt')).toBe('BASE')
+  })
+
+  it('carries the hard-requirement imperative ONLY where the blocks it points at exist', () => {
+    // The imperative used to be the closing line of every track prompt, while the fold returns the
+    // base UNCHANGED with nothing to fold — so a block that resolved no standards ended by naming a
+    // section that was never injected, and the graders reported agents both reviewing against and
+    // reporting the absence of it. The section owns the line now, so the pointer and its target are
+    // the same decision.
+    const withStandards = composeBlockSystemPrompt(
+      'BASE',
+      { resolvedFragments: [{ id: 'be-errors', body: 'Wrap errors with context.' }] },
+      'prompt',
+    )
+    expect(withStandards).toContain(STANDARDS_FOOTER)
+    // It precedes the blocks it introduces, so "below" is true of it.
+    expect(withStandards.indexOf(STANDARDS_FOOTER)).toBeLessThan(
+      withStandards.indexOf('<best-practice-standard'),
+    )
+
+    for (const composed of [
+      composeBlockSystemPrompt('BASE', { resolvedFragments: [] }, 'prompt'),
+      composeBlockSystemPrompt('BASE', {}, 'prompt'),
+      // A `context-files` kind's standards are delivered as files whose own index states they are
+      // what the review is judged against; a `none` kind applies no standards at all.
+      composeBlockSystemPrompt(
+        'BASE',
+        { resolvedFragments: [{ id: 'x', body: 'y' }] },
+        'context-files',
+        true,
+      ),
+      composeBlockSystemPrompt('BASE', { resolvedFragments: [{ id: 'x', body: 'y' }] }, 'none'),
+    ]) {
+      expect(composed).not.toContain(STANDARDS_FOOTER)
+    }
   })
 
   it('wraps each standard in its own delimited, id + title labelled block', () => {

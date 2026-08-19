@@ -8,6 +8,7 @@ import {
   composeSystemPrompt,
   isBusinessLogicKind,
   phaseForKind,
+  STANDARDS_FOOTER,
   systemPromptFor as _systemPromptFor,
   defaultAgentKindRegistry,
   userPromptFor as _userPromptFor,
@@ -124,9 +125,15 @@ describe('business-logic agent prompts', () => {
       expect(prompt).toMatch(/no business-logic documentation is available/i)
     })
 
-    it('both defer to the appended best-practice standards', () => {
-      expect(systemPromptFor(BUSINESS_DOCUMENTER_KIND)).toContain('best-practice standard')
-      expect(systemPromptFor(BUSINESS_REVIEWER_KIND)).toContain('best-practice standard')
+    it('both leave the best-practice-standards imperative to the FOLD', () => {
+      // The imperative used to close each role prompt, while the fold appends nothing when a
+      // block resolved no standards — so it pointed at a section that was never injected. The
+      // fold owns it now, which is why the assertion is at that seam.
+      for (const kind of [BUSINESS_DOCUMENTER_KIND, BUSINESS_REVIEWER_KIND]) {
+        const bare = systemPromptFor(kind)
+        expect(bare).not.toContain(STANDARDS_FOOTER)
+        expect(composeSystemPrompt(bare, [FRAGMENTS[0]!.id])).toContain(STANDARDS_FOOTER)
+      }
     })
 
     it('composes selected fragments onto the role prompt', () => {

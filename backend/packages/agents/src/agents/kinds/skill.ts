@@ -2,7 +2,6 @@ import type { AgentRunContext } from '@cat-factory/kernel'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 import { CODE_AWARE_TRAIT } from './traits.js'
 import { PLATFORM_DELIVERY_CONTRACT } from '../prompts/delivery-contract.js'
-import { STANDARDS_FOOTER } from '../prompts/shared.js'
 import { linkedContextSection } from '../prompts/standard.js'
 
 // ---------------------------------------------------------------------------
@@ -47,8 +46,6 @@ const SKILL_SYSTEM_PROMPT = [
   'have something to commit.',
   '',
   PLATFORM_DELIVERY_CONTRACT,
-  '',
-  STANDARDS_FOOTER,
 ].join('\n')
 
 function skillUserPrompt(context: AgentRunContext): string {

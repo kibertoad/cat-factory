@@ -5,6 +5,7 @@ import {
   READ_ONLY_GUARDRAIL,
   renderStandardUserPrompt,
   STANDARD_PHASE_BY_KIND,
+  STANDARDS_FOOTER,
   standardSystemPrompt,
   systemPromptFor as _systemPromptFor,
   defaultAgentKindRegistry,
@@ -86,10 +87,15 @@ describe('standard solution-phase prompts', () => {
       expect(systemPromptFor('whatever')).toContain('"whatever"')
     })
 
-    it('defers to the appended best-practice standards', () => {
-      // The hook the fragment system composes onto must be present in each phase.
+    it('leaves the best-practice-standards imperative to the FOLD, not to the phase text', () => {
+      // It used to be the closing line of each phase prompt, pointing at standards "appended
+      // below" that the fold does not append when a block resolved none. The section owns the line
+      // now, so on every phase the pointer and its target arrive together or not at all.
       for (const phase of ['design', 'build', 'review', 'test'] as const) {
-        expect(standardSystemPrompt(phase)).toContain('best-practice standard')
+        const bare = standardSystemPrompt(phase)
+        expect(bare).not.toContain(STANDARDS_FOOTER)
+        expect(composeSystemPrompt(bare, [])).toBe(bare)
+        expect(composeSystemPrompt(bare, ['node.performance'])).toContain(STANDARDS_FOOTER)
       }
     })
 

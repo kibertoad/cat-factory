@@ -389,7 +389,7 @@ function withPriorReview(prompt: string, context: AgentRunContext): string {
         `against a bar of ${prior.threshold.toFixed(2)}. Your own previous verdicts:`
       : `This work has been through ${prior.rounds.length} review round(s) before the feedback ` +
         `above. Everything previously raised, so you do not undo a fix or drop an open point:`,
-    ...renderPriorReviewRounds(prior.rounds),
+    ...renderPriorReviewRounds(prior.rounds, prior.threshold),
     '',
     grading
       ? PRIOR_ROUNDS_DIRECTIVE

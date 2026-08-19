@@ -1,4 +1,5 @@
 import type { AgentKind } from '@cat-factory/kernel'
+import { EFFORT_REPORT_FILE } from '../prompts/shared.js'
 
 // Read-only container agents. Some agent kinds need a real checkout to do their
 // work but only ever READ it: they clone the repo, explore it, and return a prose
@@ -39,9 +40,23 @@ export function isReadOnlyAgentKind(kind: AgentKind): boolean {
  * open a PR — the prose report it returns is its sole deliverable. Centralised here
  * (rather than repeated in each role prompt) so every read-only kind states the same
  * guardrail exactly once.
+ *
+ * It carves out the platform's own SENTINEL files by name, because the two rules arrive together
+ * and only one of them is negotiable. `EFFORT_REPORT_GUIDANCE` is appended to every container
+ * dispatch at the chokepoint (`buildKindBody`), so a read-only kind is always told both "you MUST
+ * NOT create files" and "write {@link EFFORT_REPORT_FILE} in your working directory" — an agent
+ * reading that either disobeys one of them or spends a turn asking which wins. Naming the
+ * exception, and stating that no commit or push happens here, is what makes the pair readable.
+ * Every kind that receives this guardrail runs on a CONTAINER surface (see
+ * `applySurfaceDirectives`), which is exactly the set the effort report is asked of; the carve-out
+ * is still phrased as "a sentinel the instructions below ask you for", so a kind that is asked for
+ * none writes none.
  */
 export const READ_ONLY_GUARDRAIL =
   'IMPORTANT — this is a READ-ONLY exploration: you may read and inspect any file in ' +
-  'the repository, but you MUST NOT modify, create or delete files, run commands that ' +
-  'change the repository, commit, or open a pull request. Your written report is the ' +
-  'only deliverable; return it as your response.'
+  'the repository, but you MUST NOT modify, create or delete its files, run commands that ' +
+  'change it, commit, or open a pull request — no commit or push happens on this step. Your ' +
+  'written report is the only deliverable; return it as your response. The ONE exception is a ' +
+  `platform sentinel file the instructions below explicitly ask you for (\`${EFFORT_REPORT_FILE}\` ` +
+  'is the standard one): the harness keeps those out of every commit, so writing one changes ' +
+  'nothing in the repository and is expected of you.'

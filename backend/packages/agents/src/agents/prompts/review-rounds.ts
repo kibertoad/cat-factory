@@ -22,6 +22,12 @@ export interface PriorReviewRound {
   /** 1-based, in the order they happened. */
   round: number
   rating: number
+  /**
+   * Whether the round ADVANCED the work — the engine's disposition, not a bar comparison.
+   * `disposeCompanionVerdict` also holds a round whose rating cleared the threshold (an open
+   * `blocker`, or a first batch raising more than nits), so this is `false` on plenty of rounds
+   * that met the bar. See {@link roundOutcome} for why that distinction has to be rendered.
+   */
   passed: boolean
   summary: string
   comments?: ReviewedPoint[]
@@ -125,6 +131,35 @@ const LATEST_ROUND_CHARS = 4_000
 const EARLIER_ROUND_CHARS = 1_200
 
 /**
+ * What became of one settled round, in the words that are actually true of it.
+ *
+ * `passed` is the ENGINE's disposition, and rendering it as "met the bar" / "did not meet the bar"
+ * asserted a comparison that had not been made: `disposeCompanionVerdict` holds a round on an open
+ * `blocker` whatever the rating, and force-loops the FIRST batch that raises anything beyond a nit
+ * even from a producer that scored well. So a grader was shown "rated 0.86, did not meet the bar"
+ * against a bar of 0.80 it had been given in the same prompt, and one of the two numbers had to be
+ * wrong. Neither was; the sentence joining them was.
+ *
+ * The bar comparison and the disposition are therefore stated as the two separate facts they are,
+ * with the reason named whenever they disagree. This repo's own rule: causes that need different
+ * reactions must not render the same, and "your score was too low" and "your score was fine, a
+ * must-fix held it" need opposite responses from the producer being reworked.
+ *
+ * The threshold's NUMBER stays out of the wording deliberately. Only the grader is given it (in the
+ * heading above these rounds), for the reason it is the only side told how much rope is left: a
+ * producer handed the number optimises for it rather than for the work. Both sides still get the
+ * comparison, which is the part that is about their own round.
+ */
+function roundOutcome(round: PriorReviewRound, threshold: number): string {
+  if (round.passed) return 'which met the bar'
+  if (round.rating < threshold) return 'below the bar'
+  if (hasBlockingReviewComments(round.comments)) {
+    return 'which met the bar, but a [blocker] below held the work back'
+  }
+  return 'which met the bar, and was still sent back once over the findings below'
+}
+
+/**
  * Render a grading loop's settled rounds, oldest first.
  *
  * The most recent round is the one whose asks are most likely still open, so it keeps far more of
@@ -135,13 +170,22 @@ const EARLIER_ROUND_CHARS = 1_200
  * Each point carries the SEVERITY it was raised at, worst first, because that is what the round
  * actually decided: a `[blocker]` from round 1 is the reason the loop is still running, and read
  * as an undifferentiated bullet it competes for attention with a nit raised in the same breath.
+ *
+ * `threshold` is what the loop's ratings were judged against, and it is required rather than
+ * optional: without it the rendering can only echo a `passed` flag whose meaning is not the bar
+ * comparison it reads as (see {@link roundOutcome}).
  */
-export function renderPriorReviewRounds(rounds: readonly PriorReviewRound[]): string[] {
+export function renderPriorReviewRounds(
+  rounds: readonly PriorReviewRound[],
+  threshold: number,
+): string[] {
   const lines: string[] = []
   for (const [index, round] of rounds.entries()) {
     const isLatest = index === rounds.length - 1
-    const verdict = round.passed ? 'met the bar' : 'did not meet the bar'
-    lines.push('', `Round ${round.round} — rated ${round.rating.toFixed(2)}, ${verdict}:`)
+    lines.push(
+      '',
+      `Round ${round.round} — rated ${round.rating.toFixed(2)}, ${roundOutcome(round, threshold)}:`,
+    )
     lines.push(clip(round.summary.trim() || '(no summary given)', isLatest))
     for (const comment of worstFirst(round.comments)) {
       const target = reviewedPointTarget(comment)

@@ -3,12 +3,24 @@
 // so the wording stays identical everywhere it is appended.
 
 /**
- * Closing line every role prompt appends before `composeSystemPrompt` folds in
- * the user's selected best-practice fragments — it tells the agent to treat those
- * appended standards as hard requirements rather than optional suggestions.
+ * The opening line of the folded best-practice-standards SECTION: it tells the agent to treat the
+ * standards that follow as hard requirements rather than optional suggestions.
+ *
+ * Emitted by `foldStandards` (runtime/fragments.ts) as part of the section it introduces, NOT
+ * appended to a role prompt. It used to be the hard-coded last line of every track prompt, while
+ * the fold returns the base prompt UNCHANGED when the block resolved no standards — so on any
+ * run without them the prompt ended by pointing at material that was never injected, and the
+ * graders reported agents reviewing against, and reporting the absence of, a section they had been
+ * told to expect. Owning the line where the blocks are written is what makes the pointer exist
+ * exactly when its target does.
+ *
+ * A kind whose `standardsDelivery` is `context-files` is not folded and correctly gets no line
+ * here: its standards index states the same thing about the files it lists. A kind delivered
+ * `none` applies no standards at all, so there is nothing to be hard about.
  */
 export const STANDARDS_FOOTER =
-  'Treat every best-practice standard appended below as a hard requirement, not a suggestion.'
+  'Follow these best-practice standards while doing the work: treat every standard below as a ' +
+  'hard requirement, not a suggestion.'
 
 /**
  * Appended to every agent whose deliverable IS its final reply (a document, report,
@@ -172,9 +184,16 @@ export const FOLLOW_UPS_FILE = '.cat-follow-ups.jsonl'
  * and the key obstacles it hit — which the harness lifts onto the result and the platform surfaces
  * in run details. This is a SIDE channel: it is kept out of the commit/PR, so writing it never
  * affects the deliverable, and the agent still completes its actual task regardless.
+ *
+ * The timing clause is CONDITIONAL because the chokepoint appends this to every container kind,
+ * read-only ones included: "after any commit/push" read as an order to commit on a step whose
+ * {@link READ_ONLY_GUARDRAIL} forbids exactly that, and the contradictory pair cost real turns.
+ * The guardrail carries the other half of the reconciliation — it names this file as the one
+ * write it permits.
  */
 export const EFFORT_REPORT_GUIDANCE =
-  'EFFORT SELF-ASSESSMENT — when you have finished your work (after any commit/push), write a ' +
+  'EFFORT SELF-ASSESSMENT — as the last thing you do, once your work is complete (including any ' +
+  'commit or push it involved; a read-only step makes none), write a ' +
   `file named \`${EFFORT_REPORT_FILE}\` in your working directory containing a SINGLE compact ` +
   'JSON object: {"difficulty":<1-10>,"summary":"<one or two sentences on how hard or easy this ' +
   'was and why>","reducedEffectiveness":"<what, if anything, reduced your effectiveness — ' +
@@ -183,6 +202,46 @@ export const EFFORT_REPORT_GUIDANCE =
   'specific — this is feedback for the humans running you, not part of the deliverable. It is a ' +
   'side channel only: it is kept out of the commit, so never reference it in code and never add ' +
   'it to git. Write it exactly once, at the end.'
+
+/**
+ * Appended to EVERY container-agent system prompt at the same chokepoint as
+ * {@link EFFORT_REPORT_GUIDANCE} (`buildKindBody`): what the execution sandbox can and cannot do.
+ *
+ * These are PLATFORM facts no agent can derive from the repository, and the graders kept catching
+ * the same waste with them absent. A coder and its reviewer independently discovered that the
+ * Dockerfile they were asked for could not be built here, then spent two consecutive rounds on the
+ * wording of that disclosure; separately, a Node 26 sandbox against a Node 22 target produced an
+ * `EBADENGINE` warning the reviewer filed as a defect in the change. None of that is resolvable by
+ * the agent, and all of it is one paragraph of context.
+ *
+ * Docker is stated as a PROBE rather than as an absence, because the honest answer varies by
+ * runtime: the image ships the Docker CLI and the compose plugin, and `entrypoint.sh` starts a
+ * rootless daemon BEST-EFFORT (Cloudflare Containers and most managed runners forbid the user
+ * namespaces it needs, while a self-hosted pool may point `DOCKER_HOST` at a sidecar instead). "No
+ * Docker daemon" would be false on the runtimes where the tester really does stand infra up, and
+ * "Docker is available" false everywhere else, so the only thing the prompt can truthfully say is
+ * "check, and do not read a failure as your bug". The toolchain VERSIONS take the same shape for a
+ * second reason as well: naming the image's Node major here would duplicate the Dockerfile's pin
+ * into a constant nothing keeps in step with it.
+ *
+ * The closing rule is the part that pays for the paragraph. An artifact this sandbox cannot execute
+ * is still a correct artifact, and saying so in one line is what stops it becoming a review round.
+ */
+export const EXECUTION_SANDBOX_GUIDANCE =
+  'EXECUTION SANDBOX — you run inside an ephemeral Linux container the platform provisions for ' +
+  'this step: a fresh clone, git and a Node toolchain. Nothing else is guaranteed to be installed. ' +
+  'There is no Kubernetes tooling (no `kubectl`, no `helm`) and the platform gives you no cluster ' +
+  'or container-registry credentials, so you cannot apply a manifest, reach a cluster, or pull or ' +
+  'push an image unless this run handed you a credential for it. A Docker CLI and the compose ' +
+  'plugin ARE installed, but the daemon starts best-effort and is unavailable on many runtimes: ' +
+  'probe it (`docker info`) before relying on it, and never report its absence as a defect in the ' +
+  "work. Toolchain versions here are the IMAGE's, not necessarily your target's — compare " +
+  "`node --version` against the project's declared engines before concluding that a version " +
+  'warning or failure is a bug in the code. Above all: a deliverable this sandbox cannot EXECUTE ' +
+  '(a Dockerfile you cannot build, a manifest you cannot apply, a deploy you cannot run) is still ' +
+  'a complete and correct deliverable. Produce it, then name in ONE line of your report which ' +
+  'artifacts you could not verify here and why. Do not hedge the artifact, do not spend turns ' +
+  'rediscovering the limit, and do not raise it as a finding against the work or another agent.'
 
 /**
  * The sentinel file a PR-opening coding agent writes its pull-request description to, at the root

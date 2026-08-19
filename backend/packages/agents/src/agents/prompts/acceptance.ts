@@ -5,7 +5,6 @@ import type { AgentRunContext } from '@cat-factory/kernel'
 import { ACCEPTANCE_AGENT_KIND } from '@cat-factory/contracts'
 import { PLATFORM_DELIVERY_CONTRACT } from './delivery-contract.js'
 import { PLAYWRIGHT_E2E_TARGET_CONFIG_ID } from '../kinds/configs.js'
-import { STANDARDS_FOOTER } from './shared.js'
 
 /** The acceptance/e2e execution targets the `playwright.e2eTarget` config offers. */
 type E2eTarget = 'ci' | 'ephemeral'
@@ -23,8 +22,8 @@ type E2eTarget = 'ci' | 'ephemeral'
 //
 // Like the standard solution phases, "what the agent should do" lives here and
 // "which extra standards apply" stays in @cat-factory/prompt-fragments: the prompt
-// closes by deferring to the best-practice fragments that `composeSystemPrompt`
-// appends below it.
+// leaves the best-practice fragments to `composeSystemPrompt`, which folds them in
+// below under its own heading.
 
 /** The agent kinds that make up the acceptance-testing track. */
 export type AcceptanceAgentKind = typeof ACCEPTANCE_AGENT_KIND
@@ -62,8 +61,6 @@ const SYSTEM_PROMPTS: Record<AcceptanceAgentKind, string> = {
     '- Output the test files to commit, each in the conventional test directory for its tool (e.g. the e2e/Playwright directory for UI tests), ready to run in CI.',
     '',
     PLAYWRIGHT_DELIVERY_GATE,
-    '',
-    STANDARDS_FOOTER,
   ].join('\n'),
 }
 

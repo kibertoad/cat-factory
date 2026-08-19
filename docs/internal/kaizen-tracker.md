@@ -54,15 +54,19 @@ every entry the pull returned, `filed` the ones that became or joined an item, a
 the settled entries the grader had nothing to say about, which are real and are why the ledger
 exists.
 
-| Sweep      | Deployment / workspace                             | Read | Filed | No finding | Truncated | Notes                                                                                                                                                                                                                                                                                        |
-| ---------- | -------------------------------------------------- | ---- | ----- | ---------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sweep      | Deployment / workspace                             | Read | Filed | No finding | Truncated | Notes                                                                                                                                                                                                                                                                                                                                                                                       |
+| ---------- | -------------------------------------------------- | ---- | ----- | ---------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 2026-08-19 | local dev instance / `ws_6583a14a0fed4579a86ec62f` | 76   | 76    | 0          | no        | First sweep, so the whole backlog: 2026-06-29 to 2026-08-14, one page, 0 in flight. Of the 76 filed, 15 carried recommendations and became or joined KZ-0001 to KZ-0015 and KZ-0019 to KZ-0023; the other 61 are `failed` gradings and are covered by the three causes in KZ-0016 to KZ-0018. No finding is 0 because every entry the grader could complete, it had something to say about. |
 
 ## Open items
 
 ### KZ-0001: Gate a conditional prompt section on what was actually injected
 
-- **Status**: open
+- **Status**: in progress, one of three (PR #PRNUM). The STANDARDS pointer is fixed: the
+  imperative moved out of the track prompts into the fold that writes the blocks, so it exists
+  exactly when they do (`build@v7`, `review@v3`). The `spec/` navigation block and the
+  foundational-catalog reuse mandate are still attached by TRAIT rather than by presence, and
+  both need a dispatch-time presence signal `systemPromptFor` cannot see: they stay open.
 - **Combos**: `pr-reviewer | anthropic:claude-opus-5 | 1`, `coder | anthropic:claude-opus-5 | build@v5` and `@v6`, `reviewer | anthropic:claude-opus-5 | 1`, `architect | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 8 entries, 2026-07-28 to 2026-08-13
 - **What the grader says**: three sections keep being named. On the standards: "the BEST-PRACTICE ADHERENCE section instructs the agent to review against `<best-practice-standard>` blocks 'folded into this prompt above', but none were injected", and "the system prompt ends the role section with 'Treat every best-practice standard appended below as a hard requirement' but nothing was appended". On the spec: "the `spec/` navigation block is included unconditionally even though the architect step already established there is no `spec/` directory in this repo". On the catalog: "collapse the ~200-word reuse-mandate section to a single line plus the required fenced block" when it resolves to nothing. One entry adds a consequence rather than a cost: `fragmentAdherence` "is a required output field" and came back empty, "so a review isn't silently shipped with its judged-against dimension missing".
@@ -71,7 +75,10 @@ exists.
 
 ### KZ-0002: The read-only guardrail and the effort-report guidance contradict each other
 
-- **Status**: open
+- **Status**: in progress (PR #PRNUM). The guardrail names `.cat-effort.json` as its ONE
+  permitted write and states that no commit or push happens on the step; the effort report no
+  longer times itself off a commit the step is forbidden to make. The pair is pinned where it is
+  actually composed, at the container-dispatch chokepoint, since neither package sees both.
 - **Combos**: `architect | anthropic:claude-opus-5 | 1`, `pr-reviewer | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 5 entries, 2026-07-28 to 2026-08-13
 - **What the grader says**: "the READ-ONLY clause says the agent 'MUST NOT modify, create or delete files', and the very next paragraph orders it to write `.cat-effort.json` in the working directory". Another states the second half: the effort file is mandated "'after any commit/push' on a step that is forbidden to commit". Every entry proposes the same remedy, an explicit carve-out: "state explicitly that `.cat-effort.json` is the single permitted write and that no commit/push will occur".
@@ -89,7 +96,14 @@ exists.
 
 ### KZ-0004: The agent container's capability limits are never stated to the agent
 
-- **Status**: open
+- **Status**: in progress (PR #PRNUM). `EXECUTION_SANDBOX_GUIDANCE` rides every container
+  dispatch: no Kubernetes tooling or cluster/registry credentials, a Docker daemon to PROBE
+  rather than assume (the image ships the CLI and starts a rootless daemon best-effort, so
+  neither "no Docker" nor "Docker works" is true everywhere), and toolchain versions that are
+  the image's rather than the target's. The Node major is deliberately NOT named: duplicating
+  the Dockerfile's pin into a constant nothing keeps in step would be a second lie waiting.
+  Plus the rule that pays for the paragraph: an artifact this sandbox cannot execute is still a
+  correct artifact, disclosed in one line rather than over two review rounds.
 - **Combos**: `coder | anthropic:claude-opus-5 | build@v5` and `@v6`, `architect | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 3 entries, 2026-08-12 to 2026-08-13
 - **What the grader says**: "state up front that no Docker daemon is available in the agent container. The block requires a Dockerfile deliverable, but neither the coder nor the reviewer can build it locally; both discovered this independently and reported it." Also "no Docker daemon socket and no `kubectl`", where "two consecutive rounds were spent on the Dockerfile being unbuilt and on the wording of that disclosure, which is pure overhead the agent cannot resolve", and separately "declare the execution sandbox's Node version, or align it with the block's target", after a Node 26 sandbox against a Node 22 target produced an `EBADENGINE` defect the reviewer then flagged.
@@ -107,7 +121,11 @@ exists.
 
 ### KZ-0006: A prior round that cleared its bar is rendered as "did not meet the bar"
 
-- **Status**: open
+- **Status**: in progress (PR #PRNUM). `renderPriorReviewRounds` now takes the threshold and
+  states the bar comparison and the disposition as the two separate facts they are, naming the
+  cause when they disagree (a `blocker` held it, or the first batch was force-looped). The
+  threshold's NUMBER stays out of the wording, so the producer still is not handed a target to
+  optimise for.
 - **Combos**: `reviewer | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 1 entry, 2026-08-12
 - **What the grader says**: "the prompt states a bar of 0.80 and records round 1 as 'rated 0.86, did not meet the bar'. Either the comparison or the rendered bar is wrong."

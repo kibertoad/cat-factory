@@ -1,5 +1,10 @@
 import type { AgentExecutor, AgentRunContext, AgentRunResult, Block } from '@cat-factory/kernel'
-import { composeSystemPrompt, defaultAgentKindRegistry, systemPromptFor } from '@cat-factory/agents'
+import {
+  composeSystemPrompt,
+  defaultAgentKindRegistry,
+  STANDARDS_FOOTER,
+  systemPromptFor,
+} from '@cat-factory/agents'
 import { promptFragmentCatalogSchema, type PromptFragment } from '@cat-factory/contracts'
 import { FRAGMENTS } from '@cat-factory/prompt-fragments'
 import * as v from 'valibot'
@@ -80,7 +85,7 @@ describe('prompt fragments', () => {
       const node = FRAGMENTS.find((f) => f.id === 'node.performance')!
       const composed = composeSystemPrompt(base, ['node.performance'])
       expect(composed).toContain(base)
-      expect(composed).toContain('Follow these standards')
+      expect(composed).toContain(STANDARDS_FOOTER)
       expect(composed).toContain(node.body)
     })
 

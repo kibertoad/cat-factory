@@ -9,6 +9,12 @@ import type {
 } from '@cat-factory/kernel'
 import { CONTEXT_DOCUMENTS_OVER_BUDGET, ValidationError } from '@cat-factory/kernel'
 import type { AgentRouting } from '@cat-factory/agents'
+import {
+  EFFORT_REPORT_FILE,
+  EFFORT_REPORT_GUIDANCE,
+  EXECUTION_SANDBOX_GUIDANCE,
+  READ_ONLY_GUARDRAIL,
+} from '@cat-factory/agents'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   ContainerAgentExecutor,
@@ -193,6 +199,38 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
   it('read-only (architect)', async () => {
     await executor.startJob(context('architect'))
     expect(captured[0]).toMatchSnapshot()
+  })
+
+  // The two directives below are only ever composed TOGETHER here, at the container-dispatch
+  // chokepoint: the guardrail rides `systemPromptFor` and the effort report is appended by
+  // `buildKindBody`, so neither package can assert the pair on its own.
+  it('reconciles the read-only guardrail with the effort report it is handed', async () => {
+    await executor.startJob(context('architect'))
+    const systemPrompt = captured[0]!.spec.systemPrompt as string
+    expect(systemPrompt).toContain(READ_ONLY_GUARDRAIL)
+    expect(systemPrompt).toContain(EFFORT_REPORT_GUIDANCE)
+    // The guardrail forbids creating files and the effort report orders one written, so the
+    // guardrail names it as its single exception. Without that an agent either disobeyed one of
+    // them or spent a turn asking which won, on every read-only run.
+    expect(READ_ONLY_GUARDRAIL).toContain(EFFORT_REPORT_FILE)
+    // And the effort report no longer times itself off a commit this step is forbidden to make.
+    expect(EFFORT_REPORT_GUIDANCE).not.toContain('after any commit/push')
+    // The carve-out has to come first: it says "the instructions below".
+    expect(systemPrompt.indexOf(READ_ONLY_GUARDRAIL)).toBeLessThan(
+      systemPrompt.indexOf(EFFORT_REPORT_GUIDANCE),
+    )
+  })
+
+  it('states the execution sandbox contract to every container kind, not just one', async () => {
+    // Platform facts no agent can derive from the checkout (no Kubernetes tooling, a Docker daemon
+    // that must be probed, toolchain versions that are the image's), plus the rule that an artifact
+    // this sandbox cannot execute is still a correct artifact. Absent, a coder and its reviewer
+    // each rediscovered that the Dockerfile they were asked for could not be built here.
+    for (const kind of ['coder', 'architect', 'reviewer', 'tester-api', 'merger']) {
+      const { executor: exec, captured: seen } = makeExecutor()
+      await exec.startJob(context(kind))
+      expect(seen[0]!.spec.systemPrompt as string).toContain(EXECUTION_SANDBOX_GUIDANCE)
+    }
   })
 
   it('default (coder)', async () => {

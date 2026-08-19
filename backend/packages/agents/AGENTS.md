@@ -7,9 +7,15 @@
 - `agents/`: the agent catalog + per-kind roles: `catalog.ts`, `kinds/` (per-kind definitions;
   `versions.ts` holds the versioned prompts, bump the number when you edit one), `prompts/`
   (`systemPromptFor`/`userPromptFor`; the shared fragments in `prompts/shared.ts`, incl.
-  `FINAL_ANSWER_IN_REPLY` and the sentinel-file guidances `EFFORT_REPORT_GUIDANCE`,
+  `FINAL_ANSWER_IN_REPLY`, `EXECUTION_SANDBOX_GUIDANCE` (what the container can and cannot run,
+  and that an artifact it cannot execute is still a correct one) and the sentinel-file guidances
+  `EFFORT_REPORT_GUIDANCE`,
   `FOLLOW_UP_GUIDANCE`, and `PR_DESCRIPTION_GUIDANCE` (the reviewer briefing a PR-opening coding
-  agent writes to `.cat-pr-description.md`, which the harness lifts onto the PR it opens), plus
+  agent writes to `.cat-pr-description.md`, which the harness lifts onto the PR it opens). Two of
+  those are composed at the container-dispatch chokepoint rather than here, so the pair a read-only
+  kind receives is only assertable in `@cat-factory/server`'s `containerAgentJobBody.spec.ts`:
+  `READ_ONLY_GUARDRAIL` names `EFFORT_REPORT_FILE` as its ONE permitted write, because the
+  chokepoint hands every container kind both "create no files" and "write this file". Also
   `REVIEW_FINDINGS_LAYOUT`, carried by the COMPANIONS, which asks each point for its own
   severity-graded `comments` entry (a `blocker` holds the run) and keeps the `summary` a verdict
   rather than a second copy of the list; preserved across a workspace override. A reviewer that
