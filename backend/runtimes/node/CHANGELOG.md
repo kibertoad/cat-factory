@@ -1,5 +1,57 @@
 # @cat-factory/node-server
 
+## 0.213.0
+
+### Minor Changes
+
+- 72ecc7c: Skills declare a group, and a review task can queue review skills onto its run.
+
+  A `SKILL.md` may now declare `group:` (`build`, `review`, `test`, `write`, `plan`, `operate`,
+  `other`), which is what lets a surface offer the part of the catalog that fits it. A manifest that
+  declares nothing, or a value this build does not know, reads as `other`, and the account library
+  shows the declared value beside it so the author can fix their frontmatter.
+
+  A `review` task carries an ordered queue of `review`-group skills (`taskTypeFields.reviewSkillIds`,
+  capped at 8), picked in the create-task form. The engine resolves them onto the reviewer's own
+  skills at dispatch, so the harness installs a team's Performance Review or Security Review playbook
+  exactly as it installs a `skill` step's pick, and each version is pinned on the step. Which agent
+  receives the queue is the new `review-skills` trait, carried by `pr-reviewer`.
+
+  A queued skill that has left the catalog FAILS the dispatch rather than being skipped: a review
+  that quietly dropped the security lens it was asked for reads exactly like a clean one.
+
+  The queue is editable after creation on the task inspector's review panel, which matters because a
+  queued skill that has left the catalog fails every dispatch of that task: the failure names the
+  task's queue as where to fix it, so that surface has to exist.
+
+  Internal break: `AccountSkillRecord` gains a required `group`, and `account_skills` gains a
+  `skill_group` column defaulting to `other` on both runtimes. Existing rows read as `other` until
+  their `SKILL.md` is next edited, which is the same edit that gives the field a value. The public
+  API's task-field table is unchanged.
+
+### Patch Changes
+
+- Updated dependencies [72ecc7c]
+  - @cat-factory/agents@0.139.0
+  - @cat-factory/contracts@0.323.0
+  - @cat-factory/kernel@0.314.0
+  - @cat-factory/orchestration@0.283.0
+  - @cat-factory/server@0.299.0
+  - @cat-factory/binary-generators@0.3.1
+  - @cat-factory/consensus@0.16.35
+  - @cat-factory/provider-bedrock@0.7.487
+  - @cat-factory/provider-cloudflare@0.7.488
+  - @cat-factory/eks@0.1.339
+  - @cat-factory/gates@0.11.1
+  - @cat-factory/gitlab@0.22.1
+  - @cat-factory/integrations@0.166.1
+  - @cat-factory/observability-otel@0.22.1
+  - @cat-factory/prompt-fragments@1.0.90
+  - @cat-factory/spend@0.16.6
+  - @cat-factory/caching@0.20.35
+  - @cat-factory/observability-langfuse@0.11.1
+  - @cat-factory/provider-s3@0.2.407
+
 ## 0.212.1
 
 ### Patch Changes
