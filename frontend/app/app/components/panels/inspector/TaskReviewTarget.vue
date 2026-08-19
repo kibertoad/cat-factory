@@ -19,6 +19,10 @@ import { computed, ref, watch } from 'vue'
 import type { Block } from '~/types/domain'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import ReviewSkillQueue from '~/components/skills/ReviewSkillQueue.vue'
+import {
+  reviewQueueDirty,
+  reviewSkillQueuePatch,
+} from '~/components/panels/inspector/TaskReviewTarget.logic'
 
 const props = defineProps<{ block: Block }>()
 const board = useBoardStore()
@@ -46,25 +50,21 @@ watch(stored, (next) => {
   draft.value = [...next]
 })
 
-const dirty = computed(() => JSON.stringify(draft.value) !== JSON.stringify(stored.value))
+const dirty = computed(() => reviewQueueDirty(stored.value, draft.value))
 const saving = ref(false)
 
 /**
- * Write the queue through the BUILT-IN half of the per-type bag, which REPLACES that half whole:
- * the other built-in keys are read back off the block and sent with it, so editing the queue can
- * never clear the pull request this task reviews. The `custom` half is a separate request key and
- * is left alone by construction.
+ * Write the queue through the BUILT-IN half of the per-type bag, which REPLACES that half whole.
+ * What that means for the payload (carry the other built-in keys; express an EMPTY queue by the
+ * key's absence rather than by an empty array riding a stored one) is
+ * {@link reviewSkillQueuePatch}, which is where it is tested.
  */
 async function save() {
   if (!dirty.value) return
-  const { custom: _custom, ...builtin } = props.block.taskTypeFields ?? {}
   saving.value = true
   try {
     await board.updateBlock(props.block.id, {
-      builtinTaskTypeFields: {
-        ...builtin,
-        ...(draft.value.length ? { reviewSkillIds: [...draft.value] } : {}),
-      },
+      builtinTaskTypeFields: reviewSkillQueuePatch(props.block.taskTypeFields, draft.value),
     })
   } finally {
     saving.value = false
