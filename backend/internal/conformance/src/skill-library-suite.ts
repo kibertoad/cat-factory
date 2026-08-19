@@ -122,6 +122,7 @@ export function defineSkillLibrarySuite(name: string, makeRepos: () => SkillLibr
         accountId,
         name: 'Bug triage',
         description: 'Triage an incoming bug report',
+        group: 'review',
         instructions: '- Reproduce\n- Classify\n- Route',
         resources: [
           { path: '.claude/skills/bug-triage/templates/report.md', sha: 'sha-r', size: 128 },
@@ -142,9 +143,13 @@ export function defineSkillLibrarySuite(name: string, makeRepos: () => SkillLibr
       expect(await accountSkills.listByAccount(accountId)).toEqual([skill])
       expect(await accountSkills.listBySource(sourceId)).toEqual([skill])
 
-      // Upsert updates in place (a resource-only change), same primary key.
+      // Upsert updates in place (a resource-only change), same primary key. The group moves with
+      // it, and to a value THIS BUILD DOES NOT KNOW: the column holds what the manifest declared,
+      // so an author's typo (or a member retired after the row was written) reaches the read
+      // boundary intact and can be shown back to them, instead of being narrowed away in storage.
       const updated: AccountSkillRecord = {
         ...skill,
+        group: 'sekurity',
         resources: [{ path: '.claude/skills/bug-triage/checklist.md', sha: 'sha-c2', size: 70 }],
         pinnedCommit: 'commit-2',
         updatedAt: 2_000,
@@ -169,6 +174,9 @@ export function defineSkillLibrarySuite(name: string, makeRepos: () => SkillLibr
         accountId,
         name: 'Lean skill',
         description: 'No sibling resources',
+        // A manifest declaring no `group:` syncs as the unclassified shelf, which is also the
+        // column default every pre-existing row carries.
+        group: 'other',
         instructions: 'Just instructions',
         resources: [],
         sourceId: `${accountId}-src`,
@@ -193,6 +201,7 @@ export function defineSkillLibrarySuite(name: string, makeRepos: () => SkillLibr
         accountId,
         name: 'S',
         description: 'd',
+        group: 'other',
         instructions: 'i',
         resources: [],
         sourceId,

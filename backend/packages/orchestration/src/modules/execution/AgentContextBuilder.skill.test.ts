@@ -2,17 +2,19 @@ import { describe, expect, it } from 'vitest'
 import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
 import { InitiativePresetRegistry, ValidationError } from '@cat-factory/kernel'
 import { AgentContextBuilder, type AgentContextBuilderDeps } from './AgentContextBuilder.js'
-import { defaultAgentKindRegistry, SKILL_AGENT_KIND } from '@cat-factory/agents'
+import { defaultAgentKindRegistry, PR_REVIEWER_KIND, SKILL_AGENT_KIND } from '@cat-factory/agents'
 
-// A dispatch's skills come from two places: the `skill` step's own pick (`stepOptions.skillId`)
-// and the running agent KIND's declared playbooks (bundled in code, or referenced from the
-// account catalog). Both resolve through the optional `skillResolver` for catalog entries; unlike
-// the fragment resolver (absent ⇒ static pool), a REQUIRED skill with the resolver UNWIRED is a
-// hard ValidationError — a step asked to apply a skill and running against nothing is a silent
-// wrong run. These pin: the resolver populates `context.skills` + pins `step.skillVersions`; a
-// missing resolver throws; a skill step with no `skillId` (legacy/malformed) resolves nothing; a
+// A dispatch's skills come from three places: the `skill` step's own pick (`stepOptions.skillId`),
+// the running agent KIND's declared playbooks (bundled in code, or referenced from the
+// account catalog), and the TASK's own queue (a review task's specialist lenses, which reach only
+// a kind carrying the `review-skills` trait). Each resolves through the optional `skillResolver`
+// for catalog entries; unlike the fragment resolver (absent ⇒ static pool), a REQUIRED skill with
+// the resolver UNWIRED is a hard ValidationError — a step asked to apply a skill and running
+// against nothing is a silent wrong run. These pin: the resolver populates `context.skills` and
+// pins `step.skillVersions`; a missing resolver throws; a skill step with no `skillId` (legacy/malformed) resolves nothing; a
 // non-skill step never touches the resolver; a kind's BUNDLED skill needs no resolver at all; and
-// an `optional` catalog skill degrades rather than failing the run.
+// an `optional` catalog skill degrades rather than failing the run. The task queue's own rules
+// (who receives it, and that a vanished queued skill fails loudly) are pinned at the bottom.
 
 function step(over: Partial<PipelineStep> = {}): PipelineStep {
   return {
@@ -55,6 +57,27 @@ const RESOLVED = {
   version: { skillId: 'src:s:triage', commit: 'commit-abc', sha: 'sha-1' },
 }
 
+/**
+ * A `SkillResolver` double built from the per-skill answer alone: the batch method maps the
+ * singular one, which is the same relation the real resolver has in reverse (it batches, and its
+ * singular method is the one-id case). What these tests are about is WHICH skills resolve and what
+ * happens when one cannot, so a double that shares one answer for both entry points keeps every
+ * case honest without restating it twice. The batch's own read-count guarantees are pinned where
+ * they live, in `SkillRunResolver.test.ts`.
+ */
+function skillResolver(
+  resolveForRun: (workspaceId: string, skillId: string) => Promise<typeof RESOLVED>,
+) {
+  return {
+    resolveForRun,
+    resolveManyForRun: async (workspaceId: string, skillIds: readonly string[]) => {
+      const out = []
+      for (const id of skillIds) out.push(await resolveForRun(workspaceId, id))
+      return out
+    },
+  }
+}
+
 function makeBuilder(over: Partial<AgentContextBuilderDeps> = {}): AgentContextBuilder {
   const blocks = new Map<string, Block>([[TASK.id, TASK]])
   return new AgentContextBuilder({
@@ -70,7 +93,7 @@ function makeBuilder(over: Partial<AgentContextBuilderDeps> = {}): AgentContextB
 describe('AgentContextBuilder skill resolution', () => {
   it('resolves the picked skill and pins step.skillVersions', async () => {
     const s = step({ stepOptions: { skillId: 'src:s:triage' } })
-    const builder = makeBuilder({ skillResolver: { resolveForRun: async () => RESOLVED } })
+    const builder = makeBuilder({ skillResolver: skillResolver(async () => RESOLVED) })
     const context = await builder.buildContext('ws1', instance([s]), s, true, TASK)
     expect(context.skills).toEqual([RESOLVED.skill])
     expect(s.skillVersions).toEqual([RESOLVED.version])
@@ -103,11 +126,9 @@ describe('AgentContextBuilder skill resolution', () => {
   it('never touches the resolver for a non-skill step', async () => {
     const s = step({ agentKind: 'coder', stepOptions: { skillId: 'src:s:triage' } })
     const context = await makeBuilder({
-      skillResolver: {
-        resolveForRun: async () => {
-          throw new Error('should not be called for a non-skill step')
-        },
-      },
+      skillResolver: skillResolver(async () => {
+        throw new Error('should not be called for a non-skill step')
+      }),
     }).buildContext('ws1', instance([s]), s, true, TASK)
     expect(context.skills).toBeUndefined()
     expect(s.skillVersions).toBeUndefined()
@@ -240,11 +261,9 @@ describe('AgentContextBuilder skill resolution', () => {
     expect(unwired.skills).toBeUndefined()
     const broken = await makeBuilder({
       agentKindRegistry: registry,
-      skillResolver: {
-        resolveForRun: async () => {
-          throw new Error('skill was removed upstream')
-        },
-      },
+      skillResolver: skillResolver(async () => {
+        throw new Error('skill was removed upstream')
+      }),
     }).buildContext('ws1', instance([step({ agentKind: 'org-reviewer' })]), s, true, TASK)
     expect(broken.skills).toBeUndefined()
   })
@@ -261,8 +280,89 @@ describe('AgentContextBuilder skill resolution', () => {
     const s = step({ stepOptions: { skillId: 'src:s:triage' } })
     const context = await makeBuilder({
       agentKindRegistry: registry,
-      skillResolver: { resolveForRun: async () => RESOLVED },
+      skillResolver: skillResolver(async () => RESOLVED),
     }).buildContext('ws1', instance([s]), s, true, TASK)
     expect(context.skills?.map((sk) => sk.skillId)).toEqual(['house-review', 'src:s:triage'])
+  })
+})
+
+describe('a review task’s queued skills', () => {
+  const REVIEW_TASK = {
+    ...TASK,
+    taskType: 'review',
+    taskTypeFields: { prNumber: 42, reviewSkillIds: ['src:s:security', 'src:s:perf'] },
+  } as unknown as Block
+
+  function resolverFor(known: Record<string, string>) {
+    return skillResolver(async (_ws: string, skillId: string) => {
+      const name = known[skillId]
+      if (!name) throw new ValidationError(`Skill '${skillId}' is no longer available.`)
+      return {
+        skill: {
+          skillId,
+          origin: 'catalog' as const,
+          name,
+          description: `The ${name} playbook`,
+          instructions: `Apply ${name}.`,
+          resources: [],
+        },
+        version: { skillId, commit: 'commit-abc', sha: `sha-${name}` },
+      }
+    })
+  }
+
+  it('reaches the reviewer in the order they were queued, pinning each version', async () => {
+    const s = step({ agentKind: PR_REVIEWER_KIND })
+    const context = await makeBuilder({
+      skillResolver: resolverFor({ 'src:s:security': 'security', 'src:s:perf': 'perf' }),
+    }).buildContext('ws1', instance([s]), s, true, REVIEW_TASK)
+    expect(context.skills?.map((sk) => sk.skillId)).toEqual(['src:s:security', 'src:s:perf'])
+    expect(s.skillVersions?.map((v) => v.skillId)).toEqual(['src:s:security', 'src:s:perf'])
+  })
+
+  it('does NOT reach a kind without the review-skills trait', async () => {
+    // The queue is a property of the review TASK, and a build pipeline's steps run on the same
+    // block shape. Without the trait gate a coder would silently inherit review lenses.
+    const s = step({ agentKind: 'coder' })
+    const context = await makeBuilder({
+      skillResolver: resolverFor({ 'src:s:security': 'security', 'src:s:perf': 'perf' }),
+    }).buildContext('ws1', instance([s]), s, true, REVIEW_TASK)
+    expect(context.skills).toBeUndefined()
+  })
+
+  it('FAILS the dispatch when a queued skill has left the catalog, naming the task', async () => {
+    // Never optional: a review that quietly drops the security lens it was asked for reads as a
+    // clean review. The message has to send the human to the task, not to the pipeline step.
+    const s = step({ agentKind: PR_REVIEWER_KIND })
+    const build = makeBuilder({ skillResolver: resolverFor({ 'src:s:security': 'security' }) })
+    await expect(build.buildContext('ws1', instance([s]), s, true, REVIEW_TASK)).rejects.toThrow(
+      /no longer available.*task’s skills/s,
+    )
+  })
+
+  it('fails a queue it cannot resolve at all when no skill library is wired', async () => {
+    const s = step({ agentKind: PR_REVIEWER_KIND })
+    await expect(
+      makeBuilder().buildContext('ws1', instance([s]), s, true, REVIEW_TASK),
+    ).rejects.toBeInstanceOf(ValidationError)
+  })
+
+  it('runs a queued skill the reviewer’s kind already declares exactly once', async () => {
+    const registry = defaultAgentKindRegistry()
+    registry.registerSkill({
+      id: 'src:s:security',
+      name: 'security',
+      description: 'The house security playbook',
+      instructions: 'Check the auth paths.',
+    })
+    registry.assignSkills(PR_REVIEWER_KIND, ['src:s:security'])
+    const s = step({ agentKind: PR_REVIEWER_KIND })
+    const context = await makeBuilder({
+      agentKindRegistry: registry,
+      skillResolver: resolverFor({ 'src:s:perf': 'perf' }),
+    }).buildContext('ws1', instance([s]), s, true, REVIEW_TASK)
+    expect(context.skills?.map((sk) => sk.skillId)).toEqual(['src:s:security', 'src:s:perf'])
+    // The declared half is BUNDLED, so only the queued half pins a catalog version.
+    expect(s.skillVersions?.map((v) => v.skillId)).toEqual(['src:s:perf'])
   })
 })

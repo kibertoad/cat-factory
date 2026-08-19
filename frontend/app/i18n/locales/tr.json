@@ -336,7 +336,14 @@
         "derivedTitle": "{ref} incele",
         "derivedTitleFallback": "Pull request'i incele",
         "prNotFound": "#{number} numaralı pull request bu servisin deposunda bulunamadı. Numarayı kontrol edin veya servisi, pull request'in bulunduğu depoya bağlayın.",
-        "prRepoMismatch": "Bu pull request başka bir depoda. Bu servis {repo} deposunu inceliyor; inceleme görevini pull request'in deposuna bağlı servis altında oluşturun."
+        "prRepoMismatch": "Bu pull request başka bir depoda. Bu servis {repo} deposunu inceliyor; inceleme görevini pull request'in deposuna bağlı servis altında oluşturun.",
+        "skills": {
+          "label": "İnceleme becerileri",
+          "hint": "Beceri kitaplığınızdan uzmanlaşmış inceleme kılavuzlarını sıraya alın. İnceleyici bunları seçtiğiniz sırayla uygular.",
+          "pickerEmpty": "Katalogda inceleme becerisi yok. Bir becerinin SKILL.md dosyasına group: review ekleyin.",
+          "capped": "Bir inceleme en fazla {max} beceri taşır.",
+          "done": "Tamam"
+        }
       },
       "contextFailed": "Görev oluşturulmadı: {count} ek okunamadı | Görev oluşturulmadı: {count} ek okunamadı"
     },
@@ -1147,7 +1154,8 @@
       "title": "İncelenen pull request",
       "hint": "Bu görevin incelediği mevcut pull request.",
       "prNumber": "PR #{number}",
-      "focus": "Odak: {focus}"
+      "focus": "Odak: {focus}",
+      "skills": "İnceleme becerileri"
     },
     "execution": {
       "title": "Yürütme",
@@ -7380,7 +7388,8 @@
       "title": "Senkronize beceriler",
       "empty": "Henüz senkronize edilmiş beceri yok. Beceri klasörlerini içe aktarmak için aşağıda bir depo kaynağı bağlayın.",
       "resources": "{count} kaynak",
-      "pinned": "{commit} üzerine sabitlendi"
+      "pinned": "{commit} üzerine sabitlendi",
+      "groupUnknown": "Bu sürümün bilmediği “{group}” grubunu bildiriyor, bu yüzden Diğer altında listeleniyor."
     },
     "sources": {
       "title": "Depo kaynakları",
@@ -7417,6 +7426,15 @@
       "checkSourceFailed": "Kaynak denetlenemedi",
       "sourceUnlinked": "Kaynağın bağlantısı kaldırıldı",
       "unlinkSourceFailed": "Kaynağın bağlantısı kaldırılamadı"
+    },
+    "groups": {
+      "build": "Geliştirme",
+      "review": "İnceleme",
+      "test": "Test",
+      "write": "Yazma",
+      "plan": "Planlama",
+      "operate": "İşletme",
+      "other": "Diğer"
     }
   },
   "merge": {

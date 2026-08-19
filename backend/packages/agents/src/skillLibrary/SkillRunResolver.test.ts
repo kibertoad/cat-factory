@@ -28,6 +28,7 @@ function skillRecord(overrides: Partial<AccountSkillRecord> = {}): AccountSkillR
     accountId: ACCOUNT,
     name: 'triage',
     description: 'Triage a bug',
+    group: 'review',
     instructions: '1. Reproduce\n2. Classify',
     resources: [
       { path: '.claude/skills/triage/templates/report.md', sha: 'sha-r', size: 40 },
@@ -269,5 +270,70 @@ describe('SkillRunResolver', () => {
       expect(syncSource).not.toHaveBeenCalled()
       expect(skill.instructions).toContain('Reproduce')
     })
+  })
+})
+
+describe('SkillRunResolver.resolveManyForRun', () => {
+  // What a dispatch resolving SEVERAL skills must not do: pay per skill for what the account
+  // answers once. The catalog cache passes through on the Worker isolate profile, so a per-skill
+  // loop is a repeated D1 read there and a repeated GitHub probe everywhere.
+  function makeBatchResolver(records: AccountSkillRecord[]) {
+    const accountSkillRepository = {
+      get: vi.fn(
+        async (_a: string, skillId: string) => records.find((r) => r.skillId === skillId) ?? null,
+      ),
+      listByAccount: vi.fn(async () => records),
+    } as unknown as AccountSkillRepository
+    const skillSourceRepository = {
+      get: vi.fn(async () => sourceRecord()),
+    } as unknown as SkillSourceRepository
+    const githubClient = {
+      getFileContent: vi.fn(async (): Promise<RepoFileContent | null> => null),
+      latestCommitSha: vi.fn(async () => sourceRecord().lastSyncedCommit),
+    } as unknown as GitHubClient
+    const resolver = new SkillRunResolver({
+      workspaceRepository: {
+        accountOf: vi.fn(async () => ACCOUNT),
+      } as unknown as WorkspaceRepository,
+      catalogService: new SkillCatalogService({ accountSkillRepository }),
+      skillSourceRepository,
+      githubClient,
+      resolveInstallationId: async () => 42,
+      syncSource: vi.fn(async () => {}),
+    })
+    return { resolver, accountSkillRepository, skillSourceRepository, githubClient }
+  }
+
+  const lensA = skillRecord({
+    skillId: `src:${SOURCE_ID}:security`,
+    name: 'security',
+    resources: [],
+  })
+  const lensB = skillRecord({ skillId: `src:${SOURCE_ID}:perf`, name: 'perf', resources: [] })
+
+  it('answers in the order asked, off ONE catalog read and ONE probe per source', async () => {
+    const { resolver, accountSkillRepository, skillSourceRepository, githubClient } =
+      makeBatchResolver([lensA, lensB])
+
+    const resolved = await resolver.resolveManyForRun(WORKSPACE, [lensB.skillId, lensA.skillId])
+
+    expect(resolved.map((r) => r.skill.skillId)).toEqual([lensB.skillId, lensA.skillId])
+    expect(accountSkillRepository.listByAccount).toHaveBeenCalledTimes(1)
+    // Both skills came from one source dir, so its head commit is probed once and its row read once.
+    expect(githubClient.latestCommitSha).toHaveBeenCalledTimes(1)
+    expect(skillSourceRepository.get).toHaveBeenCalledTimes(1)
+  })
+
+  it('throws for the first id the catalog cannot answer, naming it', async () => {
+    const { resolver } = makeBatchResolver([lensA])
+    await expect(
+      resolver.resolveManyForRun(WORKSPACE, [lensA.skillId, 'src:s:gone']),
+    ).rejects.toThrow(/src:s:gone/)
+  })
+
+  it('resolves nothing, and reads nothing, for an empty ask', async () => {
+    const { resolver, accountSkillRepository } = makeBatchResolver([lensA])
+    expect(await resolver.resolveManyForRun(WORKSPACE, [])).toEqual([])
+    expect(accountSkillRepository.listByAccount).not.toHaveBeenCalled()
   })
 })

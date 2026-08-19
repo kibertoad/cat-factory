@@ -3,7 +3,7 @@ import type {
   AccountSkillRepository,
   GroupCacheHandle,
 } from '@cat-factory/kernel'
-import type { AccountSkill } from '@cat-factory/contracts'
+import { isSkillGroup, normalizeSkillGroup, type AccountSkill } from '@cat-factory/contracts'
 
 export interface SkillCatalogServiceDependencies {
   accountSkillRepository: AccountSkillRepository
@@ -59,13 +59,22 @@ export class SkillCatalogService {
   }
 }
 
+/**
+ * Project a stored row onto the wire, narrowing its raw declared group to the shelf the picker
+ * compares on. A value this build does not know (a frontmatter typo, or a member retired since the
+ * row was synced) lands on `other` AND is echoed as `declaredGroup`, so the management surface can
+ * tell the author what they wrote rather than letting the reclassification pass in silence.
+ */
 function recordToWire(record: AccountSkillRecord): AccountSkill {
+  const declared = record.group.trim().toLowerCase()
   return {
     id: record.skillId,
     name: record.name,
     description: record.description,
     instructions: record.instructions,
     resources: record.resources,
+    group: normalizeSkillGroup(declared),
+    ...(declared && !isSkillGroup(declared) ? { declaredGroup: declared } : {}),
     source: { sourceId: record.sourceId, path: record.sourcePath, sha: record.sourceSha },
     pinnedCommit: record.pinnedCommit,
     createdAt: record.createdAt,

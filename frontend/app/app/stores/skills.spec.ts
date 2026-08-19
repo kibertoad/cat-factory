@@ -3,7 +3,12 @@ import { useSkillsStore } from '~/stores/skills'
 import { usePipelinesStore } from '~/stores/pipelines'
 import type { SkillSummary } from '~/types/domain'
 
-const summary = (id: string, name = id): SkillSummary => ({ id, name, description: `${name} desc` })
+const summary = (id: string, name = id, group: SkillSummary['group'] = 'other'): SkillSummary => ({
+  id,
+  name,
+  description: `${name} desc`,
+  group,
+})
 
 /**
  * The skill picker spans two stores: the snapshot-hydrated `useSkillsStore` (the catalog the
@@ -25,6 +30,27 @@ describe('skills picker store — snapshot-hydrated catalog', () => {
     // An empty hydrate (feature off / account with no skills) clears it.
     skills.hydrate([])
     expect(skills.catalog).toEqual([])
+  })
+})
+
+describe('skills store — the review task’s queue offers only review skills', () => {
+  it('offers the review group in catalog order and nothing else', () => {
+    const skills = useSkillsStore()
+    skills.hydrate([
+      summary('sk_build', 'Scaffold a service', 'build'),
+      summary('sk_sec', 'Security review', 'review'),
+      summary('sk_perf', 'Performance review', 'review'),
+      summary('sk_loose', 'Uncategorised', 'other'),
+    ])
+    expect(skills.reviewSkills.map((s) => s.id)).toEqual(['sk_sec', 'sk_perf'])
+  })
+
+  it('offers nothing when the account has authored no review skills', () => {
+    // The ordinary state for an account whose catalog is all build playbooks. The picker renders
+    // its empty note from this; it must not fall back to offering the whole catalog.
+    const skills = useSkillsStore()
+    skills.hydrate([summary('sk_build', 'Scaffold a service', 'build')])
+    expect(skills.reviewSkills).toEqual([])
   })
 })
 

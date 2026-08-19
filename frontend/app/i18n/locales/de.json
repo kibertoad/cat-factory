@@ -1733,7 +1733,8 @@
       "title": "Geprüfter Pull Request",
       "hint": "Der bestehende Pull Request, den diese Aufgabe prüft.",
       "prNumber": "PR #{number}",
-      "focus": "Schwerpunkt: {focus}"
+      "focus": "Schwerpunkt: {focus}",
+      "skills": "Review-Skills"
     },
     "execution": {
       "title": "Ausführung",
@@ -3100,7 +3101,14 @@
         "derivedTitle": "{ref} prüfen",
         "derivedTitleFallback": "Pull Request prüfen",
         "prNotFound": "Pull Request #{number} wurde im Repository dieses Service nicht gefunden. Prüfe die Nummer, oder verknüpfe den Service mit dem Repository, in dem der Pull Request liegt.",
-        "prRepoMismatch": "Dieser Pull Request liegt in einem anderen Repository. Dieser Service prüft {repo}; lege die Prüfaufgabe unter dem Service an, der mit dem Repository des Pull Requests verknüpft ist."
+        "prRepoMismatch": "Dieser Pull Request liegt in einem anderen Repository. Dieser Service prüft {repo}; lege die Prüfaufgabe unter dem Service an, der mit dem Repository des Pull Requests verknüpft ist.",
+        "skills": {
+          "label": "Review-Skills",
+          "hint": "Stelle spezialisierte Review-Playbooks aus deiner Skill-Bibliothek in eine Warteschlange. Der Reviewer wendet sie in der gewählten Reihenfolge an.",
+          "pickerEmpty": "Keine Review-Skills im Katalog. Ergänze group: review in der SKILL.md eines Skills, damit er hier erscheint.",
+          "capped": "Ein Review führt höchstens {max} Skills aus.",
+          "done": "Fertig"
+        }
       },
       "contextFailed": "Aufgabe nicht erstellt: {count} Anhang konnte nicht gelesen werden | Aufgabe nicht erstellt: {count} Anhänge konnten nicht gelesen werden"
     },
@@ -7380,7 +7388,8 @@
       "title": "Synchronisierte Skills",
       "empty": "Noch keine Skills synchronisiert. Verknüpfe unten eine Repo-Quelle, um ihre Skill-Ordner zu importieren.",
       "resources": "{count} Ressourcen",
-      "pinned": "fixiert auf {commit}"
+      "pinned": "fixiert auf {commit}",
+      "groupUnknown": "Gibt die Gruppe „{group}“ an, die diese Version nicht kennt; sie wird unter Sonstige geführt."
     },
     "sources": {
       "title": "Repo-Quellen",
@@ -7417,6 +7426,15 @@
       "checkSourceFailed": "Quelle konnte nicht geprüft werden",
       "sourceUnlinked": "Quelle getrennt",
       "unlinkSourceFailed": "Quelle konnte nicht getrennt werden"
+    },
+    "groups": {
+      "build": "Bauen",
+      "review": "Review",
+      "test": "Testen",
+      "write": "Schreiben",
+      "plan": "Planen",
+      "operate": "Betrieb",
+      "other": "Sonstige"
     }
   },
   "merge": {

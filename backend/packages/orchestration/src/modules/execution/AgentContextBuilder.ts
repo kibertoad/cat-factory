@@ -53,6 +53,7 @@ import {
   DOC_FINALIZER_KIND,
   DOC_WRITER_KIND,
   hasTrait,
+  REVIEW_SKILLS_TRAIT,
   standardsVerbosityFor,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry, AgentKindSource } from '@cat-factory/agents'
@@ -124,19 +125,28 @@ export interface FragmentBodyResolver {
 }
 
 /**
- * Resolves a `skill` step's picked skill (`stepOptions.skillId`) to the payload the container
- * executor renders — the persisted instructions + the resource bodies fetched at the skill's
- * pinned commit — plus the version pin recorded on the step. Implemented by the skill library's
- * {@link SkillRunResolver}; wired only when the skill library is configured. Unlike the fragment
- * resolver (whose absence degrades to the static pool), a MISSING skill resolver on a step that
- * DID pick a skill is a hard {@link ValidationError} at dispatch — a skill step running against
- * nothing is a silent wrong run, not a graceful degrade.
+ * Resolves a catalog skill to the payload the container executor renders — the persisted
+ * instructions + the resource bodies fetched at the skill's pinned commit — plus the version pin
+ * recorded on the step. Implemented by the skill library's {@link SkillRunResolver}; wired only
+ * when the skill library is configured. Unlike the fragment resolver (whose absence degrades to
+ * the static pool), a MISSING skill resolver where a skill WAS picked is a hard
+ * {@link ValidationError} at dispatch: running against nothing is a silent wrong run, not a
+ * graceful degrade.
+ *
+ * `resolveManyForRun` is not a convenience over the singular one. A dispatch resolving a LIST
+ * (a review task's queued lenses) must resolve it in one pass: the implementation answers
+ * `accountOf`, the catalog read and the per-source freshness probe once for the whole list, where
+ * a caller looping the singular method pays each of them per skill.
  */
 export interface SkillResolver {
   resolveForRun(
     workspaceId: string,
     skillId: string,
   ): Promise<{ skill: ResolvedSkill; version: SkillVersionPin }>
+  resolveManyForRun(
+    workspaceId: string,
+    skillIds: readonly string[],
+  ): Promise<{ skill: ResolvedSkill; version: SkillVersionPin }[]>
 }
 
 export type { DocumentUrlResolver } from './linked-context.js'
@@ -499,7 +509,7 @@ export class AgentContextBuilder {
         hasDesignContext: linked.hasDesignContext,
       }),
       this.resolveDocAuthoringContext(workspaceId, agentKind, block),
-      this.resolveSkillsForStep(workspaceId, agentKind, step),
+      this.resolveSkillsForStep(workspaceId, agentKind, step, block),
       resolveDispatchSettings(this.deps, { workspaceId, agentKind, step, block, initiatedBy }),
       // A consensus step's TIER SET: resolve the named groups and materialise the one this
       // task's estimate earns. In the same read wave as the rest of the context, so a tiered
@@ -1222,16 +1232,22 @@ export class AgentContextBuilder {
   }
 
   /**
-   * Resolve the skills this dispatch applies — the agent KIND's declared playbooks plus a `skill`
-   * step's own picked skill — and PIN each catalog skill's version onto the step
-   * (`step.skillVersions`), so the run records exactly which skills (and at which commit/blob)
-   * ran. Delegates to {@link resolveRunSkills}, which owns the precedence, the dedup and the
-   * per-source failure policy; a kind with no declarations and a step with no pick costs nothing.
+   * Resolve the skills this dispatch applies — the agent KIND's declared playbooks, the TASK's
+   * queued skills, and a `skill` step's own picked skill — and PIN each catalog skill's version
+   * onto the step (`step.skillVersions`), so the run records exactly which skills (and at which
+   * commit/blob) ran. Delegates to {@link resolveRunSkills}, which owns the precedence, the dedup
+   * and the per-source failure policy; a kind with no declarations, no queue and no pick costs
+   * nothing.
+   *
+   * The TASK queue is gated HERE rather than inside the resolver because who receives it is a
+   * property of the dispatched kind: only a kind carrying `review-skills` applies a review task's
+   * lenses, so a build pipeline's coder never sees a field only a review task sets.
    */
   private async resolveSkillsForStep(
     workspaceId: string,
     agentKind: string,
     step: PipelineStep,
+    block: Block,
   ): Promise<{
     skills: ResolvedSkill[]
     versions: SkillVersionPin[]
@@ -1241,11 +1257,15 @@ export class AgentContextBuilder {
     // here, and the tool-server DECLARATIONS the executor resolves for servability. Resolving them
     // separately would mean two reads of a deployment-level source that crosses a network.
     const capabilities = await resolveKindCapabilities(agentKind, this.deps)
+    const taskSkillIds = hasTrait(agentKind, REVIEW_SKILLS_TRAIT, this.deps.agentKindRegistry)
+      ? (block.taskTypeFields?.reviewSkillIds ?? [])
+      : []
     const resolved = await resolveRunSkills({
       workspaceId,
       agentKind,
       step,
       capabilities,
+      ...(taskSkillIds.length ? { taskSkillIds } : {}),
       agentKindRegistry: this.deps.agentKindRegistry,
       ...(this.deps.skillResolver ? { skillResolver: this.deps.skillResolver } : {}),
       ...(this.deps.logger ? { logger: this.deps.logger } : {}),

@@ -39,6 +39,15 @@ export interface AccountSkillRecord {
   name: string
   /** One-line description from frontmatter; feeds the palette/picker (slice 3). */
   description: string
+  /**
+   * The group the manifest declared itself into (`group:` in frontmatter), lowercased and trimmed,
+   * or `other` when it declared none. Stored RAW rather than narrowed to the wire vocabulary: what
+   * an author wrote is what the management surface has to be able to show them when it is a value
+   * this build does not know (a typo, or a member retired since the row was synced). Readers narrow
+   * with `normalizeSkillGroup` from `@cat-factory/contracts`, which lands an unknown value on the
+   * `other` shelf without guessing a neighbour.
+   */
+  group: string
   /** The `SKILL.md` markdown body — the procedural instructions the agent follows. */
   instructions: string
   /** Sibling resource files (manifest only; bodies fetched at dispatch, slice 2). */

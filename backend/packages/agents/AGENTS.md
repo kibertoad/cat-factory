@@ -147,8 +147,11 @@
   synthetic rows).
 - `skillLibrary/`: the repo-sourced Claude Skills catalog + sync (ADR 0024) and
   `SkillRunResolver`, which resolves ONE catalog skill (instructions + resource bodies at its
-  pinned commit) for a dispatch. A BUNDLED skill needs none of this: it is deployment code,
-  registered on `AgentKindRegistry.registerSkill`.
+  pinned commit) for a dispatch, whoever asked for it (a `skill` step's pick, a kind's declaration,
+  or a review task's queue). A BUNDLED skill needs none of this: it is deployment code,
+  registered on `AgentKindRegistry.registerSkill`. A skill's `group:` is parsed here and stored
+  RAW; `SkillCatalogService` narrows it to the wire vocabulary and echoes an unrecognised value as
+  `declaredGroup` (ADR 0059).
 - `foundationalServices/`: the shared-capability catalog an Architect designs against
   (`backend/docs/adr/0031-foundational-services.md`). `FoundationalServiceCatalogService` owns the
   three-tier merge (the deployment's code-registered kernel `FoundationalServiceRegistry` under

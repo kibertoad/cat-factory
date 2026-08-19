@@ -1,7 +1,7 @@
 import { prReviewAgentOutputSchema } from '@cat-factory/contracts'
 import { defineStructuredOutput } from './structured-output.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
-import { CODE_AWARE_TRAIT } from './traits.js'
+import { CODE_AWARE_TRAIT, REVIEW_SKILLS_TRAIT } from './traits.js'
 import { FRAGMENT_ADHERENCE_GUIDANCE_CONTEXT_FILES } from '../prompts/shared.js'
 import {
   prReviewerDiffPreOp,
@@ -138,6 +138,10 @@ In each subagent's prompt:
   Where \`.cat-context/standards.md\` lists a standard with a SECTION MAP, name the sections that
   apply and pass their line ranges so the subagent reads those ranges rather than the whole file.
   Do not paraphrase a standard into the prompt — a summary is not the standard.
+- Name any REVIEW SKILL that bears on the slice, and pass that skill's steps to the subagent.
+  A skill is a specialist lens this review was asked to apply (performance, security, accessibility)
+  and it earns its cost only where the slice's files are in its scope: routing every skill to every
+  slice pays for all of them on every one of that slice's turns.
 - Tell it to check \`.cat-context/pr-existing-comments.md\` for its OWN paths only
   (\`grep -n -A2 "^### <path>" …\`) and skip anything already raised there.
 - Give it an explicit TURN BUDGET scaled to the slice: roughly one turn per 10 changed lines,
@@ -265,7 +269,11 @@ export const PR_REVIEWER_AGENT_KINDS: AgentKindDefinition[] = [
     // chosen fragments are silently dropped by `AgentContextBuilder.resolveFragments` (which gates
     // on the `code-aware`/`doc-aware` traits), so they never reach the tenant fragment resolver
     // and record 0 in the agent-context snapshot ("Provided context").
-    traits: [CODE_AWARE_TRAIT],
+    // `review-skills` is what lets the review TASK queue specialist playbooks (a Performance
+    // Review, a Security Review) onto this dispatch: the engine resolves the task's
+    // `reviewSkillIds` onto the run context, and the harness installs them exactly as it installs
+    // a `skill` step's pick. Without the trait the queue resolves for nobody.
+    traits: [CODE_AWARE_TRAIT, REVIEW_SKILLS_TRAIT],
     // ...but they are delivered as `.cat-context/standard-<id>.md` FILES rather than folded into
     // this kind's system prompt. The parent reviewer delegates the actual reading to per-slice
     // subagents, so folding charged it for every standard on every one of its turns while the

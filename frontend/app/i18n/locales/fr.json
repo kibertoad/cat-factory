@@ -336,7 +336,14 @@
         "derivedTitle": "Examiner {ref}",
         "derivedTitleFallback": "Examiner la pull request",
         "prNotFound": "La pull request n° {number} est introuvable dans le dépôt de ce service. Vérifiez le numéro, ou reliez le service au dépôt qui héberge cette pull request.",
-        "prRepoMismatch": "Cette pull request se trouve dans un autre dépôt. Ce service examine {repo} : créez la tâche de revue sous le service relié au dépôt de la pull request."
+        "prRepoMismatch": "Cette pull request se trouve dans un autre dépôt. Ce service examine {repo} : créez la tâche de revue sous le service relié au dépôt de la pull request.",
+        "skills": {
+          "label": "Compétences de relecture",
+          "hint": "Mettez en file des guides de relecture spécialisés issus de votre bibliothèque. Le relecteur les applique dans l’ordre choisi.",
+          "pickerEmpty": "Aucune compétence de relecture dans votre catalogue. Ajoutez group: review au SKILL.md d’une compétence pour la proposer ici.",
+          "capped": "Une relecture porte au maximum {max} compétences.",
+          "done": "Terminé"
+        }
       },
       "contextFailed": "Tâche non créée : {count} pièce jointe illisible | Tâche non créée : {count} pièces jointes illisibles"
     },
@@ -1147,7 +1154,8 @@
       "title": "Pull request en revue",
       "hint": "La pull request existante que cette tâche examine.",
       "prNumber": "PR n° {number}",
-      "focus": "Objet : {focus}"
+      "focus": "Objet : {focus}",
+      "skills": "Compétences de relecture"
     },
     "execution": {
       "title": "Exécution",
@@ -7380,7 +7388,8 @@
       "title": "Compétences synchronisées",
       "empty": "Aucune compétence synchronisée pour l'instant. Reliez une source de dépôt ci-dessous pour importer ses dossiers de compétences.",
       "resources": "{count} ressources",
-      "pinned": "épinglée sur {commit}"
+      "pinned": "épinglée sur {commit}",
+      "groupUnknown": "Déclare le groupe « {group} », inconnu de cette version : la compétence est classée dans Autres."
     },
     "sources": {
       "title": "Sources de dépôt",
@@ -7417,6 +7426,15 @@
       "checkSourceFailed": "Impossible de vérifier la source",
       "sourceUnlinked": "Source dissociée",
       "unlinkSourceFailed": "Impossible de dissocier la source"
+    },
+    "groups": {
+      "build": "Construire",
+      "review": "Relire",
+      "test": "Tester",
+      "write": "Rédiger",
+      "plan": "Planifier",
+      "operate": "Exploiter",
+      "other": "Autres"
     }
   },
   "merge": {

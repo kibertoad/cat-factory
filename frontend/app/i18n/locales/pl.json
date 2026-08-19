@@ -336,7 +336,14 @@
         "derivedTitle": "Przegląd {ref}",
         "derivedTitleFallback": "Przegląd pull requesta",
         "prNotFound": "Nie znaleziono pull requesta #{number} w repozytorium tej usługi. Sprawdź numer albo powiąż usługę z repozytorium, w którym znajduje się ten pull request.",
-        "prRepoMismatch": "Ten pull request jest w innym repozytorium. Ta usługa przegląda {repo}, więc utwórz zadanie przeglądu w usłudze powiązanej z repozytorium tego pull requesta."
+        "prRepoMismatch": "Ten pull request jest w innym repozytorium. Ta usługa przegląda {repo}, więc utwórz zadanie przeglądu w usłudze powiązanej z repozytorium tego pull requesta.",
+        "skills": {
+          "label": "Umiejętności przeglądu",
+          "hint": "Dodaj do kolejki wyspecjalizowane podręczniki przeglądu z biblioteki umiejętności. Recenzent zastosuje je w wybranej kolejności.",
+          "pickerEmpty": "Brak umiejętności przeglądu w katalogu. Dodaj group: review w pliku SKILL.md umiejętności, aby pojawiła się tutaj.",
+          "capped": "Jeden przegląd obejmuje najwyżej {max} umiejętności.",
+          "done": "Gotowe"
+        }
       },
       "contextFailed": "Nie utworzono zadania: nie udało się odczytać {count} załącznika | Nie utworzono zadania: nie udało się odczytać {count} załączników | Nie utworzono zadania: nie udało się odczytać {count} załączników"
     },
@@ -1147,7 +1154,8 @@
       "title": "Przeglądany pull request",
       "hint": "Istniejący pull request, który przegląda to zadanie.",
       "prNumber": "PR #{number}",
-      "focus": "Zakres: {focus}"
+      "focus": "Zakres: {focus}",
+      "skills": "Umiejętności przeglądu"
     },
     "execution": {
       "title": "Wykonanie",
@@ -7380,7 +7388,8 @@
       "title": "Zsynchronizowane umiejętności",
       "empty": "Nie zsynchronizowano jeszcze żadnych umiejętności. Połącz poniżej źródło repozytorium, aby zaimportować jego foldery umiejętności.",
       "resources": "zasoby: {count}",
-      "pinned": "przypięta do {commit}"
+      "pinned": "przypięta do {commit}",
+      "groupUnknown": "Deklaruje grupę „{group}”, której ta wersja nie zna, więc trafia do Inne."
     },
     "sources": {
       "title": "Źródła repozytoriów",
@@ -7417,6 +7426,15 @@
       "checkSourceFailed": "Nie udało się sprawdzić źródła",
       "sourceUnlinked": "Źródło odłączone",
       "unlinkSourceFailed": "Nie udało się odłączyć źródła"
+    },
+    "groups": {
+      "build": "Budowanie",
+      "review": "Przegląd",
+      "test": "Testowanie",
+      "write": "Pisanie",
+      "plan": "Planowanie",
+      "operate": "Utrzymanie",
+      "other": "Inne"
     }
   },
   "merge": {

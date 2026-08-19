@@ -405,7 +405,8 @@ function definedIfPresent<T>(list: T[]): T[] | undefined {
 
 /**
  * The account's repo-sourced Claude Skills as lightweight snapshot summaries (`{ id, name,
- * description }`) for the pipeline builder's per-step skill picker (ADR 0024
+ * description, group }`) for the pipeline builder's per-step skill picker and the review task's
+ * skill queue, which offers the `review` group of the same catalog (ADR 0024
  * slice 3). Read through the account skill-catalog cache — one read for the whole account, shared
  * across its workspaces (see "No N+1"). Best-effort: the skill library is optional and must NEVER
  * break the board load, so an unwired library, an unresolved account, or a read failure degrades
@@ -420,7 +421,7 @@ async function snapshotSkills(
   try {
     const skills = await container.skillLibrary.catalogService.list(accountId)
     return skills.length
-      ? skills.map((s) => ({ id: s.id, name: s.name, description: s.description }))
+      ? skills.map((s) => ({ id: s.id, name: s.name, description: s.description, group: s.group }))
       : undefined
   } catch (err) {
     // Best-effort: log the swallowed fault (like the infra-setup probe above) so a misconfigured

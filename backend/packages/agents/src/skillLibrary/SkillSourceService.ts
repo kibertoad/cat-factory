@@ -280,6 +280,7 @@ export class SkillSourceService {
       accountId: source.accountId,
       name: parsed.name,
       description: parsed.description,
+      group: parsed.group,
       instructions: parsed.instructions,
       resources,
       sourceId: source.id,
