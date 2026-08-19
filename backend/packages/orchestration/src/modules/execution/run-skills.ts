@@ -9,8 +9,15 @@ import {
   SKILL_AGENT_KIND,
 } from '@cat-factory/agents'
 import type { PipelineStep } from '@cat-factory/contracts'
+import { SKILL_UNAVAILABLE_REASON } from '@cat-factory/contracts'
 import type { AgentKind, Logger, ResolvedSkill, SkillVersionPin } from '@cat-factory/kernel'
-import { getErrorMessage, ValidationError, noopLogger, runBestEffort } from '@cat-factory/kernel'
+import {
+  DomainError,
+  getErrorMessage,
+  ValidationError,
+  noopLogger,
+  runBestEffort,
+} from '@cat-factory/kernel'
 import type { SkillResolver } from './AgentContextBuilder.js'
 
 // ---------------------------------------------------------------------------
@@ -80,7 +87,11 @@ export async function resolveRunSkills(
     .skills
   const pickedSkillId =
     input.agentKind === SKILL_AGENT_KIND ? input.step.stepOptions?.skillId?.trim() : undefined
-  const queued = (input.taskSkillIds ?? []).map((id) => id.trim()).filter(Boolean)
+  // Deduplicated HERE, not merely against the other sources below: a queue is an ordered list a
+  // human (or an API caller) authored, so it can name one playbook twice. Folding it twice would
+  // charge every turn of the review for a second copy of the same instructions and pin a duplicate
+  // `skillVersions` entry, which reads as two lenses where one ran.
+  const queued = [...new Set((input.taskSkillIds ?? []).map((id) => id.trim()).filter(Boolean))]
   if (!declared.bundled.length && !declared.catalog.length && !queued.length && !pickedSkillId) {
     // Clear on this path too, not just the one below: a step re-dispatched after its pick was
     // removed (or its kind's declaration dropped) lands HERE, and leaving the prior round's pin
@@ -211,8 +222,32 @@ async function resolveCatalogSkill(
   } catch (error) {
     // The resolver states the fact; only this layer knows the id came off a step (or the kind
     // running on it), so it is here that the message can name where the fix is made.
-    throw new ValidationError(`${getErrorMessage(error)} ${remedy}`, { skillId })
+    throw withRemedy(error, remedy, skillId)
   }
+}
+
+/**
+ * Re-raise a resolver failure with the remedy naming the surface the id was picked on, but ONLY
+ * where the failure is the catalog answering "no such skill". Anything else on that call path is
+ * an outage (an unreachable store, a lost persistence RPC, a workspace the account read cannot
+ * resolve), and those have nothing to do with the pick: re-labelling one as a bad skill id sends
+ * an operator to edit a step that is already correct, and destroys the error's own class and
+ * cause on the way. Those propagate untouched.
+ *
+ * The refusal's own `details` are CARRIED, not rebuilt, so the machine-readable `skillId` the
+ * resolver named survives the remedy being appended to the prose.
+ */
+function withRemedy(error: unknown, remedy: string, skillId?: string): never {
+  if (!isSkillUnavailable(error)) throw error
+  throw new ValidationError(`${getErrorMessage(error)} ${remedy}`, {
+    ...(skillId ? { skillId } : {}),
+    ...error.details,
+  })
+}
+
+/** Whether a thrown value is the resolver's "this id is no longer in the catalog" refusal. */
+function isSkillUnavailable(error: unknown): error is DomainError {
+  return error instanceof DomainError && error.details?.reason === SKILL_UNAVAILABLE_REASON
 }
 
 /**
@@ -242,6 +277,8 @@ async function resolveTaskSkills(
       version,
     }))
   } catch (error) {
-    throw new ValidationError(`${getErrorMessage(error)} ${remedy}`)
+    // No `skillId` of our own to supply: the batch knows which id it could not answer and says so
+    // in its own `details`, which {@link withRemedy} carries through.
+    throw withRemedy(error, remedy)
   }
 }

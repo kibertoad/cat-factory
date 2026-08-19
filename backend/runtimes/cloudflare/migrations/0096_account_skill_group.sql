@@ -12,6 +12,14 @@
 --
 -- `NOT NULL DEFAULT 'other'` because every existing row predates the field and declared nothing:
 -- unclassified is precisely what they are, and it is the same value the parser assigns a manifest
--- with no `group:`. The next sync of each source rewrites it from the manifest.
+-- with no `group:`.
+--
+-- The default is not a placeholder a sweep replaces, and it does not need to be. A sync re-reads a
+-- source dir only when its head commit moved, and re-parses a skill only when its `SKILL.md` blob
+-- moved, so an existing row keeps `other` until its own manifest is next edited. That is the same
+-- edit that can first give the field a value: declaring `group:` rewrites the blob, so the
+-- declaration and the row that carries it arrive together. The one row this strands is a manifest
+-- that already spelled `group:` before this build knew the key, which reads as `other` until its
+-- next edit.
 
 ALTER TABLE account_skills ADD COLUMN skill_group TEXT NOT NULL DEFAULT 'other';

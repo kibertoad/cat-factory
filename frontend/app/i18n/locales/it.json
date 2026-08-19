@@ -1733,8 +1733,7 @@
       "title": "Pull request in revisione",
       "hint": "La pull request esistente che questa attività revisiona.",
       "prNumber": "PR n. {number}",
-      "focus": "Focus: {focus}",
-      "skills": "Competenze di revisione"
+      "focus": "Focus: {focus}"
     },
     "execution": {
       "title": "Esecuzione",
@@ -3101,14 +3100,7 @@
         "derivedTitle": "Rivedi {ref}",
         "derivedTitleFallback": "Rivedi la pull request",
         "prNotFound": "La pull request n. {number} non è stata trovata nel repository di questo servizio. Controlla il numero, oppure collega il servizio al repository in cui si trova la pull request.",
-        "prRepoMismatch": "Quella pull request si trova in un altro repository. Questo servizio revisiona {repo}, quindi crea l'attività di revisione sotto il servizio collegato al repository della pull request.",
-        "skills": {
-          "label": "Competenze di revisione",
-          "hint": "Metti in coda manuali di revisione specialistici dalla tua libreria. Il revisore li applica nell’ordine scelto.",
-          "pickerEmpty": "Nessuna competenza di revisione nel catalogo. Aggiungi group: review al SKILL.md di una competenza per proporla qui.",
-          "capped": "Una revisione porta al massimo {max} competenze.",
-          "done": "Fatto"
-        }
+        "prRepoMismatch": "Quella pull request si trova in un altro repository. Questo servizio revisiona {repo}, quindi crea l'attività di revisione sotto il servizio collegato al repository della pull request."
       },
       "contextFailed": "Attività non creata: {count} allegato non leggibile | Attività non creata: {count} allegati non leggibili"
     },
@@ -7435,6 +7427,15 @@
       "plan": "Pianificare",
       "operate": "Operare",
       "other": "Altre"
+    },
+    "reviewQueue": {
+      "label": "Competenze di revisione",
+      "hint": "Metti in coda manuali di revisione specialistici dalla tua libreria. Il revisore li applica nell’ordine scelto.",
+      "pickerEmpty": "Nessuna competenza di revisione nel catalogo. Aggiungi group: review al SKILL.md di una competenza per proporla qui.",
+      "capped": "Una revisione porta al massimo {max} competenze.",
+      "done": "Fatto",
+      "save": "Salva",
+      "revert": "Ripristina"
     }
   },
   "merge": {

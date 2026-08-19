@@ -378,14 +378,7 @@
         "derivedTitle": "Review {ref}",
         "derivedTitleFallback": "Review pull request",
         "prNotFound": "Pull request #{number} was not found in this service's repository. Check the number, or link the service to the repository that pull request is on.",
-        "prRepoMismatch": "That pull request is on a different repository. This service reviews {repo}, so create the review task under the service linked to the pull request's repository.",
-        "skills": {
-          "label": "Review skills",
-          "hint": "Queue specialist review playbooks from your skill library. The reviewer applies them in the order you pick.",
-          "pickerEmpty": "No review skills in your catalog. Add group: review to a skill’s SKILL.md to offer it here.",
-          "capped": "A review carries at most {max} skills.",
-          "done": "Done"
-        }
+        "prRepoMismatch": "That pull request is on a different repository. This service reviews {repo}, so create the review task under the service linked to the pull request's repository."
       },
       "contextFailed": "Task not created: {count} attachment could not be read | Task not created: {count} attachments could not be read",
       "@contextFailed": {
@@ -1247,8 +1240,7 @@
       "title": "Under review",
       "hint": "The existing pull request this task reviews.",
       "prNumber": "PR #{number}",
-      "focus": "Focus: {focus}",
-      "skills": "Review skills"
+      "focus": "Focus: {focus}"
     },
     "execution": {
       "title": "Execution",
@@ -7694,6 +7686,15 @@
       "plan": "Plan",
       "operate": "Operate",
       "other": "Other"
+    },
+    "reviewQueue": {
+      "label": "Review skills",
+      "hint": "Queue specialist review playbooks from your skill library. The reviewer applies them in the order you pick.",
+      "pickerEmpty": "No review skills in your catalog. Add group: review to a skill’s SKILL.md to offer it here.",
+      "capped": "A review carries at most {max} skills.",
+      "done": "Done",
+      "save": "Save",
+      "revert": "Revert"
     }
   },
   "merge": {

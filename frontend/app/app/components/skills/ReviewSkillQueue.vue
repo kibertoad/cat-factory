@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The specialist review playbooks a REVIEW task queues onto its run: a Performance Review, a
-// Security Review, whatever the team authored. Picked here at task creation, stored on the task as
-// `taskTypeFields.reviewSkillIds`, and resolved per dispatch onto the reviewer's own skills.
+// Security Review, whatever the team authored. Stored on the task as `taskTypeFields
+// .reviewSkillIds` and resolved per dispatch onto the reviewer's own skills.
 //
 // Only the catalog's `review` group is offered. A skill declares what kind of work it does, so a
 // scaffolding playbook has no business in a picker whose job is to add review lenses; the store's
@@ -12,7 +12,8 @@
 // to see (and change) that order. Clicking a badge removes it; picking again appends.
 //
 // Presentational and `v-model`-driven, like `FragmentSelector`: the caller owns where the list
-// lives, so the create form and any later editor bind the same component.
+// lives and when it commits, so the create form and the inspector's editor bind the same
+// component and cannot offer a person two different pickers for one field.
 import { computed, ref } from 'vue'
 import { MAX_REVIEW_SKILLS } from '@cat-factory/contracts'
 import { useSkillsStore } from '~/stores/skills'
@@ -30,10 +31,17 @@ const open = ref(false)
 
 const offered = computed(() => skills.reviewSkills)
 const selectedSet = computed(() => new Set(props.modelValue))
-/** Queued skills in QUEUE order (not catalog order), so the badges read as the run's sequence. */
+/**
+ * Queued skills in QUEUE order (not catalog order), so the badges read as the run's sequence.
+ *
+ * NAMED from the whole catalog while only the `review` group is OFFERED: a skill regrouped after
+ * it was queued is still queued, and showing it by name is what lets someone recognise the entry
+ * they now have to drop. Only an id the catalog cannot resolve at all falls back to the raw id,
+ * which is exactly the entry that will fail the next dispatch.
+ */
 const queued = computed(() =>
   props.modelValue.map(
-    (id) => offered.value.find((s) => s.id === id) ?? { id, name: id, description: '' },
+    (id) => skills.catalog.find((s) => s.id === id) ?? { id, name: id, description: '' },
   ),
 )
 /** At the cap, unpicked rows stop being offered: the reviewer carries every queued skill's text. */
@@ -56,7 +64,7 @@ function toggle(id: string) {
   <div>
     <div class="mb-1 flex items-center justify-between gap-2">
       <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        {{ t('board.addTask.review.skills.label') }}
+        {{ t('skills.reviewQueue.label') }}
       </span>
       <UPopover v-model:open="open" :content="{ align: 'end' }">
         <UButton
@@ -100,7 +108,7 @@ function toggle(id: string) {
                 </button>
               </template>
               <p v-else class="px-2 py-3 text-[12px] text-slate-500">
-                {{ t('board.addTask.review.skills.pickerEmpty') }}
+                {{ t('skills.reviewQueue.pickerEmpty') }}
               </p>
             </div>
 
@@ -108,7 +116,7 @@ function toggle(id: string) {
               v-if="atCap"
               class="border-t border-slate-800 px-2 py-1.5 text-[11px] text-amber-400"
             >
-              {{ t('board.addTask.review.skills.capped', { max: MAX_REVIEW_SKILLS }) }}
+              {{ t('skills.reviewQueue.capped', { max: MAX_REVIEW_SKILLS }) }}
             </p>
             <div class="flex justify-end border-t border-slate-800 p-1.5">
               <UButton
@@ -118,7 +126,7 @@ function toggle(id: string) {
                 data-testid="review-skill-picker-done"
                 @click="open = false"
               >
-                {{ t('board.addTask.review.skills.done') }}
+                {{ t('skills.reviewQueue.done') }}
               </UButton>
             </div>
           </div>
@@ -142,7 +150,7 @@ function toggle(id: string) {
       </UBadge>
     </div>
     <p v-else class="text-[11px] text-slate-500">
-      {{ t('board.addTask.review.skills.hint') }}
+      {{ t('skills.reviewQueue.hint') }}
     </p>
   </div>
 </template>

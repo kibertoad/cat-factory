@@ -62,6 +62,41 @@ export function normalizeSkillGroup(raw: string | null | undefined): SkillGroup 
   return isSkillGroup(value) ? value : 'other'
 }
 
+/** A stored group as a reader must present it: the shelf, plus the raw value when it is unknown. */
+export interface SkillGroupView {
+  /** The shelf to compare and filter on ({@link normalizeSkillGroup}). */
+  group: SkillGroup
+  /** What was declared, present ONLY when this build does not know it. */
+  declaredGroup?: string
+}
+
+/**
+ * Read a STORED group: the shelf it lands on, and the declared value when that is not a member
+ * this build knows. The two halves are answered together because they are one decision, and a
+ * reader that computed the shelf without the echo would reclassify in silence.
+ *
+ * Total over an ABSENT value, which is not defensive padding: the record crosses the
+ * `/internal/persistence` RPC in mothership mode, where a peer one build behind is the normal
+ * state of running one and simply does not send the field. `undefined` is the honest "declared
+ * nothing we can see", which is the `other` shelf with nothing to echo. Anything else would make
+ * the account's skill library 500 on a version skew it is designed to tolerate.
+ */
+export function describeSkillGroup(raw: string | null | undefined): SkillGroupView {
+  const declared = (raw ?? '').trim().toLowerCase()
+  const group = normalizeSkillGroup(declared)
+  return declared && !isSkillGroup(declared) ? { group, declaredGroup: declared } : { group }
+}
+
+/**
+ * `error.details.reason` on the 422 a skill resolver raises for an id the account's catalog no
+ * longer holds (removed upstream, or its source unlinked). Machine-readable precisely so the
+ * layer that knows WHERE the id was picked can recognise this refusal and append the remedy
+ * naming that surface, while an infrastructure failure on the same call path (an unreachable
+ * store, a lost RPC) propagates as itself: an outage is not a misconfiguration, and telling an
+ * operator to go re-pick a skill because a database blinked sends them to fix nothing.
+ */
+export const SKILL_UNAVAILABLE_REASON = 'skill_unavailable'
+
 /** One sibling resource file of a skill (manifest only — no body on the wire). */
 export const skillResourceSchema = v.object({
   path: v.string(),

@@ -40,7 +40,9 @@ writer ends up queued onto a security audit.
   what they wrote. The group rides the snapshot's `SkillSummary`, so the SPA filters on the
   classification the backend already made.
 - **Queue.** `taskTypeFields.reviewSkillIds` is an ordered, capped (8) list of catalog skill ids,
-  picked at task creation from the `review` group alone. At dispatch the engine resolves them onto
+  picked from the `review` group alone, at task creation and on the task inspector afterwards.
+  Deduplicated at resolve, so a list naming one playbook twice folds it once. At dispatch the
+  engine resolves them onto
   `AgentRunContext.skills`, where the existing harness-aware delivery installs them exactly as it
   installs a `skill` step's pick, and pins each version onto the step like any other catalog skill.
 - **Who receives it** is the `review-skills` TRAIT, carried today by `pr-reviewer` alone. The
@@ -48,7 +50,10 @@ writer ends up queued onto a security audit.
   covers, rather than paying for every lens on every slice.
 - **A queued skill that cannot resolve FAILS the dispatch**, with a message naming the task's
   queue. `SkillRunResolver` now states only the FACT (the skill is gone) and the engine appends the
-  remedy, because the surface a human edits differs by where the id was picked.
+  remedy, because the surface a human edits differs by where the id was picked. The fact carries
+  `details.reason: 'skill_unavailable'`, which is what lets the engine tell it from an OUTAGE on
+  the same call path: an unreachable store re-labelled as a bad pick would send an operator to
+  re-pick a skill that was never wrong.
 
 ## Rationale
 
@@ -87,8 +92,15 @@ writer ends up queued onto a security audit.
 
 - **Runtime symmetry.** One column, mirrored D1 (`0096_account_skill_group.sql`) ⇄ Drizzle, with
   the conformance round-trip asserting that a group this build does not know survives storage
-  unchanged. Existing rows default to `other` and are rewritten from the manifest on the next sync
-  of their source.
+  unchanged.
+- **Existing rows read as `other`, and no sweep changes that.** A sync re-reads a source dir only
+  when its head commit moved and re-parses a skill only when its `SKILL.md` blob moved, so a row
+  written before this change keeps the default until its own manifest is next edited. That is the
+  same edit that first gives the field a value, since declaring `group:` rewrites the blob. A
+  manifest that already spelled `group:` before this build knew the key is the one case that
+  reads wrong (filed under Other with nothing echoed, because the row genuinely holds `other`),
+  and any edit to it heals the row. Making the default self-healing instead would mean recording
+  on each row which parse produced it, which is real state for a case one keystroke clears.
 - **The public API does not carry the queue.** `BUILTIN_PUBLIC_TASK_FIELDS` states one static field
   table for every caller, and the valid ids here are the calling account's catalog. Advertising a
   vocabulary the descriptor cannot state is what the `targetPath` omission already refused. Adding
@@ -96,6 +108,10 @@ writer ends up queued onto a security audit.
 - **ADR 0024's "skills are step-only" no longer holds**, and had already been widened once by ADR
   0029's kind-declared capabilities. There are now three sources for one dispatch's skills (kind,
   task, step); `run-skills.ts` owns their order, dedup and per-source failure policy in one place.
-- **The queue is picked at creation and read-only afterwards.** The inspector shows what a review
-  will apply; changing it is a task edit through the ordinary `taskTypeFields` patch. An editor on
-  the review panel is the obvious follow-up, not a gap in the model.
+- **The queue is editable after creation, on the inspector's review panel**, through the ordinary
+  `builtinTaskTypeFields` patch (which replaces that half of the bag whole, so the panel sends the
+  task's other built-in keys back with it). That editor is not a convenience: a queued skill that
+  has left the catalog fails EVERY dispatch of the task, and the refusal's remedy names the task's
+  queue as where the fix is made. Frozen at creation, that remedy would name a surface nothing
+  offers, and the only exit would be deleting a task whose id every stored reference holds. The
+  same dead end `TaskTypeFields` was built to close for a custom type's own fields.

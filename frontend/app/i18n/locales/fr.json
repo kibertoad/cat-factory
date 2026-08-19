@@ -336,14 +336,7 @@
         "derivedTitle": "Examiner {ref}",
         "derivedTitleFallback": "Examiner la pull request",
         "prNotFound": "La pull request n° {number} est introuvable dans le dépôt de ce service. Vérifiez le numéro, ou reliez le service au dépôt qui héberge cette pull request.",
-        "prRepoMismatch": "Cette pull request se trouve dans un autre dépôt. Ce service examine {repo} : créez la tâche de revue sous le service relié au dépôt de la pull request.",
-        "skills": {
-          "label": "Compétences de relecture",
-          "hint": "Mettez en file des guides de relecture spécialisés issus de votre bibliothèque. Le relecteur les applique dans l’ordre choisi.",
-          "pickerEmpty": "Aucune compétence de relecture dans votre catalogue. Ajoutez group: review au SKILL.md d’une compétence pour la proposer ici.",
-          "capped": "Une relecture porte au maximum {max} compétences.",
-          "done": "Terminé"
-        }
+        "prRepoMismatch": "Cette pull request se trouve dans un autre dépôt. Ce service examine {repo} : créez la tâche de revue sous le service relié au dépôt de la pull request."
       },
       "contextFailed": "Tâche non créée : {count} pièce jointe illisible | Tâche non créée : {count} pièces jointes illisibles"
     },
@@ -1154,8 +1147,7 @@
       "title": "Pull request en revue",
       "hint": "La pull request existante que cette tâche examine.",
       "prNumber": "PR n° {number}",
-      "focus": "Objet : {focus}",
-      "skills": "Compétences de relecture"
+      "focus": "Objet : {focus}"
     },
     "execution": {
       "title": "Exécution",
@@ -7435,6 +7427,15 @@
       "plan": "Planifier",
       "operate": "Exploiter",
       "other": "Autres"
+    },
+    "reviewQueue": {
+      "label": "Compétences de relecture",
+      "hint": "Mettez en file des guides de relecture spécialisés issus de votre bibliothèque. Le relecteur les applique dans l’ordre choisi.",
+      "pickerEmpty": "Aucune compétence de relecture dans votre catalogue. Ajoutez group: review au SKILL.md d’une compétence pour la proposer ici.",
+      "capped": "Une relecture porte au maximum {max} compétences.",
+      "done": "Terminé",
+      "save": "Enregistrer",
+      "revert": "Rétablir"
     }
   },
   "merge": {

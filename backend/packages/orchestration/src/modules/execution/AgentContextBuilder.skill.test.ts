@@ -3,6 +3,7 @@ import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel
 import { InitiativePresetRegistry, ValidationError } from '@cat-factory/kernel'
 import { AgentContextBuilder, type AgentContextBuilderDeps } from './AgentContextBuilder.js'
 import { defaultAgentKindRegistry, PR_REVIEWER_KIND, SKILL_AGENT_KIND } from '@cat-factory/agents'
+import { SKILL_UNAVAILABLE_REASON } from '@cat-factory/contracts'
 
 // A dispatch's skills come from three places: the `skill` step's own pick (`stepOptions.skillId`),
 // the running agent KIND's declared playbooks (bundled in code, or referenced from the
@@ -268,6 +269,34 @@ describe('AgentContextBuilder skill resolution', () => {
     expect(broken.skills).toBeUndefined()
   })
 
+  it('names the pipeline STEP as the remedy when its pick has left the catalog', async () => {
+    const s = step({ stepOptions: { skillId: 'src:s:triage' } })
+    const build = makeBuilder({
+      skillResolver: skillResolver(async () => {
+        throw new ValidationError(`Skill 'src:s:triage' is no longer available.`, {
+          reason: SKILL_UNAVAILABLE_REASON,
+          skillId: 'src:s:triage',
+        })
+      }),
+    })
+    await expect(build.buildContext('ws1', instance([s]), s, true, TASK)).rejects.toThrow(
+      /no longer available.*pipeline step/s,
+    )
+  })
+
+  it('propagates an outage on the step pick unchanged', async () => {
+    // Same split as the task queue: only the catalog's "no such skill" earns a remedy, because
+    // only that one is fixed by re-picking. Everything else is an outage wearing its own class.
+    const s = step({ stepOptions: { skillId: 'src:s:triage' } })
+    const outage = new Error('D1_ERROR: network')
+    const build = makeBuilder({
+      skillResolver: skillResolver(async () => {
+        throw outage
+      }),
+    })
+    await expect(build.buildContext('ws1', instance([s]), s, true, TASK)).rejects.toBe(outage)
+  })
+
   it('dedups a step pick the kind already declares, keeping the kind’s order', async () => {
     const registry = defaultAgentKindRegistry()
     registry.registerSkill({
@@ -296,7 +325,15 @@ describe('a review task’s queued skills', () => {
   function resolverFor(known: Record<string, string>) {
     return skillResolver(async (_ws: string, skillId: string) => {
       const name = known[skillId]
-      if (!name) throw new ValidationError(`Skill '${skillId}' is no longer available.`)
+      // The real resolver's refusal shape, `reason` included: that code is what tells the engine
+      // this is a vanished skill rather than a store it could not reach, and a double that omits
+      // it would assert the remedy on a path the engine no longer takes it.
+      if (!name) {
+        throw new ValidationError(`Skill '${skillId}' is no longer available.`, {
+          reason: SKILL_UNAVAILABLE_REASON,
+          skillId,
+        })
+      }
       return {
         skill: {
           skillId,
@@ -364,5 +401,54 @@ describe('a review task’s queued skills', () => {
     expect(context.skills?.map((sk) => sk.skillId)).toEqual(['src:s:security', 'src:s:perf'])
     // The declared half is BUNDLED, so only the queued half pins a catalog version.
     expect(s.skillVersions?.map((v) => v.skillId)).toEqual(['src:s:perf'])
+  })
+
+  it('folds a playbook named twice in one queue exactly once', async () => {
+    // A queue is an ordered list somebody authored, so it can repeat an id. Folded twice, that
+    // playbook's instructions ride EVERY turn of the review a second time and pin a duplicate
+    // version, which reads as two lenses where one ran.
+    const s = step({ agentKind: PR_REVIEWER_KIND })
+    const task = {
+      ...REVIEW_TASK,
+      taskTypeFields: { reviewSkillIds: ['src:s:security', 'src:s:perf', 'src:s:security'] },
+    } as unknown as Block
+    const context = await makeBuilder({
+      skillResolver: resolverFor({ 'src:s:security': 'security', 'src:s:perf': 'perf' }),
+    }).buildContext('ws1', instance([s]), s, true, task)
+    expect(context.skills?.map((sk) => sk.skillId)).toEqual(['src:s:security', 'src:s:perf'])
+    expect(s.skillVersions?.map((v) => v.skillId)).toEqual(['src:s:security', 'src:s:perf'])
+  })
+
+  it('propagates an OUTAGE as itself rather than re-labelling it a bad pick', async () => {
+    // The two failures need opposite reactions: a vanished skill is fixed by editing the queue,
+    // an unreachable store by waiting or fixing the deployment. Appending "edit the task's
+    // skills" to a transport failure sends an operator to change something already correct, and
+    // rebuilding the error drops the class its own handler branches on.
+    const s = step({ agentKind: PR_REVIEWER_KIND })
+    const outage = new Error('persistence RPC unreachable')
+    const build = makeBuilder({
+      skillResolver: skillResolver(async () => {
+        throw outage
+      }),
+    })
+    await expect(build.buildContext('ws1', instance([s]), s, true, REVIEW_TASK)).rejects.toBe(
+      outage,
+    )
+  })
+
+  it('keeps the machine-readable skillId when it appends the remedy', async () => {
+    // The SPA reads `details.skillId` to point at the offending entry; rebuilding the refusal
+    // without carrying the resolver's own details would leave it with prose alone.
+    const s = step({ agentKind: PR_REVIEWER_KIND })
+    const build = makeBuilder({ skillResolver: resolverFor({ 'src:s:security': 'security' }) })
+    const error = await build
+      .buildContext('ws1', instance([s]), s, true, REVIEW_TASK)
+      .then(() => null)
+      .catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ValidationError)
+    expect((error as ValidationError).details).toMatchObject({
+      reason: SKILL_UNAVAILABLE_REASON,
+      skillId: 'src:s:perf',
+    })
   })
 })

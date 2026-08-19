@@ -9,12 +9,19 @@
 // provider's own link (`prUrl`), which is what makes a plain read enough here; a task created
 // while no VCS was connected keeps only the number, and then the reference reads as text rather
 // than pretending to be a link.
-import { computed } from 'vue'
+//
+// The SKILL QUEUE is editable here, and that is not a convenience. A queued skill that has left
+// the catalog FAILS every dispatch of this task, and the refusal's remedy names the task's own
+// queue as where the fix is made; with the queue frozen at creation that remedy pointed at
+// nothing and the only exit was deleting a task whose id every stored reference holds. Same
+// reasoning as `TaskTypeFields`, which exists for the same shape of dead end.
+import { computed, ref, watch } from 'vue'
 import type { Block } from '~/types/domain'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
-import { useSkillsStore } from '~/stores/skills'
+import ReviewSkillQueue from '~/components/skills/ReviewSkillQueue.vue'
 
 const props = defineProps<{ block: Block }>()
+const board = useBoardStore()
 const { t } = useI18n()
 
 const isReview = computed(() => props.block.taskType === 'review')
@@ -22,35 +29,56 @@ const fields = computed(() => props.block.taskTypeFields ?? null)
 const url = computed(() => fields.value?.prUrl?.trim() || '')
 const focus = computed(() => fields.value?.reviewFocus?.trim() || '')
 
-/**
- * The review playbooks this task queued, in the order the reviewer applies them. Named from the
- * snapshot catalog; an id the catalog no longer resolves still renders (as its raw id) rather
- * than vanishing, because the run will FAIL on that id and the task is where it gets fixed.
- */
-const skills = useSkillsStore()
-const queuedSkills = computed(() =>
-  (fields.value?.reviewSkillIds ?? []).map(
-    (id) => skills.catalog.find((s) => s.id === id) ?? { id, name: id, description: '' },
-  ),
-)
-
 /** `#123` when the number is known, else the raw link — never an empty affordance. */
 const label = computed(() => {
   const number = fields.value?.prNumber
   return number ? t('inspector.reviewTarget.prNumber', { number }) : url.value
 })
 
+/** The queue as STORED, the baseline the edit buffer is seeded from and compared against. */
+const stored = computed<string[]>(() => fields.value?.reviewSkillIds ?? [])
+
+// Local edit buffer, re-seeded whenever the stored queue changes underneath (a live board push,
+// or switching blocks). Editing writes on commit rather than per pick, so a half-built queue
+// never reaches the row a dispatch reads.
+const draft = ref<string[]>([...stored.value])
+watch(stored, (next) => {
+  draft.value = [...next]
+})
+
+const dirty = computed(() => JSON.stringify(draft.value) !== JSON.stringify(stored.value))
+const saving = ref(false)
+
 /**
- * Nothing to show when the task names no pull request AND queued nothing: there would be neither
- * a link nor a lens to report. A task with a queue but no resolvable reference still renders, so
- * what the review will apply stays visible.
+ * Write the queue through the BUILT-IN half of the per-type bag, which REPLACES that half whole:
+ * the other built-in keys are read back off the block and sent with it, so editing the queue can
+ * never clear the pull request this task reviews. The `custom` half is a separate request key and
+ * is left alone by construction.
  */
-const hasTarget = computed(() => Boolean(label.value) || queuedSkills.value.length > 0)
+async function save() {
+  if (!dirty.value) return
+  const { custom: _custom, ...builtin } = props.block.taskTypeFields ?? {}
+  saving.value = true
+  try {
+    await board.updateBlock(props.block.id, {
+      builtinTaskTypeFields: {
+        ...builtin,
+        ...(draft.value.length ? { reviewSkillIds: [...draft.value] } : {}),
+      },
+    })
+  } finally {
+    saving.value = false
+  }
+}
+
+function revert() {
+  draft.value = [...stored.value]
+}
 </script>
 
 <template>
   <InspectorSection
-    v-if="isReview && hasTarget"
+    v-if="isReview"
     :title="t('inspector.reviewTarget.title')"
     :hint="t('inspector.reviewTarget.hint')"
     icon="i-lucide-git-pull-request-arrow"
@@ -82,22 +110,28 @@ const hasTarget = computed(() => Boolean(label.value) || queuedSkills.value.leng
     <p v-if="focus" class="text-xs leading-relaxed text-slate-500">
       {{ t('inspector.reviewTarget.focus', { focus }) }}
     </p>
-    <div v-if="queuedSkills.length" class="flex flex-col gap-1">
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        {{ t('inspector.reviewTarget.skills') }}
-      </p>
-      <div class="flex flex-wrap gap-1" data-testid="inspector-review-skills">
-        <UBadge
-          v-for="(s, i) in queuedSkills"
-          :key="s.id"
+    <div data-testid="inspector-review-skills">
+      <ReviewSkillQueue v-model="draft" />
+      <div v-if="dirty" class="mt-2 flex items-center gap-2">
+        <UButton
+          size="xs"
           color="primary"
-          variant="subtle"
-          size="sm"
-          :title="s.description"
+          variant="soft"
+          :loading="saving"
+          data-testid="inspector-review-skills-save"
+          @click="save"
         >
-          <span class="me-1 tabular-nums text-slate-400">{{ i + 1 }}</span
-          >{{ s.name }}
-        </UBadge>
+          {{ t('skills.reviewQueue.save') }}
+        </UButton>
+        <UButton
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          data-testid="inspector-review-skills-revert"
+          @click="revert"
+        >
+          {{ t('skills.reviewQueue.revert') }}
+        </UButton>
       </div>
     </div>
   </InspectorSection>

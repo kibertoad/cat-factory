@@ -25,6 +25,11 @@ receives the queue is the new `review-skills` trait, carried by `pr-reviewer`.
 A queued skill that has left the catalog FAILS the dispatch rather than being skipped: a review
 that quietly dropped the security lens it was asked for reads exactly like a clean one.
 
+The queue is editable after creation on the task inspector's review panel, which matters because a
+queued skill that has left the catalog fails every dispatch of that task: the failure names the
+task's queue as where to fix it, so that surface has to exist.
+
 Internal break: `AccountSkillRecord` gains a required `group`, and `account_skills` gains a
-`skill_group` column defaulting to `other` on both runtimes. Existing rows are rewritten from their
-manifests on the next sync of their source. The public API's task-field table is unchanged.
+`skill_group` column defaulting to `other` on both runtimes. Existing rows read as `other` until
+their `SKILL.md` is next edited, which is the same edit that gives the field a value. The public
+API's task-field table is unchanged.

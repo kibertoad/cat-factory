@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import * as v from 'valibot'
-import { isSkillGroup, normalizeSkillGroup, SKILL_GROUPS } from './skill-library.js'
+import {
+  describeSkillGroup,
+  isSkillGroup,
+  normalizeSkillGroup,
+  SKILL_GROUPS,
+} from './skill-library.js'
 import { MAX_REVIEW_SKILLS, taskTypeFieldsSchema } from './primitives.js'
 
 // The group vocabulary is CLOSED and PERSISTED: a synced row carries whatever its manifest
@@ -30,6 +35,27 @@ describe('normalizeSkillGroup', () => {
     expect(normalizeSkillGroup(null)).toBe('other')
     expect(normalizeSkillGroup(undefined)).toBe('other')
     expect(isSkillGroup('security')).toBe(false)
+  })
+})
+
+describe('describeSkillGroup', () => {
+  it('echoes the declared value ONLY when this build does not know it', () => {
+    for (const group of SKILL_GROUPS) {
+      expect(describeSkillGroup(group)).toEqual({ group })
+    }
+    expect(describeSkillGroup(' Sekurity ')).toEqual({
+      group: 'other',
+      declaredGroup: 'sekurity',
+    })
+  })
+
+  it('answers for a row that carries no group at all', () => {
+    // Not a hypothetical: the skill record crosses the persistence RPC in mothership mode, where
+    // a peer one build behind simply does not send the field. Reading it as an unqualified string
+    // is a TypeError that 500s the account's skill library over a version skew by design.
+    expect(describeSkillGroup(undefined)).toEqual({ group: 'other' })
+    expect(describeSkillGroup(null)).toEqual({ group: 'other' })
+    expect(describeSkillGroup('  ')).toEqual({ group: 'other' })
   })
 })
 

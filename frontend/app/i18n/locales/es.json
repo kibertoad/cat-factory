@@ -336,14 +336,7 @@
         "derivedTitle": "Revisar {ref}",
         "derivedTitleFallback": "Revisar la pull request",
         "prNotFound": "No se encontró la pull request n.º {number} en el repositorio de este servicio. Comprueba el número, o vincula el servicio al repositorio en el que está esa pull request.",
-        "prRepoMismatch": "Esa pull request está en otro repositorio. Este servicio revisa {repo}, así que crea la tarea de revisión en el servicio vinculado al repositorio de la pull request.",
-        "skills": {
-          "label": "Habilidades de revisión",
-          "hint": "Pon en cola manuales de revisión especializados de tu biblioteca de habilidades. El revisor los aplica en el orden que elijas.",
-          "pickerEmpty": "No hay habilidades de revisión en tu catálogo. Añade group: review al SKILL.md de una habilidad para ofrecerla aquí.",
-          "capped": "Una revisión lleva como máximo {max} habilidades.",
-          "done": "Listo"
-        }
+        "prRepoMismatch": "Esa pull request está en otro repositorio. Este servicio revisa {repo}, así que crea la tarea de revisión en el servicio vinculado al repositorio de la pull request."
       },
       "contextFailed": "Tarea no creada: no se pudo leer {count} adjunto | Tarea no creada: no se pudieron leer {count} adjuntos"
     },
@@ -1154,8 +1147,7 @@
       "title": "Pull request en revisión",
       "hint": "La pull request existente que revisa esta tarea.",
       "prNumber": "PR n.º {number}",
-      "focus": "Enfoque: {focus}",
-      "skills": "Habilidades de revisión"
+      "focus": "Enfoque: {focus}"
     },
     "execution": {
       "title": "Ejecución",
@@ -7435,6 +7427,15 @@
       "plan": "Planificar",
       "operate": "Operar",
       "other": "Otras"
+    },
+    "reviewQueue": {
+      "label": "Habilidades de revisión",
+      "hint": "Pon en cola manuales de revisión especializados de tu biblioteca de habilidades. El revisor los aplica en el orden que elijas.",
+      "pickerEmpty": "No hay habilidades de revisión en tu catálogo. Añade group: review al SKILL.md de una habilidad para ofrecerla aquí.",
+      "capped": "Una revisión lleva como máximo {max} habilidades.",
+      "done": "Listo",
+      "save": "Guardar",
+      "revert": "Descartar"
     }
   },
   "merge": {

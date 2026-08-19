@@ -3,7 +3,7 @@ import type {
   AccountSkillRepository,
   GroupCacheHandle,
 } from '@cat-factory/kernel'
-import { isSkillGroup, normalizeSkillGroup, type AccountSkill } from '@cat-factory/contracts'
+import { describeSkillGroup, type AccountSkill } from '@cat-factory/contracts'
 
 export interface SkillCatalogServiceDependencies {
   accountSkillRepository: AccountSkillRepository
@@ -64,17 +64,19 @@ export class SkillCatalogService {
  * compares on. A value this build does not know (a frontmatter typo, or a member retired since the
  * row was synced) lands on `other` AND is echoed as `declaredGroup`, so the management surface can
  * tell the author what they wrote rather than letting the reclassification pass in silence.
+ *
+ * Both halves come from the one `describeSkillGroup` read rather than being computed here: it is
+ * total over a row that carries no group at all, which is what a mothership peer one build behind
+ * sends over the persistence RPC.
  */
 function recordToWire(record: AccountSkillRecord): AccountSkill {
-  const declared = record.group.trim().toLowerCase()
   return {
     id: record.skillId,
     name: record.name,
     description: record.description,
     instructions: record.instructions,
     resources: record.resources,
-    group: normalizeSkillGroup(declared),
-    ...(declared && !isSkillGroup(declared) ? { declaredGroup: declared } : {}),
+    ...describeSkillGroup(record.group),
     source: { sourceId: record.sourceId, path: record.sourcePath, sha: record.sourceSha },
     pinnedCommit: record.pinnedCommit,
     createdAt: record.createdAt,

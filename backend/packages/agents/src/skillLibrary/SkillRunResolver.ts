@@ -8,6 +8,7 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
+import { SKILL_UNAVAILABLE_REASON } from '@cat-factory/contracts'
 import { probeRepoSourceStatus } from '../repoSourceSync/repo-source-sync.js'
 import type { SkillCatalogService } from './SkillCatalogService.js'
 import type { ResolveSkillInstallationId } from './SkillSourceService.js'
@@ -103,10 +104,12 @@ export class SkillRunResolver {
       if (record) return record
       // The FACT only: what to do about it depends on where the id was picked (a pipeline step,
       // an agent kind's declaration, a task's queue), which this resolver cannot see. The engine's
-      // `run-skills` knows, and appends the remedy naming the surface the human edits.
+      // `run-skills` knows, and appends the remedy naming the surface the human edits. That is
+      // also why the refusal carries a `reason`: it is what lets the engine tell THIS from a store
+      // it could not reach on the same call, where re-picking a skill would fix nothing.
       throw new ValidationError(
         `Skill '${skillId}' is no longer available (it was removed, or its source was unlinked).`,
-        { skillId },
+        { reason: SKILL_UNAVAILABLE_REASON, skillId },
       )
     })
     // Freshness backstop: if a source dir advanced since the last sync, re-sync so the run uses
@@ -115,8 +118,12 @@ export class SkillRunResolver {
     // Probed once per SOURCE, not per skill; degrades to the last-synced records on ANY failure,
     // never wedging a run over a transient GitHub error.
     const sources: SourceReads = new Map()
-    const fresh = await this.refreshStaleSources(accountId, records, sources)
+    // ONE installation lookup for the whole resolve, taken BEFORE the probe because both halves
+    // need the same answer: the freshness probe reads the source dir's head with it, and every
+    // resource fetch below reads its blobs with it. Resolving it inside each would be the per-skill
+    // repetition this batch exists to remove, one level down.
     const installationId = await this.resolveInstallation(accountId)
+    const fresh = await this.refreshStaleSources(accountId, records, sources, installationId)
     const out: ResolvedSkillForRun[] = []
     for (const record of fresh) {
       const resources = await this.resolveResources(record, installationId, sources)
@@ -196,12 +203,12 @@ export class SkillRunResolver {
     accountId: string,
     records: AccountSkillRecord[],
     sources: SourceReads,
+    installationId: number | null,
   ): Promise<AccountSkillRecord[]> {
     const syncSource = this.deps.syncSource
     if (!syncSource) return records
+    if (installationId === null) return records
     try {
-      const installationId = await this.resolveInstallation(accountId)
-      if (installationId === null) return records
       let synced = false
       for (const sourceId of new Set(records.map((record) => record.sourceId))) {
         const source = await this.sourceOf(sources, sourceId)
