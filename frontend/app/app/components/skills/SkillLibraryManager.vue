@@ -8,6 +8,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import type { GitHubAvailableRepo } from '~/types/domain'
 import { useSkillLibrary } from '~/stores/skillLibrary'
+import { SKILL_GROUP_LABEL_KEYS } from '~/utils/skills'
 import GitHubRepoSearchSelect from '~/components/github/GitHubRepoSearchSelect.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 
@@ -176,8 +177,19 @@ async function unlinkSource(id: string) {
         >
           <UIcon name="i-lucide-book-open-check" class="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
           <div class="min-w-0 flex-1">
-            <p class="truncate text-sm font-medium text-slate-100">{{ s.name }}</p>
+            <div class="flex items-center gap-2">
+              <p class="truncate text-sm font-medium text-slate-100">{{ s.name }}</p>
+              <UBadge color="neutral" variant="subtle" size="sm" class="shrink-0">
+                {{ t(SKILL_GROUP_LABEL_KEYS[s.group]) }}
+              </UBadge>
+            </div>
             <p class="text-xs text-slate-400">{{ s.description }}</p>
+            <!-- The manifest declared a group this build does not know (a typo, or a member
+                 retired since the sync). It is filed under Other, and saying which value was
+                 declared is what lets the author fix their frontmatter. -->
+            <p v-if="s.declaredGroup" class="mt-1 text-[11px] text-amber-400">
+              {{ t('skills.catalog.groupUnknown', { group: s.declaredGroup }) }}
+            </p>
             <p class="mt-1 flex flex-wrap gap-x-3 text-[11px] text-slate-500">
               <span v-if="s.resources.length">
                 {{ t('skills.catalog.resources', { count: s.resources.length }) }}

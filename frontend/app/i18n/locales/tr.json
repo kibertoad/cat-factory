@@ -7380,7 +7380,8 @@
       "title": "Senkronize beceriler",
       "empty": "Henüz senkronize edilmiş beceri yok. Beceri klasörlerini içe aktarmak için aşağıda bir depo kaynağı bağlayın.",
       "resources": "{count} kaynak",
-      "pinned": "{commit} üzerine sabitlendi"
+      "pinned": "{commit} üzerine sabitlendi",
+      "groupUnknown": "Bu sürümün bilmediği “{group}” grubunu bildiriyor, bu yüzden Diğer altında listeleniyor."
     },
     "sources": {
       "title": "Depo kaynakları",
@@ -7417,6 +7418,24 @@
       "checkSourceFailed": "Kaynak denetlenemedi",
       "sourceUnlinked": "Kaynağın bağlantısı kaldırıldı",
       "unlinkSourceFailed": "Kaynağın bağlantısı kaldırılamadı"
+    },
+    "groups": {
+      "build": "Geliştirme",
+      "review": "İnceleme",
+      "test": "Test",
+      "write": "Yazma",
+      "plan": "Planlama",
+      "operate": "İşletme",
+      "other": "Diğer"
+    },
+    "reviewQueue": {
+      "label": "İnceleme becerileri",
+      "hint": "Beceri kitaplığınızdan uzmanlaşmış inceleme kılavuzlarını sıraya alın. İnceleyici bunları seçtiğiniz sırayla uygular.",
+      "pickerEmpty": "Katalogda inceleme becerisi yok. Bir becerinin SKILL.md dosyasına group: review ekleyin.",
+      "capped": "Bir inceleme en fazla {max} beceri taşır.",
+      "done": "Tamam",
+      "save": "Kaydet",
+      "revert": "Geri al"
     }
   },
   "merge": {

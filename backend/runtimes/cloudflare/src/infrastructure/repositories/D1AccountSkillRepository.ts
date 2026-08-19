@@ -6,6 +6,7 @@ interface AccountSkillRow {
   account_id: string
   name: string
   description: string
+  skill_group: string
   instructions: string
   resources: string
   source_id: string
@@ -33,6 +34,7 @@ function rowToRecord(row: AccountSkillRow): AccountSkillRecord {
     accountId: row.account_id,
     name: row.name,
     description: row.description,
+    group: row.skill_group,
     instructions: row.instructions,
     resources: parseResources(row.resources),
     sourceId: row.source_id,
@@ -73,12 +75,13 @@ export class D1AccountSkillRepository implements AccountSkillRepository {
     await this.db
       .prepare(
         `INSERT INTO account_skills
-          (skill_id, account_id, name, description, instructions, resources,
+          (skill_id, account_id, name, description, skill_group, instructions, resources,
            source_id, source_path, source_sha, pinned_commit, created_at, updated_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (account_id, skill_id) DO UPDATE SET
            name = excluded.name,
            description = excluded.description,
+           skill_group = excluded.skill_group,
            instructions = excluded.instructions,
            resources = excluded.resources,
            source_id = excluded.source_id,
@@ -93,6 +96,7 @@ export class D1AccountSkillRepository implements AccountSkillRepository {
         record.accountId,
         record.name,
         record.description,
+        record.group,
         record.instructions,
         JSON.stringify(record.resources),
         record.sourceId,

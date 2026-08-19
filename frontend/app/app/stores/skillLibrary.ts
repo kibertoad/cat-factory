@@ -49,7 +49,12 @@ function skillLibrarySetup(resolveAccountId: () => string | null) {
   /** Mirror the full catalog into the snapshot picker store as lightweight summaries. */
   function syncPicker() {
     useSkillsStore().hydrate(
-      catalog.value.map((s) => ({ id: s.id, name: s.name, description: s.description })),
+      catalog.value.map((s) => ({
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        group: s.group,
+      })),
     )
   }
 

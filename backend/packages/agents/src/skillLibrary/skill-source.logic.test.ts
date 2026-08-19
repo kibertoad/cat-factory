@@ -25,8 +25,25 @@ describe('skill-source.logic', () => {
     expect(parsed).toEqual({
       name: 'Bug Triage',
       description: 'Triage a bug',
+      group: 'other',
       instructions: '- Reproduce it.',
     })
+  })
+
+  it('parses a declared group, case-folded, and defaults to the unclassified shelf', () => {
+    const withGroup = parseSkillManifest(
+      'security-review',
+      ['---', 'name: Security review', 'group: Review', '---', 'Check the auth paths.'].join('\n'),
+    )
+    expect(withGroup?.group).toBe('review')
+    // Kept RAW rather than narrowed here: the catalog read boundary decides which shelf an
+    // unrecognised value lands on, and the management surface shows the author what they wrote.
+    const unknownGroup = parseSkillManifest(
+      'perf',
+      ['---', 'name: Perf', 'group: sekurity', '---', 'Measure first.'].join('\n'),
+    )
+    expect(unknownGroup?.group).toBe('sekurity')
+    expect(parseSkillManifest('plain', 'Do the thing.')?.group).toBe('other')
   })
 
   it('defaults a missing name to the humanised dir and description to the first body line', () => {
@@ -34,6 +51,7 @@ describe('skill-source.logic', () => {
     expect(parsed).toEqual({
       name: 'Release notes',
       description: 'Heading',
+      group: 'other',
       instructions: '# Heading\n\nWrite the notes.',
     })
   })

@@ -206,6 +206,16 @@ export function isSafeDocPath(path: string): boolean {
 }
 
 /**
+ * How many skills a review task may queue.
+ *
+ * Not a storage bound: each queued skill's instructions ride the reviewer's prompt for the whole
+ * review, and an agentic loop re-sends its transcript every turn, so the queue is spent out of the
+ * same context budget the review's own slicing is tuned against. A handful of deliberate lenses is
+ * the shape this serves; a catalog dumped in wholesale is the failure it refuses.
+ */
+export const MAX_REVIEW_SKILLS = 8
+
+/**
  * Small, additive, per-type fields collected on the create-task form. All optional;
  * which ones are shown depends on the chosen {@link TaskType}. Stored verbatim on the
  * block as a sparse object so adding a field never needs a schema migration.
@@ -287,6 +297,26 @@ export const taskTypeFieldsSchema = v.object({
   prUrl: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
   /** Review: freeform focus/guidance for the reviewer (e.g. "focus on the auth changes"). */
   reviewFocus: v.optional(v.pipe(v.string(), v.maxLength(4000))),
+  /**
+   * Review: the account-catalog skills QUEUED onto this review, in the order they were picked.
+   * Each is a specialist playbook the team authored ("Performance review", "Security review") that
+   * the reviewer applies on top of its standing role, so one review can carry the lenses this
+   * particular pull request needs without a bespoke pipeline per lens.
+   *
+   * Ids only, resolved per dispatch against the account's synced catalog, so editing a playbook
+   * upstream reaches the next run of a task queued long ago. The picker offers `review`-group
+   * skills; the id is stored bare because the GROUP is a property of the
+   * skill, not of this task, and copying it here would freeze a classification the catalog owns.
+   *
+   * Capped at {@link MAX_REVIEW_SKILLS}: every queued skill is instructions the reviewer carries on
+   * every turn of the review, so a long queue is paid for in the review's own context budget.
+   */
+  reviewSkillIds: v.optional(
+    v.pipe(
+      v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
+      v.maxLength(MAX_REVIEW_SKILLS),
+    ),
+  ),
 
   // --- Custom-task-type fields ----------------------------------------------
   /**

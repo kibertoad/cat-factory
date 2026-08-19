@@ -7380,7 +7380,8 @@
       "title": "Competenze sincronizzate",
       "empty": "Nessuna competenza ancora sincronizzata. Collega una fonte di repository qui sotto per importare le sue cartelle di competenze.",
       "resources": "{count} risorse",
-      "pinned": "fissata su {commit}"
+      "pinned": "fissata su {commit}",
+      "groupUnknown": "Dichiara il gruppo «{group}», che questa versione non conosce, quindi è archiviata in Altre."
     },
     "sources": {
       "title": "Fonti di repository",
@@ -7417,6 +7418,24 @@
       "checkSourceFailed": "Impossibile controllare la fonte",
       "sourceUnlinked": "Fonte scollegata",
       "unlinkSourceFailed": "Impossibile scollegare la fonte"
+    },
+    "groups": {
+      "build": "Costruire",
+      "review": "Revisionare",
+      "test": "Testare",
+      "write": "Scrivere",
+      "plan": "Pianificare",
+      "operate": "Operare",
+      "other": "Altre"
+    },
+    "reviewQueue": {
+      "label": "Competenze di revisione",
+      "hint": "Metti in coda manuali di revisione specialistici dalla tua libreria. Il revisore li applica nell’ordine scelto.",
+      "pickerEmpty": "Nessuna competenza di revisione nel catalogo. Aggiungi group: review al SKILL.md di una competenza per proporla qui.",
+      "capped": "Una revisione porta al massimo {max} competenze.",
+      "done": "Fatto",
+      "save": "Salva",
+      "revert": "Ripristina"
     }
   },
   "merge": {

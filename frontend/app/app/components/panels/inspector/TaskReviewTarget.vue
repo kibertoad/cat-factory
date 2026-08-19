@@ -9,11 +9,23 @@
 // provider's own link (`prUrl`), which is what makes a plain read enough here; a task created
 // while no VCS was connected keeps only the number, and then the reference reads as text rather
 // than pretending to be a link.
-import { computed } from 'vue'
+//
+// The SKILL QUEUE is editable here, and that is not a convenience. A queued skill that has left
+// the catalog FAILS every dispatch of this task, and the refusal's remedy names the task's own
+// queue as where the fix is made; with the queue frozen at creation that remedy pointed at
+// nothing and the only exit was deleting a task whose id every stored reference holds. Same
+// reasoning as `TaskTypeFields`, which exists for the same shape of dead end.
+import { computed, ref, watch } from 'vue'
 import type { Block } from '~/types/domain'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import ReviewSkillQueue from '~/components/skills/ReviewSkillQueue.vue'
+import {
+  reviewQueueDirty,
+  reviewSkillQueuePatch,
+} from '~/components/panels/inspector/TaskReviewTarget.logic'
 
 const props = defineProps<{ block: Block }>()
+const board = useBoardStore()
 const { t } = useI18n()
 
 const isReview = computed(() => props.block.taskType === 'review')
@@ -27,13 +39,46 @@ const label = computed(() => {
   return number ? t('inspector.reviewTarget.prNumber', { number }) : url.value
 })
 
-/** Nothing to show when the task carries no reference at all (nothing to link or name). */
-const hasTarget = computed(() => Boolean(label.value))
+/** The queue as STORED, the baseline the edit buffer is seeded from and compared against. */
+const stored = computed<string[]>(() => fields.value?.reviewSkillIds ?? [])
+
+// Local edit buffer, re-seeded whenever the stored queue changes underneath (a live board push,
+// or switching blocks). Editing writes on commit rather than per pick, so a half-built queue
+// never reaches the row a dispatch reads.
+const draft = ref<string[]>([...stored.value])
+watch(stored, (next) => {
+  draft.value = [...next]
+})
+
+const dirty = computed(() => reviewQueueDirty(stored.value, draft.value))
+const saving = ref(false)
+
+/**
+ * Write the queue through the BUILT-IN half of the per-type bag, which REPLACES that half whole.
+ * What that means for the payload (carry the other built-in keys; express an EMPTY queue by the
+ * key's absence rather than by an empty array riding a stored one) is
+ * {@link reviewSkillQueuePatch}, which is where it is tested.
+ */
+async function save() {
+  if (!dirty.value) return
+  saving.value = true
+  try {
+    await board.updateBlock(props.block.id, {
+      builtinTaskTypeFields: reviewSkillQueuePatch(props.block.taskTypeFields, draft.value),
+    })
+  } finally {
+    saving.value = false
+  }
+}
+
+function revert() {
+  draft.value = [...stored.value]
+}
 </script>
 
 <template>
   <InspectorSection
-    v-if="isReview && hasTarget"
+    v-if="isReview"
     :title="t('inspector.reviewTarget.title')"
     :hint="t('inspector.reviewTarget.hint')"
     icon="i-lucide-git-pull-request-arrow"
@@ -56,7 +101,7 @@ const hasTarget = computed(() => Boolean(label.value))
       <span class="w-full truncate text-start" :title="url">{{ label }}</span>
     </UButton>
     <p
-      v-else
+      v-else-if="label"
       class="rounded-lg border border-slate-800 bg-slate-900/40 p-2.5 text-xs text-slate-300"
       data-testid="inspector-review-target-link"
     >
@@ -65,5 +110,29 @@ const hasTarget = computed(() => Boolean(label.value))
     <p v-if="focus" class="text-xs leading-relaxed text-slate-500">
       {{ t('inspector.reviewTarget.focus', { focus }) }}
     </p>
+    <div data-testid="inspector-review-skills">
+      <ReviewSkillQueue v-model="draft" />
+      <div v-if="dirty" class="mt-2 flex items-center gap-2">
+        <UButton
+          size="xs"
+          color="primary"
+          variant="soft"
+          :loading="saving"
+          data-testid="inspector-review-skills-save"
+          @click="save"
+        >
+          {{ t('skills.reviewQueue.save') }}
+        </UButton>
+        <UButton
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          data-testid="inspector-review-skills-revert"
+          @click="revert"
+        >
+          {{ t('skills.reviewQueue.revert') }}
+        </UButton>
+      </div>
+    </div>
   </InspectorSection>
 </template>

@@ -108,6 +108,12 @@ export const BUILTIN_PUBLIC_TASK_FIELDS: Readonly<Record<string, readonly Descri
       maxLength: 500,
     },
     { key: 'reviewFocus', label: 'Review focus', type: 'textarea', maxLength: 2000 },
+    // `reviewSkillIds` is deliberately ABSENT, for the reason `targetPath` is: no descriptor can
+    // state its vocabulary. The valid values are the ids in the CALLING ACCOUNT's skill catalog,
+    // which is tenant data, where this table is one static statement served to every caller. A
+    // `checkbox-group` with no options would advertise a free-string list that creation then
+    // refuses against a catalog the caller was never shown. Adding it later (as its own
+    // discovery read) is additive.
   ],
   feature: [],
   ralph: [],

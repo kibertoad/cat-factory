@@ -28,6 +28,7 @@ import type { AppSlots, ResultViewContribution } from '~/modular/slots'
 import ContextAttachmentFields from '~/components/context/ContextAttachmentFields.vue'
 import DescriptorFields from '~/components/common/DescriptorFields.vue'
 import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
+import ReviewSkillQueue from '~/components/skills/ReviewSkillQueue.vue'
 import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import { parseConflict } from '~/composables/usePipelineErrorToast'
 import { apiErrorEnvelope } from '~/composables/api/errors'
@@ -143,6 +144,9 @@ const docOutlineHints = ref('')
 // review focus. The single input is parsed into the contract's `prUrl`/`prNumber` fields.
 const reviewPrRef = ref('')
 const reviewFocus = ref('')
+// Specialist review playbooks queued onto the review, in the order the reviewer applies them.
+// Offered from the account catalog's `review` group only (see ReviewSkillQueue).
+const reviewSkillIds = ref<string[]>([])
 
 // Best-practice prompt fragments the user pins on the task up front (folded into its agents
 // on top of the service-level standards, exactly like the inspector's picker). Chosen from the
@@ -320,6 +324,7 @@ function buildTypeFields(): TaskTypeFields | undefined {
   if (taskType.value === 'review') {
     const f: TaskTypeFields = { ...parseReviewPrRef(reviewPrRef.value) }
     if (reviewFocus.value.trim()) f.reviewFocus = reviewFocus.value.trim()
+    if (reviewSkillIds.value.length) f.reviewSkillIds = [...reviewSkillIds.value]
     return Object.keys(f).length ? f : undefined
   }
   return buildCustomTypeFields()
@@ -569,6 +574,7 @@ watch(open, (isOpen) => {
   docOutlineHints.value = ''
   reviewPrRef.value = ''
   reviewFocus.value = ''
+  reviewSkillIds.value = []
   // Empty rather than default-seeded: `taskType` was just reset to a BUILT-IN above, which
   // declares no descriptor fields. Picking a custom type from here runs the `taskType` watcher,
   // and that is the one place the new type's declared defaults are seeded.
@@ -1170,6 +1176,10 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
                 class="w-full"
               />
             </UFormField>
+            <!-- The team's specialist review playbooks, applied on top of the reviewer's standing
+                 role. Always shown (not advanced-only): queueing a security or performance pass is
+                 a per-review judgement a reviewer makes, not a platform setting. -->
+            <ReviewSkillQueue v-model="reviewSkillIds" />
           </div>
 
           <!-- A CUSTOM (deployment-registered) task type: a bespoke create-form section when its

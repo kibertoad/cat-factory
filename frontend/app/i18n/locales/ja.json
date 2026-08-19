@@ -7380,7 +7380,8 @@
       "title": "同期済みスキル",
       "empty": "まだスキルが同期されていません。下のリポジトリソースをリンクしてスキルフォルダーをインポートしてください。",
       "resources": "リソース {count} 件",
-      "pinned": "{commit} に固定"
+      "pinned": "{commit} に固定",
+      "groupUnknown": "このバージョンが知らないグループ「{group}」を宣言しているため、その他に分類しています。"
     },
     "sources": {
       "title": "リポジトリソース",
@@ -7417,6 +7418,24 @@
       "checkSourceFailed": "ソースを確認できませんでした",
       "sourceUnlinked": "ソースのリンクを解除しました",
       "unlinkSourceFailed": "ソースのリンクを解除できませんでした"
+    },
+    "groups": {
+      "build": "ビルド",
+      "review": "レビュー",
+      "test": "テスト",
+      "write": "ライティング",
+      "plan": "計画",
+      "operate": "運用",
+      "other": "その他"
+    },
+    "reviewQueue": {
+      "label": "レビュースキル",
+      "hint": "スキルライブラリから専門的なレビュー手順書をキューに追加します。レビュアーは選んだ順に適用します。",
+      "pickerEmpty": "カタログにレビュースキルがありません。スキルの SKILL.md に group: review を追加するとここに表示されます。",
+      "capped": "1 回のレビューで扱えるスキルは最大 {max} 件です。",
+      "done": "完了",
+      "save": "保存",
+      "revert": "元に戻す"
     }
   },
   "merge": {

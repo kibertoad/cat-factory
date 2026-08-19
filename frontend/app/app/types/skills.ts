@@ -8,6 +8,7 @@
 // All wire shapes are sourced from @cat-factory/contracts (single source of truth).
 
 export type {
+  SkillGroup,
   SkillResource,
   AccountSkill,
   SkillSource,

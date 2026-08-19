@@ -1,0 +1,1 @@
+ALTER TABLE "account_skills" ADD COLUMN "skill_group" text DEFAULT 'other' NOT NULL;

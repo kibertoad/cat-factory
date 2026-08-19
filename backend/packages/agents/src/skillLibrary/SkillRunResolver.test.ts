@@ -8,6 +8,7 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
+import { SKILL_UNAVAILABLE_REASON } from '@cat-factory/contracts'
 import { describe, expect, it, vi } from 'vitest'
 import { SkillCatalogService } from './SkillCatalogService.js'
 import { SkillRunResolver } from './SkillRunResolver.js'
@@ -28,6 +29,7 @@ function skillRecord(overrides: Partial<AccountSkillRecord> = {}): AccountSkillR
     accountId: ACCOUNT,
     name: 'triage',
     description: 'Triage a bug',
+    group: 'review',
     instructions: '1. Reproduce\n2. Classify',
     resources: [
       { path: '.claude/skills/triage/templates/report.md', sha: 'sha-r', size: 40 },
@@ -269,5 +271,101 @@ describe('SkillRunResolver', () => {
       expect(syncSource).not.toHaveBeenCalled()
       expect(skill.instructions).toContain('Reproduce')
     })
+  })
+})
+
+describe('SkillRunResolver.resolveManyForRun', () => {
+  // What a dispatch resolving SEVERAL skills must not do: pay per skill for what the account
+  // answers once. The catalog cache passes through on the Worker isolate profile, so a per-skill
+  // loop is a repeated D1 read there and a repeated GitHub probe everywhere.
+  function makeBatchResolver(records: AccountSkillRecord[]) {
+    const resolveInstallationId = vi.fn(async () => 42)
+    const accountSkillRepository = {
+      get: vi.fn(
+        async (_a: string, skillId: string) => records.find((r) => r.skillId === skillId) ?? null,
+      ),
+      listByAccount: vi.fn(async () => records),
+    } as unknown as AccountSkillRepository
+    const skillSourceRepository = {
+      get: vi.fn(async () => sourceRecord()),
+    } as unknown as SkillSourceRepository
+    const githubClient = {
+      getFileContent: vi.fn(async (): Promise<RepoFileContent | null> => null),
+      latestCommitSha: vi.fn(async () => sourceRecord().lastSyncedCommit),
+    } as unknown as GitHubClient
+    const resolver = new SkillRunResolver({
+      workspaceRepository: {
+        accountOf: vi.fn(async () => ACCOUNT),
+      } as unknown as WorkspaceRepository,
+      catalogService: new SkillCatalogService({ accountSkillRepository }),
+      skillSourceRepository,
+      githubClient,
+      resolveInstallationId,
+      syncSource: vi.fn(async () => {}),
+    })
+    return {
+      resolver,
+      accountSkillRepository,
+      skillSourceRepository,
+      githubClient,
+      resolveInstallationId,
+    }
+  }
+
+  const lensA = skillRecord({
+    skillId: `src:${SOURCE_ID}:security`,
+    name: 'security',
+    resources: [],
+  })
+  const lensB = skillRecord({ skillId: `src:${SOURCE_ID}:perf`, name: 'perf', resources: [] })
+
+  it('answers in the order asked, off ONE catalog read and ONE probe per source', async () => {
+    const { resolver, accountSkillRepository, skillSourceRepository, githubClient } =
+      makeBatchResolver([lensA, lensB])
+
+    const resolved = await resolver.resolveManyForRun(WORKSPACE, [lensB.skillId, lensA.skillId])
+
+    expect(resolved.map((r) => r.skill.skillId)).toEqual([lensB.skillId, lensA.skillId])
+    expect(accountSkillRepository.listByAccount).toHaveBeenCalledTimes(1)
+    // Both skills came from one source dir, so its head commit is probed once and its row read once.
+    expect(githubClient.latestCommitSha).toHaveBeenCalledTimes(1)
+    expect(skillSourceRepository.get).toHaveBeenCalledTimes(1)
+  })
+
+  it('looks the installation up ONCE, for the probe and the resource fetches alike', async () => {
+    // The freshness probe reads the source dir's head with it and every resource fetch reads its
+    // blobs with it, so resolving it in each is the per-skill repetition this batch exists to
+    // remove, one level down. It is also a real lookup: on the Worker it crosses to D1.
+    const { resolver, resolveInstallationId } = makeBatchResolver([lensA, lensB])
+    await resolver.resolveManyForRun(WORKSPACE, [lensA.skillId, lensB.skillId])
+    expect(resolveInstallationId).toHaveBeenCalledTimes(1)
+  })
+
+  it('names the vanished id with a reason its caller can branch on', async () => {
+    // The engine appends a remedy to THIS refusal and lets an outage on the same call path
+    // through untouched, which it can only tell apart by the reason code.
+    const { resolver } = makeBatchResolver([lensA])
+    const error = await resolver
+      .resolveManyForRun(WORKSPACE, [lensA.skillId, 'src:s:gone'])
+      .then(() => null)
+      .catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ValidationError)
+    expect((error as ValidationError).details).toEqual({
+      reason: SKILL_UNAVAILABLE_REASON,
+      skillId: 'src:s:gone',
+    })
+  })
+
+  it('throws for the first id the catalog cannot answer, naming it', async () => {
+    const { resolver } = makeBatchResolver([lensA])
+    await expect(
+      resolver.resolveManyForRun(WORKSPACE, [lensA.skillId, 'src:s:gone']),
+    ).rejects.toThrow(/src:s:gone/)
+  })
+
+  it('resolves nothing, and reads nothing, for an empty ask', async () => {
+    const { resolver, accountSkillRepository } = makeBatchResolver([lensA])
+    expect(await resolver.resolveManyForRun(WORKSPACE, [])).toEqual([])
+    expect(accountSkillRepository.listByAccount).not.toHaveBeenCalled()
   })
 })

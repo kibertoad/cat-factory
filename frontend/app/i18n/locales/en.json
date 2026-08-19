@@ -7639,7 +7639,8 @@
       "title": "Synced skills",
       "empty": "No skills synced yet. Link a repo source below to import its skill folders.",
       "resources": "{count} resources",
-      "pinned": "pinned {commit}"
+      "pinned": "pinned {commit}",
+      "groupUnknown": "Declares the group “{group}”, which this version does not know, so it is filed under Other."
     },
     "sources": {
       "title": "Repo sources",
@@ -7676,6 +7677,24 @@
       "checkSourceFailed": "Could not check source",
       "sourceUnlinked": "Source unlinked",
       "unlinkSourceFailed": "Could not unlink source"
+    },
+    "groups": {
+      "build": "Build",
+      "review": "Review",
+      "test": "Test",
+      "write": "Write",
+      "plan": "Plan",
+      "operate": "Operate",
+      "other": "Other"
+    },
+    "reviewQueue": {
+      "label": "Review skills",
+      "hint": "Queue specialist review playbooks from your skill library. The reviewer applies them in the order you pick.",
+      "pickerEmpty": "No review skills in your catalog. Add group: review to a skill’s SKILL.md to offer it here.",
+      "capped": "A review carries at most {max} skills.",
+      "done": "Done",
+      "save": "Save",
+      "revert": "Revert"
     }
   },
   "merge": {

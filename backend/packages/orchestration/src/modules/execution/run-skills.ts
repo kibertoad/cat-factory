@@ -9,14 +9,22 @@ import {
   SKILL_AGENT_KIND,
 } from '@cat-factory/agents'
 import type { PipelineStep } from '@cat-factory/contracts'
+import { SKILL_UNAVAILABLE_REASON } from '@cat-factory/contracts'
 import type { AgentKind, Logger, ResolvedSkill, SkillVersionPin } from '@cat-factory/kernel'
-import { ValidationError, noopLogger, runBestEffort } from '@cat-factory/kernel'
+import {
+  DomainError,
+  getErrorMessage,
+  ValidationError,
+  noopLogger,
+  runBestEffort,
+} from '@cat-factory/kernel'
 import type { SkillResolver } from './AgentContextBuilder.js'
 
 // ---------------------------------------------------------------------------
 // Resolve the skills ONE dispatch runs: the agent KIND's declared skills (bundled with the
-// deployment's package, or referenced from the account's synced catalog) plus the step's own
-// picked skill (`stepOptions.skillId`, what the built-in `skill` kind runs).
+// deployment's package, or referenced from the account's synced catalog), the TASK's own queued
+// skills (a review task's specialist lenses, reaching a kind that carries `review-skills`), and
+// the step's picked skill (`stepOptions.skillId`, what the built-in `skill` kind runs).
 //
 // Extracted from `AgentContextBuilder` as a cohesive collaborator — it owns the two sources'
 // precedence, the catalog resolution, the per-run version pinning and the failure policy, none
@@ -37,6 +45,13 @@ export interface ResolveRunSkillsInput {
    * crosses a network. Absent ⇒ resolved from `agentKindRegistry` alone.
    */
   capabilities?: AgentKindCapabilityView
+  /**
+   * Catalog skill ids the TASK queued for this dispatch, in the order a human picked them. Today
+   * that is a review task's `taskTypeFields.reviewSkillIds`, passed only when the dispatched kind
+   * carries the `review-skills` trait; the caller owns that gate, so this stays a plain ordered
+   * list of ids and nothing here re-derives who a queue is for.
+   */
+  taskSkillIds?: string[]
   /** Wired only when the skill library is configured; absent ⇒ no catalog skill can resolve. */
   skillResolver?: SkillResolver
   logger?: Logger
@@ -44,14 +59,19 @@ export interface ResolveRunSkillsInput {
 
 /**
  * Resolve every skill this dispatch applies, in the order they should be applied: the kind's own
- * declarations first (its standing playbooks), then the step's picked skill. Deduplicated by
- * skill id, so a step that picks a skill its kind already declares runs it once.
+ * declarations first (its standing playbooks), then the task's queued skills, then the step's
+ * picked skill. Deduplicated by skill id, so a skill named twice across those sources runs once.
  *
  * The failure policy differs by SOURCE, deliberately:
  *
  * - **The step's picked skill** is a hard failure when it cannot resolve (no resolver wired) —
  *   the whole point of that step is to run that skill, so a silent skip is a wrong run. This is
  *   the pre-existing `skill`-kind contract, unchanged.
+ * - **A TASK-queued skill** is a hard failure too, and for the same reason read one level up: a
+ *   human queued that lens onto this task deliberately. Skipping it would produce a review that
+ *   LOOKS complete while the security pass it was asked for silently never ran, which is exactly
+ *   the failure "degrade loudly" exists to refuse. The message names the task's queue rather than
+ *   a pipeline step, because that is where the fix is made.
  * - **A kind's declared CATALOG skill** is a hard failure too unless it declared itself
  *   `optional`: a kind that names a skill by id is saying it needs it to do the work. Marking it
  *   optional is how a kind says "apply the house playbook if this deployment has one".
@@ -67,7 +87,12 @@ export async function resolveRunSkills(
     .skills
   const pickedSkillId =
     input.agentKind === SKILL_AGENT_KIND ? input.step.stepOptions?.skillId?.trim() : undefined
-  if (!declared.bundled.length && !declared.catalog.length && !pickedSkillId) {
+  // Deduplicated HERE, not merely against the other sources below: a queue is an ordered list a
+  // human (or an API caller) authored, so it can name one playbook twice. Folding it twice would
+  // charge every turn of the review for a second copy of the same instructions and pin a duplicate
+  // `skillVersions` entry, which reads as two lenses where one ran.
+  const queued = [...new Set((input.taskSkillIds ?? []).map((id) => id.trim()).filter(Boolean))]
+  if (!declared.bundled.length && !declared.catalog.length && !queued.length && !pickedSkillId) {
     // Clear on this path too, not just the one below: a step re-dispatched after its pick was
     // removed (or its kind's declaration dropped) lands HERE, and leaving the prior round's pin
     // in place would report "this run executed that version" of a skill it never touched.
@@ -93,6 +118,17 @@ export async function resolveRunSkills(
     if (seen.has(ref.skillId)) continue
     const resolved = await resolveCatalogSkill(input, ref.skillId, ref.optional)
     if (!resolved) continue
+    seen.add(resolved.skill.skillId)
+    skills.push(resolved.skill)
+    versions.push(resolved.version)
+  }
+
+  // ONE resolve for the whole queue, never a loop over the singular method: the resolver answers
+  // the account, the catalog read and each source's freshness probe once for the list.
+  for (const resolved of await resolveTaskSkills(
+    input,
+    queued.filter((skillId) => !seen.has(skillId)),
+  )) {
     seen.add(resolved.skill.skillId)
     skills.push(resolved.skill)
     versions.push(resolved.version)
@@ -167,6 +203,7 @@ async function resolveCatalogSkill(
     return null
   }
   const resolver = input.skillResolver
+  const remedy = 'Update the pipeline step to a current skill.'
   if (optional) {
     const resolved = await runBestEffort(
       input.logger ?? noopLogger,
@@ -179,6 +216,69 @@ async function resolveCatalogSkill(
     )
     return resolved ?? null
   }
-  const { skill, version } = await resolver.resolveForRun(input.workspaceId, skillId)
-  return { skill: { ...skill, origin: 'catalog' }, version }
+  try {
+    const { skill, version } = await resolver.resolveForRun(input.workspaceId, skillId)
+    return { skill: { ...skill, origin: 'catalog' }, version }
+  } catch (error) {
+    // The resolver states the fact; only this layer knows the id came off a step (or the kind
+    // running on it), so it is here that the message can name where the fix is made.
+    throw withRemedy(error, remedy, skillId)
+  }
+}
+
+/**
+ * Re-raise a resolver failure with the remedy naming the surface the id was picked on, but ONLY
+ * where the failure is the catalog answering "no such skill". Anything else on that call path is
+ * an outage (an unreachable store, a lost persistence RPC, a workspace the account read cannot
+ * resolve), and those have nothing to do with the pick: re-labelling one as a bad skill id sends
+ * an operator to edit a step that is already correct, and destroys the error's own class and
+ * cause on the way. Those propagate untouched.
+ *
+ * The refusal's own `details` are CARRIED, not rebuilt, so the machine-readable `skillId` the
+ * resolver named survives the remedy being appended to the prose.
+ */
+function withRemedy(error: unknown, remedy: string, skillId?: string): never {
+  if (!isSkillUnavailable(error)) throw error
+  throw new ValidationError(`${getErrorMessage(error)} ${remedy}`, {
+    ...(skillId ? { skillId } : {}),
+    ...error.details,
+  })
+}
+
+/** Whether a thrown value is the resolver's "this id is no longer in the catalog" refusal. */
+function isSkillUnavailable(error: unknown): error is DomainError {
+  return error instanceof DomainError && error.details?.reason === SKILL_UNAVAILABLE_REASON
+}
+
+/**
+ * Resolve the skills a TASK queued, in one pass. Never optional: the queue is an explicit human
+ * pick, so a skill that has left the catalog fails the dispatch rather than being dropped.
+ *
+ * The REMEDY is what separates this from its `resolveCatalogSkill` sibling. The resolver states
+ * only the fact (which skill is gone), because it cannot see where the id was picked; sending
+ * someone holding a review task to "the pipeline step" would name a surface they never touched.
+ */
+async function resolveTaskSkills(
+  input: ResolveRunSkillsInput,
+  skillIds: string[],
+): Promise<{ skill: ResolvedSkill; version: SkillVersionPin }[]> {
+  if (!skillIds.length) return []
+  const remedy = 'Edit the task’s skills and pick a current one, or remove it.'
+  if (!input.skillResolver) {
+    throw new ValidationError(
+      `This task queued the skill '${skillIds[0]}', but the skill library is not configured for this deployment. ${remedy}`,
+      { skillId: skillIds[0] },
+    )
+  }
+  try {
+    const resolved = await input.skillResolver.resolveManyForRun(input.workspaceId, skillIds)
+    return resolved.map(({ skill, version }) => ({
+      skill: { ...skill, origin: 'catalog' as const },
+      version,
+    }))
+  } catch (error) {
+    // No `skillId` of our own to supply: the batch knows which id it could not answer and says so
+    // in its own `details`, which {@link withRemedy} carries through.
+    throw withRemedy(error, remedy)
+  }
 }

@@ -103,6 +103,26 @@ export const DESIGN_IMAGES_TRAIT: AgentTrait = 'design-images'
 export const INTERVIEW_GATE_TRAIT: AgentTrait = 'interview-gate'
 
 /**
+ * REVIEW-QUEUE kinds: the ones a review task's queued skills reach.
+ *
+ * A `review` task carries an ordered queue of account-catalog skills (`taskTypeFields
+ * .reviewSkillIds`), the specialist lenses a team wants applied to THIS pull request. The engine
+ * resolves them onto `AgentRunContext.skills` for a dispatch whose kind carries this trait, on top
+ * of whatever the kind itself declares, so the harness installs them by the same path it installs
+ * a `skill` step's pick.
+ *
+ * A TRAIT rather than a kind check because who applies the queue is a property of the AGENT, not
+ * of the pipeline: a deployment that reviews through its own kind carries the trait and its
+ * reviewer receives the queue, where a hard-coded `pr-reviewer` test would silently drop it. A
+ * pure marker (no guidance): each resolved skill renders its own prompt section, and static text
+ * about a queue that is usually empty would be a standing cost for an occasional feature.
+ *
+ * Deliberately NOT on the code `reviewer` companion or on a fixer. Those run inside a BUILD
+ * pipeline, where the field is never set, so carrying it would state a reach they do not have.
+ */
+export const REVIEW_SKILLS_TRAIT: AgentTrait = 'review-skills'
+
+/**
  * Implementer kinds: code-writing agents that run a LONG agentic loop (coder, fixer,
  * ci-fixer, conflict-resolver) whose system prompt — including every folded best-practice
  * standard — is re-sent on each of their many turns. A pure MARKER trait (no prompt
@@ -276,6 +296,9 @@ export const STANDARD_TRAIT_DEFINITIONS: readonly AgentTraitDefinition[] = [
   { id: SPEC_AWARE_TRAIT, guidance: SPEC_AWARE_GUIDANCE },
   { id: INTERVIEW_GATE_TRAIT },
   { id: BRIEF_STANDARDS_TRAIT },
+  // A marker: the queued skills each render their own prompt section through the shared skill
+  // delivery, so there is nothing static to fold for a kind that carries it.
+  { id: REVIEW_SKILLS_TRAIT },
   { id: FOUNDATIONAL_CATALOG_TRAIT, guidance: FOUNDATIONAL_CATALOG_GUIDANCE },
   { id: FOUNDATIONAL_CONTRACTS_TRAIT, guidance: FOUNDATIONAL_CONTRACTS_GUIDANCE },
   { id: BINARY_OUTPUT_TRAIT, guidance: BINARY_OUTPUT_GUIDANCE },

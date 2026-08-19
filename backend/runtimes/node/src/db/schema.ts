@@ -497,6 +497,10 @@ export const accountSkills = pgTable(
     account_id: text('account_id').notNull(),
     name: text('name').notNull(),
     description: text('description').notNull(),
+    // The RAW `group:` the manifest declared (lowercased by the sync), narrowed to the wire
+    // vocabulary on read so an unrecognised value can be shown back to its author. `group` is a
+    // reserved word in both engines, hence the column name.
+    skill_group: text('skill_group').notNull().default('other'),
     instructions: text('instructions').notNull(),
     // JSON [{ path, sha, size }] manifest of sibling resource files (bodies not stored).
     resources: text('resources').notNull().default('[]'),

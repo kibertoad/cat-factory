@@ -7380,7 +7380,8 @@
       "title": "Habilidades sincronizadas",
       "empty": "Aún no hay habilidades sincronizadas. Vincula una fuente de repositorio abajo para importar sus carpetas de habilidades.",
       "resources": "{count} recursos",
-      "pinned": "fijada en {commit}"
+      "pinned": "fijada en {commit}",
+      "groupUnknown": "Declara el grupo «{group}», que esta versión no conoce, así que se archiva en Otras."
     },
     "sources": {
       "title": "Fuentes de repositorio",
@@ -7417,6 +7418,24 @@
       "checkSourceFailed": "No se pudo comprobar la fuente",
       "sourceUnlinked": "Fuente desvinculada",
       "unlinkSourceFailed": "No se pudo desvincular la fuente"
+    },
+    "groups": {
+      "build": "Construir",
+      "review": "Revisar",
+      "test": "Probar",
+      "write": "Escribir",
+      "plan": "Planificar",
+      "operate": "Operar",
+      "other": "Otras"
+    },
+    "reviewQueue": {
+      "label": "Habilidades de revisión",
+      "hint": "Pon en cola manuales de revisión especializados de tu biblioteca de habilidades. El revisor los aplica en el orden que elijas.",
+      "pickerEmpty": "No hay habilidades de revisión en tu catálogo. Añade group: review al SKILL.md de una habilidad para ofrecerla aquí.",
+      "capped": "Una revisión lleva como máximo {max} habilidades.",
+      "done": "Listo",
+      "save": "Guardar",
+      "revert": "Descartar"
     }
   },
   "merge": {

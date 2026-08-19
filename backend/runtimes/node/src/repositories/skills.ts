@@ -34,6 +34,7 @@ function rowToSkill(row: AccountSkillRow): AccountSkillRecord {
     accountId: row.account_id,
     name: row.name,
     description: row.description,
+    group: row.skill_group,
     instructions: row.instructions,
     resources: parseResources(row.resources),
     sourceId: row.source_id,
@@ -74,6 +75,7 @@ export class DrizzleAccountSkillRepository implements AccountSkillRepository {
       account_id: record.accountId,
       name: record.name,
       description: record.description,
+      skill_group: record.group,
       instructions: record.instructions,
       resources: JSON.stringify(record.resources),
       source_id: record.sourceId,
@@ -92,6 +94,7 @@ export class DrizzleAccountSkillRepository implements AccountSkillRepository {
         set: {
           name: values.name,
           description: values.description,
+          skill_group: values.skill_group,
           instructions: values.instructions,
           resources: values.resources,
           source_id: values.source_id,

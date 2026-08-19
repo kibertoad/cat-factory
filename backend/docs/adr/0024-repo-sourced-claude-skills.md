@@ -93,7 +93,12 @@ silent wrong run); only the resource-body fetch degrades. Pipeline-save/run-star
 - **Rename = new identity.** A renamed skill directory produces a new `src:<sourceId>:<dir>` id and
   tombstones the old one; steps referencing the old id fail cleanly at dispatch and show a builder
   warning. No alias table (acceptable pre-1.0).
-- **Deliberately not pursued.** Skills are step-only, NOT a second passive-context surface
+- **Superseded in part.** "Skills are step-only" held at the time and no longer does: ADR 0029
+  let an agent KIND declare skills, and [ADR 0059](./0059-skill-groups-and-review-skill-queue.md)
+  lets a review TASK queue them (and gives a skill a `group:` so a picker can offer the right
+  subset). All three resolve through the same delivery; `run-skills.ts` owns their order and
+  failure policy.
+- **Deliberately not pursued.** Skills are not a second passive-context surface
   (fragments already cover passive guidance). No skill table beyond the account catalog: the
   in-repo `SKILL.md` files are the source of truth. The built-in agents were not migrated to the
   skill/custom-agent model (that remains the separate strangler work).
