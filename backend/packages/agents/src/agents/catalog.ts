@@ -452,6 +452,10 @@ function withPriorReview(prompt: string, context: AgentRunContext): string {
   const prior = context.priorReview
   if (!prior?.rounds.length) return prompt
   const grading = prior.role === 'grader'
+  // Whether this prompt HAS a current-round list above these rounds. Read rather than assumed:
+  // the producer heading points at that list, and pointing at a section that is not there is the
+  // same class of untruth the dedup below exists to remove.
+  const listedNow = context.revision?.comments ?? []
   const lines = [
     prompt,
     '',
@@ -459,13 +463,14 @@ function withPriorReview(prompt: string, context: AgentRunContext): string {
       ? `You have already reviewed earlier revisions of this work ${prior.rounds.length} time(s). ` +
         'Your own previous verdicts:'
       : `This work has been through ${prior.rounds.length} review round(s) before the feedback ` +
-        `above. The list above is the authoritative one to work through; this is the rest of ` +
-        `the history, so you do not undo a fix or drop an open point:`,
-    // The producer's history is deduplicated against the current round's list: a point still open
-    // is re-raised every round, and rendering it in both places is how one ask came to appear
-    // three times in one prompt with no single list to work from. A grader has no `revision`
-    // section of its own, so nothing is folded out of its own verdicts.
-    ...renderPriorReviewRounds(prior.rounds, prior.threshold, context.revision?.comments ?? []),
+        `above.${listedNow.length ? ' The list above is the authoritative one to work through; this is the rest of the history,' : ' Everything previously raised,'} ` +
+        `so you do not undo a fix or drop an open point:`,
+    // Deduplicated against whatever the prompt already lists as the work to do now: a point still
+    // open is re-raised every round, and rendering it in both places is how one ask came to appear
+    // three times in one prompt with no single list to work from. In practice that is the PRODUCER
+    // side, since `revision` is what a step being reworked carries; a grader re-run on its own
+    // gate has one too, and folding a verbatim repeat of its own verdict is right there as well.
+    ...renderPriorReviewRounds(prior.rounds, prior.threshold, listedNow),
     '',
     grading
       ? PRIOR_ROUNDS_DIRECTIVE

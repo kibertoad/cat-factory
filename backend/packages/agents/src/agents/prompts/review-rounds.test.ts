@@ -573,6 +573,21 @@ describe('deduplicating the producer history against the current round', () => {
     expect(prompt).toContain('name the ingress class')
   })
 
+  it('does not point at a current-round list when this round listed no points', () => {
+    // The heading names that list, and a producer looped back on prose feedback alone has none.
+    // Claiming one is the same class of untruth the dedup exists to remove.
+    const prompt = userPromptFor(
+      context({
+        agentKind: 'architect',
+        priorReview: { role: 'producer', threshold: 0.8, rounds: [rounds[0]!] },
+        revision: { previousProposal: 'v1', feedback: 'tighten it up', requestedBy: 'reviewer' },
+      }),
+      registry(),
+    )
+    expect(prompt).not.toContain('The list above is the authoritative one')
+    expect(prompt).toContain('Everything previously raised, so you do not undo a fix')
+  })
+
   it('folds nothing out of a GRADER own verdicts, which have no current-round list beside them', () => {
     const prompt = userPromptFor(
       context({
