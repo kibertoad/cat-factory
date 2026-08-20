@@ -42,9 +42,9 @@
     "db:migrate:provisioning:local": "wrangler d1 migrations apply cat_factory_provisioning --local"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^4.0.38",
-    "@ai-sdk/openai": "^4.0.41",
-    "@ai-sdk/openai-compatible": "^3.0.30",
+    "@ai-sdk/anthropic": "^4.0.39",
+    "@ai-sdk/openai": "^4.0.43",
+    "@ai-sdk/openai-compatible": "^3.0.31",
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/binary-generators": "workspace:*",
     "@cat-factory/caching": "workspace:*",
@@ -64,18 +64,18 @@
     "@cat-factory/spend": "workspace:*",
     "@cloudflare/containers": "^0.3.7",
     "@hono/valibot-validator": "^0.6.1",
-    "ai": "^7.0.64",
-    "hono": "^4.13.1",
+    "ai": "^7.0.68",
+    "hono": "^4.13.3",
     "pino": "^10.3.1",
     "valibot": "^1.4.2",
     "workers-ai-provider": "^4.0.0"
   },
   "devDependencies": {
     "@cat-factory/conformance": "workspace:*",
-    "@cloudflare/vitest-pool-workers": "^0.21.2",
-    "@cloudflare/workers-types": "^5.20260812.1",
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/workers-types": "^5.20260819.1",
     "typescript": "7.0.2",
-    "vitest": "^4.1.10",
-    "wrangler": "^4.122.0"
+    "vitest": "^4.1.11",
+    "wrangler": "^4.124.0"
   }
 }

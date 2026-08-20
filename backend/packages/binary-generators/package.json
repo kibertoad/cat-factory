@@ -40,6 +40,6 @@
     "@cat-factory/orchestration": "workspace:*",
     "openapi-types": "^12.1.3",
     "typescript": "7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

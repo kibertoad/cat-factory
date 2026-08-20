@@ -25,7 +25,7 @@ import { isOffValue } from './envFlags.js'
  * `@cat-factory/executor-harness`'s version (the value CI tags the published image with, and
  * the same tag `deploy/backend` pins). Bump it whenever the harness image bumps.
  */
-export const RECOMMENDED_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor:1.126.0'
+export const RECOMMENDED_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor:1.127.0'
 
 /**
  * The UI-TESTER image this backend release is matched to: the same harness plus Playwright +
@@ -35,7 +35,7 @@ export const RECOMMENDED_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor
  * A step declaring `image: 'ui'` (the browser-driven `tester-ui` kind) dispatches to its own
  * container on this image, alongside the run's ordinary one.
  */
-export const RECOMMENDED_UI_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor-ui:1.126.0'
+export const RECOMMENDED_UI_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor-ui:1.127.0'
 
 /**
  * The effective harness image ref: an explicit `LOCAL_HARNESS_IMAGE` wins (a custom build, a

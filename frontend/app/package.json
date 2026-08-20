@@ -56,9 +56,9 @@
     "msw": "^2.15.0",
     "nuxt": "^4.5.2",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.10",
+    "vitest": "^4.1.11",
     "vue-i18n-extract": "^2.0.7",
-    "vue-tsc": "^3.3.9"
+    "vue-tsc": "^3.3.10"
   },
   "peerDependencies": {
     "nuxt": "^4.5.2"
