@@ -352,7 +352,7 @@ describe('github store — GitHub PAT credential check', () => {
   // read behind it answers from local rows. Awaited, an unreachable GitHub held those modals
   // for the full outbound timeout to settle a banner they do not render.
   it('does not make callers wait on the outbound check', async () => {
-    let settleCheck = (_: GitHubPatCheck) => {}
+    let settleCheck: (value: GitHubPatCheck) => void = () => {}
     stubApi({
       getGitHubConnection: vi.fn().mockResolvedValue({ connection: connection() }),
       listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),

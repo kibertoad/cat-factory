@@ -1107,8 +1107,8 @@ jobs:
       # its image/namespace-override + secretGenerator cases.
       - name: Install k3d + kubectl + kustomize
         run: |
-          K3D_VERSION=v5.7.5
-          KUBECTL_VERSION=v1.31.2
+          K3D_VERSION=v5.9.0
+          KUBECTL_VERSION=v1.36.4
           KUSTOMIZE_VERSION=v5.8.1
           curl -sSfL "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64" -o "$RUNNER_TEMP/k3d"
           curl -sSfL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o "$RUNNER_TEMP/kubectl"

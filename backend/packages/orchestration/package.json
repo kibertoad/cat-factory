@@ -40,11 +40,11 @@
     "@cat-factory/sandbox": "workspace:*",
     "@cat-factory/spend": "workspace:*",
     "@cat-factory/workspaces": "workspace:*",
-    "ai": "^7.0.64"
+    "ai": "^7.0.68"
   },
   "devDependencies": {
     "@cat-factory/sandbox-fixtures": "workspace:*",
     "typescript": "7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

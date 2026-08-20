@@ -35,7 +35,7 @@
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
-    "ai": "^7.0.64",
+    "ai": "^7.0.68",
     "p-map": "^7.0.6",
     "undici": "^8.10.0",
     "yaml": "^2.9.0"
@@ -44,6 +44,6 @@
     "@cat-factory/caching": "workspace:*",
     "typescript": "7.0.2",
     "valibot": "^1.4.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }
