@@ -20,10 +20,10 @@ container behaviour rather than merely working.
 
 | Tool      | Version   | Source of truth   | Notes                                                                        |
 | --------- | --------- | ----------------- | ---------------------------------------------------------------------------- |
-| kubectl   | `v1.36.3` | deploy-harness    | Docker Desktop ships its own, older, client on the machine PATH.             |
+| kubectl   | `v1.36.4` | deploy-harness    | Docker Desktop ships its own, older, client on the machine PATH.             |
 | kustomize | `v5.8.1`  | deploy-harness    | Standalone; `kubectl` also bundles a `kustomize` subcommand.                 |
-| helm      | `v4.2.3`  | deploy-harness    |                                                                              |
-| k3d       | `v5.7.5`  | CI `test-k8s` job | Runs k3s in Docker; ships the klipper ServiceLB (LoadBalancer URLs resolve). |
+| helm      | `v4.2.4`  | deploy-harness    |                                                                              |
+| k3d       | `v5.9.0`  | CI `test-k8s` job | Runs k3s in Docker; ships the klipper ServiceLB (LoadBalancer URLs resolve). |
 
 `kubectl` / `kustomize` / `helm` are the [`deploy-harness` Dockerfile](../internal/deploy-harness/Dockerfile)
 pins, that image being what the deploy step actually runs. `k3d` is CI's, because the deploy-harness

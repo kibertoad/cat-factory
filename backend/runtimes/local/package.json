@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/local-server",
-  "version": "0.139.4",
+  "version": "0.139.5",
   "description": "Local-mode runtime facade for the Agent Architecture Board: the @cat-factory/node-server stack with agent jobs run as local Docker/Podman containers and GitHub accessed via a personal access token — a developer can run the whole product on their own machine.",
   "repository": {
     "type": "git",
@@ -45,7 +45,7 @@
     "@cat-factory/orchestration": "workspace:*",
     "@cat-factory/prompt-fragments": "workspace:*",
     "@cat-factory/server": "workspace:*",
-    "@hono/node-server": "^2.1.0",
+    "@hono/node-server": "^2.1.1",
     "drizzle-orm": "1.0.0-rc.4",
     "ws": "^8.21.3"
   },
@@ -55,6 +55,6 @@
     "@types/node": "^26.2.0",
     "@types/ws": "^8.18.1",
     "typescript": "7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }
