@@ -90,7 +90,6 @@ export function priorReviewFor(
     return {
       role: 'grader',
       threshold: companion.threshold,
-      roundsRemaining: Math.max(0, companion.maxAttempts - companion.attempts),
       rounds: toRounds(companion.verdicts),
     }
   }
@@ -108,8 +107,33 @@ export function priorReviewFor(
   return {
     role: 'producer',
     threshold: companion!.threshold,
-    roundsRemaining: Math.max(0, companion!.maxAttempts - companion!.attempts),
     rounds: toRounds(earlier),
+  }
+}
+
+/**
+ * The `gradingBar` slice: the bar THIS companion dispatch is scoring against, plus the rope left.
+ *
+ * Present for every companion dispatch and nothing else. Split from {@link priorReviewFor} because
+ * the two have different availability: the history exists only from round two, while the bar
+ * applies from round one, and reading it off the history left the FIRST grading of every step
+ * asking for a rating against a threshold the prompt never stated. `step.companion` is seeded at
+ * run start (bar, budget, `verdicts: []`), so the fact was always there; this is the read.
+ *
+ * `roundsRemaining` lives HERE and nowhere else: it is a fact about the loop's remaining budget,
+ * not about any round already in it, and the history slice used to carry a copy that only the
+ * grader's rendering read.
+ */
+function gradingBarFor(
+  step: PipelineStep,
+  registry?: AgentKindRegistry,
+): AgentRunContext['gradingBar'] | undefined {
+  if (!isCompanionKind(step.agentKind, registry)) return undefined
+  const companion = step.companion
+  if (!companion) return undefined
+  return {
+    threshold: companion.threshold,
+    roundsRemaining: Math.max(0, companion.maxAttempts - companion.attempts),
   }
 }
 
@@ -175,7 +199,16 @@ export function buildReworkContext(
   instance: { steps: readonly PipelineStep[]; currentStep: number },
   step: PipelineStep,
   registry?: AgentKindRegistry,
-): { revision?: AgentRunContext['revision']; priorReview?: AgentRunContext['priorReview'] } {
+): {
+  revision?: AgentRunContext['revision']
+  priorReview?: AgentRunContext['priorReview']
+  gradingBar?: AgentRunContext['gradingBar']
+} {
   const priorReview = priorReviewFor(instance, instance.currentStep, registry)
-  return { ...revisionSlice(step), ...(priorReview ? { priorReview } : {}) }
+  const gradingBar = gradingBarFor(step, registry)
+  return {
+    ...revisionSlice(step),
+    ...(priorReview ? { priorReview } : {}),
+    ...(gradingBar ? { gradingBar } : {}),
+  }
 }

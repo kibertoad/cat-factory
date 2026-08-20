@@ -5,6 +5,7 @@ import {
   BESPOKE_SYSTEM_PROMPTS,
   composedSystemPromptFor,
   containerDispatchDirectivesFor,
+  traitDeliveryFor,
 } from '@cat-factory/agents'
 
 // Per-workspace agent prompt overrides, container side.
@@ -51,13 +52,22 @@ export function builtInDirectivesFor(kind: AgentKind, registry: AgentKindRegistr
 /**
  * The base system prompt for one container dispatch, honouring the workspace's override.
  *
- * All this adds to `composedSystemPromptFor` is reading the override off the run context: the
- * bespoke-vs-composed branch itself lives in `@cat-factory/agents`, because the Sandbox run-driver
- * needs the same answer for a graded candidate and sits below this layer.
+ * All this adds to `composedSystemPromptFor` is reading the override and the delivered context off
+ * the run context: the bespoke-vs-composed branch itself lives in `@cat-factory/agents`, because
+ * the Sandbox run-driver needs the same answer for a graded candidate and sits below this layer.
+ *
+ * The delivered `.cat-context/` paths are what let trait guidance that NAMES one of those files
+ * stay silent when this dispatch has no such file. This is the one seam that knows the answer, so
+ * a caller that skips it silently keeps the dangling pointer: see `TraitDelivery`.
  */
 export function dispatchSystemPromptFor(
   context: AgentRunContext,
   registry: AgentKindRegistry,
 ): string {
-  return composedSystemPromptFor(context.agentKind, registry, context.systemPromptOverride)
+  return composedSystemPromptFor(
+    context.agentKind,
+    registry,
+    context.systemPromptOverride,
+    traitDeliveryFor(context),
+  )
 }

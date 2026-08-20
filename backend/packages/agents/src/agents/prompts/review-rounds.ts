@@ -181,11 +181,20 @@ function roundOutcome(round: PriorReviewRound, threshold: number): string {
  * `threshold` is what the loop's ratings were judged against, and it is required rather than
  * optional: without it the rendering can only echo a `passed` flag whose meaning is not the bar
  * comparison it reads as (see {@link roundOutcome}).
+ *
+ * `alreadyListed` is the points the SAME prompt states elsewhere as the work to do now
+ * ({@link renderRevisionComments}); each one is folded out of the history and counted instead. A
+ * point still open is re-raised every round by design, so without this the producer reads the same
+ * ask twice in two framings and has no single authoritative list: on a real run "the same six
+ * points appear three times". The fold is COUNTED rather than silent, because a round whose every
+ * point moved into the current list would otherwise render as a round that raised nothing.
  */
 export function renderPriorReviewRounds(
   rounds: readonly PriorReviewRound[],
   threshold: number,
+  alreadyListed: readonly ReviewedPoint[] = [],
 ): string[] {
+  const listed = new Set(alreadyListed.map(pointIdentity))
   const lines: string[] = []
   for (const [index, round] of rounds.entries()) {
     const isLatest = index === rounds.length - 1
@@ -194,7 +203,12 @@ export function renderPriorReviewRounds(
       `Round ${round.round} — rated ${round.rating.toFixed(2)}, ${roundOutcome(round, threshold)}:`,
     )
     lines.push(clip(round.summary.trim() || '(no summary given)', isLatest))
+    let folded = 0
     for (const comment of worstFirst(round.comments)) {
+      if (listed.has(pointIdentity(comment))) {
+        folded += 1
+        continue
+      }
       const target = reviewedPointTarget(comment)
       const grade = comment.severity ? `[${comment.severity}] ` : ''
       lines.push(
@@ -203,8 +217,40 @@ export function renderPriorReviewRounds(
           : `- ${grade}${clip(comment.body, isLatest)}`,
       )
     }
+    if (folded > 0) {
+      lines.push(
+        `- (${folded} point(s) raised in this round are still open and are listed in full above; ` +
+          'they are the same points, not new ones.)',
+      )
+    }
   }
   return lines
+}
+
+/**
+ * What makes two renderings of a point the SAME point.
+ *
+ * The anchor wins where there is one: a companion names a structured item's id, and the same id
+ * raised again is the same ask however the body was reworded between rounds. Failing that, the
+ * normalised body is all there is, so a re-raise that was rephrased renders twice. That is the
+ * safe direction of the error: showing a point twice costs tokens, and folding two DIFFERENT
+ * points together would drop an ask the producer was never told about.
+ *
+ * Deliberately not severity-sensitive. A reviewer that escalates a `minor` to a `blocker` between
+ * rounds is raising the same point harder, and the current round's rendering is the one carrying
+ * the up-to-date grade.
+ */
+function pointIdentity(point: ReviewedPoint): string {
+  const anchor = point.anchorId?.trim()
+  if (anchor) return `anchor:${anchor.toLowerCase()}`
+  const quoted = point.quotedSource?.trim()
+  const body = normaliseForIdentity(point.body)
+  return quoted ? `quoted:${normaliseForIdentity(quoted)} ${body}` : `body:${body}`
+}
+
+/** Collapse the incidental differences between two renderings of one point's prose. */
+function normaliseForIdentity(text: string): string {
+  return text.trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
 /**

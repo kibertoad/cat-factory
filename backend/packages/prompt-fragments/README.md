@@ -9,7 +9,8 @@ tenant-scoped [prompt-fragment library](https://github.com/kibertoad/cat-factory
 ## What's here
 
 - `src/collections/*.ts`: fragments authored per topic. Today: `node`, `react`,
-  `acceptance`, `design`, `style`, `migration`. Each exports an array of `PromptFragment`.
+  `acceptance`, `design`, `style`, `migration`, `deployment`. Each exports an array of
+  `PromptFragment`.
 - `src/index.ts`: merges the collections into a single `FRAGMENTS` registry plus
   `FRAGMENTS_BY_ID` and `getFragment(id)` for O(1) lookup during composition.
 

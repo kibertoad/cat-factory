@@ -199,10 +199,18 @@ const DEFAULT_CONTAINER_STEP: AgentStepSpec = {
  * rather than an agent kind: it never appears in `registry.all()`, and giving it a registration
  * would put it in the palette as a placeable block, which it is not. `CompanionController`
  * parses the verdict back out of `result.custom`.
+ *
+ * `full: true` for the same reason the `merger` declares it: this kind's whole job is to judge a
+ * CHANGE, and a change is a diff against the base branch. A default explore clone is
+ * `--depth 1 --single-branch`, which has neither `origin/<base>` nor a merge base, so the
+ * three-dot diff its prompt asks for cannot run at all and a later `git fetch` of a shallow base
+ * still has no common ancestor. The reviewer then discovers the change file by file instead, which
+ * is where a measured ~40 exploratory calls per review went. Paying for the history once is
+ * cheaper than paying for the exploration on every turn that follows it.
  */
 const CONTAINER_COMPANION_STEP: AgentStepSpec = {
   surface: 'container-explore',
-  clone: { branch: 'pr' },
+  clone: { branch: 'pr', full: true },
   output: { kind: 'structured' },
 }
 

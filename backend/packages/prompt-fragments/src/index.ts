@@ -2,6 +2,7 @@ import type { PromptFragment, TaskType } from '@cat-factory/contracts'
 import { PromptFragmentRegistry, defaultPromptFragmentRegistry } from '@cat-factory/kernel'
 import { BUILTIN_TASK_TYPE_DEFAULTS } from './task-type-defaults.js'
 import { acceptanceFragments } from './collections/acceptance.js'
+import { deploymentFragments } from './collections/deployment.js'
 import { designFragments } from './collections/design.js'
 import { migrationFragments } from './collections/migration.js'
 import { nodeFragments } from './collections/node.js'
@@ -26,6 +27,7 @@ export const FRAGMENTS: PromptFragment[] = [
   ...designFragments,
   ...styleFragments,
   ...migrationFragments,
+  ...deploymentFragments,
 ]
 
 // Re-export the writing-style collection + the document-task style defaults so a consumer (the
@@ -44,6 +46,9 @@ export { MIGRATION_FRAGMENT_IDS, migrationFragmentIdsFor } from './collections/m
 // context carries a design-origin document reads the guidance automatically, rather than depending on
 // a human having ticked it in a picker basic mode does not show.
 export { DESIGN_CONTEXT_FRAGMENT_ID, withDesignContextFragment } from './collections/design.js'
+// The containerized-service deployment ids, so a deployment can make the shipped set the default
+// for its own task type or preset without restating the ids the collection already owns.
+export { DEPLOYMENT_FRAGMENT_IDS } from './collections/deployment.js'
 
 /** Fragments keyed by id for O(1) lookup during prompt composition. */
 export const FRAGMENTS_BY_ID: ReadonlyMap<string, PromptFragment> = new Map(

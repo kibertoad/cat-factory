@@ -31,6 +31,7 @@ import {
   resolveInlineModelRef,
   standardsVerbosityFor,
   systemPromptFor,
+  traitDeliveryFor,
   userPromptFor,
 } from '@cat-factory/agents'
 import { decideConsensusMode } from './gating.js'
@@ -224,9 +225,23 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
       // Same precedence the single-actor inline executor applies: the workspace's own prompt
       // for this kind wins over the deployment-wide `AGENT_ROUTING` system prompt, and
       // `systemPromptFor` re-applies the engine-enforced directives on top of it.
+      // The delivered `.cat-context/` paths ride along for the same reason the single-actor
+      // inline executor passes them: a panel participant has no filesystem and reads the same
+      // files folded into its USER prompt, so guidance naming one must not point at nothing.
       context.systemPromptOverride
-        ? systemPromptFor(context.agentKind, this.agentKindRegistry, context.systemPromptOverride)
-        : (config.system ?? systemPromptFor(context.agentKind, this.agentKindRegistry)),
+        ? systemPromptFor(
+            context.agentKind,
+            this.agentKindRegistry,
+            context.systemPromptOverride,
+            traitDeliveryFor(context),
+          )
+        : (config.system ??
+            systemPromptFor(
+              context.agentKind,
+              this.agentKindRegistry,
+              undefined,
+              traitDeliveryFor(context),
+            )),
       context.block,
       this.agentKindRegistry.standardsDelivery(context.agentKind),
       // An inline call has no filesystem, so a `context-files` kind's standards were never

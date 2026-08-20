@@ -6,7 +6,7 @@ import {
   e2eTargetSection,
 } from './prompts/acceptance.js'
 import { isStandardsContextFile } from './runtime/fragments.js'
-import { companionSystemPrompt } from './prompts/companion.js'
+import { companionCheckoutSection, companionSystemPrompt } from './prompts/companion.js'
 import { companionTargets } from './kinds/companions.js'
 import { READ_ONLY_GUARDRAIL, isReadOnlyAgentKind } from './kinds/read-only.js'
 import { SPIKE_AGENT_KIND, spikeContextSection } from './kinds/spike.js'
@@ -14,7 +14,7 @@ import { businessLogicSystemPrompt } from './prompts/business-logic.js'
 import { mockFrontendSection, mockSystemPrompt } from './prompts/mock.js'
 import { testingSystemPrompt, testerEnvironmentSection } from './prompts/testing.js'
 import type { AgentKindRegistry } from './kinds/registry.js'
-import { traitGuidanceFor } from './kinds/traits.js'
+import { type TraitDelivery, traitGuidanceFor } from './kinds/traits.js'
 import { roleSystemPrompt, TRIAGE_JSON_CONTRACT } from './prompts/roles.js'
 import {
   CONTAINER_DISPATCH_DIRECTIVES,
@@ -133,6 +133,13 @@ const DIRECTIVE_PROBE = ' cat-factory:override-probe '
  * Totality is why {@link containerDispatchDirectivesFor} is folded in as well: `systemPromptFor` is
  * not the last thing that appends to a container prompt, and the editor's promise is about the wire
  * rather than about one seam.
+ *
+ * It is the MAXIMUM, not an exact prediction of one dispatch. Trait guidance that names an injected
+ * `.cat-context/` file is gated on that file arriving (see `TraitDelivery`), and neither the editor
+ * nor the sandbox has a dispatch to ask, so both measure with the gate open. A real dispatch that
+ * delivered nothing therefore sends a SUBSET of this. That direction is the safe one and is the
+ * same call `containerDispatchDirectivesFor` makes: what this promise exists to guarantee is that no
+ * rule the platform enforces is missing from it, and an over-report cannot break that.
  */
 export function appendedDirectivesFor(kind: AgentKind, registry: AgentKindRegistry): string {
   const measured = systemPromptFor(kind, registry, DIRECTIVE_PROBE).slice(DIRECTIVE_PROBE.length)
@@ -174,6 +181,7 @@ export function systemPromptFor(
   kind: AgentKind,
   registry: AgentKindRegistry,
   override?: string,
+  delivery?: TraitDelivery,
 ): string {
   const base = override ?? baseSystemPromptFor(kind, registry)
   // Append the surface-driven directives (read-only guardrail + final-answer-in-reply) — see
@@ -188,7 +196,11 @@ export function systemPromptFor(
   // Fold in any guidance contributed by the kind's traits (e.g. the spec-aware kinds get
   // the in-repo-spec reading guidance). Marker traits like `code-aware` add nothing here —
   // their effect (folding the service's fragments) is applied by the execution engine.
-  const guidance = traitGuidanceFor(kind, registry)
+  //
+  // `delivery` lets guidance that NAMES an injected `.cat-context/` file stay silent when the
+  // dispatch did not inject it. Omitted by every caller with no dispatch in hand (the editor's
+  // measurement, the sandbox, a test), which renders every trait in full: see `TraitDelivery`.
+  const guidance = traitGuidanceFor(kind, registry, delivery)
   const composed = guidance.length
     ? `${withDirectives}\n\n${guidance.join('\n\n')}`
     : withDirectives
@@ -369,19 +381,53 @@ export function userPromptFor(
   opts: AgentUserPromptOptions = {},
 ): string {
   const { prompt, suffix } = buildBaseUserPrompt(context, registry, opts)
+  // The wrappers in the ONE order they may run, INVARIANT MATERIAL FIRST and VOLATILE LAST. That
+  // ordering is load-bearing rather than cosmetic: a provider's prompt cache matches on a PREFIX,
+  // so whatever sits ahead of the first byte that changed between two dispatches is served from
+  // cache and everything after it is re-written. The checkout facts and the injected context files
+  // are the same bytes on every round of a rework loop (a resolved base branch; a preOp's output,
+  // the run's linked documents) and the context fold is the largest block here; the revision
+  // feedback, the grading history and the rope left are different bytes by definition on every
+  // round. Composed the other way round, as this was, each round paid a fresh cache WRITE for the
+  // whole fold: on a real revision round, 62k cache-write tokens against 26k reads over four calls.
+  //
+  // A LIST rather than nested calls because the order is the decision: five levels of nesting hid
+  // it, and every wrapper here was appended to the end of whatever the one before it returned.
+  const composed = [
+    (text: string) => withCompanionCheckout(text, context, registry, opts),
+    (text: string) => withInjectedContext(text, context, opts),
+    (text: string) => withRevision(text, context),
+    (text: string) => withPriorReview(text, context),
+    (text: string) => withGradingBar(text, context),
+    (text: string) => withRunNotice(text, opts.runNotice),
+  ].reduce((text, wrap) => wrap(text), prompt)
   // The kind's closing instruction is applied OUTSIDE every wrapper, not folded into the base
   // prompt: `userPromptSuffix` exists to be the last thing the agent reads (the `on-call` kind's
   // "respond with ONLY a JSON object" is the shape), and every wrapper appends. Folded in earlier,
   // a revision re-run would end on the reviewer's feedback and an inline run on a context-file
   // dump, leaving the reply-shape instruction buried mid-prompt. `opts.runNotice` is inside the
   // same rule: it goes after the material and BEFORE the suffix.
-  return withSuffix(
-    withRunNotice(
-      withInjectedContext(withPriorReview(withRevision(prompt, context), context), context, opts),
-      opts.runNotice,
-    ),
-    suffix,
-  )
+  return withSuffix(composed, suffix)
+}
+
+/**
+ * Tell a container-backed companion where its review starts: the base branch this dispatch
+ * resolved, and the commands that turn it into the change.
+ *
+ * A WRAPPER rather than a line in the generic block-context branch, for the reason
+ * {@link withInjectedContext} is one: `buildBaseUserPrompt` returns early for a standard phase, and
+ * the code `reviewer` IS a standard phase (`review`). Added inside the generic branch it would have
+ * reached `doc-reviewer` and a deployment's own companion while silently missing the one companion
+ * the finding was about.
+ */
+function withCompanionCheckout(
+  prompt: string,
+  context: AgentRunContext,
+  registry: AgentKindRegistry,
+  opts: AgentUserPromptOptions,
+): string {
+  const section = companionCheckoutSection(context, registry, opts.dispatch)
+  return section ? `${prompt}\n${section}` : prompt
 }
 
 /** Append the caller's note about how this run differs from the one the prompt assumes. */
@@ -410,11 +456,16 @@ function withPriorReview(prompt: string, context: AgentRunContext): string {
     prompt,
     '',
     grading
-      ? `You have already reviewed earlier revisions of this work ${prior.rounds.length} time(s), ` +
-        `against a bar of ${prior.threshold.toFixed(2)}. Your own previous verdicts:`
+      ? `You have already reviewed earlier revisions of this work ${prior.rounds.length} time(s). ` +
+        'Your own previous verdicts:'
       : `This work has been through ${prior.rounds.length} review round(s) before the feedback ` +
-        `above. Everything previously raised, so you do not undo a fix or drop an open point:`,
-    ...renderPriorReviewRounds(prior.rounds, prior.threshold),
+        `above. The list above is the authoritative one to work through; this is the rest of ` +
+        `the history, so you do not undo a fix or drop an open point:`,
+    // The producer's history is deduplicated against the current round's list: a point still open
+    // is re-raised every round, and rendering it in both places is how one ask came to appear
+    // three times in one prompt with no single list to work from. A grader has no `revision`
+    // section of its own, so nothing is folded out of its own verdicts.
+    ...renderPriorReviewRounds(prior.rounds, prior.threshold, context.revision?.comments ?? []),
     '',
     grading
       ? PRIOR_ROUNDS_DIRECTIVE
@@ -425,18 +476,40 @@ function withPriorReview(prompt: string, context: AgentRunContext): string {
   // Only the grader, and only here: an accounting can exist only once a round has been answered,
   // which is exactly the condition this whole section renders under.
   if (grading) lines.push('', ACCOUNTING_REVIEW_DIRECTIVE)
-  // How much rope is left, stated to the GRADER only. A producer told "this is the last round"
-  // optimises for the grader rather than for the work; a grader that knows it is holding the run
-  // has the context to weigh a marginal call, which is the call this loop keeps getting wrong.
-  if (grading) {
-    lines.push(
-      prior.roundsRemaining > 0
-        ? `${prior.roundsRemaining} automatic rework round(s) remain after this one.`
-        : 'This is the LAST automatic round: below the bar, the run stops for a person or ' +
-            "proceeds on this work under the run's risk policy. Rate what is actually there.",
-    )
-  }
   return lines.join('\n')
+}
+
+/**
+ * State the bar a companion GRADER is scoring against, and how much rope is left.
+ *
+ * Its own wrapper rather than a clause inside {@link withPriorReview}, because the two answer
+ * different questions and are available at different times. The history exists only from round two;
+ * the bar applies from round one, and folding it into the history section is what left the first
+ * grading of every step asking for a 0..1 rating against a threshold nobody had stated. The scale's
+ * anchors live in the companion system prompt and point here for the number, so the two halves of
+ * one instruction are read together.
+ *
+ * Grader only: `AgentRunContext.gradingBar` is set for no other dispatch, so this is a no-op for a
+ * producer, a judge and every non-companion kind. A producer handed the number would optimise for
+ * the number; it gets the per-round bar COMPARISON instead, which is the part about its own work.
+ */
+function withGradingBar(prompt: string, context: AgentRunContext): string {
+  const bar = context.gradingBar
+  if (!bar) return prompt
+  return [
+    prompt,
+    '',
+    `The bar for this work is ${bar.threshold.toFixed(2)} on the scale above: at or over it the ` +
+      'work moves on, under it the producer is sent back to revise. Any [blocker] you raise holds ' +
+      'the work whatever the rating, so grade the work honestly rather than steering the number.',
+    // How much rope is left, stated to the GRADER only. A producer told "this is the last round"
+    // optimises for the grader rather than for the work; a grader that knows it is holding the run
+    // has the context to weigh a marginal call, which is the call this loop keeps getting wrong.
+    bar.roundsRemaining > 0
+      ? `${bar.roundsRemaining} automatic rework round(s) remain after this one.`
+      : 'This is the LAST automatic round: below the bar, the run stops for a person or ' +
+        "proceeds on this work under the run's risk policy. Rate what is actually there.",
+  ].join('\n')
 }
 
 /** Append a kind's closing task instructions ({@link buildBaseUserPrompt}'s `suffix`), if any. */
@@ -465,6 +538,10 @@ const MAX_INJECTED_CONTEXT_CHARS = 320_000
  * is precisely those self-authoring kinds (`pr-reviewer`, whose preOps inject the diff, the
  * existing review threads and the standards) whose whole input arrives this way. A fold inside
  * the generic branch would reach none of them.
+ *
+ * It runs BEFORE the revision wrappers, not after: this is the biggest and most stable block in
+ * the prompt, so putting it ahead of the per-round feedback is what lets a rework round read it
+ * from the provider's prompt cache instead of re-writing it. See {@link userPromptFor}.
  *
  * STANDARDS files are deliberately excluded ({@link isStandardsContextFile}). They reach an
  * inline caller through the SYSTEM prompt instead, where `composeBlockSystemPrompt` folds them at

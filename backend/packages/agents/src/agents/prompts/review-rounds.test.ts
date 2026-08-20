@@ -57,15 +57,14 @@ function context(over: Partial<AgentRunContext> = {}): AgentRunContext {
 }
 
 describe('the prior-rounds fold', () => {
-  it('reaches a companion as its OWN verdicts, with the asks and the rope left', () => {
+  it('reaches a companion as its OWN verdicts', () => {
     const prompt = userPromptFor(
-      context({ priorReview: { role: 'grader', threshold: 0.8, roundsRemaining: 1, rounds } }),
+      context({ priorReview: { role: 'grader', threshold: 0.8, rounds } }),
       registry(),
     )
     expect(prompt).toContain('Round 1 — rated 0.72')
     expect(prompt).toContain('Round 2 — rated 0.77')
     expect(prompt).toContain('pathType is required')
-    expect(prompt).toContain('1 automatic rework round(s) remain')
     // The directive is the load-bearing half: shown a history without it, a grader still
     // re-reviews from scratch and spends the round on a fresh subset of problems.
     expect(prompt).toContain('whether it is now addressed')
@@ -75,19 +74,18 @@ describe('the prior-rounds fold', () => {
     const prompt = userPromptFor(
       context({
         agentKind: 'reviewer',
-        priorReview: { role: 'grader', threshold: 0.8, roundsRemaining: 0, rounds },
+        priorReview: { role: 'grader', threshold: 0.8, rounds },
       }),
       registry(),
     )
     expect(prompt).toContain('Round 1 — rated 0.72')
-    expect(prompt).toContain('LAST automatic round')
   })
 
   it('reaches the PRODUCER as points not to regress on, without the grader-only rope', () => {
     const prompt = userPromptFor(
       context({
         agentKind: 'architect',
-        priorReview: { role: 'producer', threshold: 0.8, roundsRemaining: 1, rounds: [rounds[0]!] },
+        priorReview: { role: 'producer', threshold: 0.8, rounds: [rounds[0]!] },
         revision: {
           previousProposal: 'v1',
           feedback: 'runAsNonRoot needs a numeric uid',
@@ -185,7 +183,7 @@ describe('feedback accounting', () => {
 
   it('tells the GRADER to check the accounting against the work, once rounds exist', () => {
     const prompt = userPromptFor(
-      context({ priorReview: { role: 'grader', threshold: 0.8, roundsRemaining: 1, rounds } }),
+      context({ priorReview: { role: 'grader', threshold: 0.8, rounds } }),
       registry(),
     )
     expect(prompt).toContain('confirm a claimed change by finding it')
@@ -404,5 +402,221 @@ describe('the points a producer is sent back with', () => {
     ])
     expect(prompt.indexOf('thin coverage')).toBeLessThan(prompt.indexOf('rename this'))
     expect(prompt).not.toContain('MUST be resolved in this revision')
+  })
+})
+
+describe('the grading bar', () => {
+  // The defect this covers: the bar used to be a clause inside the prior-rounds heading, and
+  // `priorReview` is absent on the FIRST grading of a step. So the very first verdict of every
+  // companion loop was a 0..1 rating against a threshold nobody had stated, and the number only
+  // appeared from round two.
+
+  it('reaches a grader on the FIRST round, where there is no history at all', () => {
+    const prompt = userPromptFor(
+      context({ gradingBar: { threshold: 0.8, roundsRemaining: 2 } }),
+      registry(),
+    )
+    expect(prompt).toContain('The bar for this work is 0.80')
+    expect(prompt).toContain('2 automatic rework round(s) remain')
+    expect(prompt).not.toContain('Round 1')
+  })
+
+  it('says so when it is holding the LAST round, so a marginal call is made knowingly', () => {
+    const prompt = userPromptFor(
+      context({
+        gradingBar: { threshold: 0.8, roundsRemaining: 0 },
+        priorReview: { role: 'grader', threshold: 0.8, rounds },
+      }),
+      registry(),
+    )
+    expect(prompt).toContain('LAST automatic round')
+  })
+
+  it('is stated ONCE, not once per section', () => {
+    const prompt = userPromptFor(
+      context({
+        gradingBar: { threshold: 0.8, roundsRemaining: 1 },
+        priorReview: { role: 'grader', threshold: 0.8, rounds },
+      }),
+      registry(),
+    )
+    expect(prompt.split('The bar for this work is').length - 1).toBe(1)
+  })
+
+  it('is never shown to the PRODUCER, which would optimise for the number', () => {
+    // The producer still gets the per-round bar COMPARISON, which is the part about its own work.
+    const prompt = userPromptFor(
+      context({
+        agentKind: 'architect',
+        priorReview: { role: 'producer', threshold: 0.8, rounds: [rounds[0]!] },
+        revision: { previousProposal: 'v1', feedback: 'f', requestedBy: 'reviewer' },
+      }),
+      registry(),
+    )
+    expect(prompt).not.toContain('The bar for this work is')
+    expect(prompt).not.toContain('automatic rework round(s) remain')
+    expect(prompt).toContain('below the bar')
+  })
+
+  it('points at the number from the system prompt, so the anchors are not left dangling', () => {
+    // The two halves of one instruction: the scale's anchors are a constant on the system prompt,
+    // the bar is a per-step operator setting stated with the work. Neither is readable alone.
+    expect(companionSystemPrompt('architect-companion', registry())).toContain(
+      'stated with the work below',
+    )
+  })
+})
+
+describe('deduplicating the producer history against the current round', () => {
+  // A point still open is re-raised every round by design, so it arrived once as the current
+  // round's ask and again in the history: on a real run "the same six points appear three times",
+  // with no single authoritative list to work through.
+
+  const anchored = (anchorId: string, body: string) => ({ anchorId, body })
+
+  it('folds a point out of the history when the current round already lists it', () => {
+    const prompt = userPromptFor(
+      context({
+        agentKind: 'architect',
+        priorReview: {
+          role: 'producer',
+          threshold: 0.8,
+          rounds: [
+            {
+              round: 1,
+              rating: 0.6,
+              passed: false,
+              summary: 'first pass',
+              comments: [
+                anchored('r-1', 'pin the image tag'),
+                anchored('r-2', 'drop the wildcard'),
+              ],
+            },
+          ],
+        },
+        revision: {
+          previousProposal: 'v1',
+          feedback: 'still open',
+          requestedBy: 'reviewer',
+          comments: [anchored('r-1', 'pin the image tag')],
+        },
+      }),
+      registry(),
+    )
+    // `r-1` is in the current list once and nowhere else; `r-2` was NOT re-raised, so the history
+    // is the only place it survives and dropping it would lose an open point silently.
+    expect(prompt.split('pin the image tag').length - 1).toBe(1)
+    expect(prompt).toContain('drop the wildcard')
+    // The fold is counted rather than silent: a round whose every point moved into the current
+    // list would otherwise read as a round that raised nothing.
+    expect(prompt).toContain('1 point(s) raised in this round are still open')
+  })
+
+  it('matches on the ANCHOR, so a reworded re-raise is still one point', () => {
+    const prompt = userPromptFor(
+      context({
+        agentKind: 'architect',
+        priorReview: {
+          role: 'producer',
+          threshold: 0.8,
+          rounds: [
+            {
+              round: 1,
+              rating: 0.6,
+              passed: false,
+              summary: 's',
+              comments: [anchored('r-1', 'the image tag is mutable')],
+            },
+          ],
+        },
+        revision: {
+          previousProposal: 'v1',
+          feedback: 'f',
+          requestedBy: 'reviewer',
+          comments: [anchored('r-1', 'pin the image tag to a digest')],
+        },
+      }),
+      registry(),
+    )
+    expect(prompt).not.toContain('the image tag is mutable')
+    expect(prompt).toContain('pin the image tag to a digest')
+  })
+
+  it('keeps an UNANCHORED point that only matches by prose, and drops nothing else', () => {
+    const prompt = userPromptFor(
+      context({
+        agentKind: 'architect',
+        priorReview: {
+          role: 'producer',
+          threshold: 0.8,
+          rounds: [
+            {
+              round: 1,
+              rating: 0.6,
+              passed: false,
+              summary: 's',
+              comments: [{ body: 'pathType is required' }, { body: 'name the ingress class' }],
+            },
+          ],
+        },
+        revision: {
+          previousProposal: 'v1',
+          feedback: 'f',
+          requestedBy: 'reviewer',
+          comments: [{ body: '  PathType is REQUIRED  ' }],
+        },
+      }),
+      registry(),
+    )
+    // Whitespace and case are incidental differences between two renderings of one point.
+    expect(prompt.toLowerCase().split('pathtype is required').length - 1).toBe(1)
+    expect(prompt).toContain('name the ingress class')
+  })
+
+  it('folds nothing out of a GRADER own verdicts, which have no current-round list beside them', () => {
+    const prompt = userPromptFor(
+      context({
+        priorReview: {
+          role: 'grader',
+          threshold: 0.8,
+          rounds: [
+            {
+              round: 1,
+              rating: 0.6,
+              passed: false,
+              summary: 's',
+              comments: [{ body: 'pathType is required' }],
+            },
+          ],
+        },
+      }),
+      registry(),
+    )
+    expect(prompt).toContain('pathType is required')
+    expect(prompt).not.toContain('still open and are listed in full above')
+  })
+})
+
+describe('prompt assembly order', () => {
+  it('puts the invariant injected context ahead of the volatile revision text', () => {
+    // A provider prompt cache matches on a PREFIX. The context files are the same bytes on every
+    // round of a rework loop and are the largest block here; the feedback is different bytes by
+    // definition. Composed the other way round, each round paid a fresh cache WRITE for the whole
+    // fold. Asserted as a RELATION rather than a rendered snapshot: what matters is which side of
+    // the changing text the stable material lands on.
+    const prompt = userPromptFor(
+      context({
+        agentKind: 'architect',
+        injectedContextFiles: [{ path: 'brief.md', content: 'THE-STABLE-BRIEF' }],
+        revision: {
+          previousProposal: 'v1',
+          feedback: 'THE-VOLATILE-FEEDBACK',
+          requestedBy: 'reviewer',
+        },
+      }),
+      registry(),
+    )
+    expect(prompt.indexOf('THE-STABLE-BRIEF')).toBeGreaterThan(-1)
+    expect(prompt.indexOf('THE-STABLE-BRIEF')).toBeLessThan(prompt.indexOf('THE-VOLATILE-FEEDBACK'))
   })
 })

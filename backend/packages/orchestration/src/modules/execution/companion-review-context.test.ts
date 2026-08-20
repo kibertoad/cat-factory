@@ -69,8 +69,6 @@ describe('priorReviewFor', () => {
     expect(prior?.rounds.map((r) => r.round)).toEqual([1, 2])
     expect(prior?.rounds.map((r) => r.rating)).toEqual([0.72, 0.77])
     expect(prior?.threshold).toBe(0.8)
-    // One automatic round left of the three, so the grader knows how much rope remains.
-    expect(prior?.roundsRemaining).toBe(1)
   })
 
   it('gives the PRODUCER the earlier rounds only, since the latest is already its feedback', () => {
@@ -140,11 +138,43 @@ describe('priorReviewFor', () => {
     }
     expect(priorReviewFor(inst, 0, registry())).toBeUndefined()
   })
+})
+
+describe('gradingBarFor (through buildReworkContext)', () => {
+  // The bar the companion is scoring against, split off the history slice because the two have
+  // different availability: the history exists from round two, the bar from round one. Read off
+  // `priorReview`, the FIRST grading of every step asked for a rating against a threshold the
+  // prompt never stated.
+
+  it('is present on the FIRST grading, before any verdict exists', () => {
+    const inst = instance([])
+    const context = buildReworkContext({ ...inst, currentStep: 1 }, inst.steps[1]!, registry())
+    expect(context.gradingBar).toEqual({ threshold: 0.8, roundsRemaining: 3 })
+    // …and there is still no history to show, which is the state that used to lose the bar.
+    expect(context.priorReview).toBeUndefined()
+  })
 
   it('reports a spent budget as zero rounds remaining rather than a negative', () => {
     // A human-granted extra round can push `attempts` past `maxAttempts`; the prompt says "this
     // is the last round" off this number, and "-1 rounds remain" is not a sentence.
     const inst = instance([verdict(0.72, 'a'), verdict(0.7, 'b'), verdict(0.74, 'c')], 4)
-    expect(priorReviewFor(inst, 1, registry())?.roundsRemaining).toBe(0)
+    const context = buildReworkContext({ ...inst, currentStep: 1 }, inst.steps[1]!, registry())
+    expect(context.gradingBar?.roundsRemaining).toBe(0)
+  })
+
+  it('is absent for the PRODUCER side, which must not optimise for the number', () => {
+    const inst = instance([verdict(0.72, 'a'), verdict(0.75, 'b')])
+    const producerStep = { ...inst.steps[0]!, rework: reworkFrom(inst) }
+    const context = buildReworkContext({ ...inst, currentStep: 0 }, producerStep, registry())
+    expect(context.gradingBar).toBeUndefined()
+    expect(context.priorReview?.role).toBe('producer')
+  })
+
+  it('is absent for a step that is not a companion at all', () => {
+    const inst = {
+      currentStep: 0,
+      steps: [{ agentKind: 'coder', state: 'working' }] as unknown as PipelineStep[],
+    }
+    expect(buildReworkContext(inst, inst.steps[0]!, registry()).gradingBar).toBeUndefined()
   })
 })
