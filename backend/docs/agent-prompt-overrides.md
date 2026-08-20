@@ -17,13 +17,36 @@ last-write-wins would silently discard one of two people's prompts.
 
 ## An override replaces the SHIPPED TRACK PROMPT, never the whole system prompt
 
-`systemPromptFor(kind, registry, override?)` re-applies the surface directives and trait guidance
-on top, because those are invariants of how the platform runs a kind rather than editorial
+`systemPromptFor(kind, registry, override?, delivery?)` re-applies the surface directives and trait
+guidance on top, because those are invariants of how the platform runs a kind rather than editorial
 content, so the editor shows, and an override supplies, `baseSystemPromptFor`.
 
+### Trait guidance that names an injected file is gated on the file arriving
+
+`delivery` is the fourth argument and it is the dispatch's `.cat-context/` paths
+(`traitDeliveryFor(context)`, one helper for all three composing surfaces). An
+`AgentTraitDefinition.guidance` function receives it and may return `undefined` to contribute
+nothing for THIS dispatch. The two foundational traits use that: each opens by pointing at a file
+the engine injects only when a `FoundationalServiceResolver` is wired, so on a deployment with none
+they were a few hundred words of pointer to a path that does not exist, riding every turn.
+
+Three rules bind a new gated trait:
+
+- **Gate on PRESENCE, never on content.** Where the resolver is wired the file is always written and
+  SAYS which state it is in (resolved / none registered / unavailable), and acting on that statement
+  is what the guidance asks for. `BINARY_OUTPUT_GUIDANCE` is deliberately NOT gated for the stronger
+  version of the same reason: its absent case is a REFUSAL the agent must be told ("do not attempt
+  any upload"), and gating it off would let a generator produce artifacts it can store nowhere.
+- **An absent `delivery` means UNKNOWN, not empty**, and renders the guidance in full. The prompt
+  editor, the Sandbox and a unit test all legitimately have no dispatch.
+- **`appendedDirectivesFor` is therefore a MAXIMUM**, not a prediction of one dispatch: what the
+  editor promises is that no rule the platform enforces is missing from what it shows, and a real
+  dispatch may send a subset. `promptOverrides.spec.ts` pins both directions (exact equality for a
+  dispatch that delivered every gated file, containment for one that delivered none).
+
 **Reach for the two TOTAL seams, not that pair.** `shippedBasePromptFor(kind, registry)` is what an
-override REPLACES and `composedSystemPromptFor(kind, registry, replacement?)` is what then goes on
-the wire, and each already branches on whether the kind's prompt is bespoke. `systemPromptFor` alone
+override REPLACES and `composedSystemPromptFor(kind, registry, replacement?, delivery?)` is what then
+goes on the wire, and each already branches on whether the kind's prompt is bespoke. `systemPromptFor` alone
 is right only for a kind that has no bespoke entry: for an inline ENGINE kind it returns the thin
 `roles.ts` line and appends a second copy of directives the real prompt already carried, so a caller
 using it shows an editor text nobody runs and grades a candidate on a prompt nothing sends. Three
@@ -38,6 +61,12 @@ no longer exists, so every kind whose deliverable IS its reply silently loses th
 returns an empty reply the harness fails the run on. `restoreShippedInvariants` closes that by
 diffing against the fully composed SHIPPED prompt. **A new engine-enforced fragment belongs in
 `OVERRIDE_PRESERVED_FRAGMENTS`**, or an override can delete it.
+
+That diff is taken under THIS dispatch's `delivery`, not with every gate open. No member of the
+preserve list is gated today, and threading the argument is what stops that becoming a silent
+problem: measured with the gate open, a gated member would be restored onto an overridden prompt on
+a deployment whose un-overridden prompt correctly drops it, so two dispatches of one kind would
+disagree about a rule depending on whether somebody had edited the prompt.
 
 The test for membership is whether the fragment describes how the platform RUNS the kind rather
 than what it should look for, and it catches more than the obvious two. `REVIEW_FINDINGS_LAYOUT` is

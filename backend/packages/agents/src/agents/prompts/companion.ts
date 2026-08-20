@@ -1,4 +1,4 @@
-import type { AgentKind } from '@cat-factory/kernel'
+import type { AgentDispatchContext, AgentKind, AgentRunContext } from '@cat-factory/kernel'
 import { companionFor, isContainerBackedCompanion } from '../kinds/companions.js'
 import type { AgentKindRegistry } from '../kinds/registry.js'
 import {
@@ -34,19 +34,32 @@ export function companionSystemPrompt(
     // rework loop's scores wander instead of climb: the step's `threshold` can only mean
     // something if two consecutive rounds mean the same thing by 0.8.
     anchoredQualityScale('the standard for this deliverable'),
+    // The numeric bar is deliberately NOT named here, nor pointed at. It is a per-STEP operator
+    // setting that `withGradingBar` states with the work, and that wrapper is absent on every
+    // surface with no live companion loop to read one off — the prompt editor, the Sandbox
+    // composing a graded candidate, a dispatch whose step carries no companion state. A sentence
+    // here promising the number "below" is a dangling pointer on exactly those surfaces, which is
+    // the same defect this prompt's own trait guidance is gated to avoid. The scale's anchors are
+    // self-contained without it.
+    //
     // A container-backed companion gets a real, read-only checkout of the producer's PR
     // branch. Reviewing the producer's summary reply alone is worthless — judge the ACTUAL
     // artifact: open and read the changed files / the full committed document and whatever
     // surrounding repository context you need to assess it properly. The preceding step's
     // reply (if any) is only a pointer; the repository on disk is the source of truth.
+    //
+    // It names no commands and points at none, for the same reason: `companionCheckoutSection`
+    // WITHHOLDS them wherever they would describe a checkout that is not a change (a dispatch that
+    // fell back to the base branch, a base ref that cannot be safely quoted). This instruction has
+    // to stand on its own in those runs, so it states the rule rather than deferring to a section.
     ...(isContainerBackedCompanion(kind, registry)
       ? [
           '',
-          'You have a read-only checkout of the branch under review. Do NOT judge from the',
-          "summary alone: inspect what actually changed (diff the branch against the repo's",
-          'default/base branch), then open and read the changed files in full — plus any',
-          'related code or documents in the repository you need for context — before rating.',
-          'Ground every comment in what the files actually contain. Make no commits.',
+          'You have a read-only checkout of the branch under review, with full history.',
+          'Do NOT judge from the summary alone: start from what actually changed, then open and',
+          'read the changed files in full, plus any related code or documents in the repository',
+          'you need for context, before rating. Ground every comment in what the files actually',
+          'contain. Make no commits.',
         ]
       : []),
     // The document reviewer carries `doc-aware`, so the engine folds the task's
@@ -134,4 +147,93 @@ export function companionSystemPrompt(
     '',
     FINAL_ANSWER_IN_REPLY,
   ].join('\n')
+}
+
+/**
+ * A branch name safe to interpolate into a shell command and a markdown code span.
+ *
+ * The base branch is PROVIDER-supplied, and git permits far more in a ref than a shell does: a
+ * backtick closes the code span and reflows the rest of this section as prose, and `$(…)` in a
+ * command the agent is told to run is a substitution the agent's own shell tool performs. Model-
+ * and provider-authored strings that become git arguments are validated for MAGIC rather than
+ * merely for traversal, so this is an ALLOW-list of what a ref may contain, not a deny-list of
+ * what bites. Leading `-` is excluded separately: it turns the name into an option.
+ */
+const SAFE_BRANCH_NAME = /^[A-Za-z0-9._/][A-Za-z0-9._/-]*$/
+
+/**
+ * Where a container-backed companion's review STARTS: the refs its checkout actually has, the two
+ * commands that turn them into the change, and the rule that it plans from the shape before it
+ * reads anything.
+ *
+ * The `pr-reviewer` has had this since it shipped, as an injected `.cat-context/pr-diff.md` its
+ * prompt tells it to read first; the container-backed companions had nothing equivalent and were
+ * told only to "diff against the base branch", which they had to first work out the name of. What
+ * this states instead is what the DISPATCH resolved, which is the one thing the agent cannot
+ * derive: `AgentDispatchContext.baseBranch` is the branch the engine forked from, and it is a
+ * per-deployment fact (`main`, `master`, `develop`, a release line).
+ *
+ * A SECTION rather than an injected file, deliberately: a `.cat-context/pr-diff.md` would mean a
+ * preOp reading the change back over HTTP to write bytes the checkout already has, and would
+ * duplicate the diff into a prompt that is re-sent on every turn. The commands cost the reviewer
+ * two turns and the output lands only in the turns that need it.
+ *
+ * No `git fetch` is named, and that is the point: the container agent holds NO git credential of
+ * its own (the token lives with the harness and rides GIT_ASKPASS per harness-issued command), so
+ * an agent-issued fetch fails outright on a private repo. The refs are the harness's job — a
+ * companion dispatch clones with full history, which brings `origin/<base>` with it, and the
+ * warm-pool path refreshes it (`exploreCheckoutRefs`). Naming a command the agent cannot run would
+ * put an error on the very first instruction the review is anchored on.
+ *
+ * Returns `undefined` when there is no change to measure, which is every case the commands would
+ * lie about:
+ *   - a non-companion kind, or an INLINE companion (no checkout at all, so naming git commands
+ *     would be the exact "things that are not true of this run" failure);
+ *   - no resolved dispatch (a consensus panel participant: no filesystem, no tools);
+ *   - a checkout that IS the base branch. A `clone.branch: 'pr'` dispatch falls back to base when
+ *     the producer opened no pull request, and there `<base>...HEAD` is empty: the reviewer would
+ *     be told to plan from a diffstat showing nothing and not to go looking past it, and would
+ *     grade an empty change as the work;
+ *   - a base branch whose name cannot be safely quoted, which is REPORTED rather than silently
+ *     shortened: the section states the branch it could not name and stops, leaving the system
+ *     prompt's own "start from what actually changed" instruction to stand.
+ */
+export function companionCheckoutSection(
+  context: AgentRunContext,
+  registry: AgentKindRegistry,
+  dispatch?: AgentDispatchContext,
+): string | undefined {
+  if (!dispatch || !isContainerBackedCompanion(context.agentKind, registry)) return undefined
+  const base = dispatch.baseBranch
+  if (dispatch.checkoutBranch === base) return undefined
+  if (!SAFE_BRANCH_NAME.test(base)) {
+    return (
+      '\nThis checkout is a change measured against the repository base branch. Its name contains ' +
+      'characters this prompt cannot safely quote, so the diff commands are omitted here: derive ' +
+      'the base ref yourself (`git branch -r`) before reading anything, and say in your summary ' +
+      'that you had to.'
+    )
+  }
+  const lines = [
+    '',
+    `The change under review is this checkout measured against \`${base}\`, the base branch it ` +
+      'forked from. Establish the shape before you read anything:',
+    `- \`git diff --stat origin/${base}...HEAD\` for which files moved and by how much.`,
+    `- \`git diff origin/${base}...HEAD -- <path>\` for the change to a file or a directory.`,
+    'Plan the review from that diffstat: it already tells you which files this change is about, so ' +
+      'do not go looking for them. Read a changed file in full where the diff alone cannot settle ' +
+      'whether it is correct, and read unchanged code where you need it for context.',
+  ]
+  if (dispatch.multiRepo) {
+    lines.push(
+      // What is true of a peer leg and no more. An explore peer carries `cloneBranch` only when the
+      // caller pinned one (today only the merger's combined-diff builder does), so a peer is
+      // otherwise checked out at its OWN default branch: claiming they share this branch would send
+      // the reviewer to run a diff that resolves to nothing and read the emptiness as a verdict.
+      'This change spans MULTIPLE repositories, each checked out as a sibling directory. Establish ' +
+        "each one's own base the same way before you read it, and rate the COMBINED change as a " +
+        'single verdict, not one per repository.',
+    )
+  }
+  return lines.join('\n')
 }

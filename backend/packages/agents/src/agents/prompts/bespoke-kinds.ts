@@ -1,5 +1,6 @@
 import type { AgentKind } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '../kinds/registry.js'
+import type { TraitDelivery } from '../kinds/traits.js'
 import { baseSystemPromptFor, systemPromptFor } from '../catalog.js'
 import { composeBespokePrompt, type BespokeSystemPrompt } from './bespoke.js'
 import { INLINE_ENGINE_SYSTEM_PROMPTS } from './inline-engine.js'
@@ -159,13 +160,20 @@ export function shippedBasePromptFor(kind: AgentKind, registry: AgentKindRegistr
  * alone is the bug it replaces: for the inline ENGINE kinds that returns the thin `roles.ts` line
  * plus a second copy of directives the base already carried, so a candidate was graded on a prompt
  * no run ever sends and could not be promoted unchanged.
+ *
+ * `delivery` is forwarded so trait guidance naming an injected `.cat-context/` file can stay silent
+ * when the dispatch did not inject it. A bespoke kind carries no trait guidance (its directives are
+ * a declared constant), so it ignores the argument rather than pretending to honour it. The Sandbox
+ * passes none: a graded candidate is composed against the maximal prompt, which is the honest thing
+ * to grade against and matches what the prompt editor shows.
  */
 export function composedSystemPromptFor(
   kind: AgentKind,
   registry: AgentKindRegistry,
   replacement?: string,
+  delivery?: TraitDelivery,
 ): string {
   const bespoke = BESPOKE_SYSTEM_PROMPTS[kind]
   if (bespoke) return composeBespokePrompt(bespoke, replacement)
-  return systemPromptFor(kind, registry, replacement)
+  return systemPromptFor(kind, registry, replacement, delivery)
 }

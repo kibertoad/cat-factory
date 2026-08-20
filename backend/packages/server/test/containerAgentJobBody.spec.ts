@@ -7,7 +7,11 @@ import type {
   RunnerJobResult,
   RunnerTransport,
 } from '@cat-factory/kernel'
-import { CONTEXT_DOCUMENTS_OVER_BUDGET, ValidationError } from '@cat-factory/kernel'
+import {
+  CONTEXT_DOCUMENTS_OVER_BUDGET,
+  FOUNDATIONAL_CATALOG_FILE,
+  ValidationError,
+} from '@cat-factory/kernel'
 import type { AgentRouting } from '@cat-factory/agents'
 import {
   EFFORT_REPORT_FILE,
@@ -199,6 +203,26 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
   it('read-only (architect)', async () => {
     await executor.startJob(context('architect'))
     expect(captured[0]).toMatchSnapshot()
+  })
+
+  // Trait guidance that NAMES an injected `.cat-context/` file is gated on that file arriving, and
+  // the snapshots above are dispatches that inject none: neither the architect nor the coder now
+  // carries the foundational reuse mandate there. Both directions have to be pinned, because a
+  // regression in either is silent — the gate stuck shut is a design that never hears about the
+  // shared services it should be reusing, and the gate stuck open is the ~200 words of dangling
+  // pointer this replaced.
+  it('gates the foundational guidance on the catalog file this dispatch actually injected', async () => {
+    await executor.startJob(context('architect'))
+    expect(captured[0]!.spec.systemPrompt as string).not.toContain(FOUNDATIONAL_CATALOG_FILE)
+
+    await executor.startJob(
+      context('architect', {}, undefined, {
+        injectedContextFiles: [{ path: FOUNDATIONAL_CATALOG_FILE, content: '# services' }],
+      }),
+    )
+    const withCatalog = captured[1]!.spec.systemPrompt as string
+    expect(withCatalog).toContain(FOUNDATIONAL_CATALOG_FILE)
+    expect(withCatalog).toContain('Prefer an existing foundational service')
   })
 
   // The two directives below are only ever composed TOGETHER here, at the container-dispatch

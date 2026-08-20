@@ -96,9 +96,14 @@ const BLOCK = { id: 'blk_1', title: 'A task' } as Block
 /**
  * A controller wired with the collaborators the cap branch touches and nothing else.
  *
- * The two the assertions read are returned alongside it: `park` records whether the run stopped
- * for a person, and `settle` whether it advanced. Exactly one of them fires in each case, which is
- * what makes "did the policy decide" observable rather than inferred from the returned shape.
+ * The three the assertions read are returned alongside it: `park` records whether the run stopped
+ * for a person, `settle` whether it advanced, and `resolvePolicy` whether the risk policy was read
+ * at all. Exactly one of the first two fires in each case, which is what makes "did the policy
+ * decide" observable rather than inferred from the returned shape.
+ *
+ * `companionMaxReworks` is the POLICY's answer, not the step's budget: the budget is seeded at run
+ * start, so a test that varies it varies `fresh(n)` instead. It stays on this signature because the
+ * same resolution carries `autonomy`, which the cap branch does still read.
  */
 function harness(
   autonomy: 'attended' | 'unattended',
@@ -106,6 +111,7 @@ function harness(
   producerSurface: 'container-explore' | 'container-coding' = 'container-explore',
 ) {
   const registry = pairRegistry(producerSurface)
+  const resolvePolicy = vi.fn(async () => ({ companionMaxReworks, autonomy }))
   const park = vi.fn(async () => ({ kind: 'awaiting_decision' as const, decisionId: 'appr_1' }))
   const settle = vi.fn(async () => ({ kind: 'continue' as const }))
   const loop = vi.fn()
@@ -131,9 +137,9 @@ function harness(
         s.state = 'waiting_decision'
       },
     } as never,
-    resolveRiskPolicy: async () => ({ companionMaxReworks, autonomy }),
+    resolveRiskPolicy: resolvePolicy,
   })
-  return { controller, park, settle, loop }
+  return { controller, park, settle, loop, resolvePolicy }
 }
 
 /** A verdict BELOW the step's 0.8 threshold, so the cap branch is the one reached. */
@@ -486,35 +492,40 @@ describe('a companion loop that has stopped making progress', () => {
   })
 })
 
-// WHERE the budget comes from. The step is seeded with the catalog default at run start, before any
-// policy is resolved, so a policy that states a different ceiling has to be adopted somewhere, and
-// the guard on that read is the whole subtlety: adopt it once, or a later read reports a ceiling the
-// step no longer has. Both ways a step can grade twice on an unspent budget are covered here,
-// because "once" off the wrong field holds for only one of them.
+// WHERE the budget comes from: the STEP, resolved from the task's risk policy once, at run start
+// (`RunLifecycleController`). This controller only ever READS it. It used to adopt the policy here
+// instead, on the first grading, which is one dispatch too late: the prompt for that very grading
+// already states how much rope is left, so it stated the catalog default. One resolution point is
+// also what keeps the number an agent is shown and the number the cap enforces the same number.
 
-/** A companion step that has graded nothing yet, carrying the run-start default. */
-function fresh(): ExecutionInstance {
+/** A companion step that has graded nothing yet, carrying the budget run start seeded. */
+function fresh(maxAttempts = 3): ExecutionInstance {
   const inst = instance()
   inst.steps[1] = step({
-    companion: { threshold: 0.8, maxAttempts: 3, attempts: 0, verdicts: [] },
+    companion: { threshold: 0.8, maxAttempts, attempts: 0, verdicts: [] },
   })
   return inst
 }
 
 describe('the rework budget', () => {
-  it('is adopted from the risk policy on the first grading', async () => {
-    const { controller, loop } = harness('attended', 5)
+  it('is read off the step and never rewritten by a grading', async () => {
+    const { controller, loop, resolvePolicy } = harness('attended', 5)
     const inst = fresh()
 
     await controller.resolveContainerVerdict(WS, inst, inst.steps[1]!, BLOCK, false, { ...BELOW })
 
-    expect(inst.steps[1]!.companion?.maxAttempts).toBe(5)
+    // The policy states 5 and the step says 3: the step wins, because run start already asked and
+    // the first grading's own prompt was rendered from that answer. A second resolution here is
+    // what would let the number an agent was shown and the number enforced disagree.
+    expect(inst.steps[1]!.companion?.maxAttempts).toBe(3)
     expect(loop).toHaveBeenCalledOnce()
+    // ...and a grading that does not reach its cap now resolves no policy at all.
+    expect(resolvePolicy).not.toHaveBeenCalled()
   })
 
-  it('parks on the first verdict when the policy allows no automatic rework', async () => {
-    const { controller, park, loop } = harness('attended', 0)
-    const inst = fresh()
+  it('parks on the first verdict when the run was seeded no automatic rework', async () => {
+    const { controller, park, loop } = harness('attended')
+    const inst = fresh(0)
 
     const result = await controller.resolveContainerVerdict(
       WS,
@@ -566,13 +577,13 @@ describe('the rework budget', () => {
     expect(park).toHaveBeenCalledOnce()
   })
 
-  it('is not re-read on a re-grade a human drove, which charges no round', async () => {
+  it('survives a re-grade a human drove, which charges no round', async () => {
     // The OTHER way a step grades twice with `attempts` still 0: its first verdict passed, the
     // pipeline's own gate raised, and the human answered "request changes". `requestStepChanges`
     // re-runs the producer without charging the automatic budget on purpose (a person's iteration is
-    // unbounded), so the re-grade arrives on an unspent budget. Read off `attempts` alone, the
-    // policy would be resolved again here and this step would silently move to whatever ceiling the
-    // policy states NOW.
+    // unbounded), so the re-grade arrives on an unspent budget. That is the shape that fooled an
+    // "adopt the policy on the first grading" read into firing a second time and silently moving
+    // the step to whatever ceiling the policy stated by then.
     const { controller, loop } = harness('attended', 5)
     const inst = instance()
     inst.steps[1] = step({
@@ -628,8 +639,8 @@ describe('a first batch of comments', () => {
     // the person who decides. A verdict ABOVE the bar is not that verdict, and forcing the loop
     // anyway parked every companion step this policy governs, since a review that raises no point
     // at all is the rare one.
-    const { controller, loop, park, settle } = harness('attended', 0)
-    const inst = fresh()
+    const { controller, loop, park, settle } = harness('attended')
+    const inst = fresh(0)
 
     await controller.resolveContainerVerdict(WS, inst, inst.steps[1]!, BLOCK, false, {
       ...ABOVE_WITH_COMMENTS,
@@ -646,8 +657,8 @@ describe('a first batch of comments', () => {
     // Same setup, unattended. `capSettledByPolicy` says a bar went unmet and policy waived it, and
     // it is read by whoever reviews the resulting pull request: stamping it on a 95% verdict is the
     // false claim the stamp exists to prevent, in the other direction.
-    const { controller, settle } = harness('unattended', 0)
-    const inst = fresh()
+    const { controller, settle } = harness('unattended')
+    const inst = fresh(0)
 
     await controller.resolveContainerVerdict(WS, inst, inst.steps[1]!, BLOCK, false, {
       ...ABOVE_WITH_COMMENTS,
@@ -733,12 +744,12 @@ describe('a blocker finding', () => {
     expect(inst.steps[1]!.companion?.capSettledByPolicy).toBeUndefined()
   })
 
-  it('holds the run even where the policy buys no rework rounds', async () => {
-    // `companionMaxReworks: 0` is the posture that lets a cleared rating with ordinary comments
-    // advance (asserted above). It says "do not spend model calls looping", never "accept whatever
-    // comes back", so a must-fix still stops — it just stops at the person straight away.
-    const { controller, loop, park, settle } = harness('unattended', 0)
-    const inst = fresh()
+  it('holds the run even where the run was seeded no rework rounds', async () => {
+    // A `0` budget is the posture that lets a cleared rating with ordinary comments advance
+    // (asserted above). It says "do not spend model calls looping", never "accept whatever comes
+    // back", so a must-fix still stops, it just stops at the person straight away.
+    const { controller, loop, park, settle } = harness('unattended')
+    const inst = fresh(0)
 
     await controller.resolveContainerVerdict(WS, inst, inst.steps[1]!, BLOCK, false, {
       ...ABOVE_WITH_BLOCKER,

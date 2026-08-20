@@ -80,6 +80,7 @@ export {
 export {
   type AgentTrait,
   type AgentTraitDefinition,
+  type TraitDelivery,
   CODE_AWARE_TRAIT,
   DOC_AWARE_TRAIT,
   SPEC_AWARE_TRAIT,
@@ -99,6 +100,7 @@ export {
   traitsFor,
   hasTrait,
   traitGuidanceFor,
+  traitDeliveryFor,
   standardsVerbosityFor,
 } from './agents/kinds/traits.js'
 // Per-agent-kind execution tuning (today: progress-guard knobs) folded into a container

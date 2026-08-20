@@ -9,7 +9,12 @@ tenant-scoped [prompt-fragment library](https://github.com/kibertoad/cat-factory
 ## What's here
 
 - `src/collections/*.ts`: fragments authored per topic. Today: `node`, `react`,
-  `acceptance`, `design`, `style`, `migration`. Each exports an array of `PromptFragment`.
+  `acceptance`, `design`, `style`, `migration`, `deployment`. Each exports an array of
+  `PromptFragment`. Shipping a collection does NOT put it in front of an agent: a fragment reaches a
+  run only by being SELECTED (a task's `fragmentIds`, a service frame's `serviceFragmentIds`, or a
+  task-type default), so `appliesTo` narrows the management surface rather than gating a dispatch.
+  `deployment` is opt-in for exactly that reason, and exports `DEPLOYMENT_FRAGMENT_IDS` so a
+  deployment can name the set in one line.
 - `src/index.ts`: merges the collections into a single `FRAGMENTS` registry plus
   `FRAGMENTS_BY_ID` and `getFragment(id)` for O(1) lookup during composition.
 

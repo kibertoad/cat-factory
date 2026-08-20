@@ -90,7 +90,6 @@ export function priorReviewFor(
     return {
       role: 'grader',
       threshold: companion.threshold,
-      roundsRemaining: Math.max(0, companion.maxAttempts - companion.attempts),
       rounds: toRounds(companion.verdicts),
     }
   }
@@ -108,8 +107,39 @@ export function priorReviewFor(
   return {
     role: 'producer',
     threshold: companion!.threshold,
-    roundsRemaining: Math.max(0, companion!.maxAttempts - companion!.attempts),
     rounds: toRounds(earlier),
+  }
+}
+
+/**
+ * The `gradingBar` slice: the bar THIS companion dispatch is scoring against, plus the rope left.
+ *
+ * Present for every companion dispatch and nothing else. Split from {@link priorReviewFor} because
+ * the two have different availability: the history exists only from round two, while the bar
+ * applies from round one, and reading it off the history left the FIRST grading of every step
+ * asking for a rating against a threshold the prompt never stated.
+ *
+ * Both numbers are read straight off `step.companion`, which `RunLifecycleController` seeds at run
+ * start with the bar AND the rework budget the task's RESOLVED risk policy states. That the budget
+ * is resolved by then is what makes this read honest: it was once adopted on the first grading
+ * RESULT instead, one dispatch after this renders, so a workspace whose policy allows no automatic
+ * rework was told on round one that two rounds remained — the marginal-call context the number was
+ * added to give, stated wrong, on precisely the round it mattered.
+ *
+ * `roundsRemaining` lives HERE and nowhere else: it is a fact about the loop's remaining budget,
+ * not about any round already in it, and the history slice used to carry a copy that only the
+ * grader's rendering read.
+ */
+function gradingBarFor(
+  step: PipelineStep,
+  registry?: AgentKindRegistry,
+): AgentRunContext['gradingBar'] | undefined {
+  if (!isCompanionKind(step.agentKind, registry)) return undefined
+  const companion = step.companion
+  if (!companion) return undefined
+  return {
+    threshold: companion.threshold,
+    roundsRemaining: Math.max(0, companion.maxAttempts - companion.attempts),
   }
 }
 
@@ -175,7 +205,16 @@ export function buildReworkContext(
   instance: { steps: readonly PipelineStep[]; currentStep: number },
   step: PipelineStep,
   registry?: AgentKindRegistry,
-): { revision?: AgentRunContext['revision']; priorReview?: AgentRunContext['priorReview'] } {
+): {
+  revision?: AgentRunContext['revision']
+  priorReview?: AgentRunContext['priorReview']
+  gradingBar?: AgentRunContext['gradingBar']
+} {
   const priorReview = priorReviewFor(instance, instance.currentStep, registry)
-  return { ...revisionSlice(step), ...(priorReview ? { priorReview } : {}) }
+  const gradingBar = gradingBarFor(step, registry)
+  return {
+    ...revisionSlice(step),
+    ...(priorReview ? { priorReview } : {}),
+    ...(gradingBar ? { gradingBar } : {}),
+  }
 }

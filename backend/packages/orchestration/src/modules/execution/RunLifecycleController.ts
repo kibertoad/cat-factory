@@ -87,6 +87,22 @@ export interface RunLifecycleDeps {
     block: Block,
     run: RunPolicyScope,
   ) => Promise<readonly WorkspaceRole[] | undefined>
+  /**
+   * How many automatic rework rounds a companion step may drive, from the task's resolved risk
+   * policy. A BOUND CALLBACK rather than the policy service, beside `resolveDryRunRoles` and for
+   * the same reason: this controller launches runs and the one fact it needs here is a number.
+   *
+   * Resolved at RUN START rather than at the first grading, because the first grading DISPATCH is
+   * already prompted from the seeded value: a companion is told "N automatic rework round(s) remain
+   * after this one" before any verdict exists, so a budget adopted afterwards states the catalog
+   * default to the very round the number was added for. Absent (a caller with no policy layer
+   * wired) seeds the catalog default, which is the shipped behaviour.
+   */
+  resolveCompanionReworkBudget?: (
+    workspaceId: string,
+    block: Block,
+    run: RunPolicyScope,
+  ) => Promise<number>
   requireWorkspace: (workspaceId: string) => Promise<unknown>
   requireBlock: (workspaceId: string, id: string) => Promise<Block>
   failRun: (
@@ -264,6 +280,17 @@ export class RunLifecycleController {
     // concurrent double-start is rejected by the live-run index instead of both wiping each
     // other's row (see insertLive).
 
+    // The companion rework budget, resolved ONCE for the run and only when a companion step is
+    // actually in it (a pipeline with none must not pay a policy read for nobody). This is the
+    // value every prompt and every cap check in the loop then sees, including the FIRST grading's,
+    // which is the round the seeded catalog default used to misreport.
+    const companionBudget = pipeline.agentKinds.some((kind) =>
+      companionFor(kind, this.deps.agentKindRegistry),
+    )
+      ? ((await this.deps.resolveCompanionReworkBudget?.(workspaceId, block, { intakeOrigin })) ??
+        DEFAULT_RISK_POLICY.companionMaxReworks)
+      : DEFAULT_RISK_POLICY.companionMaxReworks
+
     // Build the run only from the ENABLED steps. A step the pipeline marked
     // `enabled[i] === false` is kept in the saved pipeline (so it can be toggled back
     // on later) but skipped here entirely. Gates/thresholds are read by the kind's
@@ -298,14 +325,14 @@ export class RunLifecycleController {
           // disabled. Today it carries the requirements-review `autoRecommend` toggle.
           ...(pipeline.stepOptions?.[i] ? { stepOptions: pipeline.stepOptions[i] } : {}),
           // A companion step carries its quality bar + rework budget: the bar from the pipeline's
-          // per-step threshold (else the companion's default), the budget from the catalog default
-          // here and refreshed from the task's resolved risk policy on the first grading
-          // (`CompanionController`), exactly as the Tester's quality budget is on its first report.
+          // per-step threshold (else the companion's default), the budget from the task's resolved
+          // risk policy (see `companionBudget` above). Both are final from here: the loop reads
+          // them from round one, so neither may be a placeholder a later pass corrects.
           ...(companionDef
             ? {
                 companion: {
                   threshold: pipeline.thresholds?.[i] ?? companionDef.defaultThreshold,
-                  maxAttempts: DEFAULT_RISK_POLICY.companionMaxReworks,
+                  maxAttempts: companionBudget,
                   attempts: 0,
                   verdicts: [],
                 },

@@ -18,6 +18,7 @@ import {
 
 const dispatch: AgentDispatchContext = {
   baseBranch: 'main',
+  checkoutBranch: 'cat-factory/b1',
   workBranch: 'cat-factory/b1',
   multiRepo: false,
 }

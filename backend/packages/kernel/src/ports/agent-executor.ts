@@ -784,8 +784,6 @@ export interface AgentRunContext {
     role: 'grader' | 'producer'
     /** The bar every round was judged against, so a score in the list is readable. */
     threshold: number
-    /** How many automatic rework rounds this loop may still spend; 0 ⇒ this is the last. */
-    roundsRemaining: number
     rounds: {
       /** 1-based, in the order they happened. */
       round: number
@@ -794,6 +792,27 @@ export interface AgentRunContext {
       summary: string
       comments?: ReviewedPoint[]
     }[]
+  }
+  /**
+   * The bar a COMPANION GRADER is scoring against on THIS dispatch, and how much rope is left.
+   *
+   * Separate from {@link priorReview} because it is the loop's live state rather than its history,
+   * and the difference is a defect: `priorReview` is absent on the FIRST grading of a step, so a
+   * companion asked for a 0..1 rating on an anchored scale was never told which number holds the
+   * work back until round two. It is present on every grader dispatch, so the scale and the bar it
+   * feeds arrive together every time.
+   *
+   * Grader only, and deliberately: a PRODUCER handed the number optimises for the number rather
+   * than for the work, which is why its own rendering states the bar COMPARISON per round and never
+   * the threshold itself (see the round-rendering rules in `@cat-factory/agents`).
+   *
+   * Absent on every non-companion step and on the human "request changes" path.
+   */
+  gradingBar?: {
+    /** The rating this round must reach, from the step's companion state. */
+    threshold: number
+    /** How many automatic rework rounds remain AFTER this one; 0 ⇒ this is the last. */
+    roundsRemaining: number
   }
   /**
    * The initiative context a run carries, resolved by the engine from the block's `initiatives`

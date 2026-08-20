@@ -465,6 +465,25 @@ export function secretEnv(secrets: TestSecretSpec[] | undefined): Record<string,
 }
 
 /**
+ * Which refs a REUSED (warm-pool) explore checkout must end up holding: the branch to explore, and
+ * the repo's own base branch beside it.
+ *
+ * Its own function, and named, because the bug it removes is a swap between two branch names both
+ * in scope at the call site, and nothing downstream can tell them apart. A read-only reviewer's
+ * whole instruction is `git diff origin/<base>...HEAD`, so the base ref has to be as fresh as the
+ * branch: passing the explored branch as the base collapses the two refspecs into one, leaves
+ * `origin/<base>` at whatever tip the pool dir was first cloned at, and moves the merge base back
+ * to that tip. The diff then reports every commit merged into base since as part of the change
+ * under review, which is wrong in the direction nothing notices.
+ */
+export function exploreCheckoutRefs(job: Pick<AgentJob, 'branch' | 'repo'>): {
+  branch: string
+  baseBranch: string
+} {
+  return { branch: job.branch, baseBranch: job.repo.baseBranch }
+}
+
+/**
  * Read-only exploration: clone `branch`, run the agent making no edits, and return its
  * prose report — or, when `output.kind==='structured'`, the parsed JSON object as
  * `custom` (the backend renders any artifact files from it in a post-op). An edit-free
@@ -490,12 +509,17 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
       let workDir: string
       if (job.persistentCheckout) {
         logger.info('agent(explore): preparing reused checkout')
+        // Both refs, resolved by {@link exploreCheckoutRefs}: which one is the base is the whole
+        // decision, so it is made there rather than inline here.
+        //
+        // `job.full` is deliberately not consulted: the fresh-clone leg inside
+        // `prepareExistingCheckout` always clones with full history, so a reused checkout already
+        // has the merge base a shallow explore clone would not.
         await prepareExistingCheckout({
           dir,
           repo: job.repo,
           ghToken: job.ghToken,
-          branch: job.branch,
-          baseBranch: job.branch,
+          ...exploreCheckoutRefs(job),
           existing: true,
           signal: opts.signal,
         })

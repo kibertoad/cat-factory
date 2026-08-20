@@ -18,7 +18,9 @@ import {
   MERGER_SYSTEM_PROMPT,
   ON_CALL_SYSTEM_PROMPT,
   shippedBasePromptFor,
+  traitDeliveryFor,
 } from '@cat-factory/agents'
+import { FOUNDATIONAL_CATALOG_FILE, FOUNDATIONAL_INDEX_FILE } from '@cat-factory/kernel'
 import { builtInDirectivesFor, dispatchSystemPromptFor } from '../src/agents/promptOverrides.js'
 
 // The container-dispatch half of the per-workspace prompt override. Two properties matter and
@@ -45,10 +47,31 @@ function context(agentKind: string, systemPromptOverride?: string): AgentRunCont
   } as unknown as AgentRunContext
 }
 
+/**
+ * Every `.cat-context/` file a gated trait guidance names, so a test context can represent a
+ * dispatch that delivered ALL of them. Trait guidance pointing at one of these is withheld when the
+ * file is absent, which is what makes "what the editor advertises" a maximum rather than a
+ * prediction: this is the dispatch where the two coincide exactly.
+ */
+const ALL_GATED_CONTEXT_FILES = [FOUNDATIONAL_CATALOG_FILE, FOUNDATIONAL_INDEX_FILE]
+
+/** A dispatch that delivered every gated context file (see {@link ALL_GATED_CONTEXT_FILES}). */
+function fullyDeliveredContext(agentKind: string, systemPromptOverride?: string): AgentRunContext {
+  return {
+    ...context(agentKind, systemPromptOverride),
+    injectedContextFiles: ALL_GATED_CONTEXT_FILES.map((path) => ({ path, content: 'x' })),
+  } as unknown as AgentRunContext
+}
+
 describe('dispatchSystemPromptFor', () => {
   it('sends the shipped prompt when the workspace has no override', () => {
-    expect(dispatchSystemPromptFor(context('coder'), registry)).toBe(
-      systemPromptFor('coder', registry),
+    // Composed against the SAME delivery the dispatch resolves. Trait guidance naming an injected
+    // `.cat-context/` file is withheld when the file is absent, so `systemPromptFor` with no
+    // delivery argument answers for a different dispatch than this one and comparing the two
+    // would pin a coincidence rather than the absence of drift.
+    const ctx = context('coder')
+    expect(dispatchSystemPromptFor(ctx, registry)).toBe(
+      systemPromptFor('coder', registry, undefined, traitDeliveryFor(ctx)),
     )
   })
 
@@ -74,7 +97,7 @@ describe('dispatchSystemPromptFor', () => {
     // to it (`buildKindBody` adds the pair after it).
     expect(
       appendContainerDispatchDirectives(
-        dispatchSystemPromptFor(context('architect', 'Think hard.'), registry),
+        dispatchSystemPromptFor(fullyDeliveredContext('architect', 'Think hard.'), registry),
       ),
     ).toBe(`Think hard.${directives}`)
   })
@@ -185,9 +208,31 @@ describe('builtInDirectivesFor', () => {
     for (const kind of ['coder', 'architect', 'spec-writer', 'merger', 'on-call']) {
       expect(
         appendContainerDispatchDirectives(
-          dispatchSystemPromptFor(context(kind, 'My own prompt.'), registry),
+          dispatchSystemPromptFor(fullyDeliveredContext(kind, 'My own prompt.'), registry),
         ),
       ).toBe(`My own prompt.${builtInDirectivesFor(kind, registry)}`)
+    }
+  })
+
+  it('is a MAXIMUM: a dispatch that delivered nothing sends a subset, never an extra rule', () => {
+    // The editor has no dispatch to ask, so it measures with every gate open. What must hold is
+    // that no rule the platform enforces can be missing from what it shows: a real dispatch may
+    // send LESS (guidance naming a `.cat-context/` file that is not there) and never MORE. The
+    // failure this refuses is the opposite direction, where a workspace edits a prompt against an
+    // advertised contract the run then adds to.
+    for (const kind of ['coder', 'architect', 'spec-writer', 'merger', 'on-call']) {
+      const advertised = builtInDirectivesFor(kind, registry)
+      const sent = appendContainerDispatchDirectives(
+        dispatchSystemPromptFor(context(kind, 'My own prompt.'), registry),
+      ).slice('My own prompt.'.length)
+      for (const paragraph of sent.split('\n\n').filter((part) => part.trim())) {
+        expect(advertised).toContain(paragraph)
+      }
+      // And the invariants are in BOTH: gating may only ever drop guidance about a file.
+      for (const rule of [EXECUTION_SANDBOX_GUIDANCE, EFFORT_REPORT_GUIDANCE]) {
+        expect(advertised).toContain(rule)
+        expect(sent).toContain(rule)
+      }
     }
   })
 

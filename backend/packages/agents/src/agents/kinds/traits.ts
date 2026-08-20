@@ -271,16 +271,67 @@ export const STANDARD_AGENT_TRAITS: Partial<Record<AgentKind, AgentTrait[]>> = {
   [DOC_INTERVIEWER_AGENT_KIND]: [INTERVIEW_GATE_TRAIT],
 }
 
+/**
+ * What a dispatch actually PUT IN FRONT OF the agent, for guidance that names an artifact.
+ *
+ * Trait guidance is composed from the kind alone, and several of these strings point at a
+ * `.cat-context/` file the ENGINE decides whether to inject. When the injection did not happen
+ * the guidance is a pointer to a path that does not exist, which reads to the agent as a platform
+ * fault rather than as an absence, and the graders kept filing it: a ~200-word reuse mandate
+ * riding every turn of a run whose deployment has no catalog to reuse from.
+ *
+ * `contextPaths` absent means the CALLER DOES NOT KNOW, not that nothing was delivered, and those
+ * are opposite facts. The prompt editor measuring what the platform appends to an override, the
+ * sandbox composing a candidate and a test asking for a kind's prompt all legitimately have no
+ * dispatch, and each renders the guidance in FULL. That direction of the error is the safe one, the
+ * same reasoning `containerDispatchDirectivesFor` records: over-reporting a rule a workspace cannot
+ * delete costs a line in an editor, under-reporting hides one.
+ */
+export interface TraitDelivery {
+  /**
+   * The `.cat-context/` paths this dispatch injected, or `undefined` when unknown. An empty array
+   * is a real answer: the dispatch injected nothing.
+   */
+  contextPaths?: readonly string[]
+}
+
 /** Definition of a (custom) trait: its id and optional system-prompt guidance. */
 export interface AgentTraitDefinition {
   /** The trait id used in `STANDARD_AGENT_TRAITS` / `AgentKindDefinition.traits`. */
   id: AgentTrait
   /**
-   * Guidance folded into the system prompt of every kind carrying this trait. A function
-   * form receives the kind id. Omit for a pure marker trait whose effect lives in the
+   * Guidance folded into the system prompt of every kind carrying this trait. A function form
+   * receives the kind id plus what the dispatch delivered ({@link TraitDelivery}), and may return
+   * `undefined` to contribute NOTHING for this dispatch, which is what guidance naming an injected
+   * file does when the file is not there. Omit for a pure marker trait whose effect lives in the
    * engine (like `code-aware`).
    */
-  guidance?: string | ((kind: AgentKind) => string)
+  guidance?: string | ((kind: AgentKind, delivery: TraitDelivery) => string | undefined)
+}
+
+/**
+ * Whether `path` was injected for this dispatch, treating an unknown delivery as delivered.
+ *
+ * The default is what keeps the change additive: every caller that cannot know (the editor, the
+ * sandbox, a unit test) composes exactly the prompt it composed before.
+ */
+function wasDelivered(delivery: TraitDelivery, path: string): boolean {
+  return delivery.contextPaths === undefined || delivery.contextPaths.includes(path)
+}
+
+/**
+ * The {@link TraitDelivery} for a resolved dispatch: what the engine put in front of THIS agent.
+ *
+ * One helper for all three prompt-composing surfaces (container dispatch, the inline executor, a
+ * consensus panel) rather than a `.map(f => f.path)` at each, because the three must agree: a
+ * surface that built the set differently would gate the same kind's guidance differently for no
+ * reason a reader could find. An absent `injectedContextFiles` yields an EMPTY list rather than an
+ * unknown one, and deliberately: the field is absent exactly when the dispatch injected nothing.
+ */
+export function traitDeliveryFor(context: {
+  injectedContextFiles?: readonly { path: string }[]
+}): TraitDelivery {
+  return { contextPaths: (context.injectedContextFiles ?? []).map((file) => file.path) }
 }
 
 /**
@@ -299,8 +350,28 @@ export const STANDARD_TRAIT_DEFINITIONS: readonly AgentTraitDefinition[] = [
   // A marker: the queued skills each render their own prompt section through the shared skill
   // delivery, so there is nothing static to fold for a kind that carries it.
   { id: REVIEW_SKILLS_TRAIT },
-  { id: FOUNDATIONAL_CATALOG_TRAIT, guidance: FOUNDATIONAL_CATALOG_GUIDANCE },
-  { id: FOUNDATIONAL_CONTRACTS_TRAIT, guidance: FOUNDATIONAL_CONTRACTS_GUIDANCE },
+  // The two foundational traits are gated on their own file arriving. Each is a long section whose
+  // FIRST sentence points at a `.cat-context/` path, and the engine injects neither when no
+  // `FoundationalServiceResolver` is wired (`resolveFoundationalContext` returns nothing at all
+  // there) — so on such a deployment both were pure overhead pointing at nothing. Where a resolver
+  // IS wired the file is always written, empty catalog and failed read included, each SAYING which
+  // it is; those states are exactly what the guidance asks the agent to act on, so presence is the
+  // right condition and emptiness is not.
+  {
+    id: FOUNDATIONAL_CATALOG_TRAIT,
+    guidance: (_kind, delivery) =>
+      wasDelivered(delivery, FOUNDATIONAL_CATALOG_FILE) ? FOUNDATIONAL_CATALOG_GUIDANCE : undefined,
+  },
+  {
+    id: FOUNDATIONAL_CONTRACTS_TRAIT,
+    guidance: (_kind, delivery) =>
+      wasDelivered(delivery, FOUNDATIONAL_INDEX_FILE) ? FOUNDATIONAL_CONTRACTS_GUIDANCE : undefined,
+  },
+  // NOT gated, deliberately, though it names a file the same way. Its own text handles the absent
+  // case as a REFUSAL ("If that file is absent, the platform could not provide storage — do not
+  // attempt any upload; state it in your report and stop generating"), which is a thing the agent
+  // must be told rather than a pointer to drop: gated off, a binary-generating kind with no
+  // storage would generate happily and deliver nowhere.
   { id: BINARY_OUTPUT_TRAIT, guidance: BINARY_OUTPUT_GUIDANCE },
   // A marker: the pictures are delivered as context (files or attached parts) and the prompt
   // section that names them is rendered from what the dispatch actually achieved, so there is no
@@ -345,13 +416,22 @@ export function standardsVerbosityFor(
  * The guidance lines contributed by the traits a kind carries, in trait order. Folded
  * into the kind's system prompt by `systemPromptFor`. Marker traits (no guidance, e.g.
  * `code-aware`) contribute nothing here. Trait definitions are read off the injected registry.
+ *
+ * `delivery` is what the dispatch actually injected, so guidance that names a `.cat-context/` file
+ * can decline to say anything when the file is not there. Omitted, every trait renders in full:
+ * see {@link TraitDelivery} for why unknown is not the same as absent.
  */
-export function traitGuidanceFor(kind: AgentKind, registry: AgentKindRegistry): string[] {
+export function traitGuidanceFor(
+  kind: AgentKind,
+  registry: AgentKindRegistry,
+  delivery: TraitDelivery = {},
+): string[] {
   const lines: string[] = []
   for (const trait of traitsFor(kind, registry)) {
     const guidance = registry.traitDefinition(trait)?.guidance
     if (!guidance) continue
-    lines.push(typeof guidance === 'function' ? guidance(kind) : guidance)
+    const rendered = typeof guidance === 'function' ? guidance(kind, delivery) : guidance
+    if (rendered) lines.push(rendered)
   }
   return lines
 }

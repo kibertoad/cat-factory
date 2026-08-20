@@ -199,10 +199,18 @@ const DEFAULT_CONTAINER_STEP: AgentStepSpec = {
  * rather than an agent kind: it never appears in `registry.all()`, and giving it a registration
  * would put it in the palette as a placeable block, which it is not. `CompanionController`
  * parses the verdict back out of `result.custom`.
+ *
+ * `full: true` for the same reason the `merger` declares it: this kind's whole job is to judge a
+ * CHANGE, and a change is a diff against the base branch. A default explore clone is
+ * `--depth 1 --single-branch`, which has neither `origin/<base>` nor a merge base, so the
+ * three-dot diff its prompt asks for cannot run at all and a later `git fetch` of a shallow base
+ * still has no common ancestor. The reviewer then discovers the change file by file instead, which
+ * is where a measured ~40 exploratory calls per review went. Paying for the history once is
+ * cheaper than paying for the exploration on every turn that follows it.
  */
 const CONTAINER_COMPANION_STEP: AgentStepSpec = {
   surface: 'container-explore',
-  clone: { branch: 'pr' },
+  clone: { branch: 'pr', full: true },
   output: { kind: 'structured' },
 }
 
@@ -239,12 +247,55 @@ function structuredOutputField(output: AgentStepSpec['output']): Record<string, 
  * {@link AgentDispatchContext}. Built here, at the one dispatch chokepoint, so a builder can
  * never be handed a branch that differs from the one the job body asks the harness to clone.
  */
-function dispatchContextFor(parts: KindBodyParts): AgentDispatchContext {
+function dispatchContextFor(parts: KindBodyParts, checkoutBranch: string): AgentDispatchContext {
   return {
     baseBranch: parts.repo.baseBranch,
+    checkoutBranch,
     workBranch: parts.workBranch,
     multiRepo: (parts.peerRepos?.length ?? 0) > 0,
   }
+}
+
+/**
+ * The concrete branch a `container-explore` dispatch clones, from the step's declared target.
+ *
+ * Its own function so the prompt and the job body read ONE resolution: the builder is handed this
+ * through {@link AgentDispatchContext.checkoutBranch} and the body asks the harness to clone the
+ * same string, so a prompt naming the checkout cannot describe a branch the job never fetched.
+ * Note the two `?? repo.baseBranch` fallbacks — a `pr`-targeting explore with no pull request is
+ * checked out on base, which is exactly what a caller must be able to see.
+ */
+function resolveExploreBranch(
+  context: AgentRunContext,
+  parts: KindBodyParts,
+  step: AgentStepSpec,
+): string {
+  const { repo, workBranch, workBranchReady } = parts
+  const prBranch = context.block.pullRequest?.branch
+  if (step.clone?.branch === 'base') return repo.baseBranch
+  if (step.clone?.branch === 'pr' || step.clone?.branch === 'pr-or-work') {
+    return prBranch ?? repo.baseBranch
+  }
+  return workBranchReady ? workBranch : (prBranch ?? repo.baseBranch)
+}
+
+/**
+ * The concrete branch a `container-coding` dispatch clones: the in-place target where the step
+ * works on an existing pull request, else the repo base it branches off.
+ *
+ * The in-place pair is resolved ONCE here and handed to {@link buildCodingAgentBody}, so the
+ * refusal `resolveInPlaceBranches` can raise fires before the prompt is built rather than twice.
+ */
+function resolveCodingBranches(
+  context: AgentRunContext,
+  parts: KindBodyParts,
+  step: AgentStepSpec,
+): { clone: string; inPlace?: { clone: string; push: string } } {
+  const prBranch = context.block.pullRequest?.branch
+  const onPr =
+    step.clone?.branch === 'pr' || (step.clone?.branch === 'pr-or-work' && Boolean(prBranch))
+  const inPlace = onPr ? resolveInPlaceBranches(context, parts, step) : undefined
+  return { clone: inPlace ? inPlace.clone : parts.repo.baseBranch, ...(inPlace ? { inPlace } : {}) }
 }
 
 /**
@@ -262,18 +313,26 @@ function buildRegisteredAgentBody(
   roleSystemPrompt: string,
   registry: AgentKindRegistry,
 ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
+  // The concrete checkout, resolved BEFORE the prompt: a builder that names what is checked out
+  // (the companion's diff commands) and the body that asks the harness to clone it must read the
+  // same resolution, or the prompt describes a checkout the job never made.
+  const coding = step.surface === 'container-coding'
+  const codingBranches = coding ? resolveCodingBranches(context, parts, step) : undefined
+  const checkoutBranch = codingBranches
+    ? codingBranches.clone
+    : resolveExploreBranch(context, parts, step)
   // The kind's own prompt when it declared one (the merger's diff instructions, the
   // conflict-resolver's compact task reference), else the generic block-context prompt. Both
   // resolve inside `userPromptFor`, so this layer names no kind.
   const userPrompt = userPromptFor(context, registry, {
     materialized: true,
-    dispatch: dispatchContextFor(parts),
+    dispatch: dispatchContextFor(parts, checkoutBranch),
   })
   // Two mutually-exclusive surfaces, split into their own builders so each stays within the
   // cyclomatic-complexity budget (the shared branch prelude is cheap enough to recompute in each).
-  return step.surface === 'container-coding'
-    ? buildCodingAgentBody(context, parts, step, roleSystemPrompt, userPrompt)
-    : buildExploreAgentBody(context, parts, step, roleSystemPrompt, userPrompt)
+  return codingBranches
+    ? buildCodingAgentBody(context, parts, step, roleSystemPrompt, userPrompt, codingBranches)
+    : buildExploreAgentBody(context, parts, step, roleSystemPrompt, userPrompt, checkoutBranch)
 }
 
 /**
@@ -406,18 +465,17 @@ function buildCodingAgentBody(
   step: AgentStepSpec,
   roleSystemPrompt: string,
   userPrompt: string,
+  branches: { clone: string; inPlace?: { clone: string; push: string } },
 ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
   const { common, webTools, repo, workBranch } = parts
-  const prBranch = context.block.pullRequest?.branch
-  // Amend an EXISTING PR in place (fixer-like: push back, open no new PR) when the kind targets
-  // the PR branch, OR targets `pr-or-work` and a PR already exists. A `pr-or-work` kind with no PR
-  // yet falls back to the work-branch open-a-PR flow (coder-like) below — so one kind serves both
-  // a BAU pipeline step (amend the coder's PR) and a standalone/initiative run (open its own PR).
-  const onPr =
-    step.clone?.branch === 'pr' || (step.clone?.branch === 'pr-or-work' && Boolean(prBranch))
-  // The concrete in-place branches, honouring the step's `requirePr` / `prFallback` declarations.
-  // Resolved once here so the clone, the push target and the refusal cannot disagree.
-  const inPlace = onPr ? resolveInPlaceBranches(context, parts, step) : undefined
+  // The concrete in-place branches, honouring the step's `requirePr` / `prFallback` declarations —
+  // resolved by {@link resolveCodingBranches} before the prompt, so the clone, the push target, the
+  // refusal and what the prompt SAYS is checked out cannot disagree. Present ⇒ this dispatch
+  // amends an EXISTING PR in place (fixer-like: push back, open no new PR); absent ⇒ it branches
+  // off base onto the work branch and opens a PR (coder-like), which is where a `pr-or-work` kind
+  // with no PR yet lands, so one kind serves both a BAU pipeline step and a standalone run.
+  const inPlace = branches.inPlace
+  const onPr = inPlace !== undefined
   {
     // `pr` clone ⇒ work in place on the PR branch and push back (fixer-like, no new PR);
     // otherwise branch off base onto the work branch, push it and open a PR (coder-like).
@@ -454,7 +512,7 @@ function buildCodingAgentBody(
           opensPr ? PR_DESCRIPTION_GUIDANCE : undefined,
         ]),
         userPrompt,
-        branch: inPlace ? inPlace.clone : repo.baseBranch,
+        branch: branches.clone,
         ...(onPr ? {} : { newBranch: workBranch }),
         pushBranch: inPlace ? inPlace.push : workBranch,
         // Merge the repo's base branch in before the agent runs, so the conflict hunks are in the
@@ -512,18 +570,9 @@ function buildExploreAgentBody(
   step: AgentStepSpec,
   roleSystemPrompt: string,
   userPrompt: string,
+  exploreBranch: string,
 ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
-  const { common, webTools, repo, workBranch, workBranchReady } = parts
-  const prBranch = context.block.pullRequest?.branch
-  const wantsPr = step.clone?.branch === 'pr' || step.clone?.branch === 'pr-or-work'
-  const exploreBranch =
-    step.clone?.branch === 'base'
-      ? repo.baseBranch
-      : wantsPr
-        ? (prBranch ?? repo.baseBranch)
-        : workBranchReady
-          ? workBranch
-          : (prBranch ?? repo.baseBranch)
+  const { common, webTools } = parts
 
   // container-explore (read-only): prose, or a structured JSON object as `custom`.
   // Multi-repo (service-connections phase 3, read-only): a fan-out kind (today the

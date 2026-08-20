@@ -13,7 +13,7 @@ import type {
 import { noopLogger, resolveDesignImageDelivery } from '@cat-factory/kernel'
 import { recordInlineAgentContext } from './inline-context-record.js'
 import { type AgentKindRegistry, defaultAgentKindRegistry } from '../kinds/registry.js'
-import { standardsVerbosityFor } from '../kinds/traits.js'
+import { standardsVerbosityFor, traitDeliveryFor } from '../kinds/traits.js'
 import { systemPromptFor, userPromptFor } from '../catalog.js'
 import { catFactoryObservability } from '../../providers/instrumented.js'
 import { type AgentRouting, resolveAgentConfig, resolveInlineModelRef } from './routing.js'
@@ -290,9 +290,19 @@ export class AiAgentExecutor implements AgentExecutor {
     // replaces the shipped track prompt; `systemPromptFor` still layers the engine-enforced
     // directives on top. It wins over the deployment-wide `AGENT_ROUTING` system prompt: the
     // workspace's edit is the more specific of the two.
+    // The delivered `.cat-context/` paths ride along so trait guidance naming one of those files
+    // stays silent when this dispatch injected none: an inline call folds the same files into the
+    // USER prompt, so the presence question is identical to the container path's.
+    const delivery = traitDeliveryFor(context)
     const baseSystem = context.systemPromptOverride
-      ? systemPromptFor(context.agentKind, this.agentKindRegistry, context.systemPromptOverride)
-      : (config.system ?? systemPromptFor(context.agentKind, this.agentKindRegistry))
+      ? systemPromptFor(
+          context.agentKind,
+          this.agentKindRegistry,
+          context.systemPromptOverride,
+          delivery,
+        )
+      : (config.system ??
+        systemPromptFor(context.agentKind, this.agentKindRegistry, undefined, delivery))
     const composed = composeBlockSystemPrompt(
       baseSystem,
       context.block,
