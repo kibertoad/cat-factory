@@ -49,7 +49,12 @@ function context(kind: string): AgentRunContext {
   } as unknown as AgentRunContext
 }
 
-const dispatch = { baseBranch: 'trunk', workBranch: 'cat-factory/b1', multiRepo: false }
+const dispatch = {
+  baseBranch: 'trunk',
+  checkoutBranch: 'cat-factory/b1',
+  workBranch: 'cat-factory/b1',
+  multiRepo: false,
+}
 
 describe('the container companion checkout section', () => {
   it('names the resolved base branch and the diff commands', () => {
@@ -58,9 +63,43 @@ describe('the container companion checkout section', () => {
     // line is a per-deployment answer the dispatch already resolved.
     expect(prompt).toContain('`trunk`')
     expect(prompt).toContain('git diff --stat origin/trunk...HEAD')
-    expect(prompt).toContain('git fetch origin trunk')
     // Planning from the diffstat is the half that removes the exploration, not the diff itself.
     expect(prompt).toContain('Plan the review from that diffstat')
+  })
+
+  it('names NO git fetch: the container agent holds no credential to run one', () => {
+    // The harness carries the token out of band (GIT_ASKPASS, per harness-issued command) and the
+    // clone URL embeds no secret, so an agent-issued `git fetch` fails outright on a private repo.
+    // The refs are the harness's job; naming the command would put an error on the first
+    // instruction the whole review is anchored on.
+    const prompt = userPromptFor(context('reviewer'), registry(), { dispatch, materialized: true })
+    expect(prompt).not.toContain('git fetch')
+  })
+
+  it('says nothing when the checkout IS the base branch, so there is no diff to plan from', () => {
+    // A `clone.branch: 'pr'` dispatch falls back to base when the producer opened no pull request
+    // (a coder that changed nothing, an `opensPr: false` chain). `<base>...HEAD` is empty there, and
+    // the section would tell the reviewer to plan from that emptiness and not to look past it.
+    const prompt = userPromptFor(context('reviewer'), registry(), {
+      dispatch: { ...dispatch, checkoutBranch: 'trunk' },
+      materialized: true,
+    })
+    expect(prompt).not.toContain('git diff')
+    expect(prompt).not.toContain('Plan the review from that diffstat')
+  })
+
+  it('REPORTS a base branch name it cannot safely quote instead of interpolating it', () => {
+    // The base branch is provider-supplied and git permits characters a shell substitutes and a
+    // markdown code span terminates. A refused input is an omission that is stated, never a silent
+    // shortening: the agent is told to derive the ref itself and to say that it had to.
+    const prompt = userPromptFor(context('reviewer'), registry(), {
+      dispatch: { ...dispatch, baseBranch: 'release-$(id)`x`' },
+      materialized: true,
+    })
+    expect(prompt).not.toContain('$(id)')
+    expect(prompt).not.toContain('git diff')
+    expect(prompt).toContain('cannot safely quote')
+    expect(prompt).toContain('git branch -r')
   })
 
   it('says nothing to an INLINE companion, which has no checkout to run git in', () => {
@@ -78,21 +117,32 @@ describe('the container companion checkout section', () => {
     expect(prompt).not.toContain('Plan the review from that diffstat')
   })
 
-  it('tells a multi-repo review to rate the combined change once', () => {
+  it('tells a multi-repo review to rate the combined change once, without claiming a shared branch', () => {
+    // An explore peer carries `cloneBranch` only when the caller pinned one, so a peer is otherwise
+    // at its OWN default branch: asserting the siblings share this branch would send the reviewer
+    // to run a diff that resolves to nothing and read the emptiness as a verdict.
     const prompt = userPromptFor(context('reviewer'), registry(), {
       dispatch: { ...dispatch, multiRepo: true },
       materialized: true,
     })
     expect(prompt).toContain('MULTIPLE repositories')
     expect(prompt).toContain('single verdict')
+    expect(prompt).not.toContain('same branch')
   })
 
-  it('has the system prompt POINT at those commands rather than describe a discovery task', () => {
-    // The pair has to stay consistent: the system prompt is a per-kind constant and cannot name a
-    // branch, so it must not restate the instruction in vaguer words beside the concrete one.
+  it('leaves the system prompt able to stand alone, pointing at no section that may be withheld', () => {
+    // The pair has to stay consistent in BOTH directions. The section is withheld wherever it would
+    // describe a checkout that is not a change, and the grading bar is stated by a user-prompt
+    // wrapper that the editor and the Sandbox never run — so a system prompt deferring to either
+    // ("the commands are named below", "the bar is stated below") is a dangling pointer on exactly
+    // those surfaces. It states the rule instead.
     const system = companionSystemPrompt('reviewer', registry())!
-    expect(system).toContain('named with the work below')
     expect(system).toContain('with full history')
-    expect(system).not.toContain("repo's")
+    expect(system).toContain('start from what actually changed')
+    expect(system).not.toContain('named with the work below')
+    expect(system).not.toContain('stated with the work below')
+    // The clause this replaced: a discovery task ("diff the branch against the repo's default/base
+    // branch") the dispatch had already resolved the answer to.
+    expect(system).not.toContain("the repo's default/base branch")
   })
 })

@@ -93,8 +93,25 @@ export const deploymentFragments: PromptFragment[] = [
 
 /**
  * The ids of the deployment fragments, in catalog order, derived from {@link deploymentFragments}
- * so it can never drift from the definitions. Exported for a deployment that wants the shipped
- * containerized-service set as the default for its own task type or preset, the way
- * `MIGRATION_FRAGMENT_IDS` serves `preset_tech_migration`.
+ * so it can never drift from the definitions.
+ *
+ * NOTHING SHIPS SELECTING THESE, deliberately, and that is the whole of their delivery story. A
+ * fragment reaches a run only by being SELECTED — a task's own `fragmentIds`, a service frame's
+ * `serviceFragmentIds`, or a task-type default — because the automatic per-run relevance selector
+ * is retired from the run path, so `appliesTo` narrows the management surface and gates nothing at
+ * dispatch. There is no deploy-shaped built-in task type to hang these on, and unioning them onto
+ * `feature` would fold three deployment standards into every feature run on every deployment,
+ * which is the same "long guidance riding every turn of a run that has no use for it" this catalog
+ * exists to avoid.
+ *
+ * So they are OPT-IN, by one of three acts a deployment or a workspace performs:
+ *   - a workspace picks them on a task or on a service frame, in the fragment picker;
+ *   - a deployment makes them the default for a task type of its own,
+ *     `promptFragmentRegistry.registerTaskTypeDefaults('<type>', [...DEPLOYMENT_FRAGMENT_IDS])`;
+ *   - a preset names them in its `defaultFragmentIds`, the way `preset_tech_migration` names
+ *     `MIGRATION_FRAGMENT_IDS`.
+ *
+ * This export is what makes the second and third one line rather than three hand-copied ids that
+ * go stale the first time a fourth fragment joins the collection.
  */
 export const DEPLOYMENT_FRAGMENT_IDS: readonly string[] = deploymentFragments.map((f) => f.id)

@@ -517,10 +517,13 @@ export class ExecutionService {
       workRunner: this.workRunner,
       subscriptionActivations: subscriptionActivationRepository,
       logger: this.log,
-      // The one merge-policy fact the start path needs, as a bound callback: the lifecycle
-      // controller launches runs and has no other business with the preset layer.
+      // The two policy facts the start path needs, each as a bound callback: the lifecycle
+      // controller launches runs and has no other business with the preset layer. Both read
+      // through the same cached resolution the engine uses everywhere else.
       resolveDryRunRoles: async (ws, block, run) =>
         (await this.mergePolicy.resolve(ws, block, run)).dryRunRoles,
+      resolveCompanionReworkBudget: async (ws, block, run) =>
+        (await this.mergePolicy.resolve(ws, block, run)).companionMaxReworks,
       requireWorkspace: (ws) => this.requireWorkspace(ws),
       requireBlock: (ws, id) => this.requireBlock(ws, id),
       failRun: (ws, id, message, kind, detail, reason) =>

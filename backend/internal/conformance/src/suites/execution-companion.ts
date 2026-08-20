@@ -266,12 +266,19 @@ function registerCompanionCapTests(harness: ConformanceHarness): void {
   })
 
   it('spends the rework budget stated by the task risk policy, not a hard-coded one', async () => {
-    // The budget is POLICY, and a step is seeded with the catalog default before any policy is
-    // resolved, so the adoption happens on the companion's first grading. `0` is the value that
-    // makes the whole chain observable in one run: a policy row → the task's pin → the resolved
-    // preset → the step's budget → the cap branch. With the hard-coded ceiling still in force the
-    // run would instead spend three rework rounds (three more container dispatches) before parking
-    // in the same place, so this asserts the SPEND, which is the reason the knob exists.
+    // The budget is POLICY, resolved once at RUN START and read from the step thereafter. `0` is
+    // the value that makes the whole chain observable in one run: a policy row → the task's pin →
+    // the resolved preset → the step's budget → the cap branch. With the hard-coded ceiling still
+    // in force the run would instead spend three rework rounds (three more container dispatches)
+    // before parking in the same place, so this asserts the SPEND, which is the reason the knob
+    // exists.
+    //
+    // WHEN it is resolved is asserted too, below, on the START response. The budget used to be
+    // adopted on the companion's first grading RESULT, which is one dispatch after the prompt for
+    // that grading is composed: the round-one prompt states how many automatic rounds remain, and
+    // read off a step still holding the catalog default it told a workspace that buys no rework
+    // that two rounds were left. A run driven to completion cannot see that (both orders end on
+    // the same number), so the seed has to be read before anything grades.
     const app = harness.makeApp({ confidence: 1, companionRating: 0.4 })
     const { workspace } = await app.createWorkspace()
     const wsId = workspace.id
@@ -294,9 +301,15 @@ function registerCompanionCapTests(harness: ConformanceHarness): void {
       purpose: 'build',
       agentKinds: ['coder', 'reviewer'],
     })
-    await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-      pipelineId: pipeline.body.id,
-    })
+    const start = await app.call<ExecutionInstance>(
+      'POST',
+      `/workspaces/${wsId}/blocks/task_login/executions`,
+      { pipelineId: pipeline.body.id },
+    )
+    expect(start.status).toBe(201)
+    // Already final at run start, before the companion has graded anything: this is the state the
+    // first grading's own prompt is rendered from.
+    expect(start.body.steps.find((s) => s.agentKind === 'reviewer')?.companion?.maxAttempts).toBe(0)
 
     const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
     const companionStep = exec.steps.find((s) => s.agentKind === 'reviewer')!

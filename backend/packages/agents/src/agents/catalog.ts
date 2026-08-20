@@ -95,14 +95,22 @@ const OVERRIDE_PRESERVED_FRAGMENTS = [
  * total: it covers a fragment however it arrived, so a kind that later moves a directive from
  * inline to appended (or the reverse) needs no change here. Membership is a plain `includes`, so
  * an override that restates the rule itself is not given a second copy.
+ *
+ * The measurement is made under THIS dispatch's `delivery`, not with every gate open. Gated trait
+ * guidance contributes only when its `.cat-context/` file arrived, so measuring with the gate open
+ * would let a gated member of the preserve list be restored onto an overridden prompt on a
+ * deployment whose un-overridden prompt correctly drops it: two dispatches of one kind disagreeing
+ * about a rule, decided by whether somebody edited the prompt. No member is gated today; threading
+ * the argument is what keeps that from becoming true silently.
  */
 function restoreShippedInvariants(
   composed: string,
   kind: AgentKind,
   registry: AgentKindRegistry,
+  delivery?: TraitDelivery,
 ): string {
   // No `override` argument ⇒ terminates after exactly one level.
-  const shipped = systemPromptFor(kind, registry)
+  const shipped = systemPromptFor(kind, registry, undefined, delivery)
   let result = composed
   for (const fragment of OVERRIDE_PRESERVED_FRAGMENTS) {
     if (shipped.includes(fragment) && !result.includes(fragment)) {
@@ -207,7 +215,9 @@ export function systemPromptFor(
   // Unedited ⇒ byte-for-byte what the kind always sent. Overridden ⇒ put back any invariant the
   // shipped prompt carried inline, which replacing the track prompt would otherwise have taken
   // with it. Only reachable with an override, so the unedited path costs nothing.
-  return override === undefined ? composed : restoreShippedInvariants(composed, kind, registry)
+  return override === undefined
+    ? composed
+    : restoreShippedInvariants(composed, kind, registry, delivery)
 }
 
 /**
@@ -391,6 +401,15 @@ export function userPromptFor(
   // round. Composed the other way round, as this was, each round paid a fresh cache WRITE for the
   // whole fold: on a real revision round, 62k cache-write tokens against 26k reads over four calls.
   //
+  // The ordering rule is stated for THESE WRAPPERS and reaches no further, which bounds what it
+  // buys. `buildBaseUserPrompt` renders `priorOutputs` ("Work from earlier agents in this
+  // pipeline") at the tail of the base prompt, ahead of every wrapper — on a PRODUCER's rework
+  // dispatch those bytes are stable between rounds and the fold below is genuinely cached, but on
+  // a companion GRADER's they carry the producer's newly-rewritten reply, so the prefix breaks
+  // before the fold is reached and the grader half of the loop pays the write regardless. Moving
+  // that block is a change to every standard phase template (the shared `blockContext` partial),
+  // not to this list, so it is named here rather than implied away.
+  //
   // A LIST rather than nested calls because the order is the decision: five levels of nesting hid
   // it, and every wrapper here was appended to the end of whatever the one before it returned.
   const composed = [
@@ -455,7 +474,13 @@ function withPriorReview(prompt: string, context: AgentRunContext): string {
   // Whether this prompt HAS a current-round list above these rounds. Read rather than assumed:
   // the producer heading points at that list, and pointing at a section that is not there is the
   // same class of untruth the dedup below exists to remove.
-  const listedNow = context.revision?.comments ?? []
+  //
+  // PRODUCER only. `context.revision` on a grader dispatch is a HUMAN's "request changes" on the
+  // companion's own approval gate — someone else's list, about someone else's asks — so folding
+  // the grader's own recorded verdict points against it would delete a point the grader raised and
+  // point it at a section a different author wrote, under a heading reading "Your own previous
+  // verdicts". Two lists that merely overlap in wording are not the same list.
+  const listedNow = grading ? [] : (context.revision?.comments ?? [])
   const lines = [
     prompt,
     '',
@@ -504,9 +529,12 @@ function withGradingBar(prompt: string, context: AgentRunContext): string {
   return [
     prompt,
     '',
+    // The NUMBER and the rope, and nothing else. How the rating and a `blocker` are read against
+    // each other, and the instruction to grade honestly rather than steer the number, are stated
+    // once in the companion system prompt, which rides every one of these dispatches; restating
+    // them here would be the same paragraph twice in one prompt.
     `The bar for this work is ${bar.threshold.toFixed(2)} on the scale above: at or over it the ` +
-      'work moves on, under it the producer is sent back to revise. Any [blocker] you raise holds ' +
-      'the work whatever the rating, so grade the work honestly rather than steering the number.',
+      'work moves on, under it the producer is sent back to revise.',
     // How much rope is left, stated to the GRADER only. A producer told "this is the last round"
     // optimises for the grader rather than for the work; a grader that knows it is holding the run
     // has the context to weigh a marginal call, which is the call this loop keeps getting wrong.

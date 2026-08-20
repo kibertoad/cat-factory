@@ -197,6 +197,16 @@ second one and argues the work out again.
   artifacts, and a service, an API and a frontend ship the same way. The doubt this item was filed
   with (whether the findings recur outside the deploy-shaped tasks this deployment happens to run)
   is unresolved and the cost of being wrong is low: an unselected fragment folds nothing.
+  **They are OPT-IN and nothing shipped selects them**, which is the whole of their delivery story
+  and is stated rather than left to be discovered. A fragment reaches a run only by being SELECTED
+  (a task's `fragmentIds`, a service frame's `serviceFragmentIds`, a task-type default), because the
+  automatic per-run relevance selector is retired from the run path — so `appliesTo` narrows the
+  management surface and gates nothing at dispatch. There is no deploy-shaped built-in task type to
+  hang these on, and unioning them onto `feature` would fold three deployment standards into every
+  feature run everywhere, which is the failure mode KZ-0001 is about. So a workspace picks them, or
+  a deployment names `DEPLOYMENT_FRAGMENT_IDS` in its own task-type defaults or preset; that export
+  exists to make the second one line rather than three ids that go stale. A test pins that no
+  built-in task-type default names one.
 - **Combos**: `architect | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 2 entries, 2026-08-13
 - **What the grader says**: "five of the seven reviewer findings are from one recurring class", listed as: a numeric UID being required when `runAsNonRoot` is set, `readOnlyRootFilesystem` needing an `emptyDir` at `/tmp`, registry pull-side auth (GHCR being private by default), `imagePullPolicy` with immutable SHA tags plus push/apply ordering, gating the image push on lint/typecheck/test, and the cross-file name and label contract between Deployment, Service and Ingress. "Encoding these as standing context would likely have made this revision round unnecessary", and "shipping these as standards would let round 1 land what round 2 had to be told".
@@ -234,6 +244,20 @@ second one and argues the work out again.
   a standard phase (`review`) and `buildBaseUserPrompt` returns early for one: added in the generic
   branch it would have reached `doc-reviewer` and a deployment's own companion while missing the one
   kind this item is about.
+  Three corrections came out of reviewing the first cut, and each is a case where the prompt would
+  have described a checkout the run did not have. It names NO `git fetch`: the container agent holds
+  no git credential of its own (the token lives with the harness and rides GIT_ASKPASS per
+  harness-issued command), so an agent-issued fetch fails outright on a private repo, and the full
+  clone brings `origin/<base>` anyway. The section is WITHHELD when the checkout IS the base branch,
+  which is where a `clone.branch: 'pr'` dispatch lands when the producer opened no pull request:
+  `<base>...HEAD` is empty there, and the reviewer would have been told to plan from that emptiness
+  and not to look past it. That required `AgentDispatchContext.checkoutBranch`, resolved once per
+  dispatch and shared by the prompt and the job body so the two cannot disagree. And the warm-pool
+  path was refreshing only the explored branch, leaving `origin/<base>` at whatever tip the pool
+  directory was first cloned with, which moves the merge base back and reports every commit merged
+  into base since as part of the change under review — wrong in the direction nothing notices, since
+  a diffstat that is too big still reads as a diffstat. Fixed in the harness
+  (`exploreCheckoutRefs`), so this carries a runner-image bump.
 - **Combos**: `reviewer | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 1 entry, 2026-08-13
 - **What the grader says**: "pass the branch diff (changed-file list, or the diff itself) into the prompt for review steps. The agent is told to diff against the base branch and read changed files in full; supplying that up front would remove a chunk of the ~40 exploratory calls without weakening the 'don't judge from the summary alone' rule."
@@ -254,6 +278,17 @@ second one and argues the work out again.
   heading over nothing. `priorReview.roundsRemaining` was the old home and is deleted rather than
   left beside the new one. The number still reaches the GRADER only, per KZ-0006's rule: a producer
   handed it optimises for it, and gets the per-round bar comparison instead.
+  The ROPE half needed a second fix that reviewing the first cut surfaced: `roundsRemaining` is
+  rendered from `step.companion.maxAttempts`, and the rework budget was adopted from the task's risk
+  policy on the first grading RESULT, one dispatch AFTER the prompt for that grading is composed. So
+  a workspace whose policy allows no automatic rework was told on round one that two rounds
+  remained: the marginal-call context the number was added to give, stated wrong, on precisely the
+  round that used to have no number at all. The budget is now resolved once, at run start, and this
+  loop only ever reads it — which also removes the second resolution point, so the number an agent
+  is shown and the number the cap enforces cannot diverge. The system prompt no longer POINTS at the
+  bar either: the wrapper that states it does not run on the prompt editor or in the Sandbox, so a
+  sentence promising the number "below" was a dangling pointer on exactly the surfaces KZ-0001 is
+  about.
 - **Combos**: `architect-companion | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 1 entry, 2026-08-13
 - **What the grader says**: "state the numeric bar (0.80) inside the system prompt's anchored scale rather than only in the trailing rework note, so the 0..1 anchors and the pass threshold are defined in one place."
@@ -271,6 +306,14 @@ second one and argues the work out again.
   stated where the list is rather than implied by five levels of nesting. The `userPromptSuffix`
   stays last, which is a separate and unchanged rule. The blunt half of this item (cache the static
   prefix at all) remains stale, as the verdict said.
+  What the reordering does NOT buy is bounded and recorded at the code, because reviewing the first
+  cut found the comment claiming more than the change delivers. The rule reaches these WRAPPERS and
+  no further: `buildBaseUserPrompt` renders `priorOutputs` at the tail of the base prompt, ahead of
+  every wrapper, and on a companion GRADER's dispatch those bytes carry the producer's newly
+  rewritten reply. So the prefix breaks before the fold is reached and the grader half of the loop
+  pays the write regardless; the measured saving is the PRODUCER's rework dispatch. Moving that block
+  is a change to the shared `blockContext` partial every standard phase template includes, which is a
+  larger and separate change than this one.
 - **Combos**: `pr-reviewer | anthropic:claude-opus-5 | 1`, `architect-companion | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 2 entries, 2026-07-28 to 2026-08-13
 - **What the grader says**: the earlier one reports "3,078,625 prompt tokens against 27,234 completion tokens over 40 calls" and asks to "cache the static system+context prefix on the orchestrator". The later one is narrower and is the actionable half: "62k cache-write tokens against 26k cache reads over 4 calls suggests the stable material is being re-written each turn. Order the context so the invariant parts (system prompt, block description, pipeline context) precede the volatile parts (current revision text, prior verdicts) to maximize prefix reuse across revision rounds."

@@ -104,11 +104,10 @@ export interface CompanionControllerDeps {
   /** The pure step mutators (start/finish/park a step + the companion rework loop). */
   stepGraph: StepGraph
   /**
-   * The run's risk policy, read for TWO decisions here: how many automatic rework rounds this
-   * companion may drive ({@link CompanionController.applyAssessment}), and whether exhausting them
-   * parks for a person or is answered by policy
-   * ({@link CompanionController.settlesCapUnattended}). Both are answered from ONE resolution per
-   * grading, so a cap reached on a step's first verdict does not resolve the same policy twice.
+   * The run's risk policy, read for ONE decision here: whether exhausting the automatic rework
+   * budget parks for a person or is answered by policy
+   * ({@link CompanionController.settlesCapUnattended}). The BUDGET itself is not read here — it is
+   * resolved at run start, because the first grading's own prompt states how much of it is left.
    * Structurally typed to the fields it reads, so this collaborator stays independent of the merge
    * module.
    */
@@ -325,26 +324,12 @@ export class CompanionController {
       }
     }
 
-    // FIRST grading of this step: adopt the rework budget the task's resolved risk policy states.
-    // The step was seeded with the catalog default at run start, where no policy resolver is wired,
-    // and this is the same "refresh the budget from the preset once" the Tester's quality gate does
-    // on its first report.
-    //
-    // Guarded on having recorded NO verdict yet, which is the only reading of "first grading" that
-    // holds for both ways a step grades twice on an unspent budget. A human granted an extra round
-    // past the cap by RAISING this step's budget (`resolveCompanionExceeded`), and a human "request
-    // changes" on a gated companion re-runs the producer while charging no round at all
-    // (`requestStepChanges`), leaving `attempts` at 0 for the re-grade. Off `attempts` this read
-    // fired again on that second pass; off the verdict list it fires once per step, which is what
-    // every prompt and every cap check in this loop then goes on to see.
-    //
-    // The resolved value is HELD for the cap branch below, so a companion that reaches its cap on
-    // this same grading (a `0` budget does) resolves the policy once rather than twice.
-    let policy: CompanionRiskPolicy | undefined
-    if (producerIndex >= 0 && companion.verdicts.length === 0) {
-      policy = await this.deps.resolveRiskPolicy(workspaceId, block, instance)
-      companion.maxAttempts = policy.companionMaxReworks
-    }
+    // `companion.maxAttempts` is READ here, never written: the rework budget is resolved from the
+    // task's risk policy once, at run start (`RunLifecycleController`), and is final from then on.
+    // It used to be adopted here instead, on the first grading — which is one dispatch too late,
+    // because the prompt for that very grading already states how much rope is left, and stated
+    // the catalog default. One resolution point is also what keeps the number a prompt shows and
+    // the number the cap enforces the same number.
 
     // The score to judge: the parsed rating when there is a producer to grade, else a perfect
     // score (no producer of this companion's target kind precedes it, so there is genuinely
@@ -435,7 +420,7 @@ export class CompanionController {
       // the budget ran out under that blocker or the loop abandoned the rest of it.
       if (
         exit.parkReason === 'budget_spent' &&
-        (await this.settlesCapUnattended({ workspaceId, instance, block, step, companion, policy }))
+        (await this.settlesCapUnattended({ workspaceId, instance, block, step, companion }))
       ) {
         return this.resolvePassedCompanion({
           workspaceId,
@@ -595,9 +580,9 @@ export class CompanionController {
    *
    * Reads the policy at the moment the cap is REACHED rather than at run start, matching every
    * other policy read in the engine: an operator who moves a task onto an attended policy while it
-   * is working gets the park, and one who moves it the other way stops waiting on it. `resolved` is
-   * the grading's own resolution when the caller already needed one (a cap reached on a first
-   * verdict), so the two decisions the policy answers cost one read rather than two.
+   * is working gets the park, and one who moves it the other way stops waiting on it. It is the
+   * ONLY policy read left on this path: the rework budget is resolved at run start, so a grading
+   * that never reaches its cap now resolves no policy at all.
    *
    * It STAMPS `capSettledByPolicy` rather than only logging, because the alternative is a run that
    * looks like it passed a bar it never met. The last `verdicts` entry already says the producer
@@ -616,10 +601,9 @@ export class CompanionController {
     block: Block
     step: PipelineStep
     companion: NonNullable<PipelineStep['companion']>
-    policy: CompanionRiskPolicy | undefined
   }): Promise<boolean> {
     const { workspaceId, instance, block, step, companion } = args
-    const policy = args.policy ?? (await this.deps.resolveRiskPolicy(workspaceId, block, instance))
+    const policy = await this.deps.resolveRiskPolicy(workspaceId, block, instance)
     if (!resolvesOwnCaps(policy)) return false
     companion.capSettledByPolicy = true
     this.deps.logger?.info('companion rework cap settled by policy', {

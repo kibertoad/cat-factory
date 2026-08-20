@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parseAgentJob } from '../src/job.js'
-import { buildInfraNotes, buildPreviewOutcome, ralphUnsupportedOnMultiRepo } from '../src/agent.js'
+import {
+  buildInfraNotes,
+  buildPreviewOutcome,
+  exploreCheckoutRefs,
+  ralphUnsupportedOnMultiRepo,
+} from '../src/agent.js'
 import { installCommand } from '../src/frontend-infra.js'
 
 // The generic, manifest-driven agent kind's body validator. The handler itself
@@ -932,5 +937,32 @@ describe('parseAgentJob — mcpServers', () => {
 
   it('leaves mcpServers undefined when absent', () => {
     expect(parseAgentJob({ ...base, mode: 'coding' }).mcpServers).toBeUndefined()
+  })
+})
+
+describe('exploreCheckoutRefs', () => {
+  const job = (branch: string, baseBranch: string) => ({
+    branch,
+    repo: { ...base.repo, baseBranch },
+  })
+
+  it('asks for the REPO base beside the explored branch, so both refs are refreshed', () => {
+    // The regression this pins: passing the explored branch as the base collapses
+    // `prepareExistingCheckout`'s two refspecs into one, so a reused pool dir keeps whatever
+    // `origin/<base>` it was first cloned with and the reviewer's three-dot diff resolves its
+    // merge base to that stale tip.
+    const refs = exploreCheckoutRefs(job('cat-factory/blk', 'main'))
+    expect(refs).toEqual({ branch: 'cat-factory/blk', baseBranch: 'main' })
+    expect(refs.baseBranch).not.toBe(refs.branch)
+  })
+
+  it('names a non-default base branch rather than assuming main', () => {
+    expect(exploreCheckoutRefs(job('fix/x', 'release-7')).baseBranch).toBe('release-7')
+  })
+
+  it('collapses to one ref only when the explored branch IS the base', () => {
+    // A `clone.branch: 'base'` explore (the pr-reviewer) legitimately has nothing else to fetch.
+    const refs = exploreCheckoutRefs(job('main', 'main'))
+    expect(refs.baseBranch).toBe(refs.branch)
   })
 })

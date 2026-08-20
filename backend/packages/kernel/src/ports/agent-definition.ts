@@ -180,6 +180,17 @@ export interface AgentStepSpec {
 export interface AgentDispatchContext {
   /** The repo's base (default) branch: what a diff targets and what a work branch forks from. */
   baseBranch: string
+  /**
+   * The concrete branch this dispatch actually CHECKS OUT, resolved from the step's `clone` spec.
+   *
+   * Distinct from {@link workBranch} and from {@link baseBranch} because a step's declared target
+   * FALLS BACK: a `clone.branch: 'pr'` dispatch on a block whose producer opened no pull request
+   * (a coder that changed nothing, an `opensPr: false` chain, a companion after a direct-commit
+   * producer) is checked out on the base branch itself. A prompt that names a diff has to read this
+   * rather than assume the declaration held, or it states a change where `<base>...HEAD` is empty
+   * and the agent grades nothing as if it were something.
+   */
+  checkoutBranch: string
   /** The deterministic per-block work branch this dispatch pushes or resumes. */
   workBranch: string
   /** Whether this dispatch fans out across peer repos (one sibling checkout + PR per service). */

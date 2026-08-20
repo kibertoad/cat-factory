@@ -228,23 +228,29 @@ export function renderPriorReviewRounds(
 }
 
 /**
- * What makes two renderings of a point the SAME point.
+ * What makes two renderings of a point the SAME point: its BODY, under whatever it is attached to.
  *
- * The anchor wins where there is one: a companion names a structured item's id, and the same id
- * raised again is the same ask however the body was reworded between rounds. Failing that, the
- * normalised body is all there is, so a re-raise that was rephrased renders twice. That is the
- * safe direction of the error: showing a point twice costs tokens, and folding two DIFFERENT
- * points together would drop an ask the producer was never told about.
+ * The anchor NARROWS the match, it does not replace it. An `anchorId` names an ITEM (the companion
+ * contract calls it "a spec requirement / acceptance-criterion id"), not a finding, and one item
+ * routinely collects several: "REQ-3 is missing the error case" and "REQ-3 is ambiguously worded"
+ * are two asks on one anchor. Keyed on the anchor alone they hash together, so re-raising one of
+ * them folds BOTH out of the history, and the count then claims two points are "listed in full
+ * above" when only one is: the producer is never told about the other again. That is why
+ * `quotedSource` has always been paired with the body, and the anchor now is too.
+ *
+ * The cost is the opposite error: a point re-raised in genuinely different words renders twice.
+ * That is the safe direction and the deliberate one. Showing a point twice costs tokens; folding
+ * two DIFFERENT points together drops an ask the producer was never told about.
  *
  * Deliberately not severity-sensitive. A reviewer that escalates a `minor` to a `blocker` between
  * rounds is raising the same point harder, and the current round's rendering is the one carrying
  * the up-to-date grade.
  */
 function pointIdentity(point: ReviewedPoint): string {
-  const anchor = point.anchorId?.trim()
-  if (anchor) return `anchor:${anchor.toLowerCase()}`
-  const quoted = point.quotedSource?.trim()
   const body = normaliseForIdentity(point.body)
+  const anchor = point.anchorId?.trim()
+  if (anchor) return `anchor:${anchor.toLowerCase()} ${body}`
+  const quoted = point.quotedSource?.trim()
   return quoted ? `quoted:${normaliseForIdentity(quoted)} ${body}` : `body:${body}`
 }
 

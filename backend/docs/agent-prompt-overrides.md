@@ -45,8 +45,8 @@ Three rules bind a new gated trait:
   dispatch that delivered every gated file, containment for one that delivered none).
 
 **Reach for the two TOTAL seams, not that pair.** `shippedBasePromptFor(kind, registry)` is what an
-override REPLACES and `composedSystemPromptFor(kind, registry, replacement?)` is what then goes on
-the wire, and each already branches on whether the kind's prompt is bespoke. `systemPromptFor` alone
+override REPLACES and `composedSystemPromptFor(kind, registry, replacement?, delivery?)` is what then
+goes on the wire, and each already branches on whether the kind's prompt is bespoke. `systemPromptFor` alone
 is right only for a kind that has no bespoke entry: for an inline ENGINE kind it returns the thin
 `roles.ts` line and appends a second copy of directives the real prompt already carried, so a caller
 using it shows an editor text nobody runs and grades a candidate on a prompt nothing sends. Three
@@ -61,6 +61,12 @@ no longer exists, so every kind whose deliverable IS its reply silently loses th
 returns an empty reply the harness fails the run on. `restoreShippedInvariants` closes that by
 diffing against the fully composed SHIPPED prompt. **A new engine-enforced fragment belongs in
 `OVERRIDE_PRESERVED_FRAGMENTS`**, or an override can delete it.
+
+That diff is taken under THIS dispatch's `delivery`, not with every gate open. No member of the
+preserve list is gated today, and threading the argument is what stops that becoming a silent
+problem: measured with the gate open, a gated member would be restored onto an overridden prompt on
+a deployment whose un-overridden prompt correctly drops it, so two dispatches of one kind would
+disagree about a rule depending on whether somebody had edited the prompt.
 
 The test for membership is whether the fragment describes how the platform RUNS the kind rather
 than what it should look for, and it catches more than the obvious two. `REVIEW_FINDINGS_LAYOUT` is

@@ -458,12 +458,32 @@ describe('the grading bar', () => {
     expect(prompt).toContain('below the bar')
   })
 
-  it('points at the number from the system prompt, so the anchors are not left dangling', () => {
-    // The two halves of one instruction: the scale's anchors are a constant on the system prompt,
-    // the bar is a per-step operator setting stated with the work. Neither is readable alone.
-    expect(companionSystemPrompt('architect-companion', registry())).toContain(
-      'stated with the work below',
+  it('carries the number ONCE, leaving the shared rating rule to the system prompt', () => {
+    // Both ride every companion grading dispatch, so a rule restated in each is the same paragraph
+    // twice in one prompt. The wrapper owns the per-step number and the rope; how a rating and a
+    // blocker are read against each other, and the instruction not to steer the number, are the
+    // system prompt's, which is a per-kind constant and states them for free.
+    const system = companionSystemPrompt('architect-companion', registry())!
+    expect(system).toContain('THE TWO ARE READ SEPARATELY')
+    expect(system).toContain('rather than lowering the rating to force a fix')
+    const prompt = userPromptFor(
+      context({
+        agentKind: 'architect-companion',
+        gradingBar: { threshold: 0.8, roundsRemaining: 2 },
+      }),
+      registry(),
     )
+    expect(prompt).toContain('The bar for this work is 0.80')
+    expect(prompt).not.toContain('rather than steering the number')
+  })
+
+  it('states no location for the bar, so a surface that renders none has nothing dangling', () => {
+    // The editor measuring what the platform appends, and the Sandbox composing a graded candidate,
+    // both compose this system prompt with no companion loop to read a bar off. A sentence here
+    // promising the number "below" would be a pointer at nothing on exactly those surfaces.
+    const system = companionSystemPrompt('architect-companion', registry())!
+    expect(system).not.toContain('stated with the work below')
+    expect(system).not.toContain('with the work below')
   })
 })
 
@@ -512,7 +532,45 @@ describe('deduplicating the producer history against the current round', () => {
     expect(prompt).toContain('1 point(s) raised in this round are still open')
   })
 
-  it('matches on the ANCHOR, so a reworded re-raise is still one point', () => {
+  it('keeps two DIFFERENT points on the SAME anchor apart', () => {
+    const prompt = userPromptFor(
+      context({
+        agentKind: 'architect',
+        priorReview: {
+          role: 'producer',
+          threshold: 0.8,
+          rounds: [
+            {
+              round: 1,
+              rating: 0.6,
+              passed: false,
+              summary: 's',
+              comments: [
+                anchored('r-1', 'the image tag is mutable'),
+                anchored('r-1', 'the readiness probe checks a dependency'),
+              ],
+            },
+          ],
+        },
+        revision: {
+          previousProposal: 'v1',
+          feedback: 'f',
+          requestedBy: 'reviewer',
+          comments: [anchored('r-1', 'the image tag is mutable')],
+        },
+      }),
+      registry(),
+    )
+    // An `anchorId` names an ITEM, not a finding, and one item collects several. Keyed on the
+    // anchor alone both round-1 points hash together, so re-raising one folds BOTH out and the
+    // count claims two are "listed in full above" when only one is: the probe ask would be dropped
+    // from the prompt entirely and never raised with the producer again.
+    expect(prompt).toContain('the readiness probe checks a dependency')
+    expect(prompt.split('the image tag is mutable').length - 1).toBe(1)
+    expect(prompt).toContain('1 point(s) raised in this round are still open')
+  })
+
+  it('renders a re-raise REWORDED under the same anchor twice, the safe direction of the error', () => {
     const prompt = userPromptFor(
       context({
         agentKind: 'architect',
@@ -538,7 +596,8 @@ describe('deduplicating the producer history against the current round', () => {
       }),
       registry(),
     )
-    expect(prompt).not.toContain('the image tag is mutable')
+    // Costs tokens; folding two different points together costs an ask.
+    expect(prompt).toContain('the image tag is mutable')
     expect(prompt).toContain('pin the image tag to a digest')
   })
 

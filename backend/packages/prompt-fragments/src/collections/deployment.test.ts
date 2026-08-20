@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FRAGMENTS, getFragment } from '../index.js'
+import { BUILTIN_TASK_TYPE_DEFAULTS, FRAGMENTS, getFragment } from '../index.js'
 import { deploymentFragments, DEPLOYMENT_FRAGMENT_IDS } from './deployment.js'
 
 // The `deployment.*` collection ships the containerized-service standards a design review kept
@@ -56,6 +56,17 @@ describe('deployment fragment collection', () => {
     // Derived rather than pinned: a fourth fragment must not need this list edited by hand, which
     // is what makes the export safe for a deployment to use as a default set.
     expect(DEPLOYMENT_FRAGMENT_IDS).toEqual(deploymentFragments.map((f) => f.id))
+  })
+
+  it('is selected by NOTHING the platform ships, so it costs an unrelated run no tokens', () => {
+    // The delivery story, pinned rather than assumed. A fragment reaches a run only by being
+    // selected, and there is no deploy-shaped built-in task type: unioning these onto `feature`
+    // would fold three deployment standards into every feature run everywhere. They are opt-in, and
+    // this asserts that staying true — the failure it guards is somebody making them a built-in
+    // default for a broad type because the picker felt like too many clicks.
+    for (const ids of Object.values(BUILTIN_TASK_TYPE_DEFAULTS)) {
+      for (const id of ids ?? []) expect(DEPLOYMENT_FRAGMENT_IDS).not.toContain(id)
+    }
   })
 
   it('introduces no id collision with the rest of the catalog', () => {
