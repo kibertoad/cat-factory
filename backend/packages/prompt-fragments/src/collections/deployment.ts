@@ -17,6 +17,8 @@ import type { PromptFragment } from '@cat-factory/contracts'
 // step is DESIGNING or WRITING deployment artifacts, and a service, an API and a frontend all
 // ship the same way. The design-time kinds get them because a round-2 finding here is usually a
 // round-1 omission, which is the whole reason they are standards rather than review comments.
+// `spec-writer` is deliberately absent from all three: it captures BUSINESS requirements only, and
+// a numeric UID is not one.
 
 export const deploymentFragments: PromptFragment[] = [
   {
@@ -38,7 +40,7 @@ export const deploymentFragments: PromptFragment[] = [
     brief:
       'Container image: `USER <numeric uid>` in the image (a username breaks `runAsNonRoot`); publish immutable digest/sha tags, never a moving `latest`; gate the push on lint+typecheck+test; push before applying any manifest that references the image; the target namespace needs a pull credential (private registry is the default, GHCR included); keep the runtime image minimal with no secrets baked in.',
     appliesTo: {
-      agentKinds: ['architect', 'coder', 'spec-writer', 'deploy-fixer'],
+      agentKinds: ['architect', 'coder', 'deploy-fixer'],
     },
   },
   {
