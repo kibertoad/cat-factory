@@ -11,6 +11,7 @@ import {
   defaultStepResolverRegistry,
   defaultFoundationalServiceRegistry,
   defaultPromptFragmentRegistry,
+  defaultInlineUseCaseRegistry,
   defaultTaskTypeRegistry,
   registryBinaryGeneratorSource,
   registryBuiltinSource,
@@ -54,6 +55,10 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
     providerRegistry: dependencies.providerRegistry ?? defaultProviderRegistry(),
     pipelineRegistry: dependencies.pipelineRegistry ?? defaultPipelineRegistry(),
     taskTypeRegistry: dependencies.taskTypeRegistry ?? defaultTaskTypeRegistry(),
+    // The deployment's non-container model operations. Empty by default for the same reason the
+    // task-type registry is: what a wrapper over `/api/v1` may generate is the deployment's own
+    // declaration, and a shipped default would be a model list nobody chose.
+    inlineUseCaseRegistry: dependencies.inlineUseCaseRegistry ?? defaultInlineUseCaseRegistry(),
     foundationalServiceRegistry,
     // The deployment's generative binary integrations (image / music / video generation APIs).
     // Empty by default, exactly like the foundational registry above and for the same reason: a

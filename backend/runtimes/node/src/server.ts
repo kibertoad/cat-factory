@@ -283,6 +283,13 @@ export interface StartOptions {
    */
   taskTypeRegistry?: NodeContainerOptions['taskTypeRegistry']
   /**
+   * App-owned DI seam for the deployment's INLINE USE CASES (mirroring `taskTypeRegistry`): a
+   * deployment news a `defaultInlineUseCaseRegistry()`, registers its non-container model
+   * operations on it by reference, and passes it here. `/api/v1/use-cases` then publishes and runs
+   * them. Absent → an empty catalog. See backend/docs/inline-use-cases.md.
+   */
+  inlineUseCaseRegistry?: NodeContainerOptions['inlineUseCaseRegistry']
+  /**
    * App-owned DI seam for the deployment's FOUNDATIONAL SERVICES (mirroring
    * `agentKindRegistry`): a deployment news a `defaultFoundationalServiceRegistry()`, registers
    * the shared capabilities its org already runs on it by reference, and passes it here. They
@@ -816,6 +823,7 @@ async function bootServer(
     agentKindRegistry: options.agentKindRegistry,
     initiativePresetRegistry: options.initiativePresetRegistry,
     taskTypeRegistry: options.taskTypeRegistry,
+    inlineUseCaseRegistry: options.inlineUseCaseRegistry,
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     binaryGeneratorRegistry: options.binaryGeneratorRegistry,
     binaryStoreRegistry: options.binaryStoreRegistry,

@@ -52,6 +52,7 @@ import {
   type FoundationalServiceRegistry,
   type PromptFragmentRegistry,
   type PromptFragmentSource,
+  type InlineUseCaseRegistry,
   type TaskTypeRegistry,
   type ToolSecretResolver,
   type VcsProviderRegistry,
@@ -411,6 +412,14 @@ export interface NodeContainerOptions {
    * pre-loaded one to assert the seam is symmetric.
    */
   taskTypeRegistry?: TaskTypeRegistry
+  /**
+   * The app-owned INLINE USE-CASE registry (the deployment's non-container model operations).
+   * Rides its own option like `taskTypeRegistry`; defaults (inside `createCore`) to
+   * `defaultInlineUseCaseRegistry()`. A deployment registers its use cases on it so
+   * `/api/v1/use-cases` publishes and runs them, and boot validation refuses a malformed one.
+   * See backend/docs/inline-use-cases.md.
+   */
+  inlineUseCaseRegistry?: InlineUseCaseRegistry
   /**
    * The app-owned foundational-service registry (the shared capabilities a deployment declares in
    * CODE). Rides its own option like `taskTypeRegistry`; defaults (inside `createCore`) to

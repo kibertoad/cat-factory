@@ -186,10 +186,12 @@ type ConformanceAppOpts = {
   judgeRegistry?: CoreDependencies['judgeRegistry']
   judgeAssessor?: CoreDependencies['judgeAssessor']
   bugHuntAssessor?: CoreDependencies['bugHuntAssessor']
+  inlineUseCaseGenerator?: CoreDependencies['inlineUseCaseGenerator']
   fragmentBriefGenerator?: CoreDependencies['fragmentBriefGenerator']
   stepResolverRegistry?: CoreDependencies['stepResolverRegistry']
   initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
   taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
+  inlineUseCaseRegistry?: CoreDependencies['inlineUseCaseRegistry']
   pipelineRegistry?: CoreDependencies['pipelineRegistry']
   testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
   taskSourceProviders?: CoreDependencies['taskSourceProviders']
@@ -290,6 +292,7 @@ function buildConformanceOverrides(
       // The bug hunt's ranking producer: a deterministic fake, so the hunt's ranked/unranked
       // outcomes drive with no model on every runtime.
       bugHuntAssessor: o.bugHuntAssessor,
+      inlineUseCaseGenerator: o.inlineUseCaseGenerator,
       fragmentBriefGenerator: o.fragmentBriefGenerator,
       deployJobClient: o.deployJobClient,
       resolveDeployCloneTarget: o.resolveDeployCloneTarget,
@@ -315,6 +318,7 @@ function buildContainerRegistryOptions(opts: ConformanceAppOpts | undefined) {
     stepResolverRegistry: o.stepResolverRegistry,
     initiativePresetRegistry: o.initiativePresetRegistry,
     taskTypeRegistry: o.taskTypeRegistry,
+    inlineUseCaseRegistry: o.inlineUseCaseRegistry,
     pipelineRegistry: o.pipelineRegistry,
   })
 }

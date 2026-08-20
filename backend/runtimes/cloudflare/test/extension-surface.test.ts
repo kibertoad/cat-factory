@@ -50,6 +50,8 @@ const REQUIRED_CONSTRUCTORS = [
   'defaultPipelineRegistry',
   'TaskTypeRegistry',
   'defaultTaskTypeRegistry',
+  'InlineUseCaseRegistry',
+  'defaultInlineUseCaseRegistry',
   'InitiativePresetRegistry',
   'defaultInitiativePresetRegistry',
   'VcsProviderRegistry',

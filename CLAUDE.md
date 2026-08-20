@@ -23,8 +23,8 @@ Default to the well-factored design, not the fastest thing that passes.
   magic constant standing in for a real fix.
 - **Respect the existing seams.** Extend through the app-owned registries (`AgentKindRegistry`,
   `GateRegistry`, `JudgeRegistry`, `PipelineRegistry`, `TaskTypeRegistry`, `VcsProviderRegistry`,
-  `StepResolverRegistry`, `FoundationalServiceRegistry`, `PromptFragmentRegistry`), the kernel
-  ports, and the runtime `gateways`. Copy the nearest good citizen, never a one-off. **Injected BY
+  `StepResolverRegistry`, `FoundationalServiceRegistry`, `PromptFragmentRegistry`,
+  `InlineUseCaseRegistry`), the kernel ports, and the runtime `gateways`. Copy the nearest good citizen, never a one-off. **Injected BY
   REFERENCE, never a module global** (a `workspace:*` dep publishes as an EXACT version, so a
   consumer floating the range gets two copies and the registration lands in the one nothing reads),
   and an option on BOTH `start()` and `startLocal()`, asserted at those ENTRY POINTS rather than at

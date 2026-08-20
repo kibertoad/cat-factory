@@ -6200,7 +6200,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.58.0"
+    "version": "1.59.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -20683,6 +20683,769 @@
         "x-min-scope": "read"
       }
     },
+    "/api/v1/use-cases": {
+      "get": {
+        "description": "List the non-container model operations this deployment has registered: what each generates, the models it may run on, the parameters it accepts, and the temperature / output bounds an invocation may steer within. Each model carries whether it can be served right now, and an unavailable one says which of the two causes it is: `provider_unavailable` (nothing here resolves it, so an operator configures the provider) or `container_only` (it runs only through a subscription harness inside a per-run container, which this surface has none of). An empty list means this deployment registered no use cases, not that the surface is missing.",
+        "operationId": "listPublicUseCases",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "useCases": {
+                      "items": {
+                        "properties": {
+                          "category": {
+                            "maxLength": 60,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "description": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "generation": {
+                            "properties": {
+                              "maxOutputTokens": {
+                                "properties": {
+                                  "default": {
+                                    "type": "number"
+                                  },
+                                  "max": {
+                                    "type": "number"
+                                  },
+                                  "min": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "default",
+                                  "min",
+                                  "max"
+                                ],
+                                "type": "object"
+                              },
+                              "temperature": {
+                                "properties": {
+                                  "default": {
+                                    "type": "number"
+                                  },
+                                  "max": {
+                                    "type": "number"
+                                  },
+                                  "min": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "default",
+                                  "min",
+                                  "max"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "temperature",
+                              "maxOutputTokens"
+                            ],
+                            "type": "object"
+                          },
+                          "label": {
+                            "maxLength": 120,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "models": {
+                            "items": {
+                              "properties": {
+                                "available": {
+                                  "type": "boolean"
+                                },
+                                "default": {
+                                  "type": "boolean"
+                                },
+                                "description": {
+                                  "maxLength": 500,
+                                  "type": "string"
+                                },
+                                "id": {
+                                  "maxLength": 120,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "label": {
+                                  "maxLength": 120,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "unavailableReason": {
+                                  "enum": [
+                                    "provider_unavailable",
+                                    "container_only"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "label",
+                                "default",
+                                "available"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "parameters": {
+                            "items": {
+                              "properties": {
+                                "default": {
+                                  "maxLength": 2000,
+                                  "type": "string"
+                                },
+                                "defaultValues": {
+                                  "items": {
+                                    "maxLength": 2000,
+                                    "type": "string"
+                                  },
+                                  "maxItems": 50,
+                                  "type": "array"
+                                },
+                                "help": {
+                                  "maxLength": 300,
+                                  "type": "string"
+                                },
+                                "key": {
+                                  "maxLength": 80,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "label": {
+                                  "maxLength": 120,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "max": {
+                                  "type": "number"
+                                },
+                                "maxLength": {
+                                  "maximum": 2000,
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "min": {
+                                  "type": "number"
+                                },
+                                "options": {
+                                  "items": {
+                                    "properties": {
+                                      "label": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "value": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "label"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "placeholder": {
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                "required": {
+                                  "type": "boolean"
+                                },
+                                "section": {
+                                  "maxLength": 120,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "showWhen": {
+                                  "properties": {
+                                    "equals": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "boolean"
+                                        },
+                                        {
+                                          "type": "number"
+                                        }
+                                      ]
+                                    },
+                                    "includes": {
+                                      "type": "string"
+                                    },
+                                    "key": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "key"
+                                  ],
+                                  "type": "object"
+                                },
+                                "type": {
+                                  "enum": [
+                                    "text",
+                                    "textarea",
+                                    "number",
+                                    "select",
+                                    "checkbox",
+                                    "checkbox-group"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "key",
+                                "label"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "useCaseId": {
+                            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "useCaseId",
+                          "label",
+                          "description",
+                          "models",
+                          "parameters",
+                          "generation"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "useCases"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the deployment's inline use cases",
+        "tags": [
+          "Use cases"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/use-cases/{useCaseId}": {
+      "get": {
+        "description": "Read one registered use case by id: the same projection the catalog returns, for a caller that already holds the id and wants the current parameters and model availability without paging the catalog.",
+        "operationId": "getPublicUseCase",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "useCaseId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "category": {
+                      "maxLength": 60,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "description": {
+                      "maxLength": 500,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "generation": {
+                      "properties": {
+                        "maxOutputTokens": {
+                          "properties": {
+                            "default": {
+                              "type": "number"
+                            },
+                            "max": {
+                              "type": "number"
+                            },
+                            "min": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "default",
+                            "min",
+                            "max"
+                          ],
+                          "type": "object"
+                        },
+                        "temperature": {
+                          "properties": {
+                            "default": {
+                              "type": "number"
+                            },
+                            "max": {
+                              "type": "number"
+                            },
+                            "min": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "default",
+                            "min",
+                            "max"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "temperature",
+                        "maxOutputTokens"
+                      ],
+                      "type": "object"
+                    },
+                    "label": {
+                      "maxLength": 120,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "models": {
+                      "items": {
+                        "properties": {
+                          "available": {
+                            "type": "boolean"
+                          },
+                          "default": {
+                            "type": "boolean"
+                          },
+                          "description": {
+                            "maxLength": 500,
+                            "type": "string"
+                          },
+                          "id": {
+                            "maxLength": 120,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "label": {
+                            "maxLength": 120,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "unavailableReason": {
+                            "enum": [
+                              "provider_unavailable",
+                              "container_only"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label",
+                          "default",
+                          "available"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "parameters": {
+                      "items": {
+                        "properties": {
+                          "default": {
+                            "maxLength": 2000,
+                            "type": "string"
+                          },
+                          "defaultValues": {
+                            "items": {
+                              "maxLength": 2000,
+                              "type": "string"
+                            },
+                            "maxItems": 50,
+                            "type": "array"
+                          },
+                          "help": {
+                            "maxLength": 300,
+                            "type": "string"
+                          },
+                          "key": {
+                            "maxLength": 80,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "label": {
+                            "maxLength": 120,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "max": {
+                            "type": "number"
+                          },
+                          "maxLength": {
+                            "maximum": 2000,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "min": {
+                            "type": "number"
+                          },
+                          "options": {
+                            "items": {
+                              "properties": {
+                                "label": {
+                                  "maxLength": 120,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "maxLength": 120,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "label"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "placeholder": {
+                            "maxLength": 200,
+                            "type": "string"
+                          },
+                          "required": {
+                            "type": "boolean"
+                          },
+                          "section": {
+                            "maxLength": 120,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "showWhen": {
+                            "properties": {
+                              "equals": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "number"
+                                  }
+                                ]
+                              },
+                              "includes": {
+                                "type": "string"
+                              },
+                              "key": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "key"
+                            ],
+                            "type": "object"
+                          },
+                          "type": {
+                            "enum": [
+                              "text",
+                              "textarea",
+                              "number",
+                              "select",
+                              "checkbox",
+                              "checkbox-group"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "label"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "useCaseId": {
+                      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "useCaseId",
+                    "label",
+                    "description",
+                    "models",
+                    "parameters",
+                    "generation"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Get one use case",
+        "tags": [
+          "Use cases"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/use-cases/{useCaseId}/invocations": {
+      "post": {
+        "description": "Run one use case and answer with the generated text. Synchronous: this is a single inline model call with no repository, no container and no run, so there is no job to poll. The parameters are validated against the use case’s own descriptors (`422 use_case_parameters_invalid`, naming every problem at once); a model outside the use case’s declared list is refused (`422 use_case_model_not_allowed`) rather than substituted, and so is one this deployment cannot serve inline (`503 use_case_model_unavailable`). An exhausted workspace budget is `429 budget_exhausted`, and a model that answers with no usable text is `503 use_case_empty_reply` rather than a 200 carrying an empty string. `finishReason: \"length\"` (with `truncated: true`) means the reply hit the output budget, so the text is a prefix rather than an answer. Requires a `write` key.",
+        "operationId": "invokePublicUseCase",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "useCaseId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "maxOutputTokens": {
+                    "type": "number"
+                  },
+                  "model": {
+                    "maxLength": 120,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "parameters": {
+                    "additionalProperties": {
+                      "anyOf": [
+                        {
+                          "maxLength": 20000,
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "maxLength": 2000,
+                            "type": "string"
+                          },
+                          "maxItems": 50,
+                          "type": "array"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "propertyNames": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  "temperature": {
+                    "type": "number"
+                  }
+                },
+                "required": [],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "finishReason": {
+                      "enum": [
+                        "stop",
+                        "length",
+                        "content-filter",
+                        "other"
+                      ],
+                      "type": "string"
+                    },
+                    "model": {
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "provider": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "label",
+                        "provider",
+                        "model"
+                      ],
+                      "type": "object"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "usage": {
+                      "properties": {
+                        "inputTokens": {
+                          "type": "number"
+                        },
+                        "outputTokens": {
+                          "type": "number"
+                        },
+                        "totalTokens": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "inputTokens",
+                        "outputTokens",
+                        "totalTokens"
+                      ],
+                      "type": "object"
+                    },
+                    "useCaseId": {
+                      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "useCaseId",
+                    "model",
+                    "text",
+                    "finishReason",
+                    "truncated",
+                    "usage"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Run a use case",
+        "tags": [
+          "Use cases"
+        ],
+        "x-min-scope": "write"
+      }
+    },
     "/api/v1/vcs/connection": {
       "get": {
         "description": "The connected account, how the workspace authenticates to it, and the two permissions that decide whether an automated flow can complete: whether the platform may create repositories, and whether it may write workflow files. Both are enforced by the provider at push time, so a caller that cannot read them discovers a missing workflow permission as a repository that bootstrapped and then failed to gain its CI workflow. Provider-neutral: a GitLab-connected workspace answers here too. `connection` is null when nothing is connected, which is a state rather than an error.",
@@ -20859,6 +21622,9 @@
     },
     {
       "name": "Usage"
+    },
+    {
+      "name": "Use cases"
     },
     {
       "name": "VCS"

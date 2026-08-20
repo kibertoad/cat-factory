@@ -41,6 +41,8 @@ import type {
   TaskRepository,
   TaskSourceProvider,
   TaskTypeRegistry,
+  InlineUseCaseRegistry,
+  InlineUseCaseGenerator,
   WorkspaceMemberRepository,
   WorkspaceRepository,
   WorkspaceSnapshot,
@@ -771,6 +773,22 @@ export interface ConformanceAppOptions {
    * build. Absent → the facade's default (empty) task-type registry.
    */
   taskTypeRegistry?: TaskTypeRegistry
+  /**
+   * Inject the app-owned INLINE USE-CASE registry, pre-loaded with a deployment's use case, so the
+   * suite can assert the public `/api/v1/use-cases` surface resolves identically on EVERY runtime
+   * (its catalog projection, its model narrowing and one invocation). Each facade harness threads
+   * the SAME instance into its container build. Absent → the facade's default (empty) registry,
+   * which is what the "an empty catalog is not a missing surface" assertion drives.
+   */
+  inlineUseCaseRegistry?: InlineUseCaseRegistry
+  /**
+   * Inject the use-case surface's model producer (a deterministic fake in the suite) so an
+   * invocation, its composed prompt and the per-model availability projection are driven on EVERY
+   * runtime without a real model. Each facade harness threads it into its core overrides (the
+   * `inlineUseCaseGenerator` seam `createCore` reads); absent ⇒ the facade's model-derived
+   * generator, which is disabled with no model wired.
+   */
+  inlineUseCaseGenerator?: InlineUseCaseGenerator
   /**
    * Inject the app-owned pipeline registry, pre-loaded with a registered pipeline and/or a
    * RETIREMENT, so the suite can drive the pipeline lifecycle end to end on EVERY runtime: a

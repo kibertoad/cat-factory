@@ -174,10 +174,12 @@ type ConformanceAppOpts = {
   judgeRegistry?: CoreDependencies['judgeRegistry']
   judgeAssessor?: CoreDependencies['judgeAssessor']
   bugHuntAssessor?: CoreDependencies['bugHuntAssessor']
+  inlineUseCaseGenerator?: CoreDependencies['inlineUseCaseGenerator']
   fragmentBriefGenerator?: CoreDependencies['fragmentBriefGenerator']
   stepResolverRegistry?: CoreDependencies['stepResolverRegistry']
   initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
   taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
+  inlineUseCaseRegistry?: CoreDependencies['inlineUseCaseRegistry']
   pipelineRegistry?: CoreDependencies['pipelineRegistry']
   testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
   prVerificationReportPublisher?: CoreDependencies['prVerificationReportPublisher']
@@ -260,6 +262,7 @@ function buildConformanceOverrides(
       // The bug hunt's ranking producer: a deterministic fake, so the hunt's ranked/unranked
       // outcomes drive with no model on every runtime.
       bugHuntAssessor: o.bugHuntAssessor,
+      inlineUseCaseGenerator: o.inlineUseCaseGenerator,
       // The fragment-brief condensation model: a deterministic fake, so the generate /
       // reuse / regenerate-on-change loop drives against real Postgres with no model.
       fragmentBriefGenerator: o.fragmentBriefGenerator,
@@ -287,6 +290,7 @@ function buildContainerRegistryOptions(opts: ConformanceAppOpts | undefined) {
     stepResolverRegistry: o.stepResolverRegistry,
     initiativePresetRegistry: o.initiativePresetRegistry,
     taskTypeRegistry: o.taskTypeRegistry,
+    inlineUseCaseRegistry: o.inlineUseCaseRegistry,
     pipelineRegistry: o.pipelineRegistry,
   })
 }

@@ -251,6 +251,16 @@ export {
   type TaskTypeSuppressionServiceDependencies,
   type TaskTypeSuppressionView,
 } from './modules/taskTypes/TaskTypeSuppressionService.js'
+// The public inline use-case surface: the deployment's non-container model operations, their
+// discovery projection and the one invocation path. See `backend/docs/inline-use-cases.md`.
+export {
+  InlineUseCaseService,
+  type InlineUseCaseServiceDeps,
+} from './modules/useCases/InlineUseCaseService.js'
+export {
+  LlmInlineUseCaseGenerator,
+  type LlmInlineUseCaseGeneratorDeps,
+} from './modules/useCases/LlmInlineUseCaseGenerator.js'
 export {
   ServiceFragmentDefaultsService,
   type ServiceFragmentDefaultsServiceDependencies,

@@ -62,7 +62,7 @@ const API_PREFIX = '/api/v1'
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.58.0'
+const API_VERSION = '1.59.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -264,6 +264,24 @@ const OPERATION_DOCS = {
     summary: 'Get a job',
     description:
       'Poll a headless job started through this surface: its status and, once finished, its result.',
+  },
+  listPublicUseCases: {
+    tag: 'Use cases',
+    summary: "List the deployment's inline use cases",
+    description:
+      'List the non-container model operations this deployment has registered: what each generates, the models it may run on, the parameters it accepts, and the temperature / output bounds an invocation may steer within. Each model carries whether it can be served right now, and an unavailable one says which of the two causes it is: `provider_unavailable` (nothing here resolves it, so an operator configures the provider) or `container_only` (it runs only through a subscription harness inside a per-run container, which this surface has none of). An empty list means this deployment registered no use cases, not that the surface is missing.',
+  },
+  getPublicUseCase: {
+    tag: 'Use cases',
+    summary: 'Get one use case',
+    description:
+      'Read one registered use case by id: the same projection the catalog returns, for a caller that already holds the id and wants the current parameters and model availability without paging the catalog.',
+  },
+  invokePublicUseCase: {
+    tag: 'Use cases',
+    summary: 'Run a use case',
+    description:
+      'Run one use case and answer with the generated text. Synchronous: this is a single inline model call with no repository, no container and no run, so there is no job to poll. The parameters are validated against the use case\u2019s own descriptors (`422 use_case_parameters_invalid`, naming every problem at once); a model outside the use case\u2019s declared list is refused (`422 use_case_model_not_allowed`) rather than substituted, and so is one this deployment cannot serve inline (`503 use_case_model_unavailable`). An exhausted workspace budget is `429 budget_exhausted`, and a model that answers with no usable text is `503 use_case_empty_reply` rather than a 200 carrying an empty string. `finishReason: "length"` (with `truncated: true`) means the reply hit the output budget, so the text is a prefix rather than an answer. Requires a `write` key.',
   },
   listPublicServices: {
     tag: 'Services',

@@ -262,6 +262,45 @@ export {
   validateDescriptorFields,
 } from '@cat-factory/contracts'
 
+// Installation-level extension point for INLINE USE CASES: a named unit of NON-container model
+// work a deployment registers on the app-owned `InlineUseCaseRegistry`, narrowing the models it
+// may run on and declaring the parameters it accepts. `/api/v1/use-cases` publishes the catalog
+// and runs one. See `domain/inline-use-case-registry.ts` and `backend/docs/inline-use-cases.md`.
+export {
+  type InlineUseCaseDefinition,
+  type InlineUseCaseModelOption,
+  type InlineUseCaseModelSource,
+  type InlineUseCaseNumericLimit,
+  type InlineUseCaseGenerationOptions,
+  type InlineUseCaseComposeInput,
+  type InlineUseCasePrompt,
+  InlineUseCaseRegistry,
+  defaultInlineUseCaseRegistry,
+  DEFAULT_USE_CASE_GENERATION,
+  useCaseGenerationLimits,
+  resolveUseCaseModelOption,
+  defaultUseCaseModelOption,
+  renderUseCaseBrief,
+  composeUseCasePrompt,
+} from './domain/inline-use-case-registry.js'
+// The producer behind one: the seam that resolves a declared model option and runs the call, so
+// every other half of the surface is drivable with a deterministic fake.
+export type {
+  InlineUseCaseGenerator,
+  InlineUseCaseGenerationRequest,
+  InlineUseCaseGeneration,
+  InlineUseCaseModelAvailability,
+} from './ports/inline-use-cases.js'
+// The wire vocabulary a registration is typed against, re-exported (not restated) from contracts
+// for the same reason the descriptor helpers above are: an org package registering a use case
+// imports its WHOLE vocabulary from kernel and needs no contracts dependency of its own.
+export type {
+  UseCaseParameter,
+  UseCaseParameterType,
+  UseCaseGenerationLimits,
+  UseCaseNumericLimit,
+} from '@cat-factory/contracts'
+
 // Installation-level extension point for initiative PRESETS (mirrors the pipeline / gate
 // registry seams): a preset bundles a create-time form descriptor + planning-pipeline binding
 // + defaults + code hooks (repo-detection prefill, plan post-processor, prompt steering). The

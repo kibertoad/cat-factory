@@ -113,6 +113,7 @@ function buildWorkerConformanceDeps(recorder: RecordingEventPublisher, opts: Wor
       judgeRegistry: o.judgeRegistry,
       judgeAssessor: o.judgeAssessor,
       bugHuntAssessor: o.bugHuntAssessor,
+      inlineUseCaseGenerator: o.inlineUseCaseGenerator,
       // - fragmentBriefGenerator: a deterministic condensation model, so the generated-brief
       //   store's generate / reuse / regenerate-on-change loop is asserted against real D1.
       fragmentBriefGenerator: o.fragmentBriefGenerator,
@@ -123,6 +124,7 @@ function buildWorkerConformanceDeps(recorder: RecordingEventPublisher, opts: Wor
       stepResolverRegistry: o.stepResolverRegistry,
       initiativePresetRegistry: o.initiativePresetRegistry,
       taskTypeRegistry: o.taskTypeRegistry,
+      inlineUseCaseRegistry: o.inlineUseCaseRegistry,
       pipelineRegistry: o.pipelineRegistry,
       // - prVerificationReportPublisher + appBaseUrl: the engine's PR-report hook, so the
       //   composed report (and its in-place idempotency) is asserted against real D1.
