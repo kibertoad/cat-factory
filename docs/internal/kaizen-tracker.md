@@ -74,7 +74,7 @@ exists.
 
 ### KZ-0001: Gate a conditional prompt section on what was actually injected
 
-- **Status**: in progress, one of three (PR #PRNUM). The STANDARDS half is done, both constants
+- **Status**: in progress, one of three (PR 2062). The STANDARDS half is done, both constants
   this verdict names. `STANDARDS_FOOTER` moved out of all seven files into `foldStandards`, which
   runs only when there are blocks to introduce, so the pointer and its target are now one decision
   (`build@v7`, `review@v3`; the other six carry no number). `FRAGMENT_ADHERENCE_GUIDANCE` could not
@@ -92,7 +92,7 @@ exists.
 
 ### KZ-0002: The read-only guardrail and the effort-report guidance contradict each other
 
-- **Status**: in progress (PR #PRNUM). The guardrail names `.cat-effort.json` as its ONE
+- **Status**: in progress (PR 2062). The guardrail names `.cat-effort.json` as its ONE
   permitted write and states that no commit or push happens on the step; the effort report no
   longer times itself off a commit the step is forbidden to make. Scoped off the SURFACE as this
   verdict asks: the fix is in the guardrail text `applySurfaceDirectives` appends by surface, so
@@ -116,7 +116,7 @@ exists.
 
 ### KZ-0004: The agent container's capability limits are never stated to the agent
 
-- **Status**: in progress (PR #PRNUM). `EXECUTION_SANDBOX_GUIDANCE` rides every container
+- **Status**: in progress (PR 2062). `EXECUTION_SANDBOX_GUIDANCE` rides every container
   dispatch: no Kubernetes tooling or cluster/registry credentials, a Docker daemon to PROBE
   rather than assume (the image ships the CLI and starts a rootless daemon best-effort, so
   neither "no Docker" nor "Docker works" is true everywhere), and toolchain versions that are
@@ -148,7 +148,7 @@ exists.
 
 ### KZ-0006: A prior round that cleared its bar is rendered as "did not meet the bar"
 
-- **Status**: in progress (PR #PRNUM). `renderPriorReviewRounds` now takes the threshold and
+- **Status**: in progress (PR 2062). `renderPriorReviewRounds` now takes the threshold and
   states the bar comparison and the disposition as the two separate facts they are, naming the
   cause when they disagree (a `blocker` held it, or the first batch was force-looped). The
   threshold's NUMBER stays out of the wording, so the producer still is not handed a target to
