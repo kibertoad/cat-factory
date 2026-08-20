@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/binary-generators",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "The built-in generative binary integrations (Nano Banana, Google's Gemini image models) plus the authoring seam a deployment defines its own with, written entirely through the public BinaryGeneratorRegistry seam: depends only on @cat-factory/kernel + @cat-factory/contracts, never the engine.",
   "repository": {
     "type": "git",
@@ -40,6 +40,6 @@
     "@cat-factory/orchestration": "workspace:*",
     "openapi-types": "^12.1.3",
     "typescript": "7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

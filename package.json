@@ -36,15 +36,15 @@
     "@stryker-mutator/api": "9.6.1",
     "@valibot/to-json-schema": "^1.7.1",
     "knip": "^6.32.2",
-    "oxfmt": "^0.63.0",
-    "oxlint": "^1.78.0",
-    "publint": "^0.3.23",
+    "oxfmt": "^0.64.0",
+    "oxlint": "^1.79.0",
+    "publint": "^0.3.24",
     "sherif": "^1.13.0",
-    "turbo": "^2.10.9",
+    "turbo": "^2.10.11",
     "typescript": "7.0.2"
   },
   "engines": {
     "node": ">=24"
   },
-  "packageManager": "pnpm@11.21.0"
+  "packageManager": "pnpm@11.22.0"
 }

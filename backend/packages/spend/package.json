@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/spend",
-  "version": "0.16.6",
+  "version": "0.16.7",
   "description": "Pricing tables and spend metering for the Agent Architecture Board.",
   "repository": {
     "type": "git",
@@ -39,6 +39,6 @@
     "@stryker-mutator/core": "9.6.1",
     "@stryker-mutator/vitest-runner": "9.6.1",
     "typescript": "7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

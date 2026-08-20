@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/kernel",
-  "version": "0.314.0",
+  "version": "0.314.1",
   "description": "Shared vocabulary, pure logic, and port interfaces for the Agent Architecture Board.",
   "repository": {
     "type": "git",
@@ -33,14 +33,14 @@
   },
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
-    "ai": "^7.0.64",
+    "ai": "^7.0.68",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@stryker-mutator/core": "9.6.1",
     "@stryker-mutator/vitest-runner": "9.6.1",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.11",
     "typescript": "7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }
