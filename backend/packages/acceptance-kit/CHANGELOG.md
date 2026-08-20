@@ -1,5 +1,12 @@
 # @cat-factory/acceptance-kit
 
+## 0.3.7
+
+### Patch Changes
+
+- Updated dependencies [1d3c115]
+  - @cat-factory/kernel@0.316.0
+
 ## 0.3.6
 
 ### Patch Changes
