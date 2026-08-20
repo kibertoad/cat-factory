@@ -978,6 +978,24 @@ export function resolveModelRef(
   return or ? { provider: or.provider, model: or.model } : undefined
 }
 
+/**
+ * Whether an id names a model this build could resolve at all, under ANY capability set.
+ *
+ * The existence half of {@link resolveModelRef}, and the reason it is separate: `resolveModelRef`
+ * answers "which ref serves this id HERE", which needs the deployment's capabilities and is a
+ * request-time question. Whether the id names anything is knowable from the catalog alone, so a
+ * registration that misspells one (`gemini-flash` for `gemini-flash-2`) is a BOOT fault. Left to
+ * request time it publishes as `provider_unavailable`, whose documented remedy is "configure the
+ * provider": the operator then hunts a key for a model that will never resolve.
+ */
+export function isResolvableModelId(id: string): boolean {
+  return (
+    getSelectableModel(id) !== undefined ||
+    parseLocalModelId(id) !== undefined ||
+    parseOpenRouterModelId(id) !== undefined
+  )
+}
+
 /** Every subscription vendor (the full set), for building a permissive capability set. */
 export const ALL_SUBSCRIPTION_VENDORS: SubscriptionVendor[] = Object.keys(
   SUBSCRIPTION_VENDORS,

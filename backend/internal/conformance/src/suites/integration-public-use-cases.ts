@@ -65,18 +65,22 @@ const SCENE_PROSE = {
 function fakeGenerator(): InlineUseCaseGenerator {
   return {
     enabled: true,
-    availability: (_workspaceId, option) =>
-      Promise.resolve(
-        option.id === 'flash'
-          ? ({ available: false, reason: 'container_only' } as const)
-          : ({ available: true, ref: { provider: 'novel', model: 'magnum-v4' } } as const),
-      ),
-    generate: (request) =>
+    forScope: (scope) =>
       Promise.resolve({
-        text: `[${request.temperature}] ${request.prompt}`,
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 3, outputTokens: 5, totalTokens: 8 },
-        ref: { provider: 'novel', model: 'magnum-v4' },
+        availability: (option) =>
+          option.id === 'flash'
+            ? ({ available: false, reason: 'container_only' } as const)
+            : ({ available: true, ref: { provider: 'novel', model: 'magnum-v4' } } as const),
+        // The composed prompt AND the scope the facade resolved it under, so a facade that dropped
+        // a credential tier on the way through its own container build fails here rather than
+        // silently narrowing which keys a generation may draw on.
+        generate: (request) =>
+          Promise.resolve({
+            text: `[${request.temperature}|${scope.accountId ? 'account' : 'no-account'}] ${request.prompt}`,
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 3, outputTokens: 5, totalTokens: 8 },
+            ref: { provider: 'novel', model: 'magnum-v4' },
+          }),
       }),
   }
 }
@@ -144,8 +148,12 @@ export function definePublicUseCaseConformance(harness: ConformanceHarness): voi
       )
       expect(run.status).toBe(200)
       // The option's caption, not its stored value: the same prose projection a reusable
-      // operation's collected values reach an agent prompt through.
-      expect(run.body.text).toBe('[1.1] Beat sheet: They meet at dusk.\nTone: Grim')
+      // operation's collected values reach an agent prompt through. The `account` marker beside the
+      // temperature is the credential scope the facade resolved the call under: account-scoped
+      // provider keys are only in the pool when the scope names the account, so a facade that
+      // forwarded the workspace alone would narrow which keys a generation may draw on, and nothing
+      // else here would fail.
+      expect(run.body.text).toBe(`[1.1|account] Beat sheet: They meet at dusk.\nTone: Grim`)
       expect(run.body.model).toEqual({
         id: 'magnum',
         label: 'Magnum',

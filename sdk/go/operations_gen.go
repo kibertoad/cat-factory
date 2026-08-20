@@ -1287,11 +1287,14 @@ func (s *UseCasesService) Get(ctx context.Context, useCaseID string) (*ListPubli
 // are validated against the use case’s own descriptors (`422 use_case_parameters_invalid`, naming
 // every problem at once); a model outside the use case’s declared list is refused (`422
 // use_case_model_not_allowed`) rather than substituted, and so is one this deployment cannot
-// serve inline (`503 use_case_model_unavailable`). An exhausted workspace budget is `429
-// budget_exhausted`, and a model that answers with no usable text is `503 use_case_empty_reply`
-// rather than a 200 carrying an empty string. `finishReason: "length"` (with `truncated: true`)
-// means the reply hit the output budget, so the text is a prefix rather than an answer. Requires
-// a `write` key.
+// serve inline (`503 use_case_model_unavailable`). An exhausted budget is `429 budget_exhausted`,
+// and a model that answers with no usable text is `503 use_case_empty_reply` rather than a 200
+// carrying an empty string. A call the vendor did not complete is `503
+// use_case_generation_failed`, or `503 use_case_generation_timeout` when it did not answer inside
+// the deployment’s per-invocation deadline: separate, because a failure is worth surfacing to
+// whoever asked while a timeout is worth retrying with a smaller `maxOutputTokens`.
+// `finishReason: "length"` (with `truncated: true`) means the reply hit the output budget, so the
+// text is a prefix rather than an answer. Requires a `write` key.
 // POST /api/v1/use-cases/{useCaseId}/invocations (operation invokePublicUseCase).
 func (s *UseCasesService) Invoke(ctx context.Context, useCaseID string, body *InvokePublicUseCaseRequest) (*InvokePublicUseCaseResponse, error) {
 	if body == nil {

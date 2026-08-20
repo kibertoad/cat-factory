@@ -1,6 +1,7 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { INLINE_ENGINE_SYSTEM_PROMPTS, runsInContainer } from '@cat-factory/agents'
 import { checkBinaryGenerators } from './validateBinaryGenerators.js'
+import { inlineUseCaseProblems } from './validateInlineUseCases.js'
 import type {
   AgentKind,
   BinaryGeneratorRegistry,
@@ -8,7 +9,6 @@ import type {
   FoundationalServiceRegistry,
   GateRegistry,
   InitiativePresetRegistry,
-  InlineUseCaseDefinition,
   InlineUseCaseRegistry,
   PipelineRegistry,
   PromptFragmentRegistry,
@@ -23,7 +23,6 @@ import {
   describeFoundationalProblem,
   getErrorMessage,
   seedPipelines,
-  useCaseGenerationLimits,
   stubGateContext,
   validateFoundationalDefinition,
 } from '@cat-factory/kernel'
@@ -1202,89 +1201,25 @@ export function resetRegistrationValidationGuard(): void {
 }
 
 /**
- * Deployment-registered INLINE USE CASES: the three ways a registration is broken in a way nothing
- * at run time can recover from, plus its parameter form held to the same bar every other
- * descriptor-driven form is.
+ * Deployment-registered INLINE USE CASES: the registration's own faults, plus its parameter form
+ * held to the same bar every other descriptor-driven form is.
  *
- * All errors, by the bar the rest of this validator uses: each is fully knowable from the
- * registration itself. A malformed id is unaddressable (the path segment is the id); an empty or
- * ambiguously-defaulted model list means an invocation naming no model either cannot resolve one or
- * resolves whichever the author happened to list first, which is exactly the substitution the
- * narrowing exists to prevent; and a bound whose default sits outside its own range refuses every
- * invocation that omits the knob, naming a value the caller never sent.
+ * The registration half lives in {@link inlineUseCaseProblems} (its own module, like the
+ * binary-generator section); the form half stays here because it is the SHARED descriptor checker
+ * every other registered form goes through, and one place owning that call is what keeps a new
+ * form-bearing registry from quietly skipping it.
  */
 function checkInlineUseCases(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
   const registry = opts.registries.inlineUseCaseRegistry
   if (!registry) return []
-  const problems: RegistrationProblem[] = []
-  for (const useCase of registry.all()) {
-    const subject = `Inline use case "${useCase.useCaseId}"`
-    const bad = (code: string, message: string): void => {
-      problems.push({
-        severity: 'error',
-        code: `use_case_${code}`,
-        message: `${subject} ${message}`,
-      })
-    }
-    if (!isNamespacedId(useCase.useCaseId)) {
-      bad(
-        'bad_id',
-        'is not a namespaced id. Use "<namespace>:<name>" (lowercase, dash-separated), e.g. "acme:scene-prose".',
-      )
-    }
-    checkUseCaseModels(useCase.models, bad)
-    problems.push(...descriptorFormProblems([...(useCase.parameters ?? [])], 'use_case', subject))
-    checkUseCaseLimits(useCase, bad)
-  }
-  return problems
-}
-
-/** The model list's own faults: empty, duplicated ids, or no single answer for "which is default". */
-function checkUseCaseModels(
-  models: InlineUseCaseDefinition['models'],
-  bad: (code: string, message: string) => void,
-): void {
-  if (models.length === 0) {
-    bad('no_models', 'declares no models, so nothing can be generated through it.')
-    return
-  }
-  const seen = new Set<string>()
-  for (const option of models) {
-    if (seen.has(option.id)) bad('duplicate_model', `declares model "${option.id}" twice.`)
-    seen.add(option.id)
-  }
-  const defaults = models.filter((option) => option.default)
-  if (defaults.length > 1) {
-    bad(
-      'ambiguous_default_model',
-      `marks ${defaults.length} models as the default. Exactly one may carry \`default\`.`,
-    )
-  }
-  if (defaults.length === 0 && models.length > 1) {
-    // One model needs no flag (there is nothing to choose between). Several with none is the case
-    // where an invocation omitting `model` would run on whichever happens to be listed first, and a
-    // reorder would silently change what every such caller gets.
-    bad(
-      'no_default_model',
-      'declares several models and marks none as the default, so an invocation naming no model has no stated answer.',
-    )
-  }
-}
-
-/** A generation bound whose own default falls outside it: every defaulted invocation is refused. */
-function checkUseCaseLimits(
-  useCase: InlineUseCaseDefinition,
-  bad: (code: string, message: string) => void,
-): void {
-  const limits = useCaseGenerationLimits(useCase)
-  for (const [name, limit] of Object.entries(limits)) {
-    if (limit.min > limit.max) {
-      bad('bad_generation_range', `declares ${name} with min ${limit.min} above max ${limit.max}.`)
-    } else if (limit.default < limit.min || limit.default > limit.max) {
-      bad(
-        'default_outside_generation_range',
-        `declares ${name} default ${limit.default} outside its own ${limit.min}..${limit.max} range.`,
-      )
-    }
-  }
+  return registry
+    .all()
+    .flatMap((useCase) => [
+      ...inlineUseCaseProblems(useCase),
+      ...descriptorFormProblems(
+        [...(useCase.parameters ?? [])],
+        'use_case',
+        `Inline use case "${useCase.useCaseId}"`,
+      ),
+    ])
 }

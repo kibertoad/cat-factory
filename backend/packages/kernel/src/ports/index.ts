@@ -109,6 +109,8 @@ export type {
   InlineUseCaseGenerationRequest,
   InlineUseCaseGenerator,
   InlineUseCaseModelAvailability,
+  InlineUseCaseScope,
+  InlineUseCaseSession,
 } from './inline-use-cases.js'
 export type {
   TokenUsageRecord,

@@ -78,7 +78,9 @@ else imports its **ports** and domain types from here.
   model operations on (a narrowed model list, a parameter form drawn from the SAME descriptor
   vocabulary, and the generation bounds an invocation may steer within); the port is the producer
   that resolves one declared model option and runs the call, so every other half of the surface is
-  drivable with a deterministic fake. The pure rules beside them are total and never throw
+  drivable with a deterministic fake, and it is bound to a request's credential SCOPE once
+  (`forScope`) rather than taking a workspace id per call, because that resolution leases a key per
+  configured provider. The pure rules beside them are total and never throw
   (`resolveUseCaseModelOption` answers `undefined` for a model the use case does not carry, rather
   than falling back to its default), because the caller REFUSES there: a narrowed list that
   substitutes silently is not a narrowing. No persistence of any kind.

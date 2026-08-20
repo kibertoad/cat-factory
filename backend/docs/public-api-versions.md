@@ -936,9 +936,16 @@ an empty string, which a content editor would otherwise store as the model's ans
 
 The rest are ordinary: `404 use_case_not_found`, `422 use_case_parameters_invalid` (every problem at
 once, from the same descriptor validator a reusable operation's create door runs),
-`422 use_case_generation_out_of_range`, `429 budget_exhausted` (the workspace budget safeguard,
-which an invocation answers to for the same reason the bug hunt's ranking does: it is a billable
-model call that no run start gates) and `503 use_case_models_unconfigured` for a deployment with no
-model provider at all. Discovery still answers on such a deployment, with each model carrying
-`available: false` and its cause, so a wrapper can tell an unregistered catalog from an
-unconfigured one.
+`422 use_case_generation_out_of_range`, `429 budget_exhausted` (the tiered budget safeguard, which an
+invocation answers to for the same reason the bug hunt's ranking does: it is a billable model call
+that no run start gates, and the account and user ceilings apply as well as the workspace's) and
+`503 use_case_models_unconfigured` for a deployment with no model provider at all. Discovery still
+answers on such a deployment, with each model carrying `available: false` and its cause, so a wrapper
+can tell an unregistered catalog from an unconfigured one.
+
+Two name what happened at the VENDOR, and an exhaustive consumer switch needs both: `503
+use_case_generation_failed` (the call was made and the provider answered with an error) and `503
+use_case_generation_timeout` (it did not answer inside the deployment's per-invocation deadline).
+They are separate because the caller's move differs, and the deadline itself is part of the contract:
+a synchronous endpoint that held the request open for as long as the transport allowed would leave a
+caller with nothing to reason about.

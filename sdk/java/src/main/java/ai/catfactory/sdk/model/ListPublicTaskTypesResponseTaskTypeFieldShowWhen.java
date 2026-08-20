@@ -17,7 +17,7 @@ import org.jspecify.annotations.Nullable;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ListPublicTaskTypesResponseTaskTypeFieldShowWhen(
     /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("equals") @Nullable ListPublicTaskTypesResponseTaskTypeFieldShowWhenEquals equals,
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("equals") @Nullable Object equals,
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("includes") @Nullable String includes,
@@ -38,12 +38,12 @@ public record ListPublicTaskTypesResponseTaskTypeFieldShowWhen(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
-        private @Nullable ListPublicTaskTypesResponseTaskTypeFieldShowWhenEquals equals;
+        private @Nullable Object equals;
         private @Nullable String includes;
         private @Nullable String key;
 
         /** Set {@code equals}. */
-        public Builder equals(@Nullable ListPublicTaskTypesResponseTaskTypeFieldShowWhenEquals equals) {
+        public Builder equals(@Nullable Object equals) {
             this.equals = equals;
             return this;
         }

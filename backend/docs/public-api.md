@@ -1530,6 +1530,13 @@ The invocation's refusals, all on `details.reason`:
 | `503`  | `use_case_model_unavailable`       | The declared model cannot be served here; `details.cause` is one of the two above.  |
 | `503`  | `use_case_models_unconfigured`     | This deployment wired no model provider at all.                                     |
 | `503`  | `use_case_empty_reply`             | The model answered with no usable text, so there is nothing to return.              |
+| `503`  | `use_case_generation_failed`       | The call was made and the vendor answered with an error.                            |
+| `503`  | `use_case_generation_timeout`      | The vendor did not answer inside the deployment's per-invocation deadline.          |
+
+The last two are the likeliest of the set, not the rarest, which is why they are named rather than
+folded into one: a failure is worth surfacing to whoever asked, while a timeout is worth retrying
+with a smaller `maxOutputTokens`. The deadline exists because the endpoint is synchronous, and a
+surface that holds a caller's request open owes a bound on how long.
 
 Two of those are choices rather than mechanics, and a consumer should count on them. A model outside
 the list and a model this deployment cannot serve are both REFUSED rather than replaced, because a

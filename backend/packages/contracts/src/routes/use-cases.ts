@@ -19,7 +19,7 @@ import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
 // other "what may I do here" call: knowing which use cases exist is not invoking one, and an
 // integration's startup check must work on whatever rung its key holds. INVOKING is `write`, not
 // `admin`: it spends model tokens and returns text, and it creates no board row, starts no run and
-// merges nothing — the same reasoning that puts `POST /api/v1/jobs` on `write`. Requiring `admin`
+// merges nothing, the same reasoning that puts `POST /api/v1/jobs` on `write`. Requiring `admin`
 // would mean a content editor whose whole job is generating prose had to hold a key that also
 // deletes services.
 // ---------------------------------------------------------------------------
@@ -32,7 +32,7 @@ const useCaseIdParams = singleStringParam('useCaseId')
  *
  * The read this surface exists for. Without it a wrapper's only route to the same knowledge is a
  * hard-coded copy of the deployment's own registration, which is a second source of truth that
- * drifts the first time an operator narrows a model list — and drifts SILENTLY, because the
+ * drifts the first time an operator narrows a model list, and drifts SILENTLY, because the
  * wrapper keeps offering a choice the invocation now refuses.
  */
 export const listPublicUseCasesContract = withMinScope(
@@ -70,11 +70,21 @@ export const getPublicUseCaseContract = withMinScope(
  *
  * Refusals a caller acts on, all carrying `details.reason`: an unregistered id is `404`
  * `use_case_not_found`; parameters that do not satisfy the descriptors are `422`
- * `use_case_parameters_invalid` with every problem named at once; a model outside the use case's
- * own list is `422` `use_case_model_not_allowed`; a model this deployment cannot serve inline is
- * `503` `use_case_model_unavailable` (never a silent substitution — the narrowing is the point);
- * an exhausted workspace budget is `429` `budget_exhausted`; and a model that answers with no
- * usable text is `503` `use_case_empty_reply` rather than a 200 carrying an empty string.
+ * `use_case_parameters_invalid` with every problem named at once; a knob outside the published
+ * bounds is `422` `use_case_generation_out_of_range`; a model outside the use case's own list is
+ * `422` `use_case_model_not_allowed`; a model this deployment cannot serve inline is `503`
+ * `use_case_model_unavailable` (never a silent substitution: the narrowing is the point); a
+ * deployment with no model provider at all is `503` `use_case_models_unconfigured`; an exhausted
+ * budget is `429` `budget_exhausted`; and a model that answers with no usable text is `503`
+ * `use_case_empty_reply` rather than a 200 carrying an empty string.
+ *
+ * Two more name what happened at the VENDOR, and they are listed because they are the likeliest
+ * of the set rather than the rarest: `503` `use_case_generation_failed` (the call was made and the
+ * provider answered with an error) and `503` `use_case_generation_timeout` (it did not answer
+ * inside the deployment's per-invocation deadline). They are separate because the caller's move
+ * differs: a failure is worth surfacing to whoever asked, a timeout is worth retrying with a
+ * smaller `maxOutputTokens`. A synchronous surface OWES that deadline: without one, a stalled
+ * vendor holds the request open for as long as the transport allows.
  */
 export const invokePublicUseCaseContract = withMinScope(
   'write',

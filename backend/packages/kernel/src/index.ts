@@ -160,6 +160,7 @@ export {
   openRouterSelectableModels,
   parseOpenRouterModelId,
   resolveModelRef,
+  isResolvableModelId,
   isModelUsable,
   isModelUsableInline,
   declaredModelRouteLabels,
@@ -290,6 +291,8 @@ export type {
   InlineUseCaseGenerationRequest,
   InlineUseCaseGeneration,
   InlineUseCaseModelAvailability,
+  InlineUseCaseScope,
+  InlineUseCaseSession,
 } from './ports/inline-use-cases.js'
 // The wire vocabulary a registration is typed against, re-exported (not restated) from contracts
 // for the same reason the descriptor helpers above are: an org package registering a use case

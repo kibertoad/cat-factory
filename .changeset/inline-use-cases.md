@@ -32,7 +32,22 @@ cannot see it happened; each published model carries whether it is servable and 
 causes it is not. And a reply with no usable text answers `503 use_case_empty_reply` rather than a
 `200` carrying an empty string, which an editor would otherwise store as the model's answer.
 
-An invocation answers to the workspace budget safeguard, for the same reason the bug hunt's ranking
-does: it is a billable model call that no run start gates. Discovery does not: it answers on a
-deployment with no model provider at all, with every model marked unavailable, because an empty
-catalog and a missing surface are different facts.
+An invocation answers to the TIERED budget safeguard (workspace, account and the acting user), for
+the same reason the bug hunt's ranking does: it is a billable model call that no run start gates.
+Discovery does not: it answers on a deployment with no model provider at all, with every model marked
+unavailable, because an empty catalog and a missing surface are different facts. Both read the same
+credential scope, resolved ONCE per request: account- and user-scoped provider keys (and the acting
+user's locally-run endpoints) are in the pool, so a narrower scope would report a model this
+deployment can serve as unconfigured.
+
+The vendor call is bounded: a per-invocation deadline (2 minutes by default) plus one retry, because
+a synchronous endpoint holding a caller's request open owes a bound on how long. A call the vendor
+did not complete is `503 use_case_generation_failed`; one that ran out of time is `503
+use_case_generation_timeout`, its own reason because the caller's move differs.
+
+The Java/Kotlin SDK's emitter also changes here, and it affects three existing endpoints as well as
+this one. A free-form JSON value (`parameters` on an invocation, `fields` on a task, a task-type
+field's `showWhen.equals`) was generated as an empty marker interface with no implementations, so the
+`Map<String, …>` holding it could not be constructed at all: those parameters are now
+`Map<String, Object>`, which Jackson round-trips, and the three unusable marker types are gone. The
+Go client has always emitted `json.RawMessage` for the same shape.

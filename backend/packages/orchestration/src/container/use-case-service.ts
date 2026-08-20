@@ -1,4 +1,9 @@
-import type { InlineUseCaseGenerator, InlineUseCaseRegistry, Logger } from '@cat-factory/kernel'
+import type {
+  InlineUseCaseGenerator,
+  InlineUseCaseRegistry,
+  InlineUseCaseScope,
+  Logger,
+} from '@cat-factory/kernel'
 import type { SpendService } from '@cat-factory/spend'
 import { InlineUseCaseService } from '../modules/useCases/InlineUseCaseService.js'
 import { LlmInlineUseCaseGenerator } from '../modules/useCases/LlmInlineUseCaseGenerator.js'
@@ -22,9 +27,17 @@ export function createInlineUseCaseService(
   return new InlineUseCaseService({
     registry: wiring.registry,
     // An invocation is a billable model call that no run start gates, so it answers to the SAME
-    // workspace budget safeguard `RunAdmission` applies before a run and the bug hunt applies
-    // before its ranking.
-    isOverBudget: (workspaceId: string) => wiring.spend.isOverBudget(workspaceId),
+    // budget safeguard `RunAdmission` applies before a run and the bug hunt applies before its
+    // ranking, including its ACCOUNT and USER tiers, which `isOverBudget` consults only when the
+    // scope names them. Passing the workspace alone would let an account that has spent its
+    // monthly ceiling keep generating indefinitely through whichever of its workspaces is still
+    // under its own limit, which is the opposite of what putting this spend inside the
+    // deployment's budget was for.
+    isOverBudget: (scope: InlineUseCaseScope) =>
+      wiring.spend.isOverBudget(scope.workspaceId, {
+        ...(scope.accountId ? { accountId: scope.accountId } : {}),
+        ...(scope.userId ? { userId: scope.userId } : {}),
+      }),
     logger: wiring.logger,
     ...(generator ? { generator } : {}),
   })

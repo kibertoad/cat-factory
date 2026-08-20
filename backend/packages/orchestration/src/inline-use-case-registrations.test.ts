@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
+import { USE_CASE_TEXT_LIMITS } from '@cat-factory/contracts'
 import type { InlineUseCaseDefinition } from '@cat-factory/kernel'
-import { defaultGateRegistry, defaultInlineUseCaseRegistry } from '@cat-factory/kernel'
+import {
+  defaultGateRegistry,
+  defaultInlineUseCaseRegistry,
+  MODEL_CATALOG,
+} from '@cat-factory/kernel'
 import { collectRegistrationProblems } from './validation/validateRegistrations.js'
 
 // Boot validation of a deployment's INLINE USE CASES: the registration faults nothing at run time
@@ -87,6 +92,62 @@ describe('deployment-registered inline use cases', () => {
     expect(codes(useCase({ generation: { maxOutputTokens: { min: 9_000, max: 100 } } }))).toContain(
       'use_case_bad_generation_range',
     )
+  })
+
+  it('refuses a catalog model id nothing could ever resolve', () => {
+    // The misattribution this catches: at request time such an option publishes as
+    // `provider_unavailable`, whose documented remedy is "configure the provider", so the operator
+    // hunts a key for a model that does not exist. The catalog is a compile-time constant, so boot
+    // knows the answer.
+    expect(
+      codes(
+        useCase({
+          models: [
+            { id: 'flash', label: 'Flash', source: { kind: 'catalog', modelId: 'gemini-flahs' } },
+          ],
+        }),
+      ),
+    ).toContain('use_case_unknown_catalog_model')
+  })
+
+  it('accepts a catalog id the platform does resolve, and a dynamic local one', () => {
+    const catalogId = MODEL_CATALOG[0]!.id
+    expect(
+      codes(
+        useCase({
+          models: [
+            { id: 'stock', label: 'Stock', source: { kind: 'catalog', modelId: catalogId } },
+          ],
+        }),
+      ),
+    ).toEqual([])
+    expect(
+      codes(
+        useCase({
+          models: [
+            {
+              id: 'local',
+              label: 'Local',
+              source: { kind: 'catalog', modelId: 'ollama:qwen2.5-coder:32b' },
+            },
+          ],
+        }),
+      ),
+    ).toEqual([])
+  })
+
+  it('refuses a caption the surface could not publish, and a blank standing instruction', () => {
+    // Neither is refused anywhere else: a response is not re-validated on the way out, so a blank
+    // label serves a shape this API's own OpenAPI calls impossible, with nothing failing. And a
+    // blank systemPrompt is the invariant the type comment already argues for: a use case with no
+    // instruction is an unrestricted model call wearing a name.
+    expect(codes(useCase({ label: '   ' }))).toContain('use_case_blank_text')
+    const tooLong = 'x'.repeat(USE_CASE_TEXT_LIMITS.description + 1)
+    expect(codes(useCase({ description: tooLong }))).toContain('use_case_text_too_long')
+    expect(codes(useCase({ category: '' }))).toContain('use_case_blank_text')
+    expect(codes(useCase({ systemPrompt: '   ' }))).toContain('use_case_blank_system_prompt')
+    const option = useCase().models[0]!
+    expect(codes(useCase({ models: [{ ...option, label: '' }] }))).toContain('use_case_blank_text')
   })
 
   it('holds the parameter form to the same bar every other descriptor form meets', () => {

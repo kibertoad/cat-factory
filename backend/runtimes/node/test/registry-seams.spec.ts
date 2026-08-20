@@ -19,6 +19,7 @@ import type {
   TaskTypeFieldOption,
   TaskTypePresentation,
   InlineUseCaseDefinition,
+  InlineUseCaseGenerationOptions,
   InlineUseCaseModelOption,
   UseCaseParameter,
 } from '../src/index.js'
@@ -279,10 +280,14 @@ const _authoringVocabulary:
       binaryOutput: BinaryOutputConfig
       variant: AgentKindVariantDefinition
       // The INLINE USE-CASE authoring half: a deployment declaring a non-container model operation
-      // writes its models and its parameter form as literals, so those shapes are as much part of
-      // the seam as the registry constructor is.
+      // writes its models, its generation bounds and its parameter form as literals, so those
+      // shapes are as much part of the seam as the registry constructor is. The bounds were the one
+      // this block missed, and the miss was silent in exactly the way the block exists to prevent:
+      // a deployment naming the type of its own temperature literal had to add a direct kernel
+      // dependency, which is the duplicate-registry hazard the by-reference rule warns about.
       useCase: InlineUseCaseDefinition
       useCaseModel: InlineUseCaseModelOption
+      useCaseGeneration: InlineUseCaseGenerationOptions
       useCaseParameter: UseCaseParameter
     }
   | undefined = undefined

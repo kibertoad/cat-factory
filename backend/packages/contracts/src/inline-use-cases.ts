@@ -30,7 +30,7 @@ import { namespacedIdSchema } from './primitives.js'
  *    store, where the value never reaches a prompt.
  *  - `path`, because it means a repo-relative directory and is validated as one. Non-container
  *    work has no checkout, so the field would collect a path against a repository that does not
- *    exist for this call — a control whose only possible answers are wrong.
+ *    exist for this call: a control whose only possible answers are wrong.
  */
 export const useCaseParameterTypeSchema = v.picklist([
   'text',
@@ -56,14 +56,30 @@ export const useCaseParameterSchema = v.object({
 export type UseCaseParameter = v.InferOutput<typeof useCaseParameterSchema>
 
 /**
+ * The bounds on a use case's own captions, as VALUES rather than only as schema internals.
+ *
+ * Published because two guards must agree on them: the schemas below (what the surface promises,
+ * and what the four generated SDKs document as guaranteed) and boot validation (which refuses a
+ * registration that would violate them). A response is not re-validated on the way out, so a
+ * registration with an empty `label` would otherwise serve a shape this file's own OpenAPI says is
+ * impossible, and nothing would fail.
+ */
+export const USE_CASE_TEXT_LIMITS = {
+  label: 120,
+  description: 500,
+  category: 60,
+  modelId: 120,
+} as const
+
+/**
  * Why a model this use case names cannot be served by THIS deployment right now.
  *
  * Two causes, and they lead to different places, which is why they are not one flag:
  *
- *  - `provider_unavailable` — nothing resolves the model here: the catalog id has no route this
- *    workspace can take, or no resolver is registered for the ref's provider (no key configured).
- *    An operator fixes it by configuring the provider.
- *  - `container_only` — the model resolves, but only through a subscription HARNESS that runs
+ *  - `provider_unavailable`: nothing resolves the model here, because the catalog id has no route
+ *    this workspace can take, or no resolver is registered for the ref's provider (no key
+ *    configured). An operator fixes it by configuring the provider.
+ *  - `container_only`: the model resolves, but only through a subscription HARNESS that runs
  *    inside a per-run container, which a use case has none of. Nothing an operator configures on
  *    this deployment changes that; the caller picks another model.
  */
@@ -85,11 +101,11 @@ export type UseCaseModelUnavailableReason = (typeof USE_CASE_MODEL_UNAVAILABLE_R
  */
 export const useCaseModelSchema = v.object({
   /** The id a caller names in an invocation, and the id discovery publishes. */
-  id: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
+  id: v.pipe(v.string(), v.minLength(1), v.maxLength(USE_CASE_TEXT_LIMITS.modelId)),
   /** Human label for a picker (deployment-supplied English, rendered verbatim). */
-  label: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
+  label: v.pipe(v.string(), v.minLength(1), v.maxLength(USE_CASE_TEXT_LIMITS.label)),
   /** One line on what this model is good for here (deployment-supplied English). */
-  description: v.optional(v.pipe(v.string(), v.maxLength(500))),
+  description: v.optional(v.pipe(v.string(), v.maxLength(USE_CASE_TEXT_LIMITS.description))),
   /** Whether this is the model an invocation naming none runs on. Exactly one option is. */
   default: v.boolean(),
   /** Whether an invocation naming this model could run right now. */
@@ -130,11 +146,13 @@ export const publicUseCaseSchema = v.object({
   /** The namespaced id (`<ns>:<name>`, e.g. `stefka:scene-prose`). */
   useCaseId: namespacedIdSchema,
   /** Human label for a picker. */
-  label: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
+  label: v.pipe(v.string(), v.minLength(1), v.maxLength(USE_CASE_TEXT_LIMITS.label)),
   /** One line on what this use case produces. */
-  description: v.pipe(v.string(), v.minLength(1), v.maxLength(500)),
+  description: v.pipe(v.string(), v.minLength(1), v.maxLength(USE_CASE_TEXT_LIMITS.description)),
   /** Optional grouping caption, so a wrapper offering twenty use cases can group them. */
-  category: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(60))),
+  category: v.optional(
+    v.pipe(v.string(), v.minLength(1), v.maxLength(USE_CASE_TEXT_LIMITS.category)),
+  ),
   /** The models this use case may run on, narrowed by the registration. Never empty. */
   models: v.array(useCaseModelSchema),
   /** The accepted parameters (empty ⇒ the use case takes none). */
@@ -195,13 +213,20 @@ export type InvokeUseCase = v.InferOutput<typeof invokeUseCaseSchema>
 export const USE_CASE_FINISH_REASONS = ['stop', 'length', 'content-filter', 'other'] as const
 export type UseCaseFinishReason = (typeof USE_CASE_FINISH_REASONS)[number]
 
-/** What one invocation cost, as the provider reported it. */
+/**
+ * What one invocation cost, as the provider reported it.
+ *
+ * The three numbers ALWAYS add up, which is a choice: `inputTokens` is the whole billed input
+ * (both cache classes included, reconciled across the two shapes vendors report them in), so
+ * publishing a provider's own `total` beside it would let a cache-heavy call answer with three
+ * figures that disagree, and a wrapper metering its own users off them would under-bill silently.
+ */
 export const useCaseUsageSchema = v.object({
-  /** Input tokens the provider billed, cache classes included. */
+  /** Input tokens the provider billed, both cache classes included. */
   inputTokens: v.number(),
   /** Output tokens the provider billed. */
   outputTokens: v.number(),
-  /** The provider's own total, when it reported one, else the sum of the two above. */
+  /** The sum of the two above. */
   totalTokens: v.number(),
 })
 export type UseCaseUsage = v.InferOutput<typeof useCaseUsageSchema>

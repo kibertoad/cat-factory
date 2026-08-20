@@ -29,7 +29,7 @@ use case, exactly as it ships no custom task type.
 
 | Declaration    | Read at           | By                                                                 |
 | -------------- | ----------------- | ------------------------------------------------------------------ |
-| `models`       | discovery, invoke | `InlineUseCaseService.projectModel` / `requireModelOption`         |
+| `models`       | discovery, invoke | `projectModel` / `InlineUseCaseService.requireModelOption`         |
 | `parameters`   | discovery, invoke | the SHARED `validateDescriptorFields` / `sanitizeDescriptorFields` |
 | `generation`   | discovery, invoke | `useCaseGenerationLimits`, then the range check                    |
 | `systemPrompt` | invoke            | `composeUseCasePrompt`                                             |
@@ -87,6 +87,34 @@ picks another model. Local mode is the one place the second answer differs: an a
 Only the INVOCATION refuses in that state, with `503` `use_case_models_unconfigured`, which names
 the deployment-level gap rather than reporting four models as individually broken.
 
+## One credential binding per request, carrying all three tiers
+
+Resolving a credential scope is not free: it reads the workspace's owning account, the configured
+providers, and then LEASES a key per provider, which is an atomic select-and-mark WRITE plus a secret
+decrypt. So the generator seam is bound ONCE per request (`InlineUseCaseGenerator.forScope`) and the
+returned session answers every availability probe off that one resolution. That is why
+`InlineUseCaseSession.availability` is synchronous: the type is what states that probing an option
+costs no I/O, so a discovery read over a catalog cannot quietly become a fan-out of reads and lease
+writes again (it once was, once per declared model of every registered use case: a read-scope `GET`
+doing lease writes whose usage stamps then skewed the rotation they never spent a token on).
+
+The scope is the ACCOUNT, the WORKSPACE and the USER the key acts as, because all three carry
+provider keys and the acting user also carries their own locally-run model endpoints. Both things
+downstream reads it for are tiered, and dropping a tier is silent in opposite directions:
+
+- the model pool would omit account- and user-scoped keys, so a model this deployment CAN serve
+  publishes as `provider_unavailable` and the operator hunts a key that is already configured;
+- `SpendService.isOverBudget` consults the account and user ceilings only when the scope names them,
+  so an account past its monthly limit would keep generating through whichever of its workspaces is
+  still under its own.
+
+`forScope` may THROW, because its read is a real one, and the two callers answer that differently ON
+PURPOSE. Discovery catches it, logs the cause and publishes the catalog with every model unavailable:
+a read that 500s tells a wrapper the surface does not exist when what failed was one query behind it.
+The invocation lets it propagate, because "the pool could not be read" is not an availability answer,
+and reporting it as one would send the caller to pick another model over a fault that has nothing to
+do with the one they named.
+
 ## The refusal ORDER is cheapest-first
 
 `InlineUseCaseService.invoke` refuses in a fixed order, and the order is the point: each step costs
@@ -97,12 +125,18 @@ more than the one before it, so a request that was never going to run spends not
 3. **The generation bounds**: refused, never clamped. Silently running at the ceiling answers a
    request for one generation with a different one while reporting success, and the caller stores
    the text believing it came from the settings it asked for.
-4. **The model's availability**, which resolves the workspace's credential pool.
+4. **The credential binding**, which resolves the pool once, and then the model's AVAILABILITY,
+   which is a free read off it.
 5. **The workspace budget** (`SpendService.isOverBudget`), which reads the spend ledger. An
    invocation is a billable model call that no run start gates, exactly like the bug hunt's ranking,
    so it answers to the same safeguard; the refusal is `429` `budget_exhausted`, its own cause
    rather than a generic failure, and fail-CLOSED.
-6. **The vendor call.**
+6. **The vendor call**, bounded by a deadline (2 minutes by default) and one retry. A synchronous
+   surface owes that bound: without it a stalled vendor holds the caller's request open for as long
+   as the transport allows, and the AI SDK would retry it twice over. A call the vendor did not
+   complete is `503` `use_case_generation_failed`; one that ran out of time is `503`
+   `use_case_generation_timeout`, its own reason because the caller's move differs (retry with a
+   smaller `maxOutputTokens`, rather than surface the failure to whoever asked).
 
 A reply with no usable text is `503` `use_case_empty_reply` rather than a `200` carrying an empty
 string: some reasoning models answer only into their private channel, and a content editor would
@@ -138,6 +172,19 @@ list, a duplicated model id, several models flagged default or several with none
 generation bound whose own default falls outside it, and the parameter form held to the same bar
 every other descriptor form meets.
 
+Three of the checks exist because the alternative is not silence but MISATTRIBUTION:
+
+- a `catalog` model id nothing resolves (`gemini-flahs`) would publish as `provider_unavailable`,
+  whose documented remedy is "configure the provider", so the operator hunts a key for a model that
+  will never resolve. The catalog is a compile-time constant, so boot knows the answer, and the
+  two-member public reason vocabulary is spared a third member for a state that cannot happen;
+- a caption outside the PUBLISHED bounds (a blank `label`, a 600-character `description`) would
+  serve a shape this surface's own OpenAPI calls impossible, and serve it silently, because a
+  response is not re-validated on the way out. The bounds are read from contracts'
+  `USE_CASE_TEXT_LIMITS` rather than restated, so the guard and the schema cannot drift;
+- a blank `systemPrompt` is the invariant the type comment already argues for: a use case with no
+  instruction is an unrestricted model call wearing a name.
+
 A SINGLE model with no `default` flag is accepted: there is nothing to choose between, so requiring
 the flag would fail boot over a use case nobody can misread.
 
@@ -149,7 +196,8 @@ the flag would fail boot over a use case nobody can misread.
 | The generation seam                | `kernel/src/ports/inline-use-cases.ts`                                   |
 | The surface's rules                | `orchestration/src/modules/useCases/InlineUseCaseService.ts`             |
 | The default model-calling producer | `orchestration/src/modules/useCases/LlmInlineUseCaseGenerator.ts`        |
-| Boot validation                    | `orchestration/src/validation/validateRegistrations.ts`                  |
+| What one invocation cost           | `orchestration/src/modules/useCases/useCaseUsage.ts`                     |
+| Boot validation                    | `orchestration/src/validation/validateInlineUseCases.ts`                 |
 | The routes                         | `server/src/modules/publicApi/PublicUseCaseController.ts`                |
 | The wire shapes                    | `contracts/src/inline-use-cases.ts`, `contracts/src/routes/use-cases.ts` |
 | Cross-runtime coverage             | `conformance/src/suites/integration-public-use-cases.ts`                 |

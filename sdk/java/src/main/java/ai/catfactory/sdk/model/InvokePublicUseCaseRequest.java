@@ -25,7 +25,7 @@ public record InvokePublicUseCaseRequest(
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("model") @Nullable String model,
 
     /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("parameters") @Nullable Map<String, InvokePublicUseCaseRequestParametersValue> parameters,
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("parameters") @Nullable Map<String, Object> parameters,
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("temperature") @Nullable Double temperature
@@ -45,7 +45,7 @@ public record InvokePublicUseCaseRequest(
     public static final class Builder {
         private @Nullable Double maxOutputTokens;
         private @Nullable String model;
-        private @Nullable Map<String, InvokePublicUseCaseRequestParametersValue> parameters;
+        private @Nullable Map<String, Object> parameters;
         private @Nullable Double temperature;
 
         /** Set {@code maxOutputTokens}. */
@@ -61,7 +61,7 @@ public record InvokePublicUseCaseRequest(
         }
 
         /** Set {@code parameters}. */
-        public Builder parameters(@Nullable Map<String, InvokePublicUseCaseRequestParametersValue> parameters) {
+        public Builder parameters(@Nullable Map<String, Object> parameters) {
             this.parameters = parameters;
             return this;
         }

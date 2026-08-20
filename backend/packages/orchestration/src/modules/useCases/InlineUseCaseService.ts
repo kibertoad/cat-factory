@@ -15,10 +15,13 @@ import type {
   InlineUseCaseGenerator,
   InlineUseCaseModelOption,
   InlineUseCaseRegistry,
+  InlineUseCaseScope,
+  InlineUseCaseSession,
   Logger,
 } from '@cat-factory/kernel'
 import {
   composeUseCasePrompt,
+  describeError,
   NotFoundError,
   RateLimitedError,
   resolveUseCaseModelOption,
@@ -36,11 +39,17 @@ import {
 // rules (the narrowing, the parameter validation, the bounds, the budget guard) be asserted on
 // every runtime with a fake behind that seam.
 //
-// The one rule worth stating twice: this service NEVER substitutes a model. A caller that names a
-// model the use case does not carry, or one this deployment cannot serve, is REFUSED. Resolving to
-// something else would answer a narrowed request with an un-narrowed generation, which is the whole
-// thing a declared model list exists to prevent, and the caller would have no way to see it
-// happened.
+// Two rules worth stating twice:
+//
+//  - This service NEVER substitutes a model. A caller that names a model the use case does not
+//    carry, or one this deployment cannot serve, is REFUSED. Resolving to something else would
+//    answer a narrowed request with an un-narrowed generation, which is the whole thing a declared
+//    model list exists to prevent, and the caller would have no way to see it happened.
+//  - Every entry point binds the generator to the request's credential scope ONCE, and every
+//    availability probe reads that binding. The scope is the account, the workspace AND the user
+//    the key acts as, because all three carry provider keys: dropping a tier reports a model the
+//    deployment can serve as unavailable, and dropping it from the budget probe lets an account
+//    that has spent its ceiling keep generating through whichever workspace is still under its own.
 // ---------------------------------------------------------------------------
 
 /** What the service needs beyond the registry. */
@@ -50,13 +59,14 @@ export interface InlineUseCaseServiceDeps {
   /** The producer that resolves a model option and runs the call. Absent ⇒ nothing is invocable. */
   generator?: InlineUseCaseGenerator
   /**
-   * The workspace budget safeguard, the same one `RunAdmission` applies before a run.
+   * The tiered budget safeguard, the same one `RunAdmission` applies before a run.
    *
    * An invocation is a billable model call that no run start gates, exactly like the bug hunt's
-   * ranking, so it answers to the same guard. Absent ⇒ unguarded, which is only correct for a
-   * deployment that wired no spend service at all.
+   * ranking, so it answers to the same guard. It takes the whole SCOPE rather than a workspace id
+   * because the account and user ceilings only apply when named. Absent ⇒ unguarded, which is only
+   * correct for a deployment that wired no spend service at all.
    */
-  isOverBudget?: (workspaceId: string) => Promise<boolean>
+  isOverBudget?: (scope: InlineUseCaseScope) => Promise<boolean>
   /** Facade logger. */
   logger?: Logger
 }
@@ -69,19 +79,16 @@ function parametersOf(useCase: InlineUseCaseDefinition): readonly UseCaseParamet
 export class InlineUseCaseService {
   constructor(private readonly deps: InlineUseCaseServiceDeps) {}
 
-  /** Every registered use case, projected for this workspace (model availability included). */
-  async list(workspaceId: string): Promise<PublicUseCase[]> {
-    const useCases = this.deps.registry.all()
-    // Availability is resolved per OPTION, and the options across the catalog are a bounded list a
-    // deployment authored, so this is a fan-out over declared data rather than over rows: no
-    // repository is touched, and the generator's own provider resolution is per workspace scope,
-    // which it caches for the call.
-    return Promise.all(useCases.map((useCase) => this.project(workspaceId, useCase)))
+  /** Every registered use case, projected for this scope (model availability included). */
+  async list(scope: InlineUseCaseScope): Promise<PublicUseCase[]> {
+    const session = await this.discoverySession(scope)
+    return this.deps.registry.all().map((useCase) => this.project(useCase, session))
   }
 
-  /** One registered use case by id, projected for this workspace. */
-  async get(workspaceId: string, useCaseId: string): Promise<PublicUseCase> {
-    return this.project(workspaceId, this.require(useCaseId))
+  /** One registered use case by id, projected for this scope. */
+  async get(scope: InlineUseCaseScope, useCaseId: string): Promise<PublicUseCase> {
+    const useCase = this.require(useCaseId)
+    return this.project(useCase, await this.discoverySession(scope))
   }
 
   /**
@@ -90,11 +97,11 @@ export class InlineUseCaseService {
    * The refusal ORDER is the point, and it is cheapest-first for the same reason the bug hunt's is:
    * every step past the last one costs more than the step before it, so a request that was never
    * going to run spends nothing. The registration lookup and the parameter check read nothing at
-   * all; the model resolution reads the workspace's credential pool; the budget probe reads the
-   * spend ledger; only then does a vendor see a token.
+   * all; binding the session reads the credential pool; the budget probe reads the spend ledger;
+   * only then does a vendor see a token.
    */
   async invoke(input: {
-    workspaceId: string
+    scope: InlineUseCaseScope
     useCaseId: string
     model?: string
     parameters?: DescriptorFieldValues
@@ -106,14 +113,18 @@ export class InlineUseCaseService {
     const parameters = this.validateParameters(useCase, input.parameters ?? {})
     const option = this.requireModelOption(useCase, input.model)
     const limits = useCaseGenerationLimits(useCase)
-    const temperature = clamped(input.temperature, limits.temperature, 'temperature')
-    const maxOutputTokens = clamped(
+    const temperature = requireWithinBounds(input.temperature, limits.temperature, 'temperature')
+    const maxOutputTokens = requireWithinBounds(
       input.maxOutputTokens,
       limits.maxOutputTokens,
       'maxOutputTokens',
     )
 
-    const availability = await generator.availability(input.workspaceId, option)
+    // NOT caught here, unlike the discovery path: a credential pool that could not be read is not
+    // an availability answer, and reporting it as "this model is unavailable" would send the caller
+    // to pick another one for a fault that has nothing to do with the model they named.
+    const session = await generator.forScope(input.scope)
+    const availability = session.availability(option)
     if (!availability.available) {
       throw new UnavailableError(
         `The model '${option.label}' cannot be served by this deployment`,
@@ -121,7 +132,7 @@ export class InlineUseCaseService {
         { model: option.id, cause: availability.reason },
       )
     }
-    if (await this.deps.isOverBudget?.(input.workspaceId)) {
+    if (await this.deps.isOverBudget?.(input.scope)) {
       // Its OWN refusal rather than a generic failure: an exhausted budget is not a broken model,
       // and the fix (raise the budget, or wait for the window to roll) is not the fix for a
       // misconfigured provider. Fail-CLOSED, so no vendor call is made.
@@ -133,12 +144,11 @@ export class InlineUseCaseService {
 
     const prompt = composeUseCasePrompt(useCase, {
       useCaseId: useCase.useCaseId,
-      workspaceId: input.workspaceId,
+      workspaceId: input.scope.workspaceId,
       parameters,
       fields: parametersOf(useCase),
     })
-    const generation = await generator.generate({
-      workspaceId: input.workspaceId,
+    const generation = await session.generate({
       useCaseId: useCase.useCaseId,
       option,
       system: prompt.system,
@@ -152,7 +162,7 @@ export class InlineUseCaseService {
       // to return, and a 200 carrying an empty string would read to a content editor as a model
       // that had nothing to say about the scene.
       this.deps.logger?.warn('An inline use case produced no text', {
-        workspaceId: input.workspaceId,
+        workspaceId: input.scope.workspaceId,
         useCaseId: useCase.useCaseId,
         model: option.id,
         finishReason: generation.finishReason,
@@ -204,6 +214,31 @@ export class InlineUseCaseService {
   }
 
   /**
+   * The session a DISCOVERY read projects against, or `undefined` when there is none to be had.
+   *
+   * Two causes land on the same undefined, and each is stated where it happens rather than
+   * inferred here: no provider is wired at all (ordinary, and the catalog says so per option), or
+   * the credential pool could not be read (a real fault, logged with its cause). Discovery answers
+   * either way, because a read that 500s tells a wrapper the surface does not exist when what
+   * failed was one query behind it.
+   */
+  private async discoverySession(
+    scope: InlineUseCaseScope,
+  ): Promise<InlineUseCaseSession | undefined> {
+    const generator = this.deps.generator
+    if (!generator?.enabled) return undefined
+    try {
+      return await generator.forScope(scope)
+    } catch (error) {
+      this.deps.logger?.warn('Use-case model availability could not be resolved', {
+        workspaceId: scope.workspaceId,
+        ...describeError(error),
+      })
+      return undefined
+    }
+  }
+
+  /**
    * The caller's bag, checked against the declared parameters and frozen.
    *
    * The SHARED descriptor validator, so this surface refuses exactly what a reusable operation's
@@ -247,60 +282,56 @@ export class InlineUseCaseService {
     return option
   }
 
-  /** One use case's wire projection, with each model's availability resolved for this workspace. */
-  private async project(
-    workspaceId: string,
+  /** One use case's wire projection, with each model's availability read off the bound session. */
+  private project(
     useCase: InlineUseCaseDefinition,
-  ): Promise<PublicUseCase> {
-    const models = await Promise.all(
-      useCase.models.map((option) => this.projectModel(workspaceId, useCase, option)),
-    )
+    session: InlineUseCaseSession | undefined,
+  ): PublicUseCase {
     return {
       useCaseId: useCase.useCaseId,
       label: useCase.label,
       description: useCase.description,
       ...(useCase.category ? { category: useCase.category } : {}),
-      models,
+      models: useCase.models.map((option) => projectModel(useCase, option, session)),
       parameters: [...parametersOf(useCase)],
       generation: useCaseGenerationLimits(useCase),
     }
   }
+}
 
-  /** One model option's wire projection. */
-  private async projectModel(
-    workspaceId: string,
-    useCase: InlineUseCaseDefinition,
-    option: InlineUseCaseModelOption,
-  ): Promise<UseCaseModel> {
-    const generator = this.deps.generator
-    // With no generator there is no provider to ask, so every option is unavailable for the same
-    // deployment-level cause. Reported per option rather than omitted: a wrapper rendering the
-    // picker still shows what this use case OFFERS, greyed out, instead of an empty list that reads
-    // like a use case with no models declared.
-    const availability = generator?.enabled
-      ? await generator.availability(workspaceId, option)
-      : ({ available: false, reason: 'provider_unavailable' } as const)
-    const isDefault = resolveUseCaseModelOption(useCase, undefined)?.id === option.id
-    return {
-      id: option.id,
-      label: option.label,
-      ...(option.description ? { description: option.description } : {}),
-      default: isDefault,
-      available: availability.available,
-      ...(availability.available ? {} : { unavailableReason: availability.reason }),
-    }
+/** One model option's wire projection. */
+function projectModel(
+  useCase: InlineUseCaseDefinition,
+  option: InlineUseCaseModelOption,
+  session: InlineUseCaseSession | undefined,
+): UseCaseModel {
+  // With no session there is no provider to ask, so every option is unavailable for the same
+  // deployment-level cause. Reported per option rather than omitted: a wrapper rendering the
+  // picker still shows what this use case OFFERS, greyed out, instead of an empty list that reads
+  // like a use case with no models declared.
+  const availability = session
+    ? session.availability(option)
+    : ({ available: false, reason: 'provider_unavailable' } as const)
+  return {
+    id: option.id,
+    label: option.label,
+    ...(option.description ? { description: option.description } : {}),
+    default: resolveUseCaseModelOption(useCase, undefined)?.id === option.id,
+    available: availability.available,
+    ...(availability.available ? {} : { unavailableReason: availability.reason }),
   }
 }
 
 /**
  * A knob the caller named, checked against the declared bounds, else the declared default.
  *
- * REFUSED rather than clamped. A caller asking for temperature 2.5 against a ceiling of 1.2 is
- * asking for output the deployment has decided not to produce, and silently running at 1.2 answers
- * that request with a different generation while reporting success: the caller stores the text
- * believing it came from the settings it asked for.
+ * REFUSED rather than clamped, which is why the name says `require` and not `clamp`. A caller
+ * asking for temperature 2.5 against a ceiling of 1.2 is asking for output the deployment has
+ * decided not to produce, and silently running at 1.2 answers that request with a different
+ * generation while reporting success: the caller stores the text believing it came from the
+ * settings it asked for.
  */
-function clamped(
+function requireWithinBounds(
   value: number | undefined,
   limit: { default: number; min: number; max: number },
   name: string,
