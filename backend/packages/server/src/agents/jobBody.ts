@@ -6,9 +6,9 @@ import type {
 } from '@cat-factory/kernel'
 import {
   type AgentKindRegistry,
+  appendContainerDispatchDirectives,
   bugFixGuidanceFor,
   composeBlockSystemPrompt,
-  EFFORT_REPORT_GUIDANCE,
   toolServersSection,
   FOLLOW_UP_GUIDANCE,
   PR_DESCRIPTION_GUIDANCE,
@@ -128,12 +128,16 @@ export function buildKindBody(
     // kinds get the full bodies. See `standardsVerbosityFor` / the `brief-standards` trait.
     standardsVerbosityFor(context.agentKind, registry),
   )
-  // Every container agent is asked to end its run by writing a short effort self-assessment
-  // (how hard the work was, what reduced its effectiveness, the obstacles) to a sentinel file
-  // the harness reads and surfaces in run details. Appended here — the single container-dispatch
-  // chokepoint — so it reaches EVERY container kind (built-in and registered) uniformly, exactly
-  // like the read-only/final-answer directives reach every kind via `applySurfaceDirectives`.
-  const withEffort = `${baseRoleSystemPrompt}\n\n${EFFORT_REPORT_GUIDANCE}`
+  // The two directives EVERY container job carries, whatever the kind: what the execution
+  // environment can and cannot do (platform facts no agent can derive from the repository, absent
+  // which a coder and its reviewer each rediscovered that the Dockerfile they were asked for could
+  // not be built here) and the effort self-assessment the harness lifts onto the result. Appended
+  // here — the single container-dispatch chokepoint — so they reach every container kind, built-in
+  // and registered alike, exactly like the read-only/final-answer directives reach every kind via
+  // `applySurfaceDirectives`. The pair is declared in `@cat-factory/agents`
+  // (`CONTAINER_DISPATCH_DIRECTIVES`) because `appendedDirectivesFor` has to MEASURE it: the prompt
+  // editor shows a workspace the rules its override cannot delete, and these are two of them.
+  const withEffort = appendContainerDispatchDirectives(baseRoleSystemPrompt)
   // When the future-looking Follow-up companion is enabled for this (coder) step, append
   // the guidance that tells the Coder to stream loose-ends / side-tasks / questions to the
   // sentinel file the harness tails. Only when enabled, so a disabled companion (or any

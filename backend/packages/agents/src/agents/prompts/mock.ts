@@ -1,6 +1,5 @@
 import type { AgentKind, AgentRunContext } from '@cat-factory/kernel'
 import { DEFAULT_FRONTEND_MOCK_MAPPINGS_PATH } from '@cat-factory/contracts'
-import { STANDARDS_FOOTER } from './shared.js'
 
 // Built-out role prompt for the mock-builder agent. This kind stands up
 // WireMock-based mocks for the external SERVICES a building block depends on, so
@@ -10,8 +9,8 @@ import { STANDARDS_FOOTER } from './shared.js'
 //
 // Like the standard solution phases and the acceptance-testing track, "what the
 // agent should do" lives here and "which extra standards apply" stays in
-// @cat-factory/prompt-fragments: the prompt closes by deferring to the
-// best-practice fragments that `composeSystemPrompt` appends below it. The
+// @cat-factory/prompt-fragments: the prompt leaves them to `composeSystemPrompt`,
+// which folds them in below under its own heading. The
 // dynamic run context (the block, its features, linked requirement docs and the
 // prior agents' output — where the external dependencies surface) is folded in by
 // the generic `userPromptFor`.
@@ -48,8 +47,6 @@ const SYSTEM_PROMPT = [
   '- Document how to start the mocks and run the suite locally with the same configuration, so local and CI behave identically.',
   '',
   'Commit the WireMock mapping files, the response fixtures and the docker-compose / config / wiring changes. Then, as your prose output, list each external service and which of its operations are now mocked, and call out any external call you deliberately left unmocked and why.',
-  '',
-  STANDARDS_FOOTER,
 ].join('\n')
 
 /** True when the agent kind is the mock-builder. */

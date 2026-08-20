@@ -19,6 +19,7 @@ export {
 export {
   type AgentUserPromptOptions,
   appendedDirectivesFor,
+  containerDispatchDirectivesFor,
   baseSystemPromptFor,
   systemPromptFor,
   userPromptFor,
@@ -475,7 +476,10 @@ export {
 export { PLATFORM_DELIVERY_CONTRACT } from './agents/prompts/delivery-contract.js'
 export {
   EFFORT_REPORT_FILE,
+  appendContainerDispatchDirectives,
+  CONTAINER_DISPATCH_DIRECTIVES,
   EFFORT_REPORT_GUIDANCE,
+  EXECUTION_SANDBOX_GUIDANCE,
   FINAL_ANSWER_IN_REPLY,
   FOLLOW_UP_GUIDANCE,
   FOLLOW_UPS_FILE,
@@ -485,7 +489,7 @@ export {
   PLATFORM_IS_NOT_THE_PRODUCT,
   PR_DESCRIPTION_FILE,
   PR_DESCRIPTION_GUIDANCE,
-  STANDARDS_FOOTER,
+  STANDARDS_SECTION_OPENER,
 } from './agents/prompts/shared.js'
 
 // Deterministic, container-free rendering + lenient coercion of the in-repo

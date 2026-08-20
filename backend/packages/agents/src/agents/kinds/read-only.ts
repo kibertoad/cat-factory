@@ -39,9 +39,24 @@ export function isReadOnlyAgentKind(kind: AgentKind): boolean {
  * open a PR — the prose report it returns is its sole deliverable. Centralised here
  * (rather than repeated in each role prompt) so every read-only kind states the same
  * guardrail exactly once.
+ *
+ * It states what the AGENT may do and claims nothing about the surface it runs on, nor about what
+ * the platform does around it. Both of those were asserted here once and both were false.
+ * `applySurfaceDirectives` appends this through `systemPromptFor`, which the INLINE executor and
+ * the consensus panel also call, so a carve-out phrased as "the sentinel file the instructions
+ * below ask you for" named a file nothing asks a panel participant for, in an environment with no
+ * working directory to write it to. And "no commit or push happens on this step" is false for
+ * `spike`, whose findings document is committed and published by a backend post-op: what is true
+ * on every path is that the commit is not the agent's to make.
+ *
+ * The reconciliation with the effort report the container-dispatch chokepoint appends lives in
+ * `EFFORT_REPORT_GUIDANCE` instead, that being the only half of the pair which reaches every kind
+ * the other half can contradict: the bespoke `merger` / `on-call` prompts never pass through
+ * `systemPromptFor` at all, so a carve-out written here could not reach them.
  */
 export const READ_ONLY_GUARDRAIL =
   'IMPORTANT — this is a READ-ONLY exploration: you may read and inspect any file in ' +
-  'the repository, but you MUST NOT modify, create or delete files, run commands that ' +
-  'change the repository, commit, or open a pull request. Your written report is the ' +
-  'only deliverable; return it as your response.'
+  'the repository, but you MUST NOT modify, create or delete its files, run commands that ' +
+  'change it, commit, or open a pull request: no commit or push on this step is yours to make. ' +
+  'Your written report is the only deliverable; return it as your response, and whatever the ' +
+  'platform persists from this step it writes itself, from that report.'

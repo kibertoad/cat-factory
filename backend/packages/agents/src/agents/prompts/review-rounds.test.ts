@@ -218,10 +218,13 @@ describe('renderPriorReviewRounds', () => {
   it('trims an older round harder than the latest, and SAYS it trimmed', () => {
     // A silently shortened summary reads exactly like a grader that had little to say.
     const long = 'x'.repeat(5_000)
-    const lines = renderPriorReviewRounds([
-      { round: 1, rating: 0.5, passed: false, summary: long },
-      { round: 2, rating: 0.6, passed: false, summary: long },
-    ]).join('\n')
+    const lines = renderPriorReviewRounds(
+      [
+        { round: 1, rating: 0.5, passed: false, summary: long },
+        { round: 2, rating: 0.6, passed: false, summary: long },
+      ],
+      0.8,
+    ).join('\n')
     expect(lines).toContain('[trimmed]')
     // The latest keeps more than the earlier one, so the asks most likely still open survive.
     const [first, second] = lines.split('Round 2')
@@ -232,20 +235,23 @@ describe('renderPriorReviewRounds', () => {
     // A round's history is what tells the next pass which of its earlier asks are still holding the
     // run. Rendered as undifferentiated bullets, the must-fix from round 1 competes for attention
     // with the nit raised in the same breath, and both sides of the loop re-triage from scratch.
-    const lines = renderPriorReviewRounds([
-      {
-        round: 1,
-        rating: 0.6,
-        passed: false,
-        summary: 'mostly sound',
-        comments: [
-          { body: 'rename this', severity: 'minor' },
-          { body: 'a person said so' },
-          { body: 'unhandled partial write', severity: 'blocker' },
-          { body: 'thin coverage', severity: 'major' },
-        ],
-      },
-    ])
+    const lines = renderPriorReviewRounds(
+      [
+        {
+          round: 1,
+          rating: 0.6,
+          passed: false,
+          summary: 'mostly sound',
+          comments: [
+            { body: 'rename this', severity: 'minor' },
+            { body: 'a person said so' },
+            { body: 'unhandled partial write', severity: 'blocker' },
+            { body: 'thin coverage', severity: 'major' },
+          ],
+        },
+      ],
+      0.8,
+    )
     const bullets = lines.filter((line) => line.startsWith('- '))
     expect(bullets).toEqual([
       '- [blocker] unhandled partial write',
@@ -256,18 +262,98 @@ describe('renderPriorReviewRounds', () => {
     ])
   })
 
+  it('states the bar comparison and the disposition as separate facts', () => {
+    // `passed` is the ENGINE's disposition, not `rating >= threshold`: a blocker holds a round
+    // whatever it scored, and the first batch beyond a nit is force-looped even from a producer
+    // that scored well. Rendered as "did not meet the bar" against a bar the same prompt states,
+    // one of the two numbers has to be wrong, and a grader spent a round saying so.
+    const held = renderPriorReviewRounds(
+      [
+        {
+          round: 1,
+          rating: 0.86,
+          passed: false,
+          summary: 'good, one must-fix',
+          comments: [{ body: 'unhandled partial write', severity: 'blocker' }],
+        },
+      ],
+      0.8,
+    ).join('\n')
+    expect(held).toContain(
+      'rated 0.86, which met the bar, but a [blocker] below held the work back',
+    )
+    expect(held).not.toContain('did not meet the bar')
+
+    // Same shape, no blocker: the first batch was force-looped, which is a different cause and
+    // reads as one.
+    const looped = renderPriorReviewRounds(
+      [
+        {
+          round: 1,
+          rating: 0.9,
+          passed: false,
+          summary: 'a few majors',
+          comments: [{ body: 'x', severity: 'major' }],
+        },
+      ],
+      0.8,
+    ).join('\n')
+    expect(looped).toContain(
+      'which met the bar, and was still sent back once over the findings below',
+    )
+
+    // And a round that really was under the bar still says so plainly.
+    const below = renderPriorReviewRounds(
+      [{ round: 1, rating: 0.72, passed: false, summary: 'not there yet' }],
+      0.8,
+    ).join('\n')
+    expect(below).toContain('rated 0.72, below the bar')
+  })
+
+  it('never renders a disposition as a bar comparison, in either direction', () => {
+    // The failing side of this was the reported bug: `passed` is the ENGINE's disposition, so
+    // rendering it as "did not meet the bar" put two numbers in one prompt that contradicted each
+    // other. The PASSING side is the same conflation mirror-imaged, and it was still there: a round
+    // the engine advanced on a rating below the threshold read as having met a bar it did not meet.
+    const passedBelow = renderPriorReviewRounds(
+      [{ round: 1, rating: 0.42, passed: true, summary: 'advanced anyway' }],
+      0.8,
+    ).join('\n')
+    expect(passedBelow).toContain('rated 0.42, which was below the bar and was passed anyway')
+    expect(passedBelow).not.toContain('which met the bar')
+    // And the ordinary case still reads as it should.
+    const passedAbove = renderPriorReviewRounds(
+      [{ round: 1, rating: 0.91, passed: true, summary: 'good' }],
+      0.8,
+    ).join('\n')
+    expect(passedAbove).toContain('rated 0.91, which met the bar')
+  })
+
+  it('keeps the threshold NUMBER out of the wording, for the producer as much as the grader', () => {
+    // The bar is told to the grader once, in the heading above the rounds, for the same reason the
+    // rope left is: a producer handed the number optimises for it rather than for the work.
+    const lines = renderPriorReviewRounds(
+      [{ round: 1, rating: 0.72, passed: false, summary: 'not there yet' }],
+      0.8,
+    ).join('\n')
+    expect(lines).not.toContain('0.80')
+  })
+
   it('names an anchored point by its item id rather than as an empty quote', () => {
     // A companion anchors to a structured item and quotes nothing, so the quote is the WRONG half to
     // render it by: the two anchors are alternatives, not a preferred one plus a fallback.
-    const lines = renderPriorReviewRounds([
-      {
-        round: 1,
-        rating: 0.6,
-        passed: false,
-        summary: 'mostly sound',
-        comments: [{ anchorId: 'AC-2', severity: 'major', body: 'still open' }],
-      },
-    ])
+    const lines = renderPriorReviewRounds(
+      [
+        {
+          round: 1,
+          rating: 0.6,
+          passed: false,
+          summary: 'mostly sound',
+          comments: [{ anchorId: 'AC-2', severity: 'major', body: 'still open' }],
+        },
+      ],
+      0.8,
+    )
     expect(lines.filter((line) => line.startsWith('- '))).toEqual([
       '- [major] On item `AC-2`: still open',
     ])

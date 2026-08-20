@@ -3,12 +3,24 @@
 // so the wording stays identical everywhere it is appended.
 
 /**
- * Closing line every role prompt appends before `composeSystemPrompt` folds in
- * the user's selected best-practice fragments — it tells the agent to treat those
- * appended standards as hard requirements rather than optional suggestions.
+ * The opening line of the folded best-practice-standards SECTION: it tells the agent to treat the
+ * standards that follow as hard requirements rather than optional suggestions.
+ *
+ * Emitted by `foldStandards` (runtime/fragments.ts) as part of the section it introduces, NOT
+ * appended to a role prompt. It used to be the hard-coded last line of every track prompt, while
+ * the fold returns the base prompt UNCHANGED when the block resolved no standards — so on any
+ * run without them the prompt ended by pointing at material that was never injected, and the
+ * graders reported agents reviewing against, and reporting the absence of, a section they had been
+ * told to expect. Owning the line where the blocks are written is what makes the pointer exist
+ * exactly when its target does.
+ *
+ * A kind whose `standardsDelivery` is `context-files` is not folded and correctly gets no line
+ * here: its standards index states the same thing about the files it lists. A kind delivered
+ * `none` applies no standards at all, so there is nothing to be hard about.
  */
-export const STANDARDS_FOOTER =
-  'Treat every best-practice standard appended below as a hard requirement, not a suggestion.'
+export const STANDARDS_SECTION_OPENER =
+  'Follow these best-practice standards while doing the work: treat every standard below as a ' +
+  'hard requirement, not a suggestion.'
 
 /**
  * Appended to every agent whose deliverable IS its final reply (a document, report,
@@ -172,17 +184,111 @@ export const FOLLOW_UPS_FILE = '.cat-follow-ups.jsonl'
  * and the key obstacles it hit — which the harness lifts onto the result and the platform surfaces
  * in run details. This is a SIDE channel: it is kept out of the commit/PR, so writing it never
  * affects the deliverable, and the agent still completes its actual task regardless.
+ *
+ * BOTH halves of the write/no-write reconciliation live HERE, because this is the only text that
+ * reaches every container kind. The chokepoint appends it to the read-only kinds, whose guardrail
+ * forbids creating files, and to the bespoke `merger` / `on-call` prompts, which short-circuit
+ * `systemPromptFor` entirely (see `composedSystemPromptFor`) and so can never receive a carve-out
+ * written into that guardrail. An agent handed the contradictory pair either disobeys one of them
+ * or spends a turn asking which wins, which is what the graders kept filing.
+ *
+ * The timing clause is scoped to what the AGENT did ("any commit or push you made") rather than
+ * asserting what the STEP does. A read-only step can still commit: the `spike` kind's findings are
+ * committed and published by a backend post-op the agent takes no part in.
  */
 export const EFFORT_REPORT_GUIDANCE =
-  'EFFORT SELF-ASSESSMENT — when you have finished your work (after any commit/push), write a ' +
+  'EFFORT SELF-ASSESSMENT — as the last thing you do, once your work is complete (including any ' +
+  'commit or push you made), write a ' +
   `file named \`${EFFORT_REPORT_FILE}\` in your working directory containing a SINGLE compact ` +
   'JSON object: {"difficulty":<1-10>,"summary":"<one or two sentences on how hard or easy this ' +
   'was and why>","reducedEffectiveness":"<what, if anything, reduced your effectiveness — ' +
   'unclear requirements, flaky tooling, missing context, etc.>","obstacles":["<each key ' +
   'obstacle you hit>"]}. `difficulty` is 1 (trivial) to 10 (extremely hard). Be honest and ' +
-  'specific — this is feedback for the humans running you, not part of the deliverable. It is a ' +
-  'side channel only: it is kept out of the commit, so never reference it in code and never add ' +
-  'it to git. Write it exactly once, at the end.'
+  'specific — this is feedback for the humans running you, not part of the deliverable. Writing ' +
+  'this one file is expected even where your instructions forbid you to create, modify or commit ' +
+  'files: it is the single exception those instructions permit, because the harness keeps it out ' +
+  'of every commit, so writing it changes nothing in the repository. It is a side channel only: ' +
+  'never reference it in code and never add it to git. Write it exactly once, at the end.'
+
+/**
+ * Appended to EVERY container-agent system prompt at the same chokepoint as
+ * {@link EFFORT_REPORT_GUIDANCE} (`buildKindBody`): what the execution environment can and cannot
+ * do.
+ *
+ * These are PLATFORM facts no agent can derive from the repository, and the graders kept catching
+ * the same waste with them absent. A coder and its reviewer independently discovered that the
+ * Dockerfile they were asked for could not be built here, then spent two consecutive rounds on the
+ * wording of that disclosure; separately, a Node 26 sandbox against a Node 22 target produced an
+ * `EBADENGINE` warning the reviewer filed as a defect in the change. None of that is resolvable by
+ * the agent, and all of it is one paragraph of context.
+ *
+ * EVERY tool is stated as a PROBE rather than as a presence or an absence, and the environment
+ * itself is never named, because the honest answer varies by runtime and this text is composed
+ * BEFORE the transport is chosen. The usual case is the harness image (a rootless Docker daemon
+ * `entrypoint.sh` starts BEST-EFFORT, which Cloudflare Containers and most managed runners forbid,
+ * while a self-hosted pool may point `DOCKER_HOST` at a sidecar instead). But the same job body
+ * also serves the local NATIVE transport (`LOCAL_NATIVE_AGENTS`), which runs the developer's own
+ * CLI as a process on their machine, where `kubectl` may well be installed, Docker Desktop may be
+ * running and the toolchain is theirs. So "an ephemeral Linux container", "no Kubernetes tooling"
+ * and "a Docker CLI IS installed" are each false on one of those two paths, while "check, and do
+ * not read a failure as your bug" is true on both. Toolchain VERSIONS take the same shape for a
+ * second reason as well: naming the image's Node major here would duplicate the Dockerfile's pin
+ * into a constant nothing keeps in step with it.
+ *
+ * The closing rule is the part that pays for the paragraph, and it stops one step short of the
+ * claim it would be convenient to make: unverifiable is not the same as correct. An artifact this
+ * environment cannot execute is not INCOMPLETE for that reason, and the limit itself is not a
+ * finding, but a defect a reviewer can actually see in the artifact still is one. The paragraph
+ * reaches the reviewer companions too, so "still a complete and correct deliverable" would be the
+ * platform telling every reviewer to pass a Dockerfile with a real syntax error in it, on the
+ * grounds that it could not be built here.
+ *
+ * Unconditional, for every container kind rather than only those whose deliverable can BE an
+ * executable artifact: a reviewer reviews such artifacts, and any kind can be asked to probe for a
+ * tool. Gating it per kind would reintroduce the rediscovery it exists to prevent, one
+ * misclassification at a time, so the paragraph is kept short instead and names no tooling except
+ * as a probe example.
+ */
+export const EXECUTION_SANDBOX_GUIDANCE =
+  'EXECUTION SANDBOX — you run in a disposable working environment the platform provisions for ' +
+  'this step: a fresh clone of the repository, git and a Node toolchain. Treat nothing else as ' +
+  'guaranteed: probe for a tool (`docker info`, `kubectl version`, a language runtime) before ' +
+  'relying on it, and never report a missing tool or a failed probe as a defect in the work. The ' +
+  'platform hands you no cluster or container-registry credentials, so applying a manifest, ' +
+  'reaching a cluster and pulling or pushing an image are out of scope for this step unless this ' +
+  "run handed you a credential for them. Toolchain versions here are the ENVIRONMENT's, not " +
+  "necessarily your target's — compare `node --version` against the project's declared engines " +
+  'before concluding that a version warning or failure is a bug in the code. Above all: a ' +
+  'deliverable this environment cannot EXECUTE (a Dockerfile you cannot build, a manifest you ' +
+  'cannot apply, a deploy you cannot run) is not incomplete or incorrect for that reason. Produce ' +
+  'it, then name in ONE line of your report which artifacts you could not verify here and why. Do ' +
+  'not hedge the artifact, do not spend turns rediscovering the limit, and do not raise the limit ' +
+  'itself as a finding against the work or another agent: a defect you can actually see in the ' +
+  'artifact still is one.'
+
+/**
+ * The directives the container-dispatch chokepoint appends to EVERY container job, in the order it
+ * appends them: what the environment can and cannot do, then the effort self-assessment.
+ *
+ * Declared here rather than inlined at the chokepoint because two callers have to agree on the
+ * exact text. The dispatch (`buildKindBody`) SENDS it, and `appendedDirectivesFor` MEASURES what a
+ * workspace's override cannot delete, so the prompt editor can show it rather than describe it in
+ * prose that drifts. With the pair inlined in `@cat-factory/server` the measurement could not see
+ * it and the editor promised a shorter contract than the wire carried.
+ *
+ * Only the UNCONDITIONAL pair belongs here. The chokepoint also appends per-STEP text (the
+ * follow-up companion, bug-fix guidance, a skill directive, the wired tool servers), which depends
+ * on the run rather than on the kind and so cannot be measured for a kind at all.
+ */
+export const CONTAINER_DISPATCH_DIRECTIVES = [
+  EXECUTION_SANDBOX_GUIDANCE,
+  EFFORT_REPORT_GUIDANCE,
+] as const
+
+/** Append {@link CONTAINER_DISPATCH_DIRECTIVES} to `prompt`, in the order a dispatch sends them. */
+export function appendContainerDispatchDirectives(prompt: string): string {
+  return [prompt, ...CONTAINER_DISPATCH_DIRECTIVES].join('\n\n')
+}
 
 /**
  * The sentinel file a PR-opening coding agent writes its pull-request description to, at the root
@@ -238,6 +344,28 @@ export const PR_DESCRIPTION_GUIDANCE =
  *    the delegating prompt charges it for every standard on every turn while the subagents that
  *    apply them never receive them — the pr-reviewer case). The rating still comes from the real
  *    standard text, just read from the file rather than the prompt.
+ *
+ * The prompt-folded variant says ANY rather than THE, asks whether a block APPEARS rather than
+ * describing an empty array, and claims no POSITION for the blocks, for the same reason
+ * {@link STANDARDS_SECTION_OPENER} moved into the fold: the fold writes nothing when a block
+ * resolved no standards, so an opening that asserted the blocks were there was the second half of
+ * the same dangling pointer the graders quoted (they reported a reviewer instructed to review
+ * against blocks 'folded into this prompt above' when none were injected). It cannot move into the
+ * fold as the opener did, being a JSON output contract rather than a standards header, so it is
+ * worded to be true in all three delivery states instead.
+ *
+ * The POSITION is the half that survived the first pass at this, and it was still wrong:
+ * `foldStandards` appends the blocks BELOW the base prompt that carries this guidance, so a
+ * reviewer applying "if no such block appears above" to the text above it finds none and reports an
+ * absence on a run where the standards were folded in. Nothing in the composition can promise a
+ * direction, so the guidance names none.
+ *
+ * The `_CONTEXT_FILES` variant states its channel as the NORMAL one rather than the only one,
+ * because the fold is not suppressed unconditionally for a `context-files` kind: when the preOp
+ * that writes the files did not run, {@link composeBlockSystemPrompt} folds the standards into the
+ * prompt rather than losing them through both channels. "NOT in this prompt" was false in exactly
+ * that fallback, and the fallback is also where this text tells the reviewer to report that no
+ * standards were available.
  */
 const FRAGMENT_ADHERENCE_REPORT_SHAPE =
   'In your JSON output include a `fragmentAdherence` array with ONE entry per standard you ' +
@@ -248,23 +376,24 @@ const FRAGMENT_ADHERENCE_REPORT_SHAPE =
   'its TITLE.'
 
 export const FRAGMENT_ADHERENCE_GUIDANCE =
-  'BEST-PRACTICE ADHERENCE — the best-practice standards you must review against are folded into ' +
-  'this prompt above as separate `<best-practice-standard>` blocks, each with a stable id and a ' +
+  'BEST-PRACTICE ADHERENCE — ANY best-practice standards you must review against are folded ' +
+  'into this prompt as separate `<best-practice-standard>` blocks, each with a stable id and a ' +
   'title. ' +
   FRAGMENT_ADHERENCE_REPORT_SHAPE +
-  ' If NO best-practice standards were provided (the array of blocks above is empty), ' +
+  ' If no such block appears anywhere in this prompt, none were provided for this review: ' +
   'return `fragmentAdherence` as an empty array AND state explicitly in your summary that no ' +
   'best-practice standards were available to review against — do not invent any.'
 
 export const FRAGMENT_ADHERENCE_GUIDANCE_CONTEXT_FILES =
-  'BEST-PRACTICE ADHERENCE — the best-practice standards you must review against are NOT in this ' +
-  'prompt; they are the `.cat-context/standard-<id>.md` files listed in `.cat-context/standards.md`. ' +
-  'Each `fragmentAdherence` rating MUST come from the real standard text (yours or a slice ' +
-  "subagent's read of the file), never a paraphrase. " +
+  'BEST-PRACTICE ADHERENCE — the best-practice standards you must review against normally reach ' +
+  'you as files rather than as prompt text: the `.cat-context/standard-<id>.md` files listed in ' +
+  '`.cat-context/standards.md`. Each `fragmentAdherence` rating MUST come from the real standard ' +
+  "text (yours or a slice subagent's read of the file), never a paraphrase. " +
   FRAGMENT_ADHERENCE_REPORT_SHAPE +
-  ' If `.cat-context/standards.md` is absent or lists no standards, return `fragmentAdherence` as ' +
-  'an empty array AND state explicitly in your summary that no best-practice standards were ' +
-  'available to review against — do not invent any.'
+  ' If this run folded them into this prompt instead, as `<best-practice-standard>` blocks, review ' +
+  'against those. If NEITHER channel carries any, return `fragmentAdherence` as an empty array AND ' +
+  'state explicitly in your summary that no best-practice standards were available to review ' +
+  'against — do not invent any.'
 
 /**
  * Appended to the Coder's system prompt ONLY when the Follow-up companion is enabled for

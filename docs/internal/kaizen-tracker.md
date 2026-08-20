@@ -74,7 +74,16 @@ exists.
 
 ### KZ-0001: Gate a conditional prompt section on what was actually injected
 
-- **Status**: open
+- **Status**: in progress, one of three (PR 2062). The STANDARDS half is done, both constants
+  this verdict names. `STANDARDS_FOOTER` moved out of all seven files into `foldStandards`, which
+  runs only when there are blocks to introduce, so the pointer and its target are now one decision
+  (`build@v7`, `review@v3`; the other six carry no number). `FRAGMENT_ADHERENCE_GUIDANCE` could not
+  move the same way, being a JSON output contract rather than a standards header, so it is worded to
+  be true in all three delivery states instead: ANY rather than THE, and "if no such block appears
+  above" rather than a description of an empty array that is never written. The `spec/` navigation
+  block and the foundational-catalog reuse mandate are untouched and stay open: both are static
+  trait strings, and gating them needs a dispatch-time presence signal `systemPromptFor` cannot
+  see.
 - **Combos**: `pr-reviewer | anthropic:claude-opus-5 | 1`, `coder | anthropic:claude-opus-5 | build@v5` and `@v6`, `reviewer | anthropic:claude-opus-5 | 1`, `architect | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 8 entries, 2026-07-28 to 2026-08-13
 - **What the grader says**: three sections keep being named. On the standards: "the BEST-PRACTICE ADHERENCE section instructs the agent to review against `<best-practice-standard>` blocks 'folded into this prompt above', but none were injected", and "the system prompt ends the role section with 'Treat every best-practice standard appended below as a hard requirement' but nothing was appended". On the spec: "the `spec/` navigation block is included unconditionally even though the architect step already established there is no `spec/` directory in this repo". On the catalog: "collapse the ~200-word reuse-mandate section to a single line plus the required fenced block" when it resolves to nothing. One entry adds a consequence rather than a cost: `fragmentAdherence` "is a required output field" and came back empty, "so a review isn't silently shipped with its judged-against dimension missing".
@@ -83,7 +92,18 @@ exists.
 
 ### KZ-0002: The read-only guardrail and the effort-report guidance contradict each other
 
-- **Status**: open
+- **Status**: in progress (PR 2062). The carve-out naming `.cat-effort.json` as the one
+  permitted write rides `EFFORT_REPORT_GUIDANCE`, not the guardrail, and the effort report no
+  longer times itself off a commit the agent may not make. Scoped off the CHOKEPOINT rather than
+  the surface, which is stronger than this verdict asked for and is what the first attempt got
+  wrong: `applySurfaceDirectives` runs inside `systemPromptFor`, which `composedSystemPromptFor`
+  short-circuits for every bespoke kind, so a carve-out in the guardrail text reached neither
+  `merger` nor `on-call` (and `on-call`'s own directives are the ones that forbid every write).
+  Riding the effort report reaches every container kind whatever composed its prompt, and reaches
+  no inline dispatch, which the surface-scoped version also got wrong: `systemPromptFor` serves the
+  consensus panel and the inline executor too, so the guardrail was promising a working directory
+  to participants that have none. Pinned where the pair is actually composed, since neither package
+  sees both halves alone.
 - **Combos**: `architect | anthropic:claude-opus-5 | 1`, `pr-reviewer | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 5 entries, 2026-07-28 to 2026-08-13
 - **What the grader says**: "the READ-ONLY clause says the agent 'MUST NOT modify, create or delete files', and the very next paragraph orders it to write `.cat-effort.json` in the working directory". Another states the second half: the effort file is mandated "'after any commit/push' on a step that is forbidden to commit". Every entry proposes the same remedy, an explicit carve-out: "state explicitly that `.cat-effort.json` is the single permitted write and that no commit/push will occur".
@@ -101,7 +121,21 @@ exists.
 
 ### KZ-0004: The agent container's capability limits are never stated to the agent
 
-- **Status**: open
+- **Status**: in progress (PR 2062). `EXECUTION_SANDBOX_GUIDANCE` rides every container
+  dispatch: no Kubernetes tooling or cluster/registry credentials, a Docker daemon to PROBE
+  rather than assume (the image ships the CLI and starts a rootless daemon best-effort, so
+  neither "no Docker" nor "Docker works" is true everywhere), and toolchain versions that are
+  the image's rather than the target's. The Node major is deliberately NOT named: duplicating
+  the Dockerfile's pin into a constant nothing keeps in step would be a second lie waiting.
+  Plus the rule that pays for the paragraph: an artifact this sandbox cannot execute is still a
+  correct artifact, disclosed in one line rather than over two review rounds. What this does NOT do
+  is state the RESOLVED capability of the image the job landed on, which is what this verdict asks
+  for, so that half stays open. There is no seam for it today: `RunnerDispatchAck.capabilities`
+  reports which body FIELDS the image parses and arrives after the prompt was already composed and
+  sent, and the `standUpInfra` prompt note reports a compose failure after attempting one, on the
+  tester's local-infra path only. Carrying a resolved fact to prompt-compose time needs a new
+  harness-reported capability plus a pre-dispatch read, mirrored across both runtimes; a probe
+  instruction is the honest statement until then, since it is true wherever the daemon lands.
 - **Combos**: `coder | anthropic:claude-opus-5 | build@v5` and `@v6`, `architect | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 3 entries, 2026-08-12 to 2026-08-13
 - **What the grader says**: "state up front that no Docker daemon is available in the agent container. The block requires a Dockerfile deliverable, but neither the coder nor the reviewer can build it locally; both discovered this independently and reported it." Also "no Docker daemon socket and no `kubectl`", where "two consecutive rounds were spent on the Dockerfile being unbuilt and on the wording of that disclosure, which is pure overhead the agent cannot resolve", and separately "declare the execution sandbox's Node version, or align it with the block's target", after a Node 26 sandbox against a Node 22 target produced an `EBADENGINE` defect the reviewer then flagged.
@@ -119,7 +153,11 @@ exists.
 
 ### KZ-0006: A prior round that cleared its bar is rendered as "did not meet the bar"
 
-- **Status**: open
+- **Status**: in progress (PR 2062). `renderPriorReviewRounds` now takes the threshold and
+  states the bar comparison and the disposition as the two separate facts they are, naming the
+  cause when they disagree (a `blocker` held it, or the first batch was force-looped). The
+  threshold's NUMBER stays out of the wording, so the producer still is not handed a target to
+  optimise for.
 - **Combos**: `reviewer | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 1 entry, 2026-08-12
 - **What the grader says**: "the prompt states a bar of 0.80 and records round 1 as 'rated 0.86, did not meet the bar'. Either the comparison or the rendered bar is wrong."

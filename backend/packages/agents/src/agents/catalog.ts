@@ -17,6 +17,7 @@ import type { AgentKindRegistry } from './kinds/registry.js'
 import { traitGuidanceFor } from './kinds/traits.js'
 import { roleSystemPrompt, TRIAGE_JSON_CONTRACT } from './prompts/roles.js'
 import {
+  CONTAINER_DISPATCH_DIRECTIVES,
   FINAL_ANSWER_IN_REPLY,
   PLATFORM_IS_NOT_THE_PRODUCT,
   REVIEW_FINDINGS_LAYOUT,
@@ -128,9 +129,33 @@ const DIRECTIVE_PROBE = ' cat-factory:override-probe '
  * Two consumers depend on it: the prompt editor SHOWS it, so a workspace can see the rules its
  * override cannot delete; and the sandbox composes a candidate the same way production does, so a
  * prompt is graded on the text that will actually be sent.
+ *
+ * Totality is why {@link containerDispatchDirectivesFor} is folded in as well: `systemPromptFor` is
+ * not the last thing that appends to a container prompt, and the editor's promise is about the wire
+ * rather than about one seam.
  */
 export function appendedDirectivesFor(kind: AgentKind, registry: AgentKindRegistry): string {
-  return systemPromptFor(kind, registry, DIRECTIVE_PROBE).slice(DIRECTIVE_PROBE.length)
+  const measured = systemPromptFor(kind, registry, DIRECTIVE_PROBE).slice(DIRECTIVE_PROBE.length)
+  return `${measured}${containerDispatchDirectivesFor(kind, registry)}`
+}
+
+/**
+ * What the container-dispatch chokepoint (`buildKindBody`) appends for this kind on top of
+ * everything {@link systemPromptFor} composed, or `''` for a kind that never reaches it: an inline
+ * kind, a consensus-panel participant, or a kind with no agent step at all.
+ *
+ * Gated on the DECLARED surface, and deliberately not consulted by the chokepoint itself, which
+ * appends the pair unconditionally: it IS the container dispatch, so a kind whose surface the
+ * registry reports as something else would otherwise silently lose the contract on a real run.
+ * Here the direction of the error is the safe one, an over- rather than an under-report.
+ */
+export function containerDispatchDirectivesFor(
+  kind: AgentKind,
+  registry: AgentKindRegistry,
+): string {
+  const surface = registry.agentStep(kind)?.surface
+  if (surface !== 'container-explore' && surface !== 'container-coding') return ''
+  return `\n\n${CONTAINER_DISPATCH_DIRECTIVES.join('\n\n')}`
 }
 
 /**
@@ -389,7 +414,7 @@ function withPriorReview(prompt: string, context: AgentRunContext): string {
         `against a bar of ${prior.threshold.toFixed(2)}. Your own previous verdicts:`
       : `This work has been through ${prior.rounds.length} review round(s) before the feedback ` +
         `above. Everything previously raised, so you do not undo a fix or drop an open point:`,
-    ...renderPriorReviewRounds(prior.rounds),
+    ...renderPriorReviewRounds(prior.rounds, prior.threshold),
     '',
     grading
       ? PRIOR_ROUNDS_DIRECTIVE

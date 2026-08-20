@@ -85,13 +85,19 @@ export const PROMPT_VERSIONS = {
   // agent adds commits rather than amending/resetting/rebasing ones it already made, a rule it
   // could not infer, since the checkpoint push that publishes them is invisible from inside the
   // container.
-  build: { id: 'build', version: 6, text: standardSystemPrompt('build') },
+  // v7 / v3 (build + review together, for the same one-line reason): the standards imperative
+  // (`STANDARDS_SECTION_OPENER`) is no longer the closing line of the track text. It moved into the FOLD
+  // that writes the standards, so a block that resolved none no longer ends by pointing at a
+  // section nobody injected — which is what the graders kept reporting, from both sides: a
+  // reviewer judging against blocks it could not find, and an implementer told to treat as hard
+  // requirements standards it was never given.
+  build: { id: 'build', version: 7, text: standardSystemPrompt('build') },
   // Brought under version control alongside the implementation-state axis: the spec-writer now
   // emits `requirementItem.state`, and its output is the durable behaviour contract every later
   // step reads, so a change to it needs to be attributable like the standard phases. Numbering
   // starts at 1 — there is no earlier RECORDED version to succeed.
   'spec-writer': { id: 'spec-writer', version: 1, text: SPEC_WRITER_SYSTEM_PROMPT },
-  review: { id: 'review', version: 2, text: standardSystemPrompt('review') },
+  review: { id: 'review', version: 3, text: standardSystemPrompt('review') },
   kaizen: { id: 'kaizen', version: 1, text: KAIZEN_SYSTEM_PROMPT },
   'fork-proposer': { id: 'fork-proposer', version: 1, text: FORK_PROPOSER_SYSTEM_PROMPT },
   'fork-chat': { id: 'fork-chat', version: 1, text: FORK_CHAT_SYSTEM_PROMPT },

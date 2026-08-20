@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentRunContext } from '@cat-factory/kernel'
-import type { AgentRouting } from '@cat-factory/agents'
+import { type AgentRouting, STANDARDS_SECTION_OPENER } from '@cat-factory/agents'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import {
   ContainerAgentExecutor,
@@ -126,8 +126,11 @@ describe('ContainerAgentExecutor', () => {
     expect(body.model).toBe('qwen3-max')
     expect(body.proxyBaseUrl).toBe('https://worker.example/v1')
     expect((body.repo as Record<string, unknown>).cloneUrl).toBe('https://github.com/octo/app.git')
-    // The selected fragment was folded into the system prompt handed to Pi.
-    expect(body.systemPrompt as string).toContain('Follow these standards')
+    // The selected fragment was folded into the system prompt handed to Pi. The fold owns the
+    // imperative opener (it is no longer the track prompt's closing line), so both the opener and
+    // the fragment's own delimited block are evidence that the fold ran on this dispatch.
+    expect(body.systemPrompt as string).toContain(STANDARDS_SECTION_OPENER)
+    expect(body.systemPrompt as string).toContain('<best-practice-standard id="node.performance"')
     // The session token is model-locked to what the executor resolved.
     const session = await new ContainerSessionService({ secret: 'secret' }).verify(
       body.sessionToken as string,

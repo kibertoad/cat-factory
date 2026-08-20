@@ -1,6 +1,6 @@
 import type { AgentKind, AgentRunContext } from '@cat-factory/kernel'
 import { frameProfile } from '@cat-factory/contracts'
-import { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './shared.js'
+import { FINAL_ANSWER_IN_REPLY } from './shared.js'
 import { REFERENCE_SCREENSHOT_DIR } from './standard.js'
 
 // Built-out role prompts for the Tester → Fixer loop. The `tester` clones the PR
@@ -184,8 +184,6 @@ const FIXER_SYSTEM_PROMPT = [
   '',
   'Commit your fixes to the current branch (no new branch, no new PR) so the tester / reviewer can',
   're-check them.',
-  '',
-  STANDARDS_FOOTER,
 ].join('\n')
 
 /** True when the kind is part of the Tester/Fixer track (API or UI tester + fixer). */
