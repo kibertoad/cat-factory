@@ -155,10 +155,34 @@ const RESERVED = new Set([
   'when',
 ])
 
-/** The Java/Kotlin member name for a wire field, escaped off the reserved set above. */
+/**
+ * Names `java.lang.Object` already owns a method for, which a member may therefore not take.
+ *
+ * The JLS forbids a record component named after any NO-ARG Object method outright (`hashCode`,
+ * `toString`, `getClass`, `clone`, `finalize`, `notify`, `notifyAll`, `wait`), so a wire field with
+ * one of those names would not compile at all. `equals` is the subtle one, and the reason this set
+ * exists: it is LEGAL as a record component, because the generated `equals()` accessor is an
+ * overload of `equals(Object)` rather than an override. It broke only when the field's type widened
+ * to `Object` (a free-form JSON value), at which point the BUILDER's `Builder equals(Object)` tried
+ * to override `boolean Object.equals(Object)` and the whole artifact stopped compiling. Escaped as
+ * one set rather than as that one case, so the next such wire field fails on nobody’s CI.
+ */
+const OBJECT_MEMBERS = new Set([
+  'clone',
+  'equals',
+  'finalize',
+  'getClass',
+  'hashCode',
+  'notify',
+  'notifyAll',
+  'toString',
+  'wait',
+])
+
+/** The Java/Kotlin member name for a wire field, escaped off the two sets above. */
 function member(wireName, type) {
   const name = wireName.charAt(0).toLowerCase() + wireName.slice(1)
-  if (!RESERVED.has(name)) return name
+  if (!RESERVED.has(name) && !OBJECT_MEMBERS.has(name)) return name
   // A boolean reads best as `isX` (and Kotlin then exposes it as the property `isX`); anything
   // else takes a plain, unambiguous suffix rather than a prefix that would misdescribe it.
   if (type?.kind === 'boolean') return `is${pascal(wireName)}`

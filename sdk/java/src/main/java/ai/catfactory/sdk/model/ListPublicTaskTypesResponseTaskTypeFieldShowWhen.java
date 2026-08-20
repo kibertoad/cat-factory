@@ -10,14 +10,14 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code ListPublicTaskTypesResponseTaskTypeFieldShowWhen} wire model.
- * @param equals May be absent entirely.
+ * @param equalsValue May be absent entirely.
  * @param includes May be absent entirely.
  * @param key Length 1..unbounded.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ListPublicTaskTypesResponseTaskTypeFieldShowWhen(
     /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("equals") @Nullable Object equals,
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("equals") @Nullable Object equalsValue,
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("includes") @Nullable String includes,
@@ -38,13 +38,13 @@ public record ListPublicTaskTypesResponseTaskTypeFieldShowWhen(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
-        private @Nullable Object equals;
+        private @Nullable Object equalsValue;
         private @Nullable String includes;
         private @Nullable String key;
 
         /** Set {@code equals}. */
-        public Builder equals(@Nullable Object equals) {
-            this.equals = equals;
+        public Builder equalsValue(@Nullable Object equalsValue) {
+            this.equalsValue = equalsValue;
             return this;
         }
 
@@ -62,7 +62,7 @@ public record ListPublicTaskTypesResponseTaskTypeFieldShowWhen(
 
         /** Build the {@link ListPublicTaskTypesResponseTaskTypeFieldShowWhen}. */
         public ListPublicTaskTypesResponseTaskTypeFieldShowWhen build() {
-            return new ListPublicTaskTypesResponseTaskTypeFieldShowWhen(equals, includes, key);
+            return new ListPublicTaskTypesResponseTaskTypeFieldShowWhen(equalsValue, includes, key);
         }
     }
 }
