@@ -209,28 +209,64 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
     const systemPrompt = captured[0]!.spec.systemPrompt as string
     expect(systemPrompt).toContain(READ_ONLY_GUARDRAIL)
     expect(systemPrompt).toContain(EFFORT_REPORT_GUIDANCE)
-    // The guardrail forbids creating files and the effort report orders one written, so the
-    // guardrail names it as its single exception. Without that an agent either disobeyed one of
-    // them or spent a turn asking which won, on every read-only run.
-    expect(READ_ONLY_GUARDRAIL).toContain(EFFORT_REPORT_FILE)
-    // And the effort report no longer times itself off a commit this step is forbidden to make.
+    // One instruction forbids creating files and the other orders one written, so the CARVE-OUT
+    // rides the effort report: it is the half that reaches every kind the other half can
+    // contradict. Without it an agent either disobeyed one of them or spent a turn asking which
+    // won, on every read-only run.
+    expect(EFFORT_REPORT_GUIDANCE).toContain(EFFORT_REPORT_FILE)
+    expect(EFFORT_REPORT_GUIDANCE).toMatch(/forbid you to create, modify or commit/)
+    // And the effort report no longer times itself off a commit the agent may not make.
     expect(EFFORT_REPORT_GUIDANCE).not.toContain('after any commit/push')
-    // The carve-out has to come first: it says "the instructions below".
-    expect(systemPrompt.indexOf(READ_ONLY_GUARDRAIL)).toBeLessThan(
-      systemPrompt.indexOf(EFFORT_REPORT_GUIDANCE),
+    // The guardrail claims nothing about the sentinel, so it needs no position relative to the
+    // report and stays true on the inline surfaces that also receive it.
+    expect(READ_ONLY_GUARDRAIL).not.toContain(EFFORT_REPORT_FILE)
+    expect(READ_ONLY_GUARDRAIL).not.toMatch(/instructions below/)
+  })
+
+  // The kinds whose write prohibition is written into a BESPOKE prompt rather than appended by
+  // `applySurfaceDirectives`. `composedSystemPromptFor` short-circuits for them, so a carve-out
+  // scoped off the surface never reaches them — which is why it lives on the effort report, the
+  // one text this chokepoint hands to every container kind whatever its prompt came from.
+  it('reconciles the pair for a bespoke container kind too, not only a surface-directed one', async () => {
+    for (const kind of ['on-call', 'merger']) {
+      const { executor: exec, captured: seen } = makeExecutor()
+      await exec.startJob(context(kind))
+      const systemPrompt = seen[0]!.spec.systemPrompt as string
+      expect(systemPrompt).toContain(EFFORT_REPORT_GUIDANCE)
+      // `on-call` is the case that bites: its own directives forbid every write, and nothing in
+      // its composition path can see the effort report it is about to be handed.
+      expect(systemPrompt).toMatch(/forbid you to create, modify or commit/)
+    }
+    // `on-call` is the case that bites: its own directives forbid every write, so without the
+    // carve-out riding the effort report it is handed an unsatisfiable pair on every dispatch.
+    const { executor: onCallExec, captured: onCallSeen } = makeExecutor()
+    await onCallExec.startJob(context('on-call'))
+    expect(onCallSeen[0]!.spec.systemPrompt as string).toContain(
+      'MUST NOT modify, commit or revert anything',
     )
   })
 
   it('states the execution sandbox contract to every container kind, not just one', async () => {
-    // Platform facts no agent can derive from the checkout (no Kubernetes tooling, a Docker daemon
-    // that must be probed, toolchain versions that are the image's), plus the rule that an artifact
-    // this sandbox cannot execute is still a correct artifact. Absent, a coder and its reviewer
-    // each rediscovered that the Dockerfile they were asked for could not be built here.
+    // Platform facts no agent can derive from the checkout (every tool probed rather than assumed,
+    // no cluster or registry credentials, toolchain versions that are the environment's), plus the
+    // rule that an artifact this environment cannot execute is not incomplete for that reason.
+    // Absent, a coder and its reviewer each rediscovered that the Dockerfile they were asked for
+    // could not be built here.
     for (const kind of ['coder', 'architect', 'reviewer', 'tester-api', 'merger']) {
       const { executor: exec, captured: seen } = makeExecutor()
       await exec.startJob(context(kind))
       expect(seen[0]!.spec.systemPrompt as string).toContain(EXECUTION_SANDBOX_GUIDANCE)
     }
+    // `reviewer` is in that list, which is what bounds how far the rule may go: unverifiable is
+    // not the same as correct, so the paragraph may not call the artifact correct nor tell the
+    // reviewer to withhold a defect it can actually see. Only the LIMIT is not a finding.
+    expect(EXECUTION_SANDBOX_GUIDANCE).not.toMatch(/complete and correct deliverable/)
+    expect(EXECUTION_SANDBOX_GUIDANCE).toMatch(/not raise the limit itself as a finding/)
+    expect(EXECUTION_SANDBOX_GUIDANCE).toMatch(/a defect you can actually see in the artifact/)
+    // And it describes the environment without naming one: the same body serves the harness image
+    // and, under `LOCAL_NATIVE_AGENTS`, the developer's own machine as a host process, where
+    // "an ephemeral Linux container" and "there is no Kubernetes tooling" are both false.
+    expect(EXECUTION_SANDBOX_GUIDANCE).toMatch(/a disposable working environment/)
   })
 
   it('default (coder)', async () => {

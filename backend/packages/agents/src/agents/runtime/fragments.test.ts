@@ -1,7 +1,11 @@
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { describe, expect, it } from 'vitest'
 import { composeBlockSystemPrompt, standardsDeliveredAsFiles } from './fragments.js'
-import { FRAGMENT_ADHERENCE_GUIDANCE, STANDARDS_FOOTER } from '../prompts/shared.js'
+import {
+  FRAGMENT_ADHERENCE_GUIDANCE,
+  FRAGMENT_ADHERENCE_GUIDANCE_CONTEXT_FILES,
+  STANDARDS_SECTION_OPENER,
+} from '../prompts/shared.js'
 
 // Best-practice standards are folded into the system prompt as SEPARATE, delimited, title-labelled
 // `<best-practice-standard>` blocks (not one `\n\n`-joined blob), so an agent can tell them apart and
@@ -24,9 +28,9 @@ describe('composeBlockSystemPrompt', () => {
       { resolvedFragments: [{ id: 'be-errors', body: 'Wrap errors with context.' }] },
       'prompt',
     )
-    expect(withStandards).toContain(STANDARDS_FOOTER)
+    expect(withStandards).toContain(STANDARDS_SECTION_OPENER)
     // It precedes the blocks it introduces, so "below" is true of it.
-    expect(withStandards.indexOf(STANDARDS_FOOTER)).toBeLessThan(
+    expect(withStandards.indexOf(STANDARDS_SECTION_OPENER)).toBeLessThan(
       withStandards.indexOf('<best-practice-standard'),
     )
 
@@ -43,20 +47,42 @@ describe('composeBlockSystemPrompt', () => {
       ),
       composeBlockSystemPrompt('BASE', { resolvedFragments: [{ id: 'x', body: 'y' }] }, 'none'),
     ]) {
-      expect(composed).not.toContain(STANDARDS_FOOTER)
+      expect(composed).not.toContain(STANDARDS_SECTION_OPENER)
     }
   })
 
   it('never asserts, in either constant, that standards were folded when none were', () => {
-    // Two strings pointed at the same section: the footer's "appended below" and the adherence
+    // Two strings pointed at the same section: the opener's "appended below" and the adherence
     // guidance's "folded into this prompt above". The fold writes neither the section nor an empty
     // array when a block resolved no standards, so both dangled, and the graders quoted both.
-    // Neither may claim presence on its own.
-    expect(STANDARDS_FOOTER).not.toMatch(/appended below/i)
-    expect(FRAGMENT_ADHERENCE_GUIDANCE).not.toMatch(/^BEST-PRACTICE ADHERENCE . the best-practice/i)
-    // It asks whether a block APPEARS rather than describing an array that does not exist.
-    expect(FRAGMENT_ADHERENCE_GUIDANCE).toContain('If no such block appears above')
-    expect(FRAGMENT_ADHERENCE_GUIDANCE).not.toContain('the array of blocks above is empty')
+    //
+    // Asserted as the STRUCTURAL property rather than as the absence of those two phrasings: a
+    // reworded "attached beneath" would pass a negative-phrase check while claiming presence just
+    // as falsely, so what is pinned is that the imperative appears exactly when a block does.
+    for (const block of [
+      { resolvedFragments: [{ id: 'x', body: 'y' }] },
+      { resolvedFragments: [] },
+    ]) {
+      const composed = composeBlockSystemPrompt('BASE', block, 'prompt')
+      expect(composed.includes(STANDARDS_SECTION_OPENER)).toBe(
+        composed.includes('<best-practice-standard'),
+      )
+    }
+    // The adherence guidance is a JSON output contract, not a standards header, so it cannot move
+    // into the fold and has to be true wherever it lands instead. It therefore claims no POSITION:
+    // the fold appends the blocks BELOW the base prompt that carries it, so a reviewer applying
+    // "if no such block appears above" to the text above it would find none and report an absence
+    // on a run where the standards WERE folded in.
+    expect(FRAGMENT_ADHERENCE_GUIDANCE).not.toMatch(/\babove\b/)
+    expect(FRAGMENT_ADHERENCE_GUIDANCE).toContain('empty array')
+    const review = composeBlockSystemPrompt(
+      `ROLE. ${FRAGMENT_ADHERENCE_GUIDANCE}`,
+      { resolvedFragments: [{ id: 'x', body: 'y' }] },
+      'prompt',
+    )
+    expect(review.indexOf(FRAGMENT_ADHERENCE_GUIDANCE)).toBeLessThan(
+      review.indexOf('<best-practice-standard'),
+    )
   })
 
   it('wraps each standard in its own delimited, id + title labelled block', () => {
@@ -119,6 +145,25 @@ describe('composeBlockSystemPrompt', () => {
       const out = composeBlockSystemPrompt('BASE', block, 'context-files', false)
       expect(out).toContain('<best-practice-standard id="be-errors" title="Backend errors">')
       expect(out).toContain('Wrap errors.')
+    })
+
+    it('does not tell the reviewer the standards are absent on the run that folded them in', () => {
+      // The fallback above is why the `context-files` guidance may not say the standards are NOT in
+      // this prompt: the same composition that recovers them by folding would then carry both the
+      // section AND an instruction to report that none were available, which is the dangling
+      // pointer this whole change is about, mirror-imaged.
+      const folded = composeBlockSystemPrompt(
+        `ROLE. ${FRAGMENT_ADHERENCE_GUIDANCE_CONTEXT_FILES}`,
+        block,
+        'context-files',
+        false,
+      )
+      expect(folded).toContain('<best-practice-standard id="be-errors" title="Backend errors">')
+      expect(FRAGMENT_ADHERENCE_GUIDANCE_CONTEXT_FILES).not.toMatch(/are NOT in this prompt/)
+      // It names both channels and reports an absence only when NEITHER carried anything.
+      expect(FRAGMENT_ADHERENCE_GUIDANCE_CONTEXT_FILES).toContain('.cat-context/standards.md')
+      expect(FRAGMENT_ADHERENCE_GUIDANCE_CONTEXT_FILES).toContain('<best-practice-standard>')
+      expect(FRAGMENT_ADHERENCE_GUIDANCE_CONTEXT_FILES).toMatch(/If NEITHER channel carries any/)
     })
   })
 })

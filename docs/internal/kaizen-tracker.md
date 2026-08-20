@@ -92,13 +92,18 @@ exists.
 
 ### KZ-0002: The read-only guardrail and the effort-report guidance contradict each other
 
-- **Status**: in progress (PR 2062). The guardrail names `.cat-effort.json` as its ONE
-  permitted write and states that no commit or push happens on the step; the effort report no
-  longer times itself off a commit the step is forbidden to make. Scoped off the SURFACE as this
-  verdict asks: the fix is in the guardrail text `applySurfaceDirectives` appends by surface, so
-  `merger` and `on-call` are covered without being named, and the inline companions that never
-  reach `buildKindBody` are untouched. Pinned where the pair is actually composed, at the
-  container-dispatch chokepoint, since neither package sees both halves alone.
+- **Status**: in progress (PR 2062). The carve-out naming `.cat-effort.json` as the one
+  permitted write rides `EFFORT_REPORT_GUIDANCE`, not the guardrail, and the effort report no
+  longer times itself off a commit the agent may not make. Scoped off the CHOKEPOINT rather than
+  the surface, which is stronger than this verdict asked for and is what the first attempt got
+  wrong: `applySurfaceDirectives` runs inside `systemPromptFor`, which `composedSystemPromptFor`
+  short-circuits for every bespoke kind, so a carve-out in the guardrail text reached neither
+  `merger` nor `on-call` (and `on-call`'s own directives are the ones that forbid every write).
+  Riding the effort report reaches every container kind whatever composed its prompt, and reaches
+  no inline dispatch, which the surface-scoped version also got wrong: `systemPromptFor` serves the
+  consensus panel and the inline executor too, so the guardrail was promising a working directory
+  to participants that have none. Pinned where the pair is actually composed, since neither package
+  sees both halves alone.
 - **Combos**: `architect | anthropic:claude-opus-5 | 1`, `pr-reviewer | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 5 entries, 2026-07-28 to 2026-08-13
 - **What the grader says**: "the READ-ONLY clause says the agent 'MUST NOT modify, create or delete files', and the very next paragraph orders it to write `.cat-effort.json` in the working directory". Another states the second half: the effort file is mandated "'after any commit/push' on a step that is forbidden to commit". Every entry proposes the same remedy, an explicit carve-out: "state explicitly that `.cat-effort.json` is the single permitted write and that no commit/push will occur".

@@ -4,6 +4,7 @@ import {
   appendedDirectivesFor,
   BESPOKE_SYSTEM_PROMPTS,
   composedSystemPromptFor,
+  containerDispatchDirectivesFor,
 } from '@cat-factory/agents'
 
 // Per-workspace agent prompt overrides, container side.
@@ -36,10 +37,15 @@ import {
  * The generic measurement lives in `@cat-factory/agents` (`appendedDirectivesFor`) so the sandbox
  * -- which composes a candidate exactly as production composes an override -- can reach it without
  * depending on this layer. All this adds is the two bespoke kinds, whose directives are DECLARED
- * rather than measured because their dispatch never goes through `systemPromptFor` at all.
+ * rather than measured because their dispatch never goes through `systemPromptFor` at all: they
+ * still ride the container-dispatch chokepoint, so its directives join theirs the same way
+ * `appendedDirectivesFor` folds them onto a measured kind's.
  */
 export function builtInDirectivesFor(kind: AgentKind, registry: AgentKindRegistry): string {
-  return BESPOKE_SYSTEM_PROMPTS[kind]?.directives ?? appendedDirectivesFor(kind, registry)
+  const bespoke = BESPOKE_SYSTEM_PROMPTS[kind]?.directives
+  return bespoke === undefined
+    ? appendedDirectivesFor(kind, registry)
+    : `${bespoke}${containerDispatchDirectivesFor(kind, registry)}`
 }
 
 /**

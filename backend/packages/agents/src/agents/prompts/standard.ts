@@ -29,7 +29,7 @@ const Handlebars = HandlebarsRuntime as unknown as typeof import('handlebars')
 // Integration with the best-practice fragment system is by composition, not
 // duplication: the phase system prompt is the BASE that `composeSystemPrompt`
 // appends the user's selected fragment bodies onto, and the FOLD carries the
-// imperative that they are hard requirements (`STANDARDS_FOOTER`), so a phase that
+// imperative that they are hard requirements (`STANDARDS_SECTION_OPENER`), so a phase that
 // resolved no standards ends without a pointer to a section nobody injected. So
 // "what the agent should do" lives here and "which extra standards apply" stays in
 // @cat-factory/prompt-fragments.

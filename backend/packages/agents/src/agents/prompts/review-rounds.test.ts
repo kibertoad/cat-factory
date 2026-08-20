@@ -310,6 +310,25 @@ describe('renderPriorReviewRounds', () => {
     expect(below).toContain('rated 0.72, below the bar')
   })
 
+  it('never renders a disposition as a bar comparison, in either direction', () => {
+    // The failing side of this was the reported bug: `passed` is the ENGINE's disposition, so
+    // rendering it as "did not meet the bar" put two numbers in one prompt that contradicted each
+    // other. The PASSING side is the same conflation mirror-imaged, and it was still there: a round
+    // the engine advanced on a rating below the threshold read as having met a bar it did not meet.
+    const passedBelow = renderPriorReviewRounds(
+      [{ round: 1, rating: 0.42, passed: true, summary: 'advanced anyway' }],
+      0.8,
+    ).join('\n')
+    expect(passedBelow).toContain('rated 0.42, which was below the bar and was passed anyway')
+    expect(passedBelow).not.toContain('which met the bar')
+    // And the ordinary case still reads as it should.
+    const passedAbove = renderPriorReviewRounds(
+      [{ round: 1, rating: 0.91, passed: true, summary: 'good' }],
+      0.8,
+    ).join('\n')
+    expect(passedAbove).toContain('rated 0.91, which met the bar')
+  })
+
   it('keeps the threshold NUMBER out of the wording, for the producer as much as the grader', () => {
     // The bar is told to the grader once, in the heading above the rounds, for the same reason the
     // rope left is: a producer handed the number optimises for it rather than for the work.

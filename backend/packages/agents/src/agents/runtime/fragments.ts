@@ -1,5 +1,5 @@
 import { getFragment } from '@cat-factory/prompt-fragments'
-import { STANDARDS_FOOTER } from '../prompts/shared.js'
+import { STANDARDS_SECTION_OPENER } from '../prompts/shared.js'
 
 // Folds the best-practice fragments selected for a block into the agent's base
 // system prompt. There are two sources of fragment bodies, in priority order:
@@ -95,8 +95,8 @@ function foldStandards(
     '',
     // The section owns its own imperative opener. It rode the track prompts until a grading run
     // showed the pointer dangling on every block that resolved no standards; see
-    // {@link STANDARDS_FOOTER}.
-    STANDARDS_FOOTER,
+    // {@link STANDARDS_SECTION_OPENER}.
+    STANDARDS_SECTION_OPENER,
     'Each best-practice standard is delimited below as its own block with a stable id and title —',
     'treat each as a SEPARATE standard, and when you need to cite one refer to it by its title.',
     '',

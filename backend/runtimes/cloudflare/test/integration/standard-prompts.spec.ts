@@ -5,7 +5,7 @@ import {
   READ_ONLY_GUARDRAIL,
   renderStandardUserPrompt,
   STANDARD_PHASE_BY_KIND,
-  STANDARDS_FOOTER,
+  STANDARDS_SECTION_OPENER,
   standardSystemPrompt,
   systemPromptFor as _systemPromptFor,
   defaultAgentKindRegistry,
@@ -93,9 +93,9 @@ describe('standard solution-phase prompts', () => {
       // now, so on every phase the pointer and its target arrive together or not at all.
       for (const phase of ['design', 'build', 'review', 'test'] as const) {
         const bare = standardSystemPrompt(phase)
-        expect(bare).not.toContain(STANDARDS_FOOTER)
+        expect(bare).not.toContain(STANDARDS_SECTION_OPENER)
         expect(composeSystemPrompt(bare, [])).toBe(bare)
-        expect(composeSystemPrompt(bare, ['node.performance'])).toContain(STANDARDS_FOOTER)
+        expect(composeSystemPrompt(bare, ['node.performance'])).toContain(STANDARDS_SECTION_OPENER)
       }
     })
 

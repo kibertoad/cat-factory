@@ -86,7 +86,7 @@ export const PROMPT_VERSIONS = {
   // could not infer, since the checkpoint push that publishes them is invisible from inside the
   // container.
   // v7 / v3 (build + review together, for the same one-line reason): the standards imperative
-  // (`STANDARDS_FOOTER`) is no longer the closing line of the track text. It moved into the FOLD
+  // (`STANDARDS_SECTION_OPENER`) is no longer the closing line of the track text. It moved into the FOLD
   // that writes the standards, so a block that resolved none no longer ends by pointing at a
   // section nobody injected — which is what the graders kept reporting, from both sides: a
   // reviewer judging against blocks it could not find, and an implementer told to treat as hard

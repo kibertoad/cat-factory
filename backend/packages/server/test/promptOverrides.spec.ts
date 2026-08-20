@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentRunContext } from '@cat-factory/kernel'
 import {
+  appendContainerDispatchDirectives,
   baseSystemPromptFor,
   defaultAgentKindRegistry,
+  EFFORT_REPORT_GUIDANCE,
+  EXECUTION_SANDBOX_GUIDANCE,
   FINAL_ANSWER_IN_REPLY,
   INLINE_ENGINE_SYSTEM_PROMPTS,
   NO_ASSUMED_PRODUCT,
@@ -66,9 +69,14 @@ describe('dispatchSystemPromptFor', () => {
     const directives = builtInDirectivesFor('architect', registry)
     expect(directives).toContain(READ_ONLY_GUARDRAIL)
     expect(directives).toContain(FINAL_ANSWER_IN_REPLY)
-    expect(dispatchSystemPromptFor(context('architect', 'Think hard.'), registry)).toBe(
-      `Think hard.${directives}`,
-    )
+    // `appendContainerDispatchDirectives` closes the gap between the two: the measurement covers
+    // the whole wire, and `dispatchSystemPromptFor` is only the first of the two seams that write
+    // to it (`buildKindBody` adds the pair after it).
+    expect(
+      appendContainerDispatchDirectives(
+        dispatchSystemPromptFor(context('architect', 'Think hard.'), registry),
+      ),
+    ).toBe(`Think hard.${directives}`)
   })
 
   it('overrides a bespoke kind ROLE while keeping its directives', () => {
@@ -169,10 +177,30 @@ describe('builtInDirectivesFor', () => {
     // This is the contract the editor renders: "here is what the platform adds to whatever you
     // save". Asserted against the real dispatch so the shown text can never drift from the sent
     // text — which is the whole reason it is measured rather than written out as copy.
+    //
+    // Composed through `appendContainerDispatchDirectives` because `dispatchSystemPromptFor` is not
+    // the last thing that appends to a container prompt: `buildKindBody` adds the sandbox contract
+    // and the effort report after it. Measuring only the first seam under-reported the wire by the
+    // length of that pair, and the editor promised a shorter contract than the run sends.
     for (const kind of ['coder', 'architect', 'spec-writer', 'merger', 'on-call']) {
-      expect(dispatchSystemPromptFor(context(kind, 'My own prompt.'), registry)).toBe(
-        `My own prompt.${builtInDirectivesFor(kind, registry)}`,
-      )
+      expect(
+        appendContainerDispatchDirectives(
+          dispatchSystemPromptFor(context(kind, 'My own prompt.'), registry),
+        ),
+      ).toBe(`My own prompt.${builtInDirectivesFor(kind, registry)}`)
+    }
+  })
+
+  it('reports the container-dispatch pair for a container kind and withholds it from an inline one', () => {
+    // Both halves matter. A container kind's override cannot delete the sandbox contract, so the
+    // editor has to show it; an INLINE kind (a requirements reviewer driven as a bare LLM call)
+    // never reaches the chokepoint at all, so showing it there would promise text no run sends.
+    for (const kind of ['coder', 'architect', 'merger', 'on-call']) {
+      expect(builtInDirectivesFor(kind, registry)).toContain(EXECUTION_SANDBOX_GUIDANCE)
+      expect(builtInDirectivesFor(kind, registry)).toContain(EFFORT_REPORT_GUIDANCE)
+    }
+    for (const kind of ['requirements-reviewer', 'clarity-reviewer']) {
+      expect(builtInDirectivesFor(kind, registry)).not.toContain(EXECUTION_SANDBOX_GUIDANCE)
     }
   })
 

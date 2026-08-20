@@ -2,7 +2,7 @@ import type { AgentExecutor, AgentRunContext, AgentRunResult, Block } from '@cat
 import {
   composeSystemPrompt,
   defaultAgentKindRegistry,
-  STANDARDS_FOOTER,
+  STANDARDS_SECTION_OPENER,
   systemPromptFor,
 } from '@cat-factory/agents'
 import { promptFragmentCatalogSchema, type PromptFragment } from '@cat-factory/contracts'
@@ -85,7 +85,7 @@ describe('prompt fragments', () => {
       const node = FRAGMENTS.find((f) => f.id === 'node.performance')!
       const composed = composeSystemPrompt(base, ['node.performance'])
       expect(composed).toContain(base)
-      expect(composed).toContain(STANDARDS_FOOTER)
+      expect(composed).toContain(STANDARDS_SECTION_OPENER)
       expect(composed).toContain(node.body)
     })
 

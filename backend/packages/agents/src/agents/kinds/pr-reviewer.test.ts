@@ -729,8 +729,14 @@ describe('pr-reviewer kind registration', () => {
       true, // standards delivered as files
     )
     expect(composed).toBe(PR_REVIEWER_SYSTEM_PROMPT)
-    expect(composed).not.toContain('<best-practice-standard')
-    // ...and the adherence guidance points at the files, not "folded into this prompt above".
+    // A folded standard is an OPENING TAG carrying the fragment's id, not the mere mention of the
+    // element: the adherence guidance names it, because the fold is the run's other possible
+    // channel and the reviewer has to recognise a block if it sees one.
+    expect(composed).not.toContain('<best-practice-standard id=')
+    // ...and the adherence guidance names the file channel as the one this run used. It names the
+    // prompt channel too, because the fold is only suppressed once the files actually landed: the
+    // `standardsDelivered: false` fallback folds them in, and telling the reviewer they are "NOT in
+    // this prompt" was false on exactly that run.
     expect(composed).toContain('.cat-context/standards.md')
   })
 

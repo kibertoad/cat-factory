@@ -1,5 +1,4 @@
 import type { AgentKind } from '@cat-factory/kernel'
-import { EFFORT_REPORT_FILE } from '../prompts/shared.js'
 
 // Read-only container agents. Some agent kinds need a real checkout to do their
 // work but only ever READ it: they clone the repo, explore it, and return a prose
@@ -41,22 +40,23 @@ export function isReadOnlyAgentKind(kind: AgentKind): boolean {
  * (rather than repeated in each role prompt) so every read-only kind states the same
  * guardrail exactly once.
  *
- * It carves out the platform's own SENTINEL files by name, because the two rules arrive together
- * and only one of them is negotiable. `EFFORT_REPORT_GUIDANCE` is appended to every container
- * dispatch at the chokepoint (`buildKindBody`), so a read-only kind is always told both "you MUST
- * NOT create files" and "write {@link EFFORT_REPORT_FILE} in your working directory" — an agent
- * reading that either disobeys one of them or spends a turn asking which wins. Naming the
- * exception, and stating that no commit or push happens here, is what makes the pair readable.
- * Every kind that receives this guardrail runs on a CONTAINER surface (see
- * `applySurfaceDirectives`), which is exactly the set the effort report is asked of; the carve-out
- * is still phrased as "a sentinel the instructions below ask you for", so a kind that is asked for
- * none writes none.
+ * It states what the AGENT may do and claims nothing about the surface it runs on, nor about what
+ * the platform does around it. Both of those were asserted here once and both were false.
+ * `applySurfaceDirectives` appends this through `systemPromptFor`, which the INLINE executor and
+ * the consensus panel also call, so a carve-out phrased as "the sentinel file the instructions
+ * below ask you for" named a file nothing asks a panel participant for, in an environment with no
+ * working directory to write it to. And "no commit or push happens on this step" is false for
+ * `spike`, whose findings document is committed and published by a backend post-op: what is true
+ * on every path is that the commit is not the agent's to make.
+ *
+ * The reconciliation with the effort report the container-dispatch chokepoint appends lives in
+ * `EFFORT_REPORT_GUIDANCE` instead, that being the only half of the pair which reaches every kind
+ * the other half can contradict: the bespoke `merger` / `on-call` prompts never pass through
+ * `systemPromptFor` at all, so a carve-out written here could not reach them.
  */
 export const READ_ONLY_GUARDRAIL =
   'IMPORTANT — this is a READ-ONLY exploration: you may read and inspect any file in ' +
   'the repository, but you MUST NOT modify, create or delete its files, run commands that ' +
-  'change it, commit, or open a pull request — no commit or push happens on this step. Your ' +
-  'written report is the only deliverable; return it as your response. The ONE exception is a ' +
-  `platform sentinel file the instructions below explicitly ask you for (\`${EFFORT_REPORT_FILE}\` ` +
-  'is the standard one): the harness keeps those out of every commit, so writing one changes ' +
-  'nothing in the repository and is expected of you.'
+  'change it, commit, or open a pull request: no commit or push on this step is yours to make. ' +
+  'Your written report is the only deliverable; return it as your response, and whatever the ' +
+  'platform persists from this step it writes itself, from that report.'

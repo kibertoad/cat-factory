@@ -5,7 +5,7 @@ import {
   composeSystemPrompt,
   isAcceptanceKind,
   phaseForKind,
-  STANDARDS_FOOTER,
+  STANDARDS_SECTION_OPENER,
   systemPromptFor as _systemPromptFor,
   defaultAgentKindRegistry,
   userPromptFor as _userPromptFor,
@@ -84,8 +84,8 @@ describe('acceptance-testing agent prompts', () => {
       // fold owns it now, which is why the assertion is at that seam.
       for (const kind of ACCEPTANCE_AGENT_KINDS) {
         const bare = systemPromptFor(kind)
-        expect(bare).not.toContain(STANDARDS_FOOTER)
-        expect(composeSystemPrompt(bare, [FRAGMENTS[0]!.id])).toContain(STANDARDS_FOOTER)
+        expect(bare).not.toContain(STANDARDS_SECTION_OPENER)
+        expect(composeSystemPrompt(bare, [FRAGMENTS[0]!.id])).toContain(STANDARDS_SECTION_OPENER)
       }
     })
 

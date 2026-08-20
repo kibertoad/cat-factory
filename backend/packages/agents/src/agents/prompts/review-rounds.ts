@@ -141,7 +141,11 @@ const EARLIER_ROUND_CHARS = 1_200
  * wrong. Neither was; the sentence joining them was.
  *
  * The bar comparison and the disposition are therefore stated as the two separate facts they are,
- * with the reason named whenever they disagree. This repo's own rule: causes that need different
+ * with the reason named whenever they disagree — on the PASSING side as much as the failing one.
+ * Reading `passed` as "met the bar" is the same conflation mirror-imaged: a round the engine
+ * advanced on a rating below the threshold would be rendered as having met a bar it did not meet,
+ * against a number the same prompt states. Nothing here may derive the comparison from anything but
+ * the two numbers. This repo's own rule: causes that need different
  * reactions must not render the same, and "your score was too low" and "your score was fine, a
  * must-fix held it" need opposite responses from the producer being reworked.
  *
@@ -151,8 +155,11 @@ const EARLIER_ROUND_CHARS = 1_200
  * comparison, which is the part that is about their own round.
  */
 function roundOutcome(round: PriorReviewRound, threshold: number): string {
-  if (round.passed) return 'which met the bar'
-  if (round.rating < threshold) return 'below the bar'
+  const metBar = round.rating >= threshold
+  if (round.passed) {
+    return metBar ? 'which met the bar' : 'which was below the bar and was passed anyway'
+  }
+  if (!metBar) return 'below the bar'
   if (hasBlockingReviewComments(round.comments)) {
     return 'which met the bar, but a [blocker] below held the work back'
   }
