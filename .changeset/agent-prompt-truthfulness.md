@@ -9,9 +9,12 @@ Four findings the platform's own Kaizen graders filed repeatedly, all of them th
 prompt asserting a fact about the dispatch that the dispatch did not deliver.
 
 - The best-practice-standards imperative ("treat every standard appended below as a hard
-  requirement") was the closing line of every track prompt, while the fold appends nothing when a
+  requirement") was the closing line of seven prompt files, while the fold appends nothing when a
   block resolved no standards. It now belongs to the standards section itself, so the pointer and
-  its target arrive together or not at all. `build` bumps to v7 and `review` to v3.
+  its target arrive together or not at all. The reviewer companion's adherence guidance was the
+  same dangling pointer worded the other way round ("folded into this prompt above"); it is a JSON
+  output contract rather than a standards header, so it could not move into the fold and is instead
+  worded to be true whether or not anything was folded. `build` bumps to v7 and `review` to v3.
 - The read-only guardrail forbade creating files while the effort-report guidance, appended to every
   container dispatch, ordered one written "after any commit/push" on a step forbidden to commit. The
   guardrail now names `.cat-effort.json` as its one permitted write and states that no commit

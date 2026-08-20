@@ -297,6 +297,15 @@ export const PR_DESCRIPTION_GUIDANCE =
  *    the delegating prompt charges it for every standard on every turn while the subagents that
  *    apply them never receive them — the pr-reviewer case). The rating still comes from the real
  *    standard text, just read from the file rather than the prompt.
+ *
+ * The prompt-folded variant says ANY rather than THE, and asks whether a block APPEARS rather than
+ * describing an empty array, for the same reason {@link STANDARDS_FOOTER} moved into the fold: the
+ * fold writes nothing when a block resolved no standards, so an opening that asserted the blocks
+ * were there was the second half of the same dangling pointer the graders quoted (they reported a
+ * reviewer instructed to review against blocks 'folded into this prompt above' when none were
+ * injected). It cannot move into the fold as the footer did — it is a JSON output contract, not a
+ * standards header — so it is worded to be true in all three delivery states instead. The
+ * `_CONTEXT_FILES` variant already was: it points at a FILE and handles that file's absence.
  */
 const FRAGMENT_ADHERENCE_REPORT_SHAPE =
   'In your JSON output include a `fragmentAdherence` array with ONE entry per standard you ' +
@@ -307,11 +316,11 @@ const FRAGMENT_ADHERENCE_REPORT_SHAPE =
   'its TITLE.'
 
 export const FRAGMENT_ADHERENCE_GUIDANCE =
-  'BEST-PRACTICE ADHERENCE — the best-practice standards you must review against are folded into ' +
-  'this prompt above as separate `<best-practice-standard>` blocks, each with a stable id and a ' +
-  'title. ' +
+  'BEST-PRACTICE ADHERENCE — ANY best-practice standards you must review against are folded ' +
+  'into this prompt above as separate `<best-practice-standard>` blocks, each with a stable id ' +
+  'and a title. ' +
   FRAGMENT_ADHERENCE_REPORT_SHAPE +
-  ' If NO best-practice standards were provided (the array of blocks above is empty), ' +
+  ' If no such block appears above, none were provided for this review: ' +
   'return `fragmentAdherence` as an empty array AND state explicitly in your summary that no ' +
   'best-practice standards were available to review against — do not invent any.'
 

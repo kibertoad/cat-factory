@@ -23,11 +23,21 @@ that separates a one-run irritation from something the agents keep hitting.
 Each item carries:
 
 - **Status**: `open` (nobody has acted), `in progress` (a PR is up, linked), `done` (landed, with
-  the PR), `dismissed` (with the reason, which is the part worth writing).
+  the PR), `dismissed` (with the reason, which is the part worth writing). Every item in every
+  section carries one, the dismissals included, so filtering on Status reaches the whole file
+  rather than the part of it that happens to be repo work.
 - **Combos**: the `agentKind | model | prompt@vN` pairings the entries came from. A theme that only
   ever appears under one model is a model-selection finding; the same theme across four is a prompt
-  or platform finding.
-- **Occurrences**: how many entries say it, and the window they span.
+  or platform finding. Carried by the items whose subject is a prompt this repo ships; a
+  deployment-level failure or a dismissal names none, because the pairing is not what it is about.
+- **Combo status**: whether the pairing is still being graded. `combo.verified === true` means the
+  streak threshold was crossed and the engine STOPPED scheduling gradings for it (`kaizen.logic.ts`,
+  `nextComboState`), so a verified combo goes quiet whether or not anything was fixed. Any verdict
+  leaning on "no later grading complained" needs this field, because without it that silence and a
+  real fix are the same observation. A sweep that did not read it records that in its sweep-log row,
+  so an item without the field is never silently missing it.
+- **Occurrences**: how many entries say it, and the window they span. A single-entry item states its
+  date instead, and says so where the sweep did not record one.
 - **What the grader says**: the recommendations, quoted, with the auto-linking characters
   neutralised (see the writing rules in the skill). Never paraphrased into something stronger than
   what was said.
@@ -36,8 +46,10 @@ Each item carries:
   it still reproduces. This is the field that decides whether an item is work or history.
 - **Evidence**: the entry ids, and one `runId` to start from.
 
-Three sections below hold items that are not repo work, and they exist so those entries are
-answered rather than silently skipped:
+**Open items** is work this repo has not done. **Landed** holds the items whose fix is already in
+the tree: they stay because the theme recurs, and the next sweep has to match a recurrence against
+them rather than re-open it. Three further sections hold items that are not repo work at all, and
+they exist so those entries are answered rather than silently skipped:
 
 - **Handed to the workspace** is for recommendations about a deployment's own configuration or a
   task's authored inputs. Nothing in this repo changes for them.
@@ -54,35 +66,43 @@ every entry the pull returned, `filed` the ones that became or joined an item, a
 the settled entries the grader had nothing to say about, which are real and are why the ledger
 exists.
 
-| Sweep      | Deployment / workspace                             | Read | Filed | No finding | Truncated | Notes                                                                                                                                                                                                                                                                                                                                                                                       |
-| ---------- | -------------------------------------------------- | ---- | ----- | ---------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-08-19 | local dev instance / `ws_6583a14a0fed4579a86ec62f` | 76   | 76    | 0          | no        | First sweep, so the whole backlog: 2026-06-29 to 2026-08-14, one page, 0 in flight. Of the 76 filed, 15 carried recommendations and became or joined KZ-0001 to KZ-0015 and KZ-0019 to KZ-0023; the other 61 are `failed` gradings and are covered by the three causes in KZ-0016 to KZ-0018. No finding is 0 because every entry the grader could complete, it had something to say about. |
+| Sweep      | Deployment / workspace                             | Read | Filed | No finding | Truncated | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ---------- | -------------------------------------------------- | ---- | ----- | ---------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-08-19 | local dev instance / `ws_6583a14a0fed4579a86ec62f` | 76   | 76    | 0          | no        | First sweep, so the whole backlog: 2026-06-29 to 2026-08-14, one page, 0 in flight. Of the 76 filed, 15 carried recommendations and became or joined KZ-0001 to KZ-0015 and KZ-0019 to KZ-0023; the other 61 are `failed` gradings and are covered by the three causes in KZ-0016 to KZ-0018. No finding is 0 because every entry the grader could complete, it had something to say about. Combo verification status was not read on this sweep, so nothing here rests on the absence of a later grading. |
 
 ## Open items
 
 ### KZ-0001: Gate a conditional prompt section on what was actually injected
 
-- **Status**: in progress, one of three (PR #PRNUM). The STANDARDS pointer is fixed: the
-  imperative moved out of the track prompts into the fold that writes the blocks, so it exists
-  exactly when they do (`build@v7`, `review@v3`). The `spec/` navigation block and the
-  foundational-catalog reuse mandate are still attached by TRAIT rather than by presence, and
-  both need a dispatch-time presence signal `systemPromptFor` cannot see: they stay open.
+- **Status**: in progress, one of three (PR #PRNUM). The STANDARDS half is done, both constants
+  this verdict names. `STANDARDS_FOOTER` moved out of all seven files into `foldStandards`, which
+  runs only when there are blocks to introduce, so the pointer and its target are now one decision
+  (`build@v7`, `review@v3`; the other six carry no number). `FRAGMENT_ADHERENCE_GUIDANCE` could not
+  move the same way, being a JSON output contract rather than a standards header, so it is worded to
+  be true in all three delivery states instead: ANY rather than THE, and "if no such block appears
+  above" rather than a description of an empty array that is never written. The `spec/` navigation
+  block and the foundational-catalog reuse mandate are untouched and stay open: both are static
+  trait strings, and gating them needs a dispatch-time presence signal `systemPromptFor` cannot
+  see.
 - **Combos**: `pr-reviewer | anthropic:claude-opus-5 | 1`, `coder | anthropic:claude-opus-5 | build@v5` and `@v6`, `reviewer | anthropic:claude-opus-5 | 1`, `architect | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 8 entries, 2026-07-28 to 2026-08-13
 - **What the grader says**: three sections keep being named. On the standards: "the BEST-PRACTICE ADHERENCE section instructs the agent to review against `<best-practice-standard>` blocks 'folded into this prompt above', but none were injected", and "the system prompt ends the role section with 'Treat every best-practice standard appended below as a hard requirement' but nothing was appended". On the spec: "the `spec/` navigation block is included unconditionally even though the architect step already established there is no `spec/` directory in this repo". On the catalog: "collapse the ~200-word reuse-mandate section to a single line plus the required fenced block" when it resolves to nothing. One entry adds a consequence rather than a cost: `fragmentAdherence` "is a required output field" and came back empty, "so a review isn't silently shipped with its judged-against dimension missing".
-- **Verdict against HEAD**: still reproduces, all three. `STANDARDS_FOOTER` ("appended below") is a hard-coded last line of every standard phase prompt (`prompts/standard.ts`), while `foldStandards` returns the base prompt UNCHANGED on an empty fragment list (`runtime/fragments.ts`), so the pointer dangles by construction. `SPEC_AWARE_GUIDANCE` and `FOUNDATIONAL_CATALOG_GUIDANCE` are static trait strings attached by TRAIT, not by presence (`kinds/traits.ts`). The engine knows all three answers at dispatch, which is what makes this a gating question rather than a prompt-wording one. The cost is already a stated concern in the tree: the spec block carries a comment that it is "kept to one imperative line ON PURPOSE" because it rides every turn of the implementer kinds. Fixing the footer means bumping `build` and `review`, which carry it inside their versioned text.
+- **Verdict against HEAD**: still reproduces, all three, and the standards half is two separate strings across seven files rather than the one site a first read suggests. `STANDARDS_FOOTER` ("appended below") is the closing line of `prompts/standard.ts` (all four phases), `prompts/testing.ts`, `prompts/acceptance.ts`, `prompts/business-logic.ts` (twice), `prompts/mock.ts`, `kinds/code-commenter.ts` and `kinds/skill.ts`. Every one of those serves a `prompt`-delivery kind, where `foldStandards` returns the base prompt UNCHANGED on an empty fragment list (`runtime/fragments.ts`), so the pointer dangles by construction in all seven, and a fix that touches only `standard.ts` leaves six files emitting it. The BEST-PRACTICE ADHERENCE text the graders quoted is a SECOND constant, `FRAGMENT_ADHERENCE_GUIDANCE`, appended unconditionally to the `reviewer` companion (`prompts/companion.ts`) and dangling the same way; the `pr-reviewer` already carries the correct `FRAGMENT_ADHERENCE_GUIDANCE_CONTEXT_FILES` variant, which points at `.cat-context/standard-*.md` rather than at the prompt, so that kind is not part of this. An empty fragment list is also only one of three ways `composeBlockSystemPrompt` returns the base unchanged (`delivery: 'none'` unconditionally, `context-files` once `standardsDelivered`), so the condition to gate on is what was ACTUALLY delivered, which that function already models, not a length check. `SPEC_AWARE_GUIDANCE` and `FOUNDATIONAL_CATALOG_GUIDANCE` are static trait strings attached by TRAIT, not by presence (`kinds/traits.ts`). The engine knows all three answers at dispatch, which is what makes this a gating question rather than a prompt-wording one. The cost is already a stated concern in the tree: the spec block carries a comment that it is "kept to one imperative line ON PURPOSE" because it rides every turn of the implementer kinds. Fixing the footer means bumping `build` and `review`, the two standard phases under version control; `design`, `test` and the six other files carry no number.
 - **Evidence**: entries `kzn_f4ca74d3b3b147b1bc5d3ea8`, `kzn_2a576d2d3f9642c8aa876025`, `kzn_e61eaeb40cae4b6ebae6e1ba`, `kzn_e97c831900ea43a29ace1414`, `kzn_721d8df72c3e44edabe6311d`, `kzn_5655ca16834c42bbb6f71e41`, `kzn_10df55de96b045c399919d66`, `kzn_6ce4818f5d6b43aabefd12d3`; run `exec_194b231198454c7785f29589`
 
 ### KZ-0002: The read-only guardrail and the effort-report guidance contradict each other
 
 - **Status**: in progress (PR #PRNUM). The guardrail names `.cat-effort.json` as its ONE
   permitted write and states that no commit or push happens on the step; the effort report no
-  longer times itself off a commit the step is forbidden to make. The pair is pinned where it is
-  actually composed, at the container-dispatch chokepoint, since neither package sees both.
+  longer times itself off a commit the step is forbidden to make. Scoped off the SURFACE as this
+  verdict asks: the fix is in the guardrail text `applySurfaceDirectives` appends by surface, so
+  `merger` and `on-call` are covered without being named, and the inline companions that never
+  reach `buildKindBody` are untouched. Pinned where the pair is actually composed, at the
+  container-dispatch chokepoint, since neither package sees both halves alone.
 - **Combos**: `architect | anthropic:claude-opus-5 | 1`, `pr-reviewer | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 5 entries, 2026-07-28 to 2026-08-13
 - **What the grader says**: "the READ-ONLY clause says the agent 'MUST NOT modify, create or delete files', and the very next paragraph orders it to write `.cat-effort.json` in the working directory". Another states the second half: the effort file is mandated "'after any commit/push' on a step that is forbidden to commit". Every entry proposes the same remedy, an explicit carve-out: "state explicitly that `.cat-effort.json` is the single permitted write and that no commit/push will occur".
-- **Verdict against HEAD**: still reproduces, and it is structural rather than a wording slip. `applySurfaceDirectives` appends `READ_ONLY_GUARDRAIL` ("your written report is the only deliverable") to every read-only kind and every `container-explore` surface, then `buildKindBody` appends `EFFORT_REPORT_GUIDANCE` to EVERY container kind unconditionally, at the dispatch chokepoint, so the two always arrive together. That reaches `architect`, `analysis`, `spec-writer`, `pr-reviewer`, both companions, `bug-investigator`, `spike` and every registered explore kind. HEAD already concedes the guardrail's wording is over-broad in one place: `localWrites` exists to exempt the tester because "the guardrail's wording ('must not create files')" otherwise "reads to that agent as a refusal to run the suite". This is the same wording problem, one exemption short.
+- **Verdict against HEAD**: still reproduces, and it is structural rather than a wording slip. `applySurfaceDirectives` appends `READ_ONLY_GUARDRAIL` ("your written report is the only deliverable") to every read-only kind and every `container-explore` surface, then `buildKindBody` appends `EFFORT_REPORT_GUIDANCE` to EVERY container kind unconditionally, at the dispatch chokepoint, so the two always arrive together. That reaches every `container-explore` kind that does not declare `localWrites`: `architect`, `analysis`, `spec-writer`, `blueprints`, `pr-reviewer`, `bug-investigator`, `spike`, `merger`, `on-call`, the container-backed companions (`reviewer`, `doc-reviewer`) and every registered explore kind. It does NOT reach the inline companions `architect-companion` and `spec-companion`, which declare no `surface` in `companions.ts` and so never pass through `buildKindBody` at all; `merger` and `on-call` are the opposite case, both `container-explore` with no `localWrites`, so both get the contradicting pair. Scope the fix off the surface, not off a hand-listed set of kinds. HEAD already concedes the guardrail's wording is over-broad in one place: `localWrites` exists to exempt the tester because "the guardrail's wording ('must not create files')" otherwise "reads to that agent as a refusal to run the suite". This is the same wording problem, one exemption short.
 - **Evidence**: entries `kzn_f4ca74d3b3b147b1bc5d3ea8`, `kzn_df3419ff44a2460a9f1d6431`, `kzn_e97c831900ea43a29ace1414`, `kzn_721d8df72c3e44edabe6311d`, `kzn_5655ca16834c42bbb6f71e41`; run `exec_f261f28a352145a794141516`
 
 ### KZ-0003: A rework round re-sends every prior artefact as prose instead of one open-points list
@@ -91,7 +111,7 @@ exists.
 - **Combos**: `architect | anthropic:claude-opus-5 | 1`, `coder | anthropic:claude-opus-5 | build@v5` and `@v6`, `architect-companion | anthropic:claude-opus-5 | 1`, `reviewer | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 6 entries, 2026-08-12 to 2026-08-13
 - **What the grader says**: "the same six points appear three times (reviewer feedback, per-part comments, and the round-1/round-2 history), which inflates prompt size and gives the agent no single authoritative checklist. Collapse to one numbered list of OPEN points with stable ids, plus a short list of CLOSED points not to regress." On the companion side: "the round-1 result appears once as the rendered Markdown summary and again immediately after as a near-identical bullet list". On the reviewer side: "deliver the previous round's findings as structured items (severity, file, line, and the producer's claimed disposition) rather than as free prose". And one asks for the missing direction: "carry adjudicated decisions forward into the REVIEWER's context, not just the coder's", after a point settled as out of scope was re-raised the next round.
-- **Verdict against HEAD**: partly addressed, and the remainder is real. Severity now travels: `renderPriorReviewRounds` and `renderRevisionComments` order points worst-first and label each with its severity, and `ACCOUNTING_REVIEW_DIRECTIVE` tells the companion how to treat a producer's per-point answer. What does not exist is the deduplication: `renderPriorReviewRounds` still renders every settled round in full (4000 chars for the latest, 1200 for each earlier one) alongside `renderRevisionComments`, so the same point still reaches the producer through two renderings, and there is no settled-decisions list in the reviewer's own context. That last part of the claim has no counterpart in the tree at all.
+- **Verdict against HEAD**: partly addressed, and the remainder is real. Severity now travels: `renderPriorReviewRounds` and `renderRevisionComments` order points worst-first and label each with its severity, and `ACCOUNTING_REVIEW_DIRECTIVE` tells the companion how to treat a producer's per-point answer. Carrying settled decisions into the REVIEWER's own context exists too, so that half is not the greenfield it reads as: `withPriorReview` branches on `context.role`, and for a grader it renders "Your own previous verdicts" followed by `PRIOR_ROUNDS_DIRECTIVE` ("Do not re-open a point you already accepted"), with `ACCOUNTING_REVIEW_DIRECTIVE` beside it ("A point argued against is settled on the argument, so accept a sound one and stop raising it rather than repeating it"). Whether that is ENOUGH for the case the grader hit is a question about the directive's effect, not about a missing channel, and the fix belongs in the text already there rather than in a second one beside it. What does not exist is the deduplication: `renderPriorReviewRounds` still renders every settled round in full (4000 chars for the latest, 1200 for each earlier one) alongside `renderRevisionComments`, so the same point still reaches the producer through two renderings. That is the open half of this item.
 - **Evidence**: entries `kzn_df3419ff44a2460a9f1d6431`, `kzn_2a576d2d3f9642c8aa876025`, `kzn_26f4a6c4ae804b4c846d0f2e`, `kzn_7523cd8c5ff74f20b5608ce0`, `kzn_10df55de96b045c399919d66`, `kzn_6ce4818f5d6b43aabefd12d3`; run `exec_194b231198454c7785f29589`
 
 ### KZ-0004: The agent container's capability limits are never stated to the agent
@@ -103,11 +123,18 @@ exists.
   the image's rather than the target's. The Node major is deliberately NOT named: duplicating
   the Dockerfile's pin into a constant nothing keeps in step would be a second lie waiting.
   Plus the rule that pays for the paragraph: an artifact this sandbox cannot execute is still a
-  correct artifact, disclosed in one line rather than over two review rounds.
+  correct artifact, disclosed in one line rather than over two review rounds. What this does NOT do
+  is state the RESOLVED capability of the image the job landed on, which is what this verdict asks
+  for, so that half stays open. There is no seam for it today: `RunnerDispatchAck.capabilities`
+  reports which body FIELDS the image parses and arrives after the prompt was already composed and
+  sent, and the `standUpInfra` prompt note reports a compose failure after attempting one, on the
+  tester's local-infra path only. Carrying a resolved fact to prompt-compose time needs a new
+  harness-reported capability plus a pre-dispatch read, mirrored across both runtimes; a probe
+  instruction is the honest statement until then, since it is true wherever the daemon lands.
 - **Combos**: `coder | anthropic:claude-opus-5 | build@v5` and `@v6`, `architect | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 3 entries, 2026-08-12 to 2026-08-13
 - **What the grader says**: "state up front that no Docker daemon is available in the agent container. The block requires a Dockerfile deliverable, but neither the coder nor the reviewer can build it locally; both discovered this independently and reported it." Also "no Docker daemon socket and no `kubectl`", where "two consecutive rounds were spent on the Dockerfile being unbuilt and on the wording of that disclosure, which is pure overhead the agent cannot resolve", and separately "declare the execution sandbox's Node version, or align it with the block's target", after a Node 26 sandbox against a Node 22 target produced an `EBADENGINE` defect the reviewer then flagged.
-- **Verdict against HEAD**: still reproduces. The fact is known in the tree and told to exactly one kind: `prompts/mock.ts` tells the `mocker` its WireMock runs "in the SAME container (no docker-compose, no Docker-in-Docker)", and `frontend-infra.ts` and `job.ts` carry it as code comments. No coding or design kind is told anything about the daemon, `kubectl`, or the image's Node version. This is a platform fact the harness owns, which is what separates it from the cluster and registry questions in the same gradings (see Handed to the workspace).
+- **Verdict against HEAD**: still reproduces, but not as the flat fact the recommendation words it as, and the difference decides the fix. Docker is not absent by construction: the harness's `standUpInfra` runs `docker compose -f <path> up -d --wait` in the checkout on the local-infra path, and its own comment reads "a missing Docker daemon or a compose failure is logged and surfaced to the agent (as a prompt note) rather than failing the job". So a runner image with a daemon is a supported shape, and a channel for telling the agent when there is none already exists on that path. Hard-coding "no Docker daemon is available" into the coder and architect prompts would therefore be false on some deployments and a duplicate of that note on others. What IS missing is that no coding or design kind is told anything about the daemon, `kubectl` or the image's Node version outside it: the fact reaches exactly one kind, `prompts/mock.ts` telling the `mocker` its WireMock runs "in the SAME container (no docker-compose, no Docker-in-Docker)", plus code comments in `frontend-infra.ts` and `job.ts`. The fix is to state the RESOLVED capability of the image the job runs on, which the harness knows and the prompt does not, rather than a constant. That the harness owns the fact at all is what separates this from the cluster and registry questions in the same gradings (see Handed to the workspace).
 - **Evidence**: entries `kzn_2a576d2d3f9642c8aa876025`, `kzn_721d8df72c3e44edabe6311d`, `kzn_10df55de96b045c399919d66`; run `exec_194b231198454c7785f29589`
 
 ### KZ-0005: Ship a containerized-service deployment best-practice fragment
@@ -116,7 +143,7 @@ exists.
 - **Combos**: `architect | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 2 entries, 2026-08-13
 - **What the grader says**: "five of the seven reviewer findings are from one recurring class", listed as: a numeric UID being required when `runAsNonRoot` is set, `readOnlyRootFilesystem` needing an `emptyDir` at `/tmp`, registry pull-side auth (GHCR being private by default), `imagePullPolicy` with immutable SHA tags plus push/apply ordering, gating the image push on lint/typecheck/test, and the cross-file name and label contract between Deployment, Service and Ingress. "Encoding these as standing context would likely have made this revision round unnecessary", and "shipping these as standards would let round 1 land what round 2 had to be told".
-- **Verdict against HEAD**: still reproduces, and the seam is ready for it. `@cat-factory/prompt-fragments` ships 11 built-in fragments across `node`, `react`, `playwright`, `acceptance`, `migration` and `style` collections; there is no deployment, container or Kubernetes collection. Its index documents the pattern for adding one. This is the one item in the batch asking for new content rather than a fix, so it is also the one whose value depends on whether these findings recur outside the deploy-shaped tasks this deployment happens to be running.
+- **Verdict against HEAD**: still reproduces, and the seam is ready for it. `@cat-factory/prompt-fragments` ships 12 built-in fragments across the six collections `src/index.ts` spreads by name: `node` (2), `react` (1), `acceptance` (3), `design` (1), `style` (2) and `migration` (3). There is no deployment, container or Kubernetes collection. `playwright.e2e` is a fragment id inside `acceptance`, not a collection of its own. Its index documents the pattern for adding one. This is the one item in the batch asking for new content rather than a fix, so it is also the one whose value depends on whether these findings recur outside the deploy-shaped tasks this deployment happens to be running.
 - **Evidence**: entries `kzn_e97c831900ea43a29ace1414`, `kzn_5655ca16834c42bbb6f71e41`; run `exec_194b231198454c7785f29589`
 
 ### KZ-0006: A prior round that cleared its bar is rendered as "did not meet the bar"
@@ -156,8 +183,28 @@ exists.
 - **Combos**: `pr-reviewer | anthropic:claude-opus-5 | 1`, `architect-companion | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 2 entries, 2026-07-28 to 2026-08-13
 - **What the grader says**: the earlier one reports "3,078,625 prompt tokens against 27,234 completion tokens over 40 calls" and asks to "cache the static system+context prefix on the orchestrator". The later one is narrower and is the actionable half: "62k cache-write tokens against 26k cache reads over 4 calls suggests the stable material is being re-written each turn. Order the context so the invariant parts (system prompt, block description, pipeline context) precede the volatile parts (current revision text, prior verdicts) to maximize prefix reuse across revision rounds."
-- **Verdict against HEAD**: the blunt version is stale and the ordering claim is open. Caching is clearly working on the later runs, which report 2.49M cache reads against 72 fresh input tokens, and 113.8k of 138.5k input served from cache, so the 2026-07-28 reading of a 113:1 ratio is partly the pre-PR-1989 digest misreporting the input classes (see KZ-0010). What neither is evidence against is the ordering point: a revision round that puts changing text ahead of invariant text pays a fresh write for the whole prefix, and nothing in this sweep establishes which order the rework prompt is assembled in. Verify that before acting.
+- **Verdict against HEAD**: the blunt version is stale and the ordering claim is open. Caching is clearly working on the later runs, which report 2.49M cache reads against 72 fresh input tokens, and 113.8k of 138.5k input served from cache, so the 2026-07-28 reading of a 113:1 ratio is partly PR 1989's capture bug, and specifically the half of it that lost per-call OUTPUT tokens on every harness-served call: an under-counted denominator is what inflates a ratio. The same digest's input-class misreporting pushed the other way (see KZ-0010), so that reading measures neither side cleanly. What neither is evidence against is the ordering point: a revision round that puts changing text ahead of invariant text pays a fresh write for the whole prefix, and nothing in this sweep establishes which order the rework prompt is assembled in. Verify that before acting.
 - **Evidence**: entries `kzn_f4ca74d3b3b147b1bc5d3ea8`, `kzn_febedd4f4a09484a88ce7dea`; run `exec_194b231198454c7785f29589`
+
+<!-- Item shape, kept here so every sweep writes the same one:
+
+### KZ-0001: <one line naming the change, not the symptom>
+
+- **Status**: open
+- **Combos**: `coder | anthropic:claude-... | build@v6`
+- **Combo status**: still being graded (`verified: false`)
+- **Occurrences**: 4 entries, 2026-08-02 to 2026-08-17
+- **What the grader says**: "<quoted recommendation>" (and 3 more saying the same)
+- **Verdict against HEAD**: still reproduces; `build@v6` is the shipping version and says nothing
+  about <the thing>.
+- **Evidence**: entries `kz_...`, `kz_...`; run `exec_...`
+-->
+
+## Landed
+
+The fix is already in the tree. These stay rather than being deleted: the theme recurs, and a
+recurrence needs an item saying "done, here is the PR" to match against, or the next sweep opens a
+second one and argues the work out again.
 
 ### KZ-0010: Subscription-run token accounting and finish reasons were unreadable
 
@@ -165,7 +212,7 @@ exists.
 - **Combos**: `spec-writer | anthropic:claude-opus-4-8 | spec-writer@v1`, `architect | anthropic:claude-opus-4-8 | 1`, `pr-reviewer | anthropic:claude-opus-5 | 1`, `architect | anthropic:claude-opus-5 | 1`, `architect-companion | anthropic:claude-opus-5 | 1`, `coder | anthropic:claude-opus-5 | build@v5`, `reviewer | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 9 entries, 2026-07-06 to 2026-08-13
 - **What the grader says**: the most repeated complaint in the backlog. "Prompt tokens summed to 8 across 8 calls, which is impossible"; "62 prompt and 198 completion tokens summed over 34 calls is impossible, and 34/34 finish reasons are `unknown`, which means truncation, output-limit hits and stop reasons are all undetectable here. Right now a truncated run would grade as clean." And on the reporting side: "with 85% of stop reasons unrecorded, the reported '0 truncated calls' is not trustworthy".
-- **Verdict against HEAD**: already addressed, and the graders were right about the symptom and wrong about the layer for two of the three. PR 1989 (2026-08-13) fixed the real capture bug: per-call output tokens were lost on every harness-served call, because `attributeCumulativeUsage` guarded on whether ANY tokens had been reported and the input side always satisfied that. It also stopped recording an unreported finish reason as `stop`, and rewrote the digest that had been misleading the grader, which summed `promptTokens` alone (FRESH input by definition, so a handful of tokens on a cache-heavy run) and rendered a null finish reason as a value beside a flat zero truncation count. `digestCalls` now reports input as three classes and says outright that a finish reason nobody reported means truncation is UNKNOWN rather than none. Corroborating, though not conclusive given this is a local dev deployment whose checkout at run time is unknown: all 9 entries predate that merge, none of the 5 gradings after it calls telemetry a defect, and those later ones read the three token classes correctly.
+- **Verdict against HEAD**: already addressed, and the graders were right about the symptom and wrong about the layer for two of the three. PR 1989 (2026-08-13) fixed the real capture bug: per-call output tokens were lost on every harness-served call, because `attributeCumulativeUsage` guarded on whether ANY tokens had been reported and the input side always satisfied that. It also stopped recording an unreported finish reason as `stop`, and rewrote the digest that had been misleading the grader, which summed `promptTokens` alone (FRESH input by definition, so a handful of tokens on a cache-heavy run) and rendered a null finish reason as a value beside a flat zero truncation count. `digestCalls` now reports input as three classes and says outright that a finish reason nobody reported means truncation is UNKNOWN rather than none. The verdict rests on that code read, and the surrounding evidence is weaker than it looks. PR 1989 merged on 2026-08-13 and this item's window ends on 2026-08-13, so "all 9 entries predate the merge" is not checkable from a tracker that records dates only. The silence since is partly circular: the rewritten `digestCalls` now tells the grader outright not to report an unreported finish reason as a telemetry defect, so no later grading would raise that complaint whether or not the capture was fixed, and this sweep did not read whether these combos are still being graded at all. What does corroborate is the narrow half the prompt says nothing about, which is that the gradings after the merge read the three token classes correctly.
 - **Evidence**: entries `kzn_b8aa5a13c2d347329529f4b3`, `kzn_46a04abf75114814acdee250`, `kzn_f4ca74d3b3b147b1bc5d3ea8`, `kzn_df3419ff44a2460a9f1d6431`, `kzn_292d57c4ec714ebbbc76030d`, `kzn_2a576d2d3f9642c8aa876025`, `kzn_e61eaeb40cae4b6ebae6e1ba`, `kzn_e97c831900ea43a29ace1414`, `kzn_26f4a6c4ae804b4c846d0f2e`; run `exec_8609dc0eb3704159aea84147`
 
 ### KZ-0011: A companion rework loop spun on materially identical revisions
@@ -174,7 +221,7 @@ exists.
 - **Combos**: `architect | anthropic:claude-opus-5 | 1`, `architect-companion | anthropic:claude-opus-5 | 1`, `coder | anthropic:claude-opus-5 | build@v5`, `reviewer | anthropic:claude-opus-5 | 1`
 - **Occurrences**: 4 entries, 2026-08-12
 - **What the grader says**: all four entries of one run describe the same standstill from their own side. "It burned a full review cycle to re-emit an unchanged 0.76 on text the agent itself recognized as materially identical to three prior rounds"; "the step's final answer is identical to the 'Your previous proposal' text quoted back to it"; "the final answer here is a verbatim repeat of round 1, which is 13 calls of inspection spent to reproduce an existing string". The asks: "add a no-progress stop condition", "diff before dispatching", "cap the number of rounds per block and escalate to a human when a round yields no material change".
-- **Verdict against HEAD**: already addressed. PR 1989 added exactly this rule: a companion rework loop now stops when the producer returns the text it was asked to revise and the rating does not move, taking the same iteration-cap exit. Its review pass then narrowed the rule to producers whose deliverable IS their reply, because a container-coding kind pushes commits and may legitimately answer with nothing, which had made two empty coder summaries look like a standstill; a human-requested rework is excluded, and the park states which of the two things happened. PR 1984 had already made a companion rework round actually re-run its producer, and PR 2000 holds a run while a must-fix is open, whatever the rating. The three gradings after PR 2000 all show a loop that terminates on its own.
+- **Verdict against HEAD**: already addressed. PR 1989 added exactly this rule: a companion rework loop now stops when the producer returns the text it was asked to revise and the rating does not move, taking the same iteration-cap exit. Its review pass then narrowed the rule to producers whose deliverable IS their reply, because a container-coding kind pushes commits and may legitimately answer with nothing, which had made two empty coder summaries look like a standstill; a human-requested rework is excluded, and the park states which of the two things happened. PR 1984 had already made a companion rework round actually re-run its producer, and PR 2000 holds a run while a must-fix is open, whatever the rating. The three gradings after PR 2000 show a loop that terminates on its own, which corroborates rather than proves: this sweep did not read whether these combos are still being graded, and a verified combo goes quiet for a reason that has nothing to do with the fix.
 - **Evidence**: entries `kzn_df3419ff44a2460a9f1d6431`, `kzn_292d57c4ec714ebbbc76030d`, `kzn_2a576d2d3f9642c8aa876025`, `kzn_e61eaeb40cae4b6ebae6e1ba`; run `exec_8609dc0eb3704159aea84147`
 
 ### KZ-0012: Anchored companion findings reached the producer as "On this part: (empty)"
@@ -204,19 +251,6 @@ exists.
 - **Verdict against HEAD**: already addressed, and it was a platform gap rather than the deployment setting the grader assumed. PR 1989 found that `agent_context_snapshots` had exactly one producer, the container executor, so no inline kind ever recorded one; it added the inline recorder as a required dependency key, had it record the rework it answers, and read its per-workspace gate through the shared cache. This is NOT the same cause as the 34 `failed` gradings below, which are the deployment's own recording setting.
 - **Evidence**: entries `kzn_292d57c4ec714ebbbc76030d`, `kzn_26f4a6c4ae804b4c846d0f2e`; run `exec_d793d361cd5146268674d886`
 
-<!-- Item shape, kept here so every sweep writes the same one:
-
-### KZ-0001: <one line naming the change, not the symptom>
-
-- **Status**: open
-- **Combos**: `coder | anthropic:claude-... | build@v6`
-- **Occurrences**: 4 entries, 2026-08-02 to 2026-08-17
-- **What the grader says**: "<quoted recommendation>" (and 3 more saying the same)
-- **Verdict against HEAD**: still reproduces; `build@v6` is the shipping version and says nothing
-  about <the thing>.
-- **Evidence**: entries `kz_...`, `kz_...`; run `exec_...`
--->
-
 ## Handed to the workspace
 
 ### KZ-0015: Facts about the target cluster, registry and repo conventions the block description never states
@@ -229,17 +263,17 @@ exists.
 
 ## Deployment-level failures
 
-### KZ-0016: No telemetry captured, so 34 gradings had nothing to judge
+### KZ-0016: No telemetry captured, so the gradings had nothing to judge
 
-- **Status**: open (deployment configuration)
+- **Status**: open (deployment configuration, plus an unverified platform half)
 - **Occurrences**: 34 entries, 2026-07-01 to 2026-08-14, across `reviewer`, `coder`, `architect`, `architect-companion`, `researcher`, `spec-companion`, `spec-writer`, `mocker` and `blueprints`
 - **What the deployment reports**: "No telemetry was captured for this step (prompt recording may be off), so it cannot be graded".
-- **Verdict against HEAD**: not a repo defect. Bodies are double-gated by design, on `LLM_RECORD_PROMPTS` AND the per-workspace `storeAgentContext` setting, and a grading with no captured call has nothing to read. This is the LIVE one of the three failure causes: its window runs to 2026-08-14, later than any other entry in this pull, so the deployment is still filing gradings it cannot perform. Whoever owns that deployment should turn recording on or accept that Kaizen produces nothing there. Distinct from KZ-0014, which was a platform gap in which kinds had a producer at all.
+- **Verdict against HEAD**: a deployment setting explains half of it, and the earlier reading of this item filed the whole thing as one. `KaizenService` settles `failed` only when there is NEITHER a context snapshot NOR any recorded call for the step (`if (!snapshot && stepCalls.length === 0)`), and those two halves have different causes. The snapshot is double-gated by design, on `LLM_RECORD_PROMPTS` AND the per-workspace `storeAgentContext`, so recording off accounts for its absence. It does not account for the missing calls: `LlmObservabilityService.record` drops prompt and response BODIES behind that same gate while stating in code that "numeric telemetry is always recorded regardless", so a `llm_call_metrics` row lands either way. Zero rows needs a separate cause, and for the inline kinds in the list above (`architect-companion`, `spec-companion`) the candidate is the one KZ-0014 names: an inline call reaches the store only through the `InlineLlmCallRecorder` port, which nothing wired before PR 1989, so this is NOT cleanly distinct from that item. It is still the LIVE failure cause, its window running to 2026-08-14, later than any other entry in this pull. But turning recording on may not settle it, so whoever picks it up should check, per affected kind, whether any `llm_call_metrics` row exists for the run before concluding the deployment is at fault.
 - **Evidence**: entries `kzn_45335c05cacc47928a623228`, `kzn_a1694dceacd949dcad7f22b1`, `kzn_b4f9dbd5a0db4df5a4668bf5`, `kzn_a5140f5bdf424b0c8cd02b9b` (30 more in the ledger)
 
 ### KZ-0017: The grader model resolved to a provider this deployment has no credentials for
 
-- **Status**: closed (no action here)
+- **Status**: dismissed (working as designed; the message this recorded was replaced in PR 1027)
 - **Occurrences**: 24 entries, 2026-06-29 to 2026-07-05, across `mocker`, `blueprints`, `coder`, `merger`, `conflicts` and `tester-api`
 - **What the deployment reports**: "Unsupported model provider: qwen".
 - **Verdict against HEAD**: working as designed, and the message has since been made actionable. `qwen` is a known provider throughout the platform (`providers/endpoints.ts`, `contracts/api-keys.ts`, `domain/model-catalog.ts`), but a provider is registered only when its credentials are configured, so resolving one that is not registered throws rather than failing deep in the SDK. The bare wording these entries recorded no longer exists: PR 1027 (2026-07-11, after the last of these) replaced it with `unsupportedModelProviderMessage`, which names the workspace AI provider key pool as the primary fix, the deployment-level env vars as the alternative, lists what IS registered, and links the model-support doc. Nothing to do beyond configuring a key on that deployment.
@@ -247,7 +281,7 @@ exists.
 
 ### KZ-0018: A sealed credential failed to decrypt and the raw Web Crypto exception was recorded
 
-- **Status**: closed (no action here)
+- **Status**: done (PRs 598, 1035, 1934)
 - **Occurrences**: 3 entries, all 2026-06-30, one run
 - **What the deployment reports**: "The operation failed for an operation-specific reason".
 - **Verdict against HEAD**: already addressed, three times over. That string is the opaque `DOMException` Web Crypto raises when AES-GCM authentication fails, which for a sealed credential almost always means the wrong key. These entries are from 2026-06-30, one day before PR 598 made credential-decrypt failures actionable and isolated; PR 1035 and PR 1934 elaborated the messages further. HEAD now rethrows a message naming the cause and the remedy while keeping the DOMException as `cause`, and the tests pin that the opaque string never reaches the surface message.
@@ -257,26 +291,36 @@ exists.
 
 ### KZ-0019: Do not inject the foundational-services catalog when it is empty
 
+- **Status**: dismissed
+- **Occurrences**: 5 entries, 2026-08-12 to 2026-08-13
 - **Dismissed because**: it asks for the failure mode this repo has a rule against. Two entries want the 106-char catalog file dropped when nothing is registered ("stop injecting `foundational-services/catalog.md`", "a 98-char 'none' file"). The file's own code states the opposite and gives the reason: an empty catalog renders as an explicit "none are registered" line "rather than nothing", because absent and empty are different facts and "none are registered" is one an architect may act on. That is CLAUDE.md's "absent and zero must never render the same" and ADR 0031's three-states rule, where a missing declaration, an empty one and an unknown id each need a different reaction. The agent reading it and saying it designed from scratch is the designed behaviour, not friction. The separable half of the same recommendation, shortening the static GUIDANCE that mandates preferring an existing service, is filed as KZ-0001 and is not dismissed.
 - **Evidence**: entries `kzn_2a576d2d3f9642c8aa876025`, `kzn_e97c831900ea43a29ace1414`, `kzn_721d8df72c3e44edabe6311d`, `kzn_5655ca16834c42bbb6f71e41`, `kzn_10df55de96b045c399919d66`
 
 ### KZ-0020: Drop the "your deliverable is your final reply" clause from a JSON-only prompt
 
+- **Status**: dismissed
+- **Occurrences**: 1 entry, 2026-08-13
 - **Dismissed because**: the two directives do different jobs and only one of them is about the channel. The recommendation reads them as redundant: "drop the duplicated 'Your deliverable is the text of your FINAL reply' harness clause when the prompt already mandates 'Respond with ONLY a JSON object'". But `FINAL_ANSWER_IN_REPLY` exists because some reasoning models emit the whole answer into their private reasoning channel and return an empty visible reply, which the harness reads as unusable and fails the run; "respond with only a JSON object" constrains the FORMAT and says nothing about which channel it lands in. CLAUDE.md requires the fragment on exactly this class of agent, and the companion is one.
 - **Evidence**: entry `kzn_7523cd8c5ff74f20b5608ce0`
 
 ### KZ-0021: The `.cat-context` foundational-services path is inconsistent
 
+- **Status**: dismissed
+- **Occurrences**: 2 entries, both 2026-08-13
 - **Dismissed because**: the inconsistency is in the agent's reply, not in the prompt. Two entries report "three variants" of the catalog path and ask the prompt to "quote the exact injected path". The prompt builds it from one constant: `FOUNDATIONAL_CATALOG_FILE` is `foundational-services/catalog.md` and the guidance interpolates it as `.cat-context/foundational-services/catalog.md`. The digest's `foundational-services/catalog.md` is the same path relative to the context directory. The third variant, `.cat-context/catalog.md`, appears only in the agent's own proposal. There is one canonical path and it is already quoted correctly.
 - **Evidence**: entries `kzn_e97c831900ea43a29ace1414`, `kzn_5655ca16834c42bbb6f71e41`
 
 ### KZ-0022: Harden the spec-writer's JSON-only instruction against a prose preamble
 
+- **Status**: dismissed
+- **Occurrences**: 1 entry; this sweep did not record its date.
 - **Dismissed because**: the platform already does the alternative the recommendation itself offered. The entry reports a two-sentence preamble before the JSON and warns "if downstream persistence parses strict JSON this leading prose will break it", proposing either a harder instruction ("the FIRST character of your reply MUST be `{`") or making "the platform tolerant of a leading-prose prefix". Kernel's `extractJson` is the tolerant branch and has been: it scans forward from each candidate bracket and skips any span that does not parse, with preamble prose named in its own doc comment as the case it handles. The parse did not break and could not have. Nothing to change, and the alternative fix would mean bumping `spec-writer@v1` for a defect that does not exist.
 - **Evidence**: entry `kzn_b8aa5a13c2d347329529f4b3`
 
 ### KZ-0023: Do not spend a review round on work that already cleared the bar
 
+- **Status**: dismissed
+- **Occurrences**: 1 entry, 2026-08-12
 - **Dismissed because**: it is the rule, deliberately. The entry reads "rated 0.86, did not meet the bar" against a stated 0.80 and concludes "as-is the platform burns full review rounds (13 model calls each) on work that already passed". `disposeCompanionVerdict` sends the FIRST batch raising anything beyond a nit back for one round "even from a producer that scored well", and its comment says that is "the whole reason a threshold governs the SECOND pass onward". A `minor`-only batch is explicitly not enough to spend a round. The half of this entry that is real, the prompt asserting a bar comparison that did not happen, is filed as KZ-0006.
 - **Evidence**: entry `kzn_e61eaeb40cae4b6ebae6e1ba`
 

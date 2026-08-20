@@ -1,7 +1,7 @@
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { describe, expect, it } from 'vitest'
 import { composeBlockSystemPrompt, standardsDeliveredAsFiles } from './fragments.js'
-import { STANDARDS_FOOTER } from '../prompts/shared.js'
+import { FRAGMENT_ADHERENCE_GUIDANCE, STANDARDS_FOOTER } from '../prompts/shared.js'
 
 // Best-practice standards are folded into the system prompt as SEPARATE, delimited, title-labelled
 // `<best-practice-standard>` blocks (not one `\n\n`-joined blob), so an agent can tell them apart and
@@ -45,6 +45,18 @@ describe('composeBlockSystemPrompt', () => {
     ]) {
       expect(composed).not.toContain(STANDARDS_FOOTER)
     }
+  })
+
+  it('never asserts, in either constant, that standards were folded when none were', () => {
+    // Two strings pointed at the same section: the footer's "appended below" and the adherence
+    // guidance's "folded into this prompt above". The fold writes neither the section nor an empty
+    // array when a block resolved no standards, so both dangled, and the graders quoted both.
+    // Neither may claim presence on its own.
+    expect(STANDARDS_FOOTER).not.toMatch(/appended below/i)
+    expect(FRAGMENT_ADHERENCE_GUIDANCE).not.toMatch(/^BEST-PRACTICE ADHERENCE . the best-practice/i)
+    // It asks whether a block APPEARS rather than describing an array that does not exist.
+    expect(FRAGMENT_ADHERENCE_GUIDANCE).toContain('If no such block appears above')
+    expect(FRAGMENT_ADHERENCE_GUIDANCE).not.toContain('the array of blocks above is empty')
   })
 
   it('wraps each standard in its own delimited, id + title labelled block', () => {
