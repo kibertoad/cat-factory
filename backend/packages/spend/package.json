@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/spend",
-  "version": "0.16.8",
+  "version": "0.16.9",
   "description": "Pricing tables and spend metering for the Agent Architecture Board.",
   "repository": {
     "type": "git",
