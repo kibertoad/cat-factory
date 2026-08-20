@@ -27,7 +27,7 @@ public record UpdatePublicTask(
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("description") @Nullable String description,
 
     /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("fields") @Nullable Map<String, CreatePublicTaskFieldsValue> fields,
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("fields") @Nullable Map<String, Object> fields,
 
     /** May be absent entirely. Length 1..120. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("modelPresetId") @Nullable String modelPresetId,
@@ -53,7 +53,7 @@ public record UpdatePublicTask(
     public static final class Builder {
         private @Nullable Boolean autoStartDependents;
         private @Nullable String description;
-        private @Nullable Map<String, CreatePublicTaskFieldsValue> fields;
+        private @Nullable Map<String, Object> fields;
         private @Nullable String modelPresetId;
         private @Nullable String riskPolicyId;
         private @Nullable String title;
@@ -71,7 +71,7 @@ public record UpdatePublicTask(
         }
 
         /** Set {@code fields}. */
-        public Builder fields(@Nullable Map<String, CreatePublicTaskFieldsValue> fields) {
+        public Builder fields(@Nullable Map<String, Object> fields) {
             this.fields = fields;
             return this;
         }

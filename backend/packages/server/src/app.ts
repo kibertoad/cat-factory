@@ -124,6 +124,7 @@ import { publicSpecController } from './modules/publicApi/PublicSpecController.j
 import { publicMergeEvidenceController } from './modules/publicApi/PublicMergeEvidenceController.js'
 import { publicKaizenController } from './modules/publicApi/PublicKaizenController.js'
 import { publicDiscoveryController } from './modules/publicApi/PublicDiscoveryController.js'
+import { publicUseCaseController } from './modules/publicApi/PublicUseCaseController.js'
 import { publicSpendController } from './modules/publicApi/PublicSpendController.js'
 import { publicKeyController } from './modules/publicApi/PublicKeyController.js'
 import { publicMcpController } from './modules/publicApi/PublicMcpController.js'
@@ -219,6 +220,10 @@ function registerPublicApiControllers<E extends AppEnv>(app: Hono<E>): void {
   // deployment's own copy of the spec — the two reads an integration makes before anything else,
   // each of which used to be answerable only by guessing. `read` scope, the floor of the ladder.
   app.route('/', publicDiscoveryController())
+  // The public INLINE USE-CASE surface (`/api/v1/use-cases`): the deployment's own non-container
+  // model operations, their discovery catalog and the one synchronous invocation. `read` to
+  // discover, `write` to run. See backend/docs/inline-use-cases.md.
+  app.route('/', publicUseCaseController())
   // The public API spoken as MCP (`POST /api/v1/mcp`), so a host drives this deployment with no npm
   // install and no local process. Mounted LAST of the `/api/v1` surface it re-enters: same key auth,
   // and the tools reach those routes back through this app's own loopback under the caller's key, so

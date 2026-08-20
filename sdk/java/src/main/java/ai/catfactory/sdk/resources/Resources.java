@@ -21,6 +21,7 @@ public abstract class Resources {
     private final TasksClient tasks;
     private final PipelinesClient pipelines;
     private final TaskTypesClient taskTypes;
+    private final UseCasesClient useCases;
     private final NotificationsClient notifications;
     private final EnvironmentsClient environments;
     private final ModelsClient models;
@@ -46,6 +47,7 @@ public abstract class Resources {
         this.tasks = new TasksClient(transport);
         this.pipelines = new PipelinesClient(transport);
         this.taskTypes = new TaskTypesClient(transport);
+        this.useCases = new UseCasesClient(transport);
         this.notifications = new NotificationsClient(transport);
         this.environments = new EnvironmentsClient(transport);
         this.models = new ModelsClient(transport);
@@ -97,6 +99,11 @@ public abstract class Resources {
     /** What a task can be created AS in this workspace (the built-in kinds plus the operations the deployment registered), and the fields each one accepts. */
     public TaskTypesClient taskTypes() {
         return taskTypes;
+    }
+
+    /** The deployment's own non-container model operations: what it will generate for you, on which models, from which parameters, and running one. Each use case narrows the models it may run on and declares the form it accepts, so a wrapper renders a picker from the catalog rather than from a hard-coded copy; a model listed as unavailable says whether the deployment cannot serve it at all or has yet to configure the credential. Discovery takes a `read` key, invoking a `write` one: an invocation spends model tokens and returns text, and starts no run. */
+    public UseCasesClient useCases() {
+        return useCases;
     }
 
     /** The workspace's human-actionable inbox: list, act on, or dismiss a run tail. */

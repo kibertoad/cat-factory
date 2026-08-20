@@ -80,6 +80,15 @@ const SURFACE = {
   // ---- Task types: what a task may be created AS, and the form each one accepts -----------
   listPublicTaskTypes: { group: 'taskTypes', method: 'list' },
 
+  // ---- Inline use cases: the deployment's own NON-CONTAINER model operations ---------------
+  // Their own group rather than methods on `models`: `models.list` answers what this deployment
+  // could dispatch to at all, while a use case is a named piece of work with its own narrowed
+  // model list, its own form and its own invocation. A caller reading `client.useCases.list()`
+  // beside `client.useCases.invoke(...)` is choosing what to generate, not which model exists.
+  listPublicUseCases: { group: 'useCases', method: 'list' },
+  getPublicUseCase: { group: 'useCases', method: 'get' },
+  invokePublicUseCase: { group: 'useCases', method: 'invoke' },
+
   // ---- Environments: the cluster a run's per-PR environment is provisioned onto -------------
   // `connections`, not `handlers`: the caller is describing a connection to infrastructure,
   // where "handler" names the engine-side object that services it.
@@ -328,6 +337,8 @@ export const GROUP_DOCS = {
   pipelines: 'The pipelines a task can be started with, and whether each is headless-startable.',
   taskTypes:
     'What a task can be created AS in this workspace (the built-in kinds plus the operations the deployment registered), and the fields each one accepts.',
+  useCases:
+    "The deployment's own non-container model operations: what it will generate for you, on which models, from which parameters, and running one. Each use case narrows the models it may run on and declares the form it accepts, so a wrapper renders a picker from the catalog rather than from a hard-coded copy; a model listed as unavailable says whether the deployment cannot serve it at all or has yet to configure the credential. Discovery takes a `read` key, invoking a `write` one: an invocation spends model tokens and returns text, and starts no run.",
   notifications: "The workspace's human-actionable inbox: list, act on, or dismiss a run tail.",
   environments:
     'The cluster this workspace provisions per-run environments onto: probe a candidate connection without saving it, or bind one. The credential is write-only, so a read reports which secret keys are stored and never their values.',

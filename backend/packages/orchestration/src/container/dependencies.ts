@@ -176,6 +176,8 @@ import type {
   TaskSourceProvider,
   TaskSourceSettingsRepository,
   TaskTypeRegistry,
+  InlineUseCaseGenerator,
+  InlineUseCaseRegistry,
   TestSecretRef,
   TicketTrackerProvider,
   TokenUsageRepository,
@@ -395,6 +397,21 @@ export interface CoreDependencies {
    * Existing construction sites (tests / harnesses) that omit it get an empty registry.
    */
   taskTypeRegistry?: TaskTypeRegistry
+  /**
+   * The app-owned INLINE USE-CASE registry (the deployment's non-container model operations, which
+   * `/api/v1/use-cases` publishes and invokes). Optional + defaulted to
+   * `defaultInlineUseCaseRegistry()` (EMPTY: the platform ships no use case of its own, exactly as
+   * it ships no custom task type). A facade injects the SAME instance a deployment registers on,
+   * and re-exposes it on {@link Core} for the public surface and for `validateRegistrations`.
+   */
+  inlineUseCaseRegistry?: InlineUseCaseRegistry
+  /**
+   * The producer behind one invocation: it resolves a declared model option and runs the call.
+   * Absent ⇒ the facade's model-derived generator, which is disabled with no provider wired and
+   * makes every invocation a 503 naming that. Injected by the conformance harness as a
+   * deterministic fake, exactly like `judgeAssessor` / `bugHuntAssessor`.
+   */
+  inlineUseCaseGenerator?: InlineUseCaseGenerator
   /**
    * The app-owned initiative-preset registry (built-in generic / docs-refresh / tech-migration
    * plus any a deployment registered by reference). Optional + defaulted to

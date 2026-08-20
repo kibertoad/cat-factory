@@ -31,7 +31,7 @@ public record CreatePublicTask(
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("documents") @Nullable List<PublicTaskDocument> documents,
 
     /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("fields") @Nullable Map<String, CreatePublicTaskFieldsValue> fields,
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("fields") @Nullable Map<String, Object> fields,
 
     /** May be absent entirely. Length 1..120. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("modelPresetId") @Nullable String modelPresetId,
@@ -66,7 +66,7 @@ public record CreatePublicTask(
     public static final class Builder {
         private @Nullable String description;
         private @Nullable List<PublicTaskDocument> documents;
-        private @Nullable Map<String, CreatePublicTaskFieldsValue> fields;
+        private @Nullable Map<String, Object> fields;
         private @Nullable String modelPresetId;
         private @Nullable String pipelineId;
         private @Nullable String riskPolicyId;
@@ -87,7 +87,7 @@ public record CreatePublicTask(
         }
 
         /** Set {@code fields}. */
-        public Builder fields(@Nullable Map<String, CreatePublicTaskFieldsValue> fields) {
+        public Builder fields(@Nullable Map<String, Object> fields) {
             this.fields = fields;
             return this;
         }

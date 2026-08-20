@@ -105,6 +105,14 @@ export {
   resolveScopedModelProvider,
 } from './model-provider.js'
 export type {
+  InlineUseCaseGeneration,
+  InlineUseCaseGenerationRequest,
+  InlineUseCaseGenerator,
+  InlineUseCaseModelAvailability,
+  InlineUseCaseScope,
+  InlineUseCaseSession,
+} from './inline-use-cases.js'
+export type {
   TokenUsageRecord,
   ScopedSpendWindow,
   TokenUsageRepository,

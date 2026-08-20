@@ -1,6 +1,7 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { INLINE_ENGINE_SYSTEM_PROMPTS, runsInContainer } from '@cat-factory/agents'
 import { checkBinaryGenerators } from './validateBinaryGenerators.js'
+import { inlineUseCaseProblems } from './validateInlineUseCases.js'
 import type {
   AgentKind,
   BinaryGeneratorRegistry,
@@ -8,6 +9,7 @@ import type {
   FoundationalServiceRegistry,
   GateRegistry,
   InitiativePresetRegistry,
+  InlineUseCaseRegistry,
   PipelineRegistry,
   PromptFragmentRegistry,
   PromptFragmentSource,
@@ -113,6 +115,14 @@ export interface ValidatedRegistries {
    * a bad `formPanel`, or a `defaultPipelineId` naming a nonexistent pipeline fails at boot.
    */
   taskTypeRegistry?: TaskTypeRegistry
+  /**
+   * The app-owned inline use-case registry to validate (the facade's injected instance, the SAME
+   * one it threads through `CoreDependencies.inlineUseCaseRegistry`). Optional: when omitted, no
+   * use-case checks run. A facade that registers any passes it, so a malformed id, an ambiguous
+   * default model or an unfillable parameter form fails at boot rather than on a content editor's
+   * first generation.
+   */
+  inlineUseCaseRegistry?: InlineUseCaseRegistry
   /**
    * The app-owned initiative-preset registry to validate (the facade's injected instance — the SAME
    * one it threads through `CoreDependencies.initiativePresetRegistry`). Optional: when omitted, no
@@ -311,6 +321,9 @@ export function collectRegistrationProblems(
 
   // 10. Deployment-registered PROMPT FRAGMENTS (only when a registry is supplied).
   problems.push(...checkPromptFragments(opts))
+
+  // 10b. Deployment-registered INLINE USE CASES (only when a registry is supplied).
+  problems.push(...checkInlineUseCases(opts))
 
   // 11. CREDENTIAL injection-name collisions, over every capability registry at once: two
   //     capabilities claiming one environment variable for different lookup keys.
@@ -920,7 +933,7 @@ function checkConditionalFragments(
  * question went unasked for the gate config form, which rendered through the same component for a
  * release with none of these checks behind it.
  */
-type DescriptorFormSubject = 'task_type' | 'initiative_preset' | 'gate'
+type DescriptorFormSubject = 'task_type' | 'initiative_preset' | 'gate' | 'use_case'
 
 /**
  * A descriptor-driven FORM that structurally cannot be filled, plus the one grouping fault that has
@@ -1185,4 +1198,28 @@ export function validateRegistrationsOnce(opts: ValidateRegistrationsOptions): v
 /** Reset the once-guard. Intended for tests that exercise the boot path repeatedly. */
 export function resetRegistrationValidationGuard(): void {
   validated = false
+}
+
+/**
+ * Deployment-registered INLINE USE CASES: the registration's own faults, plus its parameter form
+ * held to the same bar every other descriptor-driven form is.
+ *
+ * The registration half lives in {@link inlineUseCaseProblems} (its own module, like the
+ * binary-generator section); the form half stays here because it is the SHARED descriptor checker
+ * every other registered form goes through, and one place owning that call is what keeps a new
+ * form-bearing registry from quietly skipping it.
+ */
+function checkInlineUseCases(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
+  const registry = opts.registries.inlineUseCaseRegistry
+  if (!registry) return []
+  return registry
+    .all()
+    .flatMap((useCase) => [
+      ...inlineUseCaseProblems(useCase),
+      ...descriptorFormProblems(
+        [...(useCase.parameters ?? [])],
+        'use_case',
+        `Inline use case "${useCase.useCaseId}"`,
+      ),
+    ])
 }

@@ -50,7 +50,13 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   Web-standard Streamable HTTP transport, stateless per request, with the key's SCOPE deciding the
   tool list and every tool call looping back through `http/loopback.ts` to `/api/v1` under the
   caller's own key; deliberately NOT an OpenAPI operation, see `docs/public-api.md`),
-  `publicApiAuth.ts` (the
+  `PublicUseCaseController` (the
+  INLINE USE-CASE surface at `/api/v1/use-cases`: the deployment's own NON-container model
+  operations, `read` to discover and `write` to run one synchronously. Thin by construction, like
+  the discovery controller beside it: every rule lives in orchestration's `InlineUseCaseService`,
+  and it mounts NO capability guard, because a deployment with no model provider must still ANSWER
+  the catalog with each model marked unavailable rather than 503 the surface out of existence.
+  See `docs/inline-use-cases.md`), `publicApiAuth.ts` (the
   shared bearer gate + `read ⊂ write ⊂ decide ⊂ admin` ladder, plus `authorizeOrThrow` for a route
   with no contract-declared response and `bearerToken` for the one that FORWARDS the key),
   `publicApiAdmission.ts` (what an external

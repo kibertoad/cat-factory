@@ -308,6 +308,10 @@ function selectNodeRegistryDeps(bundle: NodeCoreDepsBundle) {
     // createCore threads it into the board service (default-pipeline resolution) and re-exposes it
     // on Core for the snapshot projection (`customTaskTypes`) + boot-time validation.
     taskTypeRegistry: options.taskTypeRegistry,
+    // The app-owned inline use-case registry (the deployment's non-container model operations);
+    // createCore threads it into the public use-case service and re-exposes it on Core for the
+    // controller + boot-time validation.
+    inlineUseCaseRegistry: options.inlineUseCaseRegistry,
     // The app-owned foundational-service registry (the deployment's own shared-capability
     // catalog); createCore threads it into the catalog service as the `builtin` tier and
     // re-exposes it on Core for boot-time validation.

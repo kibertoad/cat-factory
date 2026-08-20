@@ -97,6 +97,8 @@ type Client struct {
 	Pipelines *PipelinesService
 	// What a task can be created AS here, and the fields each type accepts.
 	TaskTypes *TaskTypesService
+	// The deployment's own non-container model operations, and running one.
+	UseCases *UseCasesService
 	// The cluster this workspace provisions per-run environments onto.
 	Environments *EnvironmentsService
 	// The models a run here could dispatch to, and why an unavailable one is unavailable.
@@ -179,6 +181,7 @@ func New(options Options) (*Client, error) {
 	client.Tasks = &TasksService{client: client}
 	client.Pipelines = &PipelinesService{client: client}
 	client.TaskTypes = &TaskTypesService{client: client}
+	client.UseCases = &UseCasesService{client: client}
 	client.Environments = &EnvironmentsService{client: client}
 	client.Models = &ModelsService{client: client}
 	client.Vcs = &VcsService{client: client}

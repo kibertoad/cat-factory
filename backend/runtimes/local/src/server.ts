@@ -6,6 +6,7 @@ import {
   type BinaryGeneratorRegistry,
   type InitiativePresetRegistry,
   type FoundationalServiceRegistry,
+  type InlineUseCaseRegistry,
   type TaskTypeRegistry,
   DEFAULT_APP_CACHES_PROFILE,
   NodeRealtimeHub,
@@ -96,6 +97,13 @@ export interface StartLocalOptions {
    * picklist only.
    */
   taskTypeRegistry?: TaskTypeRegistry
+  /**
+   * App-owned DI seam for INLINE USE CASES: a deployment news a `defaultInlineUseCaseRegistry()`,
+   * registers its non-container model operations on it, and passes it here. Threaded through to
+   * `buildLocalContainer` (both the Postgres and mothership paths), so `/api/v1/use-cases`
+   * publishes and runs them. Absent → an empty catalog.
+   */
+  inlineUseCaseRegistry?: InlineUseCaseRegistry
   /**
    * App-owned DI seam for the deployment's FOUNDATIONAL SERVICES: a deployment news a
    * `defaultFoundationalServiceRegistry()`, registers the shared capabilities its org already
@@ -401,6 +409,7 @@ async function bootLocal(
     agentKindRegistry: options.agentKindRegistry,
     initiativePresetRegistry: options.initiativePresetRegistry,
     taskTypeRegistry: options.taskTypeRegistry,
+    inlineUseCaseRegistry: options.inlineUseCaseRegistry,
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     binaryGeneratorRegistry: options.binaryGeneratorRegistry,
     binaryStoreRegistry: options.binaryStoreRegistry,
@@ -481,6 +490,7 @@ async function startLocalMothership(
     backendRegistries,
     defaultModelPresetId,
     taskTypeRegistry,
+    inlineUseCaseRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
     binaryStoreRegistry,
@@ -515,6 +525,7 @@ async function startLocalMothership(
     backendRegistries,
     defaultModelPresetId,
     taskTypeRegistry,
+    inlineUseCaseRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
     binaryStoreRegistry,

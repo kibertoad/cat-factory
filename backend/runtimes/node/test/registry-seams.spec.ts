@@ -18,6 +18,10 @@ import type {
   TaskTypeFieldDescriptor,
   TaskTypeFieldOption,
   TaskTypePresentation,
+  InlineUseCaseDefinition,
+  InlineUseCaseGenerationOptions,
+  InlineUseCaseModelOption,
+  UseCaseParameter,
 } from '../src/index.js'
 import type { NodeContainerOptions } from '../src/container-options.js'
 import type { StartOptions } from '../src/server.js'
@@ -71,6 +75,7 @@ const SEAM_ROUTES = {
   stepResolverRegistry: 'option',
   pipelineRegistry: 'option',
   taskTypeRegistry: 'option',
+  inlineUseCaseRegistry: 'option',
   initiativePresetRegistry: 'option',
   vcsRegistry: 'option',
   foundationalServiceRegistry: 'option',
@@ -145,6 +150,7 @@ const BOOT_ROUTES = {
   stepResolverRegistry: 'entry-point',
   pipelineRegistry: 'entry-point',
   taskTypeRegistry: 'entry-point',
+  inlineUseCaseRegistry: 'entry-point',
   initiativePresetRegistry: 'entry-point',
   vcsRegistry: 'entry-point',
   foundationalServiceRegistry: 'entry-point',
@@ -222,6 +228,7 @@ const SEAM_CONSTRUCTORS = {
   stepResolverRegistry: ['StepResolverRegistry', 'defaultStepResolverRegistry'],
   pipelineRegistry: ['PipelineRegistry', 'defaultPipelineRegistry'],
   taskTypeRegistry: ['TaskTypeRegistry', 'defaultTaskTypeRegistry'],
+  inlineUseCaseRegistry: ['InlineUseCaseRegistry', 'defaultInlineUseCaseRegistry'],
   initiativePresetRegistry: ['InitiativePresetRegistry', 'defaultInitiativePresetRegistry'],
   vcsRegistry: ['VcsProviderRegistry', 'defaultVcsRegistry'],
   foundationalServiceRegistry: [
@@ -272,6 +279,16 @@ const _authoringVocabulary:
       stepOptions: StepOptions
       binaryOutput: BinaryOutputConfig
       variant: AgentKindVariantDefinition
+      // The INLINE USE-CASE authoring half: a deployment declaring a non-container model operation
+      // writes its models, its generation bounds and its parameter form as literals, so those
+      // shapes are as much part of the seam as the registry constructor is. The bounds were the one
+      // this block missed, and the miss was silent in exactly the way the block exists to prevent:
+      // a deployment naming the type of its own temperature literal had to add a direct kernel
+      // dependency, which is the duplicate-registry hazard the by-reference rule warns about.
+      useCase: InlineUseCaseDefinition
+      useCaseModel: InlineUseCaseModelOption
+      useCaseGeneration: InlineUseCaseGenerationOptions
+      useCaseParameter: UseCaseParameter
     }
   | undefined = undefined
 

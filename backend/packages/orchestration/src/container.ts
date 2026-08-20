@@ -34,6 +34,8 @@ import { buildExecutionService } from './container/execution-service.js'
 import type {} from '@cat-factory/kernel'
 
 import { ServiceMountService } from './modules/services/ServiceMountService.js'
+import { createInlineUseCaseService } from './container/use-case-service.js'
+import type { InlineUseCaseService } from './modules/useCases/InlineUseCaseService.js'
 
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
 
@@ -121,6 +123,7 @@ import type {
   GateRegistry,
   JudgeRegistry,
   InitiativePresetRegistry,
+  InlineUseCaseRegistry,
   PipelineRegistry,
   PromptFragmentRegistry,
   PromptFragmentSource,
@@ -374,6 +377,20 @@ export interface CoreSpine {
    * (`customTaskTypes`) reads the SAME instance, and the facade passes it to `validateRegistrations`.
    */
   taskTypeRegistry: TaskTypeRegistry
+  /**
+   * The app-owned inline use-case registry the engine resolved (the facade's injected instance,
+   * else the empty default). Re-exposed so the facade passes the SAME instance to
+   * `validateRegistrations` at boot, where a malformed registration fails the deployment instead
+   * of a caller's first invocation.
+   */
+  inlineUseCaseRegistry: InlineUseCaseRegistry
+  /**
+   * The public inline use-case surface's service: discovery plus one invocation. ALWAYS present,
+   * unlike an optional module, because discovery has to answer on a deployment with no model
+   * provider at all: a wrapper reading an empty catalog cannot tell a deployment that registered
+   * no use cases from one whose surface is missing, and only the first is true here.
+   */
+  inlineUseCases: InlineUseCaseService
   /**
    * The app-owned foundational-service registry the engine resolved (the facade's injected
    * instance, else the empty default) — the catalog's `builtin` tier. Re-exposed so the facade
@@ -700,6 +717,7 @@ export function createCore(injected: CoreDependencies): Core {
     judgeRegistry,
     pipelineRegistry,
     taskTypeRegistry,
+    inlineUseCaseRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
     binaryStoreRegistry,
@@ -820,6 +838,14 @@ export function createCore(injected: CoreDependencies): Core {
     promptFragments,
   })
   const { environments, environmentHandlerSeeder, sharedStackSeeder, fragmentLibrary } = platform
+
+  // The public inline use-case surface (always present; see the factory for why it is not an
+  // optional module).
+  const inlineUseCases = createInlineUseCaseService(dependencies, {
+    registry: inlineUseCaseRegistry,
+    spend: spendService,
+    logger,
+  })
   environmentHandlerSeederRef = environmentHandlerSeeder
   sharedStackSeederRef = sharedStackSeeder
 
@@ -917,6 +943,8 @@ export function createCore(injected: CoreDependencies): Core {
     judgeRegistry,
     pipelineRegistry,
     taskTypeRegistry,
+    inlineUseCaseRegistry,
+    inlineUseCases,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
     binaryStoreRegistry,

@@ -186,6 +186,18 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   suppression read PROPAGATES its failures where the snapshot's read of the same rows is
   best-effort: this one decides whether a row is written. See
   `backend/docs/reusable-operations.md`.
+- `modules/useCases/`: the public INLINE USE-CASE surface, the non-container sibling of a reusable
+  operation. `InlineUseCaseService` holds every rule between an authenticated request and the one
+  model call (the model narrowing, the shared descriptor validation, the generation bounds, the
+  tiered budget guard) and `LlmInlineUseCaseGenerator` is the `BugHuntAssessorService`-shaped
+  producer behind it, built from the model dependencies every facade already wires. The refusal
+  ORDER is cheapest-first, so a request that was never going to run spends nothing, and a knob
+  outside its declared bounds is refused rather than clamped. Every entry point binds the generator
+  to the request's credential scope ONCE (`forScope`) and reads availability off that binding, which
+  is why `availability` is synchronous: a per-option resolution is a per-option key LEASE.
+  `useCaseUsage.ts` is the reading of what the call cost, through the SHARED
+  `readInputTokenClasses`, because vendors disagree about whether a cached prefix is inside the
+  prompt count. See `backend/docs/inline-use-cases.md`.
 - `board/taskTypeFieldsPatch.ts`: the same bag written by an EDIT rather than a creation. The
   request carries the two halves separately (`customTaskTypeFields` checked against the
   deployment's descriptor, `builtinTaskTypeFields` schema-typed) and each replaces its own, so

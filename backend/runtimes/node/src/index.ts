@@ -111,6 +111,12 @@ export { PipelineRegistry, defaultPipelineRegistry } from '@cat-factory/kernel'
 // passes it to `start()` via `buildContainer`'s `taskTypeRegistry` option — the SPA renders each
 // as a first-class create-task choice + card badge (snapshot `customTaskTypes`).
 export { TaskTypeRegistry, defaultTaskTypeRegistry } from '@cat-factory/kernel'
+// Installation-level extension point for INLINE USE CASES (the same DI seam again): a deployment
+// news a `defaultInlineUseCaseRegistry()`, registers its non-container model operations on it, and
+// passes it to `start()` via the `inlineUseCaseRegistry` option. `/api/v1/use-cases` then publishes
+// the catalog and runs one, so a wrapper over this API generates through the deployment's own
+// credentials, budget and telemetry. See backend/docs/inline-use-cases.md.
+export { InlineUseCaseRegistry, defaultInlineUseCaseRegistry } from '@cat-factory/kernel'
 // Installation-level extension point for FOUNDATIONAL SERVICES (the same DI seam again): a
 // deployment news a `defaultFoundationalServiceRegistry()`, registers the shared capabilities its
 // org already runs on it, and passes it via the `foundationalServiceRegistry` option. They resolve
@@ -231,6 +237,17 @@ export type {
   TaskTypeFieldDescriptor,
   TaskTypeFieldType,
   TaskTypeFieldOption,
+  InlineUseCaseDefinition,
+  InlineUseCaseModelOption,
+  InlineUseCaseModelSource,
+  InlineUseCaseGenerationOptions,
+  InlineUseCaseNumericLimit,
+  InlineUseCaseComposeInput,
+  InlineUseCasePrompt,
+  UseCaseParameter,
+  UseCaseParameterType,
+  UseCaseGenerationLimits,
+  UseCaseNumericLimit,
   DescriptorField,
   DescriptorFieldType,
   DescriptorFieldOption,

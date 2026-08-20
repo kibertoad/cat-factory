@@ -73,6 +73,18 @@ else imports its **ports** and domain types from here.
   the seam's one DATA half (`ports/task-type-repositories.ts`, tombstones), which is also why it is
   the only part of this feature that goes `remote` in mothership mode.
   See `backend/docs/reusable-operations.md`.
+- `domain/inline-use-case-registry.ts` + `ports/inline-use-cases.ts`: the INLINE USE-CASE seam, the
+  non-container sibling of the one above. The registry is what a deployment registers its named
+  model operations on (a narrowed model list, a parameter form drawn from the SAME descriptor
+  vocabulary, and the generation bounds an invocation may steer within); the port is the producer
+  that resolves one declared model option and runs the call, so every other half of the surface is
+  drivable with a deterministic fake, and it is bound to a request's credential SCOPE once
+  (`forScope`) rather than taking a workspace id per call, because that resolution leases a key per
+  configured provider. The pure rules beside them are total and never throw
+  (`resolveUseCaseModelOption` answers `undefined` for a model the use case does not carry, rather
+  than falling back to its default), because the caller REFUSES there: a narrowed list that
+  substitutes silently is not a narrowing. No persistence of any kind.
+  See `backend/docs/inline-use-cases.md`.
 - `domain/prompt-fragment-registry.ts` + `ports/prompt-fragments.ts`: the app-owned
   `PromptFragmentRegistry` (a deployment's best-practice standards and the per-task-type default
   SETS that select them) and the `PromptFragmentSource` that decides where the pool is READ from.

@@ -40,6 +40,8 @@ from .models import (
     GetPublicRunOutcomeResponse,
     GetPublicTrackerWritebackResponse,
     GetPublicVcsConnectionResponse,
+    InvokePublicUseCaseRequest,
+    InvokePublicUseCaseResponse,
     LinkPublicRepoRequest,
     ListDebugAgentContextResponse,
     ListDebugLlmCallsOrder,
@@ -62,6 +64,8 @@ from .models import (
     ListPublicTaskDocumentsResponse,
     ListPublicTaskDocumentsResponseDocument,
     ListPublicTaskTypesResponse,
+    ListPublicUseCasesResponse,
+    ListPublicUseCasesResponseUseCase,
     ListPublicWiredModelsResponse,
     LlmCallOutcome,
     Notification,
@@ -829,6 +833,83 @@ class TaskTypesResource:
             timeout=timeout,
         )
         return ListPublicTaskTypesResponse.from_dict(raw)
+
+
+class UseCasesResource:
+    """The deployment's own non-container model operations: what it will generate for you, on
+    which models, from which parameters, and running one. Each use case narrows the models
+    it may run on and declares the form it accepts, so a wrapper renders a picker from the
+    catalog rather than from a hard-coded copy; a model listed as unavailable says whether
+    the deployment cannot serve it at all or has yet to configure the credential. Discovery
+    takes a `read` key, invoking a `write` one: an invocation spends model tokens and
+    returns text, and starts no run.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def get(self, use_case_id: str, *, timeout: float | None = None) -> ListPublicUseCasesResponseUseCase:
+        """Get one use case
+        Read one registered use case by id: the same projection the catalog returns, for a
+        caller that already holds the id and wants the current parameters and model
+        availability without paging the catalog.
+        `GET /api/v1/use-cases/{useCaseId}` (operation `getPublicUseCase`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/use-cases/{_quote(use_case_id)}",
+            query=None,
+            timeout=timeout,
+        )
+        return ListPublicUseCasesResponseUseCase.from_dict(raw)
+
+    def invoke(self, use_case_id: str, body: InvokePublicUseCaseRequest | None = None, *, timeout: float | None = None) -> InvokePublicUseCaseResponse:
+        """Run a use case
+        Run one use case and answer with the generated text. Synchronous: this is a single
+        inline model call with no repository, no container and no run, so there is no job to
+        poll. The parameters are validated against the use case’s own descriptors (`422
+        use_case_parameters_invalid`, naming every problem at once); a model outside the use
+        case’s declared list is refused (`422 use_case_model_not_allowed`) rather than
+        substituted, and so is one this deployment cannot serve inline (`503
+        use_case_model_unavailable`). An exhausted budget is `429 budget_exhausted`, and a
+        model that answers with no usable text is `503 use_case_empty_reply` rather than a
+        200 carrying an empty string. A call the vendor did not complete is `503
+        use_case_generation_failed`, or `503 use_case_generation_timeout` when it did not
+        answer inside the deployment’s per-invocation deadline: separate, because a failure
+        is worth surfacing to whoever asked while a timeout is worth retrying with a smaller
+        `maxOutputTokens`. `finishReason: "length"` (with `truncated: true`) means the reply
+        hit the output budget, so the text is a prefix rather than an answer. Requires a
+        `write` key.
+        `POST /api/v1/use-cases/{useCaseId}/invocations` (operation `invokePublicUseCase`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/use-cases/{_quote(use_case_id)}/invocations",
+            body={} if body is None else _encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return InvokePublicUseCaseResponse.from_dict(raw)
+
+    def list(self, *, timeout: float | None = None) -> ListPublicUseCasesResponse:
+        """List the deployment's inline use cases
+        List the non-container model operations this deployment has registered: what each
+        generates, the models it may run on, the parameters it accepts, and the temperature
+        / output bounds an invocation may steer within. Each model carries whether it can be
+        served right now, and an unavailable one says which of the two causes it is:
+        `provider_unavailable` (nothing here resolves it, so an operator configures the
+        provider) or `container_only` (it runs only through a subscription harness inside a
+        per-run container, which this surface has none of). An empty list means this
+        deployment registered no use cases, not that the surface is missing.
+        `GET /api/v1/use-cases` (operation `listPublicUseCases`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/use-cases",
+            query=None,
+            timeout=timeout,
+        )
+        return ListPublicUseCasesResponse.from_dict(raw)
 
 
 class NotificationsResource:
@@ -2648,6 +2729,7 @@ def build_resources(transport: Transport) -> dict[str, Any]:
         "tasks": TasksResource(transport),
         "pipelines": PipelinesResource(transport),
         "task_types": TaskTypesResource(transport),
+        "use_cases": UseCasesResource(transport),
         "notifications": NotificationsResource(transport),
         "environments": EnvironmentsResource(transport),
         "models": ModelsResource(transport),

@@ -9,6 +9,7 @@ import { definePublicDecisionsConformance } from './integration-public-decisions
 import { definePublicEvidenceConformance } from './integration-public-evidence.js'
 import { definePublicMcpConformance } from './integration-public-mcp.js'
 import { definePublicPresetConformance } from './integration-public-presets.js'
+import { definePublicUseCaseConformance } from './integration-public-use-cases.js'
 import { definePublicWebhookConformance } from './integration-public-webhooks.js'
 import { defineSecretsConformance } from './integration-secrets.js'
 import { defineSourcesConformance } from './integration-sources.js'
@@ -34,5 +35,6 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
     definePublicEvidenceConformance(harness)
     definePublicWebhookConformance(harness)
     definePublicMcpConformance(harness)
+    definePublicUseCaseConformance(harness)
   })
 }

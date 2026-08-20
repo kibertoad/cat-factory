@@ -1500,6 +1500,56 @@ poll; for push at scale, register the [outbound webhook](#outbound-webhooks-push
 step is inline **and** nothing can park on a human: the pipeline can run end-to-end with no
 interactive user. A pipeline can be startable on a board task without being either.
 
+### Inline use cases (`/api/v1/use-cases`)
+
+The NON-CONTAINER half of the surface: named units of model work a deployment registers in code,
+which take a small form, run ONE inline LLM call and answer with text. No task, no repository, no
+pipeline, no container, no run. The engine account, including why nothing here persists and why a
+model is never substituted, is [`inline-use-cases.md`](./inline-use-cases.md).
+
+| Method / path                                   | Scope   | Behaviour                                                                                   |
+| ----------------------------------------------- | ------- | ------------------------------------------------------------------------------------------- |
+| `GET /api/v1/use-cases`                         | `read`  | The registered catalog. Never 404s: an unregistered deployment answers an EMPTY list.       |
+| `GET /api/v1/use-cases/:useCaseId`              | `read`  | One use case. `404 use_case_not_found` for an id this deployment does not register.         |
+| `POST /api/v1/use-cases/:useCaseId/invocations` | `write` | Run it SYNCHRONOUSLY and answer with the text: one inline call, so there is no job to poll. |
+
+Each use case NARROWS the models it may run on, and each published model carries whether this
+deployment can serve it right now. An unavailable one is listed WITH its cause rather than hidden,
+and the two causes lead to different people: `provider_unavailable` (nothing here resolves it, so an
+operator configures the provider) and `container_only` (it runs only through a subscription harness
+inside a per-run container, which this surface has none of, so the caller picks another model).
+
+The invocation's refusals, all on `details.reason`:
+
+| Status | `reason`                           | What it means                                                                       |
+| ------ | ---------------------------------- | ----------------------------------------------------------------------------------- |
+| `422`  | `use_case_parameters_invalid`      | The bag fails the declared descriptors; `details.problems` names every one at once. |
+| `422`  | `use_case_model_not_allowed`       | A model outside this use case's list; `details.allowed` names what it does carry.   |
+| `422`  | `use_case_generation_out_of_range` | `temperature` / `maxOutputTokens` outside the published bounds. Never clamped.      |
+| `429`  | `budget_exhausted`                 | The workspace has spent its configured model budget. Nothing was sent to a vendor.  |
+| `503`  | `use_case_model_unavailable`       | The declared model cannot be served here; `details.cause` is one of the two above.  |
+| `503`  | `use_case_models_unconfigured`     | This deployment wired no model provider at all.                                     |
+| `503`  | `use_case_empty_reply`             | The model answered with no usable text, so there is nothing to return.              |
+| `503`  | `use_case_generation_failed`       | The call was made and the vendor answered with an error.                            |
+| `503`  | `use_case_generation_timeout`      | The vendor did not answer inside the deployment's per-invocation deadline.          |
+
+The last two are the likeliest of the set, not the rarest, which is why they are named rather than
+folded into one: a failure is worth surfacing to whoever asked, while a timeout is worth retrying
+with a smaller `maxOutputTokens`. The deadline exists because the endpoint is synchronous, and a
+surface that holds a caller's request open owes a bound on how long.
+
+Two of those are choices rather than mechanics, and a consumer should count on them. A model outside
+the list and a model this deployment cannot serve are both REFUSED rather than replaced, because a
+narrowed list that silently substitutes is not a narrowing and the caller cannot see it happened. And
+a `200` never carries an empty string: some reasoning models answer only into their private channel,
+and a content editor would otherwise store that silence as the model's answer. A reply that hit the
+output budget DOES come back, with `finishReason: "length"` and `truncated: true`, so the caller
+knows the text is a prefix.
+
+The parameters use the same descriptor vocabulary `/api/v1/task-types` publishes, so
+[Filling a task type's form](#filling-a-task-types-form) describes them too, minus `password` and
+`path` (a secret does not belong in a prompt, and there is no checkout to resolve a path against).
+
 ### Parked decisions (`/api/v1/runs/:runId/decisions`)
 
 The external counterpart of every window the SPA offers a human when a run stops and waits for one.
