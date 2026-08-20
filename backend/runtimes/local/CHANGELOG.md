@@ -1,5 +1,68 @@
 # @cat-factory/local-server
 
+## 0.140.0
+
+### Minor Changes
+
+- 432b4e4: Inline use cases: a deployment declares non-container model work, and `/api/v1/use-cases` publishes and runs it.
+
+  A wrapper over the public API (an external content editor, a writing tool) can now generate through
+  this deployment rather than beside it. A deployment registers named units of model work on the new
+  app-owned `InlineUseCaseRegistry`, injected like every other registry
+  (`start({ inlineUseCaseRegistry })`, `startLocal(...)`, the Worker override). Each registration
+  NARROWS the models it may run on, declares the parameter form it accepts in the shared descriptor
+  vocabulary a reusable operation's brief already uses, and states the temperature / output bounds an
+  invocation may steer within.
+
+  Three additive endpoints, surface version 1.59.0: `GET /api/v1/use-cases` (the catalog, `read`),
+  `GET /api/v1/use-cases/{useCaseId}` (`read`), and
+  `POST /api/v1/use-cases/{useCaseId}/invocations` (`write`), which runs one SYNCHRONOUSLY and answers
+  with the text. There is no task, repository, pipeline, container or run behind it, and nothing is
+  persisted: the only durable trace is the `llm_call_metrics` row, tagged with the use case's id as
+  its agent kind, so an editor's spend is attributable per use case.
+
+  Two behaviours are choices worth knowing before building against it. A model outside the use case's
+  declared list, and a model this deployment cannot serve inline, are both REFUSED rather than swapped
+  for another, because a narrowed list that substitutes silently is not a narrowing and the caller
+  cannot see it happened; each published model carries whether it is servable and which of the two
+  causes it is not. And a reply with no usable text answers `503 use_case_empty_reply` rather than a
+  `200` carrying an empty string, which an editor would otherwise store as the model's answer.
+
+  An invocation answers to the TIERED budget safeguard (workspace, account and the acting user), for
+  the same reason the bug hunt's ranking does: it is a billable model call that no run start gates.
+  Discovery does not: it answers on a deployment with no model provider at all, with every model marked
+  unavailable, because an empty catalog and a missing surface are different facts. Both read the same
+  credential scope, resolved ONCE per request: account- and user-scoped provider keys (and the acting
+  user's locally-run endpoints) are in the pool, so a narrower scope would report a model this
+  deployment can serve as unconfigured.
+
+  The vendor call is bounded: a per-invocation deadline (2 minutes by default) plus one retry, because
+  a synchronous endpoint holding a caller's request open owes a bound on how long. A call the vendor
+  did not complete is `503 use_case_generation_failed`; one that ran out of time is `503
+use_case_generation_timeout`, its own reason because the caller's move differs.
+
+  The Java/Kotlin SDK's emitter also changes here, and it affects three existing endpoints as well as
+  this one. A free-form JSON value (`parameters` on an invocation, `fields` on a task, a task-type
+  field's `showWhen.equals`) was generated as an empty marker interface with no implementations, so the
+  `Map<String, …>` holding it could not be constructed at all: those parameters are now
+  `Map<String, Object>`, which Jackson round-trips, and the three unusable marker types are gone. The
+  Go client has always emitted `json.RawMessage` for the same shape.
+
+### Patch Changes
+
+- Updated dependencies [432b4e4]
+  - @cat-factory/contracts@0.324.0
+  - @cat-factory/kernel@0.315.0
+  - @cat-factory/orchestration@0.284.0
+  - @cat-factory/server@0.301.0
+  - @cat-factory/node-server@0.214.0
+  - @cat-factory/agents@0.140.1
+  - @cat-factory/binary-generators@0.3.3
+  - @cat-factory/gitlab@0.22.3
+  - @cat-factory/integrations@0.166.3
+  - @cat-factory/prompt-fragments@1.0.92
+  - @cat-factory/executor-harness@1.127.1
+
 ## 0.139.6
 
 ### Patch Changes
