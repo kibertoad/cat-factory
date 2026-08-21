@@ -1147,7 +1147,8 @@
         "observed": "Medido a partir del cambio realizado",
         "unknown": "Registrado por otra versión de la aplicación"
       },
-      "was": "antes {value}"
+      "was": "antes {value}",
+      "supersededBasis": "Reemplaza: {basis}"
     },
     "reviewTarget": {
       "title": "Pull request en revisión",
@@ -5221,6 +5222,7 @@
         "conditionBackend": "Omitido: esta tarea solo modifica un servicio de frontend, así que no hay API detrás que probar.",
         "producerSkipped": "Omitido: el paso que revisa fue omitido, así que no hay nada que evaluar.",
         "runComplete": "Omitido: la ejecución terminó antes de este paso y no quedaba nada que hacer.",
+        "noPullRequest": "Omitido: esta ejecución no abrió ningún pull request, así que este paso no tiene ningún cambio que leer.",
         "unknown": "Omitido: este paso no se ejecutó."
       }
     },

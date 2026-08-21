@@ -63,62 +63,105 @@ replaced (`supersedes`). Three properties hold it together:
   arithmetic (`summarizeEstimate`).
 
 `supersedes` holds the last reading of the OTHER basis rather than simply the previous record, and
-`reviseTaskEstimate` (which BOTH producers' resolvers write through, so the rule cannot depend on
-which one ran last) is where that is decided. A same-basis re-run INHERITS the pair instead of
-overwriting it: two consecutive forecasts are one forecast revised, so recording the earlier one
+`reviseTaskEstimate` (which BOTH producers' resolvers write through, from ONE factory, so the rule
+cannot depend on which one ran last) is where that is decided. A same-basis re-run INHERITS the pair
+instead of overwriting it: two consecutive forecasts are one forecast revised, so recording the earlier one
 would render a prediction/measurement comparison that never happened, while dropping what the
 record already carried would let a RETRIED measurement delete the forecast the comparison exists
 for. One level deep either way, so a board row holds the pair and never a chain.
 
-## The dispatch shape, and the two refusals
+The prior record is read at settle time rather than taken from the run context (which was built at
+dispatch, and a container job can outlive minutes of other writes), and that read plus the write is
+not one atomic step. The bounded consequence is worth stating rather than implying: two runs settling
+an estimate on the SAME block at the same time both write a valid current reading, and the loser's
+`supersedes` pair is lost. Never the current scores, which are the last writer's real reading either
+way, and never a mixture of the two.
 
-`clone: { branch: 'base', full: true, prHead: true, requirePr: true }`, which is the `pr-reviewer`'s
-shape rather than the `merger`'s, for one reason: **a merge deletes the pull request's branch, and
-`refs/pull/<n>/head` outlives it.** A `pr` clone would work for a step running before the merge and
-fail for the same step running after it. The harness fetches that ref into `origin/pr-head`
-(GitHub) / the GitLab equivalent, and the prompt diffs `origin/<base>...origin/pr-head`.
+## The dispatch shape, and what a missing pull request means
 
-`resolvePrefetchPrNumber` (`@cat-factory/server`'s `agents/jobBody.ts`) resolves the number from the
-task's own declared PR fields (a `review` task's target, which is what the `pr-reviewer` wants) and
-falls back to the pull request THIS RUN opened, which is what this kind wants. The task's
-declaration wins; the two never compete for one dispatch, because a review task's run opens no PR.
+`clone: { branch: 'base', full: true, prHead: true, prHeadSource: 'run', requirePr: true }`, which is
+the `pr-reviewer`'s shape rather than the `merger`'s, for one reason: **a merge deletes the pull
+request's branch, and `refs/pull/<n>/head` outlives it.** A `pr` clone would work for a step running
+before the merge and fail for the same step running after it. The harness fetches that ref into
+`origin/pr-head` (GitHub) / the GitLab equivalent, and the prompt diffs
+`origin/<base>...origin/pr-head`.
 
-Two things refuse rather than degrade:
+**Which pull request is DECLARED, never resolved by precedence.** `prHeadSource` names the source:
+`task` (the default) is the PR the task itself declares in `prNumber`/`prUrl`, which is the
+`pr-reviewer`'s subject; `run` is the PR this run opened, which is this kind's. One resolver answers
+it, `resolvePrHeadNumber` (`@cat-factory/agents`), and both readers of the declaration go through it:
+the run preamble asking whether the step has anything to read, and the job body asking what the
+harness should fetch. A `task ?? run` fallback was the first shape and is the wrong one: it reads as
+harmless and silently widens whichever kind already had a source, so a review task whose run also
+opened a pull request would start prefetching a head its review state knows nothing about, while the
+prompt and the diff preOp still described the declared one.
 
-- **No pull request at all ⇒ the DISPATCH is refused** (`requirePr`, now honoured on the explore
-  surface too). A base checkout holds nothing to measure, and scoring it as though it were the
-  change is worse than a failed step: it lands a fabricated measurement over a real forecast.
-- **An unreadable reply ⇒ NOTHING is recorded, and the run CONTINUES.** This is the one place the
+Two things then do NOT happen, and each replaces something worse:
+
+- **No pull request at all means the STEP IS SKIPPED, and the run continues.** `requirePr` says the
+  kind cannot fall back to the base branch, and what that costs splits by whether the kind writes on
+  the pull request or reads it. A WRITER (the in-place fixers, `branch: 'pr'`) refuses at dispatch,
+  because cloning base would push its commits onto the default branch. A READER has no such hazard
+  and a different one: a base checkout holds nothing to measure and would be scored as though it
+  were the change, but FAILING would end a run whose work has already shipped over a reading nothing
+  gates on. So `runStepPreamble` skips it beside the estimate gate and the run condition, recording
+  `skipReason: 'no_pull_request'`, which the SPA maps to translated copy. The refusal in
+  `resolvePrefetchPrNumber` stays as the invariant's backstop.
+- **An unreadable reply means NOTHING is recorded, and the run CONTINUES.** This is the one place the
   kind deliberately diverges from the two assessors it otherwise copies. `merger` and `on-call`
   declare a STRUCTURED output and map it onto an engine channel, and for a structured explore kind
   the harness treats an unparseable reply as a job failure (`failureCause: 'no-usable-output'`).
   Both are right for them: the engine has a merge to decide and would have nothing to decide it
   with, and a garbage score defaulting to maximally severe routes that decision to a human.
 
-  Neither is right here. This step runs after the change has shipped and its product is a record
-  nothing gates on, so a failure would let a model that forgot its closing brace block a
-  merge-ready pull request, or (placed after the merger) re-open a task that is already `done`.
-  So the kind declares PROSE and no `mapStructuredResult`: the reply lands on `step.output`, the
-  resolver reads the scores out of it with the same tolerant parse the inline estimator uses, and
-  an unreadable one keeps the raw text and leaves the estimate the task already had. The trade is
-  the structured repair pass, which a failing step buys and this does not; `extractJson` tolerating
-  fences and surrounding prose is what makes that trade cheap. Recording a defaulted 1/1/1 as a
-  measurement was never an option: it would silently move every gate that reads the estimate.
+  Neither is right here, for the reason the skip above is a skip. So the kind declares PROSE and no
+  `mapStructuredResult`: the reply lands on `step.output`, the resolver reads the scores out of it
+  with the same tolerant parse the inline estimator uses, and an unreadable one keeps the raw text
+  and leaves the estimate the task already had. The trade is the structured repair pass, which a
+  failing step buys and this does not; `extractJson` tolerating fences and surrounding prose is what
+  makes that trade cheap. Recording a defaulted 1/1/1 as a measurement was never an option: it would
+  silently move every gate that reads the estimate.
+
+### Why the prompt REPLACES the generic one
+
+The kind declares `userPrompt`, not the `on-call`'s `userPromptSuffix`, and what that drops is the
+point rather than a casualty. The generic block-context prompt ends with the fold of every prior
+step's output, and at this position in a pipeline that fold CONTAINS THE FORECAST: the estimator's
+own `step.output` is `summarizeEstimate`, in percentages. An assessment handed the number it is
+revising anchors on it, and the delta is arithmetic the platform does from the two records.
+
+What a replacement must NOT drop is the account of what the work was, so the prompt re-states the
+task description and runs `ownServiceSection` itself. The impact axis is a blast radius, and a bare
+title names no software for one to be judged against: a model given none supplies one, which is the
+rule CLAUDE.md states for `ownService` generally.
 
 ## Placement rules
 
-- **After the producer**, since it needs the pull request. `assertValidGating`'s prerequisite is
-  satisfied by EITHER producer (`producesTaskEstimate` in `@cat-factory/contracts`, read by the
-  engine, the SPA's pipeline-health advisory and the builder's draft warning alike), because the
-  rule is about the estimate FIELD being populated, not about which agent populated it.
+- **After the step that opens the pull request, and that is enforced at SAVE.**
+  `assertValidPullRequestReaders` refuses a pipeline that opens a pull request with this step ahead
+  of the step that opens it: at that point in the run nothing has been pushed, so it would be
+  skipped for want of a PR the very next step creates, and an estimate gate downstream that counted
+  it as its producer would read nothing. An ORDERING rule rather than a presence one, so the narrow
+  chain that measures a change the BLOCK already carries is left alone.
+- **An estimate gate's prerequisite is satisfied by EITHER producer** (`producesTaskEstimate` in
+  `@cat-factory/contracts`, read by the engine, the SPA's pipeline-health advisory and the builder's
+  draft warning alike), because the rule is about the estimate FIELD being populated, not about which
+  agent populated it. The ordering rule above is what keeps that from admitting a producer placed
+  where it can never produce.
 - **Gatable, and shipped in no preset.** It costs a read-only container run per task, and the task a
   forecast put at the bottom of every axis is the one least worth measuring, so gating it is the
-  usual configuration. No built-in pipeline carries the step: adding it is a builder decision.
+  usual configuration. No built-in pipeline carries the step: adding it is a builder decision. The
+  palette offers it only to code-shipping purposes (`purposes: ['build']`), since a document,
+  research, planning or review pipeline opens no pull request for it to read.
 - **After the `merger` is legitimate, and is the strongest placement**: the change has landed for
-  real, and the engine already supports a trailing step there (the merger's resolver owns the
-  block's terminal status, so `refreshBlockProgress` moves the bar without downgrading `done`,
-  exactly as it does for the `disposer`). `refs/pull/<n>/head` is why the diff is still readable
-  once the branch is gone.
+  real. `refs/pull/<n>/head` is why the diff is still readable once the branch is gone. What makes a
+  trailing step safe there is the BLOCK's own status, not the previous resolver's return value.
+  `resolverOwnsTerminalStatus` answers only for the step settling right now, so with
+  `merger` then `task-reassessor` then `disposer` the merger's claim is honoured as the run advances
+  past the merger and lost one step later: `in_progress` goes over a real merge, and
+  `finalizeBlock`'s merger backstop then rewrites the merged task as `pr_ready`.
+  `settleStepAndAdvance` reads the block instead (`blockIsTerminal`), so a `done` or `pr_ready`
+  block only ever has its progress bar moved by the steps that follow.
 - **A gated step placed after it reads the MEASUREMENT.** That is deliberate and it is better
   information than the forecast, but it is a real behaviour difference from the same gate placed
   earlier, and the builder's step-condition preview says only that the step is conditional.
@@ -148,3 +191,6 @@ terminal task, not about this kind, so it is deliberately out of scope here.
 | The record's shape             | `backend/packages/contracts/src/consensus.ts`                                   |
 | The badge                      | `frontend/app/app/components/panels/inspector/TaskEstimateBadge.vue`            |
 | The badge's basis labels       | `frontend/app/app/utils/estimateGating.ts`                                      |
+| The no-pull-request skip       | `backend/packages/orchestration/src/modules/execution/stepPreamble.ts`          |
+| The placement rule             | `backend/packages/orchestration/src/modules/pipelines/pipelineShape.ts`         |
+| The skip reason's copy         | `frontend/app/app/utils/pipelineRender.ts`                                      |

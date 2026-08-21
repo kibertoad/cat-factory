@@ -86,12 +86,40 @@ export interface AgentCloneSpec {
    */
   prHead?: boolean
   /**
-   * Refuse the dispatch when the block has NO pull request to work on, instead of falling back to
-   * the base branch (or to {@link prFallback}). Right for a kind whose whole job IS a pull request:
-   * the in-place fixers and the conflict-resolver, where with no PR there is nothing to fix and a
-   * silent fall back to base would push unrelated work onto it; and a {@link prHead} kind that
-   * scores or judges the change a PR carries, where a base checkout holds nothing to judge and
-   * would be scored as though it were the change. Absent ⇒ the fallback runs.
+   * WHICH pull request {@link prHead} fetches, because two of them can be the subject and the
+   * answer follows from the kind's job rather than from what happens to be on the block:
+   *
+   *   - `task` (the default) — the PR the TASK ITSELF names in its own fields (`prNumber`/`prUrl`),
+   *     which is what the `pr-reviewer` was created to read. A run of a review task opens no pull
+   *     request of its own, so there is nothing else this kind could mean.
+   *   - `run` — the PR THIS RUN opened, recorded on the block, which is what a kind assessing the
+   *     change the run just landed is looking at (the `task-reassessor`).
+   *
+   * Declared rather than resolved by precedence (`task ?? run`) because a precedence silently
+   * widens every kind that already had one source: a review task whose run also opened a PR would
+   * start prefetching a head its review state knows nothing about, and the prompt naming one PR
+   * while the checkout carries the other is invisible until a score is attributed to the wrong
+   * change. Ignored when {@link prHead} is unset.
+   */
+  prHeadSource?: 'task' | 'run'
+  /**
+   * The block has NO pull request to work on: state that this kind cannot proceed on the base
+   * branch, instead of falling back to it (or to {@link prFallback}). What that COSTS depends on
+   * whether the kind WRITES on the pull request or READS it, and the two are different
+   * dispositions rather than one:
+   *
+   *   - a WRITER (the in-place fixers, the conflict-resolver: `branch: 'pr'`) REFUSES the dispatch.
+   *     With no PR there is nothing to fix, and a silent fall back to base would push unrelated
+   *     work onto it, so failing loudly is the only safe answer.
+   *   - a READER (a {@link prHead} kind scoring or judging the change a PR carries) is SKIPPED
+   *     before dispatch, with `skipReason: 'no_pull_request'` on the step. A base checkout holds
+   *     nothing to judge and scoring it as though it were the change is the failure mode this flag
+   *     exists to prevent, but the reader's product is a record nothing gates on, so failing the
+   *     run would end one whose work has already shipped over a reading nobody asked for. The skip
+   *     is taken in the run preamble (`runStepPreamble`), beside the estimate gate and the run
+   *     condition, so it costs nothing and reads on the board as what it is.
+   *
+   * Absent ⇒ the fallback runs.
    */
   requirePr?: boolean
   /**

@@ -198,7 +198,15 @@ export const BUILT_IN_CONTAINER_AGENT_KINDS: AgentKindDefinition[] = [
     //
     // The pr-reviewer's checkout, not the merger's: base + the pull request's head fetched as
     // `origin/pr-head`. `refs/pull/<n>/head` outlives the branch a merge deletes, so one step
-    // reads the same change whether it runs before the merge or after it.
+    // reads the same change whether it runs before the merge or after it. `prHeadSource: 'run'`
+    // because the subject is the change THIS RUN landed, not a pull request the task names: the
+    // reviewer's source is the other one, and leaving it to a precedence would have a review task
+    // that also opened a PR silently swap which change each of them reads.
+    //
+    // `requirePr` on a READER means the step is SKIPPED when the run opened no pull request, not
+    // that the run fails: see the flag's own contract. Both halves matter here. A base checkout
+    // has nothing to measure and would be scored as though it were the change, and a run whose
+    // work already shipped must not be ended by a reading nobody gates on.
     //
     // PROSE, deliberately, where the two assessors above it are STRUCTURED. For a structured
     // explore kind the harness treats an unparseable reply as a JOB FAILURE, which is right when
@@ -215,7 +223,13 @@ export const BUILT_IN_CONTAINER_AGENT_KINDS: AgentKindDefinition[] = [
     kind: TASK_REASSESSOR_AGENT_KIND,
     agent: {
       surface: 'container-explore',
-      clone: { branch: 'base', full: true, prHead: true, requirePr: true },
+      clone: {
+        branch: 'base',
+        full: true,
+        prHead: true,
+        prHeadSource: 'run',
+        requirePr: true,
+      },
     },
     userPrompt: taskReassessorUserPrompt,
     standardsDelivery: 'none',

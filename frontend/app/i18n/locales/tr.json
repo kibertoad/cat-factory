@@ -1147,7 +1147,8 @@
         "observed": "Yapılan değişiklikten ölçüldü",
         "unknown": "Uygulamanın başka bir sürümü kaydetti"
       },
-      "was": "önceki {value}"
+      "was": "önceki {value}",
+      "supersededBasis": "Şunu değiştirir: {basis}"
     },
     "reviewTarget": {
       "title": "İncelenen pull request",
@@ -5221,6 +5222,7 @@
         "conditionBackend": "Atlandı: bu görev yalnızca bir frontend servisini değiştiriyor, dolayısıyla arkasında denenecek bir API yok.",
         "producerSkipped": "Atlandı: incelediği adım atlandı, dolayısıyla değerlendirilecek bir şey yok.",
         "runComplete": "Atlandı: çalışma bu adımdan önce sona erdi, yapılacak bir şey kalmadı.",
+        "noPullRequest": "Atlandı: bu çalışma bir pull request açmadı, bu nedenle bu adımın okuyacağı bir değişiklik yok.",
         "unknown": "Atlandı: bu adım çalışmadı."
       }
     },

@@ -17,6 +17,7 @@ import type {
   RunInitiatorScope,
   StepCompletionResolver,
   StepResolverRegistry,
+  TaskEstimateBasis,
 } from '@cat-factory/kernel'
 import {
   INITIATIVE_ANALYST_AGENT_KIND,
@@ -761,63 +762,11 @@ export function buildStepResolverRegistry(
         if (digest) return { output: digest }
       },
     },
-    // Deliberately does NOT declare `outputIsRendered`, though its output is also a rendering of
-    // something it just persisted. The flag marks an output an edit cannot REACH, and the test is
-    // what CONSUMES the text: the plan and the spec are read back from storage, so a correction
-    // typed over their rendering changes nothing, whereas this summary is itself what downstream
-    // steps read (`priorOutputs` carries `step.output`). Editing it is therefore partially
-    // meaningful — the block's persisted `estimate` stays put, but the text the next step sees
-    // does change — so the affordance is left in place rather than refused.
-    {
-      kind: TASK_ESTIMATOR_AGENT_KIND,
-      phase: 'post-completion',
-      resolve: async ({ workspaceId, instance, step, result }) => {
-        const forecast = coerceTaskEstimate(
-          step.output ?? '',
-          result.model ?? step.model ?? null,
-          d.clock.now(),
-          'predicted',
-        )
-        if (!forecast) return
-        // Through the SAME revision rule the reassessor's resolver uses, so the block's estimate
-        // always carries the last reading of the other basis whichever producer wrote it last: a
-        // re-run's fresh forecast on a task that was measured keeps that measurement beside it.
-        const block = await d.blockRepository.get(workspaceId, instance.blockId)
-        const estimate = reviseTaskEstimate(block?.estimate, forecast)
-        await d.blockRepository.update(workspaceId, instance.blockId, { estimate })
-        return { output: summarizeEstimate(estimate) }
-      },
-    },
-    // A `task-reassessor` step MEASURED the same three axes against the change that landed. Same
-    // tolerant read as the estimator above, off the same field: the kind returns PROSE precisely so
-    // an unreadable reply cannot fail a run whose change has already shipped (see its
-    // registration). It writes the task's `observed` estimate, carrying whatever FORECAST it
-    // replaced (`reviseTaskEstimate`), and replaces the raw JSON with the readable summary an
-    // approval gate would read as the proposal.
-    //
-    // The prior estimate is READ HERE rather than taken from the run context: the context was
-    // built at dispatch, and this resolver runs after a container job that can outlive several
-    // minutes of other writes, so the record to supersede is whatever the block holds NOW.
-    //
-    // An unreadable reply leaves the block's estimate untouched and keeps the raw output: no run
-    // failure, and no invented measurement replacing a real forecast.
-    {
-      kind: TASK_REASSESSOR_AGENT_KIND,
-      phase: 'post-completion',
-      resolve: async ({ workspaceId, instance, step, result }) => {
-        const measured = coerceTaskEstimate(
-          step.output ?? '',
-          result.model ?? step.model ?? null,
-          d.clock.now(),
-          'observed',
-        )
-        if (!measured) return
-        const block = await d.blockRepository.get(workspaceId, instance.blockId)
-        const estimate = reviseTaskEstimate(block?.estimate, measured)
-        await d.blockRepository.update(workspaceId, instance.blockId, { estimate })
-        return { output: summarizeEstimate(estimate) }
-      },
-    },
+    // The two producers of a task's triage scores, from ONE factory: the rule for writing the
+    // record is the same for both and only the BASIS differs, so it is stated once (see
+    // {@link taskEstimateResolver}).
+    taskEstimateResolver(d, TASK_ESTIMATOR_AGENT_KIND, 'predicted'),
+    taskEstimateResolver(d, TASK_REASSESSOR_AGENT_KIND, 'observed'),
   ]
   const map = new Map(resolvers.map((r) => [r.kind, r]))
   // Merge deployment-registered resolvers, mirroring the gate registry below. A
@@ -827,4 +776,58 @@ export function buildStepResolverRegistry(
   const ctx: ResolverContext = { runInitiatorScope: d.runInitiatorScope }
   for (const { kind, factory } of d.stepResolverRegistry.factories()) map.set(kind, factory(ctx))
   return map
+}
+
+/**
+ * The post-completion resolver for a step that WRITES the task's triage scores, for one `basis`.
+ *
+ * Two kinds produce that record at opposite ends of a run and the rule for writing it is theirs
+ * jointly: coerce the reply tolerantly, and on a readable one revise what the block holds through
+ * {@link reviseTaskEstimate}, so the record always carries the last reading of the OTHER basis
+ * whichever producer wrote it last. A re-run's fresh forecast on a task that was measured keeps
+ * that measurement beside it, and a retried measurement keeps the forecast it corrected. Stated
+ * once here rather than twice, because a change to the write rule that lands on one basis only
+ * (a metric, an emit, a guard) is a difference nothing else would catch.
+ *
+ * Deliberately does NOT declare `outputIsRendered`, though the output is a rendering of something
+ * just persisted. The flag marks an output an edit cannot REACH, and the test is what CONSUMES the
+ * text: a plan or a spec is read back from storage, so a correction typed over their rendering
+ * changes nothing, whereas this summary is itself what downstream steps read (`priorOutputs`
+ * carries `step.output`). Editing it is therefore partially meaningful — the block's persisted
+ * `estimate` stays put, but the text the next step sees does change — so the affordance is left in
+ * place rather than refused.
+ *
+ * An UNREADABLE reply records nothing and keeps the raw output: no run failure, and no invented
+ * measurement replacing a real forecast. That matters most for the `observed` producer, whose
+ * kind returns prose precisely so a garbled reply cannot fail a run whose change already shipped.
+ *
+ * The prior record is READ HERE rather than taken from the run context: the context was built at
+ * dispatch, and a container job can outlive several minutes of other writes, so what to supersede
+ * is whatever the block holds NOW. That read and the write below are not one atomic step, and the
+ * bounded consequence is worth stating: two runs settling an estimate on the SAME block at the
+ * same time both write a valid current reading and the loser's `supersedes` pair is lost. Never
+ * the current scores, which are the last writer's real reading either way, and never a mixture.
+ */
+function taskEstimateResolver(
+  d: DispatcherRegistryDeps,
+  kind: string,
+  basis: TaskEstimateBasis,
+): StepCompletionResolver {
+  return {
+    kind,
+    phase: 'post-completion',
+    resolve: async ({ workspaceId, instance, step, result }) => {
+      const reading = coerceTaskEstimate(
+        step.output ?? '',
+        result.model ?? step.model ?? null,
+        d.clock.now(),
+        basis,
+      )
+      if (!reading) return
+      const block = await d.blockRepository.get(workspaceId, instance.blockId)
+      const estimate = reviseTaskEstimate(block?.estimate, reading)
+      await d.blockRepository.update(workspaceId, instance.blockId, { estimate })
+      return { output: summarizeEstimate(estimate) }
+    },
+  }
 }

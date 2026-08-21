@@ -1147,7 +1147,8 @@
         "observed": "Mesuré d'après la modification livrée",
         "unknown": "Enregistré par une autre version de l'application"
       },
-      "was": "avant {value}"
+      "was": "avant {value}",
+      "supersededBasis": "Remplace : {basis}"
     },
     "reviewTarget": {
       "title": "Pull request en revue",
@@ -5221,6 +5222,7 @@
         "conditionBackend": "Étape ignorée : cette tâche ne modifie qu’un service frontend, il n’y a donc pas d’API derrière à tester.",
         "producerSkipped": "Étape ignorée : l’étape qu’elle relit a été ignorée, il n’y a rien à évaluer.",
         "runComplete": "Étape ignorée : l’exécution s’est terminée avant elle, sans rien à faire.",
+        "noPullRequest": "Étape ignorée : cette exécution n’a ouvert aucune pull request, il n’y a donc aucune modification à lire.",
         "unknown": "Étape ignorée : elle n’a pas été exécutée."
       }
     },

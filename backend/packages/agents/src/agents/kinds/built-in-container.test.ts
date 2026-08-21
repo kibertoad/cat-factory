@@ -109,6 +109,10 @@ describe('the declarations the engine relies on', () => {
       branch: 'base',
       full: true,
       prHead: true,
+      // The change THIS RUN landed, declared rather than left to a `task ?? run` precedence: the
+      // reviewer's subject is the other source, and a precedence would let a review task that also
+      // opened a pull request silently swap which change each of them reads.
+      prHeadSource: 'run',
       requirePr: true,
     })
   })

@@ -4,7 +4,7 @@ import {
   type StepSkipReason,
   stepConditionSatisfied,
 } from '@cat-factory/contracts'
-import type { AgentKindRegistry } from '@cat-factory/agents'
+import { type AgentKindRegistry, resolvePrHeadNumber } from '@cat-factory/agents'
 import type { AdvanceResult } from './advance.js'
 import type { InputGateController } from './InputGateController.js'
 import type { RunStateMachine } from './RunStateMachine.js'
@@ -20,6 +20,7 @@ import { producerWasSkipped, shouldRunGatedStep } from './stepGating.logic.js'
 //   3. the INPUT gate      (is there anything in the task to act on?)
 //   4. ESTIMATE gating     (does this step apply to a task this size?)
 //   5. the RUN CONDITION   (does this step apply to a change of this shape at all?)
+//   6. the PULL-REQUEST precondition (does the change this step reads exist?)
 //
 // They live together, and outside `ExecutionService`, because the ORDER is the design and the
 // family keeps growing: each is a reason to stop before dispatching, and each new one is another
@@ -195,5 +196,43 @@ export async function runStepPreamble(
       }
     }
   }
+
+  // The PULL-REQUEST precondition: a step that READS a pull request and declares it cannot work
+  // without one (`clone.prHead` + `clone.requirePr` — the post-implementation assessor) reached a
+  // run that has none. See {@link stepNeedsMissingPullRequest} for why that is a skip here rather
+  // than a refusal at dispatch.
+  if (stepNeedsMissingPullRequest(step.agentKind, block, deps.agentKindRegistry)) {
+    return {
+      kind: 'stop',
+      result: await deps.skipGatedStep(workspaceId, instance, step, isFinalStep, 'no_pull_request'),
+    }
+  }
   return { kind: 'proceed', block, isFinalStep }
+}
+
+/**
+ * Whether this step's kind READS a pull request it declares it cannot do without, and the run has
+ * none to give it.
+ *
+ * `clone.requirePr` says a kind cannot fall back to the base branch, and what that costs splits by
+ * whether the kind writes on the pull request or reads it (the flag's own contract states both).
+ * A WRITER refuses at dispatch: cloning base would push its commits onto the default branch. A
+ * READER is skipped HERE instead, because both other dispositions are wrong for it. Dispatching
+ * would hand a base checkout to a kind whose whole subject is the change, and it would score the
+ * empty diff as though it were one. Failing the dispatch would end a run over a reading nothing
+ * gates on, and the assessor's whole placement is AFTER the work shipped, so the run it ended
+ * would be one that had already succeeded.
+ *
+ * Which pull request counts is the kind's own declaration, resolved through the one
+ * `resolvePrHeadNumber` the job body also asks, so a step is never skipped for want of a PR the
+ * dispatch would have found.
+ */
+function stepNeedsMissingPullRequest(
+  agentKind: string,
+  block: Block,
+  registry: AgentKindRegistry,
+): boolean {
+  const clone = registry.agentStep(agentKind)?.clone
+  if (!clone?.prHead || !clone.requirePr) return false
+  return resolvePrHeadNumber(clone, block) === null
 }

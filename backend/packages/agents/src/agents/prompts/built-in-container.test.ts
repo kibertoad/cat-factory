@@ -115,6 +115,47 @@ describe('the task-reassessor prompt', () => {
     expect(p).not.toContain('git diff')
     expect(p).not.toContain('`main`')
   })
+
+  it('carries the task description and the system the work belongs to', () => {
+    // This prompt REPLACES the generic block-context one, so anything the assessment needs from it
+    // has to be re-stated here. The impact axis is a blast radius, and a bare title names no
+    // software for one to be judged against: a model given none supplies one.
+    const p = prompt(TASK_REASSESSOR_AGENT_KIND, {
+      block: {
+        id: 'b1',
+        title: 'Add login',
+        type: 'task',
+        description: 'Passkeys, with a password fallback.',
+        pullRequest: { number: 42, branch: 'feat/x', url: 'u' },
+      },
+      ownService: { stated: true, title: 'Checkout API', description: 'Takes payments.' },
+    })
+    expect(p).toContain('Passkeys, with a password fallback.')
+    expect(p).toContain('The system this work belongs to: Checkout API')
+  })
+
+  it('states that no system was named rather than leaving the axis unanchored', () => {
+    const p = prompt(TASK_REASSESSOR_AGENT_KIND, {
+      block: { id: 'b1', title: 'T', type: 'task', pullRequest: { number: 42, url: 'u' } },
+      ownService: { stated: false, reason: 'not-under-a-service' },
+    })
+    expect(p).toContain('NOT STATED')
+  })
+
+  it('withholds the forecast it is revising, which rides the prior-output fold', () => {
+    // The estimator's own step output IS the forecast, in percentages (`summarizeEstimate`). An
+    // assessment handed the number it is revising anchors on it, and the delta is arithmetic the
+    // platform does from the two records — so the fold this replacement prompt drops is the point
+    // of replacing it, not a casualty.
+    const p = prompt(TASK_REASSESSOR_AGENT_KIND, {
+      block: { id: 'b1', title: 'T', type: 'task', pullRequest: { number: 42, url: 'u' } },
+      priorOutputs: [
+        { agentKind: 'task-estimator', output: '**Task estimate (predicted)**: Complexity 40%' },
+      ],
+    })
+    expect(p).not.toContain('Complexity 40%')
+    expect(p).not.toContain('task-estimator')
+  })
 })
 
 describe('the on-call prompt', () => {

@@ -41,13 +41,28 @@ Behaviour changes worth knowing:
   "a `task-estimator` runs earlier". One `producesTaskEstimate` predicate in
   `@cat-factory/contracts`, read by the engine's validation, the SPA's pipeline-health advisory and
   the builder's draft warning, which each carried their own copy of the kind id.
-- **`clone.prHead` resolves a second source, and `requirePr` now binds the explore surface.** The
-  prefetched pull request is the task's declared target (a `review` task's, unchanged) or, failing
-  that, the PR this run opened. A `prHead` kind that declares `requirePr` and resolves neither
-  REFUSES the dispatch instead of quietly reading a base checkout, which for an assessor would mean
-  scoring an empty diff as a trivial change.
-- **The estimate badge states which reading it shows**, and shows the superseded forecast beside
-  each axis. New `inspector.estimate.basis.*` copy in all ten locales.
+- **`clone.prHead` now names WHICH pull request it fetches**, with a new `prHeadSource` field:
+  `task` (the default, the `pr-reviewer`'s declared target, unchanged) or `run` (the PR this run
+  opened, the assessor's subject). Declared rather than resolved by a `task ?? run` precedence,
+  which would have silently widened the reviewer: a review task whose run also opened a pull request
+  would start prefetching a head its review state knows nothing about.
+- **`requirePr` now means two things, split by whether the kind writes on the pull request or reads
+  it.** A WRITER (the in-place fixers) still refuses the dispatch, because cloning base would push
+  its commits onto the default branch. A READER is SKIPPED before dispatch with a new
+  `no_pull_request` step-skip reason: a base checkout holds nothing to measure, and failing would
+  end a run whose work has already shipped over a reading nothing gates on. New copy in all ten
+  locales.
+- **A pipeline may no longer place a PR-reading step ahead of the step that opens the PR**
+  (`assertValidPullRequestReaders`, refused at save and at run start). It would be skipped for want
+  of a pull request the very next step creates. No stored pipeline predates the rule.
+- **A block's terminal status now survives a trailing step that claims none.** `merger → assessor →
+disposer` used to write `in_progress` over the merger's `done`, leaving `finalizeBlock`'s merger
+  backstop to record a merged task as `pr_ready`. `settleStepAndAdvance` reads the block's own
+  status rather than trusting the settling resolver's return value, which fixes the same latent bug
+  for any future step placed after the merger.
+- **The estimate badge states which reading it shows**, names the reading it replaced, and shows the
+  earlier number beside each axis that actually MOVED. New `inspector.estimate.basis.*` and
+  `supersededBasis` copy in all ten locales.
 
 The step records NOTHING when its reply cannot be read, and the run CONTINUES: it returns PROSE
 rather than declaring a structured output like its `merger` / `on-call` neighbours, because for a

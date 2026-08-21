@@ -1240,7 +1240,8 @@
         "observed": "Measured from the change that landed",
         "unknown": "Recorded by another version of the app"
       },
-      "was": "was {value}"
+      "was": "was {value}",
+      "supersededBasis": "Replaces: {basis}"
     },
     "reviewTarget": {
       "title": "Under review",
@@ -5397,6 +5398,7 @@
         "conditionBackend": "Skipped: this task changes only a frontend service, so there is no API behind it to exercise.",
         "producerSkipped": "Skipped: the step it reviews was skipped, so there is nothing to grade.",
         "runComplete": "Skipped: the run finished before this step, with nothing left to do.",
+        "noPullRequest": "Skipped: this run opened no pull request, so there is no change for this step to read.",
         "unknown": "Skipped: this step did not run."
       }
     },

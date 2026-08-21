@@ -320,6 +320,7 @@ export {
   renderPriorReviewContext,
   renderStandardContext,
   renderStandardsIndex,
+  resolvePrHeadNumber,
   resolvePrNumber,
   standardsContextFileName,
   type SuggestedSlice,

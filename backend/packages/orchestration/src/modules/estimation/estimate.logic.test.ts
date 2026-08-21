@@ -151,6 +151,25 @@ describe('summarizeEstimate', () => {
     expect(summarizeEstimate(stored)).toContain('Task estimate (predicted)')
   })
 
+  it('reads a NULL basis as the same missing one, not as an unrecognised member', () => {
+    // The field is optional on the schema, but the record travels as JSON and is read back with a
+    // plain `JSON.parse`: an absent value routinely comes back as `null`. Reporting an ordinary old
+    // forecast as "recorded by another version" would be a louder lie than the silence it replaced.
+    const stored = { ...forecast(), basis: null } as unknown as TaskEstimate
+    const summary = summarizeEstimate(stored)
+    expect(summary).toContain('Task estimate (predicted)')
+    expect(summary).not.toContain('no longer recognised')
+  })
+
+  it('reads a superseded reading’s NULL basis the same way', () => {
+    const revised = {
+      ...forecast(),
+      basis: 'observed' as const,
+      supersedes: { complexity: 0.4, risk: 0.3, impact: 0.2, basis: null, createdAt: NOW },
+    } as unknown as TaskEstimate
+    expect(summarizeEstimate(revised)).toContain('Was Task estimate (predicted)')
+  })
+
   it('says so when the basis is one this build cannot name', () => {
     // `basis` is persisted and read back with a plain `JSON.parse`, so a value retired from the
     // union reaches this function. Splicing `undefined` into the operator's summary, or guessing

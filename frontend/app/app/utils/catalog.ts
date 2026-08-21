@@ -137,6 +137,10 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-gauge-circle',
     color: '#f59e0b',
     category: 'review',
+    // Reads the pull request the run opened, so it only belongs where a pipeline ships code. A
+    // document, research, planning or review pipeline opens none, and the step would be offered
+    // only to be skipped for want of a change to measure.
+    purposes: ['build'],
     description:
       'Re-rates Complexity, Risk and Impact after the implementation lands, from the change that was actually made. Place it after the coder: it corrects the estimator’s forecast, or produces the ratings for the first time in a pipeline that has no estimator.',
   },

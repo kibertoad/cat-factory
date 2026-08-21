@@ -111,6 +111,11 @@ export function resolveRunServiceScope(
  *  - `run_complete` — an earlier step ENDED the run (a `bug-intake` fire that found nothing to
  *                   adopt), so everything after it was closed out untouched. Nothing about THIS
  *                   step decided it, which is why it cannot borrow any of the three above.
+ *  - `no_pull_request` — a step whose whole subject is a pull request (a `prHead` kind declaring
+ *                   `requirePr`: the post-implementation assessor) reached a run that opened
+ *                   none. It has nothing to read, and the two other dispositions are both wrong:
+ *                   dispatching it would score a base checkout as though it were the change, and
+ *                   FAILING the step would end a run whose work has already shipped.
  *
  * PERSISTED and CLOSED, so retiring a member does not remove it from stored runs: read it with
  * {@link isStepSkipReason} and render an unrecognised value as "skipped" rather than crashing or
@@ -121,6 +126,7 @@ export const stepSkipReasonSchema = v.picklist([
   'condition',
   'producer_skipped',
   'run_complete',
+  'no_pull_request',
 ])
 export type StepSkipReason = v.InferOutput<typeof stepSkipReasonSchema>
 

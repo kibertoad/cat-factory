@@ -1733,7 +1733,8 @@
         "observed": "Gemessen an der erfolgten Änderung",
         "unknown": "Von einer anderen App-Version erfasst"
       },
-      "was": "vorher {value}"
+      "was": "vorher {value}",
+      "supersededBasis": "Ersetzt: {basis}"
     },
     "reviewTarget": {
       "title": "Geprüfter Pull Request",
@@ -4745,6 +4746,7 @@
         "conditionBackend": "Übersprungen: Diese Aufgabe ändert nur einen Frontend-Dienst, es gibt also keine API dahinter zu prüfen.",
         "producerSkipped": "Übersprungen: Der geprüfte Schritt wurde übersprungen, es gibt nichts zu bewerten.",
         "runComplete": "Übersprungen: Der Lauf endete vor diesem Schritt, es blieb nichts zu tun.",
+        "noPullRequest": "Übersprungen: Dieser Lauf hat keinen Pull Request eröffnet, also gibt es für diesen Schritt keine Änderung zu lesen.",
         "unknown": "Übersprungen: Dieser Schritt wurde nicht ausgeführt."
       }
     },

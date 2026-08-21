@@ -68,8 +68,8 @@ export function pipelineHasEnabledBugIntake(agentKinds: string[], enabled?: bool
  *  - {@link assertValidGating}: a step gated on the task estimate must declare itself GATABLE
  *    (`isGatableKind` — a kind whose output later steps read as context rather than depend on
  *    structurally), must not also carry a human approval gate, must set at least one axis
- *    threshold (or it would always skip), and needs a `task-estimator` to have run before it (or
- *    the gate has nothing to consult).
+ *    threshold (or it would always skip), and needs a step that PRODUCES an estimate to have run
+ *    before it (or the gate has nothing to consult).
  *  - {@link assertValidRunConditions}: a step carrying a RUN CONDITION must satisfy the two
  *    structural rules an estimate gate satisfies — a gatable kind, and no human approval gate on
  *    the same step — because a skip is a skip whichever of the two axes caused it.
@@ -78,11 +78,14 @@ export function pipelineHasEnabledBugIntake(agentKinds: string[], enabled?: bool
  *    the shipped prompt, and a mismatched one would run the step under another role's prompt.
  *  - {@link assertValidTesterQualityGating}: the test quality-control companion's optional
  *    estimate gate lives on the Tester step itself (not a companion row), so it is validated
- *    separately — but under the same "threshold set + estimator earlier" rules, since a
- *    QC gate with no estimator would silently never gate.
+ *    separately — but under the same "threshold set + estimate producer earlier" rules, since a
+ *    QC gate with no producer before it would silently never gate.
  *  - {@link assertValidBinaryOutputSteps}: a step whose kind carries the `binary-output` trait
  *    must select the foundational service it stores its generated binaries through — a
  *    generator with nowhere to deliver would dispatch and only be able to refuse.
+ *  - {@link assertValidPullRequestReaders}: a step whose subject is the pull request the run opens
+ *    must not be placed before the step that opens it — the reader would be skipped for want of a
+ *    pull request the very next step creates.
  *  - {@link assertValidGateConfig}: a step's gate configuration must have a gate to configure —
  *    an approver set needs the step's approval gate ON, a quorum needs enough named approvers to
  *    reach it, and gate PARAMETERS must be declared by a gate this deployment registers for that
@@ -131,6 +134,66 @@ export function validatePipelineShape(pipeline: PipelineShape): void {
   assertValidAgentVariants(pipeline)
   assertValidBinaryOutputSteps(pipeline)
   assertValidGateConfig(pipeline)
+  assertValidPullRequestReaders(pipeline)
+}
+
+/**
+ * Whether a kind OPENS the run's pull request: a coding step that branches off base onto the work
+ * branch and is not one of the few that only SEED that branch for a later step to open the PR on
+ * (`opensPr: false`, the reproduction test). An in-place (`pr`) kind opens nothing, but a chain
+ * only reaches one when a PR already exists.
+ */
+function opensPullRequest(kind: string, registry: AgentKindRegistry): boolean {
+  const spec = registry.agentStep(kind)
+  if (!spec || spec.surface !== 'container-coding') return false
+  const branch = spec.clone?.branch
+  return (branch === 'work' || branch === 'pr-or-work') && spec.opensPr !== false
+}
+
+/** Whether a kind READS a pull request it has declared it cannot work without. */
+function readsRequiredPullRequest(kind: string, registry: AgentKindRegistry): boolean {
+  const clone = registry.agentStep(kind)?.clone
+  return Boolean(clone?.prHead && clone.requirePr)
+}
+
+/**
+ * A step whose subject is the pull request THIS RUN opens (`clone.prHead` + `clone.requirePr` —
+ * the post-implementation assessor) must not be placed BEFORE the step that opens it.
+ *
+ * An ORDERING rule, not a presence one, and the difference is the point. A pipeline that opens no
+ * pull request of its own says nothing here: the reader is then measuring a change the BLOCK
+ * already carries, which is a legitimate (if narrow) chain. What cannot work is a pipeline that
+ * DOES open one, with the reader ahead of it: at that point in the run nothing has been pushed, so
+ * the step is skipped for want of a pull request that the very next step goes on to create, and an
+ * estimate gate downstream that counted this producer reads nothing.
+ *
+ * Refused at BOTH doors like every other shape rule. It cannot invalidate a stored pipeline,
+ * because no chain predates the first kind that declares this pair.
+ *
+ * Skipped when no registry is supplied (the kernel seed test's built-in catalog, which has no
+ * deployment registrations in view); both real boundaries pass one.
+ */
+export function assertValidPullRequestReaders({
+  agentKinds,
+  enabled,
+  agentKindRegistry,
+}: PipelineShape): void {
+  if (!agentKindRegistry) return
+  const isEnabled = (i: number) => enabled?.[i] !== false
+  const opensAt = agentKinds.findIndex(
+    (kind, i) => isEnabled(i) && opensPullRequest(kind, agentKindRegistry),
+  )
+  if (opensAt < 0) return
+  for (let i = 0; i < opensAt; i++) {
+    const kind = agentKinds[i]
+    if (!kind || !isEnabled(i)) continue
+    if (!readsRequiredPullRequest(kind, agentKindRegistry)) continue
+    throw new ValidationError(
+      `Step '${kind}' reads the pull request this run opens, but it is placed before ` +
+        `'${agentKinds[opensAt]}', which opens it. Move it after the step that opens the pull ` +
+        'request.',
+    )
+  }
 }
 
 /**
@@ -426,6 +489,19 @@ function hasEstimateProducerBefore(
 }
 
 /**
+ * The refusal both estimate gates raise when {@link hasEstimateProducerBefore} says no. ONE
+ * sentence for one rule: the two gates read the same predicate, so an author told by one of them
+ * that only a `task-estimator` will do would be reading a message its own rule no longer means.
+ */
+function missingEstimateProducer(kind: string, what: string): ValidationError {
+  return new ValidationError(
+    `Step '${kind}' ${what} but no step that produces one runs before it. Add a task-estimator ` +
+      'earlier in the pipeline (or a task-reassessor, which measures the estimate after the ' +
+      'implementation lands).',
+  )
+}
+
+/**
  * Validate every ENABLED step that carries enabled estimate gating. A disabled gated step
  * never runs, so it imposes no requirement; an enabled one must satisfy all four rules:
  *
@@ -481,9 +557,7 @@ export function assertValidGating({
       )
     }
     if (!hasEstimateProducerBefore(agentKinds, i, isEnabled)) {
-      throw new ValidationError(
-        `Step '${kind}' is gated on the task estimate but no step that produces one runs before it. Add a task-estimator earlier in the pipeline (or a task-reassessor, which measures the estimate after the implementation lands).`,
-      )
+      throw missingEstimateProducer(kind, 'is gated on the task estimate')
     }
   }
 }
@@ -568,9 +642,7 @@ export function assertValidTesterQualityGating({
       )
     }
     if (!hasEstimateProducerBefore(agentKinds, i, isEnabled)) {
-      throw new ValidationError(
-        `Step '${kind}' has a test quality companion gated on the task estimate but no step that produces one runs before it. Add a task-estimator earlier in the pipeline.`,
-      )
+      throw missingEstimateProducer(kind, 'has a test quality companion gated on the task estimate')
     }
   }
 }

@@ -116,11 +116,15 @@ const UNKNOWN_BASIS_TITLE = 'Task triage (basis no longer recognised)'
  * The title for a stored basis. Three cases, deliberately distinct:
  *   - ABSENT: a row written before the vocabulary existed, and every one of those came from the
  *     estimator, so `predicted` is a fact about it rather than a default standing in for one.
+ *     `null` is the SAME case, not the unrecognised one: the field is optional on the schema but
+ *     the record round-trips through JSON, where an absent value is routinely written back as
+ *     `null`, and reporting an old forecast as "recorded by another version" would be a louder
+ *     lie than the silence it replaced.
  *   - a member this build knows: its own title.
  *   - anything else: {@link UNKNOWN_BASIS_TITLE}.
  */
-function basisTitle(basis: string | undefined): string {
-  if (basis === undefined) return BASIS_TITLE.predicted
+function basisTitle(basis: string | null | undefined): string {
+  if (basis === undefined || basis === null) return BASIS_TITLE.predicted
   return isTaskEstimateBasis(basis) ? BASIS_TITLE[basis] : UNKNOWN_BASIS_TITLE
 }
 

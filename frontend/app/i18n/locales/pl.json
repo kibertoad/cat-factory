@@ -1147,7 +1147,8 @@
         "observed": "Zmierzone na podstawie wprowadzonej zmiany",
         "unknown": "Zapisane przez inną wersję aplikacji"
       },
-      "was": "wcześniej {value}"
+      "was": "wcześniej {value}",
+      "supersededBasis": "Zastępuje: {basis}"
     },
     "reviewTarget": {
       "title": "Przeglądany pull request",
@@ -5221,6 +5222,7 @@
         "conditionBackend": "Pominięto: to zadanie zmienia tylko usługę frontendową, więc nie ma za nią API do sprawdzenia.",
         "producerSkipped": "Pominięto: krok, który ocenia, został pominięty, więc nie ma czego oceniać.",
         "runComplete": "Pominięto: przebieg zakończył się przed tym krokiem, nie było nic do zrobienia.",
+        "noPullRequest": "Pominięto: ten przebieg nie otworzył żadnego pull requesta, więc ten krok nie ma zmiany do przeczytania.",
         "unknown": "Pominięto: ten krok nie został wykonany."
       }
     },

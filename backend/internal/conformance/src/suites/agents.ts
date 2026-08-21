@@ -1127,6 +1127,9 @@ function registerTaskAssessmentTests(harness: ConformanceHarness): void {
           impact: 0.8,
           rationale: 'reached the auth path',
         },
+        // The reassessor reads the pull request THIS RUN opened, so the coder has to open one:
+        // without it the step is skipped (`no_pull_request`) rather than measuring anything.
+        pullRequest: { url: 'https://github.com/o/r/pull/7', number: 7, branch: 'feat/login' },
       })
       const { workspace } = await app.createWorkspace()
       const wsId = workspace.id
@@ -1161,6 +1164,9 @@ function registerTaskAssessmentTests(harness: ConformanceHarness): void {
       // reading corrected nothing.
       const app = harness.makeApp({
         taskAssessment: { complexity: 0.6, risk: 0.5, impact: 0.5, rationale: 'as expected' },
+        // The reassessor reads the pull request THIS RUN opened, so the coder has to open one:
+        // without it the step is skipped (`no_pull_request`) rather than measuring anything.
+        pullRequest: { url: 'https://github.com/o/r/pull/7', number: 7, branch: 'feat/login' },
       })
       const { workspace } = await app.createWorkspace()
       const wsId = workspace.id
@@ -1189,6 +1195,9 @@ function registerTaskAssessmentTests(harness: ConformanceHarness): void {
       const app = harness.makeApp({
         taskEstimate: { complexity: 0.3, risk: 0.2, impact: 0.4, rationale: 'looks small' },
         taskAssessment: { rationale: 'I could not read the diff' },
+        // The reassessor reads the pull request THIS RUN opened, so the coder has to open one:
+        // without it the step is skipped (`no_pull_request`) rather than measuring anything.
+        pullRequest: { url: 'https://github.com/o/r/pull/7', number: 7, branch: 'feat/login' },
       })
       const { workspace } = await app.createWorkspace()
       const wsId = workspace.id
@@ -1202,6 +1211,40 @@ function registerTaskAssessmentTests(harness: ConformanceHarness): void {
         pipelineId: pipeline.body.id,
       })
       await app.drive(wsId)
+
+      const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      const estimate = snapshot.body.blocks.find((b) => b.id === 'task_login')!.estimate!
+      expect(estimate.basis).toBe('predicted')
+      expect(estimate.complexity).toBe(0.3)
+    })
+
+    it('skips the measurement when the run opened no pull request', async () => {
+      // The step's whole subject is the change a pull request carries, and its `requirePr` READER
+      // disposition is a SKIP rather than a failure: a base checkout would be scored as though it
+      // were the change, and failing the dispatch would end a run whose work already shipped. So
+      // the forecast stands, the step records why it did nothing, and the run finishes.
+      const app = harness.makeApp({
+        taskEstimate: { complexity: 0.3, risk: 0.2, impact: 0.4, rationale: 'looks small' },
+        taskAssessment: { complexity: 0.9, risk: 0.9, impact: 0.9, rationale: 'never asked' },
+        // No `pullRequest`: this coder pushes without opening one.
+      })
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Estimate, code, reassess (no PR)',
+        purpose: 'build',
+        agentKinds: ['task-estimator', 'coder', 'task-reassessor'],
+      })
+      await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+        pipelineId: pipeline.body.id,
+      })
+      const execs = await app.drive(wsId)
+      const exec = execs.find((e) => e.blockId === 'task_login')!
+      expect(exec.status).toBe('done')
+      const step = exec.steps.find((s) => s.agentKind === 'task-reassessor')!
+      expect(step.skipped).toBe(true)
+      expect(step.skipReason).toBe('no_pull_request')
 
       const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
       const estimate = snapshot.body.blocks.find((b) => b.id === 'task_login')!.estimate!

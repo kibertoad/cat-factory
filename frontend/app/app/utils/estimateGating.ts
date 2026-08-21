@@ -67,7 +67,9 @@ export function parseAxisThreshold(raw: string): number | undefined {
  *
  *  - ABSENT: a row written before the basis vocabulary existed. Every one of those came from the
  *    estimator, so calling it a forecast is a fact about the row rather than a default standing in
- *    for one.
+ *    for one. `null` is the same case: the field is optional on the schema, but the record travels
+ *    as JSON and an absent value is routinely written back as `null`, so reading that as
+ *    unrecognised would relabel an ordinary old forecast.
  *  - a member this bundle KNOWS: its own label.
  *  - anything else: said out loud. `basis` is persisted and read back with no schema pass, and a
  *    browser holds a bundle older than the member it reads, so guessing onto a current member would
@@ -84,7 +86,7 @@ const ESTIMATE_BASIS_LABEL_KEYS: Record<TaskEstimateBasis, string> = {
 const ESTIMATE_BASIS_UNKNOWN_KEY = 'inspector.estimate.basis.unknown'
 
 /** The label key for a stored basis: see {@link ESTIMATE_BASIS_LABEL_KEYS} for the three cases. */
-export function estimateBasisLabelKey(basis: string | undefined): string {
-  if (basis === undefined) return ESTIMATE_BASIS_LABEL_KEYS.predicted
+export function estimateBasisLabelKey(basis: string | null | undefined): string {
+  if (basis === undefined || basis === null) return ESTIMATE_BASIS_LABEL_KEYS.predicted
   return isTaskEstimateBasis(basis) ? ESTIMATE_BASIS_LABEL_KEYS[basis] : ESTIMATE_BASIS_UNKNOWN_KEY
 }
