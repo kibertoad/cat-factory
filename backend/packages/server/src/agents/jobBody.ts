@@ -560,6 +560,44 @@ function buildCodingAgentBody(
 }
 
 /**
+ * The pull request whose HEAD the harness prefetches into `origin/pr-head`, for a
+ * `clone.prHead` kind. Without it such a kind clones only the base branch, and since the container
+ * agent holds no git credential of its own (the token lives with the harness) it cannot fetch the
+ * head itself: files the change ADDS are absent and modified files are only at their base version.
+ *
+ * TWO pull requests can be the subject, and which one it is follows from the kind's own job rather
+ * than from a flag:
+ *   - a REVIEWED PR the task names in its own fields (`prNumber`/`prUrl`), the same source the
+ *     `pr-reviewer`'s diff preOp reads;
+ *   - the PR THIS RUN opened, recorded on the block, which is what a kind assessing the change the
+ *     run just landed is looking at (`task-reassessor`).
+ * The task's own declaration wins: a `review` task names the PR it was created for, and a run of it
+ * opens none, so the two never compete for the same dispatch.
+ *
+ * `requirePr` decides what an UNRESOLVABLE number means, exactly as it does for an in-place coding
+ * clone ({@link resolveInPlaceBranches}). Without it the dispatch degrades cleanly to no prefetch
+ * (a review still reads its injected diff). With it the dispatch REFUSES: a kind whose whole job is
+ * the change a pull request carries has nothing to say about a base checkout, and scoring one as
+ * though it were the change is the failure mode a silent fallback would produce.
+ */
+function resolvePrefetchPrNumber(
+  context: AgentRunContext,
+  step: AgentStepSpec,
+): number | undefined {
+  if (!step.clone?.prHead) return undefined
+  const resolved =
+    resolvePrNumber(context.block.taskTypeFields) ?? context.block.pullRequest?.number
+  if (resolved !== undefined && resolved !== null) return resolved
+  if (step.clone.requirePr) {
+    throw new Error(
+      `The \`${context.agentKind}\` step needs the pull request carrying this task's change, and ` +
+        'this block has none.',
+    )
+  }
+  return undefined
+}
+
+/**
  * The `container-explore` job body: a read-only clone returning prose, or a structured JSON object
  * as `custom`. Extracted verbatim from {@link buildRegisteredAgentBody} so each function stays
  * within the complexity budget — behaviour is byte-identical.
@@ -593,15 +631,7 @@ function buildExploreAgentBody(
   const exploreReferenceBranches = parts.referenceBranches?.length
     ? parts.referenceBranches
     : undefined
-  // The pr-reviewer (`clone.prHead`) reviews an EXISTING PR: resolve its number so the harness can
-  // prefetch the PR head into `origin/pr-head`. Without it the review clones only the base branch,
-  // and — since the container agent has no git credential to fetch the head itself — files the PR
-  // ADDS and the head version of modified files are unreachable, silently limiting the review to
-  // the injected diff. The number comes from the task's PR fields (`prNumber`/`prUrl`), the same
-  // source the diff preOp uses; absent (unresolvable) ⇒ no prefetch (the review degrades cleanly).
-  const reviewPrNumber = step.clone?.prHead
-    ? (resolvePrNumber(context.block.taskTypeFields) ?? undefined)
-    : undefined
+  const reviewPrNumber = resolvePrefetchPrNumber(context, step)
   return {
     kind: 'agent',
     body: {

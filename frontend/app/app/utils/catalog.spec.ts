@@ -25,6 +25,7 @@ const AGENT_KINDS: AgentKind[] = [
   'pr-reviewer',
   'spike',
   'task-estimator',
+  'task-reassessor',
   'spec-writer',
   'blueprints',
   'architect',

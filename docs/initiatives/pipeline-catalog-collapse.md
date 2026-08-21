@@ -307,10 +307,13 @@ out of the palette now that nothing places it.
   the blueprints-only `pl_blueprint`; the focused fixture it always wanted. WS6 retired that one
   too, and the spec now drives the SINGLE-KIND endpoint — which is the production path as well, so
   the fixture and the real caller are finally the same thing.
-- **Estimate gating costs one always-on inline call.** `task-estimator` has to run for any gate to
-  have an estimate to read (`assertValidGating` rule 4), which is precisely why the two fixed rungs
+- **Estimate gating costs one always-on inline call.** SOME estimate producer has to run for a gate
+  to have anything to read (`assertValidGating` rule 4), which is precisely why the two fixed rungs
   carry no estimator: a pipeline that cannot escalate has nothing to consult an estimate for, so
-  paying for one would be pure overhead. `onMissingEstimate` defaults to `run`, failing safe toward
+  paying for one would be pure overhead. `task-estimator` is the cheap one and the only one any
+  preset carries; the other is `task-reassessor`, which measures the same axes from the diff a run
+  landed and so can only satisfy a gate placed after the implementation
+  ([`task-assessment.md`](../../backend/docs/task-assessment.md)). `onMissingEstimate` defaults to `run`, failing safe toward
   thoroughness: except on `human-review`, where `skip` is the safe direction.
 - **The `dep-update` schedule template lost its inference.** It was derived from
   `pipelineId === 'pl_dep_update'`; that preset was the ordinary build tail under a recurring name, so

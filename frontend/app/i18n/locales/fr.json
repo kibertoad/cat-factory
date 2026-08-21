@@ -1138,10 +1138,16 @@
     },
     "estimate": {
       "title": "Estimation",
-      "hint": "Produite par l'agent estimateur de tâches : la complexité, le risque et l'impact estimés de cette tâche. Sert à décider si les étapes de consensus (multi-exécutions) en valent la peine.",
+      "hint": "La complexité, le risque et l'impact de cette tâche. Un Task Estimator les prévoit avant le début du travail, un Task Reassessor les mesure ensuite d'après la modification réellement livrée. Sert à décider si les étapes de consensus (multi-exécutions) et les autres étapes conditionnelles en valent la peine.",
       "complexity": "Complexité",
       "risk": "Risque",
-      "impact": "Impact"
+      "impact": "Impact",
+      "basis": {
+        "predicted": "Prévision avant le début du travail",
+        "observed": "Mesuré d'après la modification livrée",
+        "unknown": "Enregistré par une autre version de l'application"
+      },
+      "was": "avant {value}"
     },
     "reviewTarget": {
       "title": "Pull request en revue",

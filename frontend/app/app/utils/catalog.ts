@@ -127,6 +127,20 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
       'Triages the task after requirements are clarified — rates Complexity, Risk and Impact (0..1). Used to gate consensus and conditional companion steps, and shown as ratings on the task.',
   },
   {
+    // The estimator's retrospective twin: it reads the change that actually landed (read-only, in a
+    // container, on the run's pull request) and re-scores the same three axes. `advanced` rather
+    // than `intermediate`: an extra container run per task is not part of the everyday delivery
+    // loop, and the everyday reader wants the forecast, not the calibration.
+    kind: 'task-reassessor',
+    tier: 'advanced',
+    label: 'Task Reassessor',
+    icon: 'i-lucide-gauge-circle',
+    color: '#f59e0b',
+    category: 'review',
+    description:
+      'Re-rates Complexity, Risk and Impact after the implementation lands, from the change that was actually made. Place it after the coder: it corrects the estimator’s forecast, or produces the ratings for the first time in a pipeline that has no estimator.',
+  },
+  {
     kind: 'requirements-brainstorm',
     tier: 'intermediate',
     label: 'Requirements Brainstorm',

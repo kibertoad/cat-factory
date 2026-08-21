@@ -4,8 +4,10 @@ import { defaultAgentKindRegistry } from '../kinds/registry.js'
 import { userPromptFor } from '../catalog.js'
 import { CONFLICT_RESOLVER_AGENT_KIND, ON_CALL_AGENT_KIND } from '@cat-factory/kernel'
 import { MERGER_AGENT_KIND } from '../kinds/built-in-container.js'
+import { TASK_REASSESSOR_AGENT_KIND } from './roles.js'
 import {
   mergerUserPrompt,
+  taskReassessorUserPrompt,
   TEST_REPORT_SHAPE_HINT,
   UI_TEST_REPORT_SHAPE_HINT,
 } from './built-in-container.js'
@@ -68,6 +70,47 @@ describe('the merger prompt', () => {
     // An inline caller (a consensus panel) resolves no dispatch context. Inventing `main` there
     // would tell an agent with no filesystem to run git against a branch nobody checked out.
     const p = mergerUserPrompt(context(MERGER_AGENT_KIND, withPr(42, 'feat/x')))
+    expect(p).toContain('(PR #42)')
+    expect(p).not.toContain('git diff')
+    expect(p).not.toContain('`main`')
+  })
+})
+
+describe('the task-reassessor prompt', () => {
+  it('points the agent at the prefetched PR head, not at the checked-out branch', () => {
+    // The kind clones BASE and the harness fetches the change into `origin/pr-head`, so a prompt
+    // naming `HEAD` (the merger's shape) would have it diff the base branch against itself and
+    // score an empty change as trivial.
+    const p = prompt(TASK_REASSESSOR_AGENT_KIND, withPr(42, 'feat/x'))
+    expect(p).toContain('(PR #42)')
+    expect(p).toContain('base branch `main`')
+    expect(p).toContain('git diff --name-status origin/main...origin/pr-head')
+    expect(p).not.toContain('origin/main...HEAD')
+  })
+
+  it('closes on the shared triage JSON contract', () => {
+    const p = prompt(TASK_REASSESSOR_AGENT_KIND, withPr(42, 'feat/x'))
+    expect(p.trimEnd().endsWith('no prose, no code fences.')).toBe(true)
+  })
+
+  it('names the connected repositories it cannot see on a multi-repo task', () => {
+    // The peer PRs' repos are not in this checkout (resolving them is the merger's combined-diff
+    // path). Silence there is a partial score a reader takes for the whole one.
+    const p = prompt(TASK_REASSESSOR_AGENT_KIND, {
+      block: {
+        id: 'b1',
+        title: 'T',
+        type: 'task',
+        pullRequest: { number: 42, branch: 'feat/x', url: 'u' },
+        peerPullRequests: [{ repo: 'acme/api', ref: { number: 9, url: 'u' } }],
+      },
+    })
+    expect(p).toContain('1 connected service repository')
+    expect(p).toContain('out of scope')
+  })
+
+  it('names no branch when there is no checkout to name one from', () => {
+    const p = taskReassessorUserPrompt(context(TASK_REASSESSOR_AGENT_KIND, withPr(42, 'feat/x')))
     expect(p).toContain('(PR #42)')
     expect(p).not.toContain('git diff')
     expect(p).not.toContain('`main`')

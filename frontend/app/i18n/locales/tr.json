@@ -1138,10 +1138,16 @@
     },
     "estimate": {
       "title": "Tahmin",
-      "hint": "Görev tahmin ajanı tarafından üretilir: bu görevin ne kadar karmaşık, riskli ve etkili göründüğü. Konsensüs (çoklu çalıştırma) adımlarının değip değmeyeceğine karar vermek için kullanılır.",
+      "hint": "Bu görevin ne kadar karmaşık, riskli ve etkili olduğu. Görev Tahmincisi işe başlamadan önce öngörür, Görev Yeniden Değerlendiricisi ise sonrasında gerçekte yapılan değişiklikten ölçer. Uzlaşma (çok çalıştırmalı) adımlarının ve diğer koşullu adımların değip değmeyeceğine karar vermek için kullanılır.",
       "complexity": "Karmaşıklık",
       "risk": "Risk",
-      "impact": "Etki"
+      "impact": "Etki",
+      "basis": {
+        "predicted": "İşe başlamadan önceki tahmin",
+        "observed": "Yapılan değişiklikten ölçüldü",
+        "unknown": "Uygulamanın başka bir sürümü kaydetti"
+      },
+      "was": "önceki {value}"
     },
     "reviewTarget": {
       "title": "İncelenen pull request",

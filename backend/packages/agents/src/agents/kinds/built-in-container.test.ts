@@ -10,6 +10,7 @@ import {
   MERGER_AGENT_KIND,
   TESTER_AGENT_KIND,
 } from './built-in-container.js'
+import { TASK_REASSESSOR_AGENT_KIND, TRIAGE_JSON_CONTRACT } from '../prompts/roles.js'
 
 // What finished the agent-kind strangler, asserted structurally rather than kind by kind: every
 // container kind the platform ships is an ordinary registration, so the dispatch layer reads its
@@ -97,6 +98,40 @@ describe('the declarations the engine relies on', () => {
 
   it('gives the merger no standards at all — it judges a diff, it does not write one', () => {
     expect(registry.standardsDelivery(MERGER_AGENT_KIND)).toBe('none')
+  })
+
+  it('gives the task-reassessor a PR precondition and the prefetched head, never a base fallback', () => {
+    // Its whole job is the change a pull request carries: with none there is nothing to measure,
+    // and a base checkout scored as though it were the change is the failure a silent fallback
+    // produces. `prHead` rather than a `pr` clone because the branch is deleted once the PR
+    // merges, while `refs/pull/<n>/head` stays fetchable.
+    expect(registry.agentStep(TASK_REASSESSOR_AGENT_KIND)?.clone).toMatchObject({
+      branch: 'base',
+      full: true,
+      prHead: true,
+      requirePr: true,
+    })
+  })
+
+  it('keeps the reassessor free of the engine channels its neighbours declare', () => {
+    // The merger and the on-call agent map their reply onto a channel the engine ACTS on, which is
+    // why an unreadable one defaults conservatively. This kind only RECORDS, so the cautious
+    // reading of an unreadable assessment is to record nothing: its resolver reads the raw `custom`
+    // and leaves the task's estimate alone. A mapper here would hand it a defaulted score to
+    // persist as a measurement.
+    expect(registry.mapStructuredResult(TASK_REASSESSOR_AGENT_KIND)).toBeUndefined()
+    expect(registry.agentStep(TASK_REASSESSOR_AGENT_KIND)?.output?.kind).toBe('structured')
+    expect(registry.standardsDelivery(TASK_REASSESSOR_AGENT_KIND)).toBe('none')
+  })
+
+  it('states the parsed JSON contract in the reassessor prompt, and keeps it under an override', () => {
+    // The engine reads scores off this reply, and an estimate that fails to parse is SILENT (the
+    // task simply keeps the estimate it had). The contract is a member of
+    // `OVERRIDE_PRESERVED_FRAGMENTS`, so a workspace that rewrites the role text gets it back.
+    expect(systemPromptFor(TASK_REASSESSOR_AGENT_KIND, registry)).toContain(TRIAGE_JSON_CONTRACT)
+    expect(
+      systemPromptFor(TASK_REASSESSOR_AGENT_KIND, registry, 'Score the diff however you like.'),
+    ).toContain(TRIAGE_JSON_CONTRACT)
   })
 
   it('maps every assessment kind onto the engine channel that acts on it', () => {

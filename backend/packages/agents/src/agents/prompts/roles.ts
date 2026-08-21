@@ -10,6 +10,19 @@ import { FINAL_ANSWER_IN_REPLY } from './shared.js'
 export const TASK_ESTIMATOR_AGENT_KIND = 'task-estimator'
 
 /**
+ * The core POST-implementation task-triage agent kind: the estimator's retrospective twin. Runs
+ * read-only in a container after the work landed, scores the SAME three axes against the change
+ * that was actually made, and the engine persists it on the block as an `observed` estimate,
+ * carrying whatever forecast it replaced.
+ *
+ * A kind of its own rather than a mode of {@link TASK_ESTIMATOR_AGENT_KIND}: the estimator is
+ * INLINE by construction (it is a member of the inline-engine taxonomy the preset-satisfiability
+ * guard keys off) and this one needs a real checkout to read a diff. One kind cannot be classified
+ * both ways. See `backend/docs/task-assessment.md`.
+ */
+export const TASK_REASSESSOR_AGENT_KIND = 'task-reassessor'
+
+/**
  * The three-axis JSON contract the engine PARSES off a triage reply (`coerceTaskEstimate` for the
  * estimator, `resolveMergerStep` for the merger).
  *
@@ -82,6 +95,17 @@ const ROLES: Partial<Record<AgentKind, string>> = {
     'You are a delivery lead triaging a software task BEFORE any design or implementation has begun. From the clarified requirements and any specification context provided, predict three axes, each from 0 (trivial/safe/local) to 1 (severe/dangerous/system-wide): complexity (how intricate the work will be — scope, coupling, unknowns), risk (how likely the change is to break something or go wrong), and impact (the blast radius / how much and who it affects if it does). Be calibrated and conservative; do not anchor every axis to the middle. ' +
     TRIAGE_JSON_CONTRACT +
     ' The rationale must briefly justify each score.',
+  // The estimator's retrospective twin: same three axes, same JSON contract, but scored from the
+  // change that was actually made rather than predicted from the requirements. Runs read-only in
+  // a container with the base checkout plus the pull request's head, so what it reads is the diff.
+  //
+  // It is deliberately NOT told the earlier forecast. An assessment handed the number it is
+  // revising anchors on it, and the delta is not the model's to report anyway: the platform
+  // derives it from the two records (see `reviseTaskEstimate`).
+  'task-reassessor':
+    'You are a delivery lead assessing a software task AFTER its implementation has landed. Read the change that was actually made and score three axes, each from 0 (trivial/safe/local) to 1 (severe/dangerous/system-wide): complexity (how intricate the work turned out to be: the scope it reached, the coupling it had to deal with, the unknowns it hit), risk (how likely THIS change is to break something, judged from what it touches and how well it is covered), and impact (its real blast radius: how much of the system, and how many users, it affects). Judge what the diff shows, not what the task description hoped for; a task that was described as sweeping and landed as a two-line change is a low-complexity change. Be calibrated and conservative; do not anchor every axis to the middle. ' +
+    TRIAGE_JSON_CONTRACT +
+    ' The rationale must briefly justify each score, naming what in the change drove it.',
   // Runs in a container against the PR head branch as the final pipeline step. It
   // ONLY assesses — it must not modify the repo — and returns a JSON score object.
   merger:

@@ -685,7 +685,7 @@ A step's `agentKind` puts it in one of four buckets, and most engine handling ke
 
 **A step's presence may be conditional on the task estimate; a HUMAN GATE never is.** Estimate gating
 (`StepGating` → `shouldRunGatedStep` → `RunDispatcher.skipGatedStep`) skips a step when an earlier
-`task-estimator`'s scores fall below its thresholds; that is what lets ONE pipeline cover a range that
+estimate PRODUCER's scores fall below its thresholds; that is what lets ONE pipeline cover a range that
 would otherwise need several near-identical presets. The three binding rules (gatability is a declared
 per-kind capability, OFF by default, and structural kinds like `merger` stay unlisted; a skipped
 producer CASCADES onto its companion via the persisted `step.skipped`; a step may not carry both

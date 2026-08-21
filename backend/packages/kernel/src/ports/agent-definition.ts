@@ -70,21 +70,28 @@ export interface AgentCloneSpec {
   /** Full history (needed to diff against base / merge); absent ⇒ shallow. */
   full?: boolean
   /**
-   * Fetch the reviewed PR's HEAD into the checkout as `origin/pr-head` before the agent runs
-   * (the `pr-reviewer`). A review clones the `base` branch — so files the PR ADDS are absent and
-   * modified files are only at their base version — and the container agent has no git credential
-   * of its own, so it cannot fetch the head itself (the token lives with the harness). When set,
-   * the engine resolves the block's reviewed PR number into the job's `reviewPrNumber` and the
-   * harness fetches `pull/<n>/head` (GitHub) / `merge-requests/<n>/head` (GitLab) with its token,
-   * so the agent can `git diff origin/<base>...origin/pr-head` and read full head file bodies.
-   * Best-effort: a failed fetch just leaves the review on the base checkout + injected diff.
+   * Fetch a pull request's HEAD into the checkout as `origin/pr-head` before the agent runs (the
+   * `pr-reviewer`, the `task-reassessor`). Such a kind clones the `base` branch, so files the
+   * change ADDS are absent and modified files are only at their base version, and the container
+   * agent has no git credential of its own, so it cannot fetch the head itself (the token lives
+   * with the harness). When set, the engine resolves the PR number into the job's `reviewPrNumber`
+   * and the harness fetches `pull/<n>/head` (GitHub) / `merge-requests/<n>/head` (GitLab) with its
+   * token, so the agent can `git diff origin/<base>...origin/pr-head` and read full head file
+   * bodies. Best-effort by default: a failed or unresolvable fetch just leaves the run on the base
+   * checkout (see {@link requirePr} for the kinds that cannot work that way).
+   *
+   * That ref is also what makes this shape survive a MERGE: the branch a merge deletes takes a
+   * `pr` clone with it, while `refs/pull/<n>/head` stays fetchable, so a kind reading the change
+   * after it landed reads the same diff a kind reading it before the merge does.
    */
   prHead?: boolean
   /**
-   * Refuse the dispatch when the block has NO pull request to work on, instead of falling back
-   * to {@link prFallback}. Right for a kind whose whole job is an EXISTING pull request (the
-   * in-place fixers, the conflict-resolver): with no PR there is nothing to fix, and a silent
-   * fall back to the base branch would push unrelated work onto it. Absent ⇒ the fallback runs.
+   * Refuse the dispatch when the block has NO pull request to work on, instead of falling back to
+   * the base branch (or to {@link prFallback}). Right for a kind whose whole job IS a pull request:
+   * the in-place fixers and the conflict-resolver, where with no PR there is nothing to fix and a
+   * silent fall back to base would push unrelated work onto it; and a {@link prHead} kind that
+   * scores or judges the change a PR carries, where a base checkout holds nothing to judge and
+   * would be scored as though it were the change. Absent ⇒ the fallback runs.
    */
   requirePr?: boolean
   /**

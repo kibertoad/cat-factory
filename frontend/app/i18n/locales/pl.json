@@ -1138,10 +1138,16 @@
     },
     "estimate": {
       "title": "Szacunek",
-      "hint": "Wynik pracy agenta szacującego zadania: jak złożone, ryzykowne i istotne wygląda to zadanie. Służy do decyzji, czy kroki konsensusu (wielokrotne uruchomienia) są opłacalne.",
+      "hint": "Jak złożone, ryzykowne i wpływowe jest to zadanie. Task Estimator prognozuje to przed rozpoczęciem pracy, a Task Reassessor mierzy to później na podstawie faktycznie wprowadzonej zmiany. Służy do decydowania, czy warto uruchamiać kroki konsensusu (wielokrotne przebiegi) i inne kroki warunkowe.",
       "complexity": "Złożoność",
       "risk": "Ryzyko",
-      "impact": "Wpływ"
+      "impact": "Wpływ",
+      "basis": {
+        "predicted": "Prognoza przed rozpoczęciem pracy",
+        "observed": "Zmierzone na podstawie wprowadzonej zmiany",
+        "unknown": "Zapisane przez inną wersję aplikacji"
+      },
+      "was": "wcześniej {value}"
     },
     "reviewTarget": {
       "title": "Przeglądany pull request",

@@ -1,4 +1,5 @@
 import type { AgentDispatchContext, AgentRunContext } from '@cat-factory/kernel'
+import { TRIAGE_JSON_CONTRACT } from './roles.js'
 
 // ---------------------------------------------------------------------------
 // The task prompts + structured-output shape hints for the BUILT-IN container kinds that assess
@@ -20,6 +21,11 @@ import type { AgentDispatchContext, AgentRunContext } from '@cat-factory/kernel'
 /** Compact shape hint fed to the structured-output repair call for the merger assessment. */
 export const MERGE_ASSESSMENT_SHAPE_HINT =
   'Expected a merge assessment: {"complexity": number 0..1, "risk": number 0..1, ' +
+  '"impact": number 0..1, "rationale": string}.'
+
+/** Compact shape hint fed to the structured-output repair call for the task re-assessment. */
+export const TASK_REASSESSMENT_SHAPE_HINT =
+  'Expected a task assessment: {"complexity": number 0..1, "risk": number 0..1, ' +
   '"impact": number 0..1, "rationale": string}.'
 
 /** Compact shape hint fed to the structured-output repair call for the on-call assessment. */
@@ -131,6 +137,60 @@ export function onCallUserPromptSuffix(
       'Beware correlation vs causation.',
     '',
     'Respond with ONLY a JSON object {"culpritConfidence":0.0,"recommendation":"revert"|"hold"|"monitor","rationale":"…","evidence":["…"]}.',
+  ].join('\n')
+}
+
+/**
+ * The `task-reassessor`'s task prompt: read the change the run actually landed and score the
+ * three triage axes against it.
+ *
+ * The checkout is the pr-reviewer's: the BASE branch plus the pull request's head fetched as
+ * `origin/pr-head` by the harness. That shape rather than a clone of the PR branch because the
+ * branch is DELETED once the pull request merges, while `refs/pull/<n>/head` survives it, so the
+ * same step reads the same diff whether it runs before the merge or after it.
+ *
+ * It is NOT handed the earlier forecast (see the role prompt in ./roles.ts): the platform derives
+ * the delta from the two records rather than asking the model what it changed.
+ *
+ * A MULTI-REPO task is named rather than silently under-scored. The peer PRs' repositories are not
+ * in this checkout (resolving them is the merger's combined-diff path, which is that kind's alone),
+ * so the assessment covers the primary repository's change and has to SAY so, or a reader takes a
+ * partial score for the whole one.
+ */
+export function taskReassessorUserPrompt(
+  context: AgentRunContext,
+  dispatch?: AgentDispatchContext,
+): string {
+  const prNumber = context.block.pullRequest?.number
+  const pr = prNumber !== undefined ? ` (PR #${prNumber})` : ''
+  // With no dispatch context there is no checkout and therefore no branch to name: say what to
+  // read without asserting a branch name the caller never resolved.
+  const readGuidance = dispatch
+    ? `You are on the base branch \`${dispatch.baseBranch}\`, and the change${pr} has been ` +
+      'fetched for you as `origin/pr-head`:\n' +
+      `  git diff --name-status origin/${dispatch.baseBranch}...origin/pr-head   # the shape of the change\n` +
+      `  git diff origin/${dispatch.baseBranch}...origin/pr-head -- <path>       # one file's diff\n` +
+      'Start from the shape, then read the diffs that decide the score. If `origin/pr-head` is ' +
+      'absent (the fetch was skipped), say so in your rationale and score from the evidence above ' +
+      'rather than guessing.'
+    : `Score the change${pr} from the evidence you have been given.`
+  const peers = context.block.peerPullRequests?.length ?? 0
+  const scope =
+    peers > 0
+      ? `This task also changed ${peers} connected service repositor${peers === 1 ? 'y' : 'ies'}, ` +
+        'which are NOT in this checkout. Score the change you can read, and state in your ' +
+        'rationale that the connected repositories were out of scope.'
+      : null
+  return [
+    'The implementation for this task has landed. Assess what was ACTUALLY built and return the ' +
+      'complexity / risk / impact scores + rationale as JSON.',
+    '',
+    readGuidance,
+    ...(scope ? ['', scope] : []),
+    '',
+    `Task: ${context.block.title}`,
+    '',
+    TRIAGE_JSON_CONTRACT,
   ].join('\n')
 }
 

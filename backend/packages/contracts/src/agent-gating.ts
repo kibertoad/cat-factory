@@ -83,6 +83,14 @@ export const BUILTIN_GATABLE_KINDS: ReadonlySet<string> = new Set<string>([
   // Documentation of work already done.
   'documenter',
   'business-documenter',
+  // The post-implementation re-assessment. It qualifies under this set's own test: nothing reads
+  // the measured estimate structurally, so its absence leaves the task holding the FORECAST it
+  // already had (or no estimate at all, exactly as before the step existed) rather than
+  // dead-ending anything. Gating it is the cheap direction too: it costs a read-only container
+  // run, and a task the forecast put at the bottom of every axis is the one least worth measuring.
+  //
+  // Shipped GATABLE but ungated, like `repro-test`: no built-in preset carries the step at all.
+  'task-reassessor',
   // Human checkpoints whose whole purpose IS the human. Gating their PRESENCE is escalation —
   // "require a human PR review once risk clears .8" — not the cancellation of an approval pause
   // a pipeline author asked for. That distinction is enforced separately: the gating validation
@@ -112,4 +120,30 @@ export const BUILTIN_GATABLE_KINDS: ReadonlySet<string> = new Set<string>([
  */
 export function isBuiltinGatableKind(kind: AgentKind | string): boolean {
   return BUILTIN_GATABLE_KINDS.has(kind)
+}
+
+/**
+ * The built-in agent kinds that WRITE a task estimate, and so satisfy the prerequisite every
+ * estimate gate carries: an enabled one of these must run EARLIER in the chain, or the gate has
+ * nothing to consult.
+ *
+ * Two members, because the estimate has two producers at opposite ends of a run (see
+ * `taskEstimateBasisSchema`): `task-estimator` FORECASTS it up front, `task-reassessor` MEASURES
+ * it against the change that was made. A gate placed after either one reads a real estimate, so
+ * the prerequisite is about the FIELD being populated rather than about which agent populated it.
+ *
+ * Lives here beside {@link BUILTIN_GATABLE_KINDS} for the same reason that set does: the engine's
+ * shape validation (`assertValidGating`, refusing an illegal pipeline at save AND at run start)
+ * and the SPA's pipeline-health advisory plus its builder draft warning all state this rule, in
+ * three different packages. Three hand-written copies of "is there an estimator before this step"
+ * is exactly how the advisory came to declare a shipped preset invalid.
+ */
+export const ESTIMATE_PRODUCING_KINDS: ReadonlySet<string> = new Set<string>([
+  'task-estimator',
+  'task-reassessor',
+])
+
+/** Whether `kind` writes the task estimate an estimate gate consults. */
+export function producesTaskEstimate(kind: AgentKind | string): boolean {
+  return ESTIMATE_PRODUCING_KINDS.has(kind)
 }

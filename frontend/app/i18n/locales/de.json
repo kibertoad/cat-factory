@@ -1724,10 +1724,16 @@
     },
     "estimate": {
       "title": "Schätzung",
-      "hint": "Vom Task-Estimator-Agent erzeugt: wie komplex, riskant und wirkungsvoll diese Aufgabe aussieht. Wird verwendet, um zu entscheiden, ob Konsens-Schritte (Mehrfachläufe) sich lohnen.",
+      "hint": "Wie komplex, riskant und wirkungsvoll diese Aufgabe ist. Ein Task Estimator prognostiziert das vor Beginn der Arbeit, ein Task Reassessor misst es danach an der tatsächlich erfolgten Änderung. Wird verwendet, um zu entscheiden, ob Konsens-Schritte (Mehrfachläufe) und andere bedingte Schritte sich lohnen.",
       "complexity": "Komplexität",
       "risk": "Risiko",
-      "impact": "Wirkung"
+      "impact": "Wirkung",
+      "basis": {
+        "predicted": "Prognose vor Beginn der Arbeit",
+        "observed": "Gemessen an der erfolgten Änderung",
+        "unknown": "Von einer anderen App-Version erfasst"
+      },
+      "was": "vorher {value}"
     },
     "reviewTarget": {
       "title": "Geprüfter Pull Request",

@@ -1,3 +1,5 @@
+import { isTaskEstimateBasis, type TaskEstimateBasis } from '@cat-factory/contracts'
+
 /**
  * The three axes a `task-estimator` step scores a task on, and the presentation vocabulary every
  * surface that lets a human gate work on them shares.
@@ -57,4 +59,32 @@ export function parseAxisThreshold(raw: string): number | undefined {
   const parsed = Number.parseFloat(trimmed)
   if (!Number.isFinite(parsed)) return undefined
   return Math.min(1, Math.max(0, parsed))
+}
+
+/**
+ * Basis → the label key saying what a stored estimate's scores were formed ON. Three cases, and
+ * they are three because each states a different fact:
+ *
+ *  - ABSENT: a row written before the basis vocabulary existed. Every one of those came from the
+ *    estimator, so calling it a forecast is a fact about the row rather than a default standing in
+ *    for one.
+ *  - a member this bundle KNOWS: its own label.
+ *  - anything else: said out loud. `basis` is persisted and read back with no schema pass, and a
+ *    browser holds a bundle older than the member it reads, so guessing onto a current member would
+ *    relabel a measurement as a forecast (or the reverse) with nothing on screen to say so.
+ *
+ * The keys are LITERAL so the typed-message-key check sees them, and the map is exhaustive over the
+ * contracts union, so a third basis fails the typecheck here rather than rendering a raw key.
+ */
+const ESTIMATE_BASIS_LABEL_KEYS: Record<TaskEstimateBasis, string> = {
+  predicted: 'inspector.estimate.basis.predicted',
+  observed: 'inspector.estimate.basis.observed',
+}
+
+const ESTIMATE_BASIS_UNKNOWN_KEY = 'inspector.estimate.basis.unknown'
+
+/** The label key for a stored basis: see {@link ESTIMATE_BASIS_LABEL_KEYS} for the three cases. */
+export function estimateBasisLabelKey(basis: string | undefined): string {
+  if (basis === undefined) return ESTIMATE_BASIS_LABEL_KEYS.predicted
+  return isTaskEstimateBasis(basis) ? ESTIMATE_BASIS_LABEL_KEYS[basis] : ESTIMATE_BASIS_UNKNOWN_KEY
 }

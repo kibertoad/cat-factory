@@ -11,9 +11,12 @@ import {
   mergerUserPrompt,
   ON_CALL_ASSESSMENT_SHAPE_HINT,
   onCallUserPromptSuffix,
+  TASK_REASSESSMENT_SHAPE_HINT,
+  taskReassessorUserPrompt,
   TEST_REPORT_SHAPE_HINT,
   UI_TEST_REPORT_SHAPE_HINT,
 } from '../prompts/built-in-container.js'
+import { TASK_REASSESSOR_AGENT_KIND } from '../prompts/roles.js'
 import { mergerResult, onCallResult, testerResult } from './built-in-results.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 
@@ -187,6 +190,33 @@ export const BUILT_IN_CONTAINER_AGENT_KINDS: AgentKindDefinition[] = [
     },
     userPromptSuffix: onCallUserPromptSuffix,
     mapStructuredResult: onCallResult,
+  },
+  {
+    // The task re-assessor measures the three triage axes against the change that LANDED, and the
+    // engine persists the result as the task's `observed` estimate (see
+    // backend/docs/task-assessment.md). The estimator's retrospective twin, and the reason it is a
+    // kind of its own rather than a mode of that inline kind.
+    //
+    // The pr-reviewer's checkout, not the merger's: base + the pull request's head fetched as
+    // `origin/pr-head`. `refs/pull/<n>/head` outlives the branch a merge deletes, so one step
+    // reads the same change whether it runs before the merge or after it.
+    //
+    // No `mapStructuredResult`, unlike its two neighbours here. Their channels exist because the
+    // ENGINE acts on the reply (a merge, a page), which makes a garbage score something to default
+    // conservatively; this one only RECORDS, and the cautious reading of an unreadable assessment
+    // is to record nothing rather than to invent a maximally severe task. Its resolver reads the
+    // raw `custom` and leaves the estimate untouched when it cannot read scores off it.
+    //
+    // `standardsDelivery: 'none'` for the merger's reason: it judges rather than produces, so a
+    // house coding standard has no bearing on how complex the diff it is holding turned out to be.
+    kind: TASK_REASSESSOR_AGENT_KIND,
+    agent: {
+      surface: 'container-explore',
+      clone: { branch: 'base', full: true, prHead: true, requirePr: true },
+      output: { kind: 'structured', shapeHint: TASK_REASSESSMENT_SHAPE_HINT },
+    },
+    userPrompt: taskReassessorUserPrompt,
+    standardsDelivery: 'none',
   },
 
   // --- Testers: read-only structured explore with the service's test dependencies stood up --

@@ -32,6 +32,7 @@ import {
   isContainerBackedCompanion,
   INTERVIEW_GATE_TRAIT,
   TASK_ESTIMATOR_AGENT_KIND,
+  TASK_REASSESSOR_AGENT_KIND,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import {
@@ -43,7 +44,11 @@ import {
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
 import { BUG_INTAKE_AGENT_KIND } from '../pipelines/pipelineShape.js'
 import { renderInitiativePlanForReview } from '@cat-factory/contracts'
-import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.logic.js'
+import {
+  coerceTaskEstimate,
+  reviseTaskEstimate,
+  summarizeEstimate,
+} from '../estimation/estimate.logic.js'
 import { renderInvestigationDigest } from './bugInvestigation.logic.js'
 import { renderReproDigest } from './reproTest.logic.js'
 import {
@@ -771,11 +776,42 @@ export function buildStepResolverRegistry(
           step.output ?? '',
           result.model ?? step.model ?? null,
           d.clock.now(),
+          'predicted',
         )
         if (estimate) {
           await d.blockRepository.update(workspaceId, instance.blockId, { estimate })
           return { output: summarizeEstimate(estimate) }
         }
+      },
+    },
+    // A `task-reassessor` step MEASURED the same three axes against the change that landed, and
+    // its structured reply arrives as `result.custom` (a container explore kind). It writes the
+    // task's `observed` estimate, carrying whatever FORECAST it replaced (`reviseTaskEstimate`),
+    // and replaces the raw JSON output with the readable summary the approval gate then reads as
+    // the proposal. The same post-completion slot the estimator uses, for the same reason.
+    //
+    // The prior estimate is READ HERE rather than taken from the run context: the context was
+    // built at dispatch, and this resolver runs after a container job that can outlive several
+    // minutes of other writes, so the record to supersede is whatever the block holds NOW.
+    //
+    // An unreadable reply (falling back to the tolerant prose parse, since a garbled structured
+    // reply still often carries the JSON in the text) leaves the block's estimate untouched and
+    // keeps the raw output: no run failure, and no invented measurement replacing a real forecast.
+    {
+      kind: TASK_REASSESSOR_AGENT_KIND,
+      phase: 'post-completion',
+      resolve: async ({ workspaceId, instance, step, result }) => {
+        const measured = coerceTaskEstimate(
+          result.custom ?? step.output ?? '',
+          result.model ?? step.model ?? null,
+          d.clock.now(),
+          'observed',
+        )
+        if (!measured) return
+        const block = await d.blockRepository.get(workspaceId, instance.blockId)
+        const estimate = reviseTaskEstimate(block?.estimate, measured)
+        await d.blockRepository.update(workspaceId, instance.blockId, { estimate })
+        return { output: summarizeEstimate(estimate) }
       },
     },
   ]

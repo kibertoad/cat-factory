@@ -8,7 +8,11 @@ import type {
   TesterQualityConfig,
 } from '@cat-factory/kernel'
 import type { BinaryOutputConfig } from '@cat-factory/contracts'
-import { conflictingOutputSizeOptions, validateDescriptorFields } from '@cat-factory/contracts'
+import {
+  conflictingOutputSizeOptions,
+  producesTaskEstimate,
+  validateDescriptorFields,
+} from '@cat-factory/contracts'
 import {
   BINARY_OUTPUT_TRAIT,
   companionTargets,
@@ -17,7 +21,6 @@ import {
   isCompanionKind,
   isGatableKind,
   SKILL_AGENT_KIND,
-  TASK_ESTIMATOR_AGENT_KIND,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { isTesterKind } from '../execution/ci.logic.js'
@@ -405,6 +408,24 @@ export function assertValidCompanionPlacement({
 }
 
 /**
+ * Whether an ENABLED step that WRITES the task estimate runs before index `i`: the prerequisite
+ * both estimate gates carry (a step's own, and a Tester's quality companion's).
+ *
+ * Asked of `producesTaskEstimate` rather than of one kind id, because the estimate has two
+ * producers at opposite ends of a run: `task-estimator` forecasts it up front and
+ * `task-reassessor` measures it once the change has landed. A gate after either reads a real
+ * estimate. The SPA states the same rule from the same contracts predicate (its pipeline-health
+ * advisory and its builder draft warning), so all three cannot drift.
+ */
+function hasEstimateProducerBefore(
+  agentKinds: readonly string[],
+  i: number,
+  isEnabled: (index: number) => boolean,
+): boolean {
+  return agentKinds.slice(0, i).some((k, j) => producesTaskEstimate(k) && isEnabled(j))
+}
+
+/**
  * Validate every ENABLED step that carries enabled estimate gating. A disabled gated step
  * never runs, so it imposes no requirement; an enabled one must satisfy all four rules:
  *
@@ -428,8 +449,8 @@ export function assertValidCompanionPlacement({
  *  3. It must set at least one axis threshold. With none, the axis loop in
  *     `shouldRunGatedStep` never matches, so a step with an estimate would ALWAYS skip — the
  *     opposite of the usual intent — making the toggle a silent footgun.
- *  4. An enabled `task-estimator` must run earlier in the chain, or the gate has no estimate
- *     to consult.
+ *  4. An enabled step that PRODUCES an estimate must run earlier in the chain, or the gate has
+ *     nothing to consult (see {@link hasEstimateProducerBefore}).
  */
 export function assertValidGating({
   agentKinds,
@@ -459,12 +480,9 @@ export function assertValidGating({
         `Step '${kind}' is estimate-gated but sets no threshold — set at least one of complexity / risk / impact, or it would always be skipped.`,
       )
     }
-    const hasEstimator = agentKinds
-      .slice(0, i)
-      .some((k, j) => k === TASK_ESTIMATOR_AGENT_KIND && isEnabled(j))
-    if (!hasEstimator) {
+    if (!hasEstimateProducerBefore(agentKinds, i, isEnabled)) {
       throw new ValidationError(
-        `Step '${kind}' is gated on the task estimate but no enabled '${TASK_ESTIMATOR_AGENT_KIND}' step runs before it. Add a task-estimator earlier in the pipeline.`,
+        `Step '${kind}' is gated on the task estimate but no step that produces one runs before it. Add a task-estimator earlier in the pipeline (or a task-reassessor, which measures the estimate after the implementation lands).`,
       )
     }
   }
@@ -549,12 +567,9 @@ export function assertValidTesterQualityGating({
         `Step '${kind}' has an estimate-gated test quality companion but sets no threshold — set at least one of complexity / risk / impact, or the gate would always skip the review.`,
       )
     }
-    const hasEstimator = agentKinds
-      .slice(0, i)
-      .some((k, j) => k === TASK_ESTIMATOR_AGENT_KIND && isEnabled(j))
-    if (!hasEstimator) {
+    if (!hasEstimateProducerBefore(agentKinds, i, isEnabled)) {
       throw new ValidationError(
-        `Step '${kind}' has a test quality companion gated on the task estimate but no enabled '${TASK_ESTIMATOR_AGENT_KIND}' step runs before it. Add a task-estimator earlier in the pipeline.`,
+        `Step '${kind}' has a test quality companion gated on the task estimate but no step that produces one runs before it. Add a task-estimator earlier in the pipeline.`,
       )
     }
   }

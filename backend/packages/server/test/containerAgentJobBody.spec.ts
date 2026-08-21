@@ -660,6 +660,41 @@ describe('ContainerAgentExecutor pr-reviewer PR-head prefetch (reviewPrNumber)',
   })
 })
 
+// The `task-reassessor` uses the same prefetch to read a change the RUN opened, so the number comes
+// off the block's own pull request rather than off task fields a review task declares. And because
+// its whole job is that change, `requirePr` turns an unresolvable number into a refusal instead of a
+// base-branch checkout it would score as though it were the change.
+describe('ContainerAgentExecutor task-reassessor PR-head prefetch', () => {
+  it('resolves reviewPrNumber from the pull request the run opened', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('task-reassessor', { pullRequest: PR }))
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('explore')
+    expect(spec.reviewPrNumber).toBe(9)
+    // BASE, not the PR branch: a merge deletes that branch while `refs/pull/<n>/head` survives it.
+    expect(spec.branch).toBe('main')
+    expect(spec.full).toBe(true)
+  })
+
+  it('refuses the dispatch when the task has no pull request at all', async () => {
+    const { executor, captured } = makeExecutor()
+    await expect(executor.startJob(context('task-reassessor'))).rejects.toThrow(
+      /needs the pull request carrying this task's change/,
+    )
+    expect(captured).toHaveLength(0)
+  })
+
+  it('keeps a review task declaration ahead of any PR the run opened', async () => {
+    // The task's declaration wins: a review task names the PR it was created for, and a run of it
+    // opens none, so the two sources never compete for one dispatch.
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(
+      context('pr-reviewer', { taskTypeFields: { prNumber: 4558 }, pullRequest: PR }),
+    )
+    expect(captured[0]!.spec.reviewPrNumber).toBe(4558)
+  })
+})
+
 describe('ContainerAgentExecutor job-token scope', () => {
   // The job token is narrowed to the repos ONE dispatch resolved, so a fully compromised run
   // reaches the repos the run was about rather than every repo the installation covers

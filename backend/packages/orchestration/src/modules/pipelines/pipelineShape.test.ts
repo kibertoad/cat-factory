@@ -212,16 +212,33 @@ describe('validatePipelineShape', () => {
     ).not.toThrow()
   })
 
-  it('requires an enabled task-estimator before any enabled gated step', () => {
+  it('requires an enabled estimate PRODUCER before any enabled gated step', () => {
     expect(() =>
       assertValidGating({ agentKinds: ['coder', 'reviewer'], gating: [null, gated] }),
-    ).toThrow(/no enabled 'task-estimator' step runs before it/)
+    ).toThrow(/no step that produces one runs before it/)
     expect(() =>
       assertValidGating({
         agentKinds: ['task-estimator', 'coder', 'reviewer'],
         gating: [null, null, gated],
       }),
     ).not.toThrow()
+    // EITHER producer satisfies it: the reassessor measures the estimate after the change lands,
+    // so a gate after one has a real estimate to read (the rule is about the FIELD being
+    // populated, not about which agent populated it).
+    expect(() =>
+      assertValidGating({
+        agentKinds: ['coder', 'task-reassessor', 'human-review'],
+        gating: [null, null, gated],
+      }),
+    ).not.toThrow()
+    // ...and a DISABLED producer does not: the same enabled-subset reading every other rule takes.
+    expect(() =>
+      assertValidGating({
+        agentKinds: ['coder', 'task-reassessor', 'human-review'],
+        enabled: [true, false, true],
+        gating: [null, null, gated],
+      }),
+    ).toThrow(/no step that produces one runs before it/)
     // A disabled gated step imposes no requirement.
     expect(() =>
       assertValidGating({

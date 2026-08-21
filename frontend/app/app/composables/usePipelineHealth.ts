@@ -1,12 +1,9 @@
 import { computed } from 'vue'
 import type { Pipeline } from '~/types/domain'
 import type { StepGating } from '~/types/consensus'
-import { isBuiltinGatableKind } from '@cat-factory/contracts'
+import { isBuiltinGatableKind, producesTaskEstimate } from '@cat-factory/contracts'
 import { COMPANION_FOR_PRODUCER, isKnownAgentKind, isProducerCompanion } from '~/utils/catalog'
 import { usePipelinesStore } from '~/stores/pipelines'
-
-/** Estimate-gating consults a `task-estimator` step (mirrors the backend constant). */
-const TASK_ESTIMATOR_KIND = 'task-estimator'
 
 export type PipelineProblemType = 'unknown-kind' | 'shape' | 'outdated' | 'retired'
 
@@ -137,9 +134,11 @@ function skipAxisProblem(
 }
 
 /**
- * Estimate gating: the shared skip-axis rules, plus the two specific to an estimate — at least one
- * axis threshold (with none the step would ALWAYS skip) and an enabled task-estimator earlier in
- * the chain (or the gate has nothing to consult). Mirrors `assertValidGating`.
+ * Estimate gating: the shared skip-axis rules, plus the two specific to an estimate: at least one
+ * axis threshold (with none the step would ALWAYS skip) and an enabled step that PRODUCES an
+ * estimate earlier in the chain (or the gate has nothing to consult). Mirrors `assertValidGating`,
+ * through the same `producesTaskEstimate` predicate, so neither surface can drift from the other
+ * about which kinds count.
  */
 function gatingProblem(p: Pipeline): string | null {
   const gating = p.gating
@@ -161,9 +160,9 @@ function gatingProblem(p: Pipeline): string | null {
     }
     const hasEstimator = kinds
       .slice(0, i)
-      .some((k, j) => k === TASK_ESTIMATOR_KIND && isEnabledAt(p, j))
+      .some((k, j) => producesTaskEstimate(k) && isEnabledAt(p, j))
     if (!hasEstimator) {
-      return `Step '${kind}' is gated on the estimate but no enabled '${TASK_ESTIMATOR_KIND}' runs before it.`
+      return `Step '${kind}' is gated on the estimate but no step that produces one runs before it.`
     }
   }
   return null

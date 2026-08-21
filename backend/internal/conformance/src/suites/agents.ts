@@ -21,6 +21,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
     defineTaskTypeConformance(harness)
     registerSpikeAndPostOpTests(harness)
     registerEstimatorAndGateTests(harness)
+    registerTaskAssessmentTests(harness)
   })
 }
 
@@ -954,128 +955,6 @@ function registerEstimatorAndGateTests(harness: ConformanceHarness): void {
     })
   })
 
-  describe('task estimator + consensus', () => {
-    it('parses a task-estimator step output onto block.estimate, persisted identically', async () => {
-      const app = harness.makeApp({
-        taskEstimate: { complexity: 0.7, risk: 0.8, impact: 0.6, rationale: 'fake estimate' },
-      })
-      const { workspace } = await app.createWorkspace()
-      const wsId = workspace.id
-
-      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
-        name: 'Estimate + code',
-        purpose: 'build',
-        agentKinds: ['task-estimator', 'coder'],
-      })
-      const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-        pipelineId: pipeline.body.id,
-      })
-      expect(start.status).toBe(201)
-      await app.drive(wsId)
-
-      // The estimator's JSON output round-trips onto the block's `estimate` column —
-      // the same shape from D1 (SQLite) and Postgres.
-      const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
-      const block = snapshot.body.blocks.find((b) => b.id === 'task_login')!
-      expect(block.estimate).toBeTruthy()
-      expect(block.estimate!.complexity).toBe(0.7)
-      expect(block.estimate!.risk).toBe(0.8)
-      expect(block.estimate!.impact).toBe(0.6)
-      expect(block.estimate!.rationale).toContain('fake estimate')
-    })
-
-    describe('technical-label inference (spec phase)', () => {
-      // Drive a spec-writer → spec-companion pipeline and assert the engine infers the
-      // block's `technical` label from the writer's `noBusinessSpecs` + the companion's
-      // `technicalCorroborated`, honouring human authority — identically on both runtimes.
-      const runSpecPhase = async (
-        opts: { noBusinessSpecs?: boolean; spec?: unknown; technicalCorroborated?: boolean },
-        preset?: { technical?: boolean | null },
-      ) => {
-        const app = harness.makeApp(opts)
-        const { workspace } = await app.createWorkspace()
-        const wsId = workspace.id
-        if (preset) {
-          await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, preset)
-        }
-        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
-          name: 'Spec phase',
-          purpose: 'build',
-          agentKinds: ['spec-writer', 'spec-companion'],
-        })
-        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-          pipelineId: pipeline.body.id,
-        })
-        expect(start.status).toBe(201)
-        await app.drive(wsId)
-        const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
-        return snapshot.body.blocks.find((b) => b.id === 'task_login')!
-      }
-
-      it('infers technical=true when the writer produced no business specs and the companion corroborates', async () => {
-        const block = await runSpecPhase({ noBusinessSpecs: true, technicalCorroborated: true })
-        expect(block.technical).toBe(true)
-      })
-
-      it('infers the symmetric business case (false) when specs were produced', async () => {
-        const block = await runSpecPhase({
-          spec: { service: 'Auth', summary: '', modules: [] },
-          technicalCorroborated: false,
-        })
-        expect(block.technical).toBe(false)
-      })
-
-      it('leaves the label undetermined when the companion gives no opinion', async () => {
-        const block = await runSpecPhase({ noBusinessSpecs: true })
-        expect(block.technical == null).toBe(true)
-      })
-
-      it('never overrides a human-set label', async () => {
-        // The human marked it BUSINESS up front; the spec phase would infer TECHNICAL,
-        // but human authority wins and the stored value is left untouched.
-        const block = await runSpecPhase(
-          { noBusinessSpecs: true, technicalCorroborated: true },
-          { technical: false },
-        )
-        expect(block.technical).toBe(false)
-      })
-    })
-
-    it('persists a consensus config on a pipeline step, surfaced on the snapshot', async () => {
-      const app = harness.makeApp()
-      const { workspace } = await app.createWorkspace()
-      const wsId = workspace.id
-
-      const created = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
-        name: 'Consensus architect',
-        purpose: 'build',
-        agentKinds: ['architect', 'coder'],
-        consensus: [
-          {
-            enabled: true,
-            strategy: 'debate',
-            rounds: 2,
-            participants: [
-              { id: 'cp1', role: 'Pragmatist' },
-              { id: 'cp2', role: 'Skeptic' },
-            ],
-            gating: { enabled: true, minRisk: 0.6 },
-          },
-          null,
-        ],
-      })
-      expect(created.body.consensus?.[0]?.enabled).toBe(true)
-      expect(created.body.consensus?.[0]?.strategy).toBe('debate')
-
-      // Round-trips through the store on a fresh snapshot read (D1 + Postgres alike).
-      const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
-      const reloaded = snapshot.body.pipelines.find((p) => p.id === created.body.id)!
-      expect(reloaded.consensus?.[0]?.strategy).toBe('debate')
-      expect(reloaded.consensus?.[0]?.participants).toHaveLength(2)
-      expect(reloaded.consensus?.[1] ?? null).toBeNull()
-    })
-  })
-
   describe('human-testing gate', () => {
     // The gate is a runtime-neutral engine step: it parks for a human, dispatches the
     // Tester's `fixer` from findings, and advances on confirm — identically on every
@@ -1190,6 +1069,239 @@ function registerEstimatorAndGateTests(harness: ConformanceHarness): void {
       expect(del.status).toBe(204)
       const afterDelete = await call<{ id: string }[]>('GET', base)
       expect(afterDelete.body).toEqual([])
+    })
+  })
+}
+
+/**
+ * The two producers of a task's triage scores, and the consensus gating that reads them: the
+ * inline `task-estimator` FORECASTS the estimate before any design work and the container
+ * `task-reassessor` MEASURES it afterwards from the change that landed, both onto the ONE
+ * `block.estimate` column, whose basis + superseded scores have to round-trip identically from D1
+ * and from Postgres. Design: `backend/docs/task-assessment.md`.
+ *
+ * Registered from the suite above; split out of {@link registerEstimatorAndGateTests} to keep each
+ * function within the per-function line budget. Every test is unchanged.
+ */
+function registerTaskAssessmentTests(harness: ConformanceHarness): void {
+  describe('task estimator + consensus', () => {
+    it('parses a task-estimator step output onto block.estimate, persisted identically', async () => {
+      const app = harness.makeApp({
+        taskEstimate: { complexity: 0.7, risk: 0.8, impact: 0.6, rationale: 'fake estimate' },
+      })
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Estimate + code',
+        purpose: 'build',
+        agentKinds: ['task-estimator', 'coder'],
+      })
+      const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+        pipelineId: pipeline.body.id,
+      })
+      expect(start.status).toBe(201)
+      await app.drive(wsId)
+
+      // The estimator's JSON output round-trips onto the block's `estimate` column —
+      // the same shape from D1 (SQLite) and Postgres.
+      const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      const block = snapshot.body.blocks.find((b) => b.id === 'task_login')!
+      expect(block.estimate).toBeTruthy()
+      expect(block.estimate!.complexity).toBe(0.7)
+      expect(block.estimate!.risk).toBe(0.8)
+      expect(block.estimate!.impact).toBe(0.6)
+      expect(block.estimate!.rationale).toContain('fake estimate')
+    })
+
+    it('replaces the forecast with the measured estimate, keeping what it superseded', async () => {
+      // The post-implementation reading, end to end: the estimator FORECASTS the task, the coder
+      // lands the change, and the reassessor MEASURES the same axes against it. The block keeps one
+      // record (what every estimate gate and the board's impact sort read) and that record carries
+      // the forecast it corrected, so "how well did we predict this" survives on both stores.
+      const app = harness.makeApp({
+        taskEstimate: { complexity: 0.3, risk: 0.2, impact: 0.4, rationale: 'looks small' },
+        customResultByKind: {
+          'task-reassessor': {
+            complexity: 0.9,
+            risk: 0.7,
+            impact: 0.8,
+            rationale: 'reached the auth path',
+          },
+        },
+      })
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Estimate, code, reassess',
+        purpose: 'build',
+        agentKinds: ['task-estimator', 'coder', 'task-reassessor'],
+      })
+      const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+        pipelineId: pipeline.body.id,
+      })
+      expect(start.status).toBe(201)
+      await app.drive(wsId)
+
+      const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      const estimate = snapshot.body.blocks.find((b) => b.id === 'task_login')!.estimate!
+      expect(estimate.basis).toBe('observed')
+      expect(estimate.complexity).toBe(0.9)
+      expect(estimate.rationale).toContain('auth path')
+      expect(estimate.supersedes).toMatchObject({
+        basis: 'predicted',
+        complexity: 0.3,
+        risk: 0.2,
+        impact: 0.4,
+      })
+    })
+
+    it('measures the estimate a pipeline with no estimator never had', async () => {
+      // The other half of the feature: nothing forecast this task, so the reassessor produces its
+      // ratings for the first time, after the fact. `supersedes` stays absent, because a first
+      // reading corrected nothing.
+      const app = harness.makeApp({
+        customResultByKind: {
+          'task-reassessor': { complexity: 0.6, risk: 0.5, impact: 0.5, rationale: 'as expected' },
+        },
+      })
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Code then reassess',
+        purpose: 'build',
+        agentKinds: ['coder', 'task-reassessor'],
+      })
+      await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+        pipelineId: pipeline.body.id,
+      })
+      await app.drive(wsId)
+
+      const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      const estimate = snapshot.body.blocks.find((b) => b.id === 'task_login')!.estimate!
+      expect(estimate.basis).toBe('observed')
+      expect(estimate.complexity).toBe(0.6)
+      expect(estimate.supersedes ?? null).toBeNull()
+    })
+
+    it('leaves a forecast standing when the measurement cannot be read', async () => {
+      // An unreadable assessment is not an assessment. The block keeps the forecast it had rather
+      // than taking a defaulted score as a measurement, which would silently move every gate that
+      // reads it.
+      const app = harness.makeApp({
+        taskEstimate: { complexity: 0.3, risk: 0.2, impact: 0.4, rationale: 'looks small' },
+        customResultByKind: { 'task-reassessor': { rationale: 'I could not read the diff' } },
+      })
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Estimate, code, reassess (garbled)',
+        purpose: 'build',
+        agentKinds: ['task-estimator', 'coder', 'task-reassessor'],
+      })
+      await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+        pipelineId: pipeline.body.id,
+      })
+      await app.drive(wsId)
+
+      const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      const estimate = snapshot.body.blocks.find((b) => b.id === 'task_login')!.estimate!
+      expect(estimate.basis).toBe('predicted')
+      expect(estimate.complexity).toBe(0.3)
+    })
+
+    describe('technical-label inference (spec phase)', () => {
+      // Drive a spec-writer → spec-companion pipeline and assert the engine infers the
+      // block's `technical` label from the writer's `noBusinessSpecs` + the companion's
+      // `technicalCorroborated`, honouring human authority — identically on both runtimes.
+      const runSpecPhase = async (
+        opts: { noBusinessSpecs?: boolean; spec?: unknown; technicalCorroborated?: boolean },
+        preset?: { technical?: boolean | null },
+      ) => {
+        const app = harness.makeApp(opts)
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        if (preset) {
+          await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, preset)
+        }
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Spec phase',
+          purpose: 'build',
+          agentKinds: ['spec-writer', 'spec-companion'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        await app.drive(wsId)
+        const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        return snapshot.body.blocks.find((b) => b.id === 'task_login')!
+      }
+
+      it('infers technical=true when the writer produced no business specs and the companion corroborates', async () => {
+        const block = await runSpecPhase({ noBusinessSpecs: true, technicalCorroborated: true })
+        expect(block.technical).toBe(true)
+      })
+
+      it('infers the symmetric business case (false) when specs were produced', async () => {
+        const block = await runSpecPhase({
+          spec: { service: 'Auth', summary: '', modules: [] },
+          technicalCorroborated: false,
+        })
+        expect(block.technical).toBe(false)
+      })
+
+      it('leaves the label undetermined when the companion gives no opinion', async () => {
+        const block = await runSpecPhase({ noBusinessSpecs: true })
+        expect(block.technical == null).toBe(true)
+      })
+
+      it('never overrides a human-set label', async () => {
+        // The human marked it BUSINESS up front; the spec phase would infer TECHNICAL,
+        // but human authority wins and the stored value is left untouched.
+        const block = await runSpecPhase(
+          { noBusinessSpecs: true, technicalCorroborated: true },
+          { technical: false },
+        )
+        expect(block.technical).toBe(false)
+      })
+    })
+
+    it('persists a consensus config on a pipeline step, surfaced on the snapshot', async () => {
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      const created = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Consensus architect',
+        purpose: 'build',
+        agentKinds: ['architect', 'coder'],
+        consensus: [
+          {
+            enabled: true,
+            strategy: 'debate',
+            rounds: 2,
+            participants: [
+              { id: 'cp1', role: 'Pragmatist' },
+              { id: 'cp2', role: 'Skeptic' },
+            ],
+            gating: { enabled: true, minRisk: 0.6 },
+          },
+          null,
+        ],
+      })
+      expect(created.body.consensus?.[0]?.enabled).toBe(true)
+      expect(created.body.consensus?.[0]?.strategy).toBe('debate')
+
+      // Round-trips through the store on a fresh snapshot read (D1 + Postgres alike).
+      const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      const reloaded = snapshot.body.pipelines.find((p) => p.id === created.body.id)!
+      expect(reloaded.consensus?.[0]?.strategy).toBe('debate')
+      expect(reloaded.consensus?.[0]?.participants).toHaveLength(2)
+      expect(reloaded.consensus?.[1] ?? null).toBeNull()
     })
   })
 }

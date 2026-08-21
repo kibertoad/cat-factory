@@ -1231,10 +1231,16 @@
     },
     "estimate": {
       "title": "Estimate",
-      "hint": "Produced by the task estimator agent: how complex, risky, and impactful this task looks. Used to decide whether consensus (multi-run) steps are worth running.",
+      "hint": "How complex, risky and impactful this task is. A Task Estimator forecasts it before the work starts; a Task Reassessor measures it afterwards from the change that landed. Used to decide whether consensus (multi-run) steps and other conditional steps are worth running.",
       "complexity": "Complexity",
       "risk": "Risk",
-      "impact": "Impact"
+      "impact": "Impact",
+      "basis": {
+        "predicted": "Forecast before the work started",
+        "observed": "Measured from the change that landed",
+        "unknown": "Recorded by another version of the app"
+      },
+      "was": "was {value}"
     },
     "reviewTarget": {
       "title": "Under review",

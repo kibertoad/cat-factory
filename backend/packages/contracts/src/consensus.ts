@@ -195,11 +195,69 @@ export const updateConsensusGroupSchema = v.object({
 export type UpdateConsensusGroupInput = v.InferOutput<typeof updateConsensusGroupSchema>
 
 /**
- * A `task-estimator` agent's structured triage of a task along three axes
- * (each 0..1; higher = more complex / riskier / higher blast-radius). Produced
- * after requirements are clarified and the spec is structured, persisted on the
- * block, surfaced in the UI, and used to gate consensus steps. This is CORE —
- * it ships independent of the consensus package.
+ * What an estimate's scores were formed ON, which is the difference between a forecast and a
+ * measurement of the same three axes:
+ *
+ *  - `predicted`: scored BEFORE any design or implementation, from the clarified requirements
+ *    and the spec (the inline `task-estimator`). A forecast.
+ *  - `observed`: scored AFTER the work landed, from the change that was actually made (the
+ *    read-only `task-reassessor`, which reads the run's pull-request diff).
+ *
+ * PERSISTED and CLOSED, and OPTIONAL on the record rather than defaulted into it: a stored
+ * estimate is read back with a plain `JSON.parse` and no schema pass, so a row written before the
+ * vocabulary existed genuinely carries no basis, and a type claiming otherwise would tell every
+ * reader the field is always there. Absence READS as `predicted` (every one of those rows came
+ * from the estimator, which is a fact about them rather than a guess), and a value this build
+ * cannot name is stated as unrecognised rather than guessed onto a current member: narrow with
+ * {@link isTaskEstimateBasis} before indexing anything by it.
+ */
+export const TASK_ESTIMATE_BASES = ['predicted', 'observed'] as const
+export const taskEstimateBasisSchema = v.picklist(TASK_ESTIMATE_BASES)
+export type TaskEstimateBasis = v.InferOutput<typeof taskEstimateBasisSchema>
+
+const TASK_ESTIMATE_BASIS_SET: ReadonlySet<string> = new Set(taskEstimateBasisSchema.options)
+
+/**
+ * Whether a value is a basis THIS BUILD knows, DERIVED from the picklist's own options so a
+ * member added later cannot leave this behind. A stored estimate may name a member since
+ * retired, and a browser may hold a bundle older than the member it reads.
+ */
+export function isTaskEstimateBasis(value: unknown): value is TaskEstimateBasis {
+  return typeof value === 'string' && TASK_ESTIMATE_BASIS_SET.has(value)
+}
+
+/**
+ * The scores an estimate REPLACED, kept on the replacement so the forecast survives the
+ * measurement that corrected it. The platform derives the delta from the pair (see
+ * `reviseTaskEstimate`); nothing asks a model what it changed.
+ *
+ * ONE level deep, deliberately: this carries no `supersedes` of its own, so a task re-assessed
+ * twice keeps the CURRENT scores and the ones immediately before them rather than growing an
+ * unbounded chain on a board row. The per-run history lives in the runs themselves.
+ */
+export const supersededTaskEstimateSchema = v.object({
+  complexity: scoreSchema,
+  risk: scoreSchema,
+  impact: scoreSchema,
+  /** Absent ⇒ `predicted`, for the same reason it is on {@link taskEstimateSchema}. */
+  basis: v.optional(taskEstimateBasisSchema),
+  model: v.optional(v.nullable(v.string())),
+  createdAt: v.number(),
+})
+export type SupersededTaskEstimate = v.InferOutput<typeof supersededTaskEstimateSchema>
+
+/**
+ * A triage of a task along three axes (each 0..1; higher = more complex / riskier / higher
+ * blast-radius), persisted on the block, surfaced in the UI, used to gate consensus and
+ * conditional steps, and to sort the board's lanes by impact. This is CORE: it ships
+ * independent of the consensus package.
+ *
+ * TWO agent kinds write it and {@link basis} says which: the inline `task-estimator` FORECASTS
+ * it before any design work, and the container `task-reassessor` MEASURES it afterwards against
+ * the change that was actually made. The block holds one record (the platform's current best
+ * answer) and a measurement that replaced a forecast carries that forecast in
+ * {@link supersedes}, so "how well did we predict this" stays answerable without a second field
+ * nothing gates on.
  */
 export const taskEstimateSchema = v.object({
   complexity: scoreSchema,
@@ -210,6 +268,10 @@ export const taskEstimateSchema = v.object({
   /** Identifier of the model that produced the estimate, for transparency. */
   model: v.optional(v.nullable(v.string())),
   createdAt: v.number(),
+  /** What the scores were formed on; absent ⇒ `predicted` (see {@link taskEstimateBasisSchema}). */
+  basis: v.optional(taskEstimateBasisSchema),
+  /** The scores this record replaced, when it replaced one. */
+  supersedes: v.optional(v.nullable(supersededTaskEstimateSchema)),
 })
 export type TaskEstimate = v.InferOutput<typeof taskEstimateSchema>
 
