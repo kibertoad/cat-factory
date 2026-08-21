@@ -11,7 +11,6 @@ import {
   mergerUserPrompt,
   ON_CALL_ASSESSMENT_SHAPE_HINT,
   onCallUserPromptSuffix,
-  TASK_REASSESSMENT_SHAPE_HINT,
   taskReassessorUserPrompt,
   TEST_REPORT_SHAPE_HINT,
   UI_TEST_REPORT_SHAPE_HINT,
@@ -201,11 +200,15 @@ export const BUILT_IN_CONTAINER_AGENT_KINDS: AgentKindDefinition[] = [
     // `origin/pr-head`. `refs/pull/<n>/head` outlives the branch a merge deletes, so one step
     // reads the same change whether it runs before the merge or after it.
     //
-    // No `mapStructuredResult`, unlike its two neighbours here. Their channels exist because the
-    // ENGINE acts on the reply (a merge, a page), which makes a garbage score something to default
-    // conservatively; this one only RECORDS, and the cautious reading of an unreadable assessment
-    // is to record nothing rather than to invent a maximally severe task. Its resolver reads the
-    // raw `custom` and leaves the estimate untouched when it cannot read scores off it.
+    // PROSE, deliberately, where the two assessors above it are STRUCTURED. For a structured
+    // explore kind the harness treats an unparseable reply as a JOB FAILURE, which is right when
+    // the ENGINE acts on the reply: the merger has a merge to decide and would have nothing to
+    // decide it with. This step runs AFTER the change shipped and its product is a record nothing
+    // gates on, so failing there would let a model that forgot its JSON block a pull request that
+    // was ready to merge, or (placed after the merger) re-open a task that is already done.
+    // Instead the reply lands on `step.output` and the resolver reads the scores out of it as
+    // tolerantly as the inline estimator's does, leaving the estimate the task already had when it
+    // cannot. The trade is the structured repair pass, which a failing step buys and this does not.
     //
     // `standardsDelivery: 'none'` for the merger's reason: it judges rather than produces, so a
     // house coding standard has no bearing on how complex the diff it is holding turned out to be.
@@ -213,7 +216,6 @@ export const BUILT_IN_CONTAINER_AGENT_KINDS: AgentKindDefinition[] = [
     agent: {
       surface: 'container-explore',
       clone: { branch: 'base', full: true, prHead: true, requirePr: true },
-      output: { kind: 'structured', shapeHint: TASK_REASSESSMENT_SHAPE_HINT },
     },
     userPrompt: taskReassessorUserPrompt,
     standardsDelivery: 'none',

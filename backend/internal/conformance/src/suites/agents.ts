@@ -1121,13 +1121,11 @@ function registerTaskAssessmentTests(harness: ConformanceHarness): void {
       // the forecast it corrected, so "how well did we predict this" survives on both stores.
       const app = harness.makeApp({
         taskEstimate: { complexity: 0.3, risk: 0.2, impact: 0.4, rationale: 'looks small' },
-        customResultByKind: {
-          'task-reassessor': {
-            complexity: 0.9,
-            risk: 0.7,
-            impact: 0.8,
-            rationale: 'reached the auth path',
-          },
+        taskAssessment: {
+          complexity: 0.9,
+          risk: 0.7,
+          impact: 0.8,
+          rationale: 'reached the auth path',
         },
       })
       const { workspace } = await app.createWorkspace()
@@ -1162,9 +1160,7 @@ function registerTaskAssessmentTests(harness: ConformanceHarness): void {
       // ratings for the first time, after the fact. `supersedes` stays absent, because a first
       // reading corrected nothing.
       const app = harness.makeApp({
-        customResultByKind: {
-          'task-reassessor': { complexity: 0.6, risk: 0.5, impact: 0.5, rationale: 'as expected' },
-        },
+        taskAssessment: { complexity: 0.6, risk: 0.5, impact: 0.5, rationale: 'as expected' },
       })
       const { workspace } = await app.createWorkspace()
       const wsId = workspace.id
@@ -1192,7 +1188,7 @@ function registerTaskAssessmentTests(harness: ConformanceHarness): void {
       // reads it.
       const app = harness.makeApp({
         taskEstimate: { complexity: 0.3, risk: 0.2, impact: 0.4, rationale: 'looks small' },
-        customResultByKind: { 'task-reassessor': { rationale: 'I could not read the diff' } },
+        taskAssessment: { rationale: 'I could not read the diff' },
       })
       const { workspace } = await app.createWorkspace()
       const wsId = workspace.id

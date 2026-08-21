@@ -23,11 +23,6 @@ export const MERGE_ASSESSMENT_SHAPE_HINT =
   'Expected a merge assessment: {"complexity": number 0..1, "risk": number 0..1, ' +
   '"impact": number 0..1, "rationale": string}.'
 
-/** Compact shape hint fed to the structured-output repair call for the task re-assessment. */
-export const TASK_REASSESSMENT_SHAPE_HINT =
-  'Expected a task assessment: {"complexity": number 0..1, "risk": number 0..1, ' +
-  '"impact": number 0..1, "rationale": string}.'
-
 /** Compact shape hint fed to the structured-output repair call for the on-call assessment. */
 export const ON_CALL_ASSESSMENT_SHAPE_HINT =
   'Expected an on-call assessment: {"culpritConfidence": number 0..1, "recommendation": ' +

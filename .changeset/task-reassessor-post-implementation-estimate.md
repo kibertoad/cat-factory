@@ -47,7 +47,10 @@ Behaviour changes worth knowing:
 - **The estimate badge states which reading it shows**, and shows the superseded forecast beside
   each axis. New `inspector.estimate.basis.*` copy in all ten locales.
 
-The step records NOTHING when its reply cannot be read, leaving the forecast standing. That is why
-it declares no `mapStructuredResult`, unlike its `merger` / `on-call` neighbours: their channels
-default a garbage score to maximally severe because the ENGINE acts on it, while a fabricated
-measurement here would silently move every gate that reads the estimate.
+The step records NOTHING when its reply cannot be read, and the run CONTINUES: it returns PROSE
+rather than declaring a structured output like its `merger` / `on-call` neighbours, because for a
+structured explore kind the harness makes an unparseable reply a job failure. That is right for a
+merger with a merge to decide and wrong for a step that runs after the change shipped, where it
+would let a missing brace block a merge-ready pull request (or re-open a task already `done`). The
+trade is the structured repair pass; the tolerant parse the inline estimator already uses is what
+makes it cheap.

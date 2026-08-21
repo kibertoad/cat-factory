@@ -113,14 +113,14 @@ describe('the declarations the engine relies on', () => {
     })
   })
 
-  it('keeps the reassessor free of the engine channels its neighbours declare', () => {
-    // The merger and the on-call agent map their reply onto a channel the engine ACTS on, which is
-    // why an unreadable one defaults conservatively. This kind only RECORDS, so the cautious
-    // reading of an unreadable assessment is to record nothing: its resolver reads the raw `custom`
-    // and leaves the task's estimate alone. A mapper here would hand it a defaulted score to
-    // persist as a measurement.
+  it('keeps the reassessor out of the structured channel its neighbours declare', () => {
+    // The merger and the on-call agent map a STRUCTURED reply onto a channel the engine ACTS on,
+    // and for a structured explore kind the harness makes an unparseable reply a job FAILURE. Both
+    // are right for them and wrong here: this step runs after the change shipped, its product is a
+    // record nothing gates on, and failing there would block a merge-ready pull request over a
+    // missing brace. Its reply is prose the resolver reads tolerantly instead.
+    expect(registry.agentStep(TASK_REASSESSOR_AGENT_KIND)?.output).toBeUndefined()
     expect(registry.mapStructuredResult(TASK_REASSESSOR_AGENT_KIND)).toBeUndefined()
-    expect(registry.agentStep(TASK_REASSESSOR_AGENT_KIND)?.output?.kind).toBe('structured')
     expect(registry.standardsDelivery(TASK_REASSESSOR_AGENT_KIND)).toBe('none')
   })
 

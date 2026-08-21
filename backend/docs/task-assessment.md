@@ -85,12 +85,22 @@ Two things refuse rather than degrade:
 - **No pull request at all ⇒ the DISPATCH is refused** (`requirePr`, now honoured on the explore
   surface too). A base checkout holds nothing to measure, and scoring it as though it were the
   change is worse than a failed step: it lands a fabricated measurement over a real forecast.
-- **An unreadable reply ⇒ NOTHING is recorded.** The kind declares no `mapStructuredResult`, unlike
-  its neighbours `merger` and `on-call`: their channels exist because the engine ACTS on the reply,
-  which is why a garbage score there defaults to maximally severe. This one only RECORDS, so the
-  cautious reading is to record nothing, keep the raw reply on the step, and leave the estimate the
-  task already had. A defaulted 1/1/1 persisted as a measurement would silently move every gate
-  that reads the estimate.
+- **An unreadable reply ⇒ NOTHING is recorded, and the run CONTINUES.** This is the one place the
+  kind deliberately diverges from the two assessors it otherwise copies. `merger` and `on-call`
+  declare a STRUCTURED output and map it onto an engine channel, and for a structured explore kind
+  the harness treats an unparseable reply as a job failure (`failureCause: 'no-usable-output'`).
+  Both are right for them: the engine has a merge to decide and would have nothing to decide it
+  with, and a garbage score defaulting to maximally severe routes that decision to a human.
+
+  Neither is right here. This step runs after the change has shipped and its product is a record
+  nothing gates on, so a failure would let a model that forgot its closing brace block a
+  merge-ready pull request, or (placed after the merger) re-open a task that is already `done`.
+  So the kind declares PROSE and no `mapStructuredResult`: the reply lands on `step.output`, the
+  resolver reads the scores out of it with the same tolerant parse the inline estimator uses, and
+  an unreadable one keeps the raw text and leaves the estimate the task already had. The trade is
+  the structured repair pass, which a failing step buys and this does not; `extractJson` tolerating
+  fences and surrounding prose is what makes that trade cheap. Recording a defaulted 1/1/1 as a
+  measurement was never an option: it would silently move every gate that reads the estimate.
 
 ## Placement rules
 

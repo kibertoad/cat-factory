@@ -784,25 +784,25 @@ export function buildStepResolverRegistry(
         }
       },
     },
-    // A `task-reassessor` step MEASURED the same three axes against the change that landed, and
-    // its structured reply arrives as `result.custom` (a container explore kind). It writes the
-    // task's `observed` estimate, carrying whatever FORECAST it replaced (`reviseTaskEstimate`),
-    // and replaces the raw JSON output with the readable summary the approval gate then reads as
-    // the proposal. The same post-completion slot the estimator uses, for the same reason.
+    // A `task-reassessor` step MEASURED the same three axes against the change that landed. Same
+    // tolerant read as the estimator above, off the same field: the kind returns PROSE precisely so
+    // an unreadable reply cannot fail a run whose change has already shipped (see its
+    // registration). It writes the task's `observed` estimate, carrying whatever FORECAST it
+    // replaced (`reviseTaskEstimate`), and replaces the raw JSON with the readable summary an
+    // approval gate would read as the proposal.
     //
     // The prior estimate is READ HERE rather than taken from the run context: the context was
     // built at dispatch, and this resolver runs after a container job that can outlive several
     // minutes of other writes, so the record to supersede is whatever the block holds NOW.
     //
-    // An unreadable reply (falling back to the tolerant prose parse, since a garbled structured
-    // reply still often carries the JSON in the text) leaves the block's estimate untouched and
-    // keeps the raw output: no run failure, and no invented measurement replacing a real forecast.
+    // An unreadable reply leaves the block's estimate untouched and keeps the raw output: no run
+    // failure, and no invented measurement replacing a real forecast.
     {
       kind: TASK_REASSESSOR_AGENT_KIND,
       phase: 'post-completion',
       resolve: async ({ workspaceId, instance, step, result }) => {
         const measured = coerceTaskEstimate(
-          result.custom ?? step.output ?? '',
+          step.output ?? '',
           result.model ?? step.model ?? null,
           d.clock.now(),
           'observed',
