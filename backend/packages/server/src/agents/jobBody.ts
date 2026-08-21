@@ -13,7 +13,7 @@ import {
   FOLLOW_UP_GUIDANCE,
   PR_DESCRIPTION_GUIDANCE,
   isContainerBackedCompanion,
-  resolvePrNumber,
+  resolvePrHeadNumber,
   standardsDeliveredAsFiles,
   standardsVerbosityFor,
   userPromptFor,
@@ -321,6 +321,10 @@ function buildRegisteredAgentBody(
   const checkoutBranch = codingBranches
     ? codingBranches.clone
     : resolveExploreBranch(context, parts, step)
+  // The prefetched PR head, resolved BEFORE the prompt for the reason the coding pair above is:
+  // the refusal `resolvePrefetchPrNumber` can raise belongs ahead of a prompt assembly (fragment
+  // resolution, standards, the context fold) whose whole cost would then be discarded.
+  const prefetchPrNumber = coding ? undefined : resolvePrefetchPrNumber(context, step)
   // The kind's own prompt when it declared one (the merger's diff instructions, the
   // conflict-resolver's compact task reference), else the generic block-context prompt. Both
   // resolve inside `userPromptFor`, so this layer names no kind.
@@ -332,7 +336,10 @@ function buildRegisteredAgentBody(
   // cyclomatic-complexity budget (the shared branch prelude is cheap enough to recompute in each).
   return codingBranches
     ? buildCodingAgentBody(context, parts, step, roleSystemPrompt, userPrompt, codingBranches)
-    : buildExploreAgentBody(context, parts, step, roleSystemPrompt, userPrompt, checkoutBranch)
+    : buildExploreAgentBody(context, parts, step, roleSystemPrompt, userPrompt, {
+        branch: checkoutBranch,
+        prNumber: prefetchPrNumber,
+      })
 }
 
 /**
@@ -560,6 +567,40 @@ function buildCodingAgentBody(
 }
 
 /**
+ * The pull request whose HEAD the harness prefetches into `origin/pr-head`, for a
+ * `clone.prHead` kind. Without it such a kind clones only the base branch, and since the container
+ * agent holds no git credential of its own (the token lives with the harness) it cannot fetch the
+ * head itself: files the change ADDS are absent and modified files are only at their base version.
+ *
+ * WHICH pull request is the kind's own declaration (`clone.prHeadSource`), resolved through the
+ * shared {@link resolvePrHeadNumber} the run preamble also reads: the PR the TASK names for the
+ * `pr-reviewer`, the PR THIS RUN opened for the `task-reassessor`. Never a `task ?? run`
+ * precedence, which would silently start prefetching a second kind of head for the reviewer.
+ *
+ * `requirePr` makes an unresolvable number a REFUSAL rather than a quiet fall back to no prefetch,
+ * because a kind whose whole subject is the change a pull request carries would otherwise score a
+ * base checkout as though it were that change. For a READING kind the refusal is not expected to
+ * be reached: `runStepPreamble` skips such a step before the dispatch is built (`no_pull_request`),
+ * so this is the invariant's backstop, and it is what a kind declaring `requirePr` on a surface
+ * with no preamble skip would hit.
+ */
+function resolvePrefetchPrNumber(
+  context: AgentRunContext,
+  step: AgentStepSpec,
+): number | undefined {
+  if (!step.clone?.prHead) return undefined
+  const resolved = resolvePrHeadNumber(step.clone, context.block)
+  if (resolved !== null) return resolved
+  if (step.clone.requirePr) {
+    throw new Error(
+      `The \`${context.agentKind}\` step needs the pull request carrying this task's change, and ` +
+        'this block has none.',
+    )
+  }
+  return undefined
+}
+
+/**
  * The `container-explore` job body: a read-only clone returning prose, or a structured JSON object
  * as `custom`. Extracted verbatim from {@link buildRegisteredAgentBody} so each function stays
  * within the complexity budget — behaviour is byte-identical.
@@ -570,7 +611,8 @@ function buildExploreAgentBody(
   step: AgentStepSpec,
   roleSystemPrompt: string,
   userPrompt: string,
-  exploreBranch: string,
+  /** What the caller already resolved, together because both are facts about ONE checkout. */
+  explore: { branch: string; prNumber: number | undefined },
 ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
   const { common, webTools } = parts
 
@@ -593,15 +635,6 @@ function buildExploreAgentBody(
   const exploreReferenceBranches = parts.referenceBranches?.length
     ? parts.referenceBranches
     : undefined
-  // The pr-reviewer (`clone.prHead`) reviews an EXISTING PR: resolve its number so the harness can
-  // prefetch the PR head into `origin/pr-head`. Without it the review clones only the base branch,
-  // and — since the container agent has no git credential to fetch the head itself — files the PR
-  // ADDS and the head version of modified files are unreachable, silently limiting the review to
-  // the injected diff. The number comes from the task's PR fields (`prNumber`/`prUrl`), the same
-  // source the diff preOp uses; absent (unresolvable) ⇒ no prefetch (the review degrades cleanly).
-  const reviewPrNumber = step.clone?.prHead
-    ? (resolvePrNumber(context.block.taskTypeFields) ?? undefined)
-    : undefined
   return {
     kind: 'agent',
     body: {
@@ -612,11 +645,11 @@ function buildExploreAgentBody(
         parts.referenceBranchesSection,
       ]),
       userPrompt,
-      branch: exploreBranch,
+      branch: explore.branch,
       ...(explorePeers ? { peerRepos: explorePeers } : {}),
       ...(exploreReferenceBranches ? { referenceBranches: exploreReferenceBranches } : {}),
       ...(step.clone?.full ? { full: true } : {}),
-      ...(reviewPrNumber !== undefined ? { reviewPrNumber } : {}),
+      ...(explore.prNumber !== undefined ? { reviewPrNumber: explore.prNumber } : {}),
       ...structuredOutputField(step.output),
       // The tester family: stand the service's declared test dependencies up around the run
       // (locally via docker-compose, or against the environment this run provisioned — the

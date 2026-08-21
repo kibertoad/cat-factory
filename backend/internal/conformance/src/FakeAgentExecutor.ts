@@ -150,6 +150,20 @@ export interface FakeAgentOptions {
    */
   taskEstimate?: { complexity: number; risk: number; impact: number; rationale: string }
   /**
+   * The MEASUREMENT a `task-reassessor` step emits, in the same JSON-as-output shape for the same
+   * reason: the kind returns prose so an unreadable reply cannot fail a run whose change already
+   * shipped, and the engine reads the scores tolerantly out of the reply. A partial object (no
+   * axes) is the honest way to drive the "unreadable measurement leaves the forecast standing"
+   * assertion. Omitted ⇒ this arm stands down and the kind falls through to the generic prose
+   * result, which carries no scores, so a test that wants a measurement has to ask for one.
+   */
+  taskAssessment?: Partial<{
+    complexity: number
+    risk: number
+    impact: number
+    rationale: string
+  }>
+  /**
    * Overall quality rating (0..1) every companion step returns, so the engine's
    * companion review + rework loop can be exercised deterministically. When omitted a
    * companion returns a passing rating of 1.
@@ -629,6 +643,15 @@ export class FakeAgentExecutor implements AgentExecutor {
         rationale: 'fake estimate',
       }
       return { output: JSON.stringify(estimate), model: 'fake' }
+    }
+
+    // The `task-reassessor` step emits the same three axes, MEASURED against the change the run
+    // landed, and the engine reads them off the reply exactly as it does the estimator's (both
+    // kinds return the JSON as their output; only the surface differs). No default: a test that
+    // wants a measurement supplies one, so a pipeline carrying the step but not the option
+    // exercises the "nothing readable came back" path rather than a silent success.
+    if (context.agentKind === 'task-reassessor' && this.options.taskAssessment !== undefined) {
+      return { output: JSON.stringify(this.options.taskAssessment), model: 'fake' }
     }
 
     // The initiative PLANNER returns the multi-phase plan the engine ingests

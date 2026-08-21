@@ -25,7 +25,7 @@ export {
   userPromptFor,
 } from './agents/catalog.js'
 export { summaryOr } from './agents/kinds/built-in-results.js'
-export { TASK_ESTIMATOR_AGENT_KIND } from './agents/prompts/roles.js'
+export { TASK_ESTIMATOR_AGENT_KIND, TASK_REASSESSOR_AGENT_KIND } from './agents/prompts/roles.js'
 // App-owned agent-kind registry (mirrors the backend-registries pilot): the composition
 // root news ONE `AgentKindRegistry` (pre-loaded with the built-ins by
 // `defaultAgentKindRegistry()`), threads it through `CoreDependencies`, and a deployment
@@ -400,6 +400,7 @@ export {
   type PrReviewOutput,
   registerPrReviewerAgent,
   renderPriorReviewContext,
+  resolvePrHeadNumber,
   resolvePrNumber,
 } from './agents/kinds/pr-reviewer.js'
 export {

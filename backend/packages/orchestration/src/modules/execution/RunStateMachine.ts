@@ -632,9 +632,10 @@ export class RunStateMachine {
    *
    * The three real variations across the call sites are options rather than copies:
    * `confidence` (only the agent-result path has one to hand `finalizeBlock`) and
-   * `resolverOwnsTerminalStatus` (a resolver such as the merger already set the block's terminal
+   * `resolverOwnsTerminalStatus` (the resolver that just ran already set the block's terminal
    * status, so advancing to a trailing step must refresh progress rather than overwrite it back
-   * to `in_progress`). The caller marks the step itself, either through
+   * to `in_progress`; a claim made EARLIER in the run is read off the block itself, see
+   * {@link blockIsTerminal}). The caller marks the step itself, either through
    * {@link finishHumanGateStep} or in its own prologue.
    */
   async settleStepAndAdvance(
@@ -661,13 +662,37 @@ export class RunStateMachine {
     // `done`/`pr_ready` mid-pipeline) must not be clobbered back to `in_progress` as the run
     // advances to a trailing step: refresh progress only, preserving that status. (The final
     // step's `finalizeBlock` then leaves a `done` block alone.)
-    if (options.resolverOwnsTerminalStatus) {
+    if (options.resolverOwnsTerminalStatus || (await this.blockIsTerminal(workspaceId, instance))) {
       await this.refreshBlockProgress(workspaceId, instance)
       await this.persistAndEmit(workspaceId, instance)
     } else {
       await this.persistAndEmit(workspaceId, instance, { blockStatus: 'in_progress' })
     }
     return { kind: 'continue' }
+  }
+
+  /**
+   * Whether the block ALREADY holds a terminal status, i.e. some earlier step in this run put it
+   * there and no later step may take it back.
+   *
+   * `options.resolverOwnsTerminalStatus` answers only for the step settling right now, which is
+   * enough while the claiming step is the last one but not one step further: with `merger →
+   * assessor → disposer`, the merger's claim is honoured as the run advances past IT, and then the
+   * assessor settles claiming nothing and writes `in_progress` over a `done` that a real merge
+   * produced. `finalizeBlock`'s merger backstop then reads the downgraded row and rewrites the
+   * merged task as `pr_ready`. The board's own status is the durable record of the claim, so it is
+   * what a later step has to be judged against rather than what the previous resolver returned.
+   *
+   * One read per advancing step. The cheaper alternative — carrying the claim on the instance —
+   * would put a new field through both facades' run mappers, and a field dropped by one of them is
+   * exactly the silent half-persisted pin this is here to stop being possible.
+   */
+  private async blockIsTerminal(
+    workspaceId: string,
+    instance: ExecutionInstance,
+  ): Promise<boolean> {
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    return block?.status === 'done' || block?.status === 'pr_ready'
   }
 
   /**
@@ -711,6 +736,10 @@ export class RunStateMachine {
     if (stepIndex === instance.steps.length - 1) {
       await this.finalizeBlock(workspaceId, instance, undefined)
       await this.stopRunContainer(workspaceId, instance)
+    } else if (await this.blockIsTerminal(workspaceId, instance)) {
+      // Same rule as {@link settleStepAndAdvance}: a gate resolved after the step that set the
+      // block's terminal status moves the bar, it does not take the status back.
+      await this.refreshBlockProgress(workspaceId, instance)
     } else {
       await this.updateBlockProgress(workspaceId, instance, 'in_progress')
     }

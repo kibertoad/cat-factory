@@ -11,9 +11,11 @@ import {
   mergerUserPrompt,
   ON_CALL_ASSESSMENT_SHAPE_HINT,
   onCallUserPromptSuffix,
+  taskReassessorUserPrompt,
   TEST_REPORT_SHAPE_HINT,
   UI_TEST_REPORT_SHAPE_HINT,
 } from '../prompts/built-in-container.js'
+import { TASK_REASSESSOR_AGENT_KIND } from '../prompts/roles.js'
 import { mergerResult, onCallResult, testerResult } from './built-in-results.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 
@@ -187,6 +189,50 @@ export const BUILT_IN_CONTAINER_AGENT_KINDS: AgentKindDefinition[] = [
     },
     userPromptSuffix: onCallUserPromptSuffix,
     mapStructuredResult: onCallResult,
+  },
+  {
+    // The task re-assessor measures the three triage axes against the change that LANDED, and the
+    // engine persists the result as the task's `observed` estimate (see
+    // backend/docs/task-assessment.md). The estimator's retrospective twin, and the reason it is a
+    // kind of its own rather than a mode of that inline kind.
+    //
+    // The pr-reviewer's checkout, not the merger's: base + the pull request's head fetched as
+    // `origin/pr-head`. `refs/pull/<n>/head` outlives the branch a merge deletes, so one step
+    // reads the same change whether it runs before the merge or after it. `prHeadSource: 'run'`
+    // because the subject is the change THIS RUN landed, not a pull request the task names: the
+    // reviewer's source is the other one, and leaving it to a precedence would have a review task
+    // that also opened a PR silently swap which change each of them reads.
+    //
+    // `requirePr` on a READER means the step is SKIPPED when the run opened no pull request, not
+    // that the run fails: see the flag's own contract. Both halves matter here. A base checkout
+    // has nothing to measure and would be scored as though it were the change, and a run whose
+    // work already shipped must not be ended by a reading nobody gates on.
+    //
+    // PROSE, deliberately, where the two assessors above it are STRUCTURED. For a structured
+    // explore kind the harness treats an unparseable reply as a JOB FAILURE, which is right when
+    // the ENGINE acts on the reply: the merger has a merge to decide and would have nothing to
+    // decide it with. This step runs AFTER the change shipped and its product is a record nothing
+    // gates on, so failing there would let a model that forgot its JSON block a pull request that
+    // was ready to merge, or (placed after the merger) re-open a task that is already done.
+    // Instead the reply lands on `step.output` and the resolver reads the scores out of it as
+    // tolerantly as the inline estimator's does, leaving the estimate the task already had when it
+    // cannot. The trade is the structured repair pass, which a failing step buys and this does not.
+    //
+    // `standardsDelivery: 'none'` for the merger's reason: it judges rather than produces, so a
+    // house coding standard has no bearing on how complex the diff it is holding turned out to be.
+    kind: TASK_REASSESSOR_AGENT_KIND,
+    agent: {
+      surface: 'container-explore',
+      clone: {
+        branch: 'base',
+        full: true,
+        prHead: true,
+        prHeadSource: 'run',
+        requirePr: true,
+      },
+    },
+    userPrompt: taskReassessorUserPrompt,
+    standardsDelivery: 'none',
   },
 
   // --- Testers: read-only structured explore with the service's test dependencies stood up --

@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { seedPipelines } from '@cat-factory/kernel'
 import { BUILTIN_GATABLE_KINDS } from '@cat-factory/contracts'
-import { AgentKindRegistry } from '@cat-factory/agents'
+import { AgentKindRegistry, defaultAgentKindRegistry } from '@cat-factory/agents'
 import {
   assertPipelineLaunchable,
   assertValidBinaryOutputSteps,
   assertValidCompanionPlacement,
   assertValidGating,
+  assertValidPullRequestReaders,
   assertValidRunConditions,
   assertValidAgentVariants,
   assertValidSkillSteps,
@@ -212,16 +213,33 @@ describe('validatePipelineShape', () => {
     ).not.toThrow()
   })
 
-  it('requires an enabled task-estimator before any enabled gated step', () => {
+  it('requires an enabled estimate PRODUCER before any enabled gated step', () => {
     expect(() =>
       assertValidGating({ agentKinds: ['coder', 'reviewer'], gating: [null, gated] }),
-    ).toThrow(/no enabled 'task-estimator' step runs before it/)
+    ).toThrow(/no step that produces one runs before it/)
     expect(() =>
       assertValidGating({
         agentKinds: ['task-estimator', 'coder', 'reviewer'],
         gating: [null, null, gated],
       }),
     ).not.toThrow()
+    // EITHER producer satisfies it: the reassessor measures the estimate after the change lands,
+    // so a gate after one has a real estimate to read (the rule is about the FIELD being
+    // populated, not about which agent populated it).
+    expect(() =>
+      assertValidGating({
+        agentKinds: ['coder', 'task-reassessor', 'human-review'],
+        gating: [null, null, gated],
+      }),
+    ).not.toThrow()
+    // ...and a DISABLED producer does not: the same enabled-subset reading every other rule takes.
+    expect(() =>
+      assertValidGating({
+        agentKinds: ['coder', 'task-reassessor', 'human-review'],
+        enabled: [true, false, true],
+        gating: [null, null, gated],
+      }),
+    ).toThrow(/no step that produces one runs before it/)
     // A disabled gated step imposes no requirement.
     expect(() =>
       assertValidGating({
@@ -753,5 +771,60 @@ describe('validatePipelineAuthoring — against the shipped catalog', () => {
         p.id,
       ).not.toThrow()
     }
+  })
+})
+
+describe('assertValidPullRequestReaders', () => {
+  // A step whose subject is the pull request the run opens has to run AFTER the step that opens
+  // it. Placed before, it is skipped for want of a pull request the very next step creates — and
+  // an estimate gate downstream that counted it as its producer then reads nothing. An ORDERING
+  // rule rather than a presence one: a pipeline that opens no PR of its own is left alone, since
+  // the reader is then measuring a change the BLOCK already carries.
+  const registry = defaultAgentKindRegistry()
+
+  it('refuses a reader placed before the step that opens the pull request', () => {
+    expect(() =>
+      assertValidPullRequestReaders({
+        agentKinds: ['task-reassessor', 'coder'],
+        agentKindRegistry: registry,
+      }),
+    ).toThrow(/placed before 'coder', which opens it/)
+  })
+
+  it('accepts it after the producer', () => {
+    expect(() =>
+      assertValidPullRequestReaders({
+        agentKinds: ['coder', 'task-reassessor'],
+        agentKindRegistry: registry,
+      }),
+    ).not.toThrow()
+  })
+
+  it('says nothing when the pipeline opens no pull request of its own', () => {
+    // The narrow standalone shape: the change is already on the block, so there is no ordering to
+    // get wrong and nothing here to refuse.
+    expect(() =>
+      assertValidPullRequestReaders({
+        agentKinds: ['task-reassessor'],
+        agentKindRegistry: registry,
+      }),
+    ).not.toThrow()
+  })
+
+  it('reads the ENABLED subset, like every other shape rule', () => {
+    // A disabled producer opens nothing, so the reader ahead of it is the standalone shape again.
+    expect(() =>
+      assertValidPullRequestReaders({
+        agentKinds: ['task-reassessor', 'coder'],
+        enabled: [true, false],
+        agentKindRegistry: registry,
+      }),
+    ).not.toThrow()
+  })
+
+  it('is skipped entirely without a registry, like the gate-config rule', () => {
+    expect(() =>
+      assertValidPullRequestReaders({ agentKinds: ['task-reassessor', 'coder'] }),
+    ).not.toThrow()
   })
 })

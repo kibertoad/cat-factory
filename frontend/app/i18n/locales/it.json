@@ -1724,10 +1724,17 @@
     },
     "estimate": {
       "title": "Stima",
-      "hint": "Prodotta dall'agente stimatore delle attivita': quanto questa attivita' appare complessa, rischiosa e di impatto. Usata per decidere se vale la pena eseguire i passaggi di consenso (multi-esecuzione).",
+      "hint": "Quanto questa attivita' e' complessa, rischiosa e di impatto. Un Task Estimator la prevede prima che il lavoro inizi, un Task Reassessor la misura dopo, dalla modifica effettivamente realizzata. Usata per decidere se vale la pena eseguire i passaggi di consenso (multi-esecuzione) e gli altri passaggi condizionali.",
       "complexity": "Complessita'",
       "risk": "Rischio",
-      "impact": "Impatto"
+      "impact": "Impatto",
+      "basis": {
+        "predicted": "Previsione prima dell'inizio del lavoro",
+        "observed": "Misurato dalla modifica realizzata",
+        "unknown": "Registrato da un'altra versione dell'app"
+      },
+      "was": "prima {value}",
+      "supersededBasis": "Sostituisce: {basis}"
     },
     "reviewTarget": {
       "title": "Pull request in revisione",
@@ -4739,6 +4746,7 @@
         "conditionBackend": "Saltato: questa attività modifica solo un servizio frontend, quindi non c’è un’API dietro da provare.",
         "producerSkipped": "Saltato: il passo che revisiona è stato saltato, quindi non c’è nulla da valutare.",
         "runComplete": "Saltato: l’esecuzione è terminata prima di questo passo, senza altro da fare.",
+        "noPullRequest": "Saltato: questa esecuzione non ha aperto alcuna pull request, quindi questo passo non ha modifiche da leggere.",
         "unknown": "Saltato: questo passo non è stato eseguito."
       }
     },

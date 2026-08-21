@@ -133,13 +133,25 @@ describe('usePipelineHealth', () => {
     expect(invalid.value[0]!.problems.some((p) => p.type === 'shape')).toBe(true)
   })
 
-  it('flags an estimate-gated companion with no task-estimator before it (shape)', () => {
+  it('flags an estimate-gated companion with no estimate producer before it (shape)', () => {
     const gated = builtin(['coder', 'reviewer'], {
       gating: [null, { enabled: true, minComplexity: 0.5, onMissingEstimate: 'run' }],
     })
     const { invalid } = scan([gated])
     expect(invalid.value).toHaveLength(1)
     expect(invalid.value[0]!.problems.some((p) => p.type === 'shape')).toBe(true)
+  })
+
+  // The estimate has two producers, at opposite ends of a run, and this advisory reads the SAME
+  // `producesTaskEstimate` predicate the engine's `assertValidGating` does. A copy that knew only
+  // the estimator would call a perfectly saveable pipeline invalid, in the surface that auto-opens
+  // a modal over the board.
+  it('accepts a gated step preceded by a task-reassessor instead of an estimator', () => {
+    const measured = builtin(['coder', 'task-reassessor', 'human-review'], {
+      gating: [null, null, { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' }],
+    })
+    const { hasIssues } = scan([measured])
+    expect(hasIssues.value).toBe(false)
   })
 
   // The regression this pins: the advisory carried its own "only a companion may be gated" rule,

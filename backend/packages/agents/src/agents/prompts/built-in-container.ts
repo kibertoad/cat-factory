@@ -1,4 +1,6 @@
 import type { AgentDispatchContext, AgentRunContext } from '@cat-factory/kernel'
+import { TRIAGE_JSON_CONTRACT } from './roles.js'
+import { ownServiceSection } from './standard.js'
 
 // ---------------------------------------------------------------------------
 // The task prompts + structured-output shape hints for the BUILT-IN container kinds that assess
@@ -131,6 +133,77 @@ export function onCallUserPromptSuffix(
       'Beware correlation vs causation.',
     '',
     'Respond with ONLY a JSON object {"culpritConfidence":0.0,"recommendation":"revert"|"hold"|"monitor","rationale":"…","evidence":["…"]}.',
+  ].join('\n')
+}
+
+/**
+ * The `task-reassessor`'s task prompt: read the change the run actually landed and score the
+ * three triage axes against it.
+ *
+ * The checkout is the pr-reviewer's: the BASE branch plus the pull request's head fetched as
+ * `origin/pr-head` by the harness. That shape rather than a clone of the PR branch because the
+ * branch is DELETED once the pull request merges, while `refs/pull/<n>/head` survives it, so the
+ * same step reads the same diff whether it runs before the merge or after it. The pull request it
+ * names is the one the harness fetched: the kind declares `prHeadSource: 'run'`, so that is
+ * `block.pullRequest` and not a PR the task might separately name.
+ *
+ * A REPLACEMENT prompt rather than a `userPromptSuffix`, and the two things that costs are both
+ * deliberate. What it drops is the fold of every prior step's output, which on this pipeline
+ * position CONTAINS THE FORECAST: the estimator's own step output is `summarizeEstimate`, in
+ * percentages. This kind must not see it (an assessment handed the number it is revising anchors
+ * on it, and the delta is arithmetic the platform does from the two records), so the fold is the
+ * thing being withheld rather than a casualty of withholding it. What it must NOT drop is the
+ * account of what the work was: the task's description and, above all, the system it belongs to,
+ * both re-stated below, because the impact axis is a blast radius and a bare title names no
+ * software for one to be judged against.
+ *
+ * A MULTI-REPO task is named rather than silently under-scored. The peer PRs' repositories are not
+ * in this checkout (resolving them is the merger's combined-diff path, which is that kind's alone),
+ * so the assessment covers the primary repository's change and has to SAY so, or a reader takes a
+ * partial score for the whole one.
+ */
+export function taskReassessorUserPrompt(
+  context: AgentRunContext,
+  dispatch?: AgentDispatchContext,
+): string {
+  const prNumber = context.block.pullRequest?.number
+  const pr = prNumber !== undefined ? ` (PR #${prNumber})` : ''
+  // With no dispatch context there is no checkout and therefore no branch to name: say what to
+  // read without asserting a branch name the caller never resolved.
+  const readGuidance = dispatch
+    ? `You are on the base branch \`${dispatch.baseBranch}\`, and the change${pr} has been ` +
+      'fetched for you as `origin/pr-head`:\n' +
+      `  git diff --name-status origin/${dispatch.baseBranch}...origin/pr-head   # the shape of the change\n` +
+      `  git diff origin/${dispatch.baseBranch}...origin/pr-head -- <path>       # one file's diff\n` +
+      'Start from the shape, then read the diffs that decide the score. If `origin/pr-head` is ' +
+      'absent (the fetch was skipped), say so in your rationale and score from the evidence above ' +
+      'rather than guessing.'
+    : `Score the change${pr} from the evidence you have been given.`
+  const peers = context.block.peerPullRequests?.length ?? 0
+  const scope =
+    peers > 0
+      ? `This task also changed ${peers} connected service repositor${peers === 1 ? 'y' : 'ies'}, ` +
+        'which are NOT in this checkout. Score the change you can read, and state in your ' +
+        'rationale that the connected repositories were out of scope.'
+      : null
+  const description = context.block.description?.trim()
+  // The system the work belongs to, or the explicit statement that nothing named one. Rendered
+  // rather than omitted for the reason `ownServiceSection` exists: the impact axis is a blast
+  // radius, and a model given no system to judge one against supplies one. Trimmed because the
+  // shared helper leads with its own blank lines for the generic prompt's line list.
+  const ownService = ownServiceSection(context).trim()
+  return [
+    'The implementation for this task has landed. Assess what was ACTUALLY built and return the ' +
+      'complexity / risk / impact scores + rationale as JSON.',
+    '',
+    readGuidance,
+    ...(scope ? ['', scope] : []),
+    '',
+    `Task: ${context.block.title}`,
+    ...(description ? ['', description] : []),
+    ...(ownService ? ['', ownService] : []),
+    '',
+    TRIAGE_JSON_CONTRACT,
   ].join('\n')
 }
 

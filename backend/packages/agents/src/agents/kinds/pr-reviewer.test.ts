@@ -26,6 +26,7 @@ import {
   renderPriorReviewContext,
   renderStandardContext,
   renderStandardsIndex,
+  resolvePrHeadNumber,
   resolvePrNumber,
   standardsContextFileName,
 } from './pr-reviewer.js'
@@ -102,6 +103,46 @@ describe('resolvePrNumber', () => {
     expect(resolvePrNumber({})).toBeNull()
     expect(resolvePrNumber({ prNumber: 0 })).toBeNull()
     expect(resolvePrNumber({ prUrl: 'not a url' })).toBeNull()
+  })
+})
+
+describe('resolvePrHeadNumber', () => {
+  // WHICH pull request a `prHead` step prefetches is the KIND's declaration, and both readers of
+  // that declaration (the run preamble's skip and the job body's prefetch) come through here, so
+  // they cannot disagree about whether a step has anything to read.
+  const block = {
+    taskTypeFields: { prNumber: 4558 },
+    pullRequest: { number: 12 },
+  }
+
+  it('reads the task declaration by default (the reviewer)', () => {
+    expect(resolvePrHeadNumber({ branch: 'base', prHead: true }, block)).toBe(4558)
+  })
+
+  it('reads the run pull request when the kind declares `run` (the assessor)', () => {
+    expect(resolvePrHeadNumber({ branch: 'base', prHead: true, prHeadSource: 'run' }, block)).toBe(
+      12,
+    )
+  })
+
+  it('never falls back across sources', () => {
+    // The point of declaring it: a fallback silently widens whichever kind already had one source.
+    expect(
+      resolvePrHeadNumber(
+        { branch: 'base', prHead: true, prHeadSource: 'run' },
+        {
+          taskTypeFields: { prNumber: 4558 },
+        },
+      ),
+    ).toBeNull()
+    expect(
+      resolvePrHeadNumber({ branch: 'base', prHead: true }, { pullRequest: { number: 12 } }),
+    ).toBeNull()
+  })
+
+  it('answers null for a step that fetches no head at all', () => {
+    expect(resolvePrHeadNumber({ branch: 'base' }, block)).toBeNull()
+    expect(resolvePrHeadNumber(undefined, block)).toBeNull()
   })
 })
 

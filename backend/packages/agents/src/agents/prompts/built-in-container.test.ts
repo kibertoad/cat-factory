@@ -4,8 +4,10 @@ import { defaultAgentKindRegistry } from '../kinds/registry.js'
 import { userPromptFor } from '../catalog.js'
 import { CONFLICT_RESOLVER_AGENT_KIND, ON_CALL_AGENT_KIND } from '@cat-factory/kernel'
 import { MERGER_AGENT_KIND } from '../kinds/built-in-container.js'
+import { TASK_REASSESSOR_AGENT_KIND } from './roles.js'
 import {
   mergerUserPrompt,
+  taskReassessorUserPrompt,
   TEST_REPORT_SHAPE_HINT,
   UI_TEST_REPORT_SHAPE_HINT,
 } from './built-in-container.js'
@@ -71,6 +73,88 @@ describe('the merger prompt', () => {
     expect(p).toContain('(PR #42)')
     expect(p).not.toContain('git diff')
     expect(p).not.toContain('`main`')
+  })
+})
+
+describe('the task-reassessor prompt', () => {
+  it('points the agent at the prefetched PR head, not at the checked-out branch', () => {
+    // The kind clones BASE and the harness fetches the change into `origin/pr-head`, so a prompt
+    // naming `HEAD` (the merger's shape) would have it diff the base branch against itself and
+    // score an empty change as trivial.
+    const p = prompt(TASK_REASSESSOR_AGENT_KIND, withPr(42, 'feat/x'))
+    expect(p).toContain('(PR #42)')
+    expect(p).toContain('base branch `main`')
+    expect(p).toContain('git diff --name-status origin/main...origin/pr-head')
+    expect(p).not.toContain('origin/main...HEAD')
+  })
+
+  it('closes on the shared triage JSON contract', () => {
+    const p = prompt(TASK_REASSESSOR_AGENT_KIND, withPr(42, 'feat/x'))
+    expect(p.trimEnd().endsWith('no prose, no code fences.')).toBe(true)
+  })
+
+  it('names the connected repositories it cannot see on a multi-repo task', () => {
+    // The peer PRs' repos are not in this checkout (resolving them is the merger's combined-diff
+    // path). Silence there is a partial score a reader takes for the whole one.
+    const p = prompt(TASK_REASSESSOR_AGENT_KIND, {
+      block: {
+        id: 'b1',
+        title: 'T',
+        type: 'task',
+        pullRequest: { number: 42, branch: 'feat/x', url: 'u' },
+        peerPullRequests: [{ repo: 'acme/api', ref: { number: 9, url: 'u' } }],
+      },
+    })
+    expect(p).toContain('1 connected service repository')
+    expect(p).toContain('out of scope')
+  })
+
+  it('names no branch when there is no checkout to name one from', () => {
+    const p = taskReassessorUserPrompt(context(TASK_REASSESSOR_AGENT_KIND, withPr(42, 'feat/x')))
+    expect(p).toContain('(PR #42)')
+    expect(p).not.toContain('git diff')
+    expect(p).not.toContain('`main`')
+  })
+
+  it('carries the task description and the system the work belongs to', () => {
+    // This prompt REPLACES the generic block-context one, so anything the assessment needs from it
+    // has to be re-stated here. The impact axis is a blast radius, and a bare title names no
+    // software for one to be judged against: a model given none supplies one.
+    const p = prompt(TASK_REASSESSOR_AGENT_KIND, {
+      block: {
+        id: 'b1',
+        title: 'Add login',
+        type: 'task',
+        description: 'Passkeys, with a password fallback.',
+        pullRequest: { number: 42, branch: 'feat/x', url: 'u' },
+      },
+      ownService: { stated: true, title: 'Checkout API', description: 'Takes payments.' },
+    })
+    expect(p).toContain('Passkeys, with a password fallback.')
+    expect(p).toContain('The system this work belongs to: Checkout API')
+  })
+
+  it('states that no system was named rather than leaving the axis unanchored', () => {
+    const p = prompt(TASK_REASSESSOR_AGENT_KIND, {
+      block: { id: 'b1', title: 'T', type: 'task', pullRequest: { number: 42, url: 'u' } },
+      ownService: { stated: false, reason: 'not-under-a-service' },
+    })
+    expect(p).toContain('NOT STATED')
+  })
+
+  it('withholds the forecast it is revising, which rides the prior-output fold', () => {
+    // The estimator's own step output IS the forecast, in percentages (`summarizeEstimate`). An
+    // assessment handed the number it is revising anchors on it, and the delta is arithmetic the
+    // platform does from the two records — so the fold this replacement prompt drops is the point
+    // of replacing it, not a casualty.
+    const p = prompt(TASK_REASSESSOR_AGENT_KIND, {
+      block: { id: 'b1', title: 'T', type: 'task', pullRequest: { number: 42, url: 'u' } },
+      priorOutputs: [
+        { agentKind: 'task-estimator', output: '**Task estimate (predicted)**: Complexity 40%' },
+      ],
+    })
+    expect(p).not.toContain('Complexity 40%')
+    expect(p).not.toContain('task-estimator')
   })
 })
 

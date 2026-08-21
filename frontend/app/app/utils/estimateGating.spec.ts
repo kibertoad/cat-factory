@@ -4,6 +4,7 @@ import {
   ESTIMATE_AXIS_FIELD,
   ESTIMATE_AXIS_HINT_KEYS,
   ESTIMATE_AXIS_LABEL_KEYS,
+  estimateBasisLabelKey,
   parseAxisThreshold,
 } from './estimateGating'
 
@@ -40,5 +41,26 @@ describe('estimate axis vocabulary', () => {
   it('gives each axis its own hint, so no two axes explain the same thing', () => {
     const hints = ESTIMATE_AXES.map((axis) => ESTIMATE_AXIS_HINT_KEYS[axis])
     expect(new Set(hints).size).toBe(ESTIMATE_AXES.length)
+  })
+})
+
+describe('estimate basis labels', () => {
+  it('labels a stored basis this build knows', () => {
+    expect(estimateBasisLabelKey('predicted')).toBe('inspector.estimate.basis.predicted')
+    expect(estimateBasisLabelKey('observed')).toBe('inspector.estimate.basis.observed')
+  })
+
+  it('reads an ABSENT basis as the forecast it was', () => {
+    // Every estimate written before the vocabulary existed came from the estimator, and those rows
+    // are read back with a plain `JSON.parse`, so the field is genuinely missing rather than
+    // defaulted on the way in.
+    expect(estimateBasisLabelKey(undefined)).toBe('inspector.estimate.basis.predicted')
+  })
+
+  it('says so for a basis this bundle cannot name, instead of guessing', () => {
+    // A browser holds a bundle older than the member it reads. Guessing onto a current member would
+    // relabel a measurement as a forecast with nothing on screen to say so.
+    expect(estimateBasisLabelKey('sampled')).toBe('inspector.estimate.basis.unknown')
+    expect(estimateBasisLabelKey('')).toBe('inspector.estimate.basis.unknown')
   })
 })

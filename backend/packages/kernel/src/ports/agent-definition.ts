@@ -70,21 +70,56 @@ export interface AgentCloneSpec {
   /** Full history (needed to diff against base / merge); absent ⇒ shallow. */
   full?: boolean
   /**
-   * Fetch the reviewed PR's HEAD into the checkout as `origin/pr-head` before the agent runs
-   * (the `pr-reviewer`). A review clones the `base` branch — so files the PR ADDS are absent and
-   * modified files are only at their base version — and the container agent has no git credential
-   * of its own, so it cannot fetch the head itself (the token lives with the harness). When set,
-   * the engine resolves the block's reviewed PR number into the job's `reviewPrNumber` and the
-   * harness fetches `pull/<n>/head` (GitHub) / `merge-requests/<n>/head` (GitLab) with its token,
-   * so the agent can `git diff origin/<base>...origin/pr-head` and read full head file bodies.
-   * Best-effort: a failed fetch just leaves the review on the base checkout + injected diff.
+   * Fetch a pull request's HEAD into the checkout as `origin/pr-head` before the agent runs (the
+   * `pr-reviewer`, the `task-reassessor`). Such a kind clones the `base` branch, so files the
+   * change ADDS are absent and modified files are only at their base version, and the container
+   * agent has no git credential of its own, so it cannot fetch the head itself (the token lives
+   * with the harness). When set, the engine resolves the PR number into the job's `reviewPrNumber`
+   * and the harness fetches `pull/<n>/head` (GitHub) / `merge-requests/<n>/head` (GitLab) with its
+   * token, so the agent can `git diff origin/<base>...origin/pr-head` and read full head file
+   * bodies. Best-effort by default: a failed or unresolvable fetch just leaves the run on the base
+   * checkout (see {@link requirePr} for the kinds that cannot work that way).
+   *
+   * That ref is also what makes this shape survive a MERGE: the branch a merge deletes takes a
+   * `pr` clone with it, while `refs/pull/<n>/head` stays fetchable, so a kind reading the change
+   * after it landed reads the same diff a kind reading it before the merge does.
    */
   prHead?: boolean
   /**
-   * Refuse the dispatch when the block has NO pull request to work on, instead of falling back
-   * to {@link prFallback}. Right for a kind whose whole job is an EXISTING pull request (the
-   * in-place fixers, the conflict-resolver): with no PR there is nothing to fix, and a silent
-   * fall back to the base branch would push unrelated work onto it. Absent ⇒ the fallback runs.
+   * WHICH pull request {@link prHead} fetches, because two of them can be the subject and the
+   * answer follows from the kind's job rather than from what happens to be on the block:
+   *
+   *   - `task` (the default) — the PR the TASK ITSELF names in its own fields (`prNumber`/`prUrl`),
+   *     which is what the `pr-reviewer` was created to read. A run of a review task opens no pull
+   *     request of its own, so there is nothing else this kind could mean.
+   *   - `run` — the PR THIS RUN opened, recorded on the block, which is what a kind assessing the
+   *     change the run just landed is looking at (the `task-reassessor`).
+   *
+   * Declared rather than resolved by precedence (`task ?? run`) because a precedence silently
+   * widens every kind that already had one source: a review task whose run also opened a PR would
+   * start prefetching a head its review state knows nothing about, and the prompt naming one PR
+   * while the checkout carries the other is invisible until a score is attributed to the wrong
+   * change. Ignored when {@link prHead} is unset.
+   */
+  prHeadSource?: 'task' | 'run'
+  /**
+   * The block has NO pull request to work on: state that this kind cannot proceed on the base
+   * branch, instead of falling back to it (or to {@link prFallback}). What that COSTS depends on
+   * whether the kind WRITES on the pull request or READS it, and the two are different
+   * dispositions rather than one:
+   *
+   *   - a WRITER (the in-place fixers, the conflict-resolver: `branch: 'pr'`) REFUSES the dispatch.
+   *     With no PR there is nothing to fix, and a silent fall back to base would push unrelated
+   *     work onto it, so failing loudly is the only safe answer.
+   *   - a READER (a {@link prHead} kind scoring or judging the change a PR carries) is SKIPPED
+   *     before dispatch, with `skipReason: 'no_pull_request'` on the step. A base checkout holds
+   *     nothing to judge and scoring it as though it were the change is the failure mode this flag
+   *     exists to prevent, but the reader's product is a record nothing gates on, so failing the
+   *     run would end one whose work has already shipped over a reading nobody asked for. The skip
+   *     is taken in the run preamble (`runStepPreamble`), beside the estimate gate and the run
+   *     condition, so it costs nothing and reads on the board as what it is.
+   *
+   * Absent ⇒ the fallback runs.
    */
   requirePr?: boolean
   /**

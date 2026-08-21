@@ -554,6 +554,11 @@ export type {
   CreateConsensusGroupInput,
   UpdateConsensusGroupInput,
   TaskEstimate,
+  // The estimate's two producers and the record one leaves behind when it corrects the other:
+  // the basis vocabulary and the superseded-scores shape travel WITH `TaskEstimate`, or a caller
+  // composing one has to reach into contracts for half of it.
+  TaskEstimateBasis,
+  SupersededTaskEstimate,
   ConsensusScore,
   ConsensusContribution,
   ConsensusRound,

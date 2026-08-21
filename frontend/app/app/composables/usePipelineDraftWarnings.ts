@@ -1,6 +1,7 @@
 import { computed, type ComputedRef } from 'vue'
 import {
   pipelineEnvironmentProblems,
+  producesTaskEstimate,
   purposeAllowsAgentCategory,
   type PipelineEnvironmentProblemReason,
 } from '@cat-factory/contracts'
@@ -60,13 +61,14 @@ export function usePipelineDraftWarnings(
 
   const enabled = (i: number) => pipelines.draftEnabled[i] !== false
 
-  // A gated step with no task-estimator before it (mirrors `assertValidGating`, which rejects the
-  // save and the start). Both the step's own estimate gate (`draftGating`) and the Tester QC
-  // companion's (`draftTesterQuality[i].gating`) count.
+  // A gated step with no estimate PRODUCER before it (mirrors `assertValidGating`, which rejects
+  // the save and the start). Both the step's own estimate gate (`draftGating`) and the Tester QC
+  // companion's (`draftTesterQuality[i].gating`) count, and either producer satisfies it: the
+  // estimator forecasts the estimate up front, the reassessor measures it once the change lands.
   const gatingNeedsEstimator = computed(() => {
     const kinds = pipelines.draft
     const hasEstimatorBefore = (i: number) =>
-      kinds.slice(0, i).some((k, j) => k === 'task-estimator' && enabled(j))
+      kinds.slice(0, i).some((k, j) => producesTaskEstimate(k) && enabled(j))
     return kinds.some((_, i) => {
       if (!enabled(i)) return false
       const gated =

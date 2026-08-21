@@ -30,11 +30,12 @@
   `agent_context_snapshots` telemetry row its container sibling has always filed, and whose header
   names the inline SERVICE calls still absent from that table).
   `kinds/built-in-container.ts` registers every BUILT-IN CONTAINER kind (`coder`, the testers,
-  the in-place fixers, the conflict-resolver, `merger`, `on-call`, the read-only explorers) as an
-  ordinary `AgentKindDefinition` declaring its `AgentStepSpec`, which is what let the server's
-  per-kind job-body switch and the executor's result-coercion chain both be deleted. Each
-  declares NO `systemPrompt` (its shipped TRACK owns the text; a copy would be dead the day the
-  track moves) and NO `presentation` (that field is what promotes a REGISTERED kind into the
+  the in-place fixers, the conflict-resolver, `merger`, `on-call`, `task-reassessor`, the read-only
+  explorers) as an ordinary `AgentKindDefinition` declaring its `AgentStepSpec`, which is what let
+  the server's per-kind job-body switch and the executor's result-coercion chain both be deleted.
+  Each declares NO `systemPrompt` (the text is owned by its shipped TRACK, or by the thin
+  `prompts/roles.ts` entry for a kind no track claims; a copy would be dead the day that moves)
+  and NO `presentation` (that field is what promotes a REGISTERED kind into the
   palette, so declaring it would list the built-in twice). Their task prompts + shape hints live
   in `prompts/built-in-container.ts` and their engine-channel mappings in `kinds/built-in-results.ts`.
   `kinds/gatable.ts` answers whether a pipeline may ESTIMATE-GATE a step of a given kind

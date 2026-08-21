@@ -1,4 +1,5 @@
 import type {
+  AgentCloneSpec,
   GitHubChangedFile,
   GitHubReviewThread,
   PrReviewSliceReview,
@@ -122,6 +123,38 @@ export function resolvePrNumber(
   const raw = m?.[1] ?? m?.[2]
   const n = raw ? Number(raw) : Number.NaN
   return Number.isInteger(n) && n > 0 ? n : null
+}
+
+/**
+ * The pull request a `clone.prHead` step is about, from the source the KIND declared
+ * ({@link AgentCloneSpec.prHeadSource}): the one the TASK names (`prNumber`/`prUrl`, the
+ * `pr-reviewer`'s subject) or the one THIS RUN opened (`block.pullRequest`, the
+ * `task-reassessor`'s). `null` when the declared source holds none, and for a step that fetches
+ * no head at all.
+ *
+ * ONE resolver for both readers of that declaration, because they must not be able to disagree:
+ * the run preamble asks it whether a `requirePr` step has anything to read (and skips the step
+ * when it does not), and the job body asks it which number the harness should fetch. Two copies
+ * of the precedence is how a step gets skipped for want of the PR the dispatch would have found,
+ * or prefetches a head the prompt does not name.
+ *
+ * Deliberately NOT a `task ?? run` fallback. A fallback reads as harmless and silently widens
+ * every kind that already had one source: a review task whose run also opened a pull request
+ * would start prefetching a head its review state knows nothing about.
+ */
+export function resolvePrHeadNumber(
+  clone: AgentCloneSpec | undefined,
+  block: {
+    taskTypeFields?: { prNumber?: number; prUrl?: string } | null | undefined
+    pullRequest?: { number?: number | null } | null | undefined
+  },
+): number | null {
+  if (!clone?.prHead) return null
+  if (clone.prHeadSource === 'run') {
+    const number = block.pullRequest?.number
+    return typeof number === 'number' && Number.isInteger(number) && number > 0 ? number : null
+  }
+  return resolvePrNumber(block.taskTypeFields ?? undefined)
 }
 
 // ---------------------------------------------------------------------------

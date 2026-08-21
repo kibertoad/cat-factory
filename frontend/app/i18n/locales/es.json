@@ -1138,10 +1138,17 @@
     },
     "estimate": {
       "title": "Estimación",
-      "hint": "Producida por el agente estimador de tareas: cuán compleja, arriesgada e impactante parece esta tarea. Se usa para decidir si merecen la pena los pasos de consenso (multiejecución).",
+      "hint": "Lo compleja, arriesgada e impactante que es esta tarea. Un Task Estimator la pronostica antes de empezar el trabajo y un Task Reassessor la mide después a partir del cambio realizado. Se usa para decidir si merecen la pena los pasos de consenso (multiejecución) y otros pasos condicionales.",
       "complexity": "Complejidad",
       "risk": "Riesgo",
-      "impact": "Impacto"
+      "impact": "Impacto",
+      "basis": {
+        "predicted": "Pronóstico previo al inicio del trabajo",
+        "observed": "Medido a partir del cambio realizado",
+        "unknown": "Registrado por otra versión de la aplicación"
+      },
+      "was": "antes {value}",
+      "supersededBasis": "Reemplaza: {basis}"
     },
     "reviewTarget": {
       "title": "Pull request en revisión",
@@ -5215,6 +5222,7 @@
         "conditionBackend": "Omitido: esta tarea solo modifica un servicio de frontend, así que no hay API detrás que probar.",
         "producerSkipped": "Omitido: el paso que revisa fue omitido, así que no hay nada que evaluar.",
         "runComplete": "Omitido: la ejecución terminó antes de este paso y no quedaba nada que hacer.",
+        "noPullRequest": "Omitido: esta ejecución no abrió ningún pull request, así que este paso no tiene ningún cambio que leer.",
         "unknown": "Omitido: este paso no se ejecutó."
       }
     },

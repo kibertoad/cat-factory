@@ -1724,10 +1724,17 @@
     },
     "estimate": {
       "title": "Schätzung",
-      "hint": "Vom Task-Estimator-Agent erzeugt: wie komplex, riskant und wirkungsvoll diese Aufgabe aussieht. Wird verwendet, um zu entscheiden, ob Konsens-Schritte (Mehrfachläufe) sich lohnen.",
+      "hint": "Wie komplex, riskant und wirkungsvoll diese Aufgabe ist. Ein Task Estimator prognostiziert das vor Beginn der Arbeit, ein Task Reassessor misst es danach an der tatsächlich erfolgten Änderung. Wird verwendet, um zu entscheiden, ob Konsens-Schritte (Mehrfachläufe) und andere bedingte Schritte sich lohnen.",
       "complexity": "Komplexität",
       "risk": "Risiko",
-      "impact": "Wirkung"
+      "impact": "Wirkung",
+      "basis": {
+        "predicted": "Prognose vor Beginn der Arbeit",
+        "observed": "Gemessen an der erfolgten Änderung",
+        "unknown": "Von einer anderen App-Version erfasst"
+      },
+      "was": "vorher {value}",
+      "supersededBasis": "Ersetzt: {basis}"
     },
     "reviewTarget": {
       "title": "Geprüfter Pull Request",
@@ -4739,6 +4746,7 @@
         "conditionBackend": "Übersprungen: Diese Aufgabe ändert nur einen Frontend-Dienst, es gibt also keine API dahinter zu prüfen.",
         "producerSkipped": "Übersprungen: Der geprüfte Schritt wurde übersprungen, es gibt nichts zu bewerten.",
         "runComplete": "Übersprungen: Der Lauf endete vor diesem Schritt, es blieb nichts zu tun.",
+        "noPullRequest": "Übersprungen: Dieser Lauf hat keinen Pull Request eröffnet, also gibt es für diesen Schritt keine Änderung zu lesen.",
         "unknown": "Übersprungen: Dieser Schritt wurde nicht ausgeführt."
       }
     },
