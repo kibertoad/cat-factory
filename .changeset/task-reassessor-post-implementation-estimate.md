@@ -29,8 +29,10 @@ full argument, and the three secondary reasons, are in `backend/docs/task-assess
 
 Behaviour changes worth knowing:
 
-- **`TaskEstimate` now says what it was formed on.** `basis` (`predicted` / `observed`) plus, when a
-  measurement replaced a forecast, that forecast in `supersedes`. Both are OPTIONAL on the type
+- **`TaskEstimate` now says what it was formed on.** `basis` (`predicted` / `observed`) plus the last
+  reading of the OTHER basis in `supersedes`, which a same-basis re-run inherits rather than
+  overwrites, so a retried measurement cannot delete the forecast it is being compared against.
+  Both are OPTIONAL on the type
   rather than defaulted into it, because the estimate is stored as a JSON blob read back with no
   schema pass: a row written before this change genuinely carries no basis, and absence reads as
   `predicted` (every one of those rows came from the estimator). A basis this build cannot name

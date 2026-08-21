@@ -18,9 +18,9 @@ function clamp01(value: unknown): number | null {
 }
 
 /**
- * Coerce a triage reply into a {@link TaskEstimate}. Tolerant: accepts either the already-parsed
- * object a structured container kind returns as `custom` or a JSON object embedded in an inline
- * kind's prose, clamps the three axes to [0,1], and defaults a missing rationale to empty.
+ * Coerce a triage reply into a {@link TaskEstimate}. Tolerant: accepts a JSON object embedded in
+ * prose (both producers return the JSON as their reply TEXT, which is what lets an unreadable one
+ * cost nothing), clamps the three axes to [0,1], and defaults a missing rationale to empty.
  *
  * Returns null when no usable scores are present, and the CALLER then leaves the block's estimate
  * untouched. That is the cautious reading for this record: unlike a merge assessment, whose absence
@@ -33,12 +33,12 @@ function clamp01(value: unknown): number | null {
  * measurement by claiming one.
  */
 export function coerceTaskEstimate(
-  source: unknown,
+  output: string,
   model: string | null,
   now: number,
   basis: TaskEstimateBasis = 'predicted',
 ): TaskEstimate | null {
-  const raw = typeof source === 'string' ? extractJson(source) : source
+  const raw = extractJson(output)
   if (!raw || typeof raw !== 'object') return null
   const obj = raw as Record<string, unknown>
   const complexity = clamp01(obj.complexity)
@@ -50,23 +50,30 @@ export function coerceTaskEstimate(
 }
 
 /**
- * What the block should hold once `next` is produced: `next` itself, carrying the scores it
- * REPLACED so the forecast survives the measurement that corrected it.
+ * What the block should hold once `next` is produced: `next` itself, carrying the last reading of
+ * the OTHER basis, so a forecast survives the measurement that corrected it and stays readable
+ * beside it.
  *
- * One level deep by construction (the prior record's own `supersedes` is dropped), so a task
- * re-assessed twice keeps its current scores and the ones immediately before them rather than
- * growing an unbounded chain on a board row.
+ * Three cases, and the third is the one worth stating:
  *
- * A first estimate supersedes nothing, and neither does a re-run of the SAME basis: two
- * consecutive forecasts are one forecast revised, and recording the earlier one as superseded
- * would read as a prediction/measurement pair that never happened.
+ *  - No prior reading: nothing was superseded, so nothing is recorded.
+ *  - A prior reading of the other basis: it becomes `next.supersedes`, ONE level deep (its own
+ *    `supersedes` is dropped), so a board row carries the pair rather than an unbounded chain.
+ *  - A prior reading of the SAME basis: it is `next`'s predecessor, not its counterpart, so
+ *    recording it would render a forecast/measurement comparison that never happened. The pair it
+ *    was already carrying is INHERITED instead. Without that, a retried step (or a second
+ *    measurement) would delete the forecast the comparison exists for, which is the opposite of
+ *    what re-measuring is for.
  */
 export function reviseTaskEstimate(
   prior: TaskEstimate | null | undefined,
   next: TaskEstimate,
 ): TaskEstimate {
-  const priorBasis = prior?.basis ?? 'predicted'
-  if (!prior || priorBasis === next.basis) return next
+  if (!prior) return next
+  const priorBasis = prior.basis ?? 'predicted'
+  if (priorBasis === next.basis) {
+    return prior.supersedes ? { ...next, supersedes: prior.supersedes } : next
+  }
   return {
     ...next,
     supersedes: {

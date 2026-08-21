@@ -772,16 +772,20 @@ export function buildStepResolverRegistry(
       kind: TASK_ESTIMATOR_AGENT_KIND,
       phase: 'post-completion',
       resolve: async ({ workspaceId, instance, step, result }) => {
-        const estimate = coerceTaskEstimate(
+        const forecast = coerceTaskEstimate(
           step.output ?? '',
           result.model ?? step.model ?? null,
           d.clock.now(),
           'predicted',
         )
-        if (estimate) {
-          await d.blockRepository.update(workspaceId, instance.blockId, { estimate })
-          return { output: summarizeEstimate(estimate) }
-        }
+        if (!forecast) return
+        // Through the SAME revision rule the reassessor's resolver uses, so the block's estimate
+        // always carries the last reading of the other basis whichever producer wrote it last: a
+        // re-run's fresh forecast on a task that was measured keeps that measurement beside it.
+        const block = await d.blockRepository.get(workspaceId, instance.blockId)
+        const estimate = reviseTaskEstimate(block?.estimate, forecast)
+        await d.blockRepository.update(workspaceId, instance.blockId, { estimate })
+        return { output: summarizeEstimate(estimate) }
       },
     },
     // A `task-reassessor` step MEASURED the same three axes against the change that landed. Same

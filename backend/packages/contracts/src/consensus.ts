@@ -227,13 +227,16 @@ export function isTaskEstimateBasis(value: unknown): value is TaskEstimateBasis 
 }
 
 /**
- * The scores an estimate REPLACED, kept on the replacement so the forecast survives the
- * measurement that corrected it. The platform derives the delta from the pair (see
- * `reviseTaskEstimate`); nothing asks a model what it changed.
+ * The last reading of the OTHER basis, kept on the current record so a forecast survives the
+ * measurement that corrected it and stays readable beside it. The platform derives the delta from
+ * the pair (see `reviseTaskEstimate`); nothing asks a model what it changed.
  *
- * ONE level deep, deliberately: this carries no `supersedes` of its own, so a task re-assessed
- * twice keeps the CURRENT scores and the ones immediately before them rather than growing an
- * unbounded chain on a board row. The per-run history lives in the runs themselves.
+ * The other basis, rather than simply the previous record: a re-run of the SAME reading INHERITS
+ * this instead of overwriting it, because a retried measurement replaces its predecessor and would
+ * otherwise delete the forecast the comparison exists for.
+ *
+ * ONE level deep, deliberately: this carries no `supersedes` of its own, so a board row holds the
+ * pair rather than an unbounded chain. The per-run history lives in the runs themselves.
  */
 export const supersededTaskEstimateSchema = v.object({
   complexity: scoreSchema,
@@ -270,7 +273,7 @@ export const taskEstimateSchema = v.object({
   createdAt: v.number(),
   /** What the scores were formed on; absent ⇒ `predicted` (see {@link taskEstimateBasisSchema}). */
   basis: v.optional(taskEstimateBasisSchema),
-  /** The scores this record replaced, when it replaced one. */
+  /** The last reading of the OTHER basis, when there was one. */
   supersedes: v.optional(v.nullable(supersededTaskEstimateSchema)),
 })
 export type TaskEstimate = v.InferOutput<typeof taskEstimateSchema>

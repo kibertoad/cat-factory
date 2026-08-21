@@ -60,12 +60,15 @@ replaced (`supersedes`). Three properties hold it together:
   measurement of a change nobody read.
 - **The delta is COMPUTED.** The reassessor is deliberately not told the earlier forecast: an
   assessment handed the number it is revising anchors on it, and what moved between two records is
-  arithmetic (`summarizeEstimate`). One level deep, so a twice-measured task keeps its current
-  scores and the ones immediately before them rather than growing a chain on a board row.
+  arithmetic (`summarizeEstimate`).
 
-`reviseTaskEstimate` supersedes nothing when the basis is UNCHANGED: two consecutive forecasts are
-one forecast revised, and recording the earlier one would render a prediction/measurement comparison
-that never happened.
+`supersedes` holds the last reading of the OTHER basis rather than simply the previous record, and
+`reviseTaskEstimate` (which BOTH producers' resolvers write through, so the rule cannot depend on
+which one ran last) is where that is decided. A same-basis re-run INHERITS the pair instead of
+overwriting it: two consecutive forecasts are one forecast revised, so recording the earlier one
+would render a prediction/measurement comparison that never happened, while dropping what the
+record already carried would let a RETRIED measurement delete the forecast the comparison exists
+for. One level deep either way, so a board row holds the pair and never a chain.
 
 ## The dispatch shape, and the two refusals
 

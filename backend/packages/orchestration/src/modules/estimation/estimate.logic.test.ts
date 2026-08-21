@@ -21,9 +21,9 @@ const forecast = (over: Partial<TaskEstimate> = {}): TaskEstimate => ({
 })
 
 describe('coerceTaskEstimate', () => {
-  it('reads the already-parsed object a structured container kind returns', () => {
+  it("reads the reply a producer returns, stamping the caller's basis", () => {
     const estimate = coerceTaskEstimate(
-      { complexity: 0.8, risk: 0.6, impact: 0.9, rationale: 'touched the auth path' },
+      '{"complexity": 0.8, "risk": 0.6, "impact": 0.9, "rationale": "touched the auth path"}',
       'model-b',
       NOW,
       'observed',
@@ -39,7 +39,7 @@ describe('coerceTaskEstimate', () => {
     })
   })
 
-  it('still finds JSON embedded in an inline kind prose reply, and clamps the axes', () => {
+  it('finds JSON embedded in prose, and clamps the axes', () => {
     const estimate = coerceTaskEstimate(
       'Here is my triage:\n```json\n{"complexity": 1.4, "risk": -2, "impact": 0.5}\n```\n',
       null,
@@ -52,7 +52,7 @@ describe('coerceTaskEstimate', () => {
     // The basis follows from which STEP ran. A reply claiming `basis: "observed"` must not be able
     // to promote a forecast into a measurement of a change nobody read.
     const estimate = coerceTaskEstimate(
-      { complexity: 0.1, risk: 0.1, impact: 0.1, basis: 'observed' },
+      '{"complexity": 0.1, "risk": 0.1, "impact": 0.1, "basis": "observed"}',
       null,
       NOW,
     )
@@ -63,16 +63,18 @@ describe('coerceTaskEstimate', () => {
     // The caller then leaves the block's estimate untouched. Nothing acts on this record
     // structurally, so an unreadable reply must not become a maximally severe task that silently
     // changes what every estimate gate decides.
-    expect(coerceTaskEstimate({ complexity: 0.5, risk: 0.5 }, null, NOW)).toBeNull()
-    expect(coerceTaskEstimate({ complexity: 0.5, risk: 0.5, impact: null }, null, NOW)).toBeNull()
+    expect(coerceTaskEstimate('{"complexity": 0.5, "risk": 0.5}', null, NOW)).toBeNull()
+    expect(
+      coerceTaskEstimate('{"complexity": 0.5, "risk": 0.5, "impact": null}', null, NOW),
+    ).toBeNull()
     expect(coerceTaskEstimate('no json here at all', null, NOW)).toBeNull()
-    expect(coerceTaskEstimate(undefined, null, NOW)).toBeNull()
+    expect(coerceTaskEstimate('', null, NOW)).toBeNull()
   })
 })
 
 describe('reviseTaskEstimate', () => {
   const measured = coerceTaskEstimate(
-    { complexity: 0.8, risk: 0.6, impact: 0.9, rationale: 'wider than it looked' },
+    '{"complexity": 0.8, "risk": 0.6, "impact": 0.9, "rationale": "wider than it looked"}',
     'model-b',
     NOW,
     'observed',
@@ -104,12 +106,28 @@ describe('reviseTaskEstimate', () => {
     expect(reviseTaskEstimate(null, measured).supersedes).toBeUndefined()
   })
 
-  it('supersedes nothing when the basis is unchanged', () => {
+  it('supersedes nothing when the basis is unchanged and there was no pair', () => {
     // Two consecutive forecasts (a re-run of the estimator) are one forecast revised, not a
     // prediction/measurement pair. Recording the earlier one would render a comparison that never
     // happened.
-    const second = coerceTaskEstimate({ complexity: 0.2, risk: 0.2, impact: 0.2 }, null, NOW)!
+    const second = coerceTaskEstimate('{"complexity": 0.2, "risk": 0.2, "impact": 0.2}', null, NOW)!
     expect(reviseTaskEstimate(forecast(), second).supersedes).toBeUndefined()
+  })
+
+  it('INHERITS the pair when the basis is unchanged, rather than deleting the forecast', () => {
+    // A retried reassessor step measures a second time. Its predecessor is the first measurement,
+    // so nothing new was superseded, but dropping what that record carried would delete the
+    // forecast the comparison exists for.
+    const first = reviseTaskEstimate(forecast(), measured)
+    const retried = coerceTaskEstimate(
+      '{"complexity": 0.7, "risk": 0.6, "impact": 0.9}',
+      null,
+      NOW + 1,
+      'observed',
+    )!
+    const second = reviseTaskEstimate(first, retried)
+    expect(second.complexity).toBe(0.7)
+    expect(second.supersedes).toMatchObject({ basis: 'predicted', complexity: 0.4 })
   })
 
   it('keeps the chain one level deep', () => {
@@ -147,7 +165,7 @@ describe('summarizeEstimate', () => {
   it('states the movement when a measurement corrected a forecast', () => {
     const revised = reviseTaskEstimate(
       forecast(),
-      coerceTaskEstimate({ complexity: 0.8, risk: 0.6, impact: 0.9 }, null, NOW, 'observed')!,
+      coerceTaskEstimate('{"complexity": 0.8, "risk": 0.6, "impact": 0.9}', null, NOW, 'observed')!,
     )
     const summary = summarizeEstimate(revised)
     expect(summary).toContain('Complexity 80%')

@@ -13,6 +13,7 @@ import {
 } from './built-in-container.js'
 import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
 import { MEDIA_GENERATOR_AGENT_KIND } from './media.js'
+import { TASK_REASSESSOR_AGENT_KIND } from '../prompts/roles.js'
 
 // Only `code-aware` and `doc-aware` actually FOLD the task's selected fragments into the agent's
 // system prompt (`AgentContextBuilder.resolveFragments` gates on exactly those two: technical
@@ -49,6 +50,10 @@ const FRAGMENT_FOLD_OPT_OUT = new Set<string>([
   // standard has no bearing on how risky a change is — the same reason it declares
   // `standardsDelivery: 'none'`, which is the stronger statement of this exemption.
   MERGER_AGENT_KIND,
+  // The same judgement about the same diff, one step later: it re-scores complexity / risk / impact
+  // against the change that landed. Exempt for the merger's reason, and it declares the same
+  // `standardsDelivery: 'none'` for it.
+  TASK_REASSESSOR_AGENT_KIND,
   // The testers RUN the service's suite and report what they observed. They are `spec-aware`, so
   // they read the in-repo spec that IS the contract under test; best-practice fragments describe
   // how code should be WRITTEN, which is not what a test run judges.
