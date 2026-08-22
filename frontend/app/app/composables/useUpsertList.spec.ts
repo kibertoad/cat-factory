@@ -63,6 +63,53 @@ describe('useUpsertList', () => {
     expect(items.value).toHaveLength(2)
   })
 
+  // Lookups run off a lazily-rebuilt key -> position map. Every write that MOVES an existing
+  // position has to invalidate it, and so does a caller replacing `items` wholesale (which the
+  // returned ref deliberately allows). A stale index answers with the wrong row, so these assert
+  // the identity of what comes back, not just that something did.
+  describe('key index coherence', () => {
+    it('answers correctly after a prepend has shifted every later position', () => {
+      const { upsert, get, indexOf } = useUpsertList<Item>({ key: (x) => x.id, prepend: true })
+      upsert({ id: 'a', v: 1 })
+      expect(indexOf('a')).toBe(0)
+      upsert({ id: 'b', v: 2 })
+      expect(indexOf('a')).toBe(1)
+      expect(get('a')).toEqual({ id: 'a', v: 1 })
+    })
+
+    it('answers correctly after a removal has shifted every later position', () => {
+      const { upsert, remove, get, indexOf } = useUpsertList<Item>({ key: (x) => x.id })
+      upsert({ id: 'a', v: 1 })
+      upsert({ id: 'b', v: 2 })
+      upsert({ id: 'c', v: 3 })
+      expect(indexOf('c')).toBe(2)
+      remove('a')
+      expect(indexOf('c')).toBe(1)
+      expect(get('b')).toEqual({ id: 'b', v: 2 })
+      expect(get('a')).toBeUndefined()
+    })
+
+    it('answers correctly after the caller replaces the list wholesale', () => {
+      const { items, upsert, get } = useUpsertList<Item>({ key: (x) => x.id })
+      upsert({ id: 'a', v: 1 })
+      items.value = [
+        { id: 'b', v: 2 },
+        { id: 'a', v: 7 },
+      ]
+      expect(get('a')).toEqual({ id: 'a', v: 7 })
+      expect(get('b')).toEqual({ id: 'b', v: 2 })
+    })
+
+    it('answers correctly after hydrate replaces the list', () => {
+      const { upsert, hydrate, get } = useUpsertList<Item>({ key: (x) => x.id })
+      upsert({ id: 'a', v: 1 })
+      expect(get('a')).toEqual({ id: 'a', v: 1 })
+      hydrate([{ id: 'b', v: 2 }])
+      expect(get('a')).toBeUndefined()
+      expect(get('b')).toEqual({ id: 'b', v: 2 })
+    })
+  })
+
   it('seeds from initial without aliasing the caller array', () => {
     const seed: Item[] = [{ id: 'a', v: 1 }]
     const { items, upsert } = useUpsertList<Item>({ key: (x) => x.id, initial: seed })

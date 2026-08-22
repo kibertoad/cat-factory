@@ -1,11 +1,21 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type {
   RequirementReview,
   ResolveRequirementsExceededChoice,
   ReviewItemStatus,
 } from '~/types/requirements'
 import { useWorkspaceStore } from '~/stores/workspace'
+// The settlement derivations over one review's findings (`stores/requirements/settlement.ts`):
+// pure, memoised per review object, and re-exported below so every caller keeps reading them off
+// the store.
+import {
+  allSettled,
+  answeredCount,
+  canIncorporate,
+  canProceed,
+  openCount,
+} from '~/stores/requirements/settlement'
 import { createRecommendationCommands } from '~/stores/requirements/recommendations'
 
 /**
@@ -48,8 +58,21 @@ export const useRequirementsStore = defineStore('requirements', () => {
   /** Whether the Requirement Writer is still producing recommendations for a block (a `pending`
    * placeholder exists). Server-derived, so the "Recommending…" state survives the window closing
    * and a page reload — the client-local `recommending` set only covers the request round-trip. */
+  /**
+   * Blocks whose stored review still carries a `pending` recommendation placeholder, derived once
+   * per change to `reviews` rather than per call. {@link backgroundStage} asks this on the per-CARD
+   * path, so as a function it re-scanned one review's recommendation list for every card on the
+   * board on every event.
+   */
+  const blocksAwaitingRecommendations = computed(() => {
+    const blocks = new Set<string>()
+    for (const [blockId, review] of Object.entries(reviews.value)) {
+      if ((review?.recommendations ?? []).some((r) => r.status === 'pending')) blocks.add(blockId)
+    }
+    return blocks
+  })
   function hasPendingRecommendations(blockId: string): boolean {
-    return (reviews.value[blockId]?.recommendations ?? []).some((r) => r.status === 'pending')
+    return blocksAwaitingRecommendations.value.has(blockId)
   }
   /**
    * The async background stage a block's review is in, or null. While the driver folds the
@@ -71,27 +94,6 @@ export const useRequirementsStore = defineStore('requirements', () => {
   }
   function isIncorporating(reviewId: string): boolean {
     return incorporating.value.has(reviewId)
-  }
-
-  /** Findings still needing a human (status `open`). */
-  function openCount(review: RequirementReview): number {
-    return review.items.filter((i) => i.status === 'open').length
-  }
-  /** Findings the human answered (a reply recorded), which the companion folds in. */
-  function answeredCount(review: RequirementReview): number {
-    return review.items.filter((i) => i.status === 'answered' || i.status === 'resolved').length
-  }
-  /** Every finding is settled (answered or dismissed) — none still open. */
-  function allSettled(review: RequirementReview): boolean {
-    return openCount(review) === 0
-  }
-  /** Incorporation is possible: all findings settled AND at least one was answered. */
-  function canIncorporate(review: RequirementReview): boolean {
-    return allSettled(review) && answeredCount(review) > 0
-  }
-  /** Proceed (skip the companion) is possible: all findings settled but none answered. */
-  function canProceed(review: RequirementReview): boolean {
-    return allSettled(review) && answeredCount(review) === 0
   }
 
   function store(review: RequirementReview) {

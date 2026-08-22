@@ -1705,6 +1705,10 @@
       "dryRun": "Ejecución de prueba: no fusionar nada",
       "dryRunForced": "Ejecución de prueba: las ejecuciones de tu rol nunca se fusionan aquí",
       "dryRunHint": "Esta ejecución abre una pull request y no fusiona nada."
+    },
+    "runDetail": {
+      "loading": "Cargando la ejecución completa…",
+      "loadFailed": "No se pudo cargar la ejecución completa: {reason}"
     }
   },
   "observability": {
@@ -1810,6 +1814,7 @@
     },
     "callsTitle": "Llamadas al modelo",
     "noCallsMatching": "Ninguna llamada al modelo coincide con este filtro.",
+    "liveCallsCapped": "Se descartó la llamada en vivo más antigua ({count}) de esta lista para acotarla; vuelve a cargar la ejecución para ver todas las llamadas registradas. | Se descartaron las {count} llamadas en vivo más antiguas de esta lista para acotarla; vuelve a cargar la ejecución para ver todas las llamadas registradas.",
     "filter": {
       "all": "Todas",
       "failed": "Fallidas",

@@ -2291,6 +2291,10 @@
       "dryRun": "Prova: non unire nulla",
       "dryRunForced": "Prova: le esecuzioni del tuo ruolo qui non vengono mai unite",
       "dryRunHint": "Questa esecuzione apre una pull request e non unisce nulla."
+    },
+    "runDetail": {
+      "loading": "Caricamento dell'esecuzione completa…",
+      "loadFailed": "Impossibile caricare l'esecuzione completa: {reason}"
     }
   },
   "layout": {
@@ -3863,6 +3867,7 @@
     },
     "callsTitle": "Chiamate al modello",
     "noCallsMatching": "Nessuna chiamata al modello corrisponde a questo filtro.",
+    "liveCallsCapped": "La chiamata live più vecchia ({count}) è stata rimossa da questo elenco per limitarlo; ricarica l'esecuzione per vedere tutte le chiamate registrate. | Le {count} chiamate live più vecchie sono state rimosse da questo elenco per limitarlo; ricarica l'esecuzione per vedere tutte le chiamate registrate.",
     "filter": {
       "all": "Tutte",
       "failed": "Fallite",

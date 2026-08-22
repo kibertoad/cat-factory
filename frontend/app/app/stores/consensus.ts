@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { ConsensusSession } from '~/types/consensus'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { useSingleFlight } from '~/composables/useSingleFlight'
 
 /**
  * Consensus session state. A consensus-enabled step runs a multi-model process (panel /
@@ -18,6 +19,8 @@ export const useConsensusStore = defineStore('consensus', () => {
   const sessions = ref<Record<string, ConsensusSession | null>>({})
   /** Block ids whose session is currently being fetched. */
   const loading = ref<Set<string>>(new Set())
+  /** One in-flight fetch per block: the window and its opener both load on open. */
+  const loads = useSingleFlight<string, void>()
 
   function sessionFor(blockId: string): ConsensusSession | null {
     return sessions.value[blockId] ?? null
@@ -40,7 +43,11 @@ export const useConsensusStore = defineStore('consensus', () => {
   }
 
   /** Load the latest session for a block (window open / reload). Best-effort. */
-  async function load(blockId: string): Promise<void> {
+  function load(blockId: string): Promise<void> {
+    return loads.run(blockId, () => fetchSession(blockId))
+  }
+
+  async function fetchSession(blockId: string): Promise<void> {
     const wsId = workspace.workspaceId
     if (!wsId) return
     loading.value = new Set(loading.value).add(blockId)

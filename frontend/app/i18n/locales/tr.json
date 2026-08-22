@@ -1705,6 +1705,10 @@
       "dryRun": "Prova çalışması: hiçbir şeyi birleştirme",
       "dryRunForced": "Prova çalışması: rolünün başlattığı çalıştırmalar burada asla birleştirilmez",
       "dryRunHint": "Bu çalıştırma bir pull request açar ve hiçbir şeyi birleştirmez."
+    },
+    "runDetail": {
+      "loading": "Çalıştırmanın tamamı yükleniyor…",
+      "loadFailed": "Çalıştırmanın tamamı yüklenemedi: {reason}"
     }
   },
   "observability": {
@@ -1810,6 +1814,7 @@
     },
     "callsTitle": "Model çağrıları",
     "noCallsMatching": "Bu filtreye uyan model çağrısı yok.",
+    "liveCallsCapped": "Listeyi sınırlamak için en eski {count} canlı çağrı listeden çıkarıldı; kaydedilen tüm çağrıları okumak için çalıştırmayı yeniden yükleyin. | Listeyi sınırlamak için en eski {count} canlı çağrı listeden çıkarıldı; kaydedilen tüm çağrıları okumak için çalıştırmayı yeniden yükleyin.",
     "filter": {
       "all": "Tümü",
       "failed": "Başarısız",

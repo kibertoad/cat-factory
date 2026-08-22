@@ -3,6 +3,7 @@ import {
   deleteWorkspaceContract,
   getWorkspaceContract,
   listWorkspacesContract,
+  projectExecutionForBoard,
   updateWorkspaceContract,
 } from '@cat-factory/contracts'
 import { BINARY_OUTPUT_TRAIT, configContributionCatalog, hasTrait } from '@cat-factory/agents'
@@ -849,7 +850,12 @@ export function workspaceController(): Hono<AppEnv> {
       {
         ...snapshot,
         blocks: redacted.blocks,
-        executions: redacted.executions,
+        // The LEAN execution projection: each step's captured prose is WITHHELD here and fetched
+        // per run by `getExecutionContract` when a human opens a step-detail overlay. Applied at
+        // the wire rather than in `WorkspaceService.snapshot`, because it is a decision about what
+        // this SPA-facing response carries, and the service's own callers (the mothership harness
+        // drives runs off it) want the whole run.
+        executions: redacted.executions.map(projectExecutionForBoard),
         spend,
         ...viewerSlices,
         agentConfigCatalog: snapshotAgentConfigCatalog(snapshot, container.agentKindRegistry),

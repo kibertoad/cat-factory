@@ -1705,6 +1705,10 @@
       "dryRun": "Exécution à blanc : ne rien fusionner",
       "dryRunForced": "Exécution à blanc : les exécutions de votre rôle ne sont jamais fusionnées ici",
       "dryRunHint": "Cette exécution ouvre une pull request et ne fusionne rien."
+    },
+    "runDetail": {
+      "loading": "Chargement de l'exécution complète…",
+      "loadFailed": "Impossible de charger l'exécution complète : {reason}"
     }
   },
   "observability": {
@@ -1810,6 +1814,7 @@
     },
     "callsTitle": "Appels de modèle",
     "noCallsMatching": "Aucun appel de modèle ne correspond à ce filtre.",
+    "liveCallsCapped": "L'appel en direct le plus ancien ({count}) a été retiré de cette liste pour la borner ; rechargez l'exécution pour voir tous les appels enregistrés. | Les {count} appels en direct les plus anciens ont été retirés de cette liste pour la borner ; rechargez l'exécution pour voir tous les appels enregistrés.",
     "filter": {
       "all": "Tous",
       "failed": "En échec",
