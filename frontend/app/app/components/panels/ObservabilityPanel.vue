@@ -61,6 +61,15 @@ const block = computed(() => (instance.value ? board.getBlock(instance.value.blo
 const calls = computed<LlmCallMetric[]>(() =>
   executionId.value ? observability.callsFor(executionId.value) : [],
 )
+/**
+ * How many LIVE rows the store's per-run cap evicted from this list. A capped list is not a
+ * prefix of the run, so a reader that cannot see the number concludes the run made exactly the
+ * calls it is scrolling. Reloading the run replaces the list with the server-bounded read and
+ * clears this.
+ */
+const droppedLiveCalls = computed(() =>
+  executionId.value ? observability.droppedLiveCallCount(executionId.value) : 0,
+)
 const loading = computed(() => !!executionId.value && observability.isLoading(executionId.value))
 const exporting = computed(
   () => !!executionId.value && observability.isExporting(executionId.value),
@@ -807,6 +816,17 @@ function exportJson() {
                 </h2>
                 <OutcomeFilterChips v-model="callFilter" :options="callFilterOptions" />
               </div>
+
+              <!-- What the live cap dropped. Without it this list reads as the whole run. -->
+              <p
+                v-if="droppedLiveCalls"
+                class="text-[11px] text-amber-300/80"
+                data-testid="observability-live-calls-capped"
+              >
+                {{
+                  t('observability.liveCallsCapped', { count: droppedLiveCalls }, droppedLiveCalls)
+                }}
+              </p>
 
               <!-- Narrowed to nothing reads differently from recorded nothing, and on this
                    surface it is the good news: the operator asked for the failures and there

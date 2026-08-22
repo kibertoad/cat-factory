@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { DocInterviewSession } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { useSingleFlight } from '~/composables/useSingleFlight'
 
 /**
  * Interactive document-interview sessions (WS5), keyed by their anchor BLOCK id. Loaded on
@@ -18,6 +19,8 @@ export const useDocInterviewStore = defineStore('docInterview', () => {
   const byBlock = ref<Record<string, DocInterviewSession>>({})
   /** True while a window action (continue/proceed) is resuming the run. */
   const resuming = ref(false)
+  /** One in-flight fetch per block: the window and its opener both load on open. */
+  const loads = useSingleFlight<string, void>()
 
   function forBlock(blockId: string): DocInterviewSession | null {
     return byBlock.value[blockId] ?? null
@@ -31,7 +34,13 @@ export const useDocInterviewStore = defineStore('docInterview', () => {
   }
 
   /** Re-fetch one block's session (the interview window's load path). */
-  async function load(blockId: string) {
+  function load(blockId: string): Promise<void> {
+    return loads.run(blockId, () => fetchSession(blockId))
+  }
+
+  // Out-of-order results need no ticket here: `upsert` is monotonic by the session's own
+  // `updatedAt`, so a slow fetch resolving after a live push (or after a newer load) is dropped.
+  async function fetchSession(blockId: string) {
     if (!workspace.workspaceId) return
     const session = await api.getDocInterview(workspace.workspaceId, blockId)
     if (session) upsert(session)

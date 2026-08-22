@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { tryOnScopeDispose } from '@vueuse/core'
 import type { Block } from '~/types/domain'
 
 // Only one block is ever dragged at a time, so the dragged id is a module-level
@@ -26,6 +27,18 @@ export function useBlockDrag() {
   const board = useBoardStore()
   const ui = useUiStore()
   const access = useWorkspaceAccess()
+
+  /**
+   * Tear down the in-flight drag's window listeners.
+   *
+   * They used to be removed inside `onUp` alone, which covers only the drag that ENDS. A touch
+   * interruption (an incoming call, a system gesture) fires `pointercancel` and no `pointerup`,
+   * and unmounting the dragging component fires neither, so both stranded a `pointermove` and a
+   * `pointerup` on `window` plus a `draggingId` that never cleared, leaving the card dimmed and
+   * every frame's z-index elevated for the rest of the session.
+   */
+  let endDrag: (() => void) | null = null
+  tryOnScopeDispose(() => endDrag?.())
 
   function startDrag(
     block: Block,
@@ -65,9 +78,32 @@ export function useBlockDrag() {
       // undoes. The `draggingId` state the card dims itself with is the whole feedback.
       if (positioned) board.previewMove(block.id, last)
     }
+    // What is currently bound to `window`, so the teardown below needs no forward reference to
+    // the handlers that call it.
+    const bound: Array<[string, (ev: PointerEvent) => void]> = []
+    /**
+     * Stop listening and clear the drag state, WITHOUT committing anything. The shared exit for
+     * every way a drag ends: the drop commits first and then calls this, and a cancel (a
+     * `pointercancel`, or the component unmounting mid-drag) calls it alone.
+     */
+    const detach = () => {
+      for (const [type, handler] of bound) {
+        window.removeEventListener(type, handler as EventListener)
+      }
+      bound.length = 0
+      endDrag = null
+      draggingId.value = null
+    }
+    /**
+     * A drag the pointer never finished. Nothing is persisted, so the local preview has to go
+     * back where it started: leaving it would show a position the server does not hold and the
+     * next refresh would silently snap the block back.
+     */
+    const onCancel = () => {
+      if (moved && positioned) board.previewMove(block.id, orig)
+      detach()
+    }
     const onUp = (ev: PointerEvent) => {
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
       if (moved) {
         // A successful reparent persists the move itself; otherwise commit the final
         // position in place. Either way it's a single write, not one per frame. Run
@@ -76,10 +112,20 @@ export function useBlockDrag() {
         const reparented = opts.reparent && reparentAt(block, ev.clientX, ev.clientY, positioned)
         if (!reparented && positioned) void board.moveBlock(block.id, last)
       }
-      draggingId.value = null
+      detach()
     }
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
+    // A second drag can only start after the first released or cancelled, but a stale listener
+    // set would silently drive it; end whatever is still attached before attaching this one.
+    endDrag?.()
+    endDrag = onCancel
+    for (const binding of [
+      ['pointermove', onMove],
+      ['pointerup', onUp],
+      ['pointercancel', onCancel],
+    ] as Array<[string, (ev: PointerEvent) => void]>) {
+      bound.push(binding)
+      window.addEventListener(binding[0], binding[1] as EventListener)
+    }
   }
 
   /** Returns true when the block was dropped into a *different* container. */

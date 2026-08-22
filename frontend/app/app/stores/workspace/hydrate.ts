@@ -11,6 +11,8 @@ import { useExecutionStore } from '~/stores/execution'
 import { useFragmentsStore } from '~/stores/fragments'
 import { useGitHubStore } from '~/stores/github'
 import { useInitiativesStore } from '~/stores/initiative'
+import { useKaizenStore } from '~/stores/kaizen'
+import { useObservabilityStore } from '~/stores/observability'
 import { useModelPresetsStore } from '~/stores/modelPresets'
 import { useConsensusGroupsStore } from '~/stores/consensusGroups'
 import { useNotificationsStore } from '~/stores/notifications'
@@ -43,6 +45,11 @@ export function resetPerBoardCaches() {
   useGitHubStore().reset()
   useInitiativesStore().reset()
   useDocInterviewStore().reset()
+  // The per-RUN observability + Kaizen caches. An execution id belongs to the board that owns it
+  // and neither store is part of the snapshot, so nothing else ever evicted a key: a session that
+  // visited several boards kept every run it had ever opened a panel on.
+  useObservabilityStore().reset()
+  useKaizenStore().reset()
   // The fragment picker catalog is per-board (the merged tenant catalog), so drop
   // it too — the next inspector open re-fetches it for the switched-to board rather
   // than showing the previous board's (or a raw-id placeholder for) fragments.

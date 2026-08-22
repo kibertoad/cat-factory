@@ -123,6 +123,22 @@ export const startAgentKindExecutionContract = defineApiContract({
   responsesByStatusCode: { 201: executionInstanceSchema, ...errorResponses },
 })
 
+/**
+ * One run, WHOLE: the read that stands behind the board snapshot's lean projection
+ * (`projectExecutionForBoard`). The snapshot withholds each step's captured prose, so the reader
+ * that actually renders it (any step-detail overlay) fetches the run it is about through here.
+ *
+ * A point-read by id rather than a "give me the heavy half" delta: the run is one row either way,
+ * and a delta would need the client's revision to be meaningful, which is exactly the coherence
+ * problem the store's monotonic `rev` already answers.
+ */
+export const getExecutionContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: executionIdParams,
+  pathResolver: ({ executionId }) => `/executions/${executionId}`,
+  responsesByStatusCode: { 200: executionInstanceSchema, ...errorResponses },
+})
+
 export const cancelExecutionContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: blockIdParams,

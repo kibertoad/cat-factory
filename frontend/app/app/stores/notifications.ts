@@ -44,6 +44,26 @@ export const useNotificationsStore = defineStore('notifications', () => {
   const liveWrites = new Map<string, { seq: number; value: Notification | null }>()
 
   /**
+   * How many in-flight live writes {@link liveWrites} may hold.
+   *
+   * {@link hydrate} forgets every write a snapshot has already reconciled, which is what keeps the
+   * map bounded by what is genuinely in flight. A long stream period that carries only TARGETED
+   * events triggers no hydrate at all, so the map grew one entry per notification for the session.
+   * The bound is on the oldest (insertion order is sequence order, so the first key is the oldest
+   * write), and it is safe to drop them: an entry only ever protects a write from a refresh whose
+   * snapshot predates it, and a refresh that far behind resolved long ago.
+   */
+  const MAX_LIVE_WRITES = 200
+
+  function trimLiveWrites() {
+    while (liveWrites.size > MAX_LIVE_WRITES) {
+      const oldest = liveWrites.keys().next()
+      if (oldest.done) return
+      liveWrites.delete(oldest.value)
+    }
+  }
+
+  /**
    * Baseline for {@link hydrate}: capture this BEFORE a refresh's snapshot fetch and pass it
    * back in, so a notification written live while the fetch was in flight survives the hydrate.
    * Callers that don't pass a baseline get a plain full replace (initial load / board switch —
@@ -74,6 +94,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
   function upsert(notification: Notification) {
     const isOpen = notification.status === 'open'
     liveWrites.set(notification.id, { seq: ++liveSeq, value: isOpen ? notification : null })
+    trimLiveWrites()
     if (!isOpen) {
       remove(notification.id)
       return

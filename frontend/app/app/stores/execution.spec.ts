@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { computed } from 'vue'
 import { useExecutionStore } from '~/stores/execution'
 import type { ExecutionInstance } from '~/types/domain'
 
@@ -321,5 +322,131 @@ describe('execution store per-block index', () => {
     expect(store.getByBlock('b1')?.status).toBe('running')
     store.upsert({ ...blockRun('e1', 'b1', 'done'), rev: 2 } as unknown as ExecutionInstance)
     expect(store.getByBlock('b1')?.status).toBe('done')
+  })
+})
+
+/**
+ * The board snapshot serves a LEAN PROJECTION of every run: each step's captured prose is
+ * withheld and the instance says so (`projected`). These pin the reconcile rule that makes a
+ * refresh safe to land on top of a run the cache already holds whole.
+ */
+describe('execution store lean-projection reconcile', () => {
+  let store: ReturnType<typeof useExecutionStore>
+  beforeEach(() => {
+    store = useExecutionStore()
+  })
+
+  /** A run whose single step carries prose. */
+  function whole(rev: number, output = 'the full prose'): ExecutionInstance {
+    return {
+      id: 'e1',
+      blockId: 'b1',
+      status: 'running',
+      rev,
+      outputHistory: [{ stepIndex: 0, output: 'superseded' }],
+      steps: [{ agentKind: 'coder', state: 'done', output }],
+    } as unknown as ExecutionInstance
+  }
+
+  /** The same run as the snapshot serves it. */
+  function projected(rev: number): ExecutionInstance {
+    return {
+      id: 'e1',
+      blockId: 'b1',
+      status: 'running',
+      rev,
+      projected: true,
+      steps: [{ agentKind: 'coder', state: 'done', hasOutput: true }],
+    } as unknown as ExecutionInstance
+  }
+
+  it('carries the withheld prose forward at an equal revision, and stops calling it a projection', () => {
+    // The real sequence: a board load, then the live event that carries the whole run, then the
+    // next refresh landing the projection again at the revision the event already delivered.
+    store.hydrate([projected(4)], 'ws1')
+    store.upsert(whole(4))
+    store.hydrate([projected(4)], 'ws1')
+    const held = store.getInstance('e1')!
+    expect(held.steps[0]!.output).toBe('the full prose')
+    expect(held.outputHistory).toHaveLength(1)
+    expect(held.projected).toBe(false)
+  })
+
+  it('does not paste stale prose under a NEWER revision of the run', () => {
+    store.hydrate([projected(4)], 'ws1')
+    store.upsert(whole(4))
+    store.hydrate([projected(5)], 'ws1')
+    const held = store.getInstance('e1')!
+    expect(held.steps[0]!.output).toBeUndefined()
+    expect(held.outputHistory).toBeUndefined()
+    // Still marked, so the overlay knows to fetch the whole run rather than read an absence.
+    expect(held.projected).toBe(true)
+  })
+
+  it('keeps the projection marked when the cache held only a projection too', () => {
+    store.hydrate([projected(4)], 'ws1')
+    store.hydrate([projected(4)], 'ws1')
+    expect(store.getInstance('e1')!.projected).toBe(true)
+  })
+
+  it('applies the same carry-forward to a projection arriving through upsert', () => {
+    store.hydrate([whole(4)], 'ws1')
+    store.upsert(projected(4))
+    expect(store.getInstance('e1')!.steps[0]!.output).toBe('the full prose')
+  })
+
+  it('leaves a whole run delivered by an event alone', () => {
+    store.hydrate([projected(4)], 'ws1')
+    store.upsert(whole(5, 'fresh prose'))
+    const held = store.getInstance('e1')!
+    expect(held.steps[0]!.output).toBe('fresh prose')
+    expect(held.projected).toBeUndefined()
+  })
+})
+
+/**
+ * `instances` is a SHALLOW ref, so every write site has to announce itself. A regression here is
+ * silent in the product (a card just stops updating), which is why the three write shapes are
+ * pinned through a derived value rather than by reading the array back.
+ */
+describe('execution store shallow-ref write sites', () => {
+  let store: ReturnType<typeof useExecutionStore>
+  beforeEach(() => {
+    store = useExecutionStore()
+  })
+
+  function stepRun(id: string, rev: number, output?: string): ExecutionInstance {
+    return {
+      id,
+      blockId: `blk_${id}`,
+      status: 'running',
+      rev,
+      steps: [{ agentKind: 'coder', state: 'done', output }],
+    } as unknown as ExecutionInstance
+  }
+
+  it('a replace, an index assignment, a push and an in-place echo each invalidate a derived read', async () => {
+    const seen = computed(() => store.instances.map((e) => `${e.id}:${e.steps[0]?.output ?? ''}`))
+
+    store.hydrate([stepRun('e1', 1, 'first')], 'ws1')
+    expect(seen.value).toEqual(['e1:first'])
+
+    // push
+    store.upsert(stepRun('e2', 1, 'other'))
+    expect(seen.value).toEqual(['e1:first', 'e2:other'])
+
+    // index assignment
+    store.upsert(stepRun('e1', 2, 'second'))
+    expect(seen.value).toEqual(['e1:second', 'e2:other'])
+
+    // in-place patch through the one echo seam
+    await store.echoAfter(
+      'e1',
+      () => Promise.resolve('echoed'),
+      (state, instance) => {
+        instance.steps[0]!.output = state
+      },
+    )
+    expect(seen.value).toEqual(['e1:echoed', 'e2:other'])
   })
 })

@@ -14,6 +14,7 @@ import { useFrameStacking } from '~/composables/useFrameStacking'
 import { useFramePlacement } from '~/composables/useFramePlacement'
 import { useViewport } from '~/composables/useViewport'
 import { boardPanMode } from '~/utils/boardPanMode'
+import { createBoardNodeProjection } from './BoardCanvas.logic'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -70,33 +71,19 @@ useTaskExpansion(boardEl, boardActivity)
 // default adds +1000 to a selected node's z-index, so a frame stayed pinned on top
 // after a click and no amount of hovering another frame could surface it. Stacking
 // is driven purely by hover/drag here; the selection highlight is the ring, not z.
-function frameZIndex(id: string) {
-  if (draggingId.value === id) return 1000
-  if (hoveredFrameId.value === id) return 100
-  return 1
-}
-
-const nodes = computed(() => [
-  ...board.frames.map((b) => ({
-    id: b.id,
-    type: 'block',
-    position: { x: b.position.x, y: b.position.y },
-    // Always-expanded frames fill the viewport; keep them non-draggable so the pane
-    // pans through them (they move via their header handle, see BlockNode).
-    draggable: false,
-    zIndex: frameZIndex(b.id),
-    data: {},
-  })),
-  // Epics are top-level grouping nodes (non-structural), drawn alongside frames and
-  // linked to their member tasks by the dependency-edge overlay.
-  ...board.epics.map((b) => ({
-    id: b.id,
-    type: 'epic',
-    position: { x: b.position.x, y: b.position.y },
-    draggable: true,
-    data: {},
-  })),
-])
+//
+// The projection is MEMOISED per node (`BoardCanvas.logic.ts`) because the stacking state is
+// what changes most often: a pointer moving between two overlapping services rebuilt every
+// node object on the board, for a change that concerns two of them. Epics are top-level
+// grouping nodes (non-structural), drawn alongside frames and linked to their member tasks by
+// the dependency-edge overlay.
+const projectNodes = createBoardNodeProjection()
+const nodes = computed(() =>
+  projectNodes(board.frames, board.epics, {
+    draggingId: draggingId.value,
+    hoveredFrameId: hoveredFrameId.value,
+  }),
+)
 
 onNodeDragStop(({ node }) => {
   board.moveBlock(node.id, node.position)

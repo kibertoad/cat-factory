@@ -28,6 +28,7 @@ import {
   runIsActive,
 } from '~/utils/pipelineRender'
 import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
+import RunDetailLoadState from '~/components/panels/RunDetailLoadState.vue'
 
 // Detail overlay for a single pipeline step. Opened by clicking an agent in the
 // inspector list (TaskExecution) or the focus-view pipeline (PipelineProgress) via
@@ -52,6 +53,19 @@ const ctx = computed(() => ui.stepDetail)
 const instance = computed(() => execution.getInstance(ctx.value?.instanceId))
 const step = computed(() =>
   ctx.value ? (instance.value?.steps[ctx.value.stepIndex] ?? null) : null,
+)
+/**
+ * The run this overlay is about, and the fetch that makes it WHOLE. The board snapshot carries a
+ * lean projection (`projectExecutionForBoard`) whose steps withhold the very prose this reader
+ * renders, so opening a step asks for the run behind it. A run the store already holds whole (one
+ * a live `execution` event delivered, or one already fetched) costs nothing.
+ */
+watch(
+  () => ctx.value?.instanceId ?? null,
+  (id) => void execution.ensureFull(id),
+  {
+    immediate: true,
+  },
 )
 const block = computed(() => (instance.value ? board.getBlock(instance.value.blockId) : undefined))
 const agent = computed(() => (step.value ? agentKindMeta(step.value.agentKind) : null))
@@ -486,6 +500,9 @@ async function copyOutput() {
           />
         </div>
       </header>
+
+      <!-- Whether the whole-run fetch behind this reader's prose has landed. -->
+      <RunDetailLoadState :instance-id="ctx?.instanceId ?? null" />
 
       <div ref="scrollEl" class="flex-1 overflow-auto px-6 py-6" @scroll="onScroll">
         <div class="mx-auto max-w-3xl space-y-5">

@@ -2291,6 +2291,10 @@
       "dryRun": "Probelauf: nichts zusammenführen",
       "dryRunForced": "Probelauf: Läufe deiner Rolle werden hier nie zusammengeführt",
       "dryRunHint": "Dieser Lauf öffnet einen Pull Request und führt nichts zusammen."
+    },
+    "runDetail": {
+      "loading": "Vollständiger Lauf wird geladen…",
+      "loadFailed": "Vollständiger Lauf konnte nicht geladen werden: {reason}"
     }
   },
   "layout": {
@@ -3863,6 +3867,7 @@
     },
     "callsTitle": "Modellaufrufe",
     "noCallsMatching": "Keine Modellaufrufe entsprechen diesem Filter.",
+    "liveCallsCapped": "Der {count} älteste Live-Aufruf wurde aus dieser Liste entfernt, um sie zu begrenzen; laden Sie den Lauf neu, um alle aufgezeichneten Aufrufe zu sehen. | Die {count} ältesten Live-Aufrufe wurden aus dieser Liste entfernt, um sie zu begrenzen; laden Sie den Lauf neu, um alle aufgezeichneten Aufrufe zu sehen.",
     "filter": {
       "all": "Alle",
       "failed": "Fehlgeschlagen",

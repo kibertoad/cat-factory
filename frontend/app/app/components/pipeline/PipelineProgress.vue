@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AgentState, ExecutionInstance } from '~/types/domain'
 import type { PipelineStep } from '~/types/execution'
+import { stepHasOutput } from '@cat-factory/contracts'
 import { agentKindMeta, FOLLOW_UP_COMPANION_META, FORK_DECISION_META } from '~/utils/catalog'
 import {
   subtaskIconClass,
@@ -341,7 +342,7 @@ const ITEM_ICON: Record<string, string> = {
             data-testid="pipeline-step"
             :data-step-kind="s.agentKind"
             :title="
-              s.output
+              stepHasOutput(s)
                 ? t('pipeline.progress.viewDetailsOutput')
                 : t('pipeline.progress.viewDetails')
             "
@@ -441,7 +442,7 @@ const ITEM_ICON: Record<string, string> = {
             </template>
 
             <UIcon
-              :name="s.output ? 'i-lucide-book-open-text' : 'i-lucide-info'"
+              :name="stepHasOutput(s) ? 'i-lucide-book-open-text' : 'i-lucide-info'"
               class="h-4 w-4 shrink-0 text-slate-500 transition-colors group-hover:text-indigo-300"
             />
           </div>
@@ -555,7 +556,10 @@ const ITEM_ICON: Record<string, string> = {
 
           <!-- A one-line hint that the agent produced prose; the full output (and
                all step metadata) lives in the step-detail overlay opened by click. -->
-          <p v-if="s.output" class="mt-2 flex items-center gap-1 text-[11px] text-slate-500">
+          <p
+            v-if="stepHasOutput(s)"
+            class="mt-2 flex items-center gap-1 text-[11px] text-slate-500"
+          >
             <UIcon name="i-lucide-book-open-text" class="h-3 w-3 shrink-0" />
             {{ t('pipeline.progress.clickToRead') }}
           </p>

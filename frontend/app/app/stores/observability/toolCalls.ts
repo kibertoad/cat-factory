@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import type { RunToolCallFailures, RunToolCallTrajectory } from '~/types/execution'
+import { useSingleFlight } from '~/composables/useSingleFlight'
 
 // The observability store's TOOL-CALL sink, extracted whole because it is one concern with two
 // reads and its own coherence rule between them.
@@ -48,6 +49,12 @@ function withFlag(set: ReturnType<typeof ref<Set<string>>>, key: string, on: boo
 }
 
 export function createToolCallSinkState(deps: ToolCallSinkDeps) {
+  /**
+   * One in-flight read per (sink, run). Both loads below fire on the panel OPENING, and the panel
+   * has two openers that routinely land in the same tick, so each answered twice.
+   */
+  const loads = useSingleFlight<string, void>()
+
   /**
    * Per-execution-id trajectory PREFIX (oldest first, the order the agent worked in) with the
    * flag saying whether the run made more calls than it holds.
@@ -98,7 +105,11 @@ export function createToolCallSinkState(deps: ToolCallSinkDeps) {
   }
 
   /** Load (or refresh) the tool-call trajectory for a run. */
-  async function loadToolCalls(executionId: string) {
+  function loadToolCalls(executionId: string): Promise<void> {
+    return loads.run(`trajectory:${executionId}`, () => fetchToolCalls(executionId))
+  }
+
+  async function fetchToolCalls(executionId: string) {
     if (!deps.ready()) return
     withFlag(toolCallsLoading, executionId, true)
     toolCallErrors.value = { ...toolCallErrors.value, [executionId]: null }
@@ -133,7 +144,11 @@ export function createToolCallSinkState(deps: ToolCallSinkDeps) {
    * fresh error would let the panel keep asserting a failure count the backend just refused to
    * confirm.
    */
-  async function loadToolCallFailures(executionId: string) {
+  function loadToolCallFailures(executionId: string): Promise<void> {
+    return loads.run(`failures:${executionId}`, () => fetchToolCallFailures(executionId))
+  }
+
+  async function fetchToolCallFailures(executionId: string) {
     if (!deps.ready()) return
     withFlag(toolCallFailuresLoading, executionId, true)
     toolCallFailureErrors.value = { ...toolCallFailureErrors.value, [executionId]: null }
@@ -155,7 +170,20 @@ export function createToolCallSinkState(deps: ToolCallSinkDeps) {
     }
   }
 
+  /**
+   * Drop every per-run cache. Called on a board SWITCH from the observability store's own
+   * `reset`: an execution id belongs to the board that owns it, and nothing here is evicted
+   * otherwise.
+   */
+  function resetToolCalls() {
+    toolCallsByExecution.value = {}
+    toolCallErrors.value = {}
+    toolCallFailuresByExecution.value = {}
+    toolCallFailureErrors.value = {}
+  }
+
   return {
+    resetToolCalls,
     toolCallsByExecution,
     toolCallErrors,
     toolCallsFor,

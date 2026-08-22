@@ -1,6 +1,6 @@
 # Initiative: performance optimizations (prioritized)
 
-**Status:** in progress; items 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 23, 25, 28 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · targeted board events · spend/workspace-settings/account-settings cache slices · GitHub-sync + fan-out-publisher parallelism · reuse-the-loaded-list batch across autoStart/initiative-spawn/blueprint-reconcile/block-delete · agent-context single frame-walk + parallel wave · password-reset-token expiry index · risk-policy merge-preset cache slice · board RAF loops driven by an activity pulse · per-block execution index · shared lane derivations with structural sharing · the one refresh funnel) · frontend deep re-audit 2026-08-14, after the task-swimlanes rework (#1777): items 5/10/19/20 re-verified and refreshed, PR links backfilled, items 25-30 added · **Owner:** core · **Started:** 2026-07-09
+**Status:** in progress; items 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 23, 25, 26, 27, 28, 29, 30 landed (20 partly) (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · targeted board events · spend/workspace-settings/account-settings cache slices · GitHub-sync + fan-out-publisher parallelism · reuse-the-loaded-list batch across autoStart/initiative-spawn/blueprint-reconcile/block-delete · agent-context single frame-walk + parallel wave · password-reset-token expiry index · risk-policy merge-preset cache slice · board RAF loops driven by an activity pulse · per-block execution index · shared lane derivations with structural sharing · the one refresh funnel · the lean board-snapshot execution projection with its by-id read · bounded observability/kaizen caches · a shallow `execution.instances` · the store/composable hygiene group) · frontend deep re-audit 2026-08-14, after the task-swimlanes rework (#1777): items 5/10/19/20 re-verified and refreshed, PR links backfilled, items 25-30 added · **Owner:** core · **Started:** 2026-07-09
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -53,7 +53,7 @@ symmetric" (CLAUDE.md).
 | 2   | P1  | gateways     | Gate polls: uncached `repoId()` + PAT re-resolved per `request()` + `listCommits` head lookup                                       | ✅ done | [#993](https://github.com/kibertoad/cat-factory/pull/993)   |
 | 3   | P1  | persistence  | Execution lists `SELECT *` (incl. `detail` JSON) + JS status filter on dispatch guard; missing `(workspace_id, kind, status)` index | ✅ done | [#996](https://github.com/kibertoad/cat-factory/pull/996)   |
 | 4   | P1  | dispatch     | `buildJobBody` serializes ~6 independent I/O steps per dispatch                                                                     | ✅ done | [#1051](https://github.com/kibertoad/cat-factory/pull/1051) |
-| 5   | P1  | frontend     | Board snapshot embeds full step outputs the board never reads (re-verified 2026-08-14: unstarted, refs refreshed)                   | ⬜ todo |                                                             |
+| 5   | P1  | frontend     | Board snapshot embeds full step outputs the board never reads (re-verified 2026-08-14: unstarted, refs refreshed)                   | ✅ done | this PR                                                     |
 | 6   | P1  | frontend     | Coarse `board` event forces full-snapshot refresh; payload already carries `blockId`                                                | ✅ done | [#1759](https://github.com/kibertoad/cat-factory/pull/1759) |
 | 7   | P2  | caching      | `SpendService` three banned TTL `Map`s (pricing / account / user limits)                                                            | ✅ done | [#1060](https://github.com/kibertoad/cat-factory/pull/1060) |
 | 8   | P2  | caching      | `AccountSettingsService` legacy 30s `Map` (the named anti-pattern)                                                                  | ✅ done | [#1068](https://github.com/kibertoad/cat-factory/pull/1068) |
@@ -68,17 +68,17 @@ symmetric" (CLAUDE.md).
 | 17  | P3  | board        | `BoardScanService` reconcile: `addModule` re-lists whole board per module                                                           | ✅ done | [#1078](https://github.com/kibertoad/cat-factory/pull/1078) |
 | 18  | P3  | board        | Block delete: teardown + remove each re-list the whole board                                                                        | ✅ done | [#1078](https://github.com/kibertoad/cat-factory/pull/1078) |
 | 19  | P3  | persistence  | `notifications.listOpen` unbounded `SELECT *` (body+payload) on snapshot                                                            | ⬜ todo |                                                             |
-| 20  | P3  | frontend     | Hydrate stringify (now WeakMap-cached), gate-map rebuilds per event, no viewport culling, z-index in `nodes` computed               | ⬜ todo |                                                             |
+| 20  | P3  | frontend     | Hydrate stringify (now WeakMap-cached), gate-map rebuilds per event, no viewport culling, z-index in `nodes` computed               | 🟡 part | this PR                                                     |
 | 21  | P3  | persistence  | `password_reset_tokens.deleteExpired` full-table scan (no `expires_at` index)                                                       | ✅ done | [#1143](https://github.com/kibertoad/cat-factory/pull/1143) |
 | 22  | P3  | spend        | `isOverBudget`: up to 3 live SUM aggregates per proxied LLM call (design decision)                                                  | ⬜ todo |                                                             |
 | 23  | P3  | engine       | `resolveRiskPolicy` re-reads merge preset per gate evaluation (optional slice)                                                      | ✅ done | [#1143](https://github.com/kibertoad/cat-factory/pull/1143) |
 | 24  | P2  | gateways     | Dispatch GH client: no single-flight / throttle; concurrent same-run steps duplicate token mint + branch probe                      | ⬜ todo |                                                             |
 | 25  | P1  | frontend     | `execution.getByBlock` full scan per call on the card/lane/measurement paths; cards scan global gate lists                          | ✅ done | [#2023](https://github.com/kibertoad/cat-factory/pull/2023) |
 | 26  | P2  | frontend     | Activity pulse re-wakes the DOM-measuring loops on every card re-render, so a busy board never parks them                           | ✅ done | this PR                                                     |
-| 27  | P2  | frontend     | Observability/kaizen stores grow unbounded per session and survive board switches                                                   | ⬜ todo |                                                             |
+| 27  | P2  | frontend     | Observability/kaizen stores grow unbounded per session and survive board switches                                                   | ✅ done | this PR                                                     |
 | 28  | P2  | frontend     | ~35 direct `refresh()` call sites + starvable trailing-only debounce + stacking retry chains                                        | ✅ done | [#2023](https://github.com/kibertoad/cat-factory/pull/2023) |
-| 29  | P3  | frontend     | Deep reactivity over `execution.instances` (shallowRef viable) and `board.blocks` (blocked by in-place writes)                      | ⬜ todo |                                                             |
-| 30  | P3  | frontend     | Identity churn, uncached derived counts, per-invocation timers, drag/viewport listener leaks (grouped)                              | ⬜ todo |                                                             |
+| 29  | P3  | frontend     | Deep reactivity over `execution.instances` (shallowRef viable) and `board.blocks` (blocked by in-place writes)                      | ✅ done | this PR                                                     |
+| 30  | P3  | frontend     | Identity churn, uncached derived counts, per-invocation timers, drag/viewport listener leaks (grouped)                              | ✅ done | this PR                                                     |
 
 ## Detailed findings
 
@@ -206,7 +206,7 @@ recording on the primary runtime for a negligible latency gain. Pure `@cat-facto
 (resolvers all started before any resolves) and that a failing observability record still never
 breaks the dispatch.
 
-### 5. Board snapshot carries full step outputs the board never reads (P1)
+### 5. Board snapshot carries full step outputs the board never reads (P1, LANDED)
 
 `WorkspaceSnapshot.executions` (`backend/packages/contracts/src/snapshot.ts:48-52`) embeds
 per-step `output` (full agent prose), `custom`, `outputHistory`, `rework` docs, and
@@ -260,6 +260,37 @@ truthiness icon in `TaskPipelineMini.vue:123` (TaskCard itself no longer touches
 `composeRunOutcome` reads no `output`), so the projection owes exactly one `hasOutput` boolean plus
 the fields the mini pipeline really renders (`state`, `agentKind`, `subtasks`, `approval`,
 `prReview` phase).
+
+**LANDED.** All three parts, in the order the premise correction named:
+
+1. `GET /workspaces/:ws/executions/:executionId` (`getExecutionContract`, served from
+   `executionRepository.get`, which already existed on both runtimes), plus the SPA's
+   `execution.ensureFull(id)`: single-flight per run, a no-op for a run the cache already holds
+   whole, with `isFullPending` / `fullError` so a failed fetch never renders as a step that said
+   nothing. Asked from the two OVERLAY HOSTS (`ResultWindowShell`, `AgentStepDetail`) rather than
+   from each window, for the same reason the shell owns the trailing report sections: the host
+   mounts exactly one window, so no window can forget.
+2. The store carry-forward (`withCarriedForwardWithheld`, beside `withPreservedMetrics`), gated on
+   an EQUAL `rev`. That gate is the part worth remembering: at the same revision the run is
+   byte-identical server-side, so the cached prose IS the withheld prose. One revision later it may
+   not be, and pasting it back is the same clobber in reverse, so a newer projection replaces and
+   the open overlay re-fetches. A merge over a run the cache held whole clears `projected`.
+3. `projectExecutionForBoard` (contracts, applied in `WorkspaceController` at the wire rather than
+   in `WorkspaceService.snapshot`, whose own callers drive runs off the whole instance). It
+   withholds `step.output` (leaving `hasOutput`, read through `stepHasOutput` at the six board /
+   inspector truthiness sites), `step.rework`, `step.testerQuality` and instance `outputHistory`.
+
+Two narrowings against the finding as written, both deliberate:
+
+- **`step.custom` STAYS.** It is structured JSON rather than prose, and it is read on two
+  non-overlay paths (the environment wizard's analyst draft, the inspector's merger decision), so
+  withholding it means moving those reads first.
+- **`judge` / `ralph` / `validation` / `reproduction` / `prReview` STAY.** They carry bounded
+  histories, and `prReview` / `forkDecision` / `followUps` drive park ROUTING
+  (`dedicatedParkView`) on the board itself. Same rule: move the board read first, then withhold.
+
+`projected` on the instance is what makes the rest safe: withheld is not absent, and every reader
+that needs the difference can ask.
 
 ### 6. Coarse `board` events force full refreshes the payload could avoid (P1) — LANDED
 
@@ -684,6 +715,33 @@ the list is item 10's `collectReviewDebt` hoist and item 30's `byBlock` churn.
   off-viewport frames via Vue Flow viewport bounds + `containerSize`; move z-index to a class
   binding so hover doesn't reallocate all nodes.
 
+**PARTLY LANDED.** The `nodes` half is done and the other two are refused / still open, with the
+reasons, so nobody re-proposes them blind:
+
+- **z-index (done).** The projection moved to `BoardCanvas.logic.ts` and is MEMOISED PER NODE: the
+  key carries every field a node has, so an unchanged node comes back as the SAME object. A hover
+  now allocates the two nodes whose stacking changed instead of all of them, and Vue Flow diffs two
+  changes instead of N. Keeping `zIndex` IN the node (rather than moving it to a class binding) is
+  deliberate: Vue Flow writes it as an inline style on the node wrapper, which a class on the inner
+  component cannot outrank.
+- **Viewport culling: REFUSED, not deferred.** Both routes strand frames. Vue Flow's own
+  `only-render-visible-elements` narrows `getNodes`, and `fitView` only ever fits nodes with
+  MEASURED dimensions, which an unrendered node does not have. So `fit-view-on-init` would fit
+  only the frames that happened to fall inside the default viewport, and a frame outside it could
+  never be brought back into view: it is not rendered, so it is not measured, so no fit includes
+  it. A hand-rolled cull inherits the same circularity. Culling needs the board to know each
+  frame's extent WITHOUT having rendered it (a stored or server-side size), which is a different
+  change from this one.
+- **Hydrate stringify: still open**, and still waiting on the same thing it was: a server-stamped
+  per-block revision. `Block` carries no `updatedAt` or `rev` on the wire, so there is no cheap
+  pre-filter to put in front of the compare, and refreshes stayed rare after #1759.
+- **Incremental gate/run projections: still open, and now cheaper to leave alone.** `instances` is
+  a `shallowRef` since item 29, and the consumers have been Map-grouped since the item 25/10
+  slice, so what remains is one rebuild per event over a board-sized population. Hand-maintaining
+  those Maps means giving up `computed` for a set of caches that must agree with the array they
+  are derived from, which is the coherence hazard this repo's own rules warn about; it needs a
+  measurement showing the rebuild matters before it is worth that.
+
 ### 21. `password_reset_tokens.deleteExpired` full-table scan (P3)
 
 `D1PasswordResetTokenRepository.ts:90-92` deletes on `expires_at < ?` with no index on
@@ -903,6 +961,21 @@ dropped), gate kaizen's history fold on the screen having loaded, add observabil
 `resetPerBoardCaches`, trim `liveWrites` on upsert too. The e2e live-update specs are the guard
 that an eviction doesn't blank an open panel.
 
+**LANDED,** all four, plus the one thing the fix owed the reader:
+
+- The live call log is capped per run (500 newest), and the cap RECORDS what it evicted:
+  `droppedLiveCallCount` feeds a line in the panel, because a capped list is not a prefix and a
+  reader who cannot see the number concludes the run made exactly the calls they are scrolling.
+  Reloading the run clears it, that read being server-bounded and stating its own limits.
+- Kaizen's `history` fold is gated on the SCREEN having asked for it, and the gate is set when
+  `loadOverview` STARTS rather than when it resolves, so a grading pushed while that fetch is in
+  flight still lands (which is what the reconcile is for). `byExecution` stays ungated: the run
+  windows read it without loading first.
+- Both stores now reset on a board switch (`resetPerBoardCaches`), including the tool-call sinks.
+- `notifications.liveWrites` is bounded on upsert too. `hydrate` already forgot what a snapshot had
+  reconciled, which bounded it by what is genuinely in flight; the case that needed a second bound
+  is a long stream period carrying only targeted events, where no hydrate ever runs.
+
 ### 28. Full-refresh fan-out: direct `refresh()` call sites, a starvable debounce, stacking retries (P2)
 
 One `workspace.refresh()` is the client's heaviest operation: the ~20-read snapshot aggregate
@@ -974,6 +1047,18 @@ drop-in: optimistic updates mutate blocks in place (`stores/board/placement.ts:6
 first or leave it. Reactivity regressions are silent, so the store unit suites plus an e2e pass
 are the bar.
 
+**LANDED for `execution.instances`; `board.blocks` stays as it was.** The premise needed one
+correction: the store does NOT only replace, index-assign and push. `echoAfter` lets an action
+store patch one step IN PLACE (`step.prReview = …` and its four siblings), which a shallow ref
+cannot see. That turned out to help rather than block: `echoAfter` is the ONE seam every such
+`assign` goes through, so the whole conversion is three write sites, `hydrate`/`cancel` (a whole
+array replace, which a shallow ref tracks itself) plus `triggerRef` in `upsert` and in `echoAfter`.
+The store spec pins all four shapes through a derived read, because a reactivity regression here is
+silent: removing either trigger fails five of them.
+
+`board.blocks` is unchanged and still blocked for the reason stated: optimistic placement mutates
+blocks in place across three modules.
+
 ### 30. Store/composable hygiene: identity churn, uncached derived counts, listener leaks (grouped, P3)
 
 - **Whole-record clones to write one key**: the review-family stores (`requirements.ts:97-99`,
@@ -1000,6 +1085,37 @@ are the bar.
   `kaizen.loadForExecution`, `consensus.load`, `docInterview.load`. The
   requirements/clarity/brainstorm per-key in-flight-promise maps (`requirements.ts:132-150`) are
   the model; `docInterview.load` also lacks a result-ordering ticket.
+
+**LANDED,** with one item narrowed and one left where it was:
+
+- **`useBlockDrag` listener leak (a bug, not a cost).** `pointercancel` and unmount are both
+  handled now, through one `detach` every exit shares plus a scope-dispose hook. A cancel also puts
+  the local preview BACK: nothing was persisted, so leaving it would show a position the server
+  does not hold and the next refresh would silently snap the block back.
+- **`useViewport` is the singleton its docstring claimed** (`createSharedComposable`): three media
+  queries for the app, not three per calling component.
+- **The wall clock is shared AND gated.** One ticker per interval, refcounted, running only while
+  something wants it; `useStepTimer` subscribes exactly while its step is running, which is also
+  when its values can change at all. N mounted `StepRunMeta`s used to mean N 1s timers, each
+  ticking for the component's whole life.
+- **`useUpsertList` has a key index**, rebuilt LAZILY: the two writes that move existing positions
+  (a prepend, a removal) invalidate rather than maintain it, so a burst of them does not pay a
+  rebuild each. It also invalidates when a caller replaces `items` wholesale, which the returned
+  ref deliberately allows.
+- **Single-flight on the panel loads**, through one `useSingleFlight` seam: observability's three
+  reads plus both tool-call reads, `kaizen.loadForExecution`, `consensus.load`,
+  `docInterview.load`. It coalesces, it does not cache: the entry drops when the promise settles.
+  Coalescing `loadForExecution` also RETIRED kaizen's per-execution load ticket, which now had
+  nothing left to order; the overview's ticket stays, that load not being keyed.
+- **`docInterview.load` needed no ordering ticket after all**: its `upsert` is monotonic by the
+  session's own `updatedAt`, which is a stronger rule than a ticket and already covers a slow fetch
+  resolving after a live push.
+- **Derived counts**: `requirements`' five composing predicates share one tally memoised on the
+  review OBJECT (`store` replaces it on every write, so identity self-invalidates), and
+  `backgroundStage`'s recommendation scan is a computed `Set` instead of a per-card pass.
+- **Whole-record clones are NOT done.** The review-family stores and `notifications.byBlock` still
+  rebuild a record/array per event. Sharing structure there means changing what each store hands
+  its consumers, which is a bigger change than the rest of this group and wants its own slice.
 
 ## Conventions & gotchas (carry between slices)
 
@@ -1070,6 +1186,14 @@ are the bar.
    SYNCHRONOUSLY off the hydrated cache today. Landing it beside two unrelated items would have
    put a wire-shape change and a new endpoint behind the same review as two pure SPA fixes.
    Remaining frontend order: 5 (as its own sequence), then 26/27, then 20/29/30.
+   8c. 5, 27, 29, 30 and the landable half of 20 went together after 26. Grouping them was right
+   for one reason worth reusing: 29 (`shallowRef`) and 5 (the carry-forward) touch the SAME three
+   write sites in the execution store, and 30's single-flight seam is what 5's `ensureFull` needed
+   anyway. What is LEFT of the frontend is now three things, each blocked on something outside this
+   initiative rather than on effort: viewport culling (needs a frame extent known without
+   rendering, see item 20), the hydrate stringify (needs a per-block revision on the wire), and
+   whole-record clone removal in the review-family stores (changes what those stores hand their
+   consumers).
 9. Items 19, 21 as small both-runtime persistence PRs (19 pairs naturally with 5).
 10. Items 22, 24 last among backend; each needs a short design note before code.
 

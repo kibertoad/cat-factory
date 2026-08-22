@@ -3,6 +3,7 @@ import {
   cancelExecutionContract,
   exportExecutionLlmMetricsContract,
   getExecutionAgentContextContract,
+  getExecutionContract,
   getExecutionLlmMetricsContract,
   getExecutionSearchQueriesContract,
   getExecutionToolCallFailuresContract,
@@ -40,6 +41,17 @@ export function executionApi({ send, sendWith, ws, pwHeaders }: ApiContext) {
         pathPrefix: ws(workspaceId),
         pathParams: { blockId },
         body,
+      }),
+
+    /**
+     * One run, WHOLE. The board snapshot serves a lean projection that withholds each step's
+     * captured prose, so a step-detail overlay fetches the run it is about through here before
+     * rendering. See `projectExecutionForBoard`.
+     */
+    getExecution: (workspaceId: string, executionId: string) =>
+      send(getExecutionContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { executionId },
       }),
 
     /**

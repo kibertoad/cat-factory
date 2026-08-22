@@ -1,4 +1,5 @@
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watchEffect } from 'vue'
+import type { Ref } from 'vue'
 import type { PipelineStep } from '~/types/execution'
 
 /**
@@ -55,21 +56,74 @@ export function stepActivityAgoMs(step: PipelineStep | null, nowMs: number): num
 }
 
 /**
- * A shared 1s wall-clock tick for surfaces that render many steps' live durations
- * at once (the pipeline timeline, the inspector run list). One interval drives every
- * step's elapsed label instead of a per-step timer. Stays `0` until mounted so the
- * first paint never reads a stale time.
+ * One wall-clock ticker per interval, shared by every caller and running only while at least one
+ * of them WANTS it. Keyed by interval because the surfaces genuinely differ (a 1s elapsed clock,
+ * the outcome card's 30s one) and two intervals cannot share a timer.
+ *
+ * Both halves were per-caller before, and both cost: `useStepTimer` creates a tick per invocation
+ * against its own one-interval intent, so N mounted `StepRunMeta`s meant N independent 1s timers;
+ * and the timer ran for the component's whole mounted lifetime whether or not anything was
+ * running, so a board of finished runs woke the main thread once a second to recompute labels that
+ * are frozen by definition.
  */
-export function useNowTick(intervalMs = 1000) {
-  const now = ref(0)
-  let timer: ReturnType<typeof setInterval> | undefined
+const tickers = new Map<
+  number,
+  { now: Ref<number>; users: number; timer?: ReturnType<typeof setInterval> }
+>()
+
+function tickerFor(intervalMs: number) {
+  let ticker = tickers.get(intervalMs)
+  if (!ticker) {
+    ticker = { now: ref(0), users: 0 }
+    tickers.set(intervalMs, ticker)
+  }
+  return ticker
+}
+
+function acquireTicker(intervalMs: number) {
+  const ticker = tickerFor(intervalMs)
+  if (++ticker.users === 1) {
+    // Stamp on the way in: a caller that subscribes between ticks must not read the stale
+    // value the last one left behind (or the 0 of a ticker nothing has ever run).
+    ticker.now.value = Date.now()
+    ticker.timer = setInterval(() => (ticker.now.value = Date.now()), intervalMs)
+  }
+  return ticker.now
+}
+
+function releaseTicker(intervalMs: number) {
+  const ticker = tickers.get(intervalMs)
+  if (!ticker || ticker.users === 0) return
+  if (--ticker.users === 0) {
+    clearInterval(ticker.timer)
+    ticker.timer = undefined
+  }
+}
+
+/**
+ * A shared wall-clock tick for surfaces that render live durations (the pipeline timeline, the
+ * inspector run list, a step's elapsed clock). Reads `0` until something is subscribed, so the
+ * first paint never reads a stale time.
+ *
+ * `active` gates the SUBSCRIPTION: pass it when the surface only needs a clock some of the time
+ * (a step's timer needs one exactly while the step runs), and the shared timer stops as soon as
+ * the last interested caller stops asking. Omitted means "for as long as this component is
+ * mounted", which is what a surface rendering many steps at once wants.
+ */
+export function useNowTick(intervalMs = 1000, active?: () => boolean) {
+  const now = tickerFor(intervalMs).now
+  let subscribed = false
+  function want(on: boolean) {
+    if (on === subscribed) return
+    subscribed = on
+    if (on) acquireTicker(intervalMs)
+    else releaseTicker(intervalMs)
+  }
   onMounted(() => {
-    now.value = Date.now()
-    timer = setInterval(() => (now.value = Date.now()), intervalMs)
+    if (active) watchEffect(() => want(active()))
+    else want(true)
   })
-  onUnmounted(() => {
-    if (timer) clearInterval(timer)
-  })
+  onUnmounted(() => want(false))
   return now
 }
 
@@ -84,11 +138,13 @@ export function useStepTimer(opts: {
   runFailed: () => boolean
   failureAt: () => number | null | undefined
 }) {
-  const nowTick = useNowTick()
-
   // A step that is finished, failed, or parked on a human is not actively
   // executing — no ticking clock or spinner. `pausedAt` is the "waiting on input" freeze.
   const isRunning = computed(() => stepIsRunning(opts.step(), opts.runFailed()))
+
+  // Subscribe to the SHARED 1s clock, and only while this step is actually running: every value
+  // below freezes at the step's own end stamp otherwise, so a tick would recompute nothing.
+  const nowTick = useNowTick(1000, () => isRunning.value)
 
   /** Elapsed/total execution time in ms — null until the step has started. */
   const durationMs = computed(() =>

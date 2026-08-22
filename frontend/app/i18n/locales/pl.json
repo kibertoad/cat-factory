@@ -1705,6 +1705,10 @@
       "dryRun": "Uruchomienie próbne: nic nie scalaj",
       "dryRunForced": "Uruchomienie próbne: uruchomienia twojej roli nigdy nie są tu scalane",
       "dryRunHint": "To uruchomienie otwiera pull request i niczego nie scala."
+    },
+    "runDetail": {
+      "loading": "Wczytywanie pełnego przebiegu…",
+      "loadFailed": "Nie udało się wczytać pełnego przebiegu: {reason}"
     }
   },
   "observability": {
@@ -1810,6 +1814,7 @@
     },
     "callsTitle": "Wywołania modelu",
     "noCallsMatching": "Żadne wywołanie modelu nie pasuje do tego filtra.",
+    "liveCallsCapped": "Najstarsze wywołanie na żywo ({count}) zostało usunięte z tej listy, aby ją ograniczyć; przeładuj przebieg, aby zobaczyć wszystkie zapisane wywołania. | {count} najstarsze wywołania na żywo zostały usunięte z tej listy, aby ją ograniczyć; przeładuj przebieg, aby zobaczyć wszystkie zapisane wywołania. | {count} najstarszych wywołań na żywo zostało usuniętych z tej listy, aby ją ograniczyć; przeładuj przebieg, aby zobaczyć wszystkie zapisane wywołania.",
     "filter": {
       "all": "Wszystkie",
       "failed": "Nieudane",
