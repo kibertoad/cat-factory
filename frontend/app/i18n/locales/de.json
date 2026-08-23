@@ -3867,7 +3867,7 @@
     },
     "callsTitle": "Modellaufrufe",
     "noCallsMatching": "Keine Modellaufrufe entsprechen diesem Filter.",
-    "liveCallsCapped": "Der {count} älteste Live-Aufruf wurde aus dieser Liste entfernt, um sie zu begrenzen; laden Sie den Lauf neu, um alle aufgezeichneten Aufrufe zu sehen. | Die {count} ältesten Live-Aufrufe wurden aus dieser Liste entfernt, um sie zu begrenzen; laden Sie den Lauf neu, um alle aufgezeichneten Aufrufe zu sehen.",
+    "callsCapped": "{count} älterer Aufruf fehlt in dieser Liste: Sie enthält höchstens die neuesten {limit}, die ein einzelner Lesevorgang des Laufs zurückgibt. | {count} ältere Aufrufe fehlen in dieser Liste: Sie enthält höchstens die neuesten {limit}, die ein einzelner Lesevorgang des Laufs zurückgibt.",
     "filter": {
       "all": "Alle",
       "failed": "Fehlgeschlagen",

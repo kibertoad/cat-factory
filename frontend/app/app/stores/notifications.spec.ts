@@ -37,6 +37,25 @@ describe('notifications live-write map', () => {
     expect(kept).not.toContain('n0')
   })
 
+  // The bound evicts by the map's INSERTION order, which is only write order because a rewritten
+  // key is re-inserted. A bare `set` keeps a key in its original slot, so the entries rewritten
+  // most (a card whose run keeps advancing, exactly the ones still in flight) would sit at the
+  // head and be evicted FIRST, losing the protection while settled entries survived.
+  it('evicts by write order, so a rewritten card outlives older untouched ones', () => {
+    store.upsert(card('rewritten'))
+    for (let i = 0; i < 199; i++) store.upsert(card(`n${i}`))
+    // Rewriting it makes it the NEWEST write, and the next card is what pushes the map over.
+    store.upsert(card('rewritten'))
+    store.upsert(card('newest'))
+
+    store.hydrate([], 0)
+    const kept = store.open.map((n) => n.id)
+    expect(kept).toContain('rewritten')
+    expect(kept).toContain('newest')
+    // The oldest write that was never touched again is the one that goes.
+    expect(kept).not.toContain('n0')
+  })
+
   it('still protects a write the in-flight refresh could not have seen', () => {
     const baseline = store.hydrateBaseline()
     store.upsert(card('live'))

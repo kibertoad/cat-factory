@@ -52,6 +52,13 @@ export const useKaizenStore = defineStore('kaizen', () => {
   let loadTicket = 0
   let latestOverviewLoad = 0
 
+  // Which BOARD the in-flight reads belong to, bumped by `reset()`. Distinct from the ticket
+  // above, which orders overview loads AGAINST EACH OTHER: a switch invalidates every read of
+  // either kind, and an overview load must not cancel an unrelated per-run one. Without it a
+  // board switch mid-load committed the previous board's gradings into the switched-to board's
+  // caches, with `historyLoaded` back to false so nothing ever re-asked and corrected it.
+  let boardGeneration = 0
+
   /**
    * Fold a freshly-loaded grading list into the live cache WITHOUT dropping live-only rows:
    * a grading pushed via `upsert` while the load was in flight may not be in the server's
@@ -91,12 +98,16 @@ export const useKaizenStore = defineStore('kaizen', () => {
     historyLoaded.value = true
     const seq = ++loadTicket
     latestOverviewLoad = seq
+    const generation = boardGeneration
     try {
       const overview = await api.getKaizenOverview(ws.requireId())
+      // `available` is a DEPLOYMENT fact rather than a per-board one, so it is recorded even by a
+      // read whose board is gone: what the deployment wires did not change under the switch.
       available.value = true
-      // A newer overview load superseded this one while it was in flight — discard the staler
-      // result so it can't clobber the fresher history (and any grading live-pushed since).
-      if (latestOverviewLoad !== seq) return
+      // A newer overview load superseded this one while it was in flight, or the board it was
+      // asked for is gone. Either way the result must not land: it would clobber the fresher
+      // history, or seed the switched-to board with the previous one's gradings.
+      if (latestOverviewLoad !== seq || generation !== boardGeneration) return
       verified.value = overview.verified
       // History is newest-first; live-pushed gradings are the newest, so prepend the survivors.
       const { reconciled, liveOnly } = reconcileWithLive(overview.gradings, history.value)
@@ -116,10 +127,13 @@ export const useKaizenStore = defineStore('kaizen', () => {
 
   async function fetchForExecution(executionId: string) {
     const ws = useWorkspaceStore()
+    const generation = boardGeneration
     loadingExecution.value = new Set(loadingExecution.value).add(executionId)
     try {
       const { gradings } = await api.getKaizenForExecution(ws.requireId(), executionId)
       available.value = true
+      // The board this run belongs to is gone, so its gradings have no cache left to land in.
+      if (generation !== boardGeneration) return
       // Two loads of one run can no longer overlap (`loads` coalesces them), so the per-execution
       // ticket this used to carry had nothing left to order and is gone. What remains is the live
       // race: a grading pushed via `upsert` while this fetch was out, which the merge keeps rather
@@ -164,6 +178,7 @@ export const useKaizenStore = defineStore('kaizen', () => {
    * `available` survives: whether the deployment wires Kaizen at all is not a per-board fact.
    */
   function reset() {
+    boardGeneration += 1
     byExecution.value = {}
     history.value = []
     historyLoaded.value = false

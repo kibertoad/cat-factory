@@ -1814,7 +1814,7 @@
     },
     "callsTitle": "Wywołania modelu",
     "noCallsMatching": "Żadne wywołanie modelu nie pasuje do tego filtra.",
-    "liveCallsCapped": "Najstarsze wywołanie na żywo ({count}) zostało usunięte z tej listy, aby ją ograniczyć; przeładuj przebieg, aby zobaczyć wszystkie zapisane wywołania. | {count} najstarsze wywołania na żywo zostały usunięte z tej listy, aby ją ograniczyć; przeładuj przebieg, aby zobaczyć wszystkie zapisane wywołania. | {count} najstarszych wywołań na żywo zostało usuniętych z tej listy, aby ją ograniczyć; przeładuj przebieg, aby zobaczyć wszystkie zapisane wywołania.",
+    "callsCapped": "{count} starsze wywołanie nie jest na tej liście: mieści ona najwyżej {limit} najnowszych, które zwraca jeden odczyt przebiegu. | {count} starsze wywołania nie są na tej liście: mieści ona najwyżej {limit} najnowszych, które zwraca jeden odczyt przebiegu. | {count} starszych wywołań nie ma na tej liście: mieści ona najwyżej {limit} najnowszych, które zwraca jeden odczyt przebiegu.",
     "filter": {
       "all": "Wszystkie",
       "failed": "Nieudane",

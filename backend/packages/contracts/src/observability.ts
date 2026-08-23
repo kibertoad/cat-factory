@@ -183,6 +183,17 @@ export const llmCallActivitySchema = v.object({
 })
 export type LlmCallActivity = v.InferOutput<typeof llmCallActivitySchema>
 
+/**
+ * How many (newest) calls one read of a run's call log answers with.
+ *
+ * A rule both sides have to agree about, so it lives here rather than in the service. The server
+ * caps the list and the export at it, and the SPA's live-append cache is bounded by the SAME
+ * number: sized lower, the first live event on an already-loaded run would evict rows the server
+ * did answer with and report them as live-evicted; sized higher, the panel would claim a window
+ * wider than any read can fill.
+ */
+export const LLM_CALL_LIST_LIMIT = 1000
+
 /** Response of `GET /workspaces/:ws/executions/:id/llm-metrics` (drill-down panel). */
 export const llmMetricsResponseSchema = v.object({
   executionId: v.string(),

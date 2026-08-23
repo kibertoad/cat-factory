@@ -143,7 +143,14 @@ const effortReport = computed(() => activeStep.value?.effortReport ?? null)
  * window can forget to ask, and a run already held whole costs nothing (`ensureFull` returns).
  */
 const activeInstanceId = computed(() => ui.resultView?.instanceId ?? null)
-watch(activeInstanceId, (id) => void execution.ensureFull(id), { immediate: true })
+// Watched through `fullFetchKey`, not the id: a full refresh lands a lean projection over an open
+// run, and at a newer revision the store cannot carry the cached prose forward, so the window has
+// to ask again rather than render the withheld fields as an absence.
+watch(
+  () => execution.fullFetchKey(activeInstanceId.value),
+  () => void execution.ensureFull(activeInstanceId.value),
+  { immediate: true },
+)
 // The step's PRE-PR VALIDATION report — the second universal trailing section, resolved the same
 // way and for the same reason: every window whose step ran a coding job can show whether the
 // checkout actually passed the service's checks before the PR opened (and, on a red run, exactly

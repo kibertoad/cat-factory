@@ -290,7 +290,24 @@ Two narrowings against the finding as written, both deliberate:
   (`dedicatedParkView`) on the board itself. Same rule: move the board read first, then withhold.
 
 `projected` on the instance is what makes the rest safe: withheld is not absent, and every reader
-that needs the difference can ask.
+that needs the difference can ask. Three consequences of that, each a place where getting it wrong
+renders as a step that said nothing:
+
+- **The overlay hosts watch `execution.fullFetchKey(id)`, not the id.** A run does not stop being a
+  projection once a window is open: every full refresh lands a lean projection over it, and at a
+  newer `rev` the carry-forward cannot fire. Keyed on the id, the watch that fired on open never
+  fires again and the open reader blanks with nothing left to refill it; keyed on the fetch key
+  (null while the run is held whole, `id:rev` while it is not) each newer projection re-asks.
+- **A recorded fetch failure is READ through the same question.** `fullError` answers only while
+  the run is still a projection, because the prose can arrive by a route the fetch knows nothing
+  about (a live `execution` event carries every run whole), and a banner saying the run could not
+  be loaded standing over prose that loaded is worse than no banner. A board switch drops the
+  pending/failed marks and disowns the requests behind them (`resetFullReads`), which is also what
+  stops a late answer landing a foreign run in the switched-to board's cache.
+- **"Approve with corrections" is gated on the run being held whole.** The editor seeds from
+  `step.output`, so entering it under a projection would seed an EMPTY draft and approving it would
+  replace the agent's proposal with nothing. The verb is withheld until the read lands; the reader
+  already states the pending/failed state on its own.
 
 ### 6. Coarse `board` events force full refreshes the payload could avoid (P1) — LANDED
 
@@ -963,10 +980,15 @@ that an eviction doesn't blank an open panel.
 
 **LANDED,** all four, plus the one thing the fix owed the reader:
 
-- The live call log is capped per run (500 newest), and the cap RECORDS what it evicted:
-  `droppedLiveCallCount` feeds a line in the panel, because a capped list is not a prefix and a
-  reader who cannot see the number concludes the run made exactly the calls they are scrolling.
-  Reloading the run clears it, that read being server-bounded and stating its own limits.
+- The call log is capped per run, and the cap RECORDS what it evicted: `droppedLiveCallCount`
+  feeds a line in the panel, because a capped list is not a prefix and a reader who cannot see the
+  number concludes the run made exactly the calls they are scrolling. The bound is
+  `LLM_CALL_LIST_LIMIT` (contracts), which is the SERVER's own read bound rather than a smaller
+  number of the client's: sized lower, the first live event on a run whose persisted log fills a
+  read would evict rows the server did answer with and report them as live-evicted, which is a
+  count of calls the panel is missing for a reason that never happened. At this size an eviction
+  means the run has outrun what one read could show either way, which is the same story the server
+  tells by truncating, so the copy does not offer a reload as the remedy.
 - Kaizen's `history` fold is gated on the SCREEN having asked for it, and the gate is set when
   `loadOverview` STARTS rather than when it resolves, so a grading pushed while that fetch is in
   flight still lands (which is what the reconcile is for). `byExecution` stays ungated: the run
@@ -1049,12 +1071,19 @@ are the bar.
 
 **LANDED for `execution.instances`; `board.blocks` stays as it was.** The premise needed one
 correction: the store does NOT only replace, index-assign and push. `echoAfter` lets an action
-store patch one step IN PLACE (`step.prReview = …` and its four siblings), which a shallow ref
-cannot see. That turned out to help rather than block: `echoAfter` is the ONE seam every such
-`assign` goes through, so the whole conversion is three write sites, `hydrate`/`cancel` (a whole
-array replace, which a shallow ref tracks itself) plus `triggerRef` in `upsert` and in `echoAfter`.
-The store spec pins all four shapes through a derived read, because a reactivity regression here is
-silent: removing either trigger fails five of them.
+store patch one step (`step.prReview = …` and its four siblings), which a shallow ref cannot see.
+That turned out to help rather than block: `echoAfter` is the ONE seam every such `assign` goes
+through, so the whole conversion is three write sites, `hydrate`/`cancel` (a whole array replace,
+which a shallow ref tracks itself) plus `upsert` and `echoAfter`.
+
+`triggerRef` alone is NOT enough at those two, and that is the trap worth recording. Under a shallow
+ref nothing in the run graph is a proxy, so the only dependency a reader can hold is the ref, and
+nearly every reader holds it through an identity-stable chain (`computed(() => getInstance(id))` to
+`steps[i]` to one field). A trigger re-runs the first computed in that chain, Vue then compares its
+recomputed value to the previous one, and an IN-PLACE patch makes them `===`: propagation stops
+there and the window never updates. So `echoAfter` applies the patch to a COPY of the run and its
+steps and swaps that in. The store spec pins each write shape twice, on the array and through the
+`getInstance` chain, because the array-level assertion is exactly the one that cannot see this.
 
 `board.blocks` is unchanged and still blocked for the reason stated: optimistic placement mutates
 blocks in place across three modules.

@@ -49,9 +49,14 @@ export const useNotificationsStore = defineStore('notifications', () => {
    * {@link hydrate} forgets every write a snapshot has already reconciled, which is what keeps the
    * map bounded by what is genuinely in flight. A long stream period that carries only TARGETED
    * events triggers no hydrate at all, so the map grew one entry per notification for the session.
-   * The bound is on the oldest (insertion order is sequence order, so the first key is the oldest
-   * write), and it is safe to drop them: an entry only ever protects a write from a refresh whose
-   * snapshot predates it, and a refresh that far behind resolved long ago.
+   * The bound is on the OLDEST write, and it is safe to drop them: an entry only ever protects a
+   * write from a refresh whose snapshot predates it, and a refresh that far behind resolved long
+   * ago.
+   *
+   * Insertion order is sequence order only because {@link upsert} RE-INSERTS a key it already
+   * holds. A bare `set` on an existing key keeps that key's original slot, so a notification
+   * rewritten many times (exactly the ones still in flight) would sit at the head of the map and
+   * be the FIRST evicted, losing its clobber protection while older, settled entries survived.
    */
   const MAX_LIVE_WRITES = 200
 
@@ -93,6 +98,9 @@ export const useNotificationsStore = defineStore('notifications', () => {
    */
   function upsert(notification: Notification) {
     const isOpen = notification.status === 'open'
+    // Delete before setting, so the map's insertion order stays WRITE order and the trim above
+    // evicts the genuinely oldest entry rather than the most recently rewritten one.
+    liveWrites.delete(notification.id)
     liveWrites.set(notification.id, { seq: ++liveSeq, value: isOpen ? notification : null })
     trimLiveWrites()
     if (!isOpen) {

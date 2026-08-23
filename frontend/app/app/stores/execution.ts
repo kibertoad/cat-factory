@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia'
-import { ref, computed, shallowRef, triggerRef } from 'vue'
+import { computed, shallowRef, triggerRef } from 'vue'
 import type { ExecutionInstance } from '~/types/domain'
 import { createExecutionCommands } from '~/stores/execution/commands'
 import { createPendingGateSelectors } from '~/stores/execution/pendingGates'
 import { createExecutionReconcile } from '~/stores/execution/reconcile'
+import { createWholeRunReads } from '~/stores/execution/wholeRunReads'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -33,11 +34,19 @@ export const useExecutionStore = defineStore('execution', () => {
    * constantly, so every one of those reads paid proxy overhead on a structure that is only ever
    * written through this store. Three write sites keep it coherent, and there are no others:
    * {@link hydrate} and `cancel` replace the array (which a shallow ref tracks on its own);
-   * {@link upsert} index-assigns or pushes; {@link echoAfter} lets an action store patch ONE step
-   * in place. The last two announce the change with `triggerRef`.
+   * {@link upsert} index-assigns or pushes; {@link echoAfter} swaps in a patched copy of ONE run.
+   * The last two announce the change with `triggerRef`.
+   *
+   * EVERY WRITE MUST ALSO CHANGE IDENTITY, which `triggerRef` alone does not buy. Nothing under
+   * this ref is a reactive proxy any more, so the only dependency a reader can hold is the ref
+   * itself, and almost every reader holds it through an identity-stable chain
+   * (`computed(() => getInstance(id))` to `steps[i]` to one field). A trigger re-runs the first
+   * computed in that chain, but Vue stops propagating when the recomputed value is `===` the old
+   * one, so a run patched IN PLACE re-reads as unchanged and the chain below it never re-runs.
+   * That is why {@link echoAfter} patches a COPY rather than the cached object.
    *
    * A reactivity regression here is SILENT (a card simply stops updating), so a new write path
-   * must either replace the array or trigger, and the store specs are what pin that.
+   * must replace the array or swap the run it touched, and the store specs are what pin that.
    */
   const instances = shallowRef<ExecutionInstance[]>([])
 
@@ -83,11 +92,20 @@ export const useExecutionStore = defineStore('execution', () => {
     const before = byId.value.get(executionId)
     const revBefore = before ? revOf(before) : -1
     const state = await send()
-    const instance = byId.value.get(executionId)
+    const i = instances.value.findIndex((e) => e.id === executionId)
+    const instance = i >= 0 ? instances.value[i]! : undefined
     if (!instance || revOf(instance) !== revBefore) return state
-    apply(state, instance)
-    // The echo patches a STEP in place, which a shallow `instances` cannot see. This is the one
-    // seam every action store's `assign` goes through, which is what makes one trigger enough.
+    // `apply` MUTATES what it is handed, so hand it a COPY and swap that copy in. Patching the
+    // cached objects in place would leave every identity-stable reader
+    // (`computed(() => getInstance(id))` to `steps[i]`) recomputing to the same object, which
+    // Vue treats as no change and stops propagating: the trigger would reach the first computed
+    // in the chain and nothing below it. The steps are copied too, because most echoes write a
+    // step's sub-state and the readers hold the STEP, not the run.
+    const patched: ExecutionInstance = { ...instance, steps: instance.steps.map((s) => ({ ...s })) }
+    apply(state, patched)
+    instances.value[i] = patched
+    // An index assignment is invisible to a shallow ref. This is the one seam every action
+    // store's `assign` goes through, which is what makes one trigger enough.
     triggerRef(instances)
     return state
   }
@@ -96,65 +114,16 @@ export const useExecutionStore = defineStore('execution', () => {
     return id ? byId.value.get(id) : undefined
   }
 
-  /** Run ids whose whole-run fetch is in flight, so a reader can say "loading" rather than "empty". */
-  const fullPending = ref<Set<string>>(new Set())
-  /**
-   * Last whole-run fetch error per run id. A withheld field and a failed fetch are different facts
-   * and a reader that cannot tell them apart renders the outage as a step that said nothing, so the
-   * failure is recorded rather than swallowed.
-   */
-  const fullErrors = ref<Record<string, string | null>>({})
-  /** In-flight fetches, so two overlays opening the same run make ONE request. */
-  const fullInFlight = new Map<string, Promise<void>>()
-
-  function isFullPending(id: string | null | undefined): boolean {
-    return !!id && fullPending.value.has(id)
-  }
-
-  function fullError(id: string | null | undefined): string | null {
-    return id ? (fullErrors.value[id] ?? null) : null
-  }
-
-  /**
-   * Make sure the cached run carries what the board snapshot's LEAN PROJECTION withholds: the
-   * step prose every step-detail overlay renders. A no-op for a run the cache already holds whole
-   * (one delivered by a live `execution` event, or already fetched), so opening a window on an
-   * active run costs nothing.
-   *
-   * Single-flight per run id: a board click can open the window and its shell in the same tick,
-   * and two overlays reading one run must not fire two point-reads of the heaviest row in it.
-   */
-  async function ensureFull(id: string | null | undefined): Promise<void> {
-    if (!id) return
-    const cached = byId.value.get(id)
-    if (cached && !cached.projected) return
-    const inFlight = fullInFlight.get(id)
-    if (inFlight) return inFlight
-    const ws = useWorkspaceStore()
-    const workspaceId = ws.workspaceId
-    if (!workspaceId) return
-    fullPending.value = new Set(fullPending.value).add(id)
-    const request = api
-      .getExecution(workspaceId, id)
-      .then((full) => {
-        fullErrors.value = { ...fullErrors.value, [id]: null }
-        upsert(full)
-      })
-      .catch((error: unknown) => {
-        fullErrors.value = {
-          ...fullErrors.value,
-          [id]: error instanceof Error ? error.message : 'Failed to load the run',
-        }
-      })
-      .finally(() => {
-        fullInFlight.delete(id)
-        const next = new Set(fullPending.value)
-        next.delete(id)
-        fullPending.value = next
-      })
-    fullInFlight.set(id, request)
-    return request
-  }
+  // The WHOLE-RUN read behind the step-detail overlays: when a prose reader has to ask for the run
+  // the board snapshot only projected, and what it is told while the answer is missing
+  // (`stores/execution/wholeRunReads.ts`). A cohesive collaborator over bound callbacks, the same
+  // shape as the reconcile above.
+  const wholeRunReads = createWholeRunReads({
+    cached: (id) => byId.value.get(id),
+    workspaceId: () => useWorkspaceStore().workspaceId,
+    fetch: (workspaceId, executionId) => api.getExecution(workspaceId, executionId),
+    apply: upsert,
+  })
 
   /**
    * Each block's run, indexed once per change to `instances` instead of scanned per lookup.
@@ -207,9 +176,7 @@ export const useExecutionStore = defineStore('execution', () => {
     echoAfter,
     byId,
     getInstance,
-    ensureFull,
-    isFullPending,
-    fullError,
+    ...wholeRunReads,
     getByBlock,
     ...pendingGates,
     ...commands,

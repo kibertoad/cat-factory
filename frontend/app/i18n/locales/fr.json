@@ -1814,7 +1814,7 @@
     },
     "callsTitle": "Appels de modèle",
     "noCallsMatching": "Aucun appel de modèle ne correspond à ce filtre.",
-    "liveCallsCapped": "L'appel en direct le plus ancien ({count}) a été retiré de cette liste pour la borner ; rechargez l'exécution pour voir tous les appels enregistrés. | Les {count} appels en direct les plus anciens ont été retirés de cette liste pour la borner ; rechargez l'exécution pour voir tous les appels enregistrés.",
+    "callsCapped": "{count} appel plus ancien manque dans cette liste : elle contient au plus les {limit} plus récents que renvoie une seule lecture de l'exécution. | {count} appels plus anciens manquent dans cette liste : elle contient au plus les {limit} plus récents que renvoie une seule lecture de l'exécution.",
     "filter": {
       "all": "Tous",
       "failed": "En échec",

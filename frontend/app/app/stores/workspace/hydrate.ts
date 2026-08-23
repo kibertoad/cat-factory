@@ -50,6 +50,10 @@ export function resetPerBoardCaches() {
   // visited several boards kept every run it had ever opened a panel on.
   useObservabilityStore().reset()
   useKaizenStore().reset()
+  // The whole-run reads behind the step-detail overlays. The runs themselves ride the snapshot
+  // (`hydrate` replaces them), but the pending/failed marks and the requests still in flight are
+  // keyed by run ids the switched-to board does not have.
+  useExecutionStore().resetFullReads()
   // The fragment picker catalog is per-board (the merged tenant catalog), so drop
   // it too — the next inspector open re-fetches it for the switched-to board rather
   // than showing the previous board's (or a raw-id placeholder for) fragments.

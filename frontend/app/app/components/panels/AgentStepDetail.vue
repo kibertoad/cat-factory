@@ -59,10 +59,15 @@ const step = computed(() =>
  * lean projection (`projectExecutionForBoard`) whose steps withhold the very prose this reader
  * renders, so opening a step asks for the run behind it. A run the store already holds whole (one
  * a live `execution` event delivered, or one already fetched) costs nothing.
+ *
+ * Watched through `fullFetchKey` rather than the id, because the run does not stop being a
+ * projection once this overlay is open: any full refresh lands a lean projection over it, and at a
+ * NEWER revision the store cannot carry the cached prose forward. Keyed on the id, the reader
+ * would blank under an open overlay with nothing left to refill it.
  */
 watch(
-  () => ctx.value?.instanceId ?? null,
-  (id) => void execution.ensureFull(id),
+  () => execution.fullFetchKey(ctx.value?.instanceId ?? null),
+  () => void execution.ensureFull(ctx.value?.instanceId ?? null),
   {
     immediate: true,
   },
@@ -279,6 +284,9 @@ const approval = useStepApproval({
   approvalId: () => approvalId.value,
   approvalPending: () => approvalPending.value && !dedicatedPark.value,
   companionExceeded: () => companionExceeded.value,
+  // The editor seeds from the step's prose, which a board projection withholds until the
+  // whole-run read above lands.
+  runIsWhole: () => instance.value?.projected !== true,
   close,
 })
 const {
@@ -291,6 +299,7 @@ const {
   draftProposal,
   rejectArmed,
   canRequestChanges,
+  canEditProposal,
   quorum: gateQuorum,
   viewerHasApproved,
   approvalWouldClearGate,
@@ -991,7 +1000,7 @@ async function copyOutput() {
           size="sm"
           icon="i-lucide-pencil"
           block
-          :disabled="rejectArmed || submitting || !!gateRefusal"
+          :disabled="rejectArmed || submitting || !!gateRefusal || !canEditProposal"
           @click="startEditing"
         >
           {{ t('panels.stepDetail.approveWithCorrections') }}

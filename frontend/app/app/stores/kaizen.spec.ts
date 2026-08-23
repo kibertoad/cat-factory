@@ -143,6 +143,43 @@ describe('kaizen store — live-push clobber guards', () => {
     expect(store.gradingsFor('exec1').map((g) => g.id)).toEqual(['g1'])
   })
 
+  // A board SWITCH is the third writer nothing ordered against. `reset()` clears the caches, but
+  // the reads already out kept their handles: the previous board's gradings landed in the
+  // switched-to board's caches, and with `historyLoaded` back to false nothing re-asked, so it
+  // never corrected itself.
+  it('discards an overview load whose board was switched away mid-flight', async () => {
+    const deferred: Array<(r: { gradings: KaizenGrading[]; verified: [] }) => void> = []
+    vi.stubGlobal('useApi', () => ({
+      getKaizenOverview: () =>
+        new Promise<{ gradings: KaizenGrading[]; verified: [] }>((res) => deferred.push(res)),
+    }))
+    const store = useKaizenStore()
+    const load = store.loadOverview()
+    store.reset()
+    deferred[0]!({ gradings: [grading({ id: 'other-board' })], verified: [] })
+    await load
+
+    expect(store.history).toEqual([])
+    // The screen never got its answer, so it must still read as un-asked rather than as loaded
+    // and empty: the next open re-asks against the board it is now on.
+    expect(store.verified).toEqual([])
+  })
+
+  it('discards a per-run load whose board was switched away mid-flight', async () => {
+    const deferred: Array<(r: { gradings: KaizenGrading[] }) => void> = []
+    vi.stubGlobal('useApi', () => ({
+      getKaizenForExecution: () =>
+        new Promise<{ gradings: KaizenGrading[] }>((res) => deferred.push(res)),
+    }))
+    const store = useKaizenStore()
+    const load = store.loadForExecution('exec1')
+    store.reset()
+    deferred[0]!({ gradings: [grading({ id: 'other-board' })] })
+    await load
+
+    expect(store.byExecution).toEqual({})
+  })
+
   it('a slower stale loadOverview never clobbers a newer one', async () => {
     const deferred: Array<(r: { gradings: KaizenGrading[]; verified: [] }) => void> = []
     vi.stubGlobal('useApi', () => ({

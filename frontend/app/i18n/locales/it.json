@@ -3867,7 +3867,7 @@
     },
     "callsTitle": "Chiamate al modello",
     "noCallsMatching": "Nessuna chiamata al modello corrisponde a questo filtro.",
-    "liveCallsCapped": "La chiamata live più vecchia ({count}) è stata rimossa da questo elenco per limitarlo; ricarica l'esecuzione per vedere tutte le chiamate registrate. | Le {count} chiamate live più vecchie sono state rimosse da questo elenco per limitarlo; ricarica l'esecuzione per vedere tutte le chiamate registrate.",
+    "callsCapped": "Manca {count} chiamata più vecchia in questo elenco: contiene al massimo le {limit} più recenti restituite da una singola lettura dell'esecuzione. | Mancano {count} chiamate più vecchie in questo elenco: contiene al massimo le {limit} più recenti restituite da una singola lettura dell'esecuzione.",
     "filter": {
       "all": "Tutte",
       "failed": "Fallite",

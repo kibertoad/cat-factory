@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
-import { isLlmWarningFinishReason } from '@cat-factory/contracts'
+import { isLlmWarningFinishReason, LLM_CALL_LIST_LIMIT } from '@cat-factory/contracts'
 import type {
   AgentContextSnapshot,
   AgentSearchQuery,
@@ -62,13 +62,13 @@ const calls = computed<LlmCallMetric[]>(() =>
   executionId.value ? observability.callsFor(executionId.value) : [],
 )
 /**
- * How many LIVE rows the store's per-run cap evicted from this list. A capped list is not a
- * prefix of the run, so a reader that cannot see the number concludes the run made exactly the
- * calls it is scrolling. Reloading the run replaces the list with the server-bounded read and
- * clears this.
+ * How many rows the store's per-run cap dropped from this list. A capped list is not a prefix of
+ * the run, so a reader that cannot see the number concludes the run made exactly the calls it is
+ * scrolling. The cap is the server's OWN read bound, so the copy must not offer a reload as the
+ * remedy: a re-read answers with the same window.
  */
-const droppedLiveCalls = computed(() =>
-  executionId.value ? observability.droppedLiveCallCount(executionId.value) : 0,
+const droppedCalls = computed(() =>
+  executionId.value ? observability.droppedCallCount(executionId.value) : 0,
 )
 const loading = computed(() => !!executionId.value && observability.isLoading(executionId.value))
 const exporting = computed(
@@ -817,14 +817,18 @@ function exportJson() {
                 <OutcomeFilterChips v-model="callFilter" :options="callFilterOptions" />
               </div>
 
-              <!-- What the live cap dropped. Without it this list reads as the whole run. -->
+              <!-- What the cap dropped. Without it this list reads as the whole run. -->
               <p
-                v-if="droppedLiveCalls"
+                v-if="droppedCalls"
                 class="text-[11px] text-amber-300/80"
-                data-testid="observability-live-calls-capped"
+                data-testid="observability-calls-capped"
               >
                 {{
-                  t('observability.liveCallsCapped', { count: droppedLiveCalls }, droppedLiveCalls)
+                  t(
+                    'observability.callsCapped',
+                    { count: droppedCalls, limit: LLM_CALL_LIST_LIMIT },
+                    droppedCalls,
+                  )
                 }}
               </p>
 

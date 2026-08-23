@@ -23,6 +23,11 @@ export function useStepApproval(opts: {
   approvalId: () => string | null
   approvalPending: () => boolean
   companionExceeded: () => boolean
+  /**
+   * Whether the cached run carries the step's captured prose rather than the board snapshot's
+   * projection of it (`ExecutionInstance.projected`). Gates {@link canEditProposal}: see there.
+   */
+  runIsWhole: () => boolean
   close: () => void
 }) {
   const execution = useExecutionStore()
@@ -138,7 +143,20 @@ export function useStepApproval(opts: {
     }
   }
 
+  /**
+   * Whether "approve with corrections" can be ENTERED. The editor seeds itself from the step's own
+   * prose, and the board snapshot WITHHOLDS that prose: an instance is a lean projection until the
+   * overlay's whole-run read lands (`projectExecutionForBoard`, `ExecutionStore.ensureFull`). Under
+   * a projection `step.output` is `undefined`, so entering edit mode would seed an EMPTY draft, and
+   * approving it would replace the agent's proposal with nothing. The reader states the fetch's
+   * pending/failed state on its own (`RunDetailLoadState`), so this withholds the verb rather than
+   * explaining itself twice.
+   */
+  const canEditProposal = computed(() => opts.runIsWhole())
+
   function startEditing() {
+    // Refused rather than clamped: seeding an empty draft is the data loss this guards.
+    if (!canEditProposal.value) return
     draftProposal.value = opts.step()?.output ?? ''
     editing.value = true
     // Editing and the review/reject path are mutually exclusive — clear the other.
@@ -226,6 +244,7 @@ export function useStepApproval(opts: {
     draftProposal,
     rejectArmed,
     canRequestChanges,
+    canEditProposal,
     quorum,
     viewerHasApproved,
     approvalWouldClearGate,

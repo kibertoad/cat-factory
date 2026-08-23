@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { computed } from 'vue'
 import { useUpsertList } from '~/composables/useUpsertList'
 
 interface Item {
@@ -98,6 +99,31 @@ describe('useUpsertList', () => {
       ]
       expect(get('a')).toEqual({ id: 'a', v: 7 })
       expect(get('b')).toEqual({ id: 'b', v: 2 })
+    })
+
+    // The index is a plain Map, so a reader answered out of an ALREADY-FRESH one depends on
+    // nothing the write it is waiting for touches: an append leaves `items.value` the same array,
+    // so a `computed` that missed on a key would never re-run. That is invisible in the store
+    // that has one reader per key today and a bug the moment a second appears, which is why it is
+    // pinned on the composable rather than on any caller.
+    it('re-runs a computed that MISSED on a key when that key is later appended', () => {
+      const { upsert, get } = useUpsertList<Item>({ key: (x) => x.id })
+      upsert({ id: 'a', v: 1 })
+      const wanted = computed(() => get('b'))
+      expect(wanted.value).toBeUndefined()
+
+      upsert({ id: 'b', v: 2 })
+      expect(wanted.value).toEqual({ id: 'b', v: 2 })
+    })
+
+    it('re-runs a computed whose item moved under a prepend', () => {
+      const { upsert, indexOf } = useUpsertList<Item>({ key: (x) => x.id, prepend: true })
+      upsert({ id: 'a', v: 1 })
+      const position = computed(() => indexOf('a'))
+      expect(position.value).toBe(0)
+
+      upsert({ id: 'b', v: 2 })
+      expect(position.value).toBe(1)
     })
 
     it('answers correctly after hydrate replaces the list', () => {

@@ -1,5 +1,6 @@
 ---
 '@cat-factory/contracts': minor
+'@cat-factory/orchestration': patch
 '@cat-factory/server': minor
 '@cat-factory/app': minor
 ---
@@ -31,9 +32,18 @@ history only once the screen has asked for it; both stores now reset on a board 
 nothing had ever evicted them on; and the notifications live-write map is bounded on write, for the
 long stream period that carries only targeted events and so triggers no hydrate to bound it.
 
+The call-log cap is `LLM_CALL_LIST_LIMIT`, a new contracts export the server's own list/export read
+is bounded by. The client holds no less than one read of the same run answers with: a smaller cap
+would have the first live event on a long run evict rows the server DID return and report them as
+live-evicted.
+
 **`execution.instances` is shallow-reactive.** Every step-level read on the board paid proxy
 overhead on a structure only this store writes. The conversion is three write sites because
-`echoAfter` is the one seam an action store's in-place step patch goes through.
+`echoAfter` is the one seam an action store's step patch goes through. Under a shallow ref a write
+must change IDENTITY as well as trigger: readers hold the store through identity-stable computeds
+(`getInstance(id)` to `steps[i]`), and Vue stops propagating a recomputed value that is `===` the
+previous one, so `echoAfter` patches a copy of the run and its steps rather than the cached
+objects.
 
 **Store and composable hygiene**, including one real bug: a drag interrupted by `pointercancel`, or
 by its component unmounting, stranded two window listeners and a stuck `draggingId`. Also a shared,
@@ -42,8 +52,10 @@ its docstring claimed, a key index in `useUpsertList`, single-flight on the pane
 openers routinely fire twice, and memoised board nodes so a hover restacks two of them instead of
 all of them.
 
-What to watch when reviewing: the equal-`rev` gate on the carry-forward, and the `triggerRef` pair,
-are the two places where being wrong is SILENT rather than loud. Both are pinned by store specs
-that fail if either is removed. Viewport culling is refused rather than deferred, with the reason
-recorded in the tracker: it needs a frame's extent to be known without rendering it, and `fitView`
-only fits nodes it has measured.
+What to watch when reviewing: the equal-`rev` gate on the carry-forward, and the two shallow-ref
+write sites, are the places where being wrong is SILENT rather than loud (an overlay blanks, a card
+stops updating). Both are pinned by store specs, the write sites twice over: once on the array, and
+once through the `getInstance` chain a window actually reads, which is the assertion an array-level
+one cannot make. Viewport culling is refused rather than deferred, with the reason recorded in the
+tracker: it needs a frame's extent to be known without rendering it, and `fitView` only fits nodes
+it has measured.

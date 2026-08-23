@@ -1814,7 +1814,7 @@
     },
     "callsTitle": "Llamadas al modelo",
     "noCallsMatching": "Ninguna llamada al modelo coincide con este filtro.",
-    "liveCallsCapped": "Se descartó la llamada en vivo más antigua ({count}) de esta lista para acotarla; vuelve a cargar la ejecución para ver todas las llamadas registradas. | Se descartaron las {count} llamadas en vivo más antiguas de esta lista para acotarla; vuelve a cargar la ejecución para ver todas las llamadas registradas.",
+    "callsCapped": "Falta {count} llamada más antigua en esta lista: contiene como máximo las {limit} más recientes que devuelve una sola lectura de la ejecución. | Faltan {count} llamadas más antiguas en esta lista: contiene como máximo las {limit} más recientes que devuelve una sola lectura de la ejecución.",
     "filter": {
       "all": "Todas",
       "failed": "Fallidas",

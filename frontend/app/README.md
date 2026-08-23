@@ -1039,10 +1039,16 @@ event left to restore it.
   here" affordance. And the store's reconcile carries the withheld fields forward ONLY at an equal
   `rev`: at the same revision the withheld prose IS what the cache holds, one revision later it may
   not be, so a newer projection replaces and the open overlay re-fetches.
-- **`execution.instances` is a `shallowRef`.** A write that does not replace the array has to
-  announce itself: `upsert` (index-assign / push) and `echoAfter` (the in-place step patch above)
-  both `triggerRef`. A missing trigger is SILENT, so a new write path either replaces the array or
-  triggers, and `stores/execution.spec.ts` pins each shape through a derived read.
+- **`execution.instances` is a `shallowRef`, so a write must both TRIGGER and change IDENTITY.**
+  Nothing under the ref is a reactive proxy any more, so the only dependency a reader can hold is
+  the ref itself, and nearly every reader holds it through an identity-stable chain
+  (`computed(() => getInstance(id))` to `steps[i]` to one field). `triggerRef` re-runs the FIRST
+  computed in that chain, and Vue stops propagating when its recomputed value is `===` the previous
+  one, so a run patched in place reaches that computed and nothing below it. `upsert` replaces the
+  run object; `echoAfter` applies the action store's patch to a COPY of the run and its steps and
+  swaps that in. A missing trigger and an in-place patch are both SILENT, so
+  `stores/execution.spec.ts` pins each write shape twice: once on the array, once through the
+  `getInstance` chain a window actually reads.
 - **Pin it with a store-level unit test** (`stores/workspace.spec.ts` for refreshes,
   `stores/workspace/refreshFunnel.spec.ts` for the funnel's own rules, `stores/execution.spec.ts`
   for echoes): drive the two orderings and assert the fresher one wins.

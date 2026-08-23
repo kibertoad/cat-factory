@@ -42,6 +42,15 @@ export function useUpsertList<T>(opts: {
   let indexedFor: T[] | null = null
 
   function reindex(): Map<unknown, number> {
+    // Track the array's LENGTH on every path, the fresh-index fast path included. The Map is
+    // plain, so a reader answered out of an already-fresh index would otherwise depend on nothing
+    // but the `items` ref, and an in-place append leaves that ref's value the same array: a
+    // computed that MISSED on a key would never re-run when the item it was waiting for arrives.
+    // `length` is the dependency the `findIndex` this replaced established, and it moves on every
+    // write that can turn a miss into a hit (push, unshift, splice) or shift a hit's position.
+    // A replace in place moves neither, and a reader that resolved an item already tracks its
+    // own index through the `items.value[i]` read below.
+    void items.value.length
     if (indexedFor === items.value) return index
     index = new Map(items.value.map((item, i) => [opts.key(item), i]))
     indexedFor = items.value
