@@ -176,8 +176,21 @@ describe('refresh funnel', () => {
    * the funnel holding a fetch that never settles and every later caller queued behind it forever.
    */
   describe('deadline', () => {
+    /**
+     * The deadline is per FUNNEL, so a test that both times a fetch out AND then drives a second
+     * one to completion needs a value that satisfies both halves. The first half is satisfied by
+     * any value (its fetch never settles, so the timer always wins in the end, it just waits that
+     * long); the second is satisfied only while every turn AFTER the timeout fits inside the same
+     * budget. Sized at 5ms that budget was two macrotask turns plus assertions, which a loaded CI
+     * runner overruns: the recovery fetch timed out instead, the test failed on its own deadline
+     * and the abandoned promise surfaced as an unhandled rejection. So this is deliberately
+     * generous and must NOT be tightened for speed: it costs one wait, and what it buys is a
+     * timing assumption the runner cannot break.
+     */
+    const GENEROUS_DEADLINE_MS = 250
+
     it('fails the caller, aborts the request and frees the slot when a fetch never settles', async () => {
-      const h = harness('ws1', 5)
+      const h = harness('ws1', GENEROUS_DEADLINE_MS)
       const stalled = expect(h.funnel.refresh()).rejects.toThrow(/timed out/)
       await stalled
       expect(h.aborted()).toBe(true)
@@ -193,6 +206,7 @@ describe('refresh funnel', () => {
       expect(h.applied()).toEqual(['recovered'])
     })
 
+    // Nothing here outlives the timeout, so this one can stay fast.
     it('does not count a timed-out fetch as coverage', async () => {
       const h = harness('ws1', 5)
       const mark = h.funnel.refreshMark()
