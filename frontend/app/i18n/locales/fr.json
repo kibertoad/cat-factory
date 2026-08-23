@@ -1814,7 +1814,6 @@
     },
     "callsTitle": "Appels de modèle",
     "noCallsMatching": "Aucun appel de modèle ne correspond à ce filtre.",
-    "callsCapped": "{count} appel plus ancien manque dans cette liste : elle contient au plus les {limit} plus récents que renvoie une seule lecture de l'exécution. | {count} appels plus anciens manquent dans cette liste : elle contient au plus les {limit} plus récents que renvoie une seule lecture de l'exécution.",
     "filter": {
       "all": "Tous",
       "failed": "En échec",

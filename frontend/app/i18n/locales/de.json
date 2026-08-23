@@ -3867,7 +3867,6 @@
     },
     "callsTitle": "Modellaufrufe",
     "noCallsMatching": "Keine Modellaufrufe entsprechen diesem Filter.",
-    "callsCapped": "{count} älterer Aufruf fehlt in dieser Liste: Sie enthält höchstens die neuesten {limit}, die ein einzelner Lesevorgang des Laufs zurückgibt. | {count} ältere Aufrufe fehlen in dieser Liste: Sie enthält höchstens die neuesten {limit}, die ein einzelner Lesevorgang des Laufs zurückgibt.",
     "filter": {
       "all": "Alle",
       "failed": "Fehlgeschlagen",

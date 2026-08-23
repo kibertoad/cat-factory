@@ -1918,8 +1918,6 @@
     },
     "callsTitle": "Model calls",
     "noCallsMatching": "No model calls match this filter.",
-    "callsCapped": "{count} older call is not in this list: it holds at most the newest {limit} a single read of the run returns. | {count} older calls are not in this list: it holds at most the newest {limit} a single read of the run returns.",
-    "@callsCapped": "Plural form required. Shown above a run's call log when the client trimmed it. The bound is the server's own read bound, so reloading does not recover the dropped rows: never word this as 'reload to see them all'.",
     "filter": {
       "all": "All",
       "failed": "Failed",

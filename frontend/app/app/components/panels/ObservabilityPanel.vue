@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
-import { isLlmWarningFinishReason, LLM_CALL_LIST_LIMIT } from '@cat-factory/contracts'
+import { isLlmWarningFinishReason } from '@cat-factory/contracts'
 import type {
   AgentContextSnapshot,
   AgentSearchQuery,
@@ -60,15 +60,6 @@ const block = computed(() => (instance.value ? board.getBlock(instance.value.blo
 
 const calls = computed<LlmCallMetric[]>(() =>
   executionId.value ? observability.callsFor(executionId.value) : [],
-)
-/**
- * How many rows the store's per-run cap dropped from this list. A capped list is not a prefix of
- * the run, so a reader that cannot see the number concludes the run made exactly the calls it is
- * scrolling. The cap is the server's OWN read bound, so the copy must not offer a reload as the
- * remedy: a re-read answers with the same window.
- */
-const droppedCalls = computed(() =>
-  executionId.value ? observability.droppedCallCount(executionId.value) : 0,
 )
 const loading = computed(() => !!executionId.value && observability.isLoading(executionId.value))
 const exporting = computed(
@@ -816,21 +807,6 @@ function exportJson() {
                 </h2>
                 <OutcomeFilterChips v-model="callFilter" :options="callFilterOptions" />
               </div>
-
-              <!-- What the cap dropped. Without it this list reads as the whole run. -->
-              <p
-                v-if="droppedCalls"
-                class="text-[11px] text-amber-300/80"
-                data-testid="observability-calls-capped"
-              >
-                {{
-                  t(
-                    'observability.callsCapped',
-                    { count: droppedCalls, limit: LLM_CALL_LIST_LIMIT },
-                    droppedCalls,
-                  )
-                }}
-              </p>
 
               <!-- Narrowed to nothing reads differently from recorded nothing, and on this
                    surface it is the good news: the operator asked for the failures and there

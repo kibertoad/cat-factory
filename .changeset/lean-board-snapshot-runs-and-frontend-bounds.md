@@ -1,6 +1,5 @@
 ---
 '@cat-factory/contracts': minor
-'@cat-factory/orchestration': patch
 '@cat-factory/server': minor
 '@cat-factory/app': minor
 ---
@@ -25,17 +24,16 @@ equal revision, because one revision later the cached prose may not be what was 
 pasting it back is the same clobber in reverse. `step.custom` and the park-routing states stay in
 the projection deliberately: both are read on the board itself.
 
-**Three stores stopped growing for the session's lifetime.** The per-run LLM call log is capped and
-records what it dropped (a capped list is not a prefix, and a reader who cannot see the number
-concludes the run made exactly the calls they are scrolling); Kaizen folds gradings into the screen
-history only once the screen has asked for it; both stores now reset on a board switch, which
-nothing had ever evicted them on; and the notifications live-write map is bounded on write, for the
-long stream period that carries only targeted events and so triggers no hydrate to bound it.
+**Three stores stopped growing for the session's lifetime.** The per-run LLM call log folds live
+events only into runs whose panel was opened; Kaizen folds gradings into the screen history only
+once the screen has asked for it; both stores now reset on a board switch, which nothing had ever
+evicted them on; and the notifications live-write map is bounded on write, for the long stream
+period that carries only targeted events and so triggers no hydrate to bound it.
 
-The call-log cap is `LLM_CALL_LIST_LIMIT`, a new contracts export the server's own list/export read
-is bounded by. The client holds no less than one read of the same run answers with: a smaller cap
-would have the first live event on a long run evict rows the server DID return and report them as
-live-evicted.
+One bound was deliberately NOT taken: a per-run cap on the call list. It was written, then removed,
+because the rows it evicted are the ones that panel exists to show and no eviction rule can tell an
+operator which call they can no longer read. What is left growing is one open run's log while
+someone watches it, which is a list they asked for and are reading.
 
 **`execution.instances` is shallow-reactive.** Every step-level read on the board paid proxy
 overhead on a structure only this store writes. The conversion is three write sites because

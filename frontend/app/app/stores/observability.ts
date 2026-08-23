@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { LLM_CALL_LIST_LIMIT } from '@cat-factory/contracts'
 import type { LlmCallActivity, LlmCallMetric } from '~/types/execution'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { createToolCallSinkState } from '~/stores/observability/toolCalls'
@@ -51,30 +50,16 @@ export const useObservabilityStore = defineStore('observability', () => {
   })
 
   /**
-   * How many calls one open run's list may hold before the oldest are evicted.
+   * Per-execution-id call list (newest first).
    *
-   * The list is otherwise unbounded for the session: a watched run keeps appending, and every
-   * append both scans the list for a duplicate id and re-allocates it, so a long run pays
-   * quadratically for rows nobody scrolls back to.
-   *
-   * The bound is the SERVER's own read bound rather than a smaller number of our own, so this
-   * cache never holds less than one read of the same run answers with. Sized lower, the first
-   * live event on a run whose persisted log is longer than the cap would evict rows the server
-   * DID answer with and report them as live-evicted, which is a count of calls the panel is
-   * missing for a reason that never happened. At this size an eviction means the run has produced
-   * more calls than a single read could show either way, which is the same story the server tells
-   * by truncating.
+   * DELIBERATELY UNCAPPED. A per-run cap was tried and removed: the rows it evicted are the ones
+   * this panel exists to show, and no eviction rule can tell an operator which call they now
+   * cannot read. What bounds this store instead costs nothing: {@link appendCall} folds live
+   * events only into runs whose panel has been OPENED, and {@link reset} drops every run on a
+   * board switch. What is left growing is one open run's own log while someone watches it, which
+   * is a list they asked for and are reading.
    */
-  const MAX_CALLS_PER_RUN = LLM_CALL_LIST_LIMIT
-
-  /** Per-execution-id call list (newest first). */
   const callsByExecution = ref<Record<string, LlmCallMetric[]>>({})
-  /**
-   * How many rows the cap above evicted, per run. A capped list is NOT a prefix of the run and a
-   * reader that assumes it is concludes the run made exactly the calls they are scrolling, so the
-   * number it dropped is kept and stated.
-   */
-  const droppedCalls = ref<Record<string, number>>({})
   /** Execution ids currently loading. */
   const loading = ref<Set<string>>(new Set())
   /** Execution ids currently exporting. */
@@ -125,14 +110,10 @@ export const useObservabilityStore = defineStore('observability', () => {
       const liveOnly = (callsByExecution.value[executionId] ?? []).filter(
         (c) => !fetchedIds.has(c.id),
       )
-      // Capped through the same helper as a live append, so the invariant holds on every write
-      // rather than only on the append path. The read itself is server-bounded, so this only
-      // trims where the live-only rows ahead of it push the merge past the bound.
-      const { rows, dropped } = capCalls([...liveOnly, ...calls])
-      callsByExecution.value = { ...callsByExecution.value, [executionId]: rows }
-      // The list this read produced is the whole story now, so the count restarts from what the
-      // merge itself dropped rather than carrying forward what an earlier live burst evicted.
-      setDroppedCount(executionId, dropped)
+      callsByExecution.value = {
+        ...callsByExecution.value,
+        [executionId]: [...liveOnly, ...calls],
+      }
     } catch (err) {
       errors.value = {
         ...errors.value,
@@ -174,30 +155,10 @@ export const useObservabilityStore = defineStore('observability', () => {
       responseText: '',
       reasoningText: '',
     }
-    const { rows, dropped } = capCalls([row, ...existing])
-    callsByExecution.value = { ...callsByExecution.value, [executionId]: rows }
-    if (dropped) setDroppedCount(executionId, droppedCallCount(executionId) + dropped)
-  }
-
-  /** Trim a run's list to {@link MAX_CALLS_PER_RUN}, newest kept, saying how many it dropped. */
-  function capCalls(rows: LlmCallMetric[]): { rows: LlmCallMetric[]; dropped: number } {
-    const dropped = Math.max(0, rows.length - MAX_CALLS_PER_RUN)
-    return { rows: dropped ? rows.slice(0, MAX_CALLS_PER_RUN) : rows, dropped }
-  }
-
-  function setDroppedCount(executionId: string, count: number) {
-    if (count === droppedCallCount(executionId)) return
-    if (count > 0) {
-      droppedCalls.value = { ...droppedCalls.value, [executionId]: count }
-      return
+    callsByExecution.value = {
+      ...callsByExecution.value,
+      [executionId]: [row, ...existing],
     }
-    const { [executionId]: _cleared, ...rest } = droppedCalls.value
-    droppedCalls.value = rest
-  }
-
-  /** How many rows the per-run cap evicted from this run's list. */
-  function droppedCallCount(executionId: string): number {
-    return droppedCalls.value[executionId] ?? 0
   }
 
   /**
@@ -208,7 +169,6 @@ export const useObservabilityStore = defineStore('observability', () => {
    */
   function reset() {
     callsByExecution.value = {}
-    droppedCalls.value = {}
     errors.value = {}
     agentContext.resetAgentContext()
     toolCalls.resetToolCalls()
@@ -239,7 +199,6 @@ export const useObservabilityStore = defineStore('observability', () => {
   return {
     callsByExecution,
     callsFor,
-    droppedCallCount,
     reset,
     isLoading,
     isExporting,

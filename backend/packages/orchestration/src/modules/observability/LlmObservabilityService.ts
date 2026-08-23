@@ -22,7 +22,6 @@ import type {
   WorkspaceSettingsCacheValue,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import { LLM_CALL_LIST_LIMIT } from '@cat-factory/contracts'
 import type { ExecutionInstance, LlmMetricsExport } from '@cat-factory/contracts'
 import type { StoredPrompt } from './observability.logic.js'
 import { buildLlmMetricsExport, computeStoredPrompt } from './observability.logic.js'
@@ -100,12 +99,8 @@ function clampBody(text: string): string {
   return `${text.slice(0, MAX_BODY_CHARS)}\n…[truncated ${text.length - MAX_BODY_CHARS} chars]`
 }
 
-/**
- * Default cap on how many (newest) calls a list/export returns. The number itself is
- * `LLM_CALL_LIST_LIMIT` in `@cat-factory/contracts`, because the SPA sizes its own live-append
- * cache against it and a second copy here would let the two drift.
- */
-const DEFAULT_LIST_LIMIT = LLM_CALL_LIST_LIMIT
+/** Default cap on how many (newest) calls a list/export returns. */
+const DEFAULT_LIST_LIMIT = 1000
 
 /** What to store for a call's prompt when prompt recording is turned off: nothing. */
 const EMPTY_STORED_PROMPT: StoredPrompt = { promptText: '', promptPrefixCount: 0, promptHash: '' }

@@ -1814,7 +1814,6 @@
     },
     "callsTitle": "Wywołania modelu",
     "noCallsMatching": "Żadne wywołanie modelu nie pasuje do tego filtra.",
-    "callsCapped": "{count} starsze wywołanie nie jest na tej liście: mieści ona najwyżej {limit} najnowszych, które zwraca jeden odczyt przebiegu. | {count} starsze wywołania nie są na tej liście: mieści ona najwyżej {limit} najnowszych, które zwraca jeden odczyt przebiegu. | {count} starszych wywołań nie ma na tej liście: mieści ona najwyżej {limit} najnowszych, które zwraca jeden odczyt przebiegu.",
     "filter": {
       "all": "Wszystkie",
       "failed": "Nieudane",

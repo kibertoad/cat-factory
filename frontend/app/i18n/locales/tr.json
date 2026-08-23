@@ -1814,7 +1814,6 @@
     },
     "callsTitle": "Model çağrıları",
     "noCallsMatching": "Bu filtreye uyan model çağrısı yok.",
-    "callsCapped": "Bu listede {count} eski çağrı yok: liste, çalıştırmanın tek bir okumasının döndürdüğü en yeni {limit} çağrıyı tutar. | Bu listede {count} eski çağrı yok: liste, çalıştırmanın tek bir okumasının döndürdüğü en yeni {limit} çağrıyı tutar.",
     "filter": {
       "all": "Tümü",
       "failed": "Başarısız",

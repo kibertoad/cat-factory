@@ -3867,7 +3867,6 @@
     },
     "callsTitle": "Chiamate al modello",
     "noCallsMatching": "Nessuna chiamata al modello corrisponde a questo filtro.",
-    "callsCapped": "Manca {count} chiamata più vecchia in questo elenco: contiene al massimo le {limit} più recenti restituite da una singola lettura dell'esecuzione. | Mancano {count} chiamate più vecchie in questo elenco: contiene al massimo le {limit} più recenti restituite da una singola lettura dell'esecuzione.",
     "filter": {
       "all": "Tutte",
       "failed": "Fallite",

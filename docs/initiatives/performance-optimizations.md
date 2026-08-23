@@ -978,17 +978,19 @@ dropped), gate kaizen's history fold on the screen having loaded, add observabil
 `resetPerBoardCaches`, trim `liveWrites` on upsert too. The e2e live-update specs are the guard
 that an eviction doesn't blank an open panel.
 
-**LANDED,** all four, plus the one thing the fix owed the reader:
+**LANDED,** with the call-log half taken a different way than the finding proposed:
 
-- The call log is capped per run, and the cap RECORDS what it evicted: `droppedLiveCallCount`
-  feeds a line in the panel, because a capped list is not a prefix and a reader who cannot see the
-  number concludes the run made exactly the calls they are scrolling. The bound is
-  `LLM_CALL_LIST_LIMIT` (contracts), which is the SERVER's own read bound rather than a smaller
-  number of the client's: sized lower, the first live event on a run whose persisted log fills a
-  read would evict rows the server did answer with and report them as live-evicted, which is a
-  count of calls the panel is missing for a reason that never happened. At this size an eviction
-  means the run has outrun what one read could show either way, which is the same story the server
-  tells by truncating, so the copy does not offer a reload as the remedy.
+- The call log is bounded by WHO IS LOOKING rather than by a row count: `appendCall` folds live
+  events only into runs whose panel has been opened, and a board switch drops every run. **A
+  per-run CAP was written and then REMOVED**, and the reason is here so nobody re-proposes it
+  blind. Every version of it loses exactly the rows the panel exists to show. Capped below the
+  server's read bound, the first live event on a long run evicts rows that read DID return;
+  capped at that bound, it still evicts one real row per live call past it. Stating the count
+  does not repair it either: a number cannot tell an operator WHICH call they can no longer read,
+  and the run long enough to trip a cap is the one most worth reading. What is left growing is
+  one open run's own log while someone watches it, which is a list they asked for and are
+  reading. A real bound there means paging the panel against the server, not forgetting rows
+  locally, and that is a different change.
 - Kaizen's `history` fold is gated on the SCREEN having asked for it, and the gate is set when
   `loadOverview` STARTS rather than when it resolves, so a grading pushed while that fetch is in
   flight still lands (which is what the reconcile is for). `byExecution` stays ungated: the run
