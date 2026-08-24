@@ -956,6 +956,14 @@ export const pipelineStepSchema = v.object({
    * server-side). Absent for built-in / prose kinds.
    */
   custom: v.optional(v.unknown()),
+  /**
+   * Whether the step HAS prose in {@link output}, stated separately so the board can render the
+   * "this step produced a reader" affordance without carrying the prose itself. Set only by the
+   * board snapshot's lean projection ({@link projectExecutionForBoard}), which WITHHOLDS `output`;
+   * an unprojected instance leaves it absent and the affordance reads `output` directly. Read
+   * through `stepHasOutput`, never either field alone.
+   */
+  hasOutput: v.optional(v.boolean()),
   /** Identifier of the model that produced `output`, for transparency. */
   model: v.optional(v.string()),
   /**
@@ -1291,6 +1299,14 @@ export const executionStatusSchema = v.picklist(['running', 'blocked', 'done', '
 export type ExecutionStatus = v.InferOutput<typeof executionStatusSchema>
 
 export const executionInstanceSchema = v.object({
+  /**
+   * Set when this instance is the board snapshot's LEAN PROJECTION
+   * ({@link projectExecutionForBoard}) rather than the whole run: the heavy captured text is
+   * WITHHELD, not absent. A reader that needs it (any step-detail overlay) must fetch the run
+   * by id first; a store reconciling a projection over a full cached run must carry the withheld
+   * fields forward rather than blanking them. Absent ⇒ the instance is complete.
+   */
+  projected: v.optional(v.boolean()),
   id: v.string(),
   blockId: v.string(),
   pipelineId: v.string(),

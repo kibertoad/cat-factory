@@ -1705,6 +1705,10 @@
       "dryRun": "Uruchomienie próbne: nic nie scalaj",
       "dryRunForced": "Uruchomienie próbne: uruchomienia twojej roli nigdy nie są tu scalane",
       "dryRunHint": "To uruchomienie otwiera pull request i niczego nie scala."
+    },
+    "runDetail": {
+      "loading": "Wczytywanie pełnego przebiegu…",
+      "loadFailed": "Nie udało się wczytać pełnego przebiegu: {reason}"
     }
   },
   "observability": {

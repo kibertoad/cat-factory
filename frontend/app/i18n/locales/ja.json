@@ -1705,6 +1705,10 @@
       "dryRun": "ドライラン: マージしない",
       "dryRunForced": "ドライラン: あなたのロールの実行はここではマージされません",
       "dryRunHint": "この実行はプルリクエストを開きますが、マージは行いません。"
+    },
+    "runDetail": {
+      "loading": "実行の全体を読み込んでいます…",
+      "loadFailed": "実行の全体を読み込めませんでした: {reason}"
     }
   },
   "observability": {

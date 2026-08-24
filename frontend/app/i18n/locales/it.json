@@ -2291,6 +2291,10 @@
       "dryRun": "Prova: non unire nulla",
       "dryRunForced": "Prova: le esecuzioni del tuo ruolo qui non vengono mai unite",
       "dryRunHint": "Questa esecuzione apre una pull request e non unisce nulla."
+    },
+    "runDetail": {
+      "loading": "Caricamento dell'esecuzione completa…",
+      "loadFailed": "Impossibile caricare l'esecuzione completa: {reason}"
     }
   },
   "layout": {

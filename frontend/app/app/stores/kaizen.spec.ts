@@ -43,24 +43,39 @@ describe('kaizen store — live-push clobber guards', () => {
     expect(store.byExecution.exec1).toHaveLength(1)
   })
 
-  it('a slower stale loadForExecution never clobbers a newer one (monotonic guard)', async () => {
-    // Two loads race for the same execution: the FIRST-issued resolves LAST with a stale list.
-    // Without the ticket guard its REPLACE would overwrite the fresher second result.
+  // Two loads of ONE run can no longer race: the run window and the run's grading badge both
+  // load on open, and they are coalesced onto a single request. That is what retired the
+  // per-execution load ticket, so this pins the property the ticket used to buy.
+  it('coalesces concurrent loads of the same run onto one request', async () => {
     const deferred: Array<(r: { gradings: KaizenGrading[] }) => void> = []
     vi.stubGlobal('useApi', () => ({
       getKaizenForExecution: () =>
         new Promise<{ gradings: KaizenGrading[] }>((res) => deferred.push(res)),
     }))
     const store = useKaizenStore()
-    const first = store.loadForExecution('exec1') // issued #1 (stale)
-    const second = store.loadForExecution('exec1') // issued #2 (fresh)
+    const first = store.loadForExecution('exec1')
+    const second = store.loadForExecution('exec1')
+    expect(deferred).toHaveLength(1)
 
-    deferred[1]!({ gradings: [grading({ id: 'fresh' })] })
-    deferred[0]!({ gradings: [grading({ id: 'stale' })] })
+    deferred[0]!({ gradings: [grading({ id: 'fresh' })] })
     await Promise.all([first, second])
 
     expect(store.byExecution.exec1).toHaveLength(1)
     expect(store.byExecution.exec1![0]!.id).toBe('fresh')
+  })
+
+  it('re-asks once the first load has settled (coalescing, not caching)', async () => {
+    let calls = 0
+    vi.stubGlobal('useApi', () => ({
+      getKaizenForExecution: () => {
+        calls++
+        return Promise.resolve({ gradings: [grading({ id: `g${calls}` })] })
+      },
+    }))
+    const store = useKaizenStore()
+    await store.loadForExecution('exec1')
+    await store.loadForExecution('exec1')
+    expect(calls).toBe(2)
   })
 
   it('a grading pushed live mid-load survives the load (merge, not blind-replace)', async () => {
@@ -97,24 +112,72 @@ describe('kaizen store — live-push clobber guards', () => {
     expect(store.byExecution.exec1![0]!.summary).toBe('live')
   })
 
-  it('loadOverview preserves a live-pushed grading in history (merge, newest-first)', async () => {
+  it('loadOverview preserves a grading pushed while its fetch was in flight (merge, newest-first)', async () => {
+    const deferred: Array<(r: { gradings: KaizenGrading[]; verified: [] }) => void> = []
     vi.stubGlobal('useApi', () => ({
       getKaizenOverview: () =>
-        Promise.resolve({
-          gradings: [grading({ id: 'old', createdAt: 1, updatedAt: 1 })],
-          verified: [],
-        }),
+        new Promise<{ gradings: KaizenGrading[]; verified: [] }>((res) => deferred.push(res)),
     }))
     const store = useKaizenStore()
-    // A grading arrives live before the overview list is fetched.
+    // Opening the SCREEN is what makes `history` a list anything reads, so the race starts here:
+    // the grading arrives live while the overview fetch is still out.
+    const load = store.loadOverview()
     store.upsert(grading({ id: 'live', createdAt: 9, updatedAt: 9 }))
-    await store.loadOverview()
+    deferred[0]!({ gradings: [grading({ id: 'old', createdAt: 1, updatedAt: 1 })], verified: [] })
+    await load
 
     const ids = store.history.map((g) => g.id)
     expect(ids).toContain('live')
     expect(ids).toContain('old')
     // The live (newest) grading stays at the front of the newest-first list.
     expect(ids[0]).toBe('live')
+  })
+
+  // The growth this gate exists to stop: a session that never opens the Kaizen screen must not
+  // accumulate one history entry per grading the workspace produces. The per-RUN cache, which the
+  // run windows read without loading first, keeps taking them.
+  it('does not fold a stream-pushed grading into history before the screen asks for it', () => {
+    const store = useKaizenStore()
+    store.upsert(grading({ id: 'g1' }))
+    expect(store.history).toEqual([])
+    expect(store.gradingsFor('exec1').map((g) => g.id)).toEqual(['g1'])
+  })
+
+  // A board SWITCH is the third writer nothing ordered against. `reset()` clears the caches, but
+  // the reads already out kept their handles: the previous board's gradings landed in the
+  // switched-to board's caches, and with `historyLoaded` back to false nothing re-asked, so it
+  // never corrected itself.
+  it('discards an overview load whose board was switched away mid-flight', async () => {
+    const deferred: Array<(r: { gradings: KaizenGrading[]; verified: [] }) => void> = []
+    vi.stubGlobal('useApi', () => ({
+      getKaizenOverview: () =>
+        new Promise<{ gradings: KaizenGrading[]; verified: [] }>((res) => deferred.push(res)),
+    }))
+    const store = useKaizenStore()
+    const load = store.loadOverview()
+    store.reset()
+    deferred[0]!({ gradings: [grading({ id: 'other-board' })], verified: [] })
+    await load
+
+    expect(store.history).toEqual([])
+    // The screen never got its answer, so it must still read as un-asked rather than as loaded
+    // and empty: the next open re-asks against the board it is now on.
+    expect(store.verified).toEqual([])
+  })
+
+  it('discards a per-run load whose board was switched away mid-flight', async () => {
+    const deferred: Array<(r: { gradings: KaizenGrading[] }) => void> = []
+    vi.stubGlobal('useApi', () => ({
+      getKaizenForExecution: () =>
+        new Promise<{ gradings: KaizenGrading[] }>((res) => deferred.push(res)),
+    }))
+    const store = useKaizenStore()
+    const load = store.loadForExecution('exec1')
+    store.reset()
+    deferred[0]!({ gradings: [grading({ id: 'other-board' })] })
+    await load
+
+    expect(store.byExecution).toEqual({})
   })
 
   it('a slower stale loadOverview never clobbers a newer one', async () => {

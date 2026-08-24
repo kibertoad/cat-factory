@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { computed } from 'vue'
 import { useUpsertList } from '~/composables/useUpsertList'
 
 interface Item {
@@ -61,6 +62,78 @@ describe('useUpsertList', () => {
     upsert({ source: 'jira', externalId: '1' }) // same composite key → replace
     upsert({ source: 'gh', externalId: '1' }) // different source → new
     expect(items.value).toHaveLength(2)
+  })
+
+  // Lookups run off a lazily-rebuilt key -> position map. Every write that MOVES an existing
+  // position has to invalidate it, and so does a caller replacing `items` wholesale (which the
+  // returned ref deliberately allows). A stale index answers with the wrong row, so these assert
+  // the identity of what comes back, not just that something did.
+  describe('key index coherence', () => {
+    it('answers correctly after a prepend has shifted every later position', () => {
+      const { upsert, get, indexOf } = useUpsertList<Item>({ key: (x) => x.id, prepend: true })
+      upsert({ id: 'a', v: 1 })
+      expect(indexOf('a')).toBe(0)
+      upsert({ id: 'b', v: 2 })
+      expect(indexOf('a')).toBe(1)
+      expect(get('a')).toEqual({ id: 'a', v: 1 })
+    })
+
+    it('answers correctly after a removal has shifted every later position', () => {
+      const { upsert, remove, get, indexOf } = useUpsertList<Item>({ key: (x) => x.id })
+      upsert({ id: 'a', v: 1 })
+      upsert({ id: 'b', v: 2 })
+      upsert({ id: 'c', v: 3 })
+      expect(indexOf('c')).toBe(2)
+      remove('a')
+      expect(indexOf('c')).toBe(1)
+      expect(get('b')).toEqual({ id: 'b', v: 2 })
+      expect(get('a')).toBeUndefined()
+    })
+
+    it('answers correctly after the caller replaces the list wholesale', () => {
+      const { items, upsert, get } = useUpsertList<Item>({ key: (x) => x.id })
+      upsert({ id: 'a', v: 1 })
+      items.value = [
+        { id: 'b', v: 2 },
+        { id: 'a', v: 7 },
+      ]
+      expect(get('a')).toEqual({ id: 'a', v: 7 })
+      expect(get('b')).toEqual({ id: 'b', v: 2 })
+    })
+
+    // The index is a plain Map, so a reader answered out of an ALREADY-FRESH one depends on
+    // nothing the write it is waiting for touches: an append leaves `items.value` the same array,
+    // so a `computed` that missed on a key would never re-run. That is invisible in the store
+    // that has one reader per key today and a bug the moment a second appears, which is why it is
+    // pinned on the composable rather than on any caller.
+    it('re-runs a computed that MISSED on a key when that key is later appended', () => {
+      const { upsert, get } = useUpsertList<Item>({ key: (x) => x.id })
+      upsert({ id: 'a', v: 1 })
+      const wanted = computed(() => get('b'))
+      expect(wanted.value).toBeUndefined()
+
+      upsert({ id: 'b', v: 2 })
+      expect(wanted.value).toEqual({ id: 'b', v: 2 })
+    })
+
+    it('re-runs a computed whose item moved under a prepend', () => {
+      const { upsert, indexOf } = useUpsertList<Item>({ key: (x) => x.id, prepend: true })
+      upsert({ id: 'a', v: 1 })
+      const position = computed(() => indexOf('a'))
+      expect(position.value).toBe(0)
+
+      upsert({ id: 'b', v: 2 })
+      expect(position.value).toBe(1)
+    })
+
+    it('answers correctly after hydrate replaces the list', () => {
+      const { upsert, hydrate, get } = useUpsertList<Item>({ key: (x) => x.id })
+      upsert({ id: 'a', v: 1 })
+      expect(get('a')).toEqual({ id: 'a', v: 1 })
+      hydrate([{ id: 'b', v: 2 }])
+      expect(get('a')).toBeUndefined()
+      expect(get('b')).toEqual({ id: 'b', v: 2 })
+    })
   })
 
   it('seeds from initial without aliasing the caller array', () => {

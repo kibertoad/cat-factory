@@ -23,6 +23,7 @@
 import { computed, ref, watch } from 'vue'
 import { useModalBehavior } from '@modular-vue/core'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
+import RunDetailLoadState from '~/components/panels/RunDetailLoadState.vue'
 import StepEffortReport from '~/components/panels/StepEffortReport.vue'
 import StepValidationReport from '~/components/panels/StepValidationReport.vue'
 import StepReproductionReport from '~/components/panels/StepReproductionReport.vue'
@@ -134,6 +135,22 @@ const activeStep = computed(() => {
   return execution.getInstance(view.instanceId)?.steps[view.stepIndex] ?? null
 })
 const effortReport = computed(() => activeStep.value?.effortReport ?? null)
+/**
+ * The run this window is about, and the fetch that makes it WHOLE. The board snapshot carries a
+ * lean projection (`projectExecutionForBoard`) whose steps withhold their captured prose, which is
+ * exactly what the windows mounted in this slot render. Asking here rather than in each window is
+ * the same reasoning as the trailing sections above: the host mounts exactly one window, so no
+ * window can forget to ask, and a run already held whole costs nothing (`ensureFull` returns).
+ */
+const activeInstanceId = computed(() => ui.resultView?.instanceId ?? null)
+// Watched through `fullFetchKey`, not the id: a full refresh lands a lean projection over an open
+// run, and at a newer revision the store cannot carry the cached prose forward, so the window has
+// to ask again rather than render the withheld fields as an absence.
+watch(
+  () => execution.fullFetchKey(activeInstanceId.value),
+  () => void execution.ensureFull(activeInstanceId.value),
+  { immediate: true },
+)
 // The step's PRE-PR VALIDATION report — the second universal trailing section, resolved the same
 // way and for the same reason: every window whose step ran a coding job can show whether the
 // checkout actually passed the service's checks before the PR opened (and, on a red run, exactly
@@ -291,6 +308,8 @@ const panelClass = computed(() => [
             <UIcon name="i-lucide-x" class="h-4 w-4" />
           </button>
         </header>
+        <!-- Whether the whole-run fetch behind this window's prose has landed. -->
+        <RunDetailLoadState :instance-id="activeInstanceId" />
         <!-- The window body. -->
         <slot />
 

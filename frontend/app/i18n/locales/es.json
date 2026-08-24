@@ -1705,6 +1705,10 @@
       "dryRun": "Ejecución de prueba: no fusionar nada",
       "dryRunForced": "Ejecución de prueba: las ejecuciones de tu rol nunca se fusionan aquí",
       "dryRunHint": "Esta ejecución abre una pull request y no fusiona nada."
+    },
+    "runDetail": {
+      "loading": "Cargando la ejecución completa…",
+      "loadFailed": "No se pudo cargar la ejecución completa: {reason}"
     }
   },
   "observability": {

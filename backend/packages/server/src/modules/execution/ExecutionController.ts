@@ -3,6 +3,7 @@ import {
   cancelExecutionContract,
   exportExecutionLlmMetricsContract,
   getExecutionAgentContextContract,
+  getExecutionContract,
   getExecutionLlmMetricsContract,
   getExecutionSearchQueriesContract,
   getExecutionToolCallFailuresContract,
@@ -19,6 +20,7 @@ import {
   startExecutionContract,
   resolveStepExceededContract,
 } from '@cat-factory/contracts'
+import { NotFoundError } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import { runWithInitiator } from '../../github/runInitiatorContext.js'
@@ -283,6 +285,19 @@ function registerExecutionTelemetryRoutes(app: Hono<AppEnv>): void {
       await c.get('container').spendService.usageBreakdown(param(c, 'workspaceId')),
       200,
     )
+  })
+
+  // One run, WHOLE. The board snapshot serves a lean projection that withholds each step's
+  // captured prose (`projectExecutionForBoard`), so the step-detail overlays fetch the run they
+  // are about through here. A 404 rather than a null body: an id the workspace does not hold is
+  // a 404 like every other point-read, and an overlay reading `null` as "this step said nothing"
+  // is exactly the withheld-vs-absent confusion the projection exists to avoid.
+  buildHonoRoute(app, getExecutionContract, async (c) => {
+    const executionId = c.req.valid('param').executionId
+    const workspaceId = param(c, 'workspaceId')
+    const instance = await c.get('container').executionRepository.get(workspaceId, executionId)
+    if (!instance) throw new NotFoundError('Run', executionId)
+    return c.json(instance, 200)
   })
 
   // LLM observability for a run: the full per-call detail (prompts, responses,

@@ -1,13 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type {
-  AgentContextSnapshot,
-  AgentSearchQuery,
-  LlmCallActivity,
-  LlmCallMetric,
-} from '~/types/execution'
+import type { LlmCallActivity, LlmCallMetric } from '~/types/execution'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { createToolCallSinkState } from '~/stores/observability/toolCalls'
+import { createAgentContextSinkState } from '~/stores/observability/agentContext'
+import { useSingleFlight } from '~/composables/useSingleFlight'
 
 /**
  * LLM observability state: the full per-call model activity for a run (prompts,
@@ -24,6 +21,13 @@ export const useObservabilityStore = defineStore('observability', () => {
   const workspace = useWorkspaceStore()
 
   /**
+   * One in-flight read per run for the call log below. Its load is triggered by a panel OPENING,
+   * and two openers in one tick is the normal case (the window and its shell, a deep link plus the
+   * click behind it), so it fired twice for one answer. The extracted sinks hold their own.
+   */
+  const loads = useSingleFlight<string, void>()
+
+  /**
    * The TOOL-CALL sink, extracted whole: two reads at two different bounds, plus the rule that
    * keeps them apart (see `observability/toolCalls.ts`). The store owns the workspace binding and
    * nothing else about it.
@@ -34,22 +38,28 @@ export const useObservabilityStore = defineStore('observability', () => {
     fetchFailures: (executionId) => api.getToolCallFailures(workspace.requireId(), executionId),
   })
 
-  /** Per-execution-id call list (newest first). */
-  const callsByExecution = ref<Record<string, LlmCallMetric[]>>({})
-  /** Per-execution-id provided-context snapshot list (newest first). */
-  const contextByExecution = ref<Record<string, AgentContextSnapshot[]>>({})
-  /** Execution ids whose context is currently loading. */
-  const contextLoading = ref<Set<string>>(new Set())
   /**
-   * Last context-load error message per execution id, or null. Distinguishes a genuine fetch
-   * failure from a run with no captured context: without this, a swallowed error rendered as
-   * the "no context stored" empty state — indistinguishable from success-with-nothing.
+   * The AGENT-CONTEXT and SEARCH-QUERY sinks, extracted as one pair for the same reason as the
+   * tool-call one beside it: both are per-dispatch records the panel loads on open and neither is
+   * pushed live (see `observability/agentContext.ts`).
    */
-  const contextErrors = ref<Record<string, string | null>>({})
-  /** Per-execution-id performed-search-query list (newest first). */
-  const searchQueriesByExecution = ref<Record<string, AgentSearchQuery[]>>({})
-  /** Execution ids whose search queries are currently loading. */
-  const searchQueriesLoading = ref<Set<string>>(new Set())
+  const agentContext = createAgentContextSinkState({
+    ready: () => !!workspace.workspaceId,
+    fetchContext: (executionId) => api.getAgentContext(workspace.requireId(), executionId),
+    fetchSearchQueries: (executionId) => api.getSearchQueries(workspace.requireId(), executionId),
+  })
+
+  /**
+   * Per-execution-id call list (newest first).
+   *
+   * DELIBERATELY UNCAPPED. A per-run cap was tried and removed: the rows it evicted are the ones
+   * this panel exists to show, and no eviction rule can tell an operator which call they now
+   * cannot read. What bounds this store instead costs nothing: {@link appendCall} folds live
+   * events only into runs whose panel has been OPENED, and {@link reset} drops every run on a
+   * board switch. What is left growing is one open run's own log while someone watches it, which
+   * is a list they asked for and are reading.
+   */
+  const callsByExecution = ref<Record<string, LlmCallMetric[]>>({})
   /** Execution ids currently loading. */
   const loading = ref<Set<string>>(new Set())
   /** Execution ids currently exporting. */
@@ -75,7 +85,11 @@ export const useObservabilityStore = defineStore('observability', () => {
   }
 
   /** Load (or refresh) the per-call detail for a run. */
-  async function load(executionId: string) {
+  function load(executionId: string): Promise<void> {
+    return loads.run(`calls:${executionId}`, () => fetchCalls(executionId))
+  }
+
+  async function fetchCalls(executionId: string) {
     if (!workspace.workspaceId) return
     withFlag(loading, executionId, true)
     errors.value = { ...errors.value, [executionId]: null }
@@ -141,58 +155,23 @@ export const useObservabilityStore = defineStore('observability', () => {
       responseText: '',
       reasoningText: '',
     }
-    callsByExecution.value = { ...callsByExecution.value, [executionId]: [row, ...existing] }
-  }
-
-  function contextFor(executionId: string): AgentContextSnapshot[] {
-    return contextByExecution.value[executionId] ?? []
-  }
-  function isContextLoading(executionId: string): boolean {
-    return contextLoading.value.has(executionId)
-  }
-
-  /** Load (or refresh) the per-dispatch provided-context snapshots for a run. */
-  async function loadContext(executionId: string) {
-    if (!workspace.workspaceId) return
-    withFlag(contextLoading, executionId, true)
-    contextErrors.value = { ...contextErrors.value, [executionId]: null }
-    try {
-      const { snapshots } = await api.getAgentContext(workspace.requireId(), executionId)
-      contextByExecution.value = { ...contextByExecution.value, [executionId]: snapshots }
-    } catch (err) {
-      // Record the error so the panel can offer a retry instead of masquerading the failure as
-      // the "no context stored" empty state.
-      contextErrors.value = {
-        ...contextErrors.value,
-        [executionId]: err instanceof Error ? err.message : 'Failed to load context',
-      }
-    } finally {
-      withFlag(contextLoading, executionId, false)
+    callsByExecution.value = {
+      ...callsByExecution.value,
+      [executionId]: [row, ...existing],
     }
   }
 
-  function searchQueriesFor(executionId: string): AgentSearchQuery[] {
-    return searchQueriesByExecution.value[executionId] ?? []
-  }
-  function isSearchQueriesLoading(executionId: string): boolean {
-    return searchQueriesLoading.value.has(executionId)
-  }
-
-  /** Load (or refresh) the performed web-search queries for a run. */
-  async function loadSearchQueries(executionId: string) {
-    if (!workspace.workspaceId) return
-    withFlag(searchQueriesLoading, executionId, true)
-    try {
-      const { searchQueries } = await api.getSearchQueries(workspace.requireId(), executionId)
-      searchQueriesByExecution.value = {
-        ...searchQueriesByExecution.value,
-        [executionId]: searchQueries,
-      }
-    } catch {
-      // Best-effort: the panel shows an empty state; nothing is persisted client-side.
-    } finally {
-      withFlag(searchQueriesLoading, executionId, false)
-    }
+  /**
+   * Drop every per-run cache. Called on a board SWITCH: an execution id is scoped to the board
+   * that owns it, nothing here is part of the snapshot, and no id was ever evicted otherwise, so
+   * without this the session accumulates every run of every board it visits. Each panel re-loads
+   * on open, which is how these were populated in the first place.
+   */
+  function reset() {
+    callsByExecution.value = {}
+    errors.value = {}
+    agentContext.resetAgentContext()
+    toolCalls.resetToolCalls()
   }
 
   /**
@@ -220,21 +199,14 @@ export const useObservabilityStore = defineStore('observability', () => {
   return {
     callsByExecution,
     callsFor,
+    reset,
     isLoading,
     isExporting,
     errors,
     load,
     appendCall,
     downloadExport,
-    contextByExecution,
-    contextErrors,
-    contextFor,
-    isContextLoading,
-    loadContext,
-    searchQueriesByExecution,
-    searchQueriesFor,
-    isSearchQueriesLoading,
-    loadSearchQueries,
+    ...agentContext,
     ...toolCalls,
   }
 })

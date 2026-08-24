@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AgentState, PipelineStep } from '~/types/domain'
+import { stepHasOutput } from '@cat-factory/contracts'
 import { agentKindMeta } from '~/utils/catalog'
 import {
   subtaskIconClass,
@@ -120,7 +121,7 @@ const ITEM_ICON: Record<string, string> = {
           {{ agentKindMeta(s.agentKind).label }}
         </span>
         <UIcon
-          v-if="s.output"
+          v-if="stepHasOutput(s)"
           name="i-lucide-file-text"
           class="h-2.5 w-2.5 shrink-0 text-slate-500"
         />

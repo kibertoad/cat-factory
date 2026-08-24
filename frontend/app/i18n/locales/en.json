@@ -1809,6 +1809,10 @@
       "dryRun": "Dry run: merge nothing",
       "dryRunForced": "Dry run: your role's runs never merge here",
       "dryRunHint": "This run opens a pull request and merges nothing."
+    },
+    "runDetail": {
+      "loading": "Loading the full run…",
+      "loadFailed": "Couldn't load the full run: {reason}"
     }
   },
   "observability": {

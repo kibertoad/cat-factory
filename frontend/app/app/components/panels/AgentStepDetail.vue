@@ -28,6 +28,7 @@ import {
   runIsActive,
 } from '~/utils/pipelineRender'
 import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
+import RunDetailLoadState from '~/components/panels/RunDetailLoadState.vue'
 
 // Detail overlay for a single pipeline step. Opened by clicking an agent in the
 // inspector list (TaskExecution) or the focus-view pipeline (PipelineProgress) via
@@ -52,6 +53,24 @@ const ctx = computed(() => ui.stepDetail)
 const instance = computed(() => execution.getInstance(ctx.value?.instanceId))
 const step = computed(() =>
   ctx.value ? (instance.value?.steps[ctx.value.stepIndex] ?? null) : null,
+)
+/**
+ * The run this overlay is about, and the fetch that makes it WHOLE. The board snapshot carries a
+ * lean projection (`projectExecutionForBoard`) whose steps withhold the very prose this reader
+ * renders, so opening a step asks for the run behind it. A run the store already holds whole (one
+ * a live `execution` event delivered, or one already fetched) costs nothing.
+ *
+ * Watched through `fullFetchKey` rather than the id, because the run does not stop being a
+ * projection once this overlay is open: any full refresh lands a lean projection over it, and at a
+ * NEWER revision the store cannot carry the cached prose forward. Keyed on the id, the reader
+ * would blank under an open overlay with nothing left to refill it.
+ */
+watch(
+  () => execution.fullFetchKey(ctx.value?.instanceId ?? null),
+  () => void execution.ensureFull(ctx.value?.instanceId ?? null),
+  {
+    immediate: true,
+  },
 )
 const block = computed(() => (instance.value ? board.getBlock(instance.value.blockId) : undefined))
 const agent = computed(() => (step.value ? agentKindMeta(step.value.agentKind) : null))
@@ -265,6 +284,9 @@ const approval = useStepApproval({
   approvalId: () => approvalId.value,
   approvalPending: () => approvalPending.value && !dedicatedPark.value,
   companionExceeded: () => companionExceeded.value,
+  // The editor seeds from the step's prose, which a board projection withholds until the
+  // whole-run read above lands.
+  runIsWhole: () => instance.value?.projected !== true,
   close,
 })
 const {
@@ -277,6 +299,7 @@ const {
   draftProposal,
   rejectArmed,
   canRequestChanges,
+  canEditProposal,
   quorum: gateQuorum,
   viewerHasApproved,
   approvalWouldClearGate,
@@ -486,6 +509,9 @@ async function copyOutput() {
           />
         </div>
       </header>
+
+      <!-- Whether the whole-run fetch behind this reader's prose has landed. -->
+      <RunDetailLoadState :instance-id="ctx?.instanceId ?? null" />
 
       <div ref="scrollEl" class="flex-1 overflow-auto px-6 py-6" @scroll="onScroll">
         <div class="mx-auto max-w-3xl space-y-5">
@@ -974,7 +1000,7 @@ async function copyOutput() {
           size="sm"
           icon="i-lucide-pencil"
           block
-          :disabled="rejectArmed || submitting || !!gateRefusal"
+          :disabled="rejectArmed || submitting || !!gateRefusal || !canEditProposal"
           @click="startEditing"
         >
           {{ t('panels.stepDetail.approveWithCorrections') }}

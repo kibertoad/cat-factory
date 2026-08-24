@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { isDryRun } from '@cat-factory/contracts'
+import { isDryRun, stepHasOutput } from '@cat-factory/contracts'
 import type { Block } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
 import {
@@ -390,7 +390,7 @@ async function mergePr() {
               class="flex min-w-0 cursor-pointer items-center gap-2 text-start transition hover:text-white"
               data-testid="run-step-open"
               :title="
-                s.output
+                stepHasOutput(s)
                   ? t('inspector.execution.viewDetailsOutput')
                   : t('inspector.execution.viewDetails')
               "
@@ -412,7 +412,7 @@ async function mergePr() {
                 {{ t('inspector.execution.companion') }}
               </span>
               <UIcon
-                :name="s.output ? 'i-lucide-book-open-text' : 'i-lucide-info'"
+                :name="stepHasOutput(s) ? 'i-lucide-book-open-text' : 'i-lucide-info'"
                 class="h-3.5 w-3.5 shrink-0 text-slate-500"
               />
             </button>

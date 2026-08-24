@@ -1,5 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { computed } from 'vue'
 import { useExecutionStore } from '~/stores/execution'
+import { useWorkspaceStore } from '~/stores/workspace'
 import type { ExecutionInstance } from '~/types/domain'
 
 /**
@@ -321,5 +323,299 @@ describe('execution store per-block index', () => {
     expect(store.getByBlock('b1')?.status).toBe('running')
     store.upsert({ ...blockRun('e1', 'b1', 'done'), rev: 2 } as unknown as ExecutionInstance)
     expect(store.getByBlock('b1')?.status).toBe('done')
+  })
+})
+
+/**
+ * The board snapshot serves a LEAN PROJECTION of every run: each step's captured prose is
+ * withheld and the instance says so (`projected`). These pin the reconcile rule that makes a
+ * refresh safe to land on top of a run the cache already holds whole.
+ */
+describe('execution store lean-projection reconcile', () => {
+  let store: ReturnType<typeof useExecutionStore>
+  beforeEach(() => {
+    store = useExecutionStore()
+  })
+
+  /** A run whose single step carries prose. */
+  function whole(rev: number, output = 'the full prose'): ExecutionInstance {
+    return {
+      id: 'e1',
+      blockId: 'b1',
+      status: 'running',
+      rev,
+      outputHistory: [{ stepIndex: 0, output: 'superseded' }],
+      steps: [{ agentKind: 'coder', state: 'done', output }],
+    } as unknown as ExecutionInstance
+  }
+
+  /** The same run as the snapshot serves it. */
+  function projected(rev: number): ExecutionInstance {
+    return {
+      id: 'e1',
+      blockId: 'b1',
+      status: 'running',
+      rev,
+      projected: true,
+      steps: [{ agentKind: 'coder', state: 'done', hasOutput: true }],
+    } as unknown as ExecutionInstance
+  }
+
+  it('carries the withheld prose forward at an equal revision, and stops calling it a projection', () => {
+    // The real sequence: a board load, then the live event that carries the whole run, then the
+    // next refresh landing the projection again at the revision the event already delivered.
+    store.hydrate([projected(4)], 'ws1')
+    store.upsert(whole(4))
+    store.hydrate([projected(4)], 'ws1')
+    const held = store.getInstance('e1')!
+    expect(held.steps[0]!.output).toBe('the full prose')
+    expect(held.outputHistory).toHaveLength(1)
+    expect(held.projected).toBe(false)
+  })
+
+  it('does not paste stale prose under a NEWER revision of the run', () => {
+    store.hydrate([projected(4)], 'ws1')
+    store.upsert(whole(4))
+    store.hydrate([projected(5)], 'ws1')
+    const held = store.getInstance('e1')!
+    expect(held.steps[0]!.output).toBeUndefined()
+    expect(held.outputHistory).toBeUndefined()
+    // Still marked, so the overlay knows to fetch the whole run rather than read an absence.
+    expect(held.projected).toBe(true)
+  })
+
+  it('keeps the projection marked when the cache held only a projection too', () => {
+    store.hydrate([projected(4)], 'ws1')
+    store.hydrate([projected(4)], 'ws1')
+    expect(store.getInstance('e1')!.projected).toBe(true)
+  })
+
+  it('applies the same carry-forward to a projection arriving through upsert', () => {
+    store.hydrate([whole(4)], 'ws1')
+    store.upsert(projected(4))
+    expect(store.getInstance('e1')!.steps[0]!.output).toBe('the full prose')
+  })
+
+  it('leaves a whole run delivered by an event alone', () => {
+    store.hydrate([projected(4)], 'ws1')
+    store.upsert(whole(5, 'fresh prose'))
+    const held = store.getInstance('e1')!
+    expect(held.steps[0]!.output).toBe('fresh prose')
+    expect(held.projected).toBeUndefined()
+  })
+})
+
+/**
+ * `instances` is a SHALLOW ref, so every write site has to announce itself. A regression here is
+ * silent in the product (a card just stops updating), which is why the three write shapes are
+ * pinned through a derived value rather than by reading the array back.
+ */
+describe('execution store shallow-ref write sites', () => {
+  let store: ReturnType<typeof useExecutionStore>
+  beforeEach(() => {
+    store = useExecutionStore()
+  })
+
+  function stepRun(id: string, rev: number, output?: string): ExecutionInstance {
+    return {
+      id,
+      blockId: `blk_${id}`,
+      status: 'running',
+      rev,
+      steps: [{ agentKind: 'coder', state: 'done', output }],
+    } as unknown as ExecutionInstance
+  }
+
+  it('a replace, an index assignment, a push and an echo each invalidate a derived read', async () => {
+    const seen = computed(() => store.instances.map((e) => `${e.id}:${e.steps[0]?.output ?? ''}`))
+
+    store.hydrate([stepRun('e1', 1, 'first')], 'ws1')
+    expect(seen.value).toEqual(['e1:first'])
+
+    // push
+    store.upsert(stepRun('e2', 1, 'other'))
+    expect(seen.value).toEqual(['e1:first', 'e2:other'])
+
+    // index assignment
+    store.upsert(stepRun('e1', 2, 'second'))
+    expect(seen.value).toEqual(['e1:second', 'e2:other'])
+
+    // in-place patch through the one echo seam
+    await store.echoAfter(
+      'e1',
+      () => Promise.resolve('echoed'),
+      (state, instance) => {
+        instance.steps[0]!.output = state
+      },
+    )
+    expect(seen.value).toEqual(['e1:echoed', 'e2:other'])
+  })
+})
+
+/**
+ * The chain the UI actually reads through, which is NOT `store.instances`: every window resolves
+ * `computed(() => getInstance(id))`, then that run's step, then one field on it. Each link is
+ * identity-stable, and Vue stops propagating a recomputed value that is `===` the previous one, so
+ * a write that patches the cached objects IN PLACE reaches the first computed and dies there. The
+ * spec above reads the array, which cannot see that; this one is the reader's own chain.
+ */
+describe('execution store shallow-ref writes through the reader chain', () => {
+  let store: ReturnType<typeof useExecutionStore>
+  beforeEach(() => {
+    store = useExecutionStore()
+  })
+
+  function forkRun(rev: number, chat: string[]): ExecutionInstance {
+    return {
+      id: 'e1',
+      blockId: 'b1',
+      status: 'blocked',
+      rev,
+      currentStep: 0,
+      steps: [{ agentKind: 'coder', forkDecision: { status: 'answering', chat } }],
+    } as unknown as ExecutionInstance
+  }
+
+  it('an echo reaches a value derived through getInstance and the step', async () => {
+    // Exactly `ForkDecisionWindow.vue`: instance, then step, then the chat on it.
+    const instance = computed(() => store.getInstance('e1'))
+    const step = computed(
+      () =>
+        instance.value?.steps[0] as unknown as
+          | { forkDecision?: { chat: string[]; status: string } }
+          | undefined,
+    )
+    const chat = computed(() => step.value?.forkDecision?.chat ?? [])
+
+    store.hydrate([forkRun(1, ['human'])], 'ws1')
+    expect(chat.value).toEqual(['human'])
+
+    await store.echoAfter(
+      'e1',
+      () => Promise.resolve({ status: 'answering', chat: ['human', 'echoed'] }),
+      (state, held) => {
+        ;(held.steps[0] as unknown as { forkDecision: unknown }).forkDecision = state
+      },
+    )
+    // Unguarded (an in-place patch), this stayed ['human'] and the "thinking…" bubble spun on.
+    expect(chat.value).toEqual(['human', 'echoed'])
+  })
+
+  it('an echo onto the RUN itself reaches a value derived through getInstance', async () => {
+    const gate = computed(
+      () => (store.getInstance('e1') as unknown as { inputGate?: { state: string } })?.inputGate,
+    )
+    store.hydrate([forkRun(1, [])], 'ws1')
+    expect(gate.value).toBeUndefined()
+
+    await store.echoAfter(
+      'e1',
+      () => Promise.resolve({ state: 'released' }),
+      (state, held) => {
+        ;(held as unknown as { inputGate: unknown }).inputGate = state
+      },
+    )
+    expect(gate.value).toEqual({ state: 'released' })
+  })
+})
+
+/**
+ * The whole-run read behind the step-detail overlays: WHEN a reader has to ask, and what it is
+ * told while the answer is missing. Both are things the overlay cannot work out for itself, which
+ * is why they are the store's to state.
+ */
+describe('execution store whole-run reads', () => {
+  let store: ReturnType<typeof useExecutionStore>
+  // Every read here FAILS: the pending/failed states are the ones the overlay cannot work out for
+  // itself, and the success path is covered by the projection reconcile above.
+  let reads: number
+  beforeEach(() => {
+    reads = 0
+    useWorkspaceStore().workspaceId = 'ws1'
+    vi.stubGlobal('useApi', () => ({
+      getExecution: () => {
+        reads += 1
+        return Promise.reject(new Error('network down'))
+      },
+    }))
+    store = useExecutionStore()
+  })
+
+  function lean(rev: number): ExecutionInstance {
+    return {
+      id: 'e1',
+      blockId: 'b1',
+      status: 'running',
+      rev,
+      projected: true,
+      steps: [{ agentKind: 'coder', state: 'done', hasOutput: true }],
+    } as unknown as ExecutionInstance
+  }
+
+  function full(rev: number): ExecutionInstance {
+    return {
+      id: 'e1',
+      blockId: 'b1',
+      status: 'running',
+      rev,
+      steps: [{ agentKind: 'coder', state: 'done', output: 'prose' }],
+    } as unknown as ExecutionInstance
+  }
+
+  it('asks nothing for a run held whole, and asks AGAIN when a newer projection lands on it', () => {
+    store.hydrate([lean(4)], 'ws1')
+    const first = store.fullFetchKey('e1')
+    expect(first).not.toBeNull()
+
+    store.upsert(full(4))
+    // Held whole: an overlay opening now must not fire a point-read.
+    expect(store.fullFetchKey('e1')).toBeNull()
+
+    // A full refresh lands the lean projection again, one revision on, so the prose it withholds
+    // is no longer the prose the cache holds and cannot be carried forward. The key has to CHANGE,
+    // or the watch that fired on open never fires again and the open overlay blanks for good.
+    store.hydrate([lean(5)], 'ws1')
+    const reasked = store.fullFetchKey('e1')
+    expect(reasked).not.toBeNull()
+    expect(reasked).not.toBe(first)
+  })
+
+  it('withholds a recorded failure once the run arrives whole by another route', async () => {
+    store.hydrate([lean(4)], 'ws1')
+    await store.ensureFull('e1')
+    expect(store.fullError('e1')).toBe('network down')
+    expect(store.isFullPending('e1')).toBe(false)
+
+    // A live `execution` event delivers every run complete, and it knows nothing about the fetch
+    // that failed. A banner saying the run could not be loaded, over prose that loaded, is worse
+    // than no banner.
+    store.upsert(full(5))
+    expect(store.fullError('e1')).toBeNull()
+  })
+
+  it('drops the read bookkeeping on a board switch', async () => {
+    store.hydrate([lean(4)], 'ws1')
+    await store.ensureFull('e1')
+    expect(store.fullError('e1')).toBe('network down')
+
+    store.resetFullReads()
+    expect(store.fullError('e1')).toBeNull()
+    expect(store.isFullPending('e1')).toBe(false)
+  })
+
+  it('makes ONE request for two overlays opening the same run, and re-asks after a failure', async () => {
+    store.hydrate([lean(4)], 'ws1')
+    // The window and its shell both ask in the same tick, on the heaviest row of the run.
+    await Promise.all([store.ensureFull('e1'), store.ensureFull('e1')])
+    expect(reads).toBe(1)
+
+    // The retry is what the reader is waiting on now, so the previous failure stops being the
+    // thing the surface reports the moment the new attempt starts.
+    const retry = store.ensureFull('e1')
+    expect(store.fullError('e1')).toBeNull()
+    expect(store.isFullPending('e1')).toBe(true)
+    await retry
+    expect(reads).toBe(2)
+    expect(store.fullError('e1')).toBe('network down')
   })
 })

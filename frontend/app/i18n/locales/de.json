@@ -2291,6 +2291,10 @@
       "dryRun": "Probelauf: nichts zusammenführen",
       "dryRunForced": "Probelauf: Läufe deiner Rolle werden hier nie zusammengeführt",
       "dryRunHint": "Dieser Lauf öffnet einen Pull Request und führt nichts zusammen."
+    },
+    "runDetail": {
+      "loading": "Vollständiger Lauf wird geladen…",
+      "loadFailed": "Vollständiger Lauf konnte nicht geladen werden: {reason}"
     }
   },
   "layout": {
