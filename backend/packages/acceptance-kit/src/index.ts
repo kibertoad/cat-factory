@@ -78,6 +78,7 @@ export {
   OperatorRefusal,
   type ShellFlavour,
   assignFor,
+  capped,
   describeFailure,
   describeThrown,
   envAssignment,
@@ -131,6 +132,7 @@ export {
   baseUrlStep,
   describeProbeFailure,
   probeFailureVerdict,
+  transportChainText,
 } from './probeFailure.js'
 export {
   type AcquireOptions,

@@ -2,19 +2,22 @@ import { CatFactoryApiError } from '@cat-factory/sdk'
 import { describe, expect, it } from 'vitest'
 import { formatDuration, formatExpiry, formatOutage, waitFor } from './deadline.js'
 import { deploymentOutageTolerance } from './deploymentOutage.js'
+import { sdkRefusedAfter, sdkTransportFailure } from './testing/sdkFailures.js'
 
-/** A transport failure in the shape Node actually produces: the cause is the informative half. */
-function refusedConnection(): Error {
-  return new TypeError('fetch failed', {
-    cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8787'), {
-      code: 'ECONNREFUSED',
-    }),
-  })
+// The transport failures below are DRIVEN through a real SDK client rather than built here, because
+// the probe a tolerance actually reads is `client.tasks.getRun(...)`: the kit never calls `fetch`
+// itself, so a bare undici `TypeError` is a shape no wait in this suite can be handed. It stopped
+// being a distinction without a difference when the SDK began composing its own message (ADR 0060),
+// which is what an expiry quotes.
+
+/** A deployment that stopped listening, seen by a client it had been answering. */
+function refusedConnection(): Promise<Error> {
+  return sdkRefusedAfter(3)
 }
 
-/** The same shape, for a cause that is a CONFIGURATION fault rather than a restart. */
-function transportFailure(code: string, message: string): Error {
-  return new TypeError('fetch failed', { cause: Object.assign(new Error(message), { code }) })
+/** The same, for a cause that is a CONFIGURATION fault rather than a restart. */
+function transportFailure(code: string, message: string): Promise<Error> {
+  return sdkTransportFailure({ message, code, answeredCalls: 3 })
 }
 
 /**
@@ -91,7 +94,7 @@ describe('waitFor', () => {
       onProgress: (state) => seen.push(state),
       probe: async () => {
         calls += 1
-        if (calls <= 2) throw refusedConnection()
+        if (calls <= 2) throw await refusedConnection()
         return { done: true, value: 'settled' }
       },
     })
@@ -110,7 +113,7 @@ describe('waitFor', () => {
         intervalMs: 1,
         tolerate: deploymentOutageTolerance(5),
         probe: async () => {
-          throw refusedConnection()
+          throw await refusedConnection()
         },
       }),
     ).rejects.toThrow(/stopped answering[\s\S]*ECONNREFUSED[\s\S]*run itself may well be fine/)
@@ -130,7 +133,7 @@ describe('waitFor', () => {
         probe: async () => {
           calls += 1
           if (calls === 1) return { done: false, state: "step 3 'coder' working" }
-          throw refusedConnection()
+          throw await refusedConnection()
         },
       }),
     ).rejects.toThrow(/Last observed: step 3 'coder' working[\s\S]*ran out mid-outage/)
@@ -139,7 +142,10 @@ describe('waitFor', () => {
   it('refuses a transport failure that is a configuration fault, not a restart', async () => {
     // A DNS entry that stopped resolving is its own diagnosis, and every second spent sitting on it
     // is a second before the operator reads it, followed by a message blaming a restart.
-    const dnsFailure = transportFailure('ENOTFOUND', 'getaddrinfo ENOTFOUND cat-factory.invalid')
+    const dnsFailure = await transportFailure(
+      'ENOTFOUND',
+      'getaddrinfo ENOTFOUND cat-factory.invalid',
+    )
     await expect(
       waitFor({
         label: 'x',
@@ -162,7 +168,7 @@ describe('waitFor', () => {
       tolerate: deploymentOutageTolerance(500),
       probe: async () => {
         calls += 1
-        if (calls === 1) throw transportFailure('ECONNRESET', 'socket hang up')
+        if (calls === 1) throw await transportFailure('ECONNRESET', 'socket hang up')
         return { done: true, value: 'settled' }
       },
     })

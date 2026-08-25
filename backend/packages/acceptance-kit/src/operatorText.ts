@@ -170,6 +170,20 @@ export function scrubbed(value: string): string {
 }
 
 /**
+ * A string cut to a budget, SAYING what it dropped.
+ *
+ * The one place that phrasing lives, because the sentence is the whole safety property: a reader who
+ * assumes they are looking at a whole account of a failure takes the last thing they can see as the
+ * last thing that happened. kernel's chain renderer states its own cut the same way; this is for the
+ * strings that do not come from it (a message another package composed, an observation written once
+ * per poll).
+ */
+export function capped(value: string, maxChars: number): string {
+  const dropped = value.length - maxChars
+  return dropped > 0 ? `${value.slice(0, maxChars)} (+${dropped} more chars)` : value
+}
+
+/**
  * A value as ONE single-quoted shell word, scrubbed, and safe whatever it holds.
  *
  * The scrub is the same one as above: these commands are printed beside the steps. The quoting is

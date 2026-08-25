@@ -43,31 +43,37 @@ what that loses is the tail, which is the failure and the summary. `runPass` ans
 
 **Where things live**
 
-| File                   | What                                                                                                                         |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `pass.ts`              | A whole pass, and the boundary that reports a bug in the suite without losing the run id or the resume.                      |
-| `scenarioRunner.ts`    | The driver: order is the array, bail is the behaviour, the gate runs per gated scenario, no timeout of its own.              |
-| `preflight.ts`         | Prerequisite vocabulary, the runner that evaluates every one, the refusal, and the gate.                                     |
-| `probeFailure.ts`      | What a THROWN probe was, as three disjoint states with different remedies.                                                   |
-| `deadline.ts`          | The clock. Every wait states its last observation; the outage tolerance is injected, never assumed.                          |
-| `deploymentOutage.ts`  | Which thrown poll is a restart worth sitting through, and for how long.                                                      |
-| `ledger.ts`            | The resumable ledger, generic over a suite's own fact type. Identity rule, `latest` pointer, `recordsFacts`.                 |
-| `passFiles.ts`         | Where a pass's files live and which passes a directory holds. A relative state dir is resolved ONCE, and REFUSED here.       |
-| `journal.ts`           | The append-only progress record. A write here may never break a pass.                                                        |
-| `client.ts`            | The two SDK clients, the run/decision descriptions, and the poll that returns on an ANSWERABLE decision.                     |
-| `decisions.ts`         | The two kinds answered, what is answerable NOW, and the refusals. The most conservative module here.                         |
-| `runDriver.ts`         | One started run to terminal, under ONE budget spanning every park.                                                           |
-| `resume.ts`            | File or adopt; the four states a resumed pass can find.                                                                      |
-| `resource.ts`          | The same, for a resource the SUITE provisions: record before observing, adopt over re-provisioning, release on CONFIRMATION. |
-| `brief.ts`             | The description-cap branch, read from the contracts' own caps. Over the attachment cap it REFUSES rather than cuts.          |
-| `consoleCredential.ts` | The opt-in `CredentialRetry`: its OWN subpath export, so the base package holds no terminal code.                            |
-| `evidence.ts`          | Report reductions: a `Check` per claim, so a failing pass reports every unmet one. Provider-NEUTRAL prose throughout.        |
-| `operatorText.ts`      | Describers, scrubbing, and the shell dialect table.                                                                          |
-| `suiteIdentity.ts`     | Who is running, and the commands rendered from it.                                                                           |
+| File                   | What                                                                                                                                                |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pass.ts`              | A whole pass, and the boundary that reports a bug in the suite without losing the run id or the resume.                                             |
+| `scenarioRunner.ts`    | The driver: order is the array, bail is the behaviour, the gate runs per gated scenario, no timeout of its own.                                     |
+| `preflight.ts`         | Prerequisite vocabulary, the runner that evaluates every one, the refusal, and the gate.                                                            |
+| `probeFailure.ts`      | What a THROWN probe was, as three disjoint states with different remedies, and which of the two renderings of a transport failure each reader gets. |
+| `deadline.ts`          | The clock. Every wait states its last observation; the outage tolerance is injected, never assumed.                                                 |
+| `deploymentOutage.ts`  | Which thrown poll is a restart worth sitting through, for how long, and what one observation of it says.                                            |
+| `ledger.ts`            | The resumable ledger, generic over a suite's own fact type. Identity rule, `latest` pointer, `recordsFacts`.                                        |
+| `passFiles.ts`         | Where a pass's files live and which passes a directory holds. A relative state dir is resolved ONCE, and REFUSED here.                              |
+| `journal.ts`           | The append-only progress record. A write here may never break a pass.                                                                               |
+| `client.ts`            | The two SDK clients, the run/decision descriptions, and the poll that returns on an ANSWERABLE decision.                                            |
+| `decisions.ts`         | The two kinds answered, what is answerable NOW, and the refusals. The most conservative module here.                                                |
+| `runDriver.ts`         | One started run to terminal, under ONE budget spanning every park.                                                                                  |
+| `resume.ts`            | File or adopt; the four states a resumed pass can find, plus what a create that never completed leaves behind.                                      |
+| `resource.ts`          | The same, for a resource the SUITE provisions: record before observing, adopt over re-provisioning, release on CONFIRMATION.                        |
+| `brief.ts`             | The description-cap branch, read from the contracts' own caps. Over the attachment cap it REFUSES rather than cuts.                                 |
+| `consoleCredential.ts` | The opt-in `CredentialRetry`: its OWN subpath export, so the base package holds no terminal code.                                                   |
+| `evidence.ts`          | Report reductions: a `Check` per claim, so a failing pass reports every unmet one. Provider-NEUTRAL prose throughout.                               |
+| `operatorText.ts`      | Describers, scrubbing, and the shell dialect table.                                                                                                 |
+| `suiteIdentity.ts`     | Who is running, and the commands rendered from it.                                                                                                  |
 
 **Tests** live beside the sources (`src/*.test.ts`) and need no infrastructure: everything here is
 pure over its seams, including the clients (a stubbed `globalThis.fetch`) and the ledger and journal
 (a temp directory).
+
+**A transport failure in a test is DRIVEN through a real SDK client** (`src/testing/sdkFailures.ts`,
+excluded from the build), never written out by hand. Nothing here calls `fetch` itself, so a bare
+undici `TypeError` is a shape no module here can be handed, and the wrapper's message is assembled by
+the SDK rather than fixed: the hand-written copies of its previous sentence stayed green through the
+release that changed what an operator reads.
 
 **See also:** [`backend/internal/acceptance`](../../internal/acceptance/AGENTS.md),
 [`backend/docs/public-api.md`](../../docs/public-api.md), [`sdk/README.md`](../../../sdk/README.md).

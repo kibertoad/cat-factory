@@ -16,10 +16,21 @@
 // **What resuming never does is assume.** Every adoption re-reads the deployment: a ledger naming
 // a task the board no longer holds files a fresh one and says so, and a run that is still working
 // is re-attached to rather than restarted.
+//
+// **The create itself is the one point no ordering can cover**, because the id is minted on the far
+// side of it (README rule 9). A create whose answer is lost leaves a task no ledger names, and the
+// next pass files a second one against the same default branch. Closing that needs a
+// caller-supplied idempotency key on `/api/v1`, which is a permanent shape on a frozen surface and
+// a decision of its own; what this module owes meanwhile is to SAY so, and to say it only when the
+// failure supports it. `createFailure` is that, and the SDK's own diagnosis is what makes the
+// distinction available (ADR 0060).
 
+import type { ConnectionFailureCause } from '@cat-factory/kernel'
 import { type CatFactoryClient, CatFactoryNotFoundError, type PublicRun } from '@cat-factory/sdk'
 import { type CredentialRetry, describeRun, isTerminal } from './client.js'
 import type { Journal } from './journal.js'
+import { OperatorRefusal } from './operatorText.js'
+import { describeProbeFailure } from './probeFailure.js'
 import { type DriveResult, driveRun } from './runDriver.js'
 
 /**
@@ -203,9 +214,81 @@ async function taskExists(client: CatFactoryClient, taskId: string): Promise<boo
   }
 }
 
+/**
+ * Whether a create that never completed may nonetheless have LANDED, per cause.
+ *
+ * The create is the one window a client cannot close (README rule 9): the id is recorded on the
+ * line after it, so a create the deployment served and whose answer was lost leaves a task no
+ * ledger names. What decides which of the two happened is the cause, and the SDK's diagnosis is
+ * what supplies it (ADR 0060): a socket that died under the request or a deadline that expired
+ * leaves the server free to have acted, while a refused connection, a name that does not resolve, a
+ * network with no route to the host, and a handshake or a header the client itself rejected all
+ * failed before any origin accepted the request.
+ *
+ * `unknown` and `aborted` count as landed, and that asymmetry is deliberate: the cost of checking a
+ * board that holds nothing is a minute, and the cost of assuming an unread failure created nothing
+ * is a second run of the same pipeline against the same default branch.
+ *
+ * An exhaustive `Record`, so a cause added to kernel's vocabulary fails this file to compile and
+ * gets a decision rather than defaulting into either half.
+ */
+const CREATE_MAY_HAVE_LANDED: Record<ConnectionFailureCause, boolean> = {
+  reset: true,
+  timeout: true,
+  aborted: true,
+  unknown: true,
+  refused: false,
+  dns: false,
+  unreachable: false,
+  'tls-untrusted': false,
+  'tls-expired': false,
+  'tls-hostname': false,
+  'tls-protocol': false,
+  'invalid-header': false,
+}
+
+/**
+ * What a create that did not complete leaves behind, said in the terms the next pass needs.
+ *
+ * A refusal the DEPLOYMENT stated is not this: it carries a status, a code and a request id, the
+ * task was not filed, and re-wrapping it would bury all three. Everything else is one of two
+ * facts, and they call for opposite actions, so the pass says which one it is rather than leaving
+ * an operator to read a transport chain and guess. An answer that came back unreadable counts as
+ * in doubt for the same reason a reset does: the deployment acted and only the reply was lost.
+ */
+function createFailure(error: unknown, label: string): unknown {
+  const failure = describeProbeFailure(error)
+  if (failure.kind === 'answered') return error
+  const inDoubt = failure.kind === 'foreign' || CREATE_MAY_HAVE_LANDED[failure.cause]
+  if (!inDoubt) {
+    return new OperatorRefusal(
+      `Filing '${label}' failed before any origin accepted the request, so nothing was created ` +
+        `and a re-run starts from where this pass stopped.\n\n${failure.detail}`,
+      { cause: error },
+    )
+  }
+  return new OperatorRefusal(
+    `Filing '${label}' got no usable answer, so whether the task exists is UNKNOWN: the ` +
+      `deployment may have filed it and lost the reply on the way back, and an id that never ` +
+      `arrives is an id nothing can record.\n\n` +
+      `Before re-running, look on the board for a task filed for '${label}'. If one is there, ` +
+      `nothing has been spent on it yet (no run was started), so delete it: a re-run finds ` +
+      `nothing recorded and files a second one, and two runs against one repository's default ` +
+      `branch race on the same branch.\n\n` +
+      `The account below says whether the deployment had been answering this client, which is ` +
+      `the evidence for which of the two happened.\n\n${failure.detail}`,
+    { cause: error },
+  )
+}
+
 async function fileTask(options: FileAndDriveOptions): Promise<string> {
   const { createTask, journal, label, onRecord } = options
-  const { taskId } = await createTask()
+  // On the REJECTION only: a `createTask` that throws synchronously is a bug in the suite building
+  // its request body, and reporting that as a create whose fate is unknown would send an operator to
+  // search a board for a task nothing ever tried to file.
+  const { taskId } = await createTask().catch((error: unknown) => {
+    throw createFailure(error, label)
+  })
   // Recorded BEFORE anything is started: a process killed between the create and the start would
   // otherwise leave a task on the board that no ledger names and no resume can find.
   onRecord({ taskId, runId: null, pullRequestUrl: null, answeredKinds: [] })

@@ -42,11 +42,19 @@
 // connection" button in the product already answers through. This module relays that verdict, adds
 // the other two kinds, and contributes only what neither can know: that this base URL was typed
 // into a file by hand.
+//
+// The SDK now describes its own transport failures too (ADR 0060: a verdict, the origin history
+// only that client holds, then the runtime's chain verbatim), so the first kind has TWO renderings
+// of one throw and this module owns the choice between them. A refusal printed once carries the
+// SDK's whole account (`transportAccount`); a line written every poll interval carries the chain
+// alone (`transportChainText`), because the account's prose restates a cause class that line
+// already names and its prefix is the wrong half to keep.
 
 import {
   connectionFailureHint,
   describeConnectionFailure,
   errorChainText,
+  MAX_ERROR_CHAIN_CHARS,
   MAX_LOGGED_ERROR_CHAIN_CHARS,
 } from '@cat-factory/kernel'
 import type {
@@ -54,9 +62,14 @@ import type {
   ConnectionFailureContext,
   ConnectionFailureDescription,
 } from '@cat-factory/kernel'
-import { CatFactoryApiError, CatFactoryDecodeError, CatFactoryTimeoutError } from '@cat-factory/sdk'
+import {
+  CatFactoryApiError,
+  CatFactoryConnectionError,
+  CatFactoryDecodeError,
+  CatFactoryTimeoutError,
+} from '@cat-factory/sdk'
 import { DeploymentAnswerError } from './deploymentApi.js'
-import { scrubbed, shellQuoted } from './operatorText.js'
+import { capped, scrubbed, shellQuoted } from './operatorText.js'
 import type { PrerequisiteVerdict, Remedy } from './preflight.js'
 import type { SuiteIdentity } from './suiteIdentity.js'
 
@@ -315,6 +328,54 @@ function detailOf(error: unknown): string {
 }
 
 /**
+ * A transport failure as the SDK's OWN account of it, rather than that account with the chain
+ * rendered a second time underneath it.
+ *
+ * Since the SDK began composing its message (ADR 0060) a `CatFactoryConnectionError` carries three
+ * parts: what happened, what that client had already seen from the origin, and the runtime's chain
+ * verbatim. Walking the chain again therefore prints the runtime's links twice, and the second copy
+ * arrives after the sentence that already quoted them:
+ *
+ *     … nothing is listening at http://127.0.0.1:8787. This client had answered 9 calls …
+ *     (connect ECONNREFUSED 127.0.0.1:8787): connect ECONNREFUSED 127.0.0.1:8787
+ *
+ * The account is relayed instead, for the same reason the remedy relays kernel's hint: the producer
+ * of a failure writes the better sentence about it, and a second rendering here is a copy that
+ * drifts. What it adds over the bare chain is the two things only the client knows, which call
+ * failed and whether the origin had been answering, and that second one is what separates a
+ * deployment that restarted from an address that never answered.
+ *
+ * Scrubbed, because a base URL may legitimately carry userinfo and this message is built from one,
+ * and capped, because a link of the chain the SDK rendered can be a provider's HTML error page.
+ */
+function transportAccount(error: unknown, described: string): string {
+  if (!(error instanceof CatFactoryConnectionError)) return described
+  const account = scrubbed(error.message).trim()
+  return account ? capped(account, MAX_LOGGED_ERROR_CHAIN_CHARS) : described
+}
+
+/**
+ * The RUNTIME's own account of a thrown probe, without the SDK's composed sentence around it.
+ *
+ * The other half of the split above, for the other reader. A refusal printed ONCE takes the whole
+ * account; a line written every poll interval for as long as an outage lasts takes this, because
+ * the cause class is already on that line, the SDK's verdict restates it, and the chain is what
+ * separates one outage from another. It is also exactly the half a PREFIX cut of the account drops,
+ * since the SDK keeps the chain last: capped at 200 characters against a real deployment URL, an
+ * expiry that used to name `connect ECONNREFUSED` named neither the errno nor the address.
+ *
+ * A `CatFactoryConnectionError` with no cause (the SDK raises one for a stream that carried no body)
+ * has nothing under it, so the wrapper itself is the runtime's account.
+ */
+export function transportChainText(
+  error: unknown,
+  maxChars: number = MAX_ERROR_CHAIN_CHARS,
+): string {
+  const runtime = error instanceof CatFactoryConnectionError ? (error.cause ?? error) : error
+  return errorChainText(runtime, maxChars)
+}
+
+/**
  * kernel's transport verdict, with the ONE cause it cannot see corrected.
  *
  * The SDK's own deadline arrives as a `CatFactoryTimeoutError` whose abort marker is deliberately
@@ -394,7 +455,7 @@ export function describeProbeFailure(
   return {
     kind: 'unanswered',
     cause,
-    detail,
+    detail: transportAccount(error, detail),
     remedy: buildRemedy(
       [...(hint ? [hint] : unclassifiedSteps(probe.target)), baseUrlStep(probe.target, identity)],
       probe.target,

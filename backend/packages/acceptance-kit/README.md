@@ -10,22 +10,22 @@ worked example. What is here is that suite with the suite taken out.
 
 ## What it gives you
 
-| Module              | What                                                                                                                                                                                              |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scenarioRunner.ts` | The driver: scenarios in the order given, in ONE process, bailing at the first failure, with the prerequisite gate before every gated one.                                                        |
-| `preflight.ts`      | The prerequisite vocabulary (`satisfied` / `unsatisfied` / `unknown`, each negative verdict carrying a rendered `Remedy`), the runner that evaluates every one, and the gate that refuses a pass. |
-| `probeFailure.ts`   | What a THROWN probe was: never answered (with kernel's transport class), answered with a refusal (the SDK's status, `code` and request id), or answered by something that is not the deployment.  |
-| `deadline.ts`       | Waits that state their LAST OBSERVATION when they expire, plus the tolerance that sits through a deployment restart rather than dying on one refused connection.                                  |
-| `ledger.ts`         | The resumable ledger: a synchronous write per fact, the copied-file refusal, the `latest` pointer, and the "has this pass created anything" rule. Generic over your own fact type.                |
-| `journal.ts`        | The append-only progress record, so a pass an operator walked away from can be watched (and read afterwards) from another window.                                                                 |
-| `client.ts`         | The two SDK clients (fast-refusing before a pass has spent anything, restart-absorbing during one), the descriptions a long wait prints, and the poll that returns on an ANSWERABLE decision.     |
-| `decisions.ts`      | Answering `follow-ups` and `clarity-review` and hard-failing on every other kind, which is what stops an unattended loop from driving a run past a decision a person was meant to make.           |
-| `runDriver.ts`      | Driving one started run to a terminal state under ONE budget spanning every park.                                                                                                                 |
-| `resume.ts`         | File a task, or adopt / re-attach to what a previous pass left, recorded at all three points a pass can be interrupted between.                                                                   |
-| `resource.ts`       | The same discipline for a RESOURCE your suite provisions itself: recorded before it can be observed, adopted rather than re-provisioned, released only when the provider agrees it is gone.       |
-| `brief.ts`          | Getting a real brief onto a task whatever its size: under the description cap it is the description, over it an attached document, and past the attachment cap it is REFUSED rather than cut.     |
-| `evidence.ts`       | Reductions over the PR verification report, so a scenario asserts on what the platform COMPUTED rather than on agent prose.                                                                       |
-| `pass.ts`           | The pass itself: banner, scenarios, summary, closing words, exit code, and the boundary that reports a bug in the suite without losing the resume.                                                |
+| Module              | What                                                                                                                                                                                                                                            |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scenarioRunner.ts` | The driver: scenarios in the order given, in ONE process, bailing at the first failure, with the prerequisite gate before every gated one.                                                                                                      |
+| `preflight.ts`      | The prerequisite vocabulary (`satisfied` / `unsatisfied` / `unknown`, each negative verdict carrying a rendered `Remedy`), the runner that evaluates every one, and the gate that refuses a pass.                                               |
+| `probeFailure.ts`   | What a THROWN probe was: never answered (with kernel's transport class, and the SDK's own account of it relayed whole), answered with a refusal (the SDK's status, `code` and request id), or answered by something that is not the deployment. |
+| `deadline.ts`       | Waits that state their LAST OBSERVATION when they expire, plus the tolerance that sits through a deployment restart rather than dying on one refused connection.                                                                                |
+| `ledger.ts`         | The resumable ledger: a synchronous write per fact, the copied-file refusal, the `latest` pointer, and the "has this pass created anything" rule. Generic over your own fact type.                                                              |
+| `journal.ts`        | The append-only progress record, so a pass an operator walked away from can be watched (and read afterwards) from another window.                                                                                                               |
+| `client.ts`         | The two SDK clients (fast-refusing before a pass has spent anything, restart-absorbing during one), the descriptions a long wait prints, and the poll that returns on an ANSWERABLE decision.                                                   |
+| `decisions.ts`      | Answering `follow-ups` and `clarity-review` and hard-failing on every other kind, which is what stops an unattended loop from driving a run past a decision a person was meant to make.                                                         |
+| `runDriver.ts`      | Driving one started run to a terminal state under ONE budget spanning every park.                                                                                                                                                               |
+| `resume.ts`         | File a task, or adopt / re-attach to what a previous pass left, recorded at all three points a pass can be interrupted between.                                                                                                                 |
+| `resource.ts`       | The same discipline for a RESOURCE your suite provisions itself: recorded before it can be observed, adopted rather than re-provisioned, released only when the provider agrees it is gone.                                                     |
+| `brief.ts`          | Getting a real brief onto a task whatever its size: under the description cap it is the description, over it an attached document, and past the attachment cap it is REFUSED rather than cut.                                                   |
+| `evidence.ts`       | Reductions over the PR verification report, so a scenario asserts on what the platform COMPUTED rather than on agent prose.                                                                                                                     |
+| `pass.ts`           | The pass itself: banner, scenarios, summary, closing words, exit code, and the boundary that reports a bug in the suite without losing the resume.                                                                                              |
 
 One further module is a SEPARATE entry point, `@cat-factory/acceptance-kit/console-credential`, so
 the base package stays free of terminal code: `createConsoleCredential()` builds the
@@ -127,16 +127,19 @@ it is rather than the obvious way.
    pull request is read off the run's REPORT (`checkEphemeralEnvironment`); a claim about the
    MERGED code is provisioned fresh from the default branch. Neither half can cover both.
 
-9. **The create itself is the one window a client cannot close, and a resumed pass must be read
-   knowing it.** `fileAndDrive` records a task id on the line after the create, which is as early as
-   any client can: if the create's response is lost in transit, the deployment may have made the row
-   and the id never reaches the caller, so nothing is recorded and the next pass files a second task.
-   That is the same rule as 7 meeting the one state a client cannot observe itself entering, and it
-   is not fixable by reordering: closing it needs a caller-supplied idempotency key on the `/api/v1`
-   writes that cost real work, which is a permanent shape on a frozen surface and a decision of its
-   own. What a pass leaves behind is a task with no run started and no budget spent, and the SDK's
-   connection diagnosis is what tells this apart from a create that never landed: it names the cause
-   and says whether the deployment had been answering.
+9. **The create itself is the one window a client cannot close, so the pass SAYS which side of it
+   the failure fell on.** `fileAndDrive` records a task id on the line after the create, which is as
+   early as any client can: if the create's response is lost in transit, the deployment may have made
+   the row and the id never reaches the caller, so nothing is recorded and the next pass files a
+   second task. That is the same rule as 7 meeting the one state a client cannot observe itself
+   entering, and it is not fixable by reordering: closing it needs a caller-supplied idempotency key
+   on the `/api/v1` writes that cost real work, which is a permanent shape on a frozen surface and a
+   decision of its own. What is fixable is the guessing. A create that failed before any origin
+   accepted the request created nothing and a re-run is clean; one that died under the request, timed
+   out or came back unreadable may have filed a task with no run started and no budget spent, and
+   that one is a refusal telling an operator to look at the board first. The SDK's connection
+   diagnosis is what makes the two separable, and its account of the origin (whether this client had
+   been answered, and how recently) travels with the instruction.
 
 ## Seams
 
