@@ -1,5 +1,17 @@
 # @cat-factory/local-server
 
+## 0.140.5
+
+### Patch Changes
+
+- Updated dependencies [95f75fc]
+  - @cat-factory/agents@0.142.3
+  - @cat-factory/binary-generators@0.3.7
+  - @cat-factory/orchestration@0.287.1
+  - @cat-factory/server@0.305.1
+  - @cat-factory/node-server@0.214.5
+  - @cat-factory/executor-harness@1.131.0
+
 ## 0.140.4
 
 ### Patch Changes

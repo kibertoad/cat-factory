@@ -1,5 +1,17 @@
 # @cat-factory/worker
 
+## 0.200.6
+
+### Patch Changes
+
+- Updated dependencies [95f75fc]
+  - @cat-factory/agents@0.142.3
+  - @cat-factory/binary-generators@0.3.7
+  - @cat-factory/consensus@0.17.4
+  - @cat-factory/orchestration@0.287.1
+  - @cat-factory/provider-cloudflare@0.7.496
+  - @cat-factory/server@0.305.1
+
 ## 0.200.5
 
 ### Patch Changes
