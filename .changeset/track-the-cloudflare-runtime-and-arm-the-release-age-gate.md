@@ -55,7 +55,20 @@ nothing stopped being pinned, and the floor drops to 80. Each floor now records 
 measured it, and `docs/internal/mutation-testing.md` makes a Stryker major a re-measure, because a
 floor is only a fact about the mutator set behind it.
 
-Also drops `@cat-factory/deploy-harness` from the refresh's changeset. Nothing in that package moved,
-and its version IS the deploy image tag, so versioning it would have rolled every deploy pin to
-0.2.16 and republished a byte-identical image, contradicting the same changeset's statement that the
-deploy image stays at 0.2.15.
+**The unchanged deploy image was republished, and a guard now stops the next one.** #2076's
+changeset listed `@cat-factory/deploy-harness` while nothing in that package moved, and its version
+IS the deploy image tag. Release #2077 consumed that changeset before the correction could land, so
+`cat-factory-deploy` went 0.2.15 to 0.2.16 with only a CHANGELOG and a version field behind it, and
+every pin rolled to a tag naming a byte-identical image. That is spent; versions do not go
+backwards, so 0.2.16 stands.
+
+What is fixable is the recurrence. `scripts/check-image-harness-changesets.mjs` refuses a changeset
+that versions an image harness when nothing that goes into that image changed on the branch. It is
+the exact converse of `check-runner-image-tag.mjs`, which asks whether a source change bumped the
+tag; neither direction implies the other, and both are silent when violated. The incident replays
+as its first fixture.
+
+Two claims in the previous release's changelog entry are wrong and are corrected here rather than
+rewritten there, since that entry is published history: Stryker 10's only breaking change was not
+the Node 20 drop, and `@cloudflare/workers-types` settles at an exact `5.20260815.1` rather than the
+`^5.20260823.1` that entry names.
