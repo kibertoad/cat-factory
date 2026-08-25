@@ -955,8 +955,9 @@ caller with nothing to reason about.
 Two additions to the FOLLOW-UP TRIAGE surface, both about what answering a Coder's question
 actually does.
 
-`POST /api/v1/runs/{runId}/follow-ups/{itemId}/answer` gains an optional `resolution`, either
-`answered` (the default, and byte-for-byte the prior behaviour) or `closed`. The two are different
+`POST /api/v1/runs/{runId}/decisions/follow-ups/items/{itemId}/answer` gains an optional
+`resolution`, either `answered` (the default, and byte-for-byte the prior behaviour) or
+`closed`. The two are different
 acts, and the endpoint previously had no way to tell them apart. `answered` says the reply carries
 information the next Coder pass applies, so the item is folded into a send-back that spends a pass.
 `closed` says the reply RULES ON the question without supplying anything to act on: the Coder asked

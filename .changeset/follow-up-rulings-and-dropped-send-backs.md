@@ -8,6 +8,9 @@
 '@cat-factory/acceptance-kit': minor
 '@cat-factory/conformance': minor
 '@cat-factory/app': minor
+'@cat-factory/sdk': minor
+'@cat-factory/mcp-server': minor
+'@cat-factory/gatekeeper-bindings': minor
 ---
 
 Answering a Coder's question and RULING ON it are now different acts, and a decision the loop
@@ -44,7 +47,19 @@ applied.
 
 **The PR verification report gains a `followUps` section** (payload `version: 10`): what the Coder
 flagged and what was decided, with the three dispositions that mean "not dealt with as triage
-intended" called out above the table rather than left to be derived from a status column.
+intended" called out above the table rather than left to be derived from a status column. Its
+counts (`total`, `dropped`, `dismissedByPolicy`) are taken over every item the run surfaced rather
+than over the rows the entries cap left visible, and the banner quotes `droppedBudget`, summed over
+the steps that actually dropped something. A pipeline may place more than one follow-up-enabled
+Coder, and a budget summed across all of them reads as half-spent while asserting it was spent.
+
+**A stamped drop is not permanent, and an unbudgeted step is not a drop.** Deciding an item again
+clears `sendBackDropped`, so the send-back the budget could not pay for can be sent once the step
+has a pass to spend; the stamp is terminal in the send-back selection, so left set it made that
+item unsendable forever while the window claimed it had been sent. And a step whose `maxLoops` is
+absent (persisted before the field existed) has the loop UNWIRED rather than exhausted: it passes
+through as before instead of stamping every decided item, warning, and banner-ing a budget of 0/0
+that nobody configured.
 
 **The acceptance suite closes questions instead of answering them.** It was the caller in the story
 above, and its own file header had already reasoned through this exact failure for the clarity-review
@@ -57,3 +72,10 @@ therefore rode an attached document, which is the documented way to submit a rea
 reached the implementer as a prompt naming `.cat-context/<file>.md` beside a checkout that had no
 such directory. The agent rebuilt the brief from whatever summary the prompt carried and filed the
 gap as a follow-up question. Bumps the runner image to `cat-factory-executor:1.130.0`.
+
+**The four SDK clients keep their published follow-up type names.** `PublicFollowUpItemKind` and
+`PublicFollowUpItemStatus` are deduped enums, and adding the report's follow-ups section re-pointed
+both onto a name derived from the section instead: a source break in four released clients,
+arriving as ordinary generated churn. Both are now pinned in the emitter's `INLINE_ENUM_NAMES`, so
+the only change to them is `closed` joining the status list. Python and Java are bumped to `0.5.0`,
+which is what publishes them.

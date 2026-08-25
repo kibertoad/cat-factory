@@ -5903,7 +5903,7 @@
     "yourAnswer": "התשובה שלך:",
     "yourRuling": "ההכרעה שלך:",
     "sendBackDropped": "מעולם לא נשלח ל-Coder: תקציב ההחזרות כבר אזל.",
-    "answerPlaceholder": "ענה על שאלה זו — היא משולבת במעבר הבא של ה-Coder…",
+    "answerPlaceholder": "ענה על שאלה זו, ולאחר מכן שלח אותה בחזרה ל-Coder או סגור אותה כמוסדרת…",
     "status": {
       "pending": "דורש החלטה",
       "filed": "הוגש כניושן",

@@ -3601,55 +3601,33 @@ type PrVerificationReport struct {
 
 // PrVerificationReportFollowUps is the `PrVerificationReportFollowUps` wire model.
 type PrVerificationReportFollowUps struct {
-	Dropped  float64                              `json:"dropped"`
-	Entries  []PrVerificationReportFollowUpsEntry `json:"entries"`
-	Loops    float64                              `json:"loops"`
-	MaxLoops float64                              `json:"maxLoops"`
+	DismissedByPolicy float64 `json:"dismissedByPolicy"`
+	Dropped           float64 `json:"dropped"`
+	// DroppedBudget always present; nil when the server has no value for it.
+	DroppedBudget *PrVerificationReportFollowUpsDroppedBudget `json:"droppedBudget"`
+	Entries       []PrVerificationReportFollowUpsEntry        `json:"entries"`
+	Loops         float64                                     `json:"loops"`
+	MaxLoops      float64                                     `json:"maxLoops"`
 	// Note may be absent entirely.
 	Note   *string          `json:"note,omitempty"`
 	Status PrReportCiStatus `json:"status"`
+	Total  float64          `json:"total"`
+}
+
+// PrVerificationReportFollowUpsDroppedBudget is the `PrVerificationReportFollowUpsDroppedBudget` wire model.
+type PrVerificationReportFollowUpsDroppedBudget struct {
+	Loops    float64 `json:"loops"`
+	MaxLoops float64 `json:"maxLoops"`
 }
 
 // PrVerificationReportFollowUpsEntry is the `PrVerificationReportFollowUpsEntry` wire model.
 type PrVerificationReportFollowUpsEntry struct {
-	DismissedByPolicy bool                                     `json:"dismissedByPolicy"`
-	Kind              PrVerificationReportFollowUpsEntryKind   `json:"kind"`
-	SendBackDropped   bool                                     `json:"sendBackDropped"`
-	Status            PrVerificationReportFollowUpsEntryStatus `json:"status"`
-	Title             string                                   `json:"title"`
+	DismissedByPolicy bool                     `json:"dismissedByPolicy"`
+	Kind              PublicFollowUpItemKind   `json:"kind"`
+	SendBackDropped   bool                     `json:"sendBackDropped"`
+	Status            PublicFollowUpItemStatus `json:"status"`
+	Title             string                   `json:"title"`
 }
-
-// PrVerificationReportFollowUpsEntryKind is the `PrVerificationReportFollowUpsEntryKind` vocabulary as carried on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type PrVerificationReportFollowUpsEntryKind string
-
-const (
-	PrVerificationReportFollowUpsEntryKindFollowUp PrVerificationReportFollowUpsEntryKind = "follow_up"
-	PrVerificationReportFollowUpsEntryKindQuestion PrVerificationReportFollowUpsEntryKind = "question"
-)
-
-// PrVerificationReportFollowUpsEntryKindValues lists every PrVerificationReportFollowUpsEntryKind this SDK release knows.
-var PrVerificationReportFollowUpsEntryKindValues = []PrVerificationReportFollowUpsEntryKind{PrVerificationReportFollowUpsEntryKindFollowUp, PrVerificationReportFollowUpsEntryKindQuestion}
-
-// PrVerificationReportFollowUpsEntryStatus is the `PrVerificationReportFollowUpsEntryStatus` vocabulary as carried on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type PrVerificationReportFollowUpsEntryStatus string
-
-const (
-	PrVerificationReportFollowUpsEntryStatusPending   PrVerificationReportFollowUpsEntryStatus = "pending"
-	PrVerificationReportFollowUpsEntryStatusFiled     PrVerificationReportFollowUpsEntryStatus = "filed"
-	PrVerificationReportFollowUpsEntryStatusQueued    PrVerificationReportFollowUpsEntryStatus = "queued"
-	PrVerificationReportFollowUpsEntryStatusAnswered  PrVerificationReportFollowUpsEntryStatus = "answered"
-	PrVerificationReportFollowUpsEntryStatusClosed    PrVerificationReportFollowUpsEntryStatus = "closed"
-	PrVerificationReportFollowUpsEntryStatusDismissed PrVerificationReportFollowUpsEntryStatus = "dismissed"
-)
-
-// PrVerificationReportFollowUpsEntryStatusValues lists every PrVerificationReportFollowUpsEntryStatus this SDK release knows.
-var PrVerificationReportFollowUpsEntryStatusValues = []PrVerificationReportFollowUpsEntryStatus{PrVerificationReportFollowUpsEntryStatusPending, PrVerificationReportFollowUpsEntryStatusFiled, PrVerificationReportFollowUpsEntryStatusQueued, PrVerificationReportFollowUpsEntryStatusAnswered, PrVerificationReportFollowUpsEntryStatusClosed, PrVerificationReportFollowUpsEntryStatusDismissed}
 
 // PrVerificationReportScope is the `PrVerificationReportScope` wire model.
 type PrVerificationReportScope struct {
@@ -4070,12 +4048,12 @@ type PublicDecisionList struct {
 // PublicFollowUpItem is the `PublicFollowUpItem` wire model.
 type PublicFollowUpItem struct {
 	// Answer always present; nil when the server has no value for it.
-	Answer          *string                                  `json:"answer"`
-	Detail          string                                   `json:"detail"`
-	ItemID          string                                   `json:"itemId"`
-	Kind            PrVerificationReportFollowUpsEntryKind   `json:"kind"`
-	SendBackDropped bool                                     `json:"sendBackDropped"`
-	Status          PrVerificationReportFollowUpsEntryStatus `json:"status"`
+	Answer          *string                  `json:"answer"`
+	Detail          string                   `json:"detail"`
+	ItemID          string                   `json:"itemId"`
+	Kind            PublicFollowUpItemKind   `json:"kind"`
+	SendBackDropped bool                     `json:"sendBackDropped"`
+	Status          PublicFollowUpItemStatus `json:"status"`
 	// SuggestedAction always present; nil when the server has no value for it.
 	SuggestedAction *string `json:"suggestedAction"`
 	// TicketExternalID always present; nil when the server has no value for it.
@@ -4084,6 +4062,38 @@ type PublicFollowUpItem struct {
 	TicketURL *string `json:"ticketUrl"`
 	Title     string  `json:"title"`
 }
+
+// PublicFollowUpItemKind is the `PublicFollowUpItemKind` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicFollowUpItemKind string
+
+const (
+	PublicFollowUpItemKindFollowUp PublicFollowUpItemKind = "follow_up"
+	PublicFollowUpItemKindQuestion PublicFollowUpItemKind = "question"
+)
+
+// PublicFollowUpItemKindValues lists every PublicFollowUpItemKind this SDK release knows.
+var PublicFollowUpItemKindValues = []PublicFollowUpItemKind{PublicFollowUpItemKindFollowUp, PublicFollowUpItemKindQuestion}
+
+// PublicFollowUpItemStatus is the `PublicFollowUpItemStatus` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicFollowUpItemStatus string
+
+const (
+	PublicFollowUpItemStatusPending   PublicFollowUpItemStatus = "pending"
+	PublicFollowUpItemStatusFiled     PublicFollowUpItemStatus = "filed"
+	PublicFollowUpItemStatusQueued    PublicFollowUpItemStatus = "queued"
+	PublicFollowUpItemStatusAnswered  PublicFollowUpItemStatus = "answered"
+	PublicFollowUpItemStatusClosed    PublicFollowUpItemStatus = "closed"
+	PublicFollowUpItemStatusDismissed PublicFollowUpItemStatus = "dismissed"
+)
+
+// PublicFollowUpItemStatusValues lists every PublicFollowUpItemStatus this SDK release knows.
+var PublicFollowUpItemStatusValues = []PublicFollowUpItemStatus{PublicFollowUpItemStatusPending, PublicFollowUpItemStatusFiled, PublicFollowUpItemStatusQueued, PublicFollowUpItemStatusAnswered, PublicFollowUpItemStatusClosed, PublicFollowUpItemStatusDismissed}
 
 // PublicFollowUpsDecision is the `PublicFollowUpsDecision` wire model.
 type PublicFollowUpsDecision struct {

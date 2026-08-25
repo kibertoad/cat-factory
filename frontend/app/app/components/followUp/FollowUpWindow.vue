@@ -237,7 +237,10 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
                     :placeholder="t('followUp.answerPlaceholder')"
                     class="w-full resize-y rounded-md border border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-[12px] text-slate-100 placeholder:text-slate-600 focus:border-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
                   />
-                  <div class="flex items-center gap-2">
+                  <!-- Wraps, like the follow-up row below: three buttons whose labels are two
+                       words each in English are one long line in most of the other locales, and
+                       the result window is a narrow panel. -->
+                  <div class="flex flex-wrap items-center gap-2">
                     <UButton
                       size="xs"
                       color="primary"

@@ -8413,11 +8413,15 @@ class PrVerificationReport:
 class PrVerificationReportFollowUps:
     """`PrVerificationReportFollowUps`, as carried on the wire."""
 
+    dismissed_by_policy: float
     dropped: float
     entries: list[PrVerificationReportFollowUpsEntry]
     loops: float
     max_loops: float
     status: PrReportCiStatus
+    total: float
+    #: Always present; ``None`` when the server has no value for it.
+    dropped_budget: PrVerificationReportFollowUpsDroppedBudget | None = None
     #: May be absent entirely.
     note: str | None = None
 
@@ -8429,13 +8433,16 @@ class PrVerificationReportFollowUps:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PrVerificationReportFollowUps":
         """Decode a `PrVerificationReportFollowUps` from its JSON object."""
-        known = {"dropped", "entries", "loops", "maxLoops", "status", "note"}
+        known = {"dismissedByPolicy", "dropped", "entries", "loops", "maxLoops", "status", "total", "droppedBudget", "note"}
         return cls(
+            dismissed_by_policy=data.get("dismissedByPolicy"),
             dropped=data.get("dropped"),
             entries=[PrVerificationReportFollowUpsEntry.from_dict(item) for item in data.get("entries") or []],
             loops=data.get("loops"),
             max_loops=data.get("maxLoops"),
             status=_enum(PrReportCiStatus, data.get("status")),
+            total=data.get("total"),
+            dropped_budget=None if data.get("droppedBudget") is None else PrVerificationReportFollowUpsDroppedBudget.from_dict(data.get("droppedBudget")),
             note=data.get("note"),
             extra={k: v for k, v in data.items() if k not in known},
         )
@@ -8443,13 +8450,46 @@ class PrVerificationReportFollowUps:
     def to_dict(self) -> dict[str, Any]:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
+        out["dismissedByPolicy"] = self.dismissed_by_policy
         out["dropped"] = self.dropped
         out["entries"] = [_encode(item) for item in self.entries]
         out["loops"] = self.loops
         out["maxLoops"] = self.max_loops
         out["status"] = _encode(self.status)
+        out["total"] = self.total
+        out["droppedBudget"] = _encode(self.dropped_budget)
         if self.note is not None:
             out["note"] = self.note
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PrVerificationReportFollowUpsDroppedBudget:
+    """`PrVerificationReportFollowUpsDroppedBudget`, as carried on the wire."""
+
+    loops: float
+    max_loops: float
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PrVerificationReportFollowUpsDroppedBudget":
+        """Decode a `PrVerificationReportFollowUpsDroppedBudget` from its JSON object."""
+        known = {"loops", "maxLoops"}
+        return cls(
+            loops=data.get("loops"),
+            max_loops=data.get("maxLoops"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["loops"] = self.loops
+        out["maxLoops"] = self.max_loops
         return out
 
 
@@ -8458,9 +8498,9 @@ class PrVerificationReportFollowUpsEntry:
     """`PrVerificationReportFollowUpsEntry`, as carried on the wire."""
 
     dismissed_by_policy: bool
-    kind: PrVerificationReportFollowUpsEntryKind
+    kind: PublicFollowUpItemKind
     send_back_dropped: bool
-    status: PrVerificationReportFollowUpsEntryStatus
+    status: PublicFollowUpItemStatus
     title: str
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
@@ -8474,9 +8514,9 @@ class PrVerificationReportFollowUpsEntry:
         known = {"dismissedByPolicy", "kind", "sendBackDropped", "status", "title"}
         return cls(
             dismissed_by_policy=data.get("dismissedByPolicy"),
-            kind=_enum(PrVerificationReportFollowUpsEntryKind, data.get("kind")),
+            kind=_enum(PublicFollowUpItemKind, data.get("kind")),
             send_back_dropped=data.get("sendBackDropped"),
-            status=_enum(PrVerificationReportFollowUpsEntryStatus, data.get("status")),
+            status=_enum(PublicFollowUpItemStatus, data.get("status")),
             title=data.get("title"),
             extra={k: v for k, v in data.items() if k not in known},
         )
@@ -8490,38 +8530,6 @@ class PrVerificationReportFollowUpsEntry:
         out["status"] = _encode(self.status)
         out["title"] = self.title
         return out
-
-
-class PrVerificationReportFollowUpsEntryKind(StrEnum):
-    """The `PrVerificationReportFollowUpsEntryKind` vocabulary.
-    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
-    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
-    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
-    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
-    An UNKNOWN value decodes to the plain string rather than raising: this surface is
-    additive, and a client that refused a value the server legitimately added would break on
-    a release it was never told about.
-    """
-    FOLLOW_UP = "follow_up"
-    QUESTION = "question"
-
-
-class PrVerificationReportFollowUpsEntryStatus(StrEnum):
-    """The `PrVerificationReportFollowUpsEntryStatus` vocabulary.
-    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
-    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
-    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
-    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
-    An UNKNOWN value decodes to the plain string rather than raising: this surface is
-    additive, and a client that refused a value the server legitimately added would break on
-    a release it was never told about.
-    """
-    PENDING = "pending"
-    FILED = "filed"
-    QUEUED = "queued"
-    ANSWERED = "answered"
-    CLOSED = "closed"
-    DISMISSED = "dismissed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -9204,9 +9212,9 @@ class PublicFollowUpItem:
 
     detail: str
     item_id: str
-    kind: PrVerificationReportFollowUpsEntryKind
+    kind: PublicFollowUpItemKind
     send_back_dropped: bool
-    status: PrVerificationReportFollowUpsEntryStatus
+    status: PublicFollowUpItemStatus
     title: str
     #: Always present; ``None`` when the server has no value for it.
     answer: str | None = None
@@ -9229,9 +9237,9 @@ class PublicFollowUpItem:
         return cls(
             detail=data.get("detail"),
             item_id=data.get("itemId"),
-            kind=_enum(PrVerificationReportFollowUpsEntryKind, data.get("kind")),
+            kind=_enum(PublicFollowUpItemKind, data.get("kind")),
             send_back_dropped=data.get("sendBackDropped"),
-            status=_enum(PrVerificationReportFollowUpsEntryStatus, data.get("status")),
+            status=_enum(PublicFollowUpItemStatus, data.get("status")),
             title=data.get("title"),
             answer=data.get("answer"),
             suggested_action=data.get("suggestedAction"),
@@ -9254,6 +9262,38 @@ class PublicFollowUpItem:
         out["ticketExternalId"] = self.ticket_external_id
         out["ticketUrl"] = self.ticket_url
         return out
+
+
+class PublicFollowUpItemKind(StrEnum):
+    """The `PublicFollowUpItemKind` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    FOLLOW_UP = "follow_up"
+    QUESTION = "question"
+
+
+class PublicFollowUpItemStatus(StrEnum):
+    """The `PublicFollowUpItemStatus` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    PENDING = "pending"
+    FILED = "filed"
+    QUEUED = "queued"
+    ANSWERED = "answered"
+    CLOSED = "closed"
+    DISMISSED = "dismissed"
 
 
 @dataclass(frozen=True, slots=True)

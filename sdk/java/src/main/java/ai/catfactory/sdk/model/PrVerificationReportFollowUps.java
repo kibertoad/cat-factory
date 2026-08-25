@@ -11,16 +11,24 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PrVerificationReportFollowUps} wire model.
+ * @param dismissedByPolicy the {@code dismissedByPolicy} field.
  * @param dropped the {@code dropped} field.
+ * @param droppedBudget Always present; {@code null} when the server has no value for it.
  * @param entries the {@code entries} field.
  * @param loops the {@code loops} field.
  * @param maxLoops the {@code maxLoops} field.
  * @param note May be absent entirely.
  * @param status the {@code status} field.
+ * @param total the {@code total} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PrVerificationReportFollowUps(
+    @JsonProperty("dismissedByPolicy") Double dismissedByPolicy,
+
     @JsonProperty("dropped") Double dropped,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("droppedBudget") @Nullable PrVerificationReportFollowUpsDroppedBudget droppedBudget,
 
     @JsonProperty("entries") List<PrVerificationReportFollowUpsEntry> entries,
 
@@ -31,7 +39,9 @@ public record PrVerificationReportFollowUps(
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("note") @Nullable String note,
 
-    @JsonProperty("status") PrReportCiStatus status
+    @JsonProperty("status") PrReportCiStatus status,
+
+    @JsonProperty("total") Double total
 ) {
 
     /** A new builder for {@link PrVerificationReportFollowUps}. */
@@ -46,16 +56,31 @@ public record PrVerificationReportFollowUps(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
+        private @Nullable Double dismissedByPolicy;
         private @Nullable Double dropped;
+        private @Nullable PrVerificationReportFollowUpsDroppedBudget droppedBudget;
         private @Nullable List<PrVerificationReportFollowUpsEntry> entries;
         private @Nullable Double loops;
         private @Nullable Double maxLoops;
         private @Nullable String note;
         private @Nullable PrReportCiStatus status;
+        private @Nullable Double total;
+
+        /** Set {@code dismissedByPolicy}. */
+        public Builder dismissedByPolicy(@Nullable Double dismissedByPolicy) {
+            this.dismissedByPolicy = dismissedByPolicy;
+            return this;
+        }
 
         /** Set {@code dropped}. */
         public Builder dropped(@Nullable Double dropped) {
             this.dropped = dropped;
+            return this;
+        }
+
+        /** Set {@code droppedBudget}. */
+        public Builder droppedBudget(@Nullable PrVerificationReportFollowUpsDroppedBudget droppedBudget) {
+            this.droppedBudget = droppedBudget;
             return this;
         }
 
@@ -89,9 +114,15 @@ public record PrVerificationReportFollowUps(
             return this;
         }
 
+        /** Set {@code total}. */
+        public Builder total(@Nullable Double total) {
+            this.total = total;
+            return this;
+        }
+
         /** Build the {@link PrVerificationReportFollowUps}. */
         public PrVerificationReportFollowUps build() {
-            return new PrVerificationReportFollowUps(dropped, entries, loops, maxLoops, note, status);
+            return new PrVerificationReportFollowUps(dismissedByPolicy, dropped, droppedBudget, entries, loops, maxLoops, note, status, total);
         }
     }
 }

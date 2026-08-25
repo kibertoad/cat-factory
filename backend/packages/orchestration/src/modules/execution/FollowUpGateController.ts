@@ -157,9 +157,19 @@ export class FollowUpGateController {
       return { kind: 'continue' }
     }
     if (verdict === 'exhausted') {
-      // The caller persists (this path returns `undefined` so the ordinary advance/finish logic
-      // runs and writes), so the stamp rides that write.
-      this.reportDroppedSendBacks(workspaceId, instance, state, this.stampExhaustedSendBacks(state))
+      const dropped = this.stampExhaustedSendBacks(state)
+      // COMMIT THE STAMP FIRST, then report it. The caller's own write is a long way off on this
+      // path (this returns `undefined`, so the ordinary advance/finish logic runs a terminal
+      // resolver, every registered post-op and the PR-report publish before anything is
+      // persisted), and any of those may throw. Reporting ahead of the write would leave the warn
+      // and the counter emitted for a drop that never reached the row, and the durable driver's
+      // re-drive would then re-select the same unstamped items and count them again: exactly the
+      // "external side effect guarded by a marker written after" mistake. Persisting here makes
+      // the stamp the claim, so a re-drive reads `settled` and reports nothing. A lost CAS race
+      // throws before either signal fires and is re-driven with nothing stamped, which is also
+      // the safe direction.
+      await this.runStateMachine.persistAndEmit(workspaceId, instance)
+      this.reportDroppedSendBacks(workspaceId, instance, state, dropped)
     }
     return undefined
   }
@@ -463,7 +473,13 @@ export class FollowUpGateController {
       if (item.kind !== 'question') {
         throw new ConflictError('Only question items can be answered')
       }
-      item.status = resolution === 'closed' ? 'closed' : 'answered'
+      // Assigned, not branched on. Both members of `FollowUpResolution` are members of
+      // `FollowUpItemStatus`, so this is byte-for-byte the ternary it replaced today, and it is
+      // the shape that keeps the two picklists honest tomorrow: a third resolution would have to
+      // be a status too or this line stops compiling, where a ternary's `else` would quietly
+      // record every one of them as `answered` and buy a Coder pass to apply a reply that carries
+      // nothing, which is the loop this whole vocabulary exists to end.
+      item.status = resolution
       item.answer = answer
       // Left false on a `closed` item too, and deliberately: nothing was sent, and `sendBackDropped`
       // is what distinguishes "never going to be sent" from "was going to be, and was not".
@@ -521,7 +537,18 @@ export class FollowUpGateController {
         )
         if (index < 0) throw new NotFoundError('Follow-up item', itemId)
         const step = fresh.steps[index]!
-        decide(step.followUps!.items.find((i) => i.id === itemId)!)
+        const target = step.followUps!.items.find((i) => i.id === itemId)!
+        // A fresh decision SUPERSEDES the previous one, so the previous one's send-back
+        // bookkeeping goes with it. Nothing refuses a second decision on an already-decided item
+        // (deliberately: a person may change their mind, and a run parked on a sibling item is
+        // exactly when they do), and the stamp is terminal in `followUpsToSendBack`, so leaving
+        // it set would make a once-dropped item unsendable FOREVER, silently skipped even on a
+        // step with budget left, while the window showed "Sent to Coder" beside "never sent to the
+        // Coder". Cleared here rather than in each `decide` because it is true of every one of
+        // them, `file` and `dismiss` included: those two do not send either, and a "never sent"
+        // note under a filed ticket describes a decision that is no longer the item's.
+        delete target.sendBackDropped
+        decide(target)
 
         const parkedHere =
           fresh.status === 'blocked' &&

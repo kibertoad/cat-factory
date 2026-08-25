@@ -90,6 +90,17 @@ describe('followUp.logic', () => {
     expect(followUpGateVerdict(state([item({ status: 'filed' })]))).toBe('settled')
   })
 
+  it('reads a step with no ceiling as settled, not as a budget that ran out', () => {
+    // `followUpLoopBudget` defaults a missing ceiling to 0 so the loop stops rather than running
+    // unbounded. Reported as `exhausted`, that same 0 would stamp every decided item as discarded,
+    // warn, count under `followup.send_back_dropped` and banner the pull request about a budget
+    // "spent" at 0/0 for a step that never had one. An unwired capability passes through.
+    const unbudgeted = state([item({ id: 'a', status: 'queued' })], { loops: 0, maxLoops: 0 })
+    expect(followUpGateVerdict(unbudgeted)).toBe('settled')
+    // And a ceiling of one still loops, so the guard is on ABSENCE, not on a low budget.
+    expect(followUpGateVerdict({ ...unbudgeted, maxLoops: 1 })).toBe('loop')
+  })
+
   it('collects every closed question as settled, not only the newest', () => {
     const s = state([
       item({ id: 'a', status: 'closed', kind: 'question', answer: 'no' }),

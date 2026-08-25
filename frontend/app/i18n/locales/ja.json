@@ -5903,7 +5903,7 @@
     "yourAnswer": "あなたの回答:",
     "yourRuling": "あなたの裁定:",
     "sendBackDropped": "Coderには送信されませんでした: 差し戻しの予算をすでに使い切っていました。",
-    "answerPlaceholder": "この質問に回答してください。Coderの次のパスに反映されます…",
+    "answerPlaceholder": "この質問に回答し、Coderに返送するか、決着済みとして確定してください…",
     "status": {
       "pending": "判断が必要",
       "filed": "issueとして登録済み",

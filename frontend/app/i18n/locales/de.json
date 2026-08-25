@@ -6480,7 +6480,7 @@
     "yourAnswer": "Deine Antwort:",
     "yourRuling": "Deine Entscheidung:",
     "sendBackDropped": "Nie an den Coder gesendet: das Budget für Rückläufe war bereits aufgebraucht.",
-    "answerPlaceholder": "Beantworte diese Frage – sie fließt in den nächsten Durchlauf des Coders ein…",
+    "answerPlaceholder": "Beantworte diese Frage und sende sie an den Coder zurück oder schließe sie als erledigt ab…",
     "status": {
       "pending": "Braucht eine Entscheidung",
       "filed": "Als Issue eingereicht",

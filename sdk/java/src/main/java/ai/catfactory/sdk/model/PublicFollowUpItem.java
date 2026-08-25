@@ -29,11 +29,11 @@ public record PublicFollowUpItem(
 
     @JsonProperty("itemId") String itemId,
 
-    @JsonProperty("kind") PrVerificationReportFollowUpsEntryKind kind,
+    @JsonProperty("kind") PublicFollowUpItemKind kind,
 
     @JsonProperty("sendBackDropped") Boolean sendBackDropped,
 
-    @JsonProperty("status") PrVerificationReportFollowUpsEntryStatus status,
+    @JsonProperty("status") PublicFollowUpItemStatus status,
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("suggestedAction") @Nullable String suggestedAction,
@@ -62,9 +62,9 @@ public record PublicFollowUpItem(
         private @Nullable String answer;
         private @Nullable String detail;
         private @Nullable String itemId;
-        private @Nullable PrVerificationReportFollowUpsEntryKind kind;
+        private @Nullable PublicFollowUpItemKind kind;
         private @Nullable Boolean sendBackDropped;
-        private @Nullable PrVerificationReportFollowUpsEntryStatus status;
+        private @Nullable PublicFollowUpItemStatus status;
         private @Nullable String suggestedAction;
         private @Nullable String ticketExternalId;
         private @Nullable String ticketUrl;
@@ -89,7 +89,7 @@ public record PublicFollowUpItem(
         }
 
         /** Set {@code kind}. */
-        public Builder kind(@Nullable PrVerificationReportFollowUpsEntryKind kind) {
+        public Builder kind(@Nullable PublicFollowUpItemKind kind) {
             this.kind = kind;
             return this;
         }
@@ -101,7 +101,7 @@ public record PublicFollowUpItem(
         }
 
         /** Set {@code status}. */
-        public Builder status(@Nullable PrVerificationReportFollowUpsEntryStatus status) {
+        public Builder status(@Nullable PublicFollowUpItemStatus status) {
             this.status = status;
             return this;
         }

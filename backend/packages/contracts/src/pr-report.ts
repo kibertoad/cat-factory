@@ -679,12 +679,17 @@ export type PrReportFollowUp = v.InferOutput<typeof prReportFollowUpSchema>
  * the PR itself used to be whatever the agent chose to write into a commit message. Three of the
  * dispositions here are load-bearing for that reader:
  *
- * - `closed` — a question ruled on rather than answered. The reason is the ruling, and a reviewer
+ * - `closed`: a question ruled on rather than answered. The reason is the ruling, and a reviewer
  *   who disagrees with it is looking at a decision, not an oversight.
- * - `sendBackDropped` — a decision that was made and then thrown away when the loop budget ran
+ * - `sendBackDropped`: a decision that was made and then thrown away when the loop budget ran
  *   out. Nothing else on the PR says the run stopped short of what triage asked for.
- * - `dismissedByPolicy` — nobody looked. An unattended run dismisses undecided items so it can
+ * - `dismissedByPolicy`: nobody looked. An unattended run dismisses undecided items so it can
  *   finish, and the resulting item list would otherwise read as a triaged one.
+ *
+ * The three COUNTS below are taken over every item the run surfaced, before `entries` is capped;
+ * `total` is what they were taken over. A count reduced to the shown rows would answer a question
+ * nobody asked ("how many of the visible ones") and would silently read as zero for a run whose
+ * flagged items all fell past the cap.
  *
  * `absent` when the companion was off on every step, or never surfaced anything.
  */
@@ -695,8 +700,24 @@ export const prReportFollowUpsSchema = v.object({
   /** Send-back passes spent and the ceiling they stopped at, summed across enabled steps. */
   loops: v.number(),
   maxLoops: v.number(),
-  /** How many entries carry `sendBackDropped`, so a reader sees the count without scanning. */
+  /** How many items the run surfaced in all, which may exceed `entries.length`. */
+  total: v.number(),
+  /** How many of those carry `sendBackDropped`, so a reader sees the count without scanning. */
   dropped: v.number(),
+  /** How many of those the run's autonomy policy dismissed rather than a person. */
+  dismissedByPolicy: v.number(),
+  /**
+   * The send-back budget the drops were measured against: `loops`/`maxLoops` summed over the steps
+   * that actually dropped something, and null when nothing did.
+   *
+   * Separate from the section-level pair above because that one sums EVERY enabled step, and a
+   * pipeline may place more than one follow-up-enabled Coder. A run whose first Coder exhausted
+   * 3/3 and dropped a decision while its second never looped sums to 3/6, and a banner that
+   * asserted a spent budget over 3-of-6 would be telling a reviewer the platform discarded their
+   * decision with half the budget still available. Summed over the exhausted steps alone the two
+   * numbers are equal by construction, which is the fact the banner is actually claiming.
+   */
+  droppedBudget: v.nullable(v.object({ loops: v.number(), maxLoops: v.number() })),
   entries: v.array(prReportFollowUpSchema),
 })
 export type PrReportFollowUps = v.InferOutput<typeof prReportFollowUpsSchema>

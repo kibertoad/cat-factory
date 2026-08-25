@@ -6201,7 +6201,7 @@
     "yourAnswer": "Your answer:",
     "yourRuling": "Your ruling:",
     "sendBackDropped": "Never sent to the Coder: the send-back budget was already spent.",
-    "answerPlaceholder": "Answer this question — it's folded into the Coder's next pass…",
+    "answerPlaceholder": "Answer this question, then send it back to the Coder or close it as settled…",
     "status": {
       "pending": "Needs a decision",
       "filed": "Filed as issue",

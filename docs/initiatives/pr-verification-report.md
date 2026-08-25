@@ -463,3 +463,17 @@ outstanding triage look like none.
 
 `loops`/`maxLoops` are SUMMED across every follow-up-enabled step. A pipeline may place more than
 one such Coder, and the reviewer's question spans all of them.
+
+Two things follow from that sum, and both were wrong the first time:
+
+- **The banner quotes `droppedBudget`, never `loops`/`maxLoops`.** `droppedBudget` sums only the
+  steps that actually dropped something, so its two numbers are equal by construction, which is
+  what "the budget was spent" claims. Over every enabled step they are not: a run whose first
+  Coder exhausted 3/3 and dropped a decision while its second never looped sums to 3/6, and a
+  reviewer reading 3-of-6 concludes the platform discarded their decision with half the budget
+  still available.
+- **`total`, `dropped` and `dismissedByPolicy` are counted before the entries cap**, and the
+  banner says so when the cap fired rather than promising that what it counts is marked in a table
+  that may not hold it. Recounted off the shown rows, a run whose flagged items all fell past the
+  cap prints zero and suppresses the line, which is the same section's own rule broken one
+  paragraph down.

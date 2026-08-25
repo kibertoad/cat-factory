@@ -5903,7 +5903,7 @@
     "yourAnswer": "Cevabınız:",
     "yourRuling": "Kararınız:",
     "sendBackDropped": "Coder'a hiç gönderilmedi: geri gönderim bütçesi çoktan tükenmişti.",
-    "answerPlaceholder": "Bu soruyu cevaplayın — Coder'ın bir sonraki turuna dahil edilir…",
+    "answerPlaceholder": "Bu soruyu cevaplayın, ardından Coder'a geri gönderin veya çözülmüş olarak kapatın…",
     "status": {
       "pending": "Karar gerekiyor",
       "filed": "Sorun olarak kaydedildi",

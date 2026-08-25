@@ -19,11 +19,11 @@ import org.jspecify.annotations.Nullable;
 public record PrVerificationReportFollowUpsEntry(
     @JsonProperty("dismissedByPolicy") Boolean dismissedByPolicy,
 
-    @JsonProperty("kind") PrVerificationReportFollowUpsEntryKind kind,
+    @JsonProperty("kind") PublicFollowUpItemKind kind,
 
     @JsonProperty("sendBackDropped") Boolean sendBackDropped,
 
-    @JsonProperty("status") PrVerificationReportFollowUpsEntryStatus status,
+    @JsonProperty("status") PublicFollowUpItemStatus status,
 
     @JsonProperty("title") String title
 ) {
@@ -41,9 +41,9 @@ public record PrVerificationReportFollowUpsEntry(
      */
     public static final class Builder {
         private @Nullable Boolean dismissedByPolicy;
-        private @Nullable PrVerificationReportFollowUpsEntryKind kind;
+        private @Nullable PublicFollowUpItemKind kind;
         private @Nullable Boolean sendBackDropped;
-        private @Nullable PrVerificationReportFollowUpsEntryStatus status;
+        private @Nullable PublicFollowUpItemStatus status;
         private @Nullable String title;
 
         /** Set {@code dismissedByPolicy}. */
@@ -53,7 +53,7 @@ public record PrVerificationReportFollowUpsEntry(
         }
 
         /** Set {@code kind}. */
-        public Builder kind(@Nullable PrVerificationReportFollowUpsEntryKind kind) {
+        public Builder kind(@Nullable PublicFollowUpItemKind kind) {
             this.kind = kind;
             return this;
         }
@@ -65,7 +65,7 @@ public record PrVerificationReportFollowUpsEntry(
         }
 
         /** Set {@code status}. */
-        public Builder status(@Nullable PrVerificationReportFollowUpsEntryStatus status) {
+        public Builder status(@Nullable PublicFollowUpItemStatus status) {
             this.status = status;
             return this;
         }

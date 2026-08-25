@@ -5903,7 +5903,7 @@
     "yourAnswer": "Votre réponse :",
     "yourRuling": "Votre décision :",
     "sendBackDropped": "Jamais transmis au Coder : le budget de renvois était déjà épuisé.",
-    "answerPlaceholder": "Répondez à cette question ; elle sera intégrée à la prochaine passe du Coder…",
+    "answerPlaceholder": "Répondez à cette question, puis renvoyez-la au Coder ou clôturez-la comme réglée…",
     "status": {
       "pending": "Nécessite une décision",
       "filed": "Enregistré comme ticket",

@@ -70,11 +70,11 @@ export function followUpLoopBudget(state: FollowUpsStepState): {
 /**
  * What the gate should do with this step's follow-up state, right now.
  *
- * - `pending`  — an item is still undecided; the run parks (or policy dismisses).
- * - `loop`     — there are unsent send-back items and budget to pay for a pass.
- * - `exhausted`— there are unsent send-back items and the budget is SPENT. The run advances, and
- *                what it is advancing past has to be recorded.
- * - `settled`  — nothing left to send; the run advances with nothing dropped.
+ * - `pending`: an item is still undecided; the run parks (or policy dismisses).
+ * - `loop`: there are unsent send-back items and budget to pay for a pass.
+ * - `exhausted`: there are unsent send-back items and the budget is SPENT. The run advances, and
+ *   what it is advancing past has to be recorded.
+ * - `settled`: nothing left to send; the run advances with nothing dropped.
  *
  * A discriminated verdict rather than the boolean this replaced, because three of those four
  * answers used to be the same `false`. The caller could not tell "nothing to send" from "a human's
@@ -88,6 +88,16 @@ export function followUpGateVerdict(state: FollowUpsStepState): FollowUpGateVerd
   if (hasPendingFollowUps(state)) return 'pending'
   if (followUpsToSendBack(state).length === 0) return 'settled'
   const budget = followUpLoopBudget(state)
+  // A step with NO ceiling at all has the send-back loop unwired, which is not the same fact as a
+  // ceiling that ran out, and it must not be reported as one. The engine seeds every follow-up
+  // step with {@link DEFAULT_FOLLOW_UP_MAX_LOOPS}, so this is reachable only for step state
+  // persisted before the field existed, which {@link followUpLoopBudget} deliberately reads as 0
+  // to stop the loop rather than run it unbounded. Read as `exhausted` that same 0 manufactures
+  // the alarm: every such item would be stamped as a discarded decision, warned about, counted
+  // under `followup.send_back_dropped` and banner-ed onto the pull request as a budget that "was
+  // spent", for a budget nobody ever configured. `settled` is the pass-through an unwired
+  // capability owes: byte-for-byte what these rows did before any of this existed.
+  if (budget.maxLoops <= 0) return 'settled'
   return budget.loops < budget.maxLoops ? 'loop' : 'exhausted'
 }
 
@@ -143,12 +153,12 @@ export function renderFollowUpRework(items: FollowUpItem[], settled: FollowUpIte
     // will otherwise do the only thing left to it: restate the uncertainty in the code, the
     // README and the commit message, one wording per pass, and ask again.
     lines.push(
-      'Already settled — do NOT raise these again, and do not rewrite the surrounding ' +
+      'Already settled: do NOT raise these again, and do not rewrite the surrounding ' +
         'comments, docs or commit message to re-argue them. Each was ruled on rather than ' +
         'answered with new information, so there is nothing further to apply:',
     )
     for (const s of settled) {
-      lines.push(`- Q: ${s.title}${s.detail ? ` — ${s.detail}` : ''}`)
+      lines.push(`- Q: ${s.title}${s.detail ? `: ${s.detail}` : ''}`)
       lines.push(`  Ruling: ${s.answer ?? 'settled without further detail'}`)
     }
     lines.push('')

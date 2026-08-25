@@ -5903,7 +5903,7 @@
     "yourAnswer": "Twoja odpowiedź:",
     "yourRuling": "Twoje rozstrzygnięcie:",
     "sendBackDropped": "Nigdy nie trafiło do Codera: budżet zawrotek był już wyczerpany.",
-    "answerPlaceholder": "Odpowiedz na to pytanie — zostanie uwzględnione w kolejnym przebiegu Codera…",
+    "answerPlaceholder": "Odpowiedz na to pytanie, a następnie odeślij je do Codera albo zamknij jako rozstrzygnięte…",
     "status": {
       "pending": "Wymaga decyzji",
       "filed": "Zgłoszone jako zgłoszenie",

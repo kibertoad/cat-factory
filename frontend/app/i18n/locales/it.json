@@ -6480,7 +6480,7 @@
     "yourAnswer": "La tua risposta:",
     "yourRuling": "La tua decisione:",
     "sendBackDropped": "Mai inviato al Coder: il budget dei rinvii era già esaurito.",
-    "answerPlaceholder": "Rispondi a questa domanda — verrà integrata nel prossimo passaggio del Coder…",
+    "answerPlaceholder": "Rispondi a questa domanda, poi inviala al Coder o chiudila come risolta…",
     "status": {
       "pending": "Richiede una decisione",
       "filed": "Registrato come issue",

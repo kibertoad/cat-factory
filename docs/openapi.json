@@ -2405,8 +2405,33 @@
           },
           "followUps": {
             "properties": {
+              "dismissedByPolicy": {
+                "type": "number"
+              },
               "dropped": {
                 "type": "number"
+              },
+              "droppedBudget": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "loops": {
+                        "type": "number"
+                      },
+                      "maxLoops": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "loops",
+                      "maxLoops"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "entries": {
                 "items": {
@@ -2472,13 +2497,19 @@
                   "absent"
                 ],
                 "type": "string"
+              },
+              "total": {
+                "type": "number"
               }
             },
             "required": [
               "status",
               "loops",
               "maxLoops",
+              "total",
               "dropped",
+              "dismissedByPolicy",
+              "droppedBudget",
               "entries"
             ],
             "type": "object"

@@ -5903,7 +5903,7 @@
     "yourAnswer": "Tu respuesta:",
     "yourRuling": "Tu decisión:",
     "sendBackDropped": "Nunca se envió al Coder: el presupuesto de reenvíos ya estaba agotado.",
-    "answerPlaceholder": "Responde a esta pregunta; se integrará en la próxima pasada del Coder…",
+    "answerPlaceholder": "Responde a esta pregunta y devuélvela al Coder o ciérrala como zanjada…",
     "status": {
       "pending": "Requiere una decisión",
       "filed": "Registrado como incidencia",

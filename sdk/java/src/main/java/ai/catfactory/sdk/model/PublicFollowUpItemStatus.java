@@ -8,14 +8,18 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code PrVerificationReportFollowUpsEntryKind} vocabulary.
+ * The {@code PublicFollowUpItemStatus} vocabulary.
  * Decoding an unrecognised value yields {@link #UNRECOGNIZED} rather than throwing, and {@link
  * #wireValue()} still returns what the server actually sent. This surface is additive, so refusing
  * a value the server legitimately added would break a caller on a release it was never told about.
  */
-public enum PrVerificationReportFollowUpsEntryKind {
-    FOLLOW_UP("follow_up"),
-    QUESTION("question"),
+public enum PublicFollowUpItemStatus {
+    PENDING("pending"),
+    FILED("filed"),
+    QUEUED("queued"),
+    ANSWERED("answered"),
+    CLOSED("closed"),
+    DISMISSED("dismissed"),
 
     /**
      * A value this SDK release does not know.
@@ -29,7 +33,7 @@ public enum PrVerificationReportFollowUpsEntryKind {
 
     private final String wire;
 
-    PrVerificationReportFollowUpsEntryKind(String wire) {
+    PublicFollowUpItemStatus(String wire) {
         this.wire = wire;
     }
 
@@ -41,8 +45,8 @@ public enum PrVerificationReportFollowUpsEntryKind {
 
     /** Decode from the wire, tolerating a value this release does not know. */
     @JsonCreator
-    public static PrVerificationReportFollowUpsEntryKind fromWire(@Nullable String wire) {
-        for (PrVerificationReportFollowUpsEntryKind candidate : values()) {
+    public static PublicFollowUpItemStatus fromWire(@Nullable String wire) {
+        for (PublicFollowUpItemStatus candidate : values()) {
             if (candidate.wire.equals(wire)) {
                 return candidate;
             }

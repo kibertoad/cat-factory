@@ -50,7 +50,13 @@ export const useFollowUpsStore = defineStore('followUps', () => {
         executionId,
         () => call(workspace.requireId()),
         (state, instance) => {
-          const step = instance.steps.find((s) => s.followUps?.enabled)
+          // Routed by ITEM ID, matching what the engine does with the same request
+          // (`FollowUpGateController.loadFollowUpItem`): a pipeline may carry more than one
+          // follow-up-enabled Coder step, and the response is that step's state. Echoing it onto
+          // "the first enabled step" would paint a later Coder's items, statuses and dropped-
+          // send-back stamps over an earlier Coder's own, so the window shows the wrong step's
+          // list until the stream repairs it and the earlier card reports decisions it never had.
+          const step = instance.steps.find((s) => s.followUps?.items.some((i) => i.id === itemId))
           if (step && state && typeof state === 'object') {
             step.followUps = state as typeof step.followUps
           }

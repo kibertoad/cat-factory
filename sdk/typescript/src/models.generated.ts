@@ -2029,31 +2029,30 @@ export interface PrVerificationReport {
 }
 
 export interface PrVerificationReportFollowUps {
+  dismissedByPolicy: number
   dropped: number
+  /** Always present; `null` when the server has no value for it. */
+  droppedBudget: PrVerificationReportFollowUpsDroppedBudget | null
   entries: PrVerificationReportFollowUpsEntry[]
   loops: number
   maxLoops: number
   note?: string | null
   status: PrReportCiStatus
+  total: number
+}
+
+export interface PrVerificationReportFollowUpsDroppedBudget {
+  loops: number
+  maxLoops: number
 }
 
 export interface PrVerificationReportFollowUpsEntry {
   dismissedByPolicy: boolean
-  kind: PrVerificationReportFollowUpsEntryKind
+  kind: PublicFollowUpItemKind
   sendBackDropped: boolean
-  status: PrVerificationReportFollowUpsEntryStatus
+  status: PublicFollowUpItemStatus
   title: string
 }
-
-export type PrVerificationReportFollowUpsEntryKind = 'follow_up' | 'question'
-
-/** Every `PrVerificationReportFollowUpsEntryKind` value, for exhaustive handling and runtime validation. */
-export const PR_VERIFICATION_REPORT_FOLLOW_UPS_ENTRY_KIND_VALUES = ['follow_up', 'question'] as const
-
-export type PrVerificationReportFollowUpsEntryStatus = 'pending' | 'filed' | 'queued' | 'answered' | 'closed' | 'dismissed'
-
-/** Every `PrVerificationReportFollowUpsEntryStatus` value, for exhaustive handling and runtime validation. */
-export const PR_VERIFICATION_REPORT_FOLLOW_UPS_ENTRY_STATUS_VALUES = ['pending', 'filed', 'queued', 'answered', 'closed', 'dismissed'] as const
 
 export interface PrVerificationReportScope {
   frameId?: string | null
@@ -2231,9 +2230,9 @@ export interface PublicFollowUpItem {
   answer: string | null
   detail: string
   itemId: string
-  kind: PrVerificationReportFollowUpsEntryKind
+  kind: PublicFollowUpItemKind
   sendBackDropped: boolean
-  status: PrVerificationReportFollowUpsEntryStatus
+  status: PublicFollowUpItemStatus
   /** Always present; `null` when the server has no value for it. */
   suggestedAction: string | null
   /** Always present; `null` when the server has no value for it. */
@@ -2242,6 +2241,16 @@ export interface PublicFollowUpItem {
   ticketUrl: string | null
   title: string
 }
+
+export type PublicFollowUpItemKind = 'follow_up' | 'question'
+
+/** Every `PublicFollowUpItemKind` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_FOLLOW_UP_ITEM_KIND_VALUES = ['follow_up', 'question'] as const
+
+export type PublicFollowUpItemStatus = 'pending' | 'filed' | 'queued' | 'answered' | 'closed' | 'dismissed'
+
+/** Every `PublicFollowUpItemStatus` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_FOLLOW_UP_ITEM_STATUS_VALUES = ['pending', 'filed', 'queued', 'answered', 'closed', 'dismissed'] as const
 
 export interface PublicFollowUpsDecision {
   items: PublicFollowUpItem[]
