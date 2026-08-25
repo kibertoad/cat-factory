@@ -179,11 +179,12 @@ export const FOLLOW_UPS_FILE = '.cat-follow-ups.jsonl'
 
 /**
  * Appended to EVERY container-agent system prompt (at the container-dispatch chokepoint, see
- * `buildKindBody`). It asks the agent to end its work by writing a short, honest self-assessment
- * of the effort to a sentinel file — how hard/easy the work was, what reduced its effectiveness,
- * and the key obstacles it hit — which the harness lifts onto the result and the platform surfaces
- * in run details. This is a SIDE channel: it is kept out of the commit/PR, so writing it never
- * affects the deliverable, and the agent still completes its actual task regardless.
+ * `buildKindBody`). It asks the agent to close out its work by writing a short, honest
+ * self-assessment of the effort to a sentinel file — how hard/easy the work was, what reduced its
+ * effectiveness, and the key obstacles it hit — which the harness lifts onto the result and the
+ * platform surfaces in run details. This is a SIDE channel: it is kept out of the commit/PR, so
+ * writing it never affects the deliverable, and the agent still completes its actual task
+ * regardless.
  *
  * BOTH halves of the write/no-write reconciliation live HERE, because this is the only text that
  * reaches every container kind. The chokepoint appends it to the read-only kinds, whose guardrail
@@ -195,10 +196,21 @@ export const FOLLOW_UPS_FILE = '.cat-follow-ups.jsonl'
  * The timing clause is scoped to what the AGENT did ("any commit or push you made") rather than
  * asserting what the STEP does. A read-only step can still commit: the `spike` kind's findings are
  * committed and published by a backend post-op the agent takes no part in.
+ *
+ * The write is ordered BEFORE the final reply, never "at the end", and the text states why. The
+ * old "as the last thing you do" made a faithful agent answer first and write this file second,
+ * and the pending tool call forces one more closing turn after the tool result. Every harness
+ * reads only the very LAST message as the reply (the claude CLI's `result` event in
+ * `agent-runner.ts`, Pi's and Codex's last agent message alike), so for a kind whose deliverable
+ * IS its reply ({@link FINAL_ANSWER_IN_REPLY}) the one-line afterthought following the tool
+ * result displaced the actual answer. A real run lost an 18k-character architect design to this
+ * three rework rounds in a row, the companion correctly rejecting each round for "design body
+ * missing" while the design sat one message earlier in the transcript. Pinned in
+ * `containerAgentJobBody.spec.ts` beside the write/no-write pair.
  */
 export const EFFORT_REPORT_GUIDANCE =
-  'EFFORT SELF-ASSESSMENT — as the last thing you do, once your work is complete (including any ' +
-  'commit or push you made), write a ' +
+  'EFFORT SELF-ASSESSMENT — once your work is complete (including any commit or push you made) ' +
+  'and BEFORE you compose your final reply, write a ' +
   `file named \`${EFFORT_REPORT_FILE}\` in your working directory containing a SINGLE compact ` +
   'JSON object: {"difficulty":<1-10>,"summary":"<one or two sentences on how hard or easy this ' +
   'was and why>","reducedEffectiveness":"<what, if anything, reduced your effectiveness — ' +
@@ -208,7 +220,10 @@ export const EFFORT_REPORT_GUIDANCE =
   'this one file is expected even where your instructions forbid you to create, modify or commit ' +
   'files: it is the single exception those instructions permit, because the harness keeps it out ' +
   'of every commit, so writing it changes nothing in the repository. It is a side channel only: ' +
-  'never reference it in code and never add it to git. Write it exactly once, at the end.'
+  'never reference it in code and never add it to git. Write it exactly once. Ordering matters: ' +
+  'the effort file first, your final reply last, and no tool call after the reply. Only the text ' +
+  'of your very last message is read as your answer, so a tool call made after you have answered ' +
+  'displaces the answer with whatever short remark follows the tool result.'
 
 /**
  * Appended to EVERY container-agent system prompt at the same chokepoint as

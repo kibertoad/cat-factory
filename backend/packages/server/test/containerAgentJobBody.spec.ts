@@ -247,6 +247,19 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
     expect(READ_ONLY_GUARDRAIL).not.toMatch(/instructions below/)
   })
 
+  // The effort write is ordered BEFORE the final reply, never "at the end". A trailing effort
+  // write forces one more closing turn after its tool result, and every harness reads only the
+  // very last message as the reply, so a kind whose deliverable IS its reply lost an entire
+  // architect design to the one-line afterthought that followed, three rework rounds in a row.
+  // Only this spec can pin it: the ordering exists to protect FINAL_ANSWER_IN_REPLY kinds, and
+  // the two texts meet nowhere but this chokepoint.
+  it('orders the effort write before the final reply, never after it', () => {
+    expect(EFFORT_REPORT_GUIDANCE).toContain('BEFORE you compose your final reply')
+    expect(EFFORT_REPORT_GUIDANCE).toContain('no tool call after the reply')
+    expect(EFFORT_REPORT_GUIDANCE).not.toContain('as the last thing you do')
+    expect(EFFORT_REPORT_GUIDANCE).not.toContain('at the end')
+  })
+
   // The kinds whose write prohibition is written into a BESPOKE prompt rather than appended by
   // `applySurfaceDirectives`. `composedSystemPromptFor` short-circuits for them, so a carve-out
   // scoped off the surface never reaches them — which is why it lives on the effort report, the
