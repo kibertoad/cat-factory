@@ -178,7 +178,15 @@
     },
     "deploy/backend": { "entry": ["src/**/*.ts"] },
     "deploy/node": { "entry": ["src/**/*.ts"] },
-    "deploy/local": { "entry": ["src/**/*.ts"] },
+    "deploy/local": {
+      "entry": ["src/**/*.ts"],
+      // `pnpm dev` spawns the CLI as `node ../../backend/packages/cli/dist/bin.js`, by path
+      // rather than by its `cat-factory` bin name, because that shim cannot exist on a fresh
+      // checkout (check-workspace-bin-scripts.mjs holds the rule). Knip reads a path into a
+      // gitignored `dist/` as a file reference, not as a use of the package that owns it, so
+      // the dependency has to be declared here or it reads as unused.
+      "ignoreDependencies": ["@cat-factory/cli"],
+    },
     // The Gatekeeper template: the Worker entry, the policy it wires, and the policy's own test.
     // `src/index.ts` is knip's own default entry and the vitest plugin finds the suite, so the
     // only thing worth stating is that `src/**` is the project (the default would sweep in

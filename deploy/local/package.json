@@ -7,7 +7,7 @@
   "scripts": {
     "secrets": "node scripts/generate-secrets.mjs",
     "predev": "pnpm --filter @cat-factory/local-server run build && pnpm --filter @cat-factory/cli run build",
-    "dev": "cat-factory supervise --compose-service postgres -- pnpm dev:raw",
+    "dev": "node ../../backend/packages/cli/dist/bin.js supervise --compose-service postgres -- pnpm dev:raw",
     "dev:raw": "node --watch --env-file-if-exists=.env src/main.ts",
     "prestart": "pnpm --filter @cat-factory/local-server run build",
     "start": "node --env-file-if-exists=.env src/main.ts",
