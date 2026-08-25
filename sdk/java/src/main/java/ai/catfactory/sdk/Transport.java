@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 
@@ -39,7 +40,7 @@ import org.jspecify.annotations.Nullable;
 public final class Transport {
 
     /** SDK version, stamped into {@code User-Agent}. Kept in step with pom.xml by {@code check:sdk}. */
-    public static final String SDK_VERSION = "0.5.0";
+    public static final String SDK_VERSION = "0.6.0";
 
     /**
      * Methods that may be replayed after a failure.
@@ -61,6 +62,19 @@ public final class Transport {
     private final int maxRetries;
     private final Map<String, String> headers;
     private final Random jitter = new Random();
+
+    /**
+     * What this client has seen from the origin, so a transport failure can say whether the
+     * deployment was answering a moment ago.
+     *
+     * <p>A response of ANY status counts: a 500 is still proof the origin is there, and that is the
+     * difference between "it restarted" and "that address never answered", which are the two
+     * readings a bare "failed to reach" collapses. Atomic because a client is documented as safe to
+     * share across threads.
+     */
+    private final AtomicLong completedCalls = new AtomicLong();
+
+    private final AtomicLong lastAnsweredMillis = new AtomicLong();
 
     /**
      * The personal password sent on every request while set, for a key BOUND to a user.
@@ -184,14 +198,13 @@ public final class Transport {
         try {
             HttpResponse<InputStream> response =
                     http.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            recordAnswer();
             if (response.statusCode() >= 400) {
                 throw toApiException(response.statusCode(), readAll(response.body()), requestId(response));
             }
             return new EventStream(response.body());
         } catch (IOException cause) {
-            throw new CatFactoryConnectionException(
-                    "cat-factory SDK: " + method + " " + path + " failed to reach " + baseUrl + ".",
-                    cause);
+            throw new CatFactoryConnectionException(diagnose(method, path, cause), cause);
         } catch (InterruptedException cause) {
             Thread.currentThread().interrupt();
             throw new CatFactoryConnectionException(
@@ -229,6 +242,7 @@ public final class Transport {
             try {
                 HttpResponse<byte[]> response =
                         http.send(request, HttpResponse.BodyHandlers.ofByteArray());
+                recordAnswer();
                 if (response.statusCode() < 400) {
                     return response.body();
                 }
@@ -257,15 +271,34 @@ public final class Transport {
                     sleep(backoffMillis(attempt));
                     continue;
                 }
-                throw new CatFactoryConnectionException(
-                        "cat-factory SDK: " + method + " " + path + " failed to reach " + baseUrl + ".",
-                        cause);
+                throw new CatFactoryConnectionException(diagnose(method, path, cause), cause);
             } catch (InterruptedException cause) {
                 Thread.currentThread().interrupt();
                 throw new CatFactoryConnectionException(
                         "cat-factory SDK: " + method + " " + path + " was interrupted.", cause);
             }
         }
+    }
+
+    /** Note that the origin ANSWERED, which is what a later failure is read against. */
+    private void recordAnswer() {
+        completedCalls.incrementAndGet();
+        lastAnsweredMillis.set(System.currentTimeMillis());
+    }
+
+    /**
+     * The classified account of a transport failure: what happened, what this client had seen from
+     * the origin, then the runtime's own chain. The cause is still attached to the exception, so a
+     * caller unwrapping it finds exactly what the JDK reported.
+     */
+    private String diagnose(String method, String path, Throwable cause) {
+        long completed = completedCalls.get();
+        ConnectionDiagnosis.OriginHistory history =
+                completed == 0
+                        ? ConnectionDiagnosis.OriginHistory.NONE
+                        : new ConnectionDiagnosis.OriginHistory(
+                                completed, System.currentTimeMillis() - lastAnsweredMillis.get());
+        return ConnectionDiagnosis.describe(method, path, baseUrl, cause, history);
     }
 
     private HttpRequest build(

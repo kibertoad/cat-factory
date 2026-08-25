@@ -62,7 +62,7 @@ const API_PREFIX = '/api/v1'
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.60.0'
+const API_VERSION = '1.61.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -317,7 +317,13 @@ const OPERATION_DOCS = {
     tag: 'Services',
     summary: 'Patch a service, including where its per-run manifests live',
     description:
-      'Change a service’s authored fields, and declare its `provisioning`: where the manifests for a per-run environment are read from. That second half is what a connected cluster alone cannot supply, because the platform keeps “which cluster” (one per workspace) apart from “which manifests” (one set per service). An omitted `provisioning` leaves the stored one alone rather than clearing it. Board coordinates are deliberately absent, as they are on service creation.',
+      'Change a service’s authored fields, and declare its `provisioning`: where the manifests for a per-run environment are read from. That second half is what a connected cluster alone cannot supply, because the platform keeps “which cluster” (one per workspace) apart from “which manifests” (one set per service). An omitted `provisioning` leaves the stored one alone rather than clearing it, so correcting a title cannot un-deploy a service; send `provisioning: null` to CLEAR the pin, which leaves the service with no environment to provision. Board coordinates are deliberately absent, as they are on service creation.',
+  },
+  listPublicEnvironmentManifestTypes: {
+    tag: 'Environments',
+    summary: 'List the custom manifest types a service can pin',
+    description:
+      'Every custom-manifest-type id a service’s `custom` provisioning may name, with the label and default manifest path of each, and whether the deployment registered it in code (`registered`) or the workspace defined it (`workspace`). Those two are fixed by different people, which is why the source is reported. The read exists because a pin is checked against no registry on the way in: an id no handler serves is accepted and fails at the `deployer` step of a run already paid for, so a caller lists first and refuses before it spends.',
   },
   connectPublicEnvironment: {
     tag: 'Environments',

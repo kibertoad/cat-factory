@@ -8,6 +8,7 @@ import {
   publicBootstrapRepoSchema,
   publicEnvironmentConnectionTestSchema,
   publicEnvironmentConnectionViewSchema,
+  publicCustomManifestTypeListSchema,
   publicEnvironmentHandlerListSchema,
   publicModelPresetListSchema,
   publicRepoFilePathSchema,
@@ -234,6 +235,29 @@ export const listPublicEnvironmentConnectionsContract = withMinScope(
     method: 'get',
     pathResolver: () => '/api/v1/environments/connections',
     responsesByStatusCode: { 200: publicEnvironmentHandlerListSchema, ...errorResponses },
+  }),
+)
+
+/**
+ * The custom-manifest-type catalog: every id a service's `custom` provisioning may pin.
+ *
+ * The read under the write. A `custom` pin is checked against nothing before it is stored (the id
+ * is validated as a STRING and matched to a handler only when a run reaches its `deployer` step),
+ * so a caller pinning an id no handler serves learns about it from a failed run rather than from
+ * the call that accepted it. Refusing the write instead would narrow what a live integration may
+ * send, which ADR 0034 treats as a break; publishing the catalog lets a caller check first, which
+ * is what a gate refusing before it spends actually needs.
+ *
+ * Both tiers, as one list: the types a deployment REGISTERS in code and the rows a workspace
+ * defines. Each entry says which it is, because an id missing from a `registered` catalog is a
+ * deployment change and a missing `workspace` row is an edit in the app.
+ */
+export const listPublicEnvironmentManifestTypesContract = withMinScope(
+  'admin',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/environments/manifest-types',
+    responsesByStatusCode: { 200: publicCustomManifestTypeListSchema, ...errorResponses },
   }),
 )
 

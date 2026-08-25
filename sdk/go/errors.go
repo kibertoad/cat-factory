@@ -30,9 +30,20 @@ type ConnectionError struct {
 	Method string
 	Path   string
 	Err    error
+
+	// diagnosis is the classified account of the failure (what happened, what this client had
+	// seen from the origin, then the runtime's own text), built by the transport where both
+	// halves are known. Unexported deliberately: the classification vocabulary is not part of
+	// the frozen surface, and a caller branching on a cause branches on the wrapped error with
+	// errors.Is/errors.As, which is Go's own answer to that question. Empty for a value built
+	// outside this package, which then renders exactly as it always did.
+	diagnosis string
 }
 
 func (e *ConnectionError) Error() string {
+	if e.diagnosis != "" {
+		return e.diagnosis
+	}
 	return fmt.Sprintf("cat-factory: %s %s failed to reach the deployment: %v", e.Method, e.Path, e.Err)
 }
 

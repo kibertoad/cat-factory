@@ -20,6 +20,7 @@ from collections.abc import Callable, Mapping
 from typing import Any
 from urllib.parse import urlencode
 
+from ._diagnosis import OriginHistory, describe_transport_failure
 from ._sse import EventStream
 from .errors import (
     CatFactoryConnectionError,
@@ -30,7 +31,7 @@ from .errors import (
 )
 
 #: SDK version, stamped into ``User-Agent``. Kept in step with pyproject.toml by ``check:sdk``.
-SDK_VERSION = "0.5.0"
+SDK_VERSION = "0.6.0"
 
 #: Methods that may be replayed after a failure.
 #:
@@ -78,6 +79,11 @@ class Transport:
             **dict(headers or {}),
         }
         self._opener = opener or urllib.request.build_opener()
+        # What this client has seen from the origin, so a transport failure can say whether the
+        # deployment was answering a moment ago. A response of ANY status counts: a 500 is still
+        # proof the origin is there, and that is the difference between "it restarted" and "that
+        # address never answered", which are the two readings a bare "failed to reach" collapses.
+        self._history = OriginHistory()
         #: The personal password sent on every request while set, for a key bound to a user.
         #: Mutable, because a caller learns it is needed from a 428 and must be able to supply it
         #: without rebuilding a configured client.
@@ -161,9 +167,11 @@ class Transport:
             # the caller is about to read from. `EventStream.close()` owns it from now on.
             raw = self._opener.open(request, timeout=timeout or self._timeout)
         except urllib.error.HTTPError as exc:
+            self._record_answer()
             raise self._from_http_error(exc) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise self._from_transport_error(exc, method, path) from exc
+        self._record_answer()
         _release_read_deadline(raw)
         return EventStream(raw)
 
@@ -211,8 +219,11 @@ class Transport:
             request = self._build(method, path, body, query, accept)
             try:
                 with self._opener.open(request, timeout=deadline) as response:
+                    self._record_answer()
                     return response.read()
             except urllib.error.HTTPError as exc:
+                # An HTTPError IS a response: the origin answered, whatever it answered with.
+                self._record_answer()
                 retriable = method in _IDEMPOTENT and exc.code in _RETRIABLE_STATUS
                 if attempt < budget and retriable:
                     # Honour `Retry-After` when the server states one: it is the deployment's own
@@ -235,6 +246,11 @@ class Transport:
             parsed = raw.decode("utf-8", errors="replace")
         return to_api_error(exc.code, parsed, exc.headers.get("x-request-id"))
 
+    def _record_answer(self) -> None:
+        """Note that the origin ANSWERED, which is what a later failure is read against."""
+        self._history.completed_calls += 1
+        self._history.last_completed_at = time.monotonic()
+
     def _from_transport_error(self, exc: Exception, method: str, path: str) -> CatFactoryError:
         # A timeout and a connection failure need DIFFERENT reactions --- one may succeed with a
         # longer budget, the other will not --- so they stay apart rather than collapsing into
@@ -243,8 +259,17 @@ class Transport:
             return CatFactoryTimeoutError(
                 f"cat-factory SDK: {method} {path} exceeded its deadline."
             )
+        # Everything else is CLASSIFIED rather than reported as a reachability verdict: see
+        # ``_diagnosis.py`` for why "failed to reach" was the one reading that could be false.
         return CatFactoryConnectionError(
-            f"cat-factory SDK: {method} {path} failed to reach {self._base_url} ({exc})."
+            describe_transport_failure(
+                method=method,
+                path=path,
+                base_url=self._base_url,
+                exc=exc,
+                history=self._history,
+                now=time.monotonic(),
+            )
         )
 
 

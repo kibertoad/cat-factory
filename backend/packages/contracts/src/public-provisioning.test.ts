@@ -156,6 +156,21 @@ describe('updatePublicServiceSchema', () => {
       title: 'Catalog API',
     })
   })
+
+  it('admits a null provisioning as the one field that IS the patch', () => {
+    // `null` is a real edit (clear the pin), so it has to satisfy the at-least-one-field check the
+    // same way a title does. Read through `!== undefined`, which is what keeps the two apart:
+    // omitted leaves the stored pin alone, and only an explicit null clears it.
+    expect(v.parse(updatePublicServiceSchema, { provisioning: null })).toEqual({
+      provisioning: null,
+    })
+  })
+
+  it('still refuses a provisioning that is neither a member nor null', () => {
+    // The null widens what is accepted and nothing else: a garbled variant is still a 400 rather
+    // than a pin stored as a shape no deploy can read.
+    expect(() => v.parse(updatePublicServiceSchema, { provisioning: { type: 'nomad' } })).toThrow()
+  })
 })
 
 describe('linkPublicRepoSchema', () => {

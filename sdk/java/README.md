@@ -144,6 +144,19 @@ try {
 `requestId()` to quote when reporting a fault. The hierarchy is sealed and every member is
 unchecked.
 
+A `CatFactoryConnectionException` states what actually failed rather than asserting the deployment
+was unreachable, and says what this client had already seen from the origin:
+
+```text
+cat-factory SDK: POST /api/v1/tasks failed: https://cat-factory.example.com reset the connection
+before answering. This client had answered 9 calls against https://cat-factory.example.com, the
+last 0.2s ago. (Connection reset)
+```
+
+A reset after nine answered calls is a deployment that restarted; a refusal with nothing answered
+yet is an address with nothing behind it, and the two send you to completely different places. The
+JDK's own exception is kept verbatim at the end of the message and as the cause.
+
 `CatFactoryApiException` is itself a case, not just a base: a status with no subclass of its own
 (a 402, a 413, or one this surface gains later) arrives as the base class rather than being
 folded into `CatFactoryServerException`. The surface is additive forever, and reporting a refusal

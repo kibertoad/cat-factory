@@ -20,6 +20,7 @@ package ai.catfactory.sdk.smoketest;
 
 import ai.catfactory.sdk.CatFactoryClient;
 import ai.catfactory.sdk.CatFactoryApiException;
+import ai.catfactory.sdk.CatFactoryConnectionException;
 import ai.catfactory.sdk.CatFactoryForbiddenException;
 import ai.catfactory.sdk.CatFactoryNotFoundException;
 import ai.catfactory.sdk.CatFactoryUnauthorizedException;
@@ -298,6 +299,31 @@ public final class Smoketest {
                 observations.put("forbiddenIsTypedClass", true);
                 observations.put("forbiddenStatus", exc.status());
                 observations.put("forbiddenCode", exc.code());
+            }
+        });
+
+        step("error: connection refused", () -> {
+            // The one failure with no deployment on the other end of it, and the one whose MESSAGE
+            // is the whole product: a caller with no checkout reads this line and nothing else. All
+            // four clients must name the cause (nothing listening) rather than assert
+            // unreachability, and must say what this client had seen from the origin, which
+            // separates a restart from a bad address.
+            // The key is a placeholder because nothing ever reads it: the request fails before a
+            // connection exists to send it over, which is the whole point of the case.
+            CatFactoryClient unreachable =
+                    CatFactoryClient.builder()
+                            .baseUrl("http://127.0.0.1:1")
+                            .apiKey("cf_live_pak_0000.deadbeef")
+                            .maxRetries(0)
+                            .build();
+            try {
+                unreachable.services().list();
+                failures.add("error: connection refused — expected a transport failure, got a success");
+            } catch (CatFactoryConnectionException exc) {
+                observations.put("connectionFailureIsTypedClass", true);
+                String message = exc.getMessage() == null ? "" : exc.getMessage();
+                observations.put("connectionFailureNamesTheCause", message.contains("nothing is listening"));
+                observations.put("connectionFailureStatesHistory", message.contains("has not completed a call"));
             }
         });
 

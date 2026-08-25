@@ -95,6 +95,11 @@ const SURFACE = {
   connectPublicEnvironment: { group: 'environments', method: 'connect' },
   listPublicEnvironmentConnections: { group: 'environments', method: 'listConnections' },
   testPublicEnvironmentConnection: { group: 'environments', method: 'testConnection' },
+  // The catalog under a service's `custom` pin: the ids a pin may name. Its own method rather
+  // than a field on the handler list, because the two answer different questions (what this
+  // workspace has BOUND, versus what a pin may name at all) and a deployment registers manifest
+  // types in code without necessarily having connected a handler for each yet.
+  listPublicEnvironmentManifestTypes: { group: 'environments', method: 'listManifestTypes' },
 
   // ---- What this deployment has WIRED ------------------------------------------------------
   // Three groups rather than one `wiring` bag: each names a real resource a caller asks about on
@@ -341,7 +346,7 @@ export const GROUP_DOCS = {
     "The deployment's own non-container model operations: what it will generate for you, on which models, from which parameters, and running one. Each use case narrows the models it may run on and declares the form it accepts, so a wrapper renders a picker from the catalog rather than from a hard-coded copy; a model listed as unavailable says whether the deployment cannot serve it at all or has yet to configure the credential. Discovery takes a `read` key, invoking a `write` one: an invocation spends model tokens and returns text, and starts no run.",
   notifications: "The workspace's human-actionable inbox: list, act on, or dismiss a run tail.",
   environments:
-    'The cluster this workspace provisions per-run environments onto: probe a candidate connection without saving it, or bind one. The credential is write-only, so a read reports which secret keys are stored and never their values.',
+    "The cluster this workspace provisions per-run environments onto: probe a candidate connection without saving it, bind one, or list what is already bound. The credential is write-only, so a read reports which secret keys are stored and never their values. The manifest-type catalog is the read under a service's `custom` provisioning pin: the ids a pin may name, each saying whether the deployment registered it in code or the workspace defined it, so a caller checks an id before a run pays to discover it resolves to nothing.",
   models:
     'The models a run in this workspace could actually dispatch to, and why an unavailable one is unavailable: unconfigured, or refused by the account model-family policy. Those two need opposite fixes.',
   vcs: "The workspace's source-control connection: which account it talks to, how it authenticates, and whether it may create repositories and write workflow files. Both permissions are enforced by the provider at push time, so reading them beats discovering one missing halfway through an automated setup.",

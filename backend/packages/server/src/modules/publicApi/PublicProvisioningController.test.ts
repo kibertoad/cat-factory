@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type {
   Block,
   BootstrapJob,
+  CustomManifestType,
   EnvironmentHandlerView,
   GitHubAvailableRepo,
   GitHubConnection,
@@ -22,6 +23,8 @@ import type { ServerContainer } from '../../http/env.js'
 import {
   asVcsRefusal,
   byHandlerIdentity,
+  byManifestId,
+  toPublicManifestType,
   readGradableFile,
   readVcsConnection,
   toBlockPatch,
@@ -153,6 +156,25 @@ describe('toBlockPatch', () => {
       localDevOnly: true,
     } as ServiceProvisioning)
     expect(patch.provisioning).toEqual({ type: 'custom', manifestId: 'kargo', localDevOnly: true })
+  })
+
+  it('CLEARS the pin on an explicit null, which is the only way a caller can undo its own write', () => {
+    // Omitted and null are different edits, and the difference is the whole reason the field takes
+    // a null: omitted LEAVES the stored pin (a caller correcting a title must not un-deploy a
+    // service), and until null was accepted a suite that pinned a shared board's frame changed it
+    // permanently. Cleared is written as the type that MEANS none rather than as a deleted key,
+    // because the patch replaces the column wholesale and "absent" is not expressible on it.
+    const patch = toBlockPatch({ provisioning: null }, {
+      type: 'custom',
+      manifestId: 'kargo',
+      manifestPath: 'deploy/preview.yml',
+    } as ServiceProvisioning)
+    expect(patch.provisioning).toEqual({ type: 'infraless' })
+    // And the cleared service reads back with no `provisioning` at all, which is what a caller
+    // checking its own undo sees.
+    expect('provisioning' in toPublicService(frame({ provisioning: patch.provisioning }))).toBe(
+      false,
+    )
   })
 
   it('distinguishes an empty-string description from an omitted one', () => {
@@ -640,5 +662,50 @@ describe('readGradableFile', () => {
         'main',
       ),
     ).rejects.toBeInstanceOf(UnavailableError)
+  })
+})
+
+describe('toPublicManifestType', () => {
+  const registered = (overrides: Partial<CustomManifestType> = {}): CustomManifestType =>
+    ({
+      manifestId: 'kargo',
+      label: 'Kargo',
+      source: 'registered',
+      ...overrides,
+    }) as CustomManifestType
+
+  it('publishes what a caller pinning an id can act on, and nothing it cannot', () => {
+    // `fixerPrompt` is internal text this repo rewrites freely and `acceptsInputHint` describes an
+    // input shape the caller does not send here: freezing either on `/api/v1` buys nobody anything.
+    expect(
+      toPublicManifestType(
+        registered({
+          defaultManifestPath: 'deploy/preview.yaml',
+          fixerPrompt: 'write the manifest',
+          acceptsInputHint: '{ image }',
+        }),
+      ),
+    ).toEqual({
+      manifestId: 'kargo',
+      label: 'Kargo',
+      source: 'registered',
+      defaultManifestPath: 'deploy/preview.yaml',
+    })
+  })
+
+  it('reports a declared-nothing default as null rather than omitting the field', () => {
+    // An absent key and a null read differently to a generated client, and "this type declares no
+    // default path" is a fact a caller acts on: a pin naming no `manifestPath` deploys nothing.
+    expect(toPublicManifestType(registered()).defaultManifestPath).toBeNull()
+  })
+
+  it('orders by the id a pin names, comparing code units', () => {
+    const ids = [registered({ manifestId: 'nomad' }), registered({ manifestId: 'Kargo' })]
+      .map(toPublicManifestType)
+      .sort(byManifestId)
+      .map((type) => type.manifestId)
+    // Code units, not a locale collation: the same catalog must serialise identically from a
+    // workerd isolate and a Node build with a different ICU.
+    expect(ids).toEqual(['Kargo', 'nomad'])
   })
 })

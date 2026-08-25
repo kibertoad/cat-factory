@@ -111,7 +111,7 @@ public abstract class Resources {
         return notifications;
     }
 
-    /** The cluster this workspace provisions per-run environments onto: probe a candidate connection without saving it, or bind one. The credential is write-only, so a read reports which secret keys are stored and never their values. */
+    /** The cluster this workspace provisions per-run environments onto: probe a candidate connection without saving it, bind one, or list what is already bound. The credential is write-only, so a read reports which secret keys are stored and never their values. The manifest-type catalog is the read under a service's `custom` provisioning pin: the ids a pin may name, each saying whether the deployment registered it in code or the workspace defined it, so a caller checks an id before a run pays to discover it resolves to nothing. */
     public EnvironmentsClient environments() {
         return environments;
     }

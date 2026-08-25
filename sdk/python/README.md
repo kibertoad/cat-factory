@@ -79,6 +79,19 @@ except CatFactoryForbiddenError as exc:
 Every API error carries `status`, `code`, `details`, `issues` and the `request_id` to quote when
 reporting a fault.
 
+A `CatFactoryConnectionError` states what actually failed rather than asserting the deployment was
+unreachable, and says what this client had already seen from the origin:
+
+```text
+cat-factory SDK: POST /api/v1/tasks failed: https://cat-factory.example.com reset the connection
+before answering. This client had answered 9 calls against https://cat-factory.example.com, the
+last 0.2s ago. (<urlopen error [Errno 104] Connection reset by peer>)
+```
+
+A reset after nine answered calls is a deployment that restarted; a refusal with nothing answered
+yet is an address with nothing behind it, and the two send you to completely different places. The
+runtime's own error is kept verbatim at the end of the message and as the raised exception's cause.
+
 ## Models
 
 Frozen dataclasses with `from_dict` / `to_dict`. Two properties to know:

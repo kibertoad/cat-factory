@@ -88,8 +88,9 @@ public final class ServicesClient {
      * a per-run environment are read from. That second half is what a connected cluster alone
      * cannot supply, because the platform keeps “which cluster” (one per workspace) apart from
      * “which manifests” (one set per service). An omitted `provisioning` leaves the stored one
-     * alone rather than clearing it. Board coordinates are deliberately absent, as they are on
-     * service creation.
+     * alone rather than clearing it, so correcting a title cannot un-deploy a service; send
+     * `provisioning: null` to CLEAR the pin, which leaves the service with no environment to
+     * provision. Board coordinates are deliberately absent, as they are on service creation.
      * {@code PATCH /api/v1/services/{serviceId}} (operation {@code updatePublicService}).
      */
     public PublicService update(String serviceId, UpdatePublicServiceRequest body) {

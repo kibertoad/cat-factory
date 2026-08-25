@@ -82,6 +82,19 @@ Classes: `CatFactoryValidationError` (400/422), `…Unauthorized` (401), `…For
 `CatFactoryError`. Every API error carries `status`, `code`, `details`, `issues` and the
 `requestId` to quote when reporting a fault.
 
+A `CatFactoryConnectionError` states what actually failed rather than asserting the deployment was
+unreachable, and says what this client had already seen from the origin:
+
+```text
+cat-factory SDK: POST /api/v1/tasks failed: https://cat-factory.example.com reset the connection
+before answering. This client had answered 9 calls against https://cat-factory.example.com, the
+last 0.2s ago. (read ECONNRESET)
+```
+
+A reset after nine answered calls is a deployment that restarted; a refusal with nothing answered
+yet is an address with nothing behind it, and the two send you to completely different places. The
+runtime's own cause chain is kept verbatim at the end of the message and on `cause`.
+
 ## Options
 
 ```ts

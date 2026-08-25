@@ -67,3 +67,9 @@ native custom runner backend all render from the descriptor.
   `serviceStatus`) that a flat `ProviderConfigField` list can't express. Extending the descriptor
   with grouped/conditional fields (or a small recursive schema-form generator) is the prerequisite
   for retiring both the env form and the JSON manifest editor: do that once and both fall out.
+- **The custom-manifest-type catalog now has a PUBLISHED reduction**, and this initiative's SPA side
+  should project the same one rather than growing its own:
+  [ADR 0060](../../backend/docs/adr/0060-headless-caller-diagnosability.md) serves it as
+  `GET /api/v1/environments/manifest-types` off `EnvironmentConnectionService.listCustomTypes`, which
+  is the same read the service inspector already uses. What differs is what each surface publishes,
+  not where the list comes from: the public one withholds `fixerPrompt` and `acceptsInputHint`.

@@ -1,4 +1,5 @@
 import type { PublicAttachedDocumentList, PublicRepoList, PublicTask } from '@cat-factory/contracts'
+import { createBackendRegistries } from '@cat-factory/integrations'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 import { mintPublicApiKey } from './shared.js'
@@ -22,8 +23,130 @@ import { mintPublicApiKey } from './shared.js'
  */
 export function definePublicBoardConformance(harness: ConformanceHarness): void {
   defineServiceProvisioning(harness)
+  defineCustomProvisioningPins(harness)
   defineTaskDependencies(harness)
   defineTaskDocuments(harness)
+}
+
+/**
+ * The `custom` provisioning pin's two reads: the catalog an id can be checked against, and taking
+ * a pin back.
+ *
+ * Facade-run because only a facade shows what a unit test cannot: that the catalog route is
+ * MOUNTED and answers off the app's own registry + workspace rows, and that a cleared pin left the
+ * STORE rather than merely the response.
+ */
+function defineCustomProvisioningPins(harness: ConformanceHarness): void {
+  describe('public API: custom provisioning pins', () => {
+    it('publishes what a pin may name, and still accepts a pin naming something else', async () => {
+      // Both halves of the same fact. Nothing validates a `manifestId` on the way in: it is checked
+      // as a string and matched to a handler only when a run reaches its `deployer` step, so an id
+      // no handler serves is stored and reported back as configured. Refusing it at the write would
+      // narrow what a live integration may send (ADR 0034), so the catalog is what lets a caller
+      // refuse BEFORE it pays for a run, and the accepted-anyway pin is the behaviour that makes
+      // the catalog load-bearing rather than decorative.
+      const registries = createBackendRegistries()
+      registries.customManifestTypeRegistry.register({
+        manifestId: 'conformance-kargo',
+        label: 'Conformance Kargo',
+        defaultManifestPath: 'deploy/preview.yaml',
+      })
+      const app = harness.makeApp(undefined, { backendRegistries: registries })
+      const { workspace } = await app.createOrgWorkspace()
+      const admin = await mintPublicApiKey(app, workspace.id, 'admin', 'pins')
+
+      const catalog = await app.call<{
+        manifestTypes: {
+          manifestId: string
+          label: string
+          source: string
+          defaultManifestPath: string | null
+        }[]
+      }>('GET', '/api/v1/environments/manifest-types', undefined, admin)
+      expect(catalog.status).toBe(200)
+      const registered = catalog.body.manifestTypes.find(
+        (type) => type.manifestId === 'conformance-kargo',
+      )
+      // `registered` and not `workspace`: an id missing from a code-registered catalog is a
+      // deployment change, where a missing row is an edit in the app, and those are different
+      // people. The default path is what a pin naming no `manifestPath` will deploy from.
+      expect(registered).toEqual({
+        manifestId: 'conformance-kargo',
+        label: 'Conformance Kargo',
+        source: 'registered',
+        defaultManifestPath: 'deploy/preview.yaml',
+      })
+
+      const service = await app.call<{ serviceId: string }>(
+        'POST',
+        '/api/v1/services',
+        { title: 'Pinned' },
+        admin,
+      )
+      const unserved = await app.call<{ provisioning?: { type: string; manifestId?: string } }>(
+        'PATCH',
+        `/api/v1/services/${service.body.serviceId}`,
+        { provisioning: { type: 'custom', manifestId: 'served-by-nobody' } },
+        admin,
+      )
+      expect(unserved.status).toBe(200)
+      expect(unserved.body.provisioning).toEqual({ type: 'custom', manifestId: 'served-by-nobody' })
+      expect(catalog.body.manifestTypes.map((type) => type.manifestId)).not.toContain(
+        'served-by-nobody',
+      )
+    })
+
+    it('CLEARS a pin on an explicit null, and leaves an omitted one alone', async () => {
+      // The pair, in the order a caller hits it. A suite that pins a shared board's frame had no
+      // way to undo the write, because the provisioning variant has two members and neither means
+      // "none"; and the omission must keep meaning "leave it alone", or a caller correcting a
+      // title would un-deploy the service.
+      const app = harness.makeApp()
+      const { workspace } = await app.createOrgWorkspace()
+      const admin = await mintPublicApiKey(app, workspace.id, 'admin', 'pins')
+      const service = await app.call<{ serviceId: string }>(
+        'POST',
+        '/api/v1/services',
+        { title: 'Pinned then cleared' },
+        admin,
+      )
+      const serviceId = service.body.serviceId
+      await app.call(
+        'PATCH',
+        `/api/v1/services/${serviceId}`,
+        { provisioning: { type: 'custom', manifestId: 'conformance-kargo' } },
+        admin,
+      )
+
+      const renamed = await app.call<{ title: string; provisioning?: { manifestId?: string } }>(
+        'PATCH',
+        `/api/v1/services/${serviceId}`,
+        { title: 'Renamed, still deploying' },
+        admin,
+      )
+      expect(renamed.body.provisioning?.manifestId).toBe('conformance-kargo')
+
+      const cleared = await app.call<{ provisioning?: unknown }>(
+        'PATCH',
+        `/api/v1/services/${serviceId}`,
+        { provisioning: null },
+        admin,
+      )
+      expect(cleared.status).toBe(200)
+      expect('provisioning' in cleared.body).toBe(false)
+      // Off the STORE, not just off the response the write happened to build: this is the half a
+      // unit test cannot see, and the one a facade that lowered the clear differently would fail.
+      const reread = await app.call<{ services: { serviceId: string; provisioning?: unknown }[] }>(
+        'GET',
+        '/api/v1/services',
+        undefined,
+        admin,
+      )
+      const stored = reread.body.services.find((entry) => entry.serviceId === serviceId)
+      expect(stored).toBeDefined()
+      expect('provisioning' in (stored ?? {})).toBe(false)
+    })
+  })
 }
 
 /** Raising a service, filing work under it, and taking it back down. */

@@ -98,6 +98,19 @@ case err != nil:
 reporting a fault. `*ConnectionError` and `*DecodeError` are the transport-level failures; all
 work with `errors.As` / `errors.Is`.
 
+A `*ConnectionError` states what actually failed rather than asserting the deployment was
+unreachable, and says what this client had already seen from the origin:
+
+```text
+cat-factory: POST /api/v1/tasks failed: https://cat-factory.example.com reset the connection
+before answering. This client had answered 9 calls against https://cat-factory.example.com, the
+last 0.2s ago. (read tcp ...: connection reset by peer)
+```
+
+A reset after nine answered calls is a deployment that restarted; a refusal with nothing answered
+yet is an address with nothing behind it, and the two send you to completely different places. The
+wrapped error is unchanged, so `errors.Is(err, syscall.ECONNREFUSED)` still answers.
+
 ## Pointers
 
 A field is a **pointer** when the value can be genuinely absent or genuinely null; Go's zero

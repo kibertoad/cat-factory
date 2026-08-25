@@ -653,6 +653,42 @@ export const publicEnvironmentHandlerListSchema = v.object({
 })
 export type PublicEnvironmentHandlerList = v.InferOutput<typeof publicEnvironmentHandlerListSchema>
 
+/**
+ * One entry of the workspace's custom-manifest-type catalog: what a `custom` pin may NAME.
+ *
+ * The read that was missing under the pin itself. A `custom` pin is a `manifestId` matched against
+ * a handler, and nothing on the write path checks it: `publicManifestIdSchema` checks a string
+ * FORMAT and no registry, so an id no handler serves is accepted and the failure surfaces at the
+ * `deployer` step of a run that has already been paid for. Refusing it at the write would be the
+ * cleanest statement of that and is a break under ADR 0034 (it narrows what a live integration may
+ * send), so the answer is additive: publish what is pinnable and let a caller check before it
+ * spends.
+ *
+ * `source` is the half a caller acts on. A `registered` type is code in the deployment's own
+ * composition root, so an id missing from this list is a deployment change; a `workspace` one is a
+ * row, editable in the app. Those take different people, which is why the field is published rather
+ * than left to be inferred from the id.
+ *
+ * `fixerPrompt` and `acceptsInputHint` are deliberately NOT published. A prompt is internal text
+ * this repo rewrites freely, and freezing it on a surface that may never be reshaped buys a caller
+ * nothing it can act on.
+ */
+export const publicCustomManifestTypeSchema = v.object({
+  /** The id a service's `custom` provisioning pins. */
+  manifestId: v.string(),
+  label: v.string(),
+  /** `registered` (code, in the deployment's composition root) or `workspace` (an editable row). */
+  source: v.picklist(['registered', 'workspace']),
+  /** Where the manifest is read from when a pin names no `manifestPath`; null when it declares none. */
+  defaultManifestPath: v.nullable(v.string()),
+})
+export type PublicCustomManifestType = v.InferOutput<typeof publicCustomManifestTypeSchema>
+
+export const publicCustomManifestTypeListSchema = v.object({
+  manifestTypes: v.array(publicCustomManifestTypeSchema),
+})
+export type PublicCustomManifestTypeList = v.InferOutput<typeof publicCustomManifestTypeListSchema>
+
 // ---- 4. A service's provisioning (the SOURCE half) --------------------------
 
 /**
@@ -708,7 +744,20 @@ export const updatePublicServiceSchema = v.pipe(
   v.object({
     title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
     description: v.optional(descriptionField),
-    provisioning: v.optional(publicServiceProvisioningSchema),
+    /**
+     * Where this service's per-run manifests live. Omitted LEAVES the stored pin alone; `null`
+     * CLEARS it, leaving the service with no environment to provision.
+     *
+     * The two are different on purpose, and the difference is the field's whole reason for having
+     * a null: a caller correcting a title must not un-deploy a service, and a caller undoing its
+     * own pin had no way to say so, because the variant has two members and neither means "none".
+     * A suite that pins a shared board's frame therefore changed it permanently.
+     *
+     * `null` clears the WHOLE stored provisioning, not the published half of it: the service is
+     * left as one with no environment, which is what clearing a pin means. A caller narrowing a
+     * pin rather than removing it sends the member it wants instead.
+     */
+    provisioning: v.optional(v.nullable(publicServiceProvisioningSchema)),
   }),
   v.check(
     (input) =>

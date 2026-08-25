@@ -54,6 +54,7 @@ from .models import (
     ListDebugToolCallsResponse,
     ListPublicAvailableReposResponse,
     ListPublicEnvironmentConnectionsResponse,
+    ListPublicEnvironmentManifestTypesResponse,
     ListPublicJobsResponse,
     ListPublicKaizenEntriesAcknowledged,
     ListPublicMergeClassRollupsResponse,
@@ -308,8 +309,10 @@ class ServicesResource:
         manifests for a per-run environment are read from. That second half is what a
         connected cluster alone cannot supply, because the platform keeps “which cluster”
         (one per workspace) apart from “which manifests” (one set per service). An omitted
-        `provisioning` leaves the stored one alone rather than clearing it. Board
-        coordinates are deliberately absent, as they are on service creation.
+        `provisioning` leaves the stored one alone rather than clearing it, so correcting a
+        title cannot un-deploy a service; send `provisioning: null` to CLEAR the pin, which
+        leaves the service with no environment to provision. Board coordinates are
+        deliberately absent, as they are on service creation.
         `PATCH /api/v1/services/{serviceId}` (operation `updatePublicService`).
         """
         raw = self._transport.request(
@@ -971,8 +974,12 @@ class NotificationsResource:
 
 class EnvironmentsResource:
     """The cluster this workspace provisions per-run environments onto: probe a candidate
-    connection without saving it, or bind one. The credential is write-only, so a read
-    reports which secret keys are stored and never their values.
+    connection without saving it, bind one, or list what is already bound. The credential is
+    write-only, so a read reports which secret keys are stored and never their values. The
+    manifest-type catalog is the read under a service's `custom` provisioning pin: the ids a
+    pin may name, each saying whether the deployment registered it in code or the workspace
+    defined it, so a caller checks an id before a run pays to discover it resolves to
+    nothing.
     """
 
     def __init__(self, transport: Transport) -> None:
@@ -1018,6 +1025,26 @@ class EnvironmentsResource:
             timeout=timeout,
         )
         return ListPublicEnvironmentConnectionsResponse.from_dict(raw)
+
+    def list_manifest_types(self, *, timeout: float | None = None) -> ListPublicEnvironmentManifestTypesResponse:
+        """List the custom manifest types a service can pin
+        Every custom-manifest-type id a service’s `custom` provisioning may name, with the
+        label and default manifest path of each, and whether the deployment registered it in
+        code (`registered`) or the workspace defined it (`workspace`). Those two are fixed
+        by different people, which is why the source is reported. The read exists because a
+        pin is checked against no registry on the way in: an id no handler serves is
+        accepted and fails at the `deployer` step of a run already paid for, so a caller
+        lists first and refuses before it spends.
+        `GET /api/v1/environments/manifest-types` (operation
+        `listPublicEnvironmentManifestTypes`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/environments/manifest-types",
+            query=None,
+            timeout=timeout,
+        )
+        return ListPublicEnvironmentManifestTypesResponse.from_dict(raw)
 
     def test_connection(self, body: TestPublicEnvironmentConnectionRequest, *, timeout: float | None = None) -> TestPublicEnvironmentConnectionResponse:
         """Probe a candidate cluster connection without saving it

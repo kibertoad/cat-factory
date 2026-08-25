@@ -353,6 +353,31 @@ func main() {
 		return nil
 	})
 
+	step("error: connection refused", func() error {
+		// The one failure with no deployment on the other end of it, and the one whose MESSAGE is
+		// the whole product: a caller with no checkout reads this line and nothing else. All four
+		// clients must name the cause (nothing listening) rather than assert unreachability, and
+		// must say what this client had seen from the origin, which separates a restart from a bad
+		// address.
+		unreachable, err := catfactory.New(catfactory.Options{
+			BaseURL:    "http://127.0.0.1:1",
+			APIKey:     apiKey,
+			MaxRetries: -1,
+		})
+		if err != nil {
+			return err
+		}
+		_, err = unreachable.Services.List(ctx)
+		if err == nil {
+			return fmt.Errorf("expected a transport failure, got a success")
+		}
+		var connErr *catfactory.ConnectionError
+		observations["connectionFailureIsTypedClass"] = errors.As(err, &connErr)
+		observations["connectionFailureNamesTheCause"] = strings.Contains(err.Error(), "nothing is listening")
+		observations["connectionFailureStatesHistory"] = strings.Contains(err.Error(), "has not completed a call")
+		return nil
+	})
+
 	step("tasks.start", func() error {
 		body := catfactory.StartPublicTask{}
 		if pipelineID != "" {
