@@ -151,8 +151,13 @@ runner image:**
 
 - `backend/internal/executor-harness/src/**`
 - `backend/internal/executor-harness/Dockerfile`
+- `backend/internal/executor-harness/Dockerfile.ui` (the UI-tester image, versioned by the
+  same package)
 - `backend/internal/executor-harness/tsconfig.json`
-- the pinned `PI_VERSION` / `PI_TODO_EXTENSION_VERSION` build args
+- any pinned build arg in either Dockerfile: the three agent CLIs
+  (`PI_VERSION` / `CLAUDE_CODE_VERSION` / `CODEX_VERSION`), Pi's extensions
+  (`PI_TODO_EXTENSION_VERSION` / `PI_WEB_TOOLS_EXTENSION_VERSION`), and the UI image's
+  Playwright / pnpm / Yarn / `serve` / `WIREMOCK_VERSION` pins
 
 This keeps the published image tag in lockstep with the source that produced it.
 
