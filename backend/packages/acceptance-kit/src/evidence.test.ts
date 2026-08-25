@@ -23,6 +23,7 @@ function report(overrides: Partial<PrVerificationReport> = {}): PrVerificationRe
     generatedAt: 0,
     run: {} as PrVerificationReport['run'],
     context: {} as PrVerificationReport['context'],
+    followUps: { status: 'absent', loops: 0, maxLoops: 0, dropped: 0, entries: [] },
     ci: { status: 'absent', failingChecks: [], fixerAttempts: 0 },
     validation: {} as PrVerificationReport['validation'],
     reproduction: { status: 'absent', testPaths: [], attempts: 0 },

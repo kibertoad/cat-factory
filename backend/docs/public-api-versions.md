@@ -949,3 +949,30 @@ use_case_generation_timeout` (it did not answer inside the deployment's per-invo
 They are separate because the caller's move differs, and the deadline itself is part of the contract:
 a synchronous endpoint that held the request open for as long as the transport allowed would leave a
 caller with nothing to reason about.
+
+## 1.60.0
+
+Two additions to the FOLLOW-UP TRIAGE surface, both about what answering a Coder's question
+actually does.
+
+`POST /api/v1/runs/{runId}/follow-ups/{itemId}/answer` gains an optional `resolution`, either
+`answered` (the default, and byte-for-byte the prior behaviour) or `closed`. The two are different
+acts, and the endpoint previously had no way to tell them apart. `answered` says the reply carries
+information the next Coder pass applies, so the item is folded into a send-back that spends a pass.
+`closed` says the reply RULES ON the question without supplying anything to act on: the Coder asked
+for a fact nobody has, or asked to widen scope and the answer is no. A closed item clears the gate
+exactly as an answer does, spends no pass, and is carried into every later rework prompt as settled.
+
+The distinction is not cosmetic and is the reason this shipped. An unattended caller that answers
+every question with one fixed steer was, in effect, telling the Coder there was something new to
+apply each time. There never was, so the Coder reworded its uncertainty in the code and re-raised
+the same question under a new title, once per pass, until the send-back budget ran out. Callers
+that answer with a standing policy rather than with facts should send `resolution: 'closed'`.
+
+Alongside it, each item in a `follow-ups` decision gains `sendBackDropped`. It is true when the
+item was decided for a send-back the Coder never received, because the step's loop budget was
+already spent. Such an item reads `answered` or `queued` forever, which is indistinguishable from
+one the Coder acted on; this is the only field that says the run advanced without applying a
+decision somebody made. The same fact appears in the run's verification report
+(`GET /api/v1/runs/{runId}/report`), whose payload gains a `followUps` section and moves to
+`version: 10`.

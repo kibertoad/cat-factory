@@ -5901,16 +5901,21 @@
     "suggested": "Sugerowane:",
     "viewIssue": "Zobacz zgłoszenie",
     "yourAnswer": "Twoja odpowiedź:",
+    "yourRuling": "Twoje rozstrzygnięcie:",
+    "sendBackDropped": "Nigdy nie trafiło do Codera: budżet zawrotek był już wyczerpany.",
     "answerPlaceholder": "Odpowiedz na to pytanie — zostanie uwzględnione w kolejnym przebiegu Codera…",
     "status": {
       "pending": "Wymaga decyzji",
       "filed": "Zgłoszone jako zgłoszenie",
       "queued": "Wysłane do Codera",
       "answered": "Odpowiedziano",
+      "closed": "Rozstrzygnięte",
       "dismissed": "Odrzucone"
     },
     "actions": {
       "answerAndSend": "Odpowiedz i odeślij",
+      "answerAndClose": "Odpowiedz i zamknij",
+      "answerAndCloseHint": "Zapisz jako rozstrzygnięte bez zużywania kolejnego przebiegu Codera.",
       "dismiss": "Odrzuć",
       "fileAsIssue": "Zgłoś jako zgłoszenie",
       "sendToCoder": "Wyślij do Codera"

@@ -5901,16 +5901,21 @@
     "suggested": "מוצע:",
     "viewIssue": "הצג ניושן",
     "yourAnswer": "התשובה שלך:",
+    "yourRuling": "ההכרעה שלך:",
+    "sendBackDropped": "מעולם לא נשלח ל-Coder: תקציב ההחזרות כבר אזל.",
     "answerPlaceholder": "ענה על שאלה זו — היא משולבת במעבר הבא של ה-Coder…",
     "status": {
       "pending": "דורש החלטה",
       "filed": "הוגש כניושן",
       "queued": "נשלח ל-Coder",
       "answered": "נענה",
+      "closed": "הוכרע",
       "dismissed": "נדחה"
     },
     "actions": {
       "answerAndSend": "ענה ושלח בחזרה",
+      "answerAndClose": "לענות ולסגור",
+      "answerAndCloseHint": "לתעד כמוסדר בלי לבזבז מעבר נוסף של ה-Coder.",
       "dismiss": "דחה",
       "fileAsIssue": "הגש כניושן",
       "sendToCoder": "שלח ל-Coder"

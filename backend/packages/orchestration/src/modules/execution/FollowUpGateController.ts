@@ -6,8 +6,10 @@ import type {
   ExecutionRepository,
   FollowUpItem,
   FollowUpsStepState,
+  FollowUpResolution,
   IdGenerator,
   Logger,
+  OperationalMetrics,
   PipelineStep,
   RunAutonomy,
   StreamedFollowUp,
@@ -16,10 +18,12 @@ import type {
 } from '@cat-factory/kernel'
 import { ConflictError, NotFoundError } from '@cat-factory/kernel'
 import {
+  followUpGateVerdict,
+  followUpLoopBudget,
+  followUpsAlreadySettled,
   followUpsToSendBack,
   hasPendingFollowUps,
   renderFollowUpRework,
-  shouldLoopCoder,
 } from './followUp.logic.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
@@ -51,6 +55,12 @@ export interface FollowUpGateControllerDeps {
   ) => Promise<{ autonomy?: RunAutonomy }>
   /** Facade logger; absent in tests, where the dismissal is asserted off the step instead. */
   logger?: Logger
+  /**
+   * Where a dropped send-back is COUNTED. Required rather than optional, like every other holder
+   * of this port: an un-wired counter is indistinguishable from a deployment where this never
+   * happens, and those are the two facts an operator most needs to tell apart here.
+   */
+  operationalMetrics: OperationalMetrics
 }
 
 /**
@@ -76,6 +86,7 @@ export class FollowUpGateController {
   private readonly ticketTrackerProvider?: TicketTrackerProvider
   private readonly resolveRiskPolicy: FollowUpGateControllerDeps['resolveRiskPolicy']
   private readonly logger?: Logger
+  private readonly metrics: OperationalMetrics
 
   constructor(deps: FollowUpGateControllerDeps) {
     this.executionRepository = deps.executionRepository
@@ -90,6 +101,7 @@ export class FollowUpGateController {
     this.ticketTrackerProvider = deps.ticketTrackerProvider
     this.resolveRiskPolicy = deps.resolveRiskPolicy
     this.logger = deps.logger
+    this.metrics = deps.operationalMetrics
   }
 
   /**
@@ -136,14 +148,76 @@ export class FollowUpGateController {
         return this.runStateMachine.parkStepOnDecision(workspaceId, instance, step)
       }
     }
-    if (shouldLoopCoder(state)) {
+    const verdict = followUpGateVerdict(state)
+    if (verdict === 'loop') {
       this.loopCoderForFollowUps(instance, step)
       await this.runStateMachine.persistAndEmit(workspaceId, instance, {
         blockStatus: 'in_progress',
       })
       return { kind: 'continue' }
     }
+    if (verdict === 'exhausted') {
+      // The caller persists (this path returns `undefined` so the ordinary advance/finish logic
+      // runs and writes), so the stamp rides that write.
+      this.reportDroppedSendBacks(workspaceId, instance, state, this.stampExhaustedSendBacks(state))
+    }
     return undefined
+  }
+
+  /**
+   * Mark the send-backs the loop budget could not pay for. Idempotent, and the stamp is what makes
+   * it so: {@link followUpsToSendBack} excludes a dropped item, so a second call over the same
+   * state finds nothing and returns empty.
+   *
+   * Reached when the Coder has been looped `maxLoops` times and a human's queued follow-up or
+   * answered question is still unsent. The run advances from here, which is the right call (the
+   * alternative is a run that never finishes, and the budget exists precisely to bound a
+   * conversation that is not converging). But advancing is not the same as converging, and the two
+   * used to be indistinguishable afterwards: the items sat `answered` with `sentToCoder` false
+   * forever, reading exactly like answers the Coder had acted on.
+   */
+  private stampExhaustedSendBacks(state: FollowUpsStepState): FollowUpItem[] {
+    const dropped = followUpsToSendBack(state)
+    const now = this.clock.now()
+    for (const item of dropped) {
+      item.sendBackDropped = true
+      item.updatedAt = now
+    }
+    return dropped
+  }
+
+  /**
+   * Report what {@link stampExhaustedSendBacks} dropped, once, for the two readers the stamp
+   * itself does not reach:
+   *
+   * - a `warn`, for the operator debugging THIS run, carrying the ids to find it and the budget
+   *   that ran out;
+   * - `followup.send_back_dropped`, for the operator who needs to know this is happening MORE than
+   *   it was. One run hitting the cap is ordinary. A deployment where most runs do has a prompt or
+   *   a triage habit to change, and only a rate tells those apart.
+   *
+   * Separate from the stamp because neither of these is idempotent and the stamp has to live
+   * inside a CAS callback that re-runs on a lost race.
+   */
+  private reportDroppedSendBacks(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    state: FollowUpsStepState,
+    dropped: FollowUpItem[],
+  ): void {
+    if (dropped.length === 0) return
+    const budget = followUpLoopBudget(state)
+    this.logger?.warn('follow-up send-backs dropped: the Coder loop budget is spent', {
+      workspaceId,
+      runId: instance.id,
+      blockId: instance.blockId,
+      dropped: dropped.length,
+      loops: budget.loops,
+      maxLoops: budget.maxLoops,
+    })
+    // Undimensioned: the only split worth having is which run, which is unbounded and already on
+    // the log line above.
+    this.metrics.increment('followup.send_back_dropped', {}, dropped.length)
   }
 
   /**
@@ -214,7 +288,9 @@ export class FollowUpGateController {
   private loopCoderForFollowUps(instance: ExecutionInstance, step: PipelineStep): void {
     const state = step.followUps!
     const sending = followUpsToSendBack(state)
-    const feedback = renderFollowUpRework(sending)
+    // Every question ruled on rides along, not only the ones ruled on since the last pass: the
+    // Coder has no memory across passes, so a ruling dropped from the prompt is one it re-raises.
+    const feedback = renderFollowUpRework(sending, followUpsAlreadySettled(state))
     for (const item of sending) {
       item.sentToCoder = true
       item.updatedAt = this.clock.now()
@@ -368,19 +444,29 @@ export class FollowUpGateController {
     })
   }
 
-  /** Answer a `question` item; the answer is folded into the Coder's next pass. */
+  /**
+   * Answer a `question` item.
+   *
+   * `answered` (the default) folds the answer into the Coder's next pass. `closed` records the
+   * reply as a RULING: the item is decided and clears the gate exactly as an answer does, but it
+   * buys no pass, and it is carried into every later rework prompt as settled. See
+   * `followUpResolutionSchema` for why the answerer picks this rather than the engine inferring it.
+   */
   async answerFollowUp(
     workspaceId: string,
     executionId: string,
     itemId: string,
     answer: string,
+    resolution: FollowUpResolution = 'answered',
   ): Promise<FollowUpsStepState> {
     return this.applyFollowUpDecision(workspaceId, executionId, itemId, (item) => {
       if (item.kind !== 'question') {
         throw new ConflictError('Only question items can be answered')
       }
-      item.status = 'answered'
+      item.status = resolution === 'closed' ? 'closed' : 'answered'
       item.answer = answer
+      // Left false on a `closed` item too, and deliberately: nothing was sent, and `sendBackDropped`
+      // is what distinguishes "never going to be sent" from "was going to be, and was not".
       item.sentToCoder = false
       item.updatedAt = this.clock.now()
     })
@@ -422,12 +508,14 @@ export class FollowUpGateController {
     let outcome: 'record' | 'loop' | 'handoff' | 'advance' = 'record'
     let index = -1
     let loopDecisionId: string | undefined
+    let dropped: FollowUpItem[] = []
     const persisted = await this.runStateMachine.mutateInstance(
       workspaceId,
       executionId,
       (fresh) => {
         outcome = 'record'
         loopDecisionId = undefined
+        dropped = []
         index = fresh.steps.findIndex(
           (s) => s.followUps?.enabled && s.followUps.items.some((i) => i.id === itemId),
         )
@@ -443,12 +531,17 @@ export class FollowUpGateController {
         if (!parkedHere || hasPendingFollowUps(step.followUps!)) return
         // Every item decided and the run is parked here: loop the Coder for the send-back items,
         // hand off to a co-located approval gate, or advance past the gate.
-        if (shouldLoopCoder(step.followUps!)) {
+        const verdict = followUpGateVerdict(step.followUps!)
+        if (verdict === 'loop') {
           loopDecisionId = step.approval!.id
           this.loopCoderForFollowUps(fresh, step)
           outcome = 'loop'
           return
         }
+        // The STAMP only: it is idempotent and belongs with the write, so it re-applies safely
+        // when a lost CAS race re-runs this callback on the winner's snapshot. Its log line and
+        // its counter are not idempotent, so they fire once, below, on the persisted snapshot.
+        if (verdict === 'exhausted') dropped = this.stampExhaustedSendBacks(step.followUps!)
         const isFinalStep = index === fresh.steps.length - 1
         if (step.requiresApproval && !isFinalStep && step.approval?.status === 'pending') {
           // The follow-up park reused `step.approval`; advancing here would silently SKIP the
@@ -465,6 +558,7 @@ export class FollowUpGateController {
     )
     // Non-idempotent side effects on the winning snapshot (the CAS write is the source of truth,
     // so nothing re-persists here). The settled paths first clear the follow-up waiting card.
+    this.reportDroppedSendBacks(workspaceId, persisted, persisted.steps[index]!.followUps!, dropped)
     if (outcome === 'record') {
       await this.runStateMachine.emitInstance(workspaceId, persisted)
     } else {

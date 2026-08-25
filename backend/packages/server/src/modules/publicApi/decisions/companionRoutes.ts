@@ -75,7 +75,8 @@ export function registerFollowUpDecisionRoutes(app: Hono<AppEnv>): void {
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
   })
 
-  // Answer a question item; the answer steers the Coder's next pass.
+  // Answer a question item: 'answered' steers the Coder's next pass, 'closed' rules on it with
+  // no further pass (the reason still reaches the Coder, as something already settled).
   buildHonoRoute(app, answerPublicRunFollowUpContract, async (c) => {
     const { runId, itemId } = c.req.valid('param')
     const gated = await gateDecisionAction(c, runId)
@@ -83,7 +84,7 @@ export function registerFollowUpDecisionRoutes(app: Hono<AppEnv>): void {
       return c.json(failureBody(gated.fail), gated.fail.status)
     }
     const { workspaceId, scoped } = gated
-    const { answer } = c.req.valid('json')
+    const { answer, resolution } = c.req.valid('json')
     await runWithInitiator({ workspaceId, initiatedBy: scoped.execution.initiatedBy }, () =>
       c
         .get('container')
@@ -92,6 +93,7 @@ export function registerFollowUpDecisionRoutes(app: Hono<AppEnv>): void {
           scoped.execution.id,
           itemId,
           answer,
+          resolution,
         ),
     )
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)

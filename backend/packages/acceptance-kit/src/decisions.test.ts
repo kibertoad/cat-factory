@@ -90,6 +90,7 @@ function item(
     title: 'share the pagination helper',
     detail: 'the pagination helper could be shared',
     answer: null,
+    sendBackDropped: false,
     suggestedAction: null,
     ticketExternalId: null,
     ticketUrl: null,

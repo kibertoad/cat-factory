@@ -1024,6 +1024,10 @@ export function buildSingleRepoCodingSpec(
     guardLimits: job.guardLimits,
     ...(job.persistentCheckout ? { persistentCheckout: true } : {}),
     ...(job.streamFollowUps ? { streamFollowUps: true } : {}),
+    // The task's linked documents, materialised into `.cat-context/` for the agent to read on
+    // demand. Every other caller of `runAgentInWorkspace` forwards these; this spread was the one
+    // that did not, so the implementer's prompt named files its checkout had never been given.
+    ...(job.contextFiles?.length ? { contextFiles: job.contextFiles } : {}),
     // Whether a pull request will open at all is exactly `job.pr` (see the `if (job.pr)` guard in
     // `runSingleRepoCoding`), and it is what decides whether the repo's PR template is worth
     // resolving. Read off the same field rather than a new job-body flag, so the two can't drift.

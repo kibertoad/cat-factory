@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useApi } from '~/composables/useApi'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useExecutionStore } from '~/stores/execution'
+import type { FollowUpResolution } from '~/types/execution'
 
 /**
  * The Follow-up companion action surface. The live item state lives on the run's Coder step
@@ -69,8 +70,15 @@ export const useFollowUpsStore = defineStore('followUps', () => {
   const queueItem = (executionId: string, itemId: string) =>
     act(executionId, itemId, (ws) => api.queueFollowUp(ws, executionId, itemId))
 
-  const answerItem = (executionId: string, itemId: string, answer: string) =>
-    act(executionId, itemId, (ws) => api.answerFollowUp(ws, executionId, itemId, answer))
+  const answerItem = (
+    executionId: string,
+    itemId: string,
+    answer: string,
+    resolution: FollowUpResolution = 'answered',
+  ) =>
+    act(executionId, itemId, (ws) =>
+      api.answerFollowUp(ws, executionId, itemId, answer, resolution),
+    )
 
   const dismissItem = (executionId: string, itemId: string) =>
     act(executionId, itemId, (ws) => api.dismissFollowUp(ws, executionId, itemId))

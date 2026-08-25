@@ -472,6 +472,53 @@ function registerAsyncJobAndPrTests(harness: ConformanceHarness): void {
     expect(finalCoder.followUps?.items.find((i) => i.id === question.id)?.status).toBe('answered')
   })
 
+  it('a CLOSED question clears the follow-up gate without buying the Coder another pass', async () => {
+    // The sibling of the assertion above, and the difference between them is the whole point of
+    // the `resolution` field. Answering says "here is something to apply", and pays a Coder pass
+    // for it. Closing says "this is ruled on", clears the same gate, and spends nothing.
+    //
+    // Pinned on both runtimes because the unattended callers that most need it (the acceptance
+    // suite, any headless `/api/v1` driver) answer with a standing policy rather than with facts:
+    // handed that as an ANSWER, the Coder finds nothing to apply, rewords its uncertainty and
+    // re-raises the same question, once per pass, until the budget runs out.
+    const app = harness.makeApp({
+      confidence: 1,
+      asyncKinds: ['coder'],
+      followUps: [{ kind: 'question', title: 'Which timeout?', detail: '30s or 60s?' }],
+    })
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+    await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: 'pl_simple',
+    })
+
+    const parked = await app.drive(wsId)
+    const exec = parked.find((e) => e.blockId === 'task_login')!
+    expect(exec.status).toBe('blocked')
+    const question = exec.steps.find((s) => s.agentKind === 'coder')!.followUps!.items[0]!
+
+    const closed = await app.call(
+      'POST',
+      `/workspaces/${wsId}/executions/${exec.id}/follow-ups/${question.id}/answer`,
+      { answer: 'The brief already settles this. Do not widen scope.', resolution: 'closed' },
+    )
+    expect(closed.status).toBe(200)
+
+    const done = await app.drive(wsId)
+    const final = done.find((e) => e.blockId === 'task_login')!
+    expect(final.status).toBe('done')
+    const finalCoder = final.steps.find((s) => s.agentKind === 'coder')!
+    expect(finalCoder.followUps?.items[0]!.status).toBe('closed')
+    // The reason is RECORDED even though no pass was bought: it is what later rework prompts carry
+    // as settled, and what a reviewer reads on the PR report.
+    expect(finalCoder.followUps?.items[0]!.answer).toContain('Do not widen scope')
+    // The gate cleared and the run finished, and nothing was spent doing it.
+    expect(finalCoder.followUps?.loops ?? 0).toBe(0)
+    // Nothing was DROPPED either: a ruling is not a send-back the budget failed to pay for, and
+    // conflating those would put a spurious warning on every closed question's pull request.
+    expect(finalCoder.followUps?.items[0]!.sendBackDropped ?? false).toBe(false)
+  })
+
   it('opens a PR when confidence is below threshold, then merges on demand', async () => {
     const app = harness.makeApp({ confidence: 0.5 })
     const { workspace } = await app.createWorkspace()

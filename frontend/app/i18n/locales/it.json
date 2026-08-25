@@ -6478,16 +6478,21 @@
     "suggested": "Suggerito:",
     "viewIssue": "Visualizza issue",
     "yourAnswer": "La tua risposta:",
+    "yourRuling": "La tua decisione:",
+    "sendBackDropped": "Mai inviato al Coder: il budget dei rinvii era già esaurito.",
     "answerPlaceholder": "Rispondi a questa domanda — verrà integrata nel prossimo passaggio del Coder…",
     "status": {
       "pending": "Richiede una decisione",
       "filed": "Registrato come issue",
       "queued": "Inviato al Coder",
       "answered": "Risposto",
+      "closed": "Deciso",
       "dismissed": "Ignorato"
     },
     "actions": {
       "answerAndSend": "Rispondi e invia",
+      "answerAndClose": "Rispondi e chiudi",
+      "answerAndCloseHint": "Registralo come risolto senza spendere un altro passaggio del Coder.",
       "dismiss": "Ignora",
       "fileAsIssue": "Registra come issue",
       "sendToCoder": "Invia al Coder"

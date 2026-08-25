@@ -6478,16 +6478,21 @@
     "suggested": "Vorgeschlagen:",
     "viewIssue": "Issue ansehen",
     "yourAnswer": "Deine Antwort:",
+    "yourRuling": "Deine Entscheidung:",
+    "sendBackDropped": "Nie an den Coder gesendet: das Budget für Rückläufe war bereits aufgebraucht.",
     "answerPlaceholder": "Beantworte diese Frage – sie fließt in den nächsten Durchlauf des Coders ein…",
     "status": {
       "pending": "Braucht eine Entscheidung",
       "filed": "Als Issue eingereicht",
       "queued": "An Coder gesendet",
       "answered": "Beantwortet",
+      "closed": "Entschieden",
       "dismissed": "Verworfen"
     },
     "actions": {
       "answerAndSend": "Antworten & zurücksenden",
+      "answerAndClose": "Antworten & abschließen",
+      "answerAndCloseHint": "Als erledigt festhalten, ohne einen weiteren Coder-Durchlauf zu verbrauchen.",
       "dismiss": "Verwerfen",
       "fileAsIssue": "Als Issue einreichen",
       "sendToCoder": "An Coder senden"

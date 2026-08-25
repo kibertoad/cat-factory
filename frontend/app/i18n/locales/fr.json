@@ -5901,16 +5901,21 @@
     "suggested": "Suggestion :",
     "viewIssue": "Voir le ticket",
     "yourAnswer": "Votre réponse :",
+    "yourRuling": "Votre décision :",
+    "sendBackDropped": "Jamais transmis au Coder : le budget de renvois était déjà épuisé.",
     "answerPlaceholder": "Répondez à cette question ; elle sera intégrée à la prochaine passe du Coder…",
     "status": {
       "pending": "Nécessite une décision",
       "filed": "Enregistré comme ticket",
       "queued": "Envoyé au Coder",
       "answered": "Répondu",
+      "closed": "Tranché",
       "dismissed": "Rejeté"
     },
     "actions": {
       "answerAndSend": "Répondre et renvoyer",
+      "answerAndClose": "Répondre et clore",
+      "answerAndCloseHint": "Enregistrer comme réglé sans dépenser une passe supplémentaire du Coder.",
       "dismiss": "Rejeter",
       "fileAsIssue": "Enregistrer comme ticket",
       "sendToCoder": "Envoyer au Coder"

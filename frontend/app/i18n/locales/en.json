@@ -6199,16 +6199,21 @@
     "suggested": "Suggested:",
     "viewIssue": "View issue",
     "yourAnswer": "Your answer:",
+    "yourRuling": "Your ruling:",
+    "sendBackDropped": "Never sent to the Coder: the send-back budget was already spent.",
     "answerPlaceholder": "Answer this question — it's folded into the Coder's next pass…",
     "status": {
       "pending": "Needs a decision",
       "filed": "Filed as issue",
       "queued": "Sent to Coder",
       "answered": "Answered",
+      "closed": "Ruled on",
       "dismissed": "Dismissed"
     },
     "actions": {
       "answerAndSend": "Answer & send back",
+      "answerAndClose": "Answer & close",
+      "answerAndCloseHint": "Record this as settled without spending another Coder pass.",
       "dismiss": "Dismiss",
       "fileAsIssue": "File as issue",
       "sendToCoder": "Send to Coder"

@@ -3,6 +3,7 @@ import type {
   BinaryCandidateStepState,
   ChallengePrReviewFindingInput,
   ChooseForkInput,
+  FollowUpResolution,
   FollowUpsStepState,
   ForkChatRequestInput,
   ForkDecisionStepState,
@@ -45,6 +46,7 @@ export interface RunDecisionSurfaces {
     executionId: string,
     itemId: string,
     answer: string,
+    resolution?: FollowUpResolution,
   ): Promise<FollowUpsStepState>
   dismissFollowUp(
     workspaceId: string,
@@ -204,8 +206,9 @@ export function runDecisionSurfaces(dispatcher: () => RunDispatcher): RunDecisio
       executionId: string,
       itemId: string,
       answer: string,
+      resolution?: FollowUpResolution,
     ): Promise<FollowUpsStepState> {
-      return dispatcher().answerFollowUp(workspaceId, executionId, itemId, answer)
+      return dispatcher().answerFollowUp(workspaceId, executionId, itemId, answer, resolution)
     },
 
     /** @see RunDispatcher.dismissFollowUp */

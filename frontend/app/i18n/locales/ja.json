@@ -5901,16 +5901,21 @@
     "suggested": "提案:",
     "viewIssue": "issueを表示",
     "yourAnswer": "あなたの回答:",
+    "yourRuling": "あなたの裁定:",
+    "sendBackDropped": "Coderには送信されませんでした: 差し戻しの予算をすでに使い切っていました。",
     "answerPlaceholder": "この質問に回答してください。Coderの次のパスに反映されます…",
     "status": {
       "pending": "判断が必要",
       "filed": "issueとして登録済み",
       "queued": "Coderに送信済み",
       "answered": "回答済み",
+      "closed": "裁定済み",
       "dismissed": "却下済み"
     },
     "actions": {
       "answerAndSend": "回答して返送",
+      "answerAndClose": "回答して確定",
+      "answerAndCloseHint": "Coderの再実行を消費せずに決着済みとして記録します。",
       "dismiss": "却下",
       "fileAsIssue": "issueとして登録",
       "sendToCoder": "Coderに送信"

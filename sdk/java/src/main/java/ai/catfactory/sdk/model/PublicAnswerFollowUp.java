@@ -4,17 +4,22 @@
 package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PublicAnswerFollowUp} wire model.
  * @param answer Length 1..4000.
+ * @param resolution May be absent entirely.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicAnswerFollowUp(
     /** Length 1..4000. */
-    @JsonProperty("answer") String answer
+    @JsonProperty("answer") String answer,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("resolution") @Nullable PublicAnswerFollowUpResolution resolution
 ) {
 
     /** A new builder for {@link PublicAnswerFollowUp}. */
@@ -30,6 +35,7 @@ public record PublicAnswerFollowUp(
      */
     public static final class Builder {
         private @Nullable String answer;
+        private @Nullable PublicAnswerFollowUpResolution resolution;
 
         /** Set {@code answer}. */
         public Builder answer(@Nullable String answer) {
@@ -37,9 +43,15 @@ public record PublicAnswerFollowUp(
             return this;
         }
 
+        /** Set {@code resolution}. */
+        public Builder resolution(@Nullable PublicAnswerFollowUpResolution resolution) {
+            this.resolution = resolution;
+            return this;
+        }
+
         /** Build the {@link PublicAnswerFollowUp}. */
         public PublicAnswerFollowUp build() {
-            return new PublicAnswerFollowUp(answer);
+            return new PublicAnswerFollowUp(answer, resolution);
         }
     }
 }

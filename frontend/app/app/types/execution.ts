@@ -58,6 +58,7 @@ export type {
   PipelineStep,
   FollowUpItemKind,
   FollowUpItemStatus,
+  FollowUpResolution,
   FollowUpItem,
   FollowUpsStepState,
   ForkOption,

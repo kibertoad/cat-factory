@@ -5901,16 +5901,21 @@
     "suggested": "Önerilen:",
     "viewIssue": "Sorunu görüntüle",
     "yourAnswer": "Cevabınız:",
+    "yourRuling": "Kararınız:",
+    "sendBackDropped": "Coder'a hiç gönderilmedi: geri gönderim bütçesi çoktan tükenmişti.",
     "answerPlaceholder": "Bu soruyu cevaplayın — Coder'ın bir sonraki turuna dahil edilir…",
     "status": {
       "pending": "Karar gerekiyor",
       "filed": "Sorun olarak kaydedildi",
       "queued": "Coder'a gönderildi",
       "answered": "Cevaplandı",
+      "closed": "Karara bağlandı",
       "dismissed": "Reddedildi"
     },
     "actions": {
       "answerAndSend": "Cevapla ve geri gönder",
+      "answerAndClose": "Yanıtla ve kapat",
+      "answerAndCloseHint": "Yeni bir Coder turu harcamadan çözülmüş olarak kaydet.",
       "dismiss": "Reddet",
       "fileAsIssue": "Sorun olarak kaydet",
       "sendToCoder": "Coder'a gönder"

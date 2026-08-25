@@ -13,6 +13,7 @@ import org.jspecify.annotations.Nullable;
  * @param detail the {@code detail} field.
  * @param itemId the {@code itemId} field.
  * @param kind the {@code kind} field.
+ * @param sendBackDropped the {@code sendBackDropped} field.
  * @param status the {@code status} field.
  * @param suggestedAction Always present; {@code null} when the server has no value for it.
  * @param ticketExternalId Always present; {@code null} when the server has no value for it.
@@ -28,9 +29,11 @@ public record PublicFollowUpItem(
 
     @JsonProperty("itemId") String itemId,
 
-    @JsonProperty("kind") PublicFollowUpItemKind kind,
+    @JsonProperty("kind") PrVerificationReportFollowUpsEntryKind kind,
 
-    @JsonProperty("status") PublicFollowUpItemStatus status,
+    @JsonProperty("sendBackDropped") Boolean sendBackDropped,
+
+    @JsonProperty("status") PrVerificationReportFollowUpsEntryStatus status,
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("suggestedAction") @Nullable String suggestedAction,
@@ -59,8 +62,9 @@ public record PublicFollowUpItem(
         private @Nullable String answer;
         private @Nullable String detail;
         private @Nullable String itemId;
-        private @Nullable PublicFollowUpItemKind kind;
-        private @Nullable PublicFollowUpItemStatus status;
+        private @Nullable PrVerificationReportFollowUpsEntryKind kind;
+        private @Nullable Boolean sendBackDropped;
+        private @Nullable PrVerificationReportFollowUpsEntryStatus status;
         private @Nullable String suggestedAction;
         private @Nullable String ticketExternalId;
         private @Nullable String ticketUrl;
@@ -85,13 +89,19 @@ public record PublicFollowUpItem(
         }
 
         /** Set {@code kind}. */
-        public Builder kind(@Nullable PublicFollowUpItemKind kind) {
+        public Builder kind(@Nullable PrVerificationReportFollowUpsEntryKind kind) {
             this.kind = kind;
             return this;
         }
 
+        /** Set {@code sendBackDropped}. */
+        public Builder sendBackDropped(@Nullable Boolean sendBackDropped) {
+            this.sendBackDropped = sendBackDropped;
+            return this;
+        }
+
         /** Set {@code status}. */
-        public Builder status(@Nullable PublicFollowUpItemStatus status) {
+        public Builder status(@Nullable PrVerificationReportFollowUpsEntryStatus status) {
             this.status = status;
             return this;
         }
@@ -122,7 +132,7 @@ public record PublicFollowUpItem(
 
         /** Build the {@link PublicFollowUpItem}. */
         public PublicFollowUpItem build() {
-            return new PublicFollowUpItem(answer, detail, itemId, kind, status, suggestedAction, ticketExternalId, ticketUrl, title);
+            return new PublicFollowUpItem(answer, detail, itemId, kind, sendBackDropped, status, suggestedAction, ticketExternalId, ticketUrl, title);
         }
     }
 }

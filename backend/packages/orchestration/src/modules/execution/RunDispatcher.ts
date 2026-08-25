@@ -13,6 +13,7 @@ import type {
   ExecutionEventPublisher,
   ExecutionInstance,
   ExecutionRepository,
+  FollowUpResolution,
   FollowUpsStepState,
   ForkChatRequestInput,
   ForkDecisionStepState,
@@ -54,7 +55,7 @@ import { DeployerStepController } from './DeployerStepController.js'
 import { DeployFixController } from './DeployFixController.js'
 import { SettledHelperRouter } from './SettledHelperRouter.js'
 import { DisposerStepController } from './DisposerStepController.js'
-import { FollowUpGateController } from './FollowUpGateController.js'
+import type { FollowUpGateController } from './FollowUpGateController.js'
 import { RunRepoOpsController } from './RunRepoOpsController.js'
 import { CompanionController } from './CompanionController.js'
 import { HumanTestController } from './HumanTestController.js'
@@ -109,6 +110,7 @@ import type { InitiativeService } from '../initiative/InitiativeService.js'
 import type { SpendService } from '@cat-factory/spend'
 import type { BlueprintReconciler } from './ExecutionService.js'
 import {
+  buildFollowUpGate,
   gateOutcomeRecording,
   type ResolvedRiskPolicy,
   type RunDispatcherDeps,
@@ -321,20 +323,9 @@ export class RunDispatcher {
         this.recordStepResult(ws, instance, step, isFinalStep, result),
       logger: deps.logger,
     })
-    this.followUpGate = new FollowUpGateController({
-      executionRepository: deps.executionRepository,
-      blockRepository: deps.blockRepository,
-      contextBuilder: deps.contextBuilder,
-      stepGraph: deps.stepGraph,
-      runStateMachine: deps.runStateMachine,
-      workRunner: deps.workRunner,
-      idGenerator: deps.idGenerator,
-      clock: deps.clock,
-      notificationService: deps.notificationService,
-      ticketTrackerProvider: deps.ticketTrackerProvider,
-      resolveRiskPolicy: (ws, block, run) => this.resolveRiskPolicy(ws, block, run),
-      logger: deps.logger,
-    })
+    this.followUpGate = buildFollowUpGate(deps, (ws, block, run) =>
+      this.resolveRiskPolicy(ws, block, run),
+    )
     this.repoOps = new RunRepoOpsController({
       blockRepository: deps.blockRepository,
       contextBuilder: deps.contextBuilder,
@@ -1426,8 +1417,9 @@ export class RunDispatcher {
     executionId: string,
     itemId: string,
     answer: string,
+    resolution?: FollowUpResolution,
   ): Promise<FollowUpsStepState> {
-    return this.followUpGate.answerFollowUp(workspaceId, executionId, itemId, answer)
+    return this.followUpGate.answerFollowUp(workspaceId, executionId, itemId, answer, resolution)
   }
 
   /** @see FollowUpGateController.dismissFollowUp */

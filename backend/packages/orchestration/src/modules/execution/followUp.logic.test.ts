@@ -3,11 +3,12 @@ import type { FollowUpItem, FollowUpsStepState } from '@cat-factory/kernel'
 import {
   DEFAULT_FOLLOW_UP_MAX_LOOPS,
   FOLLOW_UP_PRODUCER_KIND,
+  followUpGateVerdict,
+  followUpsAlreadySettled,
   followUpsToSendBack,
   hasPendingFollowUps,
   pendingFollowUpCount,
   renderFollowUpRework,
-  shouldLoopCoder,
 } from './followUp.logic.js'
 
 const item = (over: Partial<FollowUpItem>): FollowUpItem => ({
@@ -52,21 +53,50 @@ describe('followUp.logic', () => {
       item({ id: 'c', status: 'queued', sentToCoder: true }),
       item({ id: 'd', status: 'filed' }),
       item({ id: 'e', status: 'dismissed' }),
+      // A ruling, not an answer: it clears the gate and buys no pass.
+      item({ id: 'f', status: 'closed', kind: 'question', answer: 'the brief stands' }),
     ])
     expect(followUpsToSendBack(s).map((i) => i.id)).toEqual(['a', 'b'])
   })
 
-  it('loops only when no pending, has unsent send-back items, and budget remains', () => {
+  it('excludes an already-dropped send-back, so exhaustion is reported exactly once', () => {
+    // The stamp is what makes the exhausted verdict idempotent: without this exclusion a
+    // re-driven advance re-counts the same dropped decisions on every pass over the step.
+    const dropped = state([item({ id: 'a', status: 'queued', sendBackDropped: true })], {
+      loops: DEFAULT_FOLLOW_UP_MAX_LOOPS,
+    })
+    expect(followUpsToSendBack(dropped)).toEqual([])
+    expect(followUpGateVerdict(dropped)).toBe('settled')
+  })
+
+  it('names each gate disposition, so an exhausted budget is not read as nothing to send', () => {
     const ready = state([item({ id: 'a', status: 'queued' })])
-    expect(shouldLoopCoder(ready)).toBe(true)
-    // A still-pending item blocks the loop (decisions outstanding).
+    expect(followUpGateVerdict(ready)).toBe('loop')
+    // A still-pending item holds the gate, whatever else is decided.
     expect(
-      shouldLoopCoder(state([item({ status: 'pending' }), item({ id: 'a', status: 'queued' })])),
-    ).toBe(false)
-    // Budget spent → no loop (the items advance without re-running).
-    expect(shouldLoopCoder({ ...ready, loops: DEFAULT_FOLLOW_UP_MAX_LOOPS })).toBe(false)
-    // Nothing to send back → no loop.
-    expect(shouldLoopCoder(state([item({ status: 'filed' })]))).toBe(false)
+      followUpGateVerdict(
+        state([item({ status: 'pending' }), item({ id: 'a', status: 'queued' })]),
+      ),
+    ).toBe('pending')
+    // Budget spent WITH a decision still unsent: the run advances, and something was dropped.
+    expect(followUpGateVerdict({ ...ready, loops: DEFAULT_FOLLOW_UP_MAX_LOOPS })).toBe('exhausted')
+    // Budget spent with NOTHING outstanding is an ordinary finish, not a drop. These two were the
+    // same `false` before, which is why the drop reached nobody.
+    expect(
+      followUpGateVerdict(
+        state([item({ status: 'filed' })], { loops: DEFAULT_FOLLOW_UP_MAX_LOOPS }),
+      ),
+    ).toBe('settled')
+    expect(followUpGateVerdict(state([item({ status: 'filed' })]))).toBe('settled')
+  })
+
+  it('collects every closed question as settled, not only the newest', () => {
+    const s = state([
+      item({ id: 'a', status: 'closed', kind: 'question', answer: 'no' }),
+      item({ id: 'b', status: 'answered', kind: 'question', answer: 'yes' }),
+      item({ id: 'c', status: 'closed', kind: 'question', answer: 'the brief stands' }),
+    ])
+    expect(followUpsAlreadySettled(s).map((i) => i.id)).toEqual(['a', 'c'])
   })
 
   it('renders queued tasks + answered questions into the Coder rework, empty when none', () => {
@@ -92,5 +122,35 @@ describe('followUp.logic', () => {
     expect(text).toContain('Suggested approach: extract a helper')
     expect(text).toContain('Answers to questions you raised')
     expect(text).toContain('A: 30s')
+  })
+
+  it('carries the rulings into the rework, told apart from answers and marked do-not-re-raise', () => {
+    const text = renderFollowUpRework(
+      [item({ id: 'a', status: 'queued', title: 'Dedupe util' })],
+      [
+        item({
+          id: 'b',
+          status: 'closed',
+          kind: 'question',
+          title: 'Which IngressClass is default?',
+          answer: 'Nobody here knows. Ship it classless and say so.',
+        }),
+      ],
+    )
+    expect(text).toContain('Already settled')
+    expect(text).toContain('do NOT raise these again')
+    expect(text).toContain('Which IngressClass is default?')
+    expect(text).toContain('Ruling: Nobody here knows.')
+    // A ruling must not be presented as something to apply: that framing is what produced the
+    // reword-and-re-ask loop this section exists to end.
+    expect(text).not.toContain('A: Nobody here knows.')
+  })
+
+  it('spends no pass on rulings alone: a rework with nothing to send stays empty', () => {
+    // Otherwise the budget buys a model call whose entire prompt is "here is what you may not ask
+    // about", which has no work in it.
+    expect(renderFollowUpRework([], [item({ id: 'b', status: 'closed', kind: 'question' })])).toBe(
+      '',
+    )
   })
 })

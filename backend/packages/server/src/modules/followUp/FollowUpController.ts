@@ -51,10 +51,11 @@ export function followUpController(): Hono<AppEnv> {
     return c.json(state, 200)
   })
 
-  // Answer a question item (the answer folds into the Coder's next pass).
+  // Answer a question item: 'answered' folds it into the Coder's next pass, 'closed' records it
+  // as a ruling that buys no pass.
   buildHonoRoute(app, answerFollowUpContract, async (c) => {
     const { executionId, itemId } = c.req.valid('param')
-    const { answer } = c.req.valid('json')
+    const { answer, resolution } = c.req.valid('json')
     const state = await c
       .get('container')
       .executionService.decisions.answerFollowUp(
@@ -62,6 +63,7 @@ export function followUpController(): Hono<AppEnv> {
         executionId,
         itemId,
         answer,
+        resolution,
       )
     return c.json(state, 200)
   })
