@@ -213,7 +213,12 @@ chain]`), because a silent slice reads as the whole chain. The two readers have 
 - **The outermost link is KEPT**, `fetch failed` and all, unlike `describeConnectionFailure`, which
   drops it so a probe's verdict leads with the real cause. The divergence is deliberate: a log line
   and a `DispatchError` message are matched downstream by their OPENING phrase (`/dispatch failed/i`,
-  the eviction sentinels), so appending causes is safe where dropping a leading link is not.
+  the eviction sentinels), so appending causes is safe where dropping a leading link is not. The
+  DROP is `errorChainDiagnosisText`, the sibling of `errorChainText` and not a fourth describer: it
+  renders, it classifies nothing, and it is what a reader takes when it already has the cause class
+  and wants only the chain (the acceptance kit's per-poll outage line, on a 200-character budget the
+  contentless wrapper spends without separating one outage from another). `describeConnectionFailure`
+  applies the same reduction, from the one statement of it.
 - **An error with NOTHING to say answers with the empty string**, not with `String(error)`, whose
   value for a message-less error is the base constructor name `Error`. Call sites guard with
   `getErrorMessage(err) || '<what the operator should do about it>'` (the local preflight probes),

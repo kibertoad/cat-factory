@@ -138,8 +138,18 @@ it is rather than the obvious way.
    accepted the request created nothing and a re-run is clean; one that died under the request, timed
    out or came back unreadable may have filed a task with no run started and no budget spent, and
    that one is a refusal telling an operator to look at the board first. The SDK's connection
-   diagnosis is what makes the two separable, and its account of the origin (whether this client had
-   been answered, and how recently) travels with the instruction.
+   diagnosis is what makes the two separable, and what the account attached to the refusal actually
+   PROVES is said per cause: an origin history is a claim only the connection error carries, and a
+   gateway's own 502 describes the wrong party.
+
+   **What bounds the window is what the request was, not where the code that failed sat.** Two
+   narrowings keep it honest, because both were got wrong by reading it as "whatever `createTask`
+   threw". Only a failure the SDK raised about a call it MADE is classified, so a brief over the
+   description cap and a bug in the suite are reported as themselves rather than as a task that may
+   be on the board. And anything the request body has to be READ from goes in `prepareTask`, which
+   runs before the window opens and is still skipped entirely when there is a task to adopt: an
+   evidence read composing a description fails exactly the ways a create does, and nothing has been
+   filed when it fails.
 
 ## Seams
 

@@ -53,6 +53,7 @@
 import {
   connectionFailureHint,
   describeConnectionFailure,
+  errorChainDiagnosisText,
   errorChainText,
   MAX_ERROR_CHAIN_CHARS,
   MAX_LOGGED_ERROR_CHAIN_CHARS,
@@ -153,6 +154,33 @@ export type ProbeFailure =
   | { kind: 'foreign'; detail: string; remedy: Remedy }
   /** No answer arrived at all. `cause` is kernel's transport class, `unknown` when unmatched. */
   | { kind: 'unanswered'; cause: ConnectionFailureCause; detail: string; remedy: Remedy }
+
+/**
+ * Statuses that can only have been written by something IN FRONT of the deployment.
+ *
+ * Our own backend never emits them: `handleError` is the one producer of the error envelope and it
+ * maps the domain vocabulary onto 401/403/404/409/422/428/429/503, so a 502 or a 504 on this wire
+ * came from a proxy, a load balancer or a tunnel. A 503 is deliberately absent: that one IS the
+ * deployment, saying a capability is unwired.
+ *
+ * The distinction is worth more than "it answered", because the two readers of it need opposite
+ * things from an answer nobody at the deployment wrote. A wait SITS THROUGH one, for the same
+ * reason it sits through a refused connection. A create treats one as UNSETTLED, because a gateway
+ * that gave up on the upstream says nothing about whether the upstream had already acted: the
+ * request may well have been served and only the reply lost.
+ */
+const INTERMEDIARY_STATUSES = new Set([502, 504])
+
+/**
+ * Whether an ANSWERED failure's status came from an intermediary rather than from the deployment.
+ *
+ * Exported because both readers of {@link ProbeFailure} branch on it and a second copy of the pair
+ * would be two answers to one question: `deploymentOutage.ts` decides whether to keep waiting,
+ * `resume.ts` whether a create may have landed.
+ */
+export function isIntermediaryStatus(status: number): boolean {
+  return INTERMEDIARY_STATUSES.has(status)
+}
 
 /**
  * The remedy for an ANSWERED refusal through `/api/v1`, which is a different question from an
@@ -366,13 +394,19 @@ function transportAccount(error: unknown, described: string): string {
  *
  * A `CatFactoryConnectionError` with no cause (the SDK raises one for a stream that carried no body)
  * has nothing under it, so the wrapper itself is the runtime's account.
+ *
+ * Read as a DIAGNOSIS rather than as a chain, which is what drops undici's contentless `fetch
+ * failed` link. That link is identical for a refused connection, an expired certificate and a name
+ * that stopped resolving, so on a budget this small it is fourteen characters that separate no two
+ * outages; kernel keeps it in `errorChainText` for the matchers that lead on it, and neither
+ * matches this.
  */
 export function transportChainText(
   error: unknown,
   maxChars: number = MAX_ERROR_CHAIN_CHARS,
 ): string {
   const runtime = error instanceof CatFactoryConnectionError ? (error.cause ?? error) : error
-  return errorChainText(runtime, maxChars)
+  return errorChainDiagnosisText(runtime, maxChars)
 }
 
 /**

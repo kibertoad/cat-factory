@@ -187,19 +187,75 @@ export function joinErrorChain(
 }
 
 /**
+ * The wrapper undici puts over every transport error. It carries no information of its own: the
+ * thing that happened (`connect ECONNREFUSED`, `getaddrinfo ENOTFOUND`, an expired certificate)
+ * hangs off its cause.
+ */
+const CONTENTLESS_TRANSPORT_WRAPPER = 'fetch failed'
+
+/**
+ * Chain links rendered for a DIAGNOSIS: undici's contentless wrapper dropped, so the real cause
+ * lands in the first position. Kept when it is ALL there is, so the removal never empties the
+ * account.
+ *
+ * Takes the FLATTENED links rather than a thrown value, because `describeConnectionFailure` has
+ * already walked the chain to classify it and a second walk there would read the same chain twice.
+ *
+ * One statement of the rule, shared by that describer and by {@link errorChainDiagnosisText}. It
+ * used to be inlined in the describer, which is how the acceptance kit's per-poll observation came
+ * to spend its 200-character budget re-printing the wrapper: the reduction existed as behaviour but
+ * not as a function, so the reader that needed it reached for the describer that keeps it.
+ *
+ * The exact literal only: `renderErrorChainLinks` folds repeats into `fetch failed (x2)`, and a
+ * chain that is nothing but the wrapper twice has genuinely reported two failures.
+ */
+export function diagnosisChainLinks(links: readonly unknown[]): readonly string[] {
+  const parts = renderErrorChainLinks(links)
+  const meaningful = parts.filter((part) => part !== CONTENTLESS_TRANSPORT_WRAPPER)
+  return meaningful.length > 0 ? meaningful : parts
+}
+
+/**
  * A thrown value as ONE line of text: its own message, then each cause beneath it, scrubbed and
  * capped. This is what `getErrorMessage` and `describeError` both answer with.
  *
  * The outermost link is KEPT even when it is undici's contentless `fetch failed` wrapper, unlike
- * {@link describeConnectionFailure}, which drops it. The difference is deliberate and is about who
- * reads the result. A probe's verdict is prose an operator reads as a diagnosis, so the wrapper is
- * noise ahead of the real cause. This string, by contrast, is the one a `DispatchError` carries,
- * a persisted `reason` records and a log line greps — and several of those are matched downstream by
- * their opening phrase (`/dispatch failed/i`, the eviction sentinels). Dropping a leading link would
- * silently re-point every one of those matches; appending the causes cannot.
+ * {@link errorChainDiagnosisText} and {@link describeConnectionFailure}, which drop it. The
+ * difference is deliberate and is about who reads the result. A probe's verdict is prose an
+ * operator reads as a diagnosis, so the wrapper is noise ahead of the real cause. This string, by
+ * contrast, is the one a `DispatchError` carries, a persisted `reason` records and a log line
+ * greps — and several of those are matched downstream by their opening phrase (`/dispatch failed/i`,
+ * the eviction sentinels). Dropping a leading link would silently re-point every one of those
+ * matches; appending the causes cannot.
  */
 export function errorChainText(error: unknown, maxChars: number = MAX_ERROR_CHAIN_CHARS): string {
-  const parts = renderErrorChainLinks(flattenErrorChain(error))
+  return chainText(error, renderErrorChainLinks(flattenErrorChain(error)), maxChars)
+}
+
+/**
+ * The same chain as {@link errorChainText}, read as a DIAGNOSIS: undici's contentless wrapper is
+ * dropped so the line leads with what actually happened.
+ *
+ * For a reader who is looking at the string to work out what is wrong, and especially for one on a
+ * BUDGET. A per-poll journal line capped at a couple of hundred characters spends every one of the
+ * wrapper's on a phrase that is identical for a refused connection, an expired certificate and a
+ * DNS entry that stopped resolving.
+ *
+ * Not the default, and never the string a downstream matcher reads: see {@link errorChainText} for
+ * what leads those.
+ */
+export function errorChainDiagnosisText(
+  error: unknown,
+  maxChars: number = MAX_ERROR_CHAIN_CHARS,
+): string {
+  return chainText(error, diagnosisChainLinks(flattenErrorChain(error)), maxChars)
+}
+
+/**
+ * The rendering both describers share: the links when there are any, and otherwise what the THROWN
+ * value itself can be said to be.
+ */
+function chainText(error: unknown, parts: readonly string[], maxChars: number): string {
   if (parts.length > 0) return joinErrorChain(parts, maxChars)
   // Nothing in the chain had anything to say, and what that means depends on WHAT was thrown.
   //

@@ -1,5 +1,5 @@
 import type { ConnectionFailureCause, ConnectionTestResult } from '@cat-factory/contracts'
-import { flattenErrorChain, joinErrorChain, renderErrorChainLinks } from './error-chain.logic.js'
+import { diagnosisChainLinks, flattenErrorChain, joinErrorChain } from './error-chain.logic.js'
 import { redactSecrets } from './redact-secrets.logic.js'
 
 // Re-exported so the probes (spread across integrations and both facades, which share only
@@ -225,13 +225,11 @@ export function describeConnectionFailure(
   const links = flattenErrorChain(error)
   const cause = classifyChain(links)
 
-  const parts = renderErrorChainLinks(links)
-  // `fetch failed` is the wrapper undici puts over every transport error. It carries no
-  // information, and dropping it is what leaves the real cause in the first position of a
-  // DIAGNOSIS (the one place that is right; see `errorChainText`, which keeps it). Kept when it is
-  // ALL there is, so the message is never empty.
-  const meaningful = parts.length > 1 ? parts.filter((p) => p !== 'fetch failed') : parts
-  const detail = joinErrorChain(meaningful) || 'The connection failed for an unreported reason.'
+  // Rendered as a DIAGNOSIS: undici's contentless wrapper is dropped so the real cause leads. The
+  // rule is `errorChainDiagnosisText`'s (see `errorChainText`, which keeps the wrapper and why),
+  // read here at the LINKS level because the chain has already been flattened to classify it.
+  const detail =
+    joinErrorChain(diagnosisChainLinks(links)) || 'The connection failed for an unreported reason.'
   const hint = hintFor(cause, ctx)
   return { cause, detail, ...(hint ? { hint } : {}) }
 }

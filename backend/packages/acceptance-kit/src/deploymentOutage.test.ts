@@ -1,3 +1,4 @@
+import { CatFactoryApiError } from '@cat-factory/sdk'
 import { describe, expect, it } from 'vitest'
 import { deploymentOutageTolerance } from './deploymentOutage.js'
 import { sdkTransportFailure } from './testing/sdkFailures.js'
@@ -60,6 +61,43 @@ describe('deploymentOutageTolerance', () => {
     )
     expect(observation).toContain('connect ECONNREFUSED 203.0.113.42:443')
     expect(observation).toMatch(/more characters|more chars/)
+  })
+
+  it("leads with the errno rather than with undici's contentless wrapper", async () => {
+    // `fetch failed` is what Node puts over every transport error, so it is identical for a refused
+    // connection, an expired certificate and a name that stopped resolving: on a 200-character
+    // budget it is fourteen characters that separate no two outages. kernel keeps it in
+    // `errorChainText` for the matchers that lead on it, and this line is not one of those.
+    //
+    // Asserted as a PREFIX rather than with `toContain`, which is what let it survive: the errno was
+    // present the whole time, sitting behind a wrapper nobody had asked for.
+    const observation = describeThrow(
+      await sdkTransportFailure({
+        message: 'connect ECONNREFUSED 203.0.113.42:443',
+        code: 'ECONNREFUSED',
+        answeredCalls: 9,
+        baseUrl: BASE_URL,
+      }),
+    )
+    expect(observation).toBe(
+      'the deployment did not answer (refused): connect ECONNREFUSED 203.0.113.42:443',
+    )
+  })
+
+  it('says which intermediary answered, through the same fact the create window reads', async () => {
+    // A 502 is not the deployment's word (`handleError` never writes one), so the wait sits through
+    // it. `probeFailure.ts` owns which statuses those are, because `resume.ts` branches on the same
+    // fact to decide whether a create may have landed, and two copies would be two answers.
+    const observation = describeThrow(
+      new CatFactoryApiError({
+        status: 502,
+        code: 'unknown',
+        message: 'bad gateway',
+        requestId: null,
+        body: '<html>bad gateway</html>',
+      }),
+    )
+    expect(observation).toContain('something in front of the deployment answered 502')
   })
 
   it('ends the wait on a cause that is configuration rather than weather', async () => {
