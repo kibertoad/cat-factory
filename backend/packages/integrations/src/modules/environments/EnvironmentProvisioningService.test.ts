@@ -639,6 +639,59 @@ describe('EnvironmentProvisioningService — returned URL policy', () => {
   })
 })
 
+describe('EnvironmentProvisioningService — mis-resolving URL policy', () => {
+  // A wildcard-DNS host answers from the LEFTMOST four-octet run in a name, so `cf-acc-5` in
+  // front of the loopback host answers 5.127.0.0. The URL is otherwise perfectly safe, which is
+  // why this is graded beside the safety policy rather than folded into it: the two refuse
+  // different things about the same value.
+  const LOOPBACK: UrlSafetyPolicy = { schemes: ['http'], allowHosts: ['.nip.io'] }
+  const misresolving: ProvisionedEnvironment = {
+    ...READY,
+    url: 'http://cf-acc-5.127.0.0.1.nip.io',
+  }
+
+  it('refuses the URL a provider returns from a synchronous provision', async () => {
+    const service = makeService(recordingProvider(misresolving), fakeRegistry(), LOOPBACK)
+    await expect(service.provision({ workspaceId: 'ws1', blockId: 'blk1' })).rejects.toThrow(
+      /5\.127\.0\.0/,
+    )
+  })
+
+  it('refuses a host first read back on the STATUS poll', async () => {
+    // The `ingressStatus` / `gatewayStatus` shape: the URL is null at provision and only exists
+    // once the live Ingress is read, so a provision-time-only check can never see it at all.
+    const registry = fakeRegistry()
+    const provider: EnvironmentProvider = {
+      async provision() {
+        return { ...misresolving, url: null, status: 'provisioning' }
+      },
+      async status() {
+        return misresolving
+      },
+      async teardown() {
+        return { status: 'torn_down' }
+      },
+    }
+    const service = makeService(provider, registry, LOOPBACK)
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    const id = registry.records[0]!.id
+    await expect(service.refreshStatus('ws1', id)).rejects.toThrow(/5\.127\.0\.0/)
+  })
+
+  it('leaves a correctly-composed wildcard host alone', async () => {
+    // The control, and the one a false positive would break: every working ephemeral environment
+    // on a local cluster looks exactly like this.
+    const registry = fakeRegistry()
+    const service = makeService(
+      recordingProvider({ ...READY, url: 'http://cf-acc-pr5.127.0.0.1.nip.io' }),
+      registry,
+      LOOPBACK,
+    )
+    const handle = await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    expect(handle.url).toBe('http://cf-acc-pr5.127.0.0.1.nip.io')
+  })
+})
+
 describe('EnvironmentProvisioningService — async container-backed deploy lifecycle', () => {
   const CLONE = { cloneUrl: 'https://github.com/acme/web.git', ref: 'feat/x', token: 'gh-tok' }
   const REF: RunnerJobRef = { runId: 'exec1', jobId: 'deploy_1' }
@@ -721,6 +774,7 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
     opts: {
       deployJobClient?: DeployJobClient
       cloneTarget?: typeof CLONE | null
+      urlPolicy?: UrlSafetyPolicy
     } = {},
   ) {
     const connectionService = {
@@ -734,6 +788,7 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
       secretCipher: fakeCipher,
       idGenerator: { next: (prefix: string) => `${prefix}_${++n}` },
       clock: { now: () => 1_700_000_000_000 },
+      ...(opts.urlPolicy ? { urlPolicy: opts.urlPolicy } : {}),
       ...(opts.deployJobClient ? { deployJobClient: opts.deployJobClient } : {}),
       ...(opts.cloneTarget !== null
         ? { resolveDeployCloneTarget: async () => opts.cloneTarget ?? CLONE }
@@ -784,6 +839,23 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
     // The prior `provisioning` record is superseded; the ready one is the live record.
     const live = registry.records.find((r) => r.blockId === 'blk1' && !r.deletedAt)
     expect(live!.status).toBe('ready')
+  })
+
+  it('refuses a mis-resolving URL the deploy container rendered', async () => {
+    // The URL a container hands back is published exactly as one derived in process is, so the
+    // grade has to sit on the seam both settle on. Without it, every kustomize/helm/image-override
+    // service shipped the failure this rule exists for while the raw-manifest path was guarded.
+    const service = makeAsyncService(asyncProvider(), fakeRegistry(), {
+      deployJobClient: fakeJobClient({ state: 'running' }),
+      urlPolicy: { schemes: ['http'], allowHosts: ['.nip.io'] },
+    })
+    const view: RunnerJobView = {
+      state: 'done',
+      result: { custom: { namespace: 'cf-acc-5', url: 'http://cf-acc-5.127.0.0.1.nip.io' } },
+    }
+    await expect(
+      service.finalizeProvision({ workspaceId: 'ws1', blockId: 'blk1' }, view),
+    ).rejects.toThrow(/5\.127\.0\.0/)
   })
 
   it('finalizes a failed deploy view into a failed environment carrying the error', async () => {
