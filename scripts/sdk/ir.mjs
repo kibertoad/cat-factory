@@ -125,6 +125,14 @@ const INLINE_ENUM_NAMES = {
   '24h,30d,7d,90d': 'PublicSpendWindow',
   'daily-rollup,ledger': 'PublicSpendSource',
   'agentKind,model,repo,run,service,taskType,ticket': 'PublicSpendDimension',
+  // A follow-up item's kind and status, shared by the `follow-ups` DECISION (which shipped these
+  // names) and the verification report's follow-ups section (which walks first, alphabetically).
+  // Pinned on the precedent above, and this pair is what made the precedent worth restating: the
+  // report section was added months later, took both deduped enums with it, and respelled
+  // `PublicFollowUpItemKind`/`PublicFollowUpItemStatus` in four released SDKs as a side effect of
+  // adding an unrelated field. Nothing in the diff said so; it read as generated churn.
+  'follow_up,question': 'PublicFollowUpItemKind',
+  'answered,closed,dismissed,filed,pending,queued': 'PublicFollowUpItemStatus',
 }
 
 /** OpenAPI/JSON-Schema scalar → IR primitive. */

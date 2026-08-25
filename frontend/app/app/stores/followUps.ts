@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useApi } from '~/composables/useApi'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useExecutionStore } from '~/stores/execution'
+import type { FollowUpResolution } from '~/types/execution'
 
 /**
  * The Follow-up companion action surface. The live item state lives on the run's Coder step
@@ -49,7 +50,13 @@ export const useFollowUpsStore = defineStore('followUps', () => {
         executionId,
         () => call(workspace.requireId()),
         (state, instance) => {
-          const step = instance.steps.find((s) => s.followUps?.enabled)
+          // Routed by ITEM ID, matching what the engine does with the same request
+          // (`FollowUpGateController.loadFollowUpItem`): a pipeline may carry more than one
+          // follow-up-enabled Coder step, and the response is that step's state. Echoing it onto
+          // "the first enabled step" would paint a later Coder's items, statuses and dropped-
+          // send-back stamps over an earlier Coder's own, so the window shows the wrong step's
+          // list until the stream repairs it and the earlier card reports decisions it never had.
+          const step = instance.steps.find((s) => s.followUps?.items.some((i) => i.id === itemId))
           if (step && state && typeof state === 'object') {
             step.followUps = state as typeof step.followUps
           }
@@ -69,8 +76,15 @@ export const useFollowUpsStore = defineStore('followUps', () => {
   const queueItem = (executionId: string, itemId: string) =>
     act(executionId, itemId, (ws) => api.queueFollowUp(ws, executionId, itemId))
 
-  const answerItem = (executionId: string, itemId: string, answer: string) =>
-    act(executionId, itemId, (ws) => api.answerFollowUp(ws, executionId, itemId, answer))
+  const answerItem = (
+    executionId: string,
+    itemId: string,
+    answer: string,
+    resolution: FollowUpResolution = 'answered',
+  ) =>
+    act(executionId, itemId, (ws) =>
+      api.answerFollowUp(ws, executionId, itemId, answer, resolution),
+    )
 
   const dismissItem = (executionId: string, itemId: string) =>
     act(executionId, itemId, (ws) => api.dismissFollowUp(ws, executionId, itemId))

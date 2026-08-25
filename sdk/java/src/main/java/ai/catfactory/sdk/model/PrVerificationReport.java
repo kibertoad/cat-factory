@@ -14,6 +14,7 @@ import org.jspecify.annotations.Nullable;
  * @param ci the {@code ci} field.
  * @param context the {@code context} field.
  * @param environments the {@code environments} field.
+ * @param followUps the {@code followUps} field.
  * @param generatedAt the {@code generatedAt} field.
  * @param judges the {@code judges} field.
  * @param merge the {@code merge} field.
@@ -34,6 +35,8 @@ public record PrVerificationReport(
     @JsonProperty("context") PrReportContext context,
 
     @JsonProperty("environments") PrReportEnvironments environments,
+
+    @JsonProperty("followUps") PrVerificationReportFollowUps followUps,
 
     @JsonProperty("generatedAt") Double generatedAt,
 
@@ -76,6 +79,7 @@ public record PrVerificationReport(
         private @Nullable PrReportCi ci;
         private @Nullable PrReportContext context;
         private @Nullable PrReportEnvironments environments;
+        private @Nullable PrVerificationReportFollowUps followUps;
         private @Nullable Double generatedAt;
         private @Nullable PrReportJudges judges;
         private @Nullable PrReportMerge merge;
@@ -104,6 +108,12 @@ public record PrVerificationReport(
         /** Set {@code environments}. */
         public Builder environments(@Nullable PrReportEnvironments environments) {
             this.environments = environments;
+            return this;
+        }
+
+        /** Set {@code followUps}. */
+        public Builder followUps(@Nullable PrVerificationReportFollowUps followUps) {
+            this.followUps = followUps;
             return this;
         }
 
@@ -181,7 +191,7 @@ public record PrVerificationReport(
 
         /** Build the {@link PrVerificationReport}. */
         public PrVerificationReport build() {
-            return new PrVerificationReport(ci, context, environments, generatedAt, judges, merge, observability, reproduction, requirements, run, scope, tests, truncations, validation, version);
+            return new PrVerificationReport(ci, context, environments, followUps, generatedAt, judges, merge, observability, reproduction, requirements, run, scope, tests, truncations, validation, version);
         }
     }
 }

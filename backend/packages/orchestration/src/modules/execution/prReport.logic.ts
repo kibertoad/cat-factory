@@ -5,6 +5,7 @@ import type {
   MergeDecision,
   PipelineStep,
   PrReportCheck,
+  PrReportFollowUp,
   PrReportIssue,
   PrReportJudge,
   PrReportRequirement,
@@ -36,6 +37,7 @@ import {
   renderValidation,
 } from './prReport.commands.js'
 import { composeContext, renderContext } from './prReport.context.js'
+import { followUpLoopBudget } from './followUp.logic.js'
 import { absentNote, findStep } from './prReport.steps.js'
 
 // ---------------------------------------------------------------------------
@@ -566,6 +568,79 @@ function composeJudges(
   return { status: 'reported', verdicts }
 }
 
+/**
+ * Compose what the Coder flagged mid-run and how each item was decided.
+ *
+ * Every enabled step's items, not only the current one's: a pipeline may place more than one
+ * follow-up-enabled Coder, and the reviewer's question ("what did the build notice, and what was
+ * done about it") spans all of them. `loops`/`maxLoops` are summed for the same reason, and
+ * `droppedBudget` is summed over the exhausted steps ALONE, which is the only pair a "the budget
+ * was spent" banner may quote (see `prReportFollowUpsSchema`).
+ *
+ * `pending` items are included even though the gate normally holds the run until none remain,
+ * because a report is composed on a run that may still be parked on exactly that gate, and a
+ * silently omitted pending item is the difference between "triage is outstanding" and "there was
+ * nothing to triage". Nothing here re-probes: this is the settlement-hook rule, a reduction over
+ * in-memory state.
+ */
+function composeFollowUps(
+  instance: ExecutionInstance,
+  truncations: string[],
+): PrVerificationReport['followUps'] {
+  const steps = instance.steps.filter((s) => s.followUps?.enabled)
+  const items = steps.flatMap((s) => s.followUps!.items)
+  if (items.length === 0) {
+    return {
+      status: 'absent',
+      note:
+        steps.length === 0
+          ? 'The follow-up companion is not enabled on any step of this pipeline, so the Coder surfaced nothing to decide.'
+          : 'The follow-up companion was enabled, and the Coder surfaced no loose ends or questions.',
+      loops: 0,
+      maxLoops: 0,
+      total: 0,
+      dropped: 0,
+      dismissedByPolicy: 0,
+      droppedBudget: null,
+      entries: [],
+    }
+  }
+  // Both counts are taken over the WHOLE list, before the cap, so a capped section states how many
+  // decisions were dropped rather than how many of the SHOWN ones were. `dropped` was already
+  // right; `dismissedByPolicy` used to be recounted off the capped entries at render time, which
+  // reads as "0 items" (and suppresses the line entirely) for a run whose policy-dismissed items
+  // all fell past the cap.
+  const dropped = items.filter((i) => i.sendBackDropped).length
+  const budgets = steps.map((s) => followUpLoopBudget(s.followUps!))
+  // Only the steps that actually dropped a decision: see `droppedBudget` in the schema for why a
+  // sum over every enabled step cannot back the banner's claim.
+  const exhausted = steps
+    .filter((s) => s.followUps!.items.some((i) => i.sendBackDropped))
+    .map((s) => followUpLoopBudget(s.followUps!))
+  return {
+    status: 'reported',
+    loops: budgets.reduce((sum, b) => sum + b.loops, 0),
+    maxLoops: budgets.reduce((sum, b) => sum + b.maxLoops, 0),
+    total: items.length,
+    dropped,
+    dismissedByPolicy: items.filter((i) => i.dismissedByPolicy).length,
+    droppedBudget:
+      exhausted.length === 0
+        ? null
+        : {
+            loops: exhausted.reduce((sum, b) => sum + b.loops, 0),
+            maxLoops: exhausted.reduce((sum, b) => sum + b.maxLoops, 0),
+          },
+    entries: cap(items, 'followUps.entries', truncations).map((item) => ({
+      kind: item.kind,
+      title: scrubbed(item.title),
+      status: item.status,
+      sendBackDropped: item.sendBackDropped ?? false,
+      dismissedByPolicy: item.dismissedByPolicy ?? false,
+    })),
+  }
+}
+
 /** Compose the report from a run's in-memory state plus the few resolved inputs. */
 export function composePrVerificationReport(
   instance: ExecutionInstance,
@@ -608,6 +683,10 @@ export function composePrVerificationReport(
     // What the run built FROM. Run-scoped like the sections below it: the linked documents are
     // the TASK's, so every repo the run touched was written from the same brief.
     context: composeContext(instance, (items, label) => cap(items, label, truncations)),
+    // Beside the context section for the same reason that one sits where it does: both answer what
+    // surrounded the build rather than what checked it, and a loose end the Coder flagged frames
+    // the evidence below it.
+    followUps: composeFollowUps(instance, truncations),
     // The CI gate, the tester, the judges, the environments and the merge sequence are all
     // RUN-scoped: the gate reduces every repo's checks to one verdict that blocks every PR the
     // run opened, the tester ran once, and the merger merges the whole set (peers first, own
@@ -863,6 +942,73 @@ function renderJudgeModelPin(pin: PrReportJudge['modelPin']): string {
   return ` · ⚠️ rubric pinned \`${hostMarkdown.cell(pin.requested)}\`, unavailable in this deployment`
 }
 
+/**
+ * How one follow-up item's disposition reads to a reviewer.
+ *
+ * An exhaustive `Record` over the status vocabulary rather than a runtime-built string, so adding
+ * a member to that closed picklist fails to compile here instead of rendering `undefined` into a
+ * pull-request body. `pending` earns a row despite the gate normally clearing it first: a report
+ * composed while the run is parked on that gate must not describe outstanding triage as settled.
+ */
+const FOLLOW_UP_DISPOSITION: Record<PrReportFollowUp['status'], string> = {
+  pending: '🔸 awaiting a decision',
+  filed: '📋 filed as an issue',
+  queued: '↩️ sent back to the Coder',
+  answered: '💬 answered',
+  closed: '🔒 ruled on, no further pass',
+  dismissed: '➖ dismissed',
+}
+
+/**
+ * What the Coder flagged, and what was decided.
+ *
+ * Ordered by how much a reviewer needs to act: the two dispositions that mean "this was NOT dealt
+ * with as triage intended" (a dropped send-back, a policy dismissal) are called out above the
+ * table, because a reader who has to derive them from a status column will not.
+ */
+function renderFollowUps(followUps: PrVerificationReport['followUps']): string[] {
+  const out = ['### Coder follow-ups', '']
+  if (followUps.status === 'absent') return [...out, absentNote(followUps.note), '']
+  // The table below may be a capped PREFIX of the run's items, so neither banner may promise that
+  // what it counts is visible in it. Both counts are whole-run (see `composeFollowUps`); when the
+  // cap fired, say so instead of pointing at rows that are not there.
+  const capped = followUps.entries.length < followUps.total
+  const marked = capped
+    ? `The table below shows the first ${followUps.entries.length} of ${followUps.total} items, so not every one of them appears in it.`
+    : 'They are marked below.'
+  if (followUps.dropped > 0) {
+    // Quoted from `droppedBudget`, never the section-level pair: only the steps that dropped
+    // something can back a claim that the budget was spent.
+    const budget = followUps.droppedBudget
+    const spent = budget ? ` (${budget.loops}/${budget.maxLoops} passes)` : ''
+    out.push(
+      `⚠️ **${followUps.dropped} decided follow-up${followUps.dropped === 1 ? '' : 's'} never reached the Coder.** ` +
+        `The send-back budget${spent} was spent, so the run advanced without applying them. ${marked}`,
+      '',
+    )
+  }
+  const byPolicy = followUps.dismissedByPolicy
+  if (byPolicy > 0) {
+    out.push(
+      `ℹ️ ${byPolicy} item${byPolicy === 1 ? ' was' : 's were'} dismissed by the run's autonomy policy ` +
+        'rather than by a person: nothing was watching this run.',
+      '',
+    )
+  }
+  out.push('| Item | Kind | Disposition |', '| --- | --- | --- |')
+  for (const entry of followUps.entries) {
+    const flags = [
+      entry.sendBackDropped ? ' · **never sent**' : '',
+      entry.dismissedByPolicy ? ' · by policy' : '',
+    ].join('')
+    out.push(
+      `| ${hostMarkdown.cell(entry.title)} | ${hostMarkdown.cell(entry.kind)} | ${FOLLOW_UP_DISPOSITION[entry.status]}${flags} |`,
+    )
+  }
+  out.push('')
+  return out
+}
+
 function renderJudges(judges: PrVerificationReport['judges']): string[] {
   const out = ['### Rubric reviews', '']
   if (judges.status === 'absent') return [...out, absentNote(judges.note), '']
@@ -996,6 +1142,9 @@ export function renderPrVerificationReport(report: PrVerificationReport): string
     // not know the design moved mid-run misreads every verdict below as a statement about the
     // design they can see now.
     ...renderContext(report.context),
+    // Beside the context section: both describe the ground the build stood on, and a loose end the
+    // Coder flagged (or a decision that never reached it) changes how the evidence below reads.
+    ...renderFollowUps(report.followUps),
     ...renderCi(report.ci),
     // The two CAPTURED-OUTPUT sections sit beside CI rather than at the end: they answer the same
     // question a reviewer asks first ("does it work?"), and unlike CI they are the platform's own

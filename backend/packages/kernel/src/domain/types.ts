@@ -321,6 +321,7 @@ export type {
   // + the live step state the engine parks/loops on.
   FollowUpItemKind,
   FollowUpItemStatus,
+  FollowUpResolution,
   FollowUpItem,
   FollowUpsStepState,
   AnswerFollowUpInput,
@@ -488,6 +489,9 @@ export type {
   PrReportStep,
   PrReportIssue,
   PrReportJudge,
+  // What the Coder flagged mid-run and how each item was decided.
+  PrReportFollowUp,
+  PrReportFollowUps,
   PrReportRun,
   PrReportCheck,
   PrReportCi,

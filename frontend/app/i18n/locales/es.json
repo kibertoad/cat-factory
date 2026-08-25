@@ -5901,16 +5901,21 @@
     "suggested": "Sugerido:",
     "viewIssue": "Ver incidencia",
     "yourAnswer": "Tu respuesta:",
-    "answerPlaceholder": "Responde a esta pregunta; se integrará en la próxima pasada del Coder…",
+    "yourRuling": "Tu decisión:",
+    "sendBackDropped": "Nunca se envió al Coder: el presupuesto de reenvíos ya estaba agotado.",
+    "answerPlaceholder": "Responde a esta pregunta y devuélvela al Coder o ciérrala como zanjada…",
     "status": {
       "pending": "Requiere una decisión",
       "filed": "Registrado como incidencia",
       "queued": "Enviado al Coder",
       "answered": "Respondido",
+      "closed": "Resuelto",
       "dismissed": "Descartado"
     },
     "actions": {
       "answerAndSend": "Responder y devolver",
+      "answerAndClose": "Responder y cerrar",
+      "answerAndCloseHint": "Registrarlo como zanjado sin gastar otra pasada del Coder.",
       "dismiss": "Descartar",
       "fileAsIssue": "Registrar como incidencia",
       "sendToCoder": "Enviar al Coder"

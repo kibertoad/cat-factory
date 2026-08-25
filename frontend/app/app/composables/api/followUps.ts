@@ -5,6 +5,7 @@ import {
   getFollowUpsContract,
   queueFollowUpContract,
 } from '@cat-factory/contracts'
+import type { FollowUpResolution } from '~/types/execution'
 import type { ApiContext } from './context'
 
 /**
@@ -34,12 +35,19 @@ export function followUpsApi({ send, ws }: ApiContext) {
         pathParams: { executionId, itemId },
       }),
 
-    // Answer a question item (folded into the Coder's next pass).
-    answerFollowUp: (workspaceId: string, executionId: string, itemId: string, answer: string) =>
+    // Answer a question item: 'answered' folds it into the Coder's next pass, 'closed' records a
+    // ruling that buys no pass (the Coder still sees it, as something already settled).
+    answerFollowUp: (
+      workspaceId: string,
+      executionId: string,
+      itemId: string,
+      answer: string,
+      resolution: FollowUpResolution = 'answered',
+    ) =>
       send(answerFollowUpContract, {
         pathPrefix: ws(workspaceId),
         pathParams: { executionId, itemId },
-        body: { answer },
+        body: { answer, resolution },
       }),
 
     // Dismiss a follow-up / question item without acting on it.

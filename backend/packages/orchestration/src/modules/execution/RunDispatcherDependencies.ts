@@ -14,6 +14,7 @@ import type {
   JudgeAssessor,
   JudgeRegistry,
   Logger,
+  OperationalMetrics,
   ProviderCapabilities,
   ProviderRegistry,
   RequirementConcernLevel,
@@ -27,6 +28,8 @@ import type {
   WorkRunner,
 } from '@cat-factory/kernel'
 import { GateOutcomeRecorder } from '../observability/GateOutcomeRecorder.js'
+import { FollowUpGateController } from './FollowUpGateController.js'
+import type { FollowUpGateControllerDeps } from './FollowUpGateController.js'
 import type { SettledGate } from '../observability/GateOutcomeRecorder.js'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type {
@@ -119,6 +122,12 @@ export interface RunDispatcherDeps {
    */
   logger?: Logger
   /**
+   * The deployment-wide counter port. Required, not optional: an un-wired counter reports zero
+   * forever, which is indistinguishable from the signal genuinely never firing. A caller with
+   * nothing to export passes kernel's `noopOperationalMetrics`, which says so in code.
+   */
+  operationalMetrics: OperationalMetrics
+  /**
    * Optional settled-gate projection: the gate machine records each terminal verdict into it
    * for the operator dashboard's attempt statistics. Absent ⇒ nothing is recorded.
    */
@@ -207,4 +216,37 @@ export function gateOutcomeRecording(
     logger,
   })
   return { recordGateOutcome: (settled) => recorder.record(settled) }
+}
+
+/**
+ * Build the Follow-up companion gate from the dispatcher's deps.
+ *
+ * A free function for the reason {@link gateOutcomeRecording} is one: the constructor is at its
+ * per-function line budget, and a budget is a split trigger rather than a number to raise. This
+ * controller's field spread is the largest of the constructor's remaining literals and the one
+ * that grew, so it is the one that moves.
+ *
+ * `resolveRiskPolicy` stays a bound callback the caller passes in: the gate reads the policy for
+ * exactly one decision (whether undecided items park for a person or are dismissed unattended),
+ * and taking the resolver by reference keeps it independent of how the dispatcher resolves one.
+ */
+export function buildFollowUpGate(
+  deps: RunDispatcherDeps,
+  resolveRiskPolicy: FollowUpGateControllerDeps['resolveRiskPolicy'],
+): FollowUpGateController {
+  return new FollowUpGateController({
+    executionRepository: deps.executionRepository,
+    blockRepository: deps.blockRepository,
+    contextBuilder: deps.contextBuilder,
+    stepGraph: deps.stepGraph,
+    runStateMachine: deps.runStateMachine,
+    workRunner: deps.workRunner,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
+    notificationService: deps.notificationService,
+    ticketTrackerProvider: deps.ticketTrackerProvider,
+    resolveRiskPolicy,
+    logger: deps.logger,
+    operationalMetrics: deps.operationalMetrics,
+  })
 }

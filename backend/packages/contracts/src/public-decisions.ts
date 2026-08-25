@@ -616,6 +616,13 @@ export const publicFollowUpItemSchema = v.object({
   status: followUpItemStatusSchema,
   /** The recorded answer to a `question`, or null while unanswered. */
   answer: v.nullable(v.string()),
+  /**
+   * True when this item was decided for a send-back the step's loop budget could not pay for, so
+   * the Coder never received it. Reported because it is the one disposition a caller cannot infer
+   * from `status`: such an item reads `answered`/`queued` forever, exactly like one the Coder
+   * acted on.
+   */
+  sendBackDropped: v.boolean(),
   /** Canonical id of the ticket a `filed` item was filed as, or null. */
   ticketExternalId: v.nullable(v.string()),
   /** Web URL of that ticket, or null. */

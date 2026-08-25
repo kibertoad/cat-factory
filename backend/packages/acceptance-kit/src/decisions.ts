@@ -42,6 +42,9 @@ export type AnswerOptions = {
    * What to say when the platform asks a question the brief already answers. Kept as a caller
    * argument rather than a constant because scenario 03's answer is about the bug under
    * investigation, and a generic string there would be the suite feeding the investigator noise.
+   *
+   * It is a RULING, not information: see {@link answerFollowUps} for why a follow-up question is
+   * closed with it rather than answered with it.
    */
   steer: string
 }
@@ -127,8 +130,26 @@ export function unexpectedDecision(decision: PublicDecision): string {
  *
  * A `follow_up` is work the agent noticed and deliberately did NOT do; dismissing it is the right
  * unattended answer, because filing it would create board tasks the suite never cleans up and
- * sending it back would loop the coder on scope the brief did not ask for. A `question` is the
- * agent asking for a steer, and gets the caller's, which is the brief restated.
+ * sending it back would loop the coder on scope the brief did not ask for.
+ *
+ * A `question` is CLOSED with the steer as the reason, never `answered` with it. The distinction is
+ * the whole of what this function got wrong before, and it cost three coder passes per run.
+ * `resolution: 'answered'` promises the reply carries something the next pass can apply, and the
+ * steer never does: it is the brief restated, which is what the agent already built from. Handed it
+ * as an answer, an agent that asked an unanswerable question ("which IngressClass does the target
+ * cluster mark as default?") finds nothing to apply, rewords the surrounding comment so its
+ * uncertainty is at least written down, re-raises the same question under a new title, and gets the
+ * same steer back. The loop ended on `maxLoops`, not on agreement.
+ *
+ * `closed` says what is true: nobody here is going to answer this, the brief stands, stop asking.
+ * It clears the gate exactly as an answer does, so the suite still drives the run to completion,
+ * and it spends no model call doing it.
+ *
+ * The consequence for coverage is deliberate and worth stating: this suite no longer exercises the
+ * send-back loop, because it no longer has an honest reason to. That loop is engine behaviour with
+ * no assembled-product component, so it is pinned in `followUp.logic.test.ts` and in the gate
+ * controller's own tests, where the budget can be driven to exhaustion on purpose rather than
+ * whenever a model happens to ask a question.
  *
  * Items that are already settled are skipped: the list carries the whole set, and re-answering a
  * `dismissed` item is a 4xx that would read as a broken suite.
@@ -143,8 +164,9 @@ async function answerFollowUps(
     if (item.kind === 'question') {
       await options.client.decisions.answerFollowUp(options.runId, item.itemId, {
         answer: options.steer,
+        resolution: 'closed',
       })
-      actions.push(`answered question ${item.itemId}`)
+      actions.push(`closed question ${item.itemId}`)
     } else {
       await options.client.decisions.dismissFollowUp(options.runId, item.itemId)
       actions.push(`dismissed follow_up ${item.itemId}`)

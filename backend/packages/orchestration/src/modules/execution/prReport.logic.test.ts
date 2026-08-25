@@ -70,6 +70,8 @@ describe('composePrVerificationReport', () => {
     expect(report.validation.note).toContain('no check commands')
     expect(report.reproduction.status).toBe('absent')
     expect(report.reproduction.note).toContain('No reproduction step')
+    expect(report.followUps.status).toBe('absent')
+    expect(report.followUps.note).toContain('not enabled')
     // Still a schema-valid report — an evidence-free run publishes a truthful empty one.
     expect(() => parsePrVerificationReport(report)).not.toThrow()
   })

@@ -10,7 +10,7 @@ import { useResultView } from '~/composables/useResultView'
 import { useExecutionStore } from '~/stores/execution'
 import { useBoardStore } from '~/stores/board'
 import { useFollowUpsStore } from '~/stores/followUps'
-import type { FollowUpItem } from '~/types/execution'
+import type { FollowUpItem, FollowUpResolution } from '~/types/execution'
 import { FOLLOW_UP_COMPANION_META } from '~/utils/catalog'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 
@@ -56,14 +56,23 @@ async function onQueue(item: FollowUpItem) {
   const id = execId()
   if (id) await followUps.queueItem(id, item.id).catch(() => {})
 }
-async function onAnswer(item: FollowUpItem) {
+/**
+ * Answer a question, either way.
+ *
+ * `answered` buys the Coder another pass to apply what you said. `closed` records the reply as a
+ * RULING: the item is decided and the gate clears exactly the same, but no pass is spent and the
+ * Coder is told the topic is settled so it stops re-raising it. Two buttons rather than one with a
+ * toggle, because the choice is not a preference about this window: it is what the answer IS, and
+ * the person typing it is the only one who knows.
+ */
+async function onAnswer(item: FollowUpItem, resolution: FollowUpResolution = 'answered') {
   const id = execId()
   const answer = (drafts[item.id] ?? '').trim()
   if (!id || !answer) return
   // Clear the draft only once the answer is actually recorded: clearing first would make a failed
   // send cost the typed answer, and would also leave the unsaved guard below with nothing to protect.
   await followUps
-    .answerItem(id, item.id, answer)
+    .answerItem(id, item.id, answer, resolution)
     .then(() => {
       delete drafts[item.id]
     })
@@ -103,6 +112,7 @@ const STATUS_LABEL_KEYS: Record<FollowUpItem['status'], string> = {
   filed: 'followUp.status.filed',
   queued: 'followUp.status.queued',
   answered: 'followUp.status.answered',
+  closed: 'followUp.status.closed',
   dismissed: 'followUp.status.dismissed',
 }
 
@@ -114,7 +124,13 @@ const STATUS_META: Record<
   filed: { badge: 'success', text: 'text-emerald-300' },
   queued: { badge: 'info', text: 'text-sky-300' },
   answered: { badge: 'info', text: 'text-sky-300' },
+  closed: { badge: 'neutral', text: 'text-slate-300' },
   dismissed: { badge: 'neutral', text: 'text-slate-400' },
+}
+
+/** Whether a decided item carries a recorded reply to show ('answered' or 'closed'). */
+function hasRecordedAnswer(item: FollowUpItem): boolean {
+  return (item.status === 'answered' || item.status === 'closed') && !!item.answer
 }
 </script>
 
@@ -197,12 +213,18 @@ const STATUS_META: Record<
                   {{ item.ticketExternalId ?? t('followUp.viewIssue') }}
                 </a>
               </p>
-              <p
-                v-if="item.status === 'answered' && item.answer"
-                class="mt-1 text-[11px] text-slate-300"
-              >
-                <span class="text-slate-500">{{ t('followUp.yourAnswer') }}</span>
+              <p v-if="hasRecordedAnswer(item)" class="mt-1 text-[11px] text-slate-300">
+                <span class="text-slate-500">
+                  {{
+                    item.status === 'closed' ? t('followUp.yourRuling') : t('followUp.yourAnswer')
+                  }}
+                </span>
                 {{ item.answer }}
+              </p>
+              <!-- A decision that was made and then thrown away when the budget ran out. It must
+                   not read like one the Coder acted on. -->
+              <p v-if="item.sendBackDropped" class="mt-1 text-[11px] text-amber-300">
+                {{ t('followUp.sendBackDropped') }}
               </p>
 
               <!-- Actions (only while the item is still undecided) -->
@@ -215,7 +237,10 @@ const STATUS_META: Record<
                     :placeholder="t('followUp.answerPlaceholder')"
                     class="w-full resize-y rounded-md border border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-[12px] text-slate-100 placeholder:text-slate-600 focus:border-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
                   />
-                  <div class="flex items-center gap-2">
+                  <!-- Wraps, like the follow-up row below: three buttons whose labels are two
+                       words each in English are one long line in most of the other locales, and
+                       the result window is a narrow panel. -->
+                  <div class="flex flex-wrap items-center gap-2">
                     <UButton
                       size="xs"
                       color="primary"
@@ -225,6 +250,21 @@ const STATUS_META: Record<
                       @click="onAnswer(item)"
                     >
                       {{ t('followUp.actions.answerAndSend') }}
+                    </UButton>
+                    <UButton
+                      size="xs"
+                      color="neutral"
+                      variant="subtle"
+                      :loading="followUps.isActing(item.id)"
+                      :disabled="!(drafts[item.id] ?? '').trim() || !access.canExecuteRuns.value"
+                      :title="
+                        access.canExecuteRuns.value
+                          ? t('followUp.actions.answerAndCloseHint')
+                          : t('access.noRunExecute')
+                      "
+                      @click="onAnswer(item, 'closed')"
+                    >
+                      {{ t('followUp.actions.answerAndClose') }}
                     </UButton>
                     <UButton
                       size="xs"

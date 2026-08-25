@@ -38,8 +38,12 @@ export type FollowUpItemKind = v.InferOutput<typeof followUpItemKindSchema>
  *   Coder loop-back as rework.
  * - `answered`: a question the human answered (`answer` set); the Q&A is folded into
  *   the next Coder loop-back.
+ * - `closed`: a question RULED ON without a loop-back (`answer` carries the reason).
+ *   Nobody could supply what the Coder asked for, or the ask was settled by what the
+ *   brief already says, so there is nothing for another pass to apply. See
+ *   {@link followUpResolutionSchema} for why this is a status of its own.
  * - `dismissed`: waved off as not worth acting on.
- * All of `filed`/`queued`/`answered`/`dismissed` are "decided"; only `pending`
+ * All of `filed`/`queued`/`answered`/`closed`/`dismissed` are "decided"; only `pending`
  * holds the gate.
  */
 export const followUpItemStatusSchema = v.picklist([
@@ -47,6 +51,7 @@ export const followUpItemStatusSchema = v.picklist([
   'filed',
   'queued',
   'answered',
+  'closed',
   'dismissed',
 ])
 export type FollowUpItemStatus = v.InferOutput<typeof followUpItemStatusSchema>
@@ -79,6 +84,18 @@ export const followUpItemSchema = v.object({
    * follow-up was triaged.
    */
   dismissedByPolicy: v.optional(v.boolean()),
+  /**
+   * True when this item was decided for a send-back (`queued` / `answered`) that the step's loop
+   * budget could not pay for: `loops` had already reached `maxLoops`, so the Coder never received
+   * it. Absent on every item that was sent, and on every item that was never going to be.
+   *
+   * The sibling of {@link dismissedByPolicy}, and recorded for the same reason. Without it a
+   * dropped send-back is stored as `answered` with `sentToCoder` false forever, which is
+   * indistinguishable from an answer still queued for a pass that is about to run, and reads to
+   * anybody auditing the step as an answer the Coder acted on. A budget that quietly discards a
+   * human's decision has to say so.
+   */
+  sendBackDropped: v.optional(v.boolean()),
   /** Canonical external id of the filed ticket (e.g. "owner/repo#123"), when `filed`. */
   ticketExternalId: v.optional(v.nullable(v.string())),
   /** URL of the filed ticket, when `filed`. */
@@ -109,9 +126,46 @@ export type FollowUpsStepState = v.InferOutput<typeof followUpsStepStateSchema>
 
 // ---- Request bodies -------------------------------------------------------
 
-/** Answer a `question` item (the answer is folded into the next Coder loop-back). */
+/**
+ * What answering a `question` DOES, which is not the same as what the answer says.
+ *
+ * - `answered` (the default, and every answer before this existed): the reply carries information
+ *   the next pass applies, so it is folded into a Coder loop-back.
+ * - `closed`: the reply RULES ON the question without supplying anything to act on. The Coder
+ *   asked for a fact nobody here has, or asked to widen scope and the answer is no. The reason is
+ *   still recorded in `answer` and still shown to the Coder, as something already settled.
+ *
+ * Split from the answer TEXT because the engine cannot read the difference out of prose, and
+ * guessing it wrong is expensive in both directions. Answering every question as if it carried new
+ * information is what produced the loop this vocabulary exists to end: a question the answerer
+ * could not resolve ("which IngressClass does the target cluster mark as default?") came back with
+ * a generic steer, the Coder found nothing in it to apply, reworded the surrounding comment, and
+ * re-raised the same question under a new title. Three passes, one commit's worth of change, and
+ * the budget rather than the conversation was what finally stopped it.
+ *
+ * The answerer always knows which one they are giving. Ask them rather than infer it.
+ */
+export const followUpResolutionSchema = v.picklist(['answered', 'closed'])
+export type FollowUpResolution = v.InferOutput<typeof followUpResolutionSchema>
+
+/**
+ * Answer a `question` item. `answered` folds the answer into the next Coder loop-back;
+ * `closed` records it as a ruling with no further pass. See {@link followUpResolutionSchema}.
+ *
+ * `resolution` is OPTIONAL and an omitted one means `answered`, so a caller written before it
+ * existed keeps its exact prior behaviour. That is the public surface's additive rule
+ * (`backend/docs/public-api.md`), and it is also the right reading on the merits: an answer that
+ * came with no disposition is one somebody typed into a box that promised to send it back.
+ *
+ * Declared WITHOUT a valibot `default`, deliberately. A schema default is "always present on the
+ * way out, optional on the way in", and the SDK emitters cannot render one shape as both
+ * (`scripts/sdk/ir.mjs` refuses it rather than guessing). So the field is plainly optional on the
+ * wire and the ENGINE owns the fallback, in `FollowUpGateController.answerFollowUp`, which is the
+ * one place that has to agree with itself about what an absent disposition means.
+ */
 export const answerFollowUpSchema = v.object({
   answer: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(4000)),
+  resolution: v.optional(followUpResolutionSchema),
 })
 export type AnswerFollowUpInput = v.InferOutput<typeof answerFollowUpSchema>
 

@@ -2,6 +2,7 @@ import * as v from 'valibot'
 import { mergeAssessmentSchema } from './merge.js'
 import { judgeDispositionSchema, judgeFindingSchema, judgeModelPinSchema } from './judge.js'
 import { documentFreshnessSchema, documentOriginSchema } from './documents.js'
+import { followUpItemKindSchema, followUpItemStatusSchema } from './followUp.js'
 import { requirementPrioritySchema, requirementStateSchema } from './spec.js'
 import { reproductionStatusSchema } from './reproduction.js'
 import { requirementVerdictStatusSchema, testEnvironmentSchema } from './testing.js'
@@ -40,7 +41,7 @@ import { vcsProviderSchema } from './routes/auth.js'
  * (see the header), so a bump means "there is more here than there was", and a consumer written
  * against an older number keeps reading the fields it knows.
  */
-export const PR_VERIFICATION_REPORT_VERSION = 9
+export const PR_VERIFICATION_REPORT_VERSION = 10
 
 /**
  * How much of one captured command log the report carries, per command.
@@ -652,6 +653,75 @@ export const prReportJudgeSchema = v.object({
 })
 export type PrReportJudge = v.InferOutput<typeof prReportJudgeSchema>
 
+/** One item the Coder surfaced mid-run, and what was done with it. */
+export const prReportFollowUpSchema = v.object({
+  /** `follow_up` (a loose end it chose not to act on) or `question` (a clarification it raised). */
+  kind: followUpItemKindSchema,
+  /** The item's headline. Model-authored text: scrubbed at compose time, escaped at render. */
+  title: v.string(),
+  /** How it was decided. `pending` is unreachable here (the gate holds the run until it is not). */
+  status: followUpItemStatusSchema,
+  /**
+   * True when this item was decided for a send-back the Coder never received, because the step's
+   * loop budget was already spent. The one disposition `status` cannot show on its own.
+   */
+  sendBackDropped: v.boolean(),
+  /** True when the run's autonomy policy dismissed it because nobody was watching. */
+  dismissedByPolicy: v.boolean(),
+})
+export type PrReportFollowUp = v.InferOutput<typeof prReportFollowUpSchema>
+
+/**
+ * What the Coder flagged while it worked, and what was decided about each one.
+ *
+ * A reviewer reading this pull request is the person best placed to act on a loose end the Coder
+ * noticed, and the worst placed to discover one: the items live on the run, and the only trace on
+ * the PR itself used to be whatever the agent chose to write into a commit message. Three of the
+ * dispositions here are load-bearing for that reader:
+ *
+ * - `closed`: a question ruled on rather than answered. The reason is the ruling, and a reviewer
+ *   who disagrees with it is looking at a decision, not an oversight.
+ * - `sendBackDropped`: a decision that was made and then thrown away when the loop budget ran
+ *   out. Nothing else on the PR says the run stopped short of what triage asked for.
+ * - `dismissedByPolicy`: nobody looked. An unattended run dismisses undecided items so it can
+ *   finish, and the resulting item list would otherwise read as a triaged one.
+ *
+ * The three COUNTS below are taken over every item the run surfaced, before `entries` is capped;
+ * `total` is what they were taken over. A count reduced to the shown rows would answer a question
+ * nobody asked ("how many of the visible ones") and would silently read as zero for a run whose
+ * flagged items all fell past the cap.
+ *
+ * `absent` when the companion was off on every step, or never surfaced anything.
+ */
+export const prReportFollowUpsSchema = v.object({
+  status: prReportSectionStatusSchema,
+  /** Says why the section is empty when `status` is `absent`. */
+  note: v.optional(v.nullable(v.string())),
+  /** Send-back passes spent and the ceiling they stopped at, summed across enabled steps. */
+  loops: v.number(),
+  maxLoops: v.number(),
+  /** How many items the run surfaced in all, which may exceed `entries.length`. */
+  total: v.number(),
+  /** How many of those carry `sendBackDropped`, so a reader sees the count without scanning. */
+  dropped: v.number(),
+  /** How many of those the run's autonomy policy dismissed rather than a person. */
+  dismissedByPolicy: v.number(),
+  /**
+   * The send-back budget the drops were measured against: `loops`/`maxLoops` summed over the steps
+   * that actually dropped something, and null when nothing did.
+   *
+   * Separate from the section-level pair above because that one sums EVERY enabled step, and a
+   * pipeline may place more than one follow-up-enabled Coder. A run whose first Coder exhausted
+   * 3/3 and dropped a decision while its second never looped sums to 3/6, and a banner that
+   * asserted a spent budget over 3-of-6 would be telling a reviewer the platform discarded their
+   * decision with half the budget still available. Summed over the exhausted steps alone the two
+   * numbers are equal by construction, which is the fact the banner is actually claiming.
+   */
+  droppedBudget: v.nullable(v.object({ loops: v.number(), maxLoops: v.number() })),
+  entries: v.array(prReportFollowUpSchema),
+})
+export type PrReportFollowUps = v.InferOutput<typeof prReportFollowUpsSchema>
+
 /** The run's judge verdicts. `absent` when the pipeline placed no judge step (or none settled). */
 export const prReportJudgesSchema = v.object({
   status: prReportSectionStatusSchema,
@@ -903,6 +973,8 @@ export const prVerificationReportSchema = v.object({
   run: prReportRunSchema,
   /** What the run built FROM: the linked documents its agents read, at which revision. */
   context: prReportContextSchema,
+  /** What the Coder flagged mid-run, and how each item was decided. */
+  followUps: prReportFollowUpsSchema,
   ci: prReportCiSchema,
   /** The platform's OWN run of the service's check commands against the pushed tree. */
   validation: prReportValidationSchema,

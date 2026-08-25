@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { runCapturedCommand } from './captured-command.js'
 import type {
+  ContextFileSpec,
   HarnessAuthFields,
   ImageManifestSpec,
   RepoSpec,
@@ -162,6 +163,21 @@ export interface CodingAgentSpec extends HarnessAuthFields {
    * `docs/initiatives/bugfix-reproduction-proof.md`.
    */
   reproduction?: ReproductionSpec
+  /**
+   * The run's LINKED CONTEXT documents (the task's attached brief, an RFC, a tracker issue body),
+   * materialised into `.cat-context/<path>` in the checkout and enumerated for the agent in its
+   * `AGENTS.md` context block. Absent ⇒ none.
+   *
+   * Carried here because the CODING agent is the one that needs them most and was the ONE path
+   * that dropped them: every sibling caller of {@link runAgentInWorkspace} (the explore paths, the
+   * conflict path, `multi-repo-coding.ts`) forwarded `job.contextFiles` and this one did not, so a
+   * task whose brief was too long for `description` and therefore rode an attached document
+   * reached the implementer as a prompt naming `.cat-context/<file>.md` and a checkout with no
+   * such directory. The agent then rebuilt the brief from whatever summary the prompt carried and
+   * reported the gap as a follow-up question, which is the most expensive way to discover a
+   * missing field spread.
+   */
+  contextFiles?: ContextFileSpec[]
   /**
    * The skills to make available for this run — a `skill` step's pick and/or the running kind's
    * declared playbooks. Threaded into {@link runAgentInWorkspace}, which installs them
@@ -508,6 +524,8 @@ export async function runCodingAgent(
             webToolsGuidance: spec.webToolsGuidance,
             webSearchProxy: spec.webSearchProxy,
             guardLimits: spec.guardLimits,
+            // Materialised into `.cat-context/` and enumerated in the agent's AGENTS.md block.
+            ...(spec.contextFiles?.length ? { contextFiles: spec.contextFiles } : {}),
             ...(spec.skills?.length ? { skills: spec.skills } : {}),
             ...(spec.mcpServers?.length ? { mcpServers: spec.mcpServers } : {}),
             ...(spec.referenceScreenshots

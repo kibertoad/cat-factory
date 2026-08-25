@@ -410,6 +410,7 @@ export function toFollowUpsDecision(
       suggestedAction: item.suggestedAction ?? null,
       status: item.status,
       answer: item.answer ?? null,
+      sendBackDropped: item.sendBackDropped ?? false,
       ticketExternalId: item.ticketExternalId ?? null,
       ticketUrl: item.ticketUrl ?? null,
     })),

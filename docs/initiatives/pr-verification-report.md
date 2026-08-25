@@ -433,3 +433,47 @@ Three things about it are deliberate:
 - **The endpoint stays authenticated.** The report may land on a public repository, so the bytes
   are not made reachable by an unguessable URL: a reader without workspace access gets a 401, which
   is the honest outcome and the same one the app deep link already produces.
+
+### The Coder-follow-ups section (report `version: 10`)
+
+What the Coder flagged while it worked, and what was decided about each item. Its own section
+rather than a line in the run table, because it answers a question no other section does: not
+"did the work pass" but "what did the build notice, and did anybody act on it".
+
+It sits directly after `Context sources` for the same reason that one sits where it does. Both
+describe the ground the run stood on, and a loose end the Coder deliberately left changes how the
+evidence below it reads.
+
+Three dispositions carry weight for the reviewer, and each is called out ABOVE the table rather
+than left to be derived from a status column:
+
+- **`closed`** is a question ruled on rather than answered: nobody had the fact it asked for, or
+  it asked to widen scope and the answer was no. The reason is recorded, and a reviewer who
+  disagrees with it is looking at a decision, not an oversight.
+- **`sendBackDropped`** is a decision that was made and then thrown away because the step's
+  send-back budget was already spent. The run advanced without applying it. Nothing else on the
+  pull request says the run stopped short of what triage asked for, and on the item itself it is
+  the only thing distinguishing that case from an answer the Coder applied.
+- **`dismissedByPolicy`** is nobody having looked: an unattended run dismisses undecided items so
+  it can finish, and the item list would otherwise read as a triaged one.
+
+`pending` items are included even though the gate normally holds the run until none remain: a
+report can be composed while the run is parked on exactly that gate, and omitting them would make
+outstanding triage look like none.
+
+`loops`/`maxLoops` are SUMMED across every follow-up-enabled step. A pipeline may place more than
+one such Coder, and the reviewer's question spans all of them.
+
+Two things follow from that sum, and both were wrong the first time:
+
+- **The banner quotes `droppedBudget`, never `loops`/`maxLoops`.** `droppedBudget` sums only the
+  steps that actually dropped something, so its two numbers are equal by construction, which is
+  what "the budget was spent" claims. Over every enabled step they are not: a run whose first
+  Coder exhausted 3/3 and dropped a decision while its second never looped sums to 3/6, and a
+  reviewer reading 3-of-6 concludes the platform discarded their decision with half the budget
+  still available.
+- **`total`, `dropped` and `dismissedByPolicy` are counted before the entries cap**, and the
+  banner says so when the cap fired rather than promising that what it counts is marked in a table
+  that may not hold it. Recounted off the shown rows, a run whose flagged items all fell past the
+  cap prints zero and suppresses the line, which is the same section's own rule broken one
+  paragraph down.

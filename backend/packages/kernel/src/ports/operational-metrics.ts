@@ -252,6 +252,22 @@ export type OperationalCounter =
    * pass is logged rather than counted (`LinkedDocumentRefreshService`, `trigger` field).
    */
   | 'document.freshness_gap'
+  /**
+   * A human's follow-up decision (a queued follow-up, an answered question) that the Coder's
+   * send-back loop budget could not pay for, so the run advanced without the Coder ever seeing it.
+   * Counted per DROPPED ITEM, not per run that dropped any.
+   *
+   * The rate is the signal, not the individual event: one run exhausting its budget is ordinary
+   * and is on the run's own log line and PR report. A deployment where this climbs is telling you
+   * something the per-run records cannot, and the two causes need opposite fixes. Either the Coder
+   * keeps re-raising questions nobody can answer (a prompt problem, or answers being given as
+   * steers where a `closed` ruling was meant), or triage is routinely queueing more work than
+   * `maxLoops` passes can absorb (a budget problem).
+   *
+   * UNDIMENSIONED. The only split worth having is which run, which is unbounded; it rides the log
+   * line at the increment site, as every id does.
+   */
+  | 'followup.send_back_dropped'
 
 // Deliberately NOT a counter here: "jobs sitting in a dead-letter queue". It is a LEVEL, and
 // the only thing that can read it is a periodic `SELECT` over the queue tables — which returns
