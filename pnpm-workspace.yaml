@@ -46,14 +46,34 @@ overrides:
   'vite>esbuild': 0.28.1
   'tsx>esbuild': 0.28.1
   'nitropack>esbuild': 0.28.1
-  # ONE wrangler across the stack, for the same reason the three esbuild pins above exist.
-  # `@cloudflare/vitest-pool-workers` pins `wrangler` (and through it `workerd` + `miniflare`)
-  # EXACTLY, while our own range is a caret — so any in-range refresh floats our wrangler ahead
-  # of the one the test pool pins and the tree gains a SECOND workerd. That is not just ~100MB of
-  # duplicated platform binary per arch: the Worker suite runs inside the pool's workerd, so the
-  # runtime the tests prove and the runtime `wrangler deploy` ships would be different builds.
-  # Held to whatever `@cloudflare/vitest-pool-workers` pins; move it when that package moves.
-  wrangler: 4.124.0
+  # `@cloudflare/workers-types` is a singleton for the same reason, one layer up: its version IS a
+  # workerd date (`5.20260815.1` <-> `workerd@1.20260815.1`), so a second copy means part of the
+  # tree typechecks against a runtime the rest of it does not run. Two slots float it even with
+  # every workspace declaration pinned exact, both of them OPTIONAL PEERS that `autoInstallPeers`
+  # fills from the newest published version: `drizzle-orm` (peer `>=4`, so anything satisfies it)
+  # and `wrangler` itself wherever a package declares wrangler without the types beside it, as
+  # deploy/frontend does. Left alone that quietly reintroduced 5.20260823.1 beside the pinned
+  # 5.20260815.1, eight days of API ahead of the workerd that runs.
+  #
+  # Top-level here, unlike wrangler below, and the difference is who the authority is. Wrangler's
+  # correct version belongs to `@cloudflare/vitest-pool-workers` and must be TRACKED, which an
+  # override cannot do. The types' correct version is DERIVED from the workerd we already resolve,
+  # and wrangler states it outright: its own peer range on this package is `^5.20260815.1`. So the
+  # override asserts a fact we own rather than freezing someone else's decision, and
+  # `scripts/check-cloudflare-runtime-pins.mjs` re-derives it from the lockfile every CI run.
+  # Move it with workerd, never on its own.
+  '@cloudflare/workers-types': 5.20260815.1
+  # NO `wrangler` override here, deliberately. The invariant is ONE wrangler (and through it one
+  # workerd + one miniflare) across the stack, because the Worker suite runs inside the pool's
+  # workerd and `wrangler deploy` ships wrangler's: two copies mean the runtime the tests prove is
+  # a different build from the runtime that ships, on top of ~100MB of duplicated platform binary
+  # per arch. A top-level override is the wrong tool for it: it OVERRIDES
+  # `@cloudflare/vitest-pool-workers`'s exact pin instead of TRACKING it, so the next pool bump is
+  # silently forced back to our number and the pool runs against a wrangler it never pinned. What
+  # holds the invariant instead is an exact `wrangler` version in each package that declares it,
+  # plus `scripts/check-cloudflare-runtime-pins.mjs`, which fails CI the moment the lockfile holds
+  # more than one wrangler/workerd/miniflare. So a pool bump arrives as a red guard naming the
+  # version to move to, rather than as a pin nothing re-examines.
   # Babel 7 and Babel 8 coexist on purpose: Nuxt's build graph is on `@babel/core@7`, while
   # Stryker 10's instrumenter moved to `@babel/core@8`. The three plugins below are OPTIONAL
   # PEERS of the Nuxt packages, so pnpm fills those slots from whatever version of that name is
@@ -106,15 +126,29 @@ allowBuilds:
   sharp: true
   vue-demi: true
   workerd: true
-# The `minimumReleaseAge` supply-chain gate refuses registry packages younger
-# than the configured window. Only ever list packages WE OWN here (wildcard
-# namespaces, or an unscoped package published by the same maintainer as this
-# repo, e.g. layered-loader) — our own freshly-published packages are trusted
-# and must never be age-gated. Do NOT add per-version exceptions for third-party
-# packages: when upgrading, pick the latest version that already satisfies the
-# release-age rule instead. (The prior `nuxt` / `@nuxt/*` exception has been pruned:
-# Nuxt 4.5.x has aged past the window, so — as its own note promised — it self-heals
-# and no longer needs an exclusion.)
+# The supply-chain gate: a package published inside this window is refused, so a compromised
+# release has to survive a day of public scrutiny before it can reach an install here. 1440
+# minutes = 24 hours.
+#
+# It MUST be set explicitly. pnpm has no default for it (`maximumPublishedBy` is derived as
+# `opts.minimumReleaseAge ? ... : undefined`), so an unset value is not a shorter window, it is NO
+# window: every version resolves the instant it is published and `minimumReleaseAgeExclude` below
+# governs nothing. That is not hypothetical, it is what this repo shipped until 2026-08-25: the
+# exclude list was maintained, documented and argued over for months while the gate it excludes
+# from was never turned on. Nothing else enforces the window, so do not delete this line to
+# "unblock" an install: the fix for a blocked install is to wait, or to pick an older version.
+minimumReleaseAge: 1440
+# Only ever list packages WE OWN here (wildcard namespaces, or an unscoped package published by
+# the same maintainer as this repo, e.g. layered-loader): our own freshly-published packages are
+# trusted and must never be age-gated. Do NOT add per-version exceptions for third-party packages.
+# When upgrading, pick the latest version that already satisfies the release-age rule instead: an
+# exception buys hours and costs the whole property the gate exists for, on exactly the package
+# someone felt strongly enough about to bypass it.
+#
+# Two prior entries have been pruned, both self-healing exactly as their notes promised: the
+# `nuxt` / `@nuxt/*` exception (Nuxt 4.5.x aged past the window) and `pg-boss@12.28.0`, taken ~20
+# minutes short of the window in the 2026-08-25 refresh. There are now zero third-party entries,
+# which is the only correct number.
 minimumReleaseAgeExclude:
   - '@cat-factory/*'
   - '@toad-contracts/*'
@@ -122,10 +156,3 @@ minimumReleaseAgeExclude:
   - '@modular-frontend/*'
   - layered-loader
   - toad-scheduler
-  # PRUNE ME. The one third-party exception in the tree, and it is already stale: pg-boss
-  # 12.28.0 was ~20 minutes short of the window when this dependency refresh was cut, so it
-  # was taken deliberately rather than deferred to the next sweep. It has since aged past the
-  # gate, which means removing this line is a no-op re-resolve — do it in the next dependency
-  # PR. It is NOT precedent: the standing rule is still to pick the newest version that already
-  # satisfies the release-age rule instead of listing a version here.
-  - pg-boss@12.28.0

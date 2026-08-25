@@ -25,9 +25,24 @@ export default defineMutationConfig({
     '!src/**/*.test.ts',
     '!src/**/*.fixtures.ts',
   ],
-  // Measured 84.23% total / 85.79% covered over 7,316 mutants. The floor is the truncated total
-  // less the two-point margin every floor here carries (docs/internal/mutation-testing.md says
-  // what the margin absorbs); kernel is the package that needs it most, since ONE new `domain/`
-  // module arriving with no tests moves the total by more than a point on its own.
-  minimumScore: 82,
+  // Measured 82.37% total / 85.56% covered over 7,908 mutants, UNDER STRYKER 10.0.0. The floor is
+  // the truncated total less the two-point margin every floor here carries
+  // (docs/internal/mutation-testing.md says what the margin absorbs); kernel is the package that
+  // needs it most, since ONE new `domain/` module arriving with no tests moves the total by more
+  // than a point on its own.
+  //
+  // LOWERED from 82, and this is the rarer of the two legitimate lowerings: not a widened `mutate`
+  // scope, but Stryker 10 adding `emptyExpressionMutator` to the DEFAULT set, which is the same
+  // event through a different door. The population went 7,316 -> 7,908 and the total 84.23 ->
+  // 82.37, because the new mutants land on call statements and `throw new X()`, which kernel's
+  // suites assert around far less often than they assert returned values. Nothing here stopped
+  // being pinned; the denominator grew with behaviour no test was ever written against.
+  //
+  // Left at 82 the floor was not a ratchet at all: 82.37 against a break of 82 is 0.37 points, and
+  // the arithmetic above says one ordinary untested module costs ~1.6. The next one would have
+  // turned the nightly red for scope growth while reading as a regression, which is the failure
+  // the two-point margin exists to prevent. This is NOT licence for a test regression: the number
+  // to compare against from here is 82.37, and covered (85.56, essentially unmoved from 85.79) is
+  // what says the existing tests still assert what they did.
+  minimumScore: 80,
 })

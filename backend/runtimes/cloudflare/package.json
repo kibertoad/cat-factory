@@ -73,7 +73,7 @@
   "devDependencies": {
     "@cat-factory/conformance": "workspace:*",
     "@cloudflare/vitest-pool-workers": "^0.22.0",
-    "@cloudflare/workers-types": "^5.20260823.1",
+    "@cloudflare/workers-types": "5.20260815.1",
     "typescript": "7.0.2",
     "vitest": "^4.1.11",
     "wrangler": "4.124.0"

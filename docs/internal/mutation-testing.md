@@ -57,11 +57,14 @@ saturate every core.
 
 ## What is in scope, and why
 
+Measured under **Stryker 10.0.0**. The version is part of the measurement, not trivia beside it:
+see "A floor is only a fact about the mutator set that measured it" below.
+
 | Package               | Mutated                          | Mutants | Score (total / covered) | Floor |
 | --------------------- | -------------------------------- | ------- | ----------------------- | ----- |
-| `@cat-factory/kernel` | `src/domain/**`, `src/shared/**` | 7,316   | 84.23% / 85.79%         | 82%   |
-| `@cat-factory/gates`  | all of `src/`                    | 651     | 90.78% / 92.06%         | 88%   |
-| `@cat-factory/spend`  | all of `src/`                    | 396     | 97.73% / 97.73%         | 95%   |
+| `@cat-factory/kernel` | `src/domain/**`, `src/shared/**` | 7,908   | 82.37% / 85.56%         | 80%   |
+| `@cat-factory/gates`  | all of `src/`                    | 669     | 90.58% / 91.82%         | 88%   |
+| `@cat-factory/spend`  | all of `src/`                    | 400     | 97.25% / 97.49%         | 95%   |
 
 These three are pure logic with fast, database-free unit suites, which is the only shape mutation
 testing can afford: the suite runs once per surviving mutant, so a package whose tests need
@@ -183,8 +186,8 @@ real.
 `minimumScore` in each package's config becomes Stryker's `thresholds.break`: below it, `stryker
 run` exits non-zero and the nightly job goes red.
 
-**A floor is the measured total truncated to a whole percent, less two points** (kernel 84.23 →
-84 → 82, gates 90.78 → 90 → 88, spend 97.73 → 97 → 95). The margin is not provisional slack
+**A floor is the measured total truncated to a whole percent, less two points** (kernel 82.37 →
+82 → 80, gates 90.58 → 90 → 88, spend 97.25 → 97 → 95). The margin is not provisional slack
 waiting to be reclaimed. It is sized to the one thing that moves this number without any test
 having changed: **the denominator**.
 
@@ -233,8 +236,8 @@ floors needed none, because a `Timeout` counts as DETECTED and so a slower runne
 the same or higher". Both halves fail. It is one-directional (a FASTER runner than the measuring
 machine turns timeout-kills back into survivors, which lowers the score), and the cushion it
 appeals to is mostly not there: every measurement behind the table above found **zero** timeouts in
-gates and spend, and nine in kernel, worth 0.15 points. Runner speed is the small term here;
-scope growth is the large one.
+gates and spend, and nine to fourteen in kernel, worth under 0.2 points. Runner speed is the small
+term here; scope growth is the large one.
 
 The covered-code score is the metric that is immune to scope growth, and it is deliberately NOT
 the ratchet. It has the opposite bias: writing the FIRST test for an untested module moves that
@@ -253,6 +256,39 @@ nothing in CI runs two of these jobs on one runner.
 Raise a floor when a change earns the win. The ONE legitimate lowering is a deliberate expansion of
 the mutate scope that pulls in code which had no tests, and the PR that does it says so: everything
 else that lowers the number is a test that stopped asserting something.
+
+**A floor is only a fact about the mutator set that measured it, so record that set and re-measure
+when it moves.** Every number above is `detected / (detected + survived + NoCoverage)`, and Stryker
+decides what goes in that denominator. A release that adds a mutator re-bases all three floors at
+once without a line of this repo changing, in whichever direction the new mutants happen to fall,
+and it arrives looking like an ordinary dependency bump. Stryker 10.0.0 is the worked example: its
+release notes lead with dropping Node 20, and it also added `emptyExpressionMutator` to the DEFAULT
+set (every call-expression statement becomes an empty statement, every `throw new X()` becomes one,
+every call in expression position becomes `void 0`), which lands hardest on exactly the
+side-effecting code a threshold-heavy package has least reason to assert around. The 2026-08-25
+dependency refresh took that bump describing it as a Node 20 drop, and the floors it invalidated
+went unexamined until a review caught it.
+
+The re-measure is what that cost, and it is not what anyone would have guessed. The two small
+packages barely moved: gates 651 → 669 mutants and 90.78 → 90.58, spend 396 → 400 and 97.73 →
+97.25, both absorbed by the margin with the floor untouched. Gates was the package the new mutator
+should have hit hardest, being probes and dispatches where nearly every statement IS a call, and it
+did not, because those calls are precisely what its suites assert on. Kernel took all of it: 7,316 →
+7,908 mutants and 84.23 → 82.37, against a floor of 82. **A 2.23-point margin had become 0.37**, one
+untested module short of a red nightly that would have read as a regression, and the covered score
+moved 85.79 → 85.56, which is what says nothing stopped being pinned. So kernel's floor was lowered
+to 80 and the other two stood.
+
+That is the second legitimate lowering, beside a widened `mutate` scope, and it is the same event
+through a different door: the denominator grew with behaviour no test was ever written against. It
+is also the reason to re-measure promptly rather than at leisure. A floor left at 82 would not have
+been a strict ratchet holding the line; it would have been an instrument with no margin left,
+failing on the next ordinary module and training everyone to re-pin it unread.
+
+So each `stryker.config.mjs` records the Stryker version its measurement was taken under beside the
+number, a Stryker MAJOR is a re-measure before the floors mean anything again, and the PR taking one
+says which way each floor moved. A floor whose recorded version is behind the installed one is not a
+ratchet: it is a number nobody has checked.
 
 A red job is not a merge stop. It is a statement that some behaviour in that package is now
 unpinned, and the HTML artifact says exactly which line.
