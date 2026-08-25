@@ -25,9 +25,15 @@ export default defineMutationConfig({
     '!src/**/*.test.ts',
     '!src/**/*.fixtures.ts',
   ],
-  // Measured 84.23% total / 85.79% covered over 7,316 mutants. The floor is the truncated total
-  // less the two-point margin every floor here carries (docs/internal/mutation-testing.md says
-  // what the margin absorbs); kernel is the package that needs it most, since ONE new `domain/`
-  // module arriving with no tests moves the total by more than a point on its own.
+  // Measured 84.23% total / 85.79% covered over 7,316 mutants, UNDER STRYKER 9.6.1. The floor is
+  // the truncated total less the two-point margin every floor here carries
+  // (docs/internal/mutation-testing.md says what the margin absorbs); kernel is the package that
+  // needs it most, since ONE new `domain/` module arriving with no tests moves the total by more
+  // than a point on its own.
+  //
+  // The installed Stryker is 10.0.0, which added `emptyExpressionMutator` to the default set, so
+  // this measurement predates the current mutant population and the 2.23-point margin is doing
+  // work it was never sized for. Re-measure on the nightly and re-set from the reported total
+  // before treating this number as a ratchet again.
   minimumScore: 82,
 })

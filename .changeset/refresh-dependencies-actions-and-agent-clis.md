@@ -9,7 +9,6 @@
 '@cat-factory/conformance': patch
 '@cat-factory/consensus': patch
 '@cat-factory/contracts': patch
-'@cat-factory/deploy-harness': patch
 '@cat-factory/eks': patch
 '@cat-factory/example-custom-agent': patch
 '@cat-factory/executor-harness': patch
@@ -47,14 +46,19 @@ newest release each declared range already admits):
   `@ai-sdk/anthropic@^4.0.39 → ^4.0.41`, `@ai-sdk/openai@^4.0.43 → ^4.0.46`,
   `@ai-sdk/openai-compatible@^3.0.31 → ^3.0.35`, `@ai-sdk/amazon-bedrock@^5.0.58 → ^5.0.61`.
 - **Runtime deps**: `jose@^6.2.9 → ^6.2.10`, `pg-boss@^12.27.0 → ^12.28.0`,
-  `capnweb@^0.11.1 → ^0.12.0`, `@aws-sdk/client-s3@^3.1113.0 → ^3.1116.0`,
-  `@cloudflare/workers-types@^5.20260819.1 → ^5.20260823.1`.
+  `capnweb@^0.11.1 → ^0.12.0`, `@aws-sdk/client-s3@^3.1113.0 → ^3.1116.0`.
+  `@cloudflare/workers-types` settles at an exact `5.20260815.1` rather than a caret: its version
+  IS a workerd date, so a caret floats the types ahead of the runtime that executes them.
 - **Frontend**: `@nuxt/ui@^4.10.0 → ^4.11.0`, `happy-dom@^20.11.2 → ^20.11.6`,
   `vue-tsc@^3.3.10 → ^3.3.11`. The frontend's `typescript@^6.0.3` is deliberately unchanged:
   `vue-tsc` still resolves `typescript/lib/tsc`, a subpath TypeScript 7's exports map does not
   expose, so the SPA stays on 6 until `vue-tsc` supports the Go port.
-- **Tooling**: `@stryker-mutator/*@9.6.1 → 10.0.0` (its only breaking change is dropping Node 20;
-  CI runs 26) and pnpm `11.22.0 → 11.23.0`.
+- **Tooling**: `@stryker-mutator/*@9.6.1 → 10.0.0` and pnpm `11.22.0 → 11.23.0`. Stryker 10 drops
+  Node 20 (CI runs 26) and ALSO adds `emptyExpressionMutator` to the default mutator set, which
+  enlarges every mutated package's mutant population. The three score floors were measured under
+  9.6.1 and have not been re-measured against the new population, so they are provisional until the
+  nightly reports; `docs/internal/mutation-testing.md` now records which version each floor was
+  measured under.
 
 **Changesets moves as a coupled major**: `@changesets/cli@^2.31.1 → ^3.0.1` plus
 `changesets/action@v1.9.0 → v2.1.1`, which refuse each other's majors. Two behaviour changes had to
@@ -66,19 +70,20 @@ takes the renamed inputs (`version-script`, `publish-script`, `pr-title`, `commi
 the environment. v2 pushes the release branch and tags through the GitHub API, so that job's
 checkout no longer persists git credentials.
 
-**Held back, all inside the ~24h `minimumReleaseAge` window when this was cut**: `@types/node@26.3.0`,
+**Held back, all inside the ~24h release-age window when this was cut**: `@types/node@26.3.0`,
 `hono@4.13.4`, `oxlint@1.80.0`, `oxfmt@0.65.0`, `ai@7.0.78`, `@ai-sdk/openai-compatible@3.0.36`,
 `@aws-sdk/client-s3@3.1117.0`. `pg-boss@12.28.0` was ~20 minutes short of the same window and was
-taken anyway, so it is listed in `minimumReleaseAgeExclude` — the ONE third-party entry there, added
-deliberately with a PRUNE ME note, since it has already aged past the gate and removing the line is
-now a no-op re-resolve.
+taken anyway, listed in `minimumReleaseAgeExclude` with a PRUNE ME note. It has since aged past the
+window and that entry is gone again.
 
-**`wrangler` is now pinned by override**, not merely ranged. `@cloudflare/vitest-pool-workers@0.22.0`
-pins `wrangler` (and through it `workerd` and `miniflare`) EXACTLY, so any in-range refresh floats our
-caret ahead of the pool's pin and the tree gains a SECOND workerd — not just ~100MB of duplicated
-platform binary per arch, but a runtime the Worker suite proves that is a different build from the one
-`wrangler deploy` ships. The override holds it at whatever pool-workers pins, exactly as the three
-esbuild pins beside it already do, and moves when that package moves.
+**`wrangler` moves from a caret to an exact version in every package that declares it.**
+`@cloudflare/vitest-pool-workers@0.22.0` pins `wrangler` (and through it `workerd` and `miniflare`)
+EXACTLY, so any in-range refresh floats our caret ahead of the pool's pin and the tree gains a SECOND
+workerd: not just ~100MB of duplicated platform binary per arch, but a runtime the Worker suite
+proves that is a different build from the one `wrangler deploy` ships. This first shipped as a
+top-level override, which was the wrong shape (an override OVERRIDES the pool's pin instead of
+tracking it) and has since been replaced by the exact declarations plus a guard that fails CI on a
+second copy.
 
 **Stryker 10 pulled Babel 8 into a tree whose Nuxt half is on Babel 7**, and the three Babel plugins
 Nuxt declares as OPTIONAL PEERS were then filled from the 8.x line while still being handed

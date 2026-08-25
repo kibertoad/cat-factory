@@ -254,6 +254,23 @@ Raise a floor when a change earns the win. The ONE legitimate lowering is a deli
 the mutate scope that pulls in code which had no tests, and the PR that does it says so: everything
 else that lowers the number is a test that stopped asserting something.
 
+**A floor is only a fact about the mutator set that measured it, so record that set and re-measure
+when it moves.** Every number above is `detected / (detected + survived + NoCoverage)`, and Stryker
+decides what goes in that denominator. A release that adds a mutator re-bases all three floors at
+once without a line of this repo changing, in whichever direction the new mutants happen to fall,
+and it arrives looking like an ordinary dependency bump. Stryker 10.0.0 is the worked example: its
+release notes lead with dropping Node 20, and it also added `emptyExpressionMutator` to the DEFAULT
+set (every call-expression statement becomes an empty statement, every `throw new X()` becomes one,
+every call in expression position becomes `void 0`), which lands hardest on exactly the
+side-effecting code a threshold-heavy package has least reason to assert around. The 2026-08-25
+dependency refresh took that bump describing it as a Node 20 drop, and the floors it invalidated
+went unexamined until a review caught it.
+
+So each `stryker.config.mjs` records the Stryker version its measurement was taken under beside the
+number, a Stryker MAJOR is a re-measure before the floors mean anything again, and the PR taking one
+says which way each floor moved. A floor whose recorded version is behind the installed one is not a
+ratchet: it is a number nobody has checked.
+
 A red job is not a merge stop. It is a statement that some behaviour in that package is now
 unpinned, and the HTML artifact says exactly which line.
 

@@ -565,6 +565,18 @@ jobs:
       - name: Guard runner image path gates
         run: node scripts/check-runner-image-paths.mjs
 
+      # Guard the Cloudflare runtime pins: ONE wrangler, and through it one workerd and one
+      # miniflare. `@cloudflare/vitest-pool-workers` pins wrangler exactly and the Worker suite
+      # runs inside the pool's workerd, while `wrangler deploy` ships wrangler's, so a second copy
+      # means the runtime the tests prove is not the runtime that ships. Both halves stay green
+      # while that is true, which is why it needs an assertion rather than a convention. Also
+      # holds `@cloudflare/workers-types` to the resolved workerd's date, since its version IS a
+      # workerd date and a caret floats the types ahead of the runtime they describe. Reads the
+      # lockfile and the workspace manifests. Its fixtures run in the `node --test` step above.
+      # Pure node, no install, no network.
+      - name: Guard Cloudflare runtime pins
+        run: node scripts/check-cloudflare-runtime-pins.mjs
+
   # The former monolithic "Build & typecheck" job was one long SERIAL chain (build →
   # publint/attw → knip → typechecks → nuxt generate → drizzle) and, at ~3m, a co-critical
   # blocking path. It is split into three lanes that run in PARALLEL — `build-typecheck`

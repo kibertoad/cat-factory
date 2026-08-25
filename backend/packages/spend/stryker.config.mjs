@@ -10,8 +10,11 @@ import { defineMutationConfig } from '../../../scripts/stryker-base.mjs'
 // constant, so its mutants are static and left unmeasured by `ignoreStatic` (see the base config).
 export default defineMutationConfig({
   mutate: ['src/**/*.ts', '!src/**/*.test.ts', '!src/index.ts'],
-  // Measured 97.73% total / 97.73% covered over 396 mutants, less the two-point margin. The two
-  // scores are equal because nothing in scope is untested: spend has no `NoCoverage` mutants left.
+  // Measured 97.73% total / 97.73% covered over 396 mutants, UNDER STRYKER 9.6.1, less the
+  // two-point margin. The two scores are equal because nothing in scope is untested: spend has no
+  // `NoCoverage` mutants left. The installed Stryker is 10.0.0 and its added
+  // `emptyExpressionMutator` enlarges that 396, which on the smallest package in the set is where
+  // a percentage margin buys the fewest mutants: re-measure before reading a dip as a regression.
   //
   // This is the package's CEILING, not a rung: all nine remaining survivors were checked one by one
   // and every one is behaviour-preserving (the worked list is in
