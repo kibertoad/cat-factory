@@ -5,6 +5,9 @@
 '@cat-factory/server': minor
 '@cat-factory/observability-otel': minor
 '@cat-factory/executor-harness': minor
+'@cat-factory/acceptance-kit': minor
+'@cat-factory/conformance': minor
+'@cat-factory/app': minor
 ---
 
 Answering a Coder's question and RULING ON it are now different acts, and a decision the loop
