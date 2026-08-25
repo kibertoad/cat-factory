@@ -1,5 +1,119 @@
 # @cat-factory/acceptance
 
+## 0.4.32
+
+### Patch Changes
+
+- 0cfa7a2: Refresh the dependency tree, the pinned GitHub Actions and the Docker images, and move the three bundled agent CLIs.
+  
+  **Registry deps** (direct ranges plus a full lockfile re-resolution, so transitives move to the
+  newest release each declared range already admits):
+  
+  - **AI SDK family** (held to the major that pairs with `workers-ai-provider`): `ai@^7.0.68 → ^7.0.77`,
+    `@ai-sdk/anthropic@^4.0.39 → ^4.0.41`, `@ai-sdk/openai@^4.0.43 → ^4.0.46`,
+    `@ai-sdk/openai-compatible@^3.0.31 → ^3.0.35`, `@ai-sdk/amazon-bedrock@^5.0.58 → ^5.0.61`.
+  - **Runtime deps**: `jose@^6.2.9 → ^6.2.10`, `pg-boss@^12.27.0 → ^12.28.0`,
+    `capnweb@^0.11.1 → ^0.12.0`, `@aws-sdk/client-s3@^3.1113.0 → ^3.1116.0`,
+    `@cloudflare/workers-types@^5.20260819.1 → ^5.20260823.1`.
+  - **Frontend**: `@nuxt/ui@^4.10.0 → ^4.11.0`, `happy-dom@^20.11.2 → ^20.11.6`,
+    `vue-tsc@^3.3.10 → ^3.3.11`. The frontend's `typescript@^6.0.3` is deliberately unchanged:
+    `vue-tsc` still resolves `typescript/lib/tsc`, a subpath TypeScript 7's exports map does not
+    expose, so the SPA stays on 6 until `vue-tsc` supports the Go port.
+  - **Tooling**: `@stryker-mutator/*@9.6.1 → 10.0.0` (its only breaking change is dropping Node 20;
+    CI runs 26) and pnpm `11.22.0 → 11.23.0`.
+  
+  **Changesets moves as a coupled major**: `@changesets/cli@^2.31.1 → ^3.0.1` plus
+  `changesets/action@v1.9.0 → v2.1.1`, which refuse each other's majors. Two behaviour changes had to
+  be pinned back to what this repo already relied on: `.changeset/config.json` now sets
+  `privatePackages: { version: true, tag: false }`, because v3 stopped versioning private packages by
+  default and `@cat-factory/executor-harness`'s version IS the runner image tag; and `release.yml`
+  takes the renamed inputs (`version-script`, `publish-script`, `pr-title`, `commit-message`), the
+  `pr-number` output, and the token through the `github-token` input, which v2 no longer accepts from
+  the environment. v2 pushes the release branch and tags through the GitHub API, so that job's
+  checkout no longer persists git credentials.
+  
+  **Held back, all inside the ~24h `minimumReleaseAge` window when this was cut**: `@types/node@26.3.0`,
+  `hono@4.13.4`, `oxlint@1.80.0`, `oxfmt@0.65.0`, `ai@7.0.78`, `@ai-sdk/openai-compatible@3.0.36`,
+  `@aws-sdk/client-s3@3.1117.0`. `pg-boss@12.28.0` was ~20 minutes short of the same window and was
+  taken anyway, so it is listed in `minimumReleaseAgeExclude` — the ONE third-party entry there, added
+  deliberately with a PRUNE ME note, since it has already aged past the gate and removing the line is
+  now a no-op re-resolve.
+  
+  **`wrangler` is now pinned by override**, not merely ranged. `@cloudflare/vitest-pool-workers@0.22.0`
+  pins `wrangler` (and through it `workerd` and `miniflare`) EXACTLY, so any in-range refresh floats our
+  caret ahead of the pool's pin and the tree gains a SECOND workerd — not just ~100MB of duplicated
+  platform binary per arch, but a runtime the Worker suite proves that is a different build from the one
+  `wrangler deploy` ships. The override holds it at whatever pool-workers pins, exactly as the three
+  esbuild pins beside it already do, and moves when that package moves.
+  
+  **Stryker 10 pulled Babel 8 into a tree whose Nuxt half is on Babel 7**, and the three Babel plugins
+  Nuxt declares as OPTIONAL PEERS were then filled from the 8.x line while still being handed
+  `@babel/core@7`. A Babel 8 plugin's `declare()` asserts the core major and throws, so
+  `pnpm-workspace.yaml` scopes those three names back to 7.x for their Nuxt parents.
+  
+  **The three agent CLIs the executor image bundles** move together and are all taken at their newest
+  release, ahead of the release-age window: Pi `0.84.2 → 0.84.3`, Claude Code `2.1.237 → 2.1.243`,
+  Codex `0.148.0 → 0.149.1`. That exemption is an explicit call re-made at each bump, and the
+  Dockerfile now says so for all three rather than for Claude Code alone. Pi's two extensions take the
+  ordinary aged pick, `2.6.2 → 2.7.0`. The UI image moves `pnpm 11.22.0 → 11.23.0` to match the
+  workspace; its Playwright (1.62.1), Yarn (4.18.0), `serve` (14.2.6) and WireMock (3.13.1) pins are
+  already current, as are the deploy image's kubectl `v1.36.4` / kustomize `v5.8.1` / helm `v4.2.4` and
+  both images' `node:26-trixie-slim` digest.
+  
+  The executor image tag therefore rolls to `1.130.0` (base + UI): republishing over a live tag does
+  not roll a deployment out. The deploy image is unchanged and stays at `0.2.15`.
+  
+  **Pinned GitHub Actions**: `actions/checkout v7.0.0 → v7.0.1`, `actions/setup-node v6.4.0 → v7.0.0`,
+  `actions/setup-java v5.7.0 → v6.0.0` (both majors are ESM rewrites with no change to the inputs used
+  here), `docker/build-push-action v7.2.0 → v7.3.0`, `docker/login-action v4.2.0 → v4.6.0`,
+  `docker/setup-buildx-action v4.1.0 → v4.3.0`, `docker/setup-qemu-action v4.1.0 → v4.2.0`,
+  `dorny/paths-filter v4.0.1 → v4.0.3`, `pnpm/action-setup v6.0.9 → v6.0.10`,
+  `rharkor/caching-for-turbo v2.5.0 → v2.5.1`, and `zizmorcore/zizmor-action v0.5.7 → v0.6.2`, which
+  raises the default zizmor from 1.26.1 to 1.29.0.
+- dc26bb5: Refuse an ephemeral-environment URL that resolves to the wrong network.
+  
+  `nip.io` and `sslip.io` answer from the leftmost four-octet run in a hostname and read `-` and `.`
+  as the same separator, so a per-PR namespace ending in a separator plus digits contributes an
+  address of its own and wins: `cf-env-catalog-api-5.127.0.0.1.nip.io` resolves to `5.127.0.0`. The
+  platform's default namespace had exactly that shape for every pull request, and the URL was
+  published unverified, so the environment rolled out, reported `ready`, and the failure first
+  surfaced at the `tester` step as a connection error naming the cluster rather than the config.
+  
+  Every environment URL is now graded where every provider's URL is published (the sync provision,
+  the async deploy-container finalize, and the status reconcile all settle on one seam beside
+  `assertSafeEnvironmentUrl`), so a URL rendered inside a deploy harness or read off a live Ingress
+  is checked exactly as one derived in process is. The Kubernetes provider additionally grades its
+  RENDERED ingress host before it creates anything, and refuses as `config_incomplete`: the late
+  check it replaces ran past the namespace, the registry pull Secret and every applied workload, and
+  a failed provision records no `externalId`, so each refusal leaked a namespace nothing could
+  reclaim. Grading the rendered host also sees what a parsed URL cannot, since an authority stops at
+  the first `/`. The rule is `describeWildcardDnsShift` in `@cat-factory/contracts`, and every remedy
+  it offers is re-graded against the rule before being printed (telling someone already using dashes
+  to "write the address with dashes" was a description of their broken config, not a fix).
+  
+  **Behaviour change to defaults, deliberately breaking.** The default per-PR Kubernetes namespace is
+  now `cf-env-<repoName>-pr<pullNumber>`, the guided `cat-factory k3s` setup writes
+  `cf-env-pr{{pullNumber}}` with a `{{namespace}}.127.0.0.1.nip.io` host (a `{{branch}}` host renders
+  `cat-factory/<taskId>`, whose `/` ends the hostname), and the acceptance suite defaults to
+  `cf-acc-pr{{pullNumber}}`. New provisions land in differently-named namespaces than before;
+  existing environments keep the namespace persisted on their record, so teardown still reclaims
+  them. Without this, an operator who left the defaults alone would move from silently wrong to
+  hard-failing at the deployer step with no automated fix.
+  
+  The acceptance `ingress-template` preflight now grades the namespace and host templates COMPOSED,
+  once per repository the pass provisions, which is the only way this class of fault is visible.
+  
+  Corrects the belief that made the failure invisible on both sides, wherever it was still written
+  down: `nip.io` does not map `<anything>.127.0.0.1.nip.io` to loopback.
+- Updated dependencies [08752da]
+- Updated dependencies [0cfa7a2]
+- Updated dependencies [dc26bb5]
+  - @cat-factory/contracts@0.327.0
+  - @cat-factory/kernel@0.318.0
+  - @cat-factory/acceptance-kit@0.4.0
+  - @cat-factory/sdk@0.46.0
+  - @cat-factory/cli@0.13.2
+
 ## 0.4.31
 
 ### Patch Changes
