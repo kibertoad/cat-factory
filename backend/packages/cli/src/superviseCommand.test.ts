@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ArgError, type CliOptions } from './args.js'
-import { quoteToken, supervise } from './superviseCommand.js'
+import { quoteToken, supervise, timestamp } from './superviseCommand.js'
 
 const WINDOWS_NODE = 'C:\\Program Files\\nodejs\\node.exe'
 
@@ -64,5 +64,13 @@ describe('supervise — argument refusals', () => {
     await expect(
       supervise(opts({ superviseCommand: ['true'], k3sCluster: 'c', k3sRuntime: 'k3s' })),
     ).rejects.toThrow(/cannot be supervised/)
+  })
+})
+
+describe('timestamp', () => {
+  it('renders zero-padded local wall-clock time', () => {
+    // Constructed via local-time components, since the helper reads local getters by design.
+    expect(timestamp(new Date(2026, 7, 25, 9, 5, 3))).toBe('09:05:03')
+    expect(timestamp(new Date(2026, 7, 25, 23, 59, 59))).toBe('23:59:59')
   })
 })
