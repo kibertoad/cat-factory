@@ -65,6 +65,38 @@ create there. It signs you in and becomes the deployment's credential (sealed on
 machine), so repo-operating agent steps work from the next run, with no restart. Setting
 `GITHUB_PAT` in `.env` still wins and turns that form off.
 
+### `pnpm dev`: the same boot under a supervisor
+
+`pnpm dev` is `pnpm start` with two additions: `node --watch` restarts the service on a
+source change, and [`cat-factory supervise`](../../backend/packages/cli/README.md#supervising-local-dev)
+wraps that watcher so a slept laptop cannot leave a parked process holding the port with
+nothing served behind it. `--compose-service postgres` is what lets it bring the database
+back before relaunching. Prefer `pnpm start` (or `pnpm dev:raw`) when you are debugging a
+crash: the supervisor restarts the process, which destroys the parked state you want to
+read.
+
+The script spawns the CLI as `node ../../backend/packages/cli/dist/bin.js`, never as the
+`cat-factory` command, and that is load-bearing. `@cat-factory/cli` declares its `bin` at
+`dist/bin.js`, a build output that does not exist on a fresh checkout, so `pnpm install`
+cannot create the `node_modules/.bin/cat-factory` shim and warns:
+
+```
+[WARN] Failed to create bin at .../deploy/local/node_modules/.bin/cat-factory.
+ENOENT: no such file or directory, open '.../backend/packages/cli/dist/bin.js'
+```
+
+Nothing re-links bins after a build, so `predev` producing `dist/bin.js` does not rescue
+the name: it stays unresolvable until some later install re-links it, and `pnpm dev` fails
+with `cat-factory: not found` on exactly the fresh clone the instructions above describe.
+The built file, addressed by path, is there the moment `predev` finishes.
+
+The same warning is emitted for `@cat-factory/cli` under `backend/internal/acceptance` and
+for `@cat-factory/mcp-server` under `backend/packages/server`. Both of those consume the
+package as a **library** and neither runs its binary, so there the missing shim costs
+nothing. All three lines are expected on any install against an unbuilt tree, CI included,
+and a published install is unaffected: the tarball ships `dist/`, so npm links the bin
+normally.
+
 ### Recovering a wedged database
 
 Boot validates its migration state and **fails fast** with an actionable message if the

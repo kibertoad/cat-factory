@@ -424,6 +424,14 @@ jobs:
       - name: Guard deploy templates
         run: node scripts/check-deploy-placeholders.mjs
 
+      # Guard against a package script spawning a WORKSPACE CLI by its bin name. Those bins
+      # point at `dist/`, so pnpm cannot link the shim on a fresh checkout (the `[WARN] Failed
+      # to create bin` lines every install prints) and nothing re-links after a build: the
+      # script then fails only for someone who just cloned, never here, because this lane's
+      # node_modules cache was populated after a build. Pure node; no install.
+      - name: Guard workspace bin scripts
+        run: node scripts/check-workspace-bin-scripts.mjs
+
       # Guard the version numbers a branch introduces against the npm registry. In practice this
       # gates the RELEASE PR, the only branch that moves a version field. `changeset publish`
       # reports "already published on npm" as a warn and exits 0, and it says that about every
