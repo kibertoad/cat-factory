@@ -85,7 +85,7 @@ public final class Smoketest {
         CatFactoryClient readClient =
                 CatFactoryClient.builder().baseUrl(baseUrl).apiKey(readKey).build();
 
-        smoketest.run(client, readClient, baseUrl);
+        smoketest.run(client, readClient, baseUrl, deadUrl);
 
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("sdk", "java");
@@ -105,7 +105,8 @@ public final class Smoketest {
         System.out.println("java smoketest completed");
     }
 
-    private void run(CatFactoryClient client, CatFactoryClient readClient, String baseUrl) {
+    private void run(
+            CatFactoryClient client, CatFactoryClient readClient, String baseUrl, String deadUrl) {
         step("services.list", () -> {
             var result = client.services().list();
             observations.put("serviceCount", result.services().size());
