@@ -174,7 +174,7 @@ export const kubernetesEnvironmentConfigSchema = v.object({
   /** Human label for the connection (shown in the UI). */
   label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
   /**
-   * Namespace name template for the per-PR environment, e.g. `cf-env-{{pullNumber}}`.
+   * Namespace name template for the per-PR environment, e.g. `cf-env-pr{{pullNumber}}`.
    * Rendered with the provision vars then sanitized to an RFC1123 label; absent ⇒ a
    * default derived from the PR number / block id.
    */

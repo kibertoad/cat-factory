@@ -4,6 +4,7 @@ import {
   imageTemplateSample,
   renderEnvironmentHost,
   renderEnvironmentImage,
+  renderEnvironmentNamespace,
 } from '../src/k3s.ts'
 
 // The two manifest templates the briefs make mandatory, rendered the way the platform renders them
@@ -149,5 +150,32 @@ describe('hostSuffix', () => {
 
   it('returns a template with no holes unchanged', () => {
     expect(hostSuffix('preview.example.com')).toBe('preview.example.com')
+  })
+})
+
+describe('renderEnvironmentNamespace', () => {
+  const sample = imageTemplateSample({ owner: 'acme', name: 'catalog-api' })
+
+  it('renders the per-PR holes a namespace template may name', () => {
+    expect(renderEnvironmentNamespace('cf-acc-pr{{pullNumber}}', sample)).toBe('cf-acc-pr1')
+    expect(renderEnvironmentNamespace('{{repoName}}-pr{{pullNumber}}', sample)).toBe(
+      'catalog-api-pr1',
+    )
+  })
+
+  it('lowercases, because the platform sanitizes to an RFC1123 label', () => {
+    expect(renderEnvironmentNamespace('CF-ACC-PR{{pullNumber}}', sample)).toBe('cf-acc-pr1')
+  })
+
+  it('reports a hole no provision fills, rather than rendering it away', () => {
+    // Left verbatim so the brace check catches it: rendering it to '' would produce a plausible
+    // namespace here and a different one on the platform, which is the drift these renderers
+    // exist to prevent.
+    expect(renderEnvironmentNamespace('cf-acc-{{commitSha}}', sample)).toBeNull()
+    expect(renderEnvironmentNamespace('cf-acc-{{pull number}}', sample)).toBeNull()
+  })
+
+  it('does not fill {{namespace}}, which is what it PRODUCES', () => {
+    expect(renderEnvironmentNamespace('{{namespace}}-x', sample)).toBeNull()
   })
 })

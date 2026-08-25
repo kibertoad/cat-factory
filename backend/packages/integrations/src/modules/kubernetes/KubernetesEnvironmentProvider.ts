@@ -60,6 +60,7 @@ import {
 } from './kubernetes-registry-auth.logic.js'
 import {
   deriveUrl,
+  describeUnreachableIngressHost,
   extractGatewayAddress,
   extractGatewayListenerHost,
   extractHttpRouteHost,
@@ -178,6 +179,7 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     const config = this.parseConfig(req.manifest)
     const client = this.makeClient(config, req.resolveSecret)
     const { namespace, vars } = this.provisionContext(config, req.inputs)
+    this.assertReachableUrl(config, vars)
 
     await this.ensureNamespace(client, config, namespace)
 
@@ -404,6 +406,7 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
       )
     }
     const { namespace, vars } = this.provisionContext(config, req.inputs)
+    this.assertReachableUrl(config, vars)
     // Prepare the namespace + its pull credential over the apiserver BEFORE handing the job over,
     // so both render paths behave the same way about private registries. Creating the namespace
     // early is idempotent (the deploy container applies into it either way), and it is what makes
@@ -444,6 +447,30 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
    * optional rendered image) in one place, so `provision()`, `buildProvisionJob()`, and
    * `finalizeProvision()` derive them identically.
    */
+  /**
+   * Refuse, before anything is created, a configuration whose environment URL would not reach
+   * this cluster.
+   *
+   * Both provisioning paths call it as their FIRST act after resolving the vars, and the ordering
+   * is the point. The namespace is half of what mis-resolves, so the grade cannot happen until
+   * `provisionContext` has run; every apiserver write happens after it, so a refusal leaves
+   * nothing behind. It used to sit at the end of `provision()`, past the namespace, past the
+   * registry pull Secret holding the run's VCS credential and past every applied workload, and a
+   * failed provision records no `externalId` for `teardown()` to read: each refused run leaked a
+   * live namespace nothing could reclaim.
+   *
+   * `config_incomplete` is the reason because the fix is a person editing the workspace's
+   * connection, and the one thing an automated fixer must not do here is touch the checkout: the
+   * manifests are correct.
+   */
+  private assertReachableUrl(
+    config: KubernetesProvisionConfig,
+    vars: Record<string, string>,
+  ): void {
+    const unreachable = describeUnreachableIngressHost(config.url, vars)
+    if (unreachable) throw environmentFailure(unreachable, 'config_incomplete')
+  }
+
   private provisionContext(
     config: KubernetesProvisionConfig,
     inputs: Record<string, string>,

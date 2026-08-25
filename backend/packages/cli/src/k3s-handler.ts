@@ -9,8 +9,18 @@ import { type ResolvedConnection } from './k3s-provision.js'
  */
 export const KUBERNETES_ENV_TOKEN_SECRET_KEY = 'apiToken'
 
-/** Default per-PR namespace name template written into the handler (rendered with the PR number). */
-export const DEFAULT_NAMESPACE_TEMPLATE = 'cf-env-{{pullNumber}}'
+/**
+ * Default per-PR namespace name template written into the handler (rendered with the PR number).
+ *
+ * **The `pr` is load-bearing.** `cf-env-{{pullNumber}}` renders `cf-env-5`, and in front of
+ * `INGRESS_HOST_TEMPLATE` that composes `cf-env-5.127.0.0.1.nip.io`, which nip.io answers
+ * with **5.127.0.0**: these resolvers take the leftmost four-octet run in a name and read `-` as
+ * a separator, so the pull-request number becomes the first octet of an address on somebody
+ * else's network. Every pull number ends in a digit, so this was wrong on every provision and
+ * invisible until a run reached a step that actually opened the environment URL. Rendering `pr5`
+ * ends the label with a letter, which is not an octet, so the name carries one address again.
+ */
+export const DEFAULT_NAMESPACE_TEMPLATE = 'cf-env-pr{{pullNumber}}'
 
 /**
  * The `RegisterEnvironmentHandlerInput` shape for the `local-k3s` engine, mirrored structurally

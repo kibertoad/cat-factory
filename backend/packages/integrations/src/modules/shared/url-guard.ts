@@ -41,7 +41,7 @@ export interface PublicUrlGuardOptions {
 export function assertSafePublicUrl(url: string, options: PublicUrlGuardOptions): void {
   const { subject, label = 'URL', policy = STRICT_URL_SAFETY_POLICY } = options
   const invalid = () => new ValidationError(`${subject} ${label} is not a valid URL: '${url}'`)
-  const match = url.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):\/\/([^/?#]*)/)
+  const match = url.match(URL_PREFIX)
   if (!match) throw invalid()
 
   if (!policy.schemes.includes(match[1]!.toLowerCase())) {
@@ -52,18 +52,45 @@ export function assertSafePublicUrl(url: string, options: PublicUrlGuardOptions)
   if (authority.includes('@')) {
     throw new ValidationError(`${subject} ${label} must not contain credentials`)
   }
-  let host: string
-  if (authority.startsWith('[')) {
-    const end = authority.indexOf(']')
-    if (end === -1) throw invalid()
-    host = authority.slice(1, end)
-  } else {
-    host = authority.split(':')[0]!
-  }
-  if (host === '') throw invalid()
+  const host = authorityHost(authority)
+  if (host === null || host === '') throw invalid()
   if (!hostExempt(host, policy) && isBlockedPrivateHost(host)) {
     throw new ValidationError(`${subject} ${label} must be a public host`)
   }
+}
+
+/** Scheme and authority, up to the first `/`, `?` or `#`: what a client actually connects to. */
+const URL_PREFIX = /^([a-zA-Z][a-zA-Z0-9+.-]*):\/\/([^/?#]*)/
+
+/**
+ * The host inside an authority (port stripped, IPv6 brackets removed), or `null` for an
+ * authority this parser cannot read.
+ *
+ * Split out so the guard above is not the only thing that can answer "what host does this URL
+ * name": {@link publicUrlHost} lets a caller that GRADES a URL rather than admitting one read it
+ * exactly as the admission does. Two hand-parsers over the same string would be two chances to
+ * disagree about, say, a bracketed address.
+ */
+function authorityHost(authority: string): string | null {
+  if (!authority.startsWith('[')) return authority.split(':')[0]!
+  const end = authority.indexOf(']')
+  return end === -1 ? null : authority.slice(1, end)
+}
+
+/**
+ * The host a URL names, or `null` when it names none this parser can read.
+ *
+ * Parsed by hand for the same reason {@link assertSafePublicUrl} is: it stays in the
+ * platform-agnostic core and behaves identically on workerd and Node. It also truncates at the
+ * first `/` exactly as a client would, which matters to callers grading a RENDERED host: a
+ * template that produced `host/with-a-slash.example` names `host`, and reading it any other way
+ * would grade a name nothing will ever look up.
+ */
+export function publicUrlHost(url: string): string | null {
+  const match = url.match(URL_PREFIX)
+  if (!match) return null
+  const host = authorityHost(match[2]!)
+  return host === null || host === '' ? null : host
 }
 
 /**

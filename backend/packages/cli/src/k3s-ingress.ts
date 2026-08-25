@@ -16,7 +16,7 @@ import {
  *   2. a HOST PORT published into it, because every local distribution runs the cluster inside
  *      Docker and forwards only the ports it was asked for at create time.
  *
- * Both were previously assumed. `cat-factory k3s` printed `{{branch}}.127.0.0.1.nip.io` as wired
+ * Both were previously assumed. `cat-factory k3s` printed its nip.io host template as wired
  * on every path, including a reused cluster it had never looked at, and the failure landed at the
  * `tester` step against a URL that answered nothing: environment readiness is WORKLOAD readiness,
  * so provisioning still reported success.
@@ -34,9 +34,20 @@ import {
 export const DEFAULT_INGRESS_PORT = 80
 
 /**
- * The host the rendered template resolves to. `nip.io` is wildcard DNS that maps
- * `<anything>.127.0.0.1.nip.io` to loopback with no local DNS setup, so the port probe below
- * targets loopback directly rather than resolving a sample hostname.
+ * The host the port probe connects to.
+ *
+ * Loopback directly, rather than a sample hostname, which keeps this probe answering the PORT
+ * question alone. That is still the right split, but the reason written here used to be that
+ * `nip.io` maps `<anything>.127.0.0.1.nip.io` to loopback, and **that is false**: these resolvers
+ * answer from the LEFTMOST four-octet run in a name and read `-` and `.` alike, so a prefix
+ * ending in a separator plus digits resolves somewhere else entirely
+ * (`cf-env-api-5.127.0.0.1.nip.io` is `5.127.0.0`). Resolving a sample here would therefore prove
+ * nothing about the template a workspace actually configures, since the sample and the real
+ * namespace differ in exactly the part that decides it.
+ *
+ * That half belongs to `describeWildcardDnsShift` in `@cat-factory/contracts`, which grades the
+ * rendered host and which the environment provider refuses a provision on. See
+ * `backend/docs/local-k3s-environments.md`.
  */
 export const INGRESS_PROBE_HOST = '127.0.0.1'
 
@@ -45,8 +56,16 @@ export const INGRESS_PROBE_HOST = '127.0.0.1'
  * is also the Ingress `spec.rules[].host` a service's manifests declare, and Kubernetes rejects a
  * `host` carrying a port. A non-default host port travels as the URL source's own `port` field
  * instead (see {@link ingressUrlPort}).
+ *
+ * **`{{namespace}}`, never `{{branch}}`**, which is what this used to write. A branch is
+ * `cat-factory/<taskId>`: the `/` ends the host and turns everything after it into a PATH, so the
+ * URL `http://cat-factory/task_….127.0.0.1.nip.io` names the bare host `cat-factory` and reaches
+ * nothing, while an Ingress declaring that `host` is refused by the apiserver outright. The
+ * namespace is the one per-PR value the platform has already sanitized to a single RFC1123 label,
+ * and it composes cleanly with {@link DEFAULT_NAMESPACE_TEMPLATE}, whose rendered `pr<n>` keeps
+ * the name carrying exactly one address (see `backend/docs/local-k3s-environments.md`).
  */
-export const INGRESS_HOST_TEMPLATE = '{{branch}}.127.0.0.1.nip.io'
+export const INGRESS_HOST_TEMPLATE = '{{namespace}}.127.0.0.1.nip.io'
 
 /** The container port an ingress controller serves plain HTTP on (Traefik `web`, nginx `http`). */
 export const INGRESS_CONTAINER_HTTP_PORT = 80

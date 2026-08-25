@@ -141,6 +141,36 @@ export function renderEnvironmentHost(hostTemplate: string, namespace: string): 
 }
 
 /**
+ * The namespace a pull request will be provisioned into, for composing with the host template.
+ *
+ * Exists because the two are only wrong TOGETHER: a namespace is a fine namespace whatever it
+ * ends in, and a host template is fine whatever it is prefixed with, and the environment is
+ * unreachable when one particular pair meets (see `describeWildcardDnsShift` in contracts). So
+ * the `ingress-template` prerequisite renders this and feeds it to {@link renderEnvironmentHost}
+ * rather than grading either half on its own.
+ *
+ * Rendered against the same sample as the image template, because the namespace template draws
+ * on the same per-PR vars. Lowercased because the platform sanitizes to an RFC1123 label, and
+ * NOT otherwise sanitized: `k8sName` lives in `@cat-factory/integrations`, which this suite does
+ * not depend on, and a second copy of that rule here would be a thing to drift. The cost is
+ * bounded and worth naming: a template whose sanitized form differs in a way that MATTERS here
+ * (an underscore, which `k8sName` turns into the `-` that opens an octet) is graded as its
+ * unsanitized self and can still slip past. The platform refuses it at provision either way;
+ * this check exists to move the common case in front of the spend, not to be the only guard.
+ */
+export function renderEnvironmentNamespace(
+  namespaceTemplate: string,
+  sample: ImageTemplateSample,
+): string | null {
+  const rendered = namespaceTemplate
+    .replace(PLACEHOLDER, (hole, key: string) =>
+      Object.hasOwn(sample, key) ? sample[key as ImageTemplateKey] : hole,
+    )
+    .toLowerCase()
+  return rendered.includes('{{') || rendered.includes('}}') ? null : rendered
+}
+
+/**
  * The per-pull-request values the platform fills an image template's holes with.
  *
  * **The KEY SET is the load-bearing half**, not the values: it decides which templates the gate
@@ -189,6 +219,12 @@ type ImageTemplateKey =
  * binds is provisioned without them). They are sampled as present anyway: a template naming one
  * is refused either way, and refusing it as "not a legal reference" is true where "a provision
  * does not fill it" would not be.
+ *
+ * Their VALUES carry `pr1` rather than `1`, and that is not cosmetic either: these are the
+ * platform's own written examples of an environment URL, and `cf-acc-1.127.0.0.1.nip.io` is
+ * precisely the name the `ingress-template` preflight now refuses (it answers 1.127.0.0). A
+ * sample showing the shape the check rejects teaches the wrong thing to every operator and agent
+ * that reads it.
  */
 export function imageTemplateSample(repo: { owner: string; name: string }): ImageTemplateSample {
   return {
@@ -201,8 +237,8 @@ export function imageTemplateSample(repo: { owner: string; name: string }): Imag
     pullUrl: `https://github.com/${repo.owner}/${repo.name}/pull/1`,
     repoOwner: repo.owner,
     repoName: repo.name,
-    frontendOrigins: 'http://cf-acc-1.127.0.0.1.nip.io',
-    peerEnvUrls: 'catalog-web=http://cf-acc-1.127.0.0.1.nip.io',
+    frontendOrigins: 'http://cf-acc-pr1.127.0.0.1.nip.io',
+    peerEnvUrls: 'catalog-web=http://cf-acc-pr1.127.0.0.1.nip.io',
   }
 }
 

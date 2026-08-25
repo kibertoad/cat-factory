@@ -32,7 +32,7 @@ function config(overrides: Partial<AcceptanceConfig> = {}): AcceptanceConfig {
       caCertPem: null,
       insecureSkipTlsVerify: true,
       ingressHostTemplate: '{{namespace}}.127.0.0.1.nip.io',
-      namespaceTemplate: 'cf-acc-{{pullNumber}}',
+      namespaceTemplate: 'cf-acc-pr{{pullNumber}}',
       imageTemplate: 'ghcr.io/{{repoOwner}}/{{repoName}}:pr-{{pullNumber}}',
     },
     vcs: { token: 'reporter-token', apiBaseUrl: 'https://api.github.com' },
@@ -956,6 +956,65 @@ describe('ingress-template', () => {
       }),
     })
     expect(commandsOf(verdict.remedy)[0]).toContain("'{{namespace}}.127.0.0.1.nip.io'")
+  })
+
+  it('refuses the namespace/host pair that lost a pass, naming the address it would reach', async () => {
+    // The regression this check was added for. Both templates render cleanly, which is why the
+    // check that graded them separately passed it, and in a live pass `cf-acc-5.127.0.0.1.nip.io`
+    // answered 5.127.0.0. That run reached a merged-ready pull request before the tester found
+    // out. The sample pull request here is number 1, so the graded name is `cf-acc-1…`, which is
+    // exactly the literal this check used to hard-code as its example of a HEALTHY host.
+    const verdict = await refusal('ingress-template', {
+      config: config({
+        cluster: { ...config().cluster, namespaceTemplate: 'cf-acc-{{pullNumber}}' },
+      }),
+    })
+    expect(verdict.problem).toContain('1.127.0.0')
+    expect(verdict.problem).toContain('cf-acc-1.127.0.0.1.nip.io')
+    expect(commandsOf(verdict.remedy)[0]).toContain("'cf-acc-pr{{pullNumber}}'")
+  })
+
+  it('refuses a namespace template holding a hole no provision fills', async () => {
+    const verdict = await refusal('ingress-template', {
+      config: config({
+        cluster: { ...config().cluster, namespaceTemplate: 'cf-acc-{{commitSha}}' },
+      }),
+    })
+    expect(verdict.problem).toContain('{{commitSha}}')
+  })
+
+  it('passes the shipped defaults, which are chosen to compose', async () => {
+    // The guard on the guard: the two defaults are only correct TOGETHER, so a change to either
+    // that reintroduces the shift fails here rather than in a live pass.
+    const detail = await satisfied('ingress-template', { config: config() })
+    expect(detail).toContain('cf-acc-pr1.127.0.0.1.nip.io')
+  })
+
+  it('grades every repository the pass provisions, not just the first', async () => {
+    // A namespace template naming {{repoName}} composes a DIFFERENT host per repository, so one
+    // can shift while the other does not. Grading the backend alone let that configuration reach
+    // a live pass, where it died at the frontend's tester with everything upstream green.
+    const verdict = await refusal('ingress-template', {
+      config: config({
+        cluster: { ...config().cluster, namespaceTemplate: '{{repoName}}' },
+        repos: { backend: 'catalog-api', frontend: 'catalog-2' },
+      }),
+    })
+    expect(verdict.problem).toContain('catalog-2')
+    expect(verdict.problem).toContain('2.127.0.0')
+  })
+
+  it('names the placeholders a provision actually fills, read off the renderer', async () => {
+    // The hand-written list this replaced was six keys short, which refuses a working template
+    // with a message naming the wrong vocabulary.
+    const verdict = await refusal('ingress-template', {
+      config: config({
+        cluster: { ...config().cluster, namespaceTemplate: 'cf-acc-{{commitSha}}' },
+      }),
+    })
+    for (const key of ['{{pullNumber}}', '{{repoName}}', '{{blockId}}', '{{title}}', '{{type}}']) {
+      expect(verdict.remedy.steps.join(' ')).toContain(key)
+    }
   })
 })
 

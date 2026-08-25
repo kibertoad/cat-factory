@@ -161,6 +161,96 @@ describe('KubernetesEnvironmentProvider.provision', () => {
       provider.provision({ manifest, inputs: { pullNumber: '1' }, resolveSecret }),
     ).rejects.toThrow(/run repo/i)
   })
+
+  const MISRESOLVING = kubernetesConfigToManifest({
+    ...config,
+    namespaceTemplate: 'cf-acc-{{pullNumber}}',
+    url: {
+      source: 'ingressTemplate',
+      hostTemplate: '{{namespace}}.127.0.0.1.nip.io',
+      scheme: 'http',
+    },
+  })
+
+  const provisionMisresolving = () =>
+    new KubernetesEnvironmentProvider().provision({
+      manifest: MISRESOLVING,
+      inputs: { pullNumber: '5', branch: 'feat' },
+      resolveSecret,
+      runRepo: runRepo({ 'k8s/app.yaml': DEPLOY_YAML }),
+    })
+
+  it('refuses a wildcard-DNS URL that would resolve to another network', async () => {
+    // The exact pairing that lost a run: a namespace ending in `-<pullNumber>` in front of the
+    // loopback nip.io host, which answers 5.127.0.0. Nothing downstream can notice, because the
+    // workloads are healthy and readiness is workload readiness, so the refusal has to be here.
+    stubFetch(() => ({ status: 200 }))
+    await expect(provisionMisresolving()).rejects.toThrow(/5\.127\.0\.0/)
+  })
+
+  it('refuses BEFORE it touches the apiserver, so nothing is left to reclaim', async () => {
+    // The behaviour, not the message. Every apply below is stubbed 200, so a check that ran after
+    // the namespace, the registry pull Secret and the workloads would throw the same error and
+    // read as the same pass, while each refused run left a live namespace holding the run's VCS
+    // credential and a failed provision records no `externalId` for `teardown()` to delete.
+    const calls = stubFetch(() => ({ status: 200 }))
+    await expect(provisionMisresolving()).rejects.toThrow(/5\.127\.0\.0/)
+    expect(calls).toEqual([])
+  })
+
+  it('classifies that refusal as config_incomplete, so no fixer edits the checkout', async () => {
+    // The manifests are correct; the workspace connection is not. Sending a `deploy-fixer` at
+    // this would mean hard-coding an address the platform was supposed to substitute.
+    stubFetch(() => ({ status: 200 }))
+    const error = await provisionMisresolving().catch((e: unknown) => e)
+    expect((error as { details?: { reason?: string } }).details?.reason).toBe('config_incomplete')
+  })
+
+  it('refuses a rendered host that is not a hostname at all', async () => {
+    // `{{branch}}` renders `cat-factory/<taskId>`, so the URL is
+    // `http://cat-factory/task_….127.0.0.1.nip.io` and its AUTHORITY is the bare `cat-factory`.
+    // Graded as a parsed URL there is nothing to see; graded as the rendered host there is.
+    const calls = stubFetch(() => ({ status: 200 }))
+    const branchHost = kubernetesConfigToManifest({
+      ...config,
+      url: {
+        source: 'ingressTemplate',
+        hostTemplate: '{{branch}}.127.0.0.1.nip.io',
+        scheme: 'http',
+      },
+    })
+    await expect(
+      new KubernetesEnvironmentProvider().provision({
+        manifest: branchHost,
+        inputs: { pullNumber: '5', branch: 'cat-factory/task_19312e88' },
+        resolveSecret,
+        runRepo: runRepo({ 'k8s/app.yaml': DEPLOY_YAML }),
+      }),
+    ).rejects.toThrow(/not a hostname/)
+    expect(calls).toEqual([])
+  })
+
+  it('provisions normally when the same cluster is addressed by a letter-terminated namespace', async () => {
+    // The control for the two above: one character different in the namespace template, and the
+    // name carries exactly one address again.
+    stubFetch(() => ({ status: 200 }))
+    const fixed = kubernetesConfigToManifest({
+      ...config,
+      namespaceTemplate: 'cf-acc-pr{{pullNumber}}',
+      url: {
+        source: 'ingressTemplate',
+        hostTemplate: '{{namespace}}.127.0.0.1.nip.io',
+        scheme: 'http',
+      },
+    })
+    const result = await new KubernetesEnvironmentProvider().provision({
+      manifest: fixed,
+      inputs: { pullNumber: '5', branch: 'feat' },
+      resolveSecret,
+      runRepo: runRepo({ 'k8s/app.yaml': DEPLOY_YAML }),
+    })
+    expect(result.url).toBe('http://cf-acc-pr5.127.0.0.1.nip.io')
+  })
 })
 
 describe('KubernetesEnvironmentProvider.status', () => {
@@ -446,6 +536,31 @@ describe('KubernetesEnvironmentProvider.asyncProvision', () => {
     expect(spec.cluster.namespace).toBe('cf-env-42')
     expect(spec.images).toEqual([{ name: 'registry/app', newTag: 'feat' }])
     expect(spec.url).toEqual({ source: 'gatewayStatus', scheme: 'https' })
+  })
+
+  it('refuses a mis-resolving URL before the job is handed to the deploy container', async () => {
+    // The container-render path publishes the harness's URL, so a check that only guarded the
+    // synchronous REST path left kustomize, helm, image-override and secret-injection services
+    // shipping the very failure this rule exists for. It refuses at DISPATCH rather than at
+    // finalize so the namespace, the pull Secret and the deploy job itself are never spent.
+    const calls = stubFetch(() => ({ status: 200 }))
+    await expect(
+      new KubernetesEnvironmentProvider().asyncProvision!.buildProvisionJob({
+        manifest: kubernetesConfigToManifest({
+          ...kustomizeConfig,
+          namespaceTemplate: 'cf-acc-{{pullNumber}}',
+          url: {
+            source: 'ingressTemplate',
+            hostTemplate: '{{namespace}}.127.0.0.1.nip.io',
+            scheme: 'http',
+          },
+        }),
+        inputs: { pullNumber: '5', branch: 'feat' },
+        resolveSecret,
+        deploy,
+      }),
+    ).rejects.toThrow(/5\.127\.0\.0/)
+    expect(calls).toEqual([])
   })
 
   it('throws when rendering is needed but no deploy inputs are provided', async () => {

@@ -111,7 +111,7 @@ describe('the Kubernetes shapes this surface projects', () => {
     // over `/api/v1` and have no way to say which port serves it.
     const withPort = {
       source: 'ingressTemplate',
-      hostTemplate: '{{branch}}.127.0.0.1.nip.io',
+      hostTemplate: '{{namespace}}.127.0.0.1.nip.io',
       port: 18080,
       scheme: 'http',
     }

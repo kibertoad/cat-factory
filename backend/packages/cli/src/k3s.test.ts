@@ -345,8 +345,8 @@ describe('setupK3s', () => {
     expect(io.opened).toEqual([
       'http://localhost:4000/?infraSetup=local-k3s' +
         '&label=Local+k3s&apiServerUrl=https%3A%2F%2F127.0.0.1%3A6443' +
-        '&namespaceTemplate=cf-env-%7B%7BpullNumber%7D%7D' +
-        '&hostTemplate=%7B%7Bbranch%7D%7D.127.0.0.1.nip.io&scheme=http&insecureSkipTlsVerify=1',
+        '&namespaceTemplate=cf-env-pr%7B%7BpullNumber%7D%7D' +
+        '&hostTemplate=%7B%7Bnamespace%7D%7D.127.0.0.1.nip.io&scheme=http&insecureSkipTlsVerify=1',
     ])
     expect(io.lines.join('\n')).toContain('pre-filled Local k3s connect form')
   })
@@ -427,7 +427,7 @@ describe('printed environment-URL guidance', () => {
 
   it('promises the host template only when BOTH halves were verified', async () => {
     const out = await summaryFor(ONE_CLASS, 'open')
-    expect(out).toContain('Host template:           {{branch}}.127.0.0.1.nip.io')
+    expect(out).toContain('Host template:           {{namespace}}.127.0.0.1.nip.io')
     expect(out).toContain('Verified:')
     expect(out).toContain('host port 80 answers')
   })

@@ -16,16 +16,39 @@
 // The shared shape of a refusal here: name the variable AND its rendered value, because a template
 // is unreadable until you see what it produced, and offer the default as the fix, because for both
 // of these the default is a working answer.
+//
+// **A template is graded as it will be COMPOSED, never on its own.** The ingress check reads the
+// namespace template too, and renders one through the other, because the failure that motivated
+// this rule lived in neither half: both rendered cleanly and the name they built resolved to
+// another network entirely. A check that grades one variable at a time cannot see that class of
+// fault at all, and it is the class that costs the most, because everything upstream of the
+// tester succeeds.
 
 import {
   envAssignment,
   type Prerequisite,
+  type PrerequisiteVerdict,
   satisfied,
   unsatisfied,
 } from '@cat-factory/acceptance-kit'
+import {
+  describeWildcardDnsShift,
+  describeWildcardDnsShiftProblem,
+  wildcardDnsShiftRemedies,
+} from '@cat-factory/contracts'
 import type { AcceptanceConfig } from './config.ts'
-import { DEFAULT_IMAGE_TEMPLATE, DEFAULT_INGRESS_HOST_TEMPLATE, K3S_DOC } from './config.ts'
-import { imageTemplateSample, renderEnvironmentHost, renderEnvironmentImage } from './k3s.ts'
+import {
+  DEFAULT_IMAGE_TEMPLATE,
+  DEFAULT_INGRESS_HOST_TEMPLATE,
+  DEFAULT_NAMESPACE_TEMPLATE,
+  K3S_DOC,
+} from './config.ts'
+import {
+  imageTemplateSample,
+  renderEnvironmentHost,
+  renderEnvironmentImage,
+  renderEnvironmentNamespace,
+} from './k3s.ts'
 
 /**
  * All these two checks need. Narrower than `PreflightContext` on purpose, and assignable from it,
@@ -36,39 +59,32 @@ export type ManifestTemplateContext = { config: AcceptanceConfig }
 export const MANIFEST_TEMPLATE_PREREQUISITES: readonly Prerequisite<ManifestTemplateContext>[] = [
   {
     id: 'ingress-template',
-    what: 'an environment URL can be derived from the configured host template',
+    what: 'the configured namespace and host templates compose into a URL that reaches this cluster',
     disposition: 'required',
     check: async ({ config }) => {
-      // Rendered against a sample namespace: the real one carries a pull-request number no run
-      // has produced yet. What it proves is that the template holds no hole the platform cannot
-      // fill, the failure that otherwise appears as an environment stuck `provisioning` behind a
-      // URL nobody can resolve.
-      const host = renderEnvironmentHost(config.cluster.ingressHostTemplate, 'cf-acc-1')
-      return host === null
-        ? unsatisfied(
-            `ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE ('${config.cluster.ingressHostTemplate}') still ` +
-              `holds an unrendered placeholder after {{namespace}} is substituted`,
-            {
-              steps: [
-                'Build the template from {{namespace}} only: it is the one value known before a ' +
-                  'run opens its pull request, so {{branch}} and {{pullNumber}} leave a hole the ' +
-                  'suite cannot fill.',
-                'The default below needs no DNS: nip.io resolves <anything>.127.0.0.1 to loopback.',
-                'Unsetting the variable is also a fix, since the default is what it falls back to.',
-              ],
-              commands: [
-                {
-                  run: envAssignment(
-                    'ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE',
-                    DEFAULT_INGRESS_HOST_TEMPLATE,
-                  ),
-                  purpose: 'use the documented default, which renders from {{namespace}} alone',
-                },
-              ],
-              docs: K3S_DOC,
-            },
-          )
-        : satisfied(`renders as '${host}'`)
+      // Rendered against a sample pull request: the real one carries a number no run has produced
+      // yet. What it proves is that the templates hold no hole the platform cannot fill, the
+      // failure that otherwise appears as an environment stuck `provisioning` behind a URL nobody
+      // can resolve.
+      //
+      // **Graded once PER REPOSITORY**, because a namespace template may name `{{repoName}}` and
+      // a pass provisions from both. Grading the backend's alone passed a configuration whose
+      // FRONTEND namespace shifted (`catalog-api` carries no window, `catalog-2` composes
+      // `2.127.0.0`), and the cost of that miss is the whole point of a preflight: everything
+      // upstream of the frontend's tester succeeds first.
+      const compositions = []
+      for (const repo of [config.repos.backend, config.repos.frontend]) {
+        const composed = composeEnvironmentUrlHost(config, repo)
+        if ('problem' in composed) return composed.problem
+        compositions.push(composed)
+      }
+      // Names the compositions rather than the templates, because the composition is the thing
+      // nobody has seen written down and the thing that was wrong.
+      return satisfied(
+        compositions
+          .map(({ repo, namespace, host }) => `${repo} provisions '${namespace}' at '${host}'`)
+          .join('; '),
+      )
     },
   },
   {
@@ -138,3 +154,110 @@ export const MANIFEST_TEMPLATE_PREREQUISITES: readonly Prerequisite<ManifestTemp
     },
   },
 ]
+
+/** One repository's rendered namespace and the environment URL host it composes. */
+type ComposedEnvironmentUrl = { repo: string; namespace: string; host: string }
+
+/**
+ * Render the two templates as a provision of `repo` would, or hand back the refusal.
+ *
+ * The three failures are kept apart because they are three different edits: a namespace template
+ * holding a hole nothing fills, a host template holding one, and two templates that each render
+ * perfectly and compose into a name pointing at another network. Only the third needed inventing;
+ * it is also the only one nothing downstream can catch.
+ */
+function composeEnvironmentUrlHost(
+  config: AcceptanceConfig,
+  repo: string,
+): ComposedEnvironmentUrl | { problem: PrerequisiteVerdict } {
+  const sample = imageTemplateSample({ owner: config.repoOwner, name: repo })
+  const namespace = renderEnvironmentNamespace(config.cluster.namespaceTemplate, sample)
+  if (namespace === null) {
+    // The vocabulary is READ OFF the sample rather than restated, because the sample's key set is
+    // what the renderer actually fills from. A hand-written list here was already short of six of
+    // them, which is a working template refused with a message naming the wrong words.
+    const fillable = Object.keys(sample)
+      .map((key) => `{{${key}}}`)
+      .join(', ')
+    return {
+      problem: unsatisfied(
+        `ACCEPTANCE_K3S_NAMESPACE_TEMPLATE ('${config.cluster.namespaceTemplate}') still holds ` +
+          `an unrendered placeholder after ${repo}'s pull-request values are substituted`,
+        {
+          steps: [
+            `Build the template from the values a per-PR provision knows: ${fillable}. It may ` +
+              'not name {{namespace}}, which is what this template PRODUCES.',
+            'Unsetting the variable is also a fix, since the default below is the fallback.',
+          ],
+          commands: [
+            {
+              run: envAssignment('ACCEPTANCE_K3S_NAMESPACE_TEMPLATE', DEFAULT_NAMESPACE_TEMPLATE),
+              purpose: 'use the documented default, which renders per pull request',
+            },
+          ],
+          docs: K3S_DOC,
+        },
+      ),
+    }
+  }
+  const host = renderEnvironmentHost(config.cluster.ingressHostTemplate, namespace)
+  if (host === null) {
+    return {
+      problem: unsatisfied(
+        `ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE ('${config.cluster.ingressHostTemplate}') still ` +
+          `holds an unrendered placeholder after {{namespace}} is substituted`,
+        {
+          steps: [
+            'Build the template from {{namespace}} only: it is the one value known before a ' +
+              'run opens its pull request, so {{branch}} and {{pullNumber}} leave a hole the ' +
+              'suite cannot fill.',
+            'The default below needs no DNS of your own, because nip.io answers from the ' +
+              'address written into the name.',
+            'Unsetting the variable is also a fix, since the default is what it falls back to.',
+          ],
+          commands: [
+            {
+              run: envAssignment(
+                'ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE',
+                DEFAULT_INGRESS_HOST_TEMPLATE,
+              ),
+              purpose: 'use the documented default, which renders from {{namespace}} alone',
+            },
+          ],
+          docs: K3S_DOC,
+        },
+      ),
+    }
+  }
+  // The check this file was missing, and the reason a pass once spent four agents and a pull
+  // request before failing: BOTH templates rendered perfectly, and the name they composed pointed
+  // at a different network. A wildcard-DNS host carries its address in the name, so a namespace
+  // ending in a separator plus digits contributes an address of its own and, being further left,
+  // wins. Nothing downstream can catch it: the workloads are healthy, the environment reports
+  // `ready`, and the first thing to notice is the tester, eight minutes and one confusing
+  // connection error later.
+  const shift = describeWildcardDnsShift(host)
+  if (!shift) return { repo, namespace, host }
+  return {
+    problem: unsatisfied(
+      `ACCEPTANCE_K3S_NAMESPACE_TEMPLATE and ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE compose into a ` +
+        `URL that does not reach this cluster for ${repo}: ` +
+        describeWildcardDnsShiftProblem(shift),
+      {
+        steps: [
+          ...wildcardDnsShiftRemedies(shift),
+          'Unsetting BOTH variables is also a fix: the defaults below are chosen to compose.',
+        ],
+        commands: [
+          {
+            run: envAssignment('ACCEPTANCE_K3S_NAMESPACE_TEMPLATE', DEFAULT_NAMESPACE_TEMPLATE),
+            purpose:
+              `renders a namespace ending in a letter, so '${shift.trailing}' is the ` +
+              `only address in the name`,
+          },
+        ],
+        docs: K3S_DOC,
+      },
+    ),
+  }
+}

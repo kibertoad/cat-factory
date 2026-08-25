@@ -28,7 +28,8 @@ third-party adapter uses (registered by reference via `createBackendRegistries()
 
 ## How it works
 
-- **Provision**: render the namespace name (`namespaceTemplate`, default `cf-env-<pr>`), create
+- **Provision**: render the namespace name (`namespaceTemplate`, default
+  `cf-env-<repoName>-pr<pullNumber>`), create
   it, read the manifests from the configured source, template `{{branch}}`/`{{pullNumber}}`/
   `{{namespace}}`/`{{image}}`/`{{repoOwner}}`/`{{repoName}}`, force each resource into the
   namespace, and apply via server-side apply (`PATCH …?fieldManager=cat-factory`). Returns
@@ -80,28 +81,59 @@ If you'd rather wire it by hand (or the guided flow can't run on your host), do 
      cluster. Node/local honors custom-CA TLS via undici; the Cloudflare Worker does not, so a
      CA/insecure config is rejected there at registration.
    - `apiToken`: the ServiceAccount token (stored encrypted).
-   - the **URL derivation** (an ingress-template host like `{{branch}}.127.0.0.1.nip.io`, or a
-     `serviceStatus` LoadBalancer with k3s ServiceLB) + the `namespaceTemplate`.
+   - the **URL derivation** (an ingress-template host like `{{namespace}}.127.0.0.1.nip.io`, or a
+     `serviceStatus` LoadBalancer with k3s ServiceLB) + the `namespaceTemplate`. These two are
+     configured separately and are only correct **together**: see the third requirement below.
 
-     An ingress-template host needs **two** things, and neither is implied by the other. First an
+     An ingress-template host needs **three** things, and none is implied by the others. First an
      **ingress controller** in the cluster: a default k3d/k3s cluster bundles Traefik, but a
      cluster created with `--disable=traefik` has none, and kind ships none at all. Second a
      **host port published into it**: every local distribution runs the cluster inside Docker and
      forwards only the ports it was asked for at CREATE time (`k3d cluster create -p
 "80:80@loadbalancer"`, kind's `extraPortMappings`), and neither can be added to a cluster that
-     already exists. Without the port, `http://<anything>.127.0.0.1.nip.io` resolves to loopback
-     and finds nothing listening, environments still reach `ready` (readiness is workload
-     readiness, not an HTTP probe), and the failure surfaces much later at the `tester` step.
+     already exists. Without the port, a name that does resolve to loopback (see the third
+     requirement for which ones do) finds nothing listening, environments still reach `ready`
+     (readiness is workload readiness, not an HTTP probe), and the failure surfaces much later at
+     the `tester` step.
      `cat-factory k3s` checks both and refuses to prefill a template it has not established; the
      manual path is yours to check with `kubectl get ingressclass` and a `curl` at the host port.
      Also set the URL **scheme** to `http`: a local ingress controller serves TLS with a
      self-signed certificate, so an `https` environment URL fails on the certificate instead.
 
+     Third, and the one that reads as a cluster fault when it is a naming one: with a wildcard-DNS
+     host the rendered name must carry **exactly one address**, which constrains the
+     `namespaceTemplate` it is composed with. `nip.io` and `sslip.io` answer from the leftmost
+     four-octet run in a name and treat `-` and `.` as the same separator, so a namespace ending
+     in a separator plus digits contributes an address of its own and wins:
+
+     ```
+     cf-env-catalog-api-5.127.0.0.1.nip.io  ->  5.127.0.0     (somebody else's network)
+     cf-env-catalog-api-pr5.127.0.0.1.nip.io -> 127.0.0.1     (one character's difference)
+     ```
+
+     **The platform's own default namespace used to have that shape for every pull request ever
+     opened** (`cf-env-<repoName>-<pullNumber>`), so leaving `namespaceTemplate` unset and pairing
+     it with a `nip.io` host was the trap rather than an exotic case. It cost a run four agents
+     and a merge-ready pull request before its `tester` step reported eight minutes of connection
+     failures against an address that was never this cluster. Two things changed. The defaults
+     render `pr<n>` now (`cf-env-<repoName>-pr<pullNumber>`, and `cat-factory k3s` writes
+     `cf-env-pr{{pullNumber}}`), so an untouched setup composes correctly; and the provider
+     refuses a mis-resolving provision outright (`config_incomplete`, naming both addresses)
+     BEFORE it creates anything, so an operator's own templates fail at setup rather than
+     silently. To fix one, end the namespace with a letter (`…-pr{{pullNumber}}`), or spell the
+     address with the separator the prefix does NOT join on (`…-5.127-0-0-1.nip.io`, or
+     `…-5-127.0.0.1.nip.io`), since a four-octet run must use one separator throughout. Writing
+     the address with dashes is not on its own a fix: a dashed prefix extends a dashed address
+     exactly as a dotted one extends a dotted address.
+
      A host port other than the scheme's default goes in the URL source's own **`port`** field,
      never inside `hostTemplate`. The rendered template is also the Ingress `spec.rules[].host`
      your manifests declare, and Kubernetes rejects a `host` carrying a port, so a template like
-     `{{branch}}.127.0.0.1.nip.io:18080` yields the right environment URL and a manifest the
-     apiserver refuses.
+     `{{namespace}}.127.0.0.1.nip.io:18080` yields the right environment URL and a manifest the
+     apiserver refuses. Build the host from **`{{namespace}}`** rather than `{{branch}}` for a
+     second reason: a branch is `cat-factory/<taskId>`, and the `/` ends the host and turns the
+     rest into a path, so the URL names the bare `cat-factory` and the Ingress declaring that
+     `host` is refused. `{{namespace}}` is already sanitized to one RFC1123 label.
      The **`manifestSource`** is no longer on this connection: it is declared per-service on the
      block's `provisioning` (colocated path or a separate repo), and merged with this engine config
      at provision time. In local mode you can additionally set a per-user "this-machine" override of
