@@ -19,7 +19,8 @@
 
 import type { ConnectionFailureCause } from '@cat-factory/kernel'
 import type { ProbeTolerance } from './deadline.js'
-import { describeProbeFailure } from './probeFailure.js'
+import { capped } from './operatorText.js'
+import { describeProbeFailure, isIntermediaryStatus, transportChainText } from './probeFailure.js'
 
 /**
  * How long a wait sits through a deployment that is not answering.
@@ -34,17 +35,6 @@ import { describeProbeFailure } from './probeFailure.js'
  * budget that was sized for a pipeline rather than for an outage.
  */
 export const DEPLOYMENT_OUTAGE_GRACE_MS = 2 * 60 * 1000
-
-/**
- * Gateway statuses that mean "something in front of the deployment could not reach it".
- *
- * They are tolerated for the same reason a refused connection is, and they are safe to tolerate
- * because our own backend never emits them: `handleError` maps the domain vocabulary onto
- * 401/403/404/409/422/428/429/503, so a 502 or a 504 on this wire can only have been written by
- * an intermediary. A 503 is deliberately NOT here: that one IS the deployment, saying a capability
- * is unwired, and waiting for it to change its mind is waiting for nothing.
- */
-const GATEWAY_STATUSES = new Set([502, 504])
 
 /**
  * Which unanswered causes have the shape of a RESTART, and are therefore worth sitting through.
@@ -84,19 +74,26 @@ const TRANSIENT_CAUSES: Record<ConnectionFailureCause, boolean> = {
 /**
  * How much of a cause chain ONE observation carries.
  *
- * `describeProbeFailure` renders the whole chain at kernel's LOG budget (4000 characters), which
- * is right for the one-shot refusal it was written for and wrong here: this line is written every
- * poll interval for as long as the outage lasts, into a journal whose value is that a person can
- * read it. What separates one outage from another is the cause class and the first line of the
- * chain, both of which fit.
+ * `describeProbeFailure` renders at kernel's LOG budget (4000 characters), which is right for the
+ * one-shot refusal it was written for and wrong here: this line is written every poll interval for
+ * as long as the outage lasts, into a journal whose value is that a person can read it. What
+ * separates one outage from another is the cause class and the first line of the chain, both of
+ * which fit.
  */
 const OBSERVED_DETAIL_CHARS = 200
 
-function briefly(detail: string): string {
-  const dropped = detail.length - OBSERVED_DETAIL_CHARS
-  // Says what it dropped: a reader who assumes a whole chain would take the last link they see as
-  // the root cause.
-  return dropped > 0 ? `${detail.slice(0, OBSERVED_DETAIL_CHARS)} (+${dropped} more chars)` : detail
+/**
+ * What ONE observation says happened, which for an unanswered poll is the RUNTIME's own chain.
+ *
+ * Deliberately not the failure's whole `detail`. Since ADR 0060 that is the SDK's composed account,
+ * whose first sentence restates the cause class this line already prints and whose chain sits LAST,
+ * so a 200-character prefix of it drops exactly the evidence: against a deployment URL of any real
+ * length an expiry that used to end in `connect ECONNREFUSED 203.0.113.42:443` named neither the
+ * errno nor the address. The account still reaches the reader who sees this failure once, through
+ * the preflight refusal.
+ */
+function briefly(error: unknown): string {
+  return transportChainText(error, OBSERVED_DETAIL_CHARS)
 }
 
 /**
@@ -116,13 +113,16 @@ export function deploymentOutageTolerance(
       const failure = describeProbeFailure(error)
       if (failure.kind === 'unanswered') {
         return TRANSIENT_CAUSES[failure.cause]
-          ? `the deployment did not answer (${failure.cause}): ${briefly(failure.detail)}`
+          ? `the deployment did not answer (${failure.cause}): ${briefly(error)}`
           : null
       }
-      if (failure.kind === 'answered' && GATEWAY_STATUSES.has(failure.status)) {
+      // Tolerated for the same reason a refused connection is: nobody at the deployment wrote it,
+      // so it is a fact about the path rather than an answer to sit on. `probeFailure.ts` owns
+      // which statuses those are, because the create window branches on the same fact.
+      if (failure.kind === 'answered' && isIntermediaryStatus(failure.status)) {
         return (
           `something in front of the deployment answered ${failure.status}, so it could not reach ` +
-          `it: ${briefly(failure.detail)}`
+          `it: ${capped(failure.detail, OBSERVED_DETAIL_CHARS)}`
         )
       }
       return null

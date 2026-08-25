@@ -208,7 +208,10 @@ else imports its **ports** and domain types from here.
   a probe named `connect ECONNREFUSED` while the log line for the SAME failure said `fetch failed`.
   The one asymmetry that stays: this KEEPS undici's contentless outer link, because a log line and a
   `DispatchError` message are matched downstream by their opening phrase, while a probe's verdict
-  drops it to lead with the real cause. Full model: [`backend/docs/logging.md`](../../docs/logging.md).
+  drops it to lead with the real cause. **`errorChainDiagnosisText`** is that drop as a function
+  (still a rendering, not a fourth describer), so a reader holding the cause class already can take
+  the chain alone without re-deriving a verdict; `describeConnectionFailure` reduces through the
+  same helper, so the rule has one statement. Full model: [`backend/docs/logging.md`](../../docs/logging.md).
 - `shared/connection-failure.logic.ts`: **`describeConnectionFailure` / `connectionFailureResult`**,
   what every "Test connection" button reports when the probe got no ANSWER at all. On Node/undici a
   transport failure arrives as a generic `TypeError: fetch failed` with the real cause on `.cause`

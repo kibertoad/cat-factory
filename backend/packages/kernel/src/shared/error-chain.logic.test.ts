@@ -3,6 +3,7 @@ import { getErrorMessage } from '../domain/errors.js'
 import { describeError } from './best-effort.js'
 import { describeConnectionFailure } from './connection-failure.logic.js'
 import {
+  errorChainDiagnosisText,
   errorChainMatches,
   errorChainText,
   MAX_ERROR_CHAIN_CHARS,
@@ -242,5 +243,33 @@ describe('the three describers agree on the chain', () => {
     const described = describeConnectionFailure(error)
     expect(described.cause).toBe('dns')
     expect(described.detail).toContain('getaddrinfo ENOTFOUND cluster.internal')
+  })
+})
+
+describe('errorChainDiagnosisText', () => {
+  it('leads with the cause, which is the half a diagnosis is read for', () => {
+    // The rule `describeConnectionFailure` has always applied, available as a function so a reader
+    // that wants it does not have to be a connection VERDICT to get it. The acceptance kit's
+    // per-poll observation is the caller that went without: it takes the runtime chain alone, on a
+    // 200-character budget, and spent the first fourteen of them on a phrase identical for every
+    // transport failure there is.
+    const error = fetchFailure(coded('connect ECONNREFUSED 127.0.0.1:6443', 'ECONNREFUSED'))
+    expect(errorChainDiagnosisText(error)).toBe('connect ECONNREFUSED 127.0.0.1:6443')
+    // Its sibling keeps it, and that divergence is the reason both exist.
+    expect(errorChainText(error).startsWith('fetch failed')).toBe(true)
+  })
+
+  it('keeps the wrapper when it is the only thing the chain said', () => {
+    // Dropping it here would answer EMPTY for a failure that was genuinely reported, and empty is
+    // the value every `|| '<what to do about it>'` guard in the product reads as "undescribable".
+    expect(errorChainDiagnosisText(fetchFailure(undefined))).toBe('fetch failed')
+  })
+
+  it('agrees with the describer that owns the rule', () => {
+    // Asserted as a RELATION rather than as a second copy of the expected prose: the point of
+    // extracting the reduction was that one statement of it serves both, and a test spelling out
+    // what each returns would pass with two implementations that had drifted.
+    const error = fetchFailure(coded('getaddrinfo ENOTFOUND cat-factory.invalid', 'ENOTFOUND'))
+    expect(errorChainDiagnosisText(error)).toBe(describeConnectionFailure(error).detail)
   })
 })

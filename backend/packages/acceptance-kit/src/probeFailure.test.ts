@@ -8,8 +8,10 @@ import {
 } from '@cat-factory/sdk'
 import { describe, expect, it } from 'vitest'
 import { DeploymentAnswerError } from './deploymentApi.js'
+import { scrubbed } from './operatorText.js'
 import { baseUrlStep, describeProbeFailure, probeFailureVerdict } from './probeFailure.js'
 import type { SuiteIdentity } from './suiteIdentity.js'
+import { sdkTransportFailure as driveSdkFailure } from './testing/sdkFailures.js'
 
 // What is pinned here is the DIFFERENCE between the failures, because that is the whole reason this
 // module exists. The chain walk, the classification and the per-cause hints are kernel's and are
@@ -41,17 +43,18 @@ const identity: SuiteIdentity = {
   configFile: 'acceptance/.env',
 }
 
-/** The link that names a transport failure, as Node hangs it off undici's contentless wrapper. */
-function transportCause(message: string, code: string): Error {
-  return Object.assign(new Error(message), { code })
-}
-
-/** A transport failure as the SDK re-throws one: its own wrapper over undici's over the real link. */
-function sdkTransportFailure(message: string, code: string): CatFactoryConnectionError {
-  return new CatFactoryConnectionError(
-    'cat-factory SDK: GET /me failed to reach http://127.0.0.1:8787.',
-    { cause: new TypeError('fetch failed', { cause: transportCause(message, code) }) },
-  )
+/**
+ * A transport failure as the SDK re-throws one, DRIVEN through a real client rather than built here.
+ *
+ * The version this replaced spelled the wrapper's message out by hand, and that sentence stopped
+ * being the one the SDK writes: it assembles a verdict, its own origin history and the runtime's
+ * chain now (ADR 0060). A hand-built copy kept these tests green across exactly the change that
+ * altered what an operator reads, which is the drift a fixture is supposed to catch.
+ */
+function sdkTransportFailure(message: string, code: string): Promise<CatFactoryConnectionError> {
+  // One answered call, so the account carries an origin history: this module relays that sentence
+  // and it is the half neither kernel nor this suite could ever supply.
+  return driveSdkFailure({ message, code, answeredCalls: 1 })
 }
 
 /**
@@ -165,28 +168,43 @@ describe('baseUrlStep', () => {
 })
 
 describe('describeProbeFailure, when nothing answered', () => {
-  it('names the real cause instead of the wrapper undici throws', () => {
+  it('names the real cause instead of the wrapper undici throws', async () => {
     const failure = describeProbeFailure(
-      sdkTransportFailure('connect ECONNREFUSED 127.0.0.1:8787', 'ECONNREFUSED'),
+      await sdkTransportFailure('connect ECONNREFUSED 127.0.0.1:8787', 'ECONNREFUSED'),
       probe,
       identity,
     )
     expect(failure).toMatchObject({ kind: 'unanswered', cause: 'refused' })
     expect(failure.detail).toContain('connect ECONNREFUSED 127.0.0.1:8787')
-    // Dropped by kernel because it carries nothing: the diagnosis has to LEAD with the real cause.
+    // Carries nothing, and neither describer leads with it: the diagnosis has to name the real cause.
     expect(failure.detail).not.toContain('fetch failed')
   })
 
-  it('classifies through the SDK wrapper, and keeps the call it names', () => {
-    // The shape the suite actually gets: the SDK never hands over undici's `TypeError`. Its own
-    // message is the only thing that says WHICH call failed, so it is reported rather than dropped.
+  it('relays the SDK account whole rather than rendering the chain a second time', async () => {
+    // The regression this pins arrived with ADR 0060. The SDK's message ENDS with the runtime's
+    // chain, so walking the chain again under it printed `connect ECONNREFUSED 127.0.0.1:8787`
+    // twice, the second copy after the sentence that had already quoted it.
+    const thrown = await sdkTransportFailure('connect ECONNREFUSED 127.0.0.1:8787', 'ECONNREFUSED')
+    const failure = describeProbeFailure(thrown, probe, identity)
+    // A RELATION over what the SDK wrote, not a copy of it: the sentence is the SDK's to change,
+    // and what belongs to this module is the decision to relay it unedited.
+    expect(failure.detail).toBe(scrubbed(thrown.message))
+    expect(failure.detail.split('ECONNREFUSED')).toHaveLength(2)
+  })
+
+  it('classifies through the SDK wrapper, and keeps what only the client knew', async () => {
+    // The shape the suite actually gets: the SDK never hands over undici's `TypeError`. Its message
+    // is the only thing that says WHICH call failed and whether the origin had been answering, and
+    // the second of those is what separates a deployment that restarted from an address that never
+    // answered. Both are reported rather than dropped.
     const failure = describeProbeFailure(
-      sdkTransportFailure('getaddrinfo ENOTFOUND backend.invalid', 'ENOTFOUND'),
+      await sdkTransportFailure('getaddrinfo ENOTFOUND backend.invalid', 'ENOTFOUND'),
       probe,
       identity,
     )
     expect(failure).toMatchObject({ kind: 'unanswered', cause: 'dns' })
-    expect(failure.detail).toContain('GET /me failed to reach')
+    expect(failure.detail).toContain('/api/v1/me')
+    expect(failure.detail).toContain('had answered 1 call')
     expect(failure.detail).toContain('ENOTFOUND')
   })
 
@@ -203,23 +221,23 @@ describe('describeProbeFailure, when nothing answered', () => {
     expect(rendered).not.toContain('run the test again')
   })
 
-  it('relays the remedy for the classified cause rather than paraphrasing it', () => {
+  it('relays the remedy for the classified cause rather than paraphrasing it', async () => {
     // The same rule `deployment-health` follows for the backend's own config problems: the platform
     // already writes the better sentence, and a copy here would be one release behind it.
     const failure = describeProbeFailure(
-      sdkTransportFailure('connect ECONNREFUSED 127.0.0.1:8787', 'ECONNREFUSED'),
+      await sdkTransportFailure('connect ECONNREFUSED 127.0.0.1:8787', 'ECONNREFUSED'),
       probe,
       identity,
     )
     expect(failure.remedy.steps[0]).toContain('Nothing is listening at http://127.0.0.1:8787')
   })
 
-  it('withholds the credential guesses from a cause that sent no credential', () => {
+  it('withholds the credential guesses from a cause that sent no credential', async () => {
     // The misdiagnosis this replaced. A refused connection never got as far as a request, so
     // "an API key that is missing, revoked, or scoped below admin" sent an operator to inspect a
     // token that could not have been involved.
     const rendered = describeProbeFailure(
-      sdkTransportFailure('connect ECONNREFUSED 127.0.0.1:8787', 'ECONNREFUSED'),
+      await sdkTransportFailure('connect ECONNREFUSED 127.0.0.1:8787', 'ECONNREFUSED'),
       probe,
       identity,
     ).remedy.steps.join('\n')
@@ -238,11 +256,11 @@ describe('describeProbeFailure, when nothing answered', () => {
     )
   })
 
-  it('tells a certificate problem apart from a stopped deployment', () => {
+  it('tells a certificate problem apart from a stopped deployment', async () => {
     // Two setup mistakes that read identically as `fetch failed`, and whose fixes share nothing:
     // one starts a process, the other pastes a CA bundle or ticks a box.
     const failure = describeProbeFailure(
-      sdkTransportFailure('self-signed certificate', 'DEPTH_ZERO_SELF_SIGNED_CERT'),
+      await sdkTransportFailure('self-signed certificate', 'DEPTH_ZERO_SELF_SIGNED_CERT'),
       probe,
       identity,
     )
@@ -250,9 +268,9 @@ describe('describeProbeFailure, when nothing answered', () => {
     expect(failure.remedy.steps[0]).toContain('TLS certificate')
   })
 
-  it('names the base URL as the hand-typed value it is, whatever the cause', () => {
+  it('names the base URL as the hand-typed value it is, whatever the cause', async () => {
     for (const error of [
-      sdkTransportFailure('getaddrinfo ENOTFOUND backend.invalid', 'ENOTFOUND'),
+      await sdkTransportFailure('getaddrinfo ENOTFOUND backend.invalid', 'ENOTFOUND'),
       new Error('something else entirely'),
     ]) {
       const rendered = describeProbeFailure(error, probe, identity).remedy.steps.join('\n')
@@ -284,9 +302,9 @@ describe('describeProbeFailure, when nothing answered', () => {
     expect(rendered).toContain('ACME_BASE_URL')
   })
 
-  it('still describes a classified failure when no probe target was supplied', () => {
+  it('still describes a classified failure when no probe target was supplied', async () => {
     const failure = describeProbeFailure(
-      sdkTransportFailure('connect ECONNREFUSED 127.0.0.1:8787', 'ECONNREFUSED'),
+      await sdkTransportFailure('connect ECONNREFUSED 127.0.0.1:8787', 'ECONNREFUSED'),
       undefined,
       identity,
     )
@@ -544,20 +562,20 @@ describe('the remedy every probe failure carries', () => {
 })
 
 describe('probeFailureVerdict', () => {
-  it('is an unknown verdict, never an unsatisfied one', () => {
+  it('is an unknown verdict, never an unsatisfied one', async () => {
     // `preflight.ts` rule 2: a probe that failed is not evidence about the thing probed, and
     // reporting it as "unmet" sends someone to fix a model catalog over a refused request.
     const verdict = probeFailureVerdict(
-      sdkTransportFailure('connect ECONNREFUSED 127.0.0.1:8787', 'ECONNREFUSED'),
+      await sdkTransportFailure('connect ECONNREFUSED 127.0.0.1:8787', 'ECONNREFUSED'),
       probe,
       identity,
     )
     expect(verdict.status).toBe('unknown')
   })
 
-  it('puts the cause class on the summary line, which is all the streamed output prints', () => {
+  it('puts the cause class on the summary line, which is all the streamed output prints', async () => {
     const verdict = probeFailureVerdict(
-      sdkTransportFailure('connect ECONNREFUSED 127.0.0.1:8787', 'ECONNREFUSED'),
+      await sdkTransportFailure('connect ECONNREFUSED 127.0.0.1:8787', 'ECONNREFUSED'),
       probe,
       identity,
     )

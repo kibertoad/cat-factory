@@ -76,14 +76,19 @@ export function investigateAndFixScenario(harness: Harness): Scenario {
             // reclaimed its namespace), so this normally resolves to null and the report says
             // "reproduce locally", which is the truth. It is derived rather than assumed because the
             // alternative reading, a `ready` entry in a settled report, is a deploy-time fact that
-            // would send the investigator to a dead host. Resolved inside the callback because a
-            // resumed pass that adopts the already filed task must not spend two evidence reads
-            // composing a description nobody uses.
-            createTask: async () =>
+            // would send the investigator to a dead host.
+            //
+            // It is `prepareTask` rather than the first half of `createTask` because these are two
+            // evidence READS against the same deployment the create goes to, and they fail the same
+            // ways: inside the create window a reset on one of them was reported as a task that may
+            // have been filed. `prepareTask` keeps the laziness that put them there (a resumed pass
+            // adopting the already filed task still spends nothing) without the misreport.
+            prepareTask: liveEnvironmentUrl,
+            createTask: (environmentUrl) =>
               filePinnedTask(client, config, frontend.serviceId, {
                 title: 'Paging repeats the last item of the previous page',
                 taskType: 'bug',
-                description: bugReportBrief(await liveEnvironmentUrl()),
+                description: bugReportBrief(environmentUrl),
               }),
             onRecord: (record) => world.patch({ bugfix: record }),
             pipelineId: PIPELINE,

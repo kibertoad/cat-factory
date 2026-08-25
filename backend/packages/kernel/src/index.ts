@@ -927,6 +927,7 @@ export {
 } from './shared/post-mortem.logic.js'
 export { describeError, runBestEffort } from './shared/best-effort.js'
 export {
+  errorChainDiagnosisText,
   errorChainMatches,
   errorChainText,
   publicDiagnostic,
