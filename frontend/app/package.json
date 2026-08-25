@@ -33,7 +33,7 @@
     "@modular-vue/nuxt": "^0.4.1",
     "@modular-vue/runtime": "^1.4.1",
     "@modular-vue/vue": "^1.4.1",
-    "@nuxt/ui": "^4.10.0",
+    "@nuxt/ui": "^4.11.0",
     "@nuxtjs/i18n": "^10.6.0",
     "@pinia/nuxt": "^1.0.2",
     "@toad-contracts/core": "0.4.0",
@@ -52,13 +52,13 @@
   },
   "devDependencies": {
     "@toad-contracts/testing": "0.3.2",
-    "happy-dom": "^20.11.2",
+    "happy-dom": "^20.11.6",
     "msw": "^2.15.0",
     "nuxt": "^4.5.2",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11",
     "vue-i18n-extract": "^2.0.7",
-    "vue-tsc": "^3.3.10"
+    "vue-tsc": "^3.3.11"
   },
   "peerDependencies": {
     "nuxt": "^4.5.2"

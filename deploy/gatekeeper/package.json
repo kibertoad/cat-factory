@@ -15,9 +15,9 @@
     "@cat-factory/gatekeeper-worker": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260819.1",
+    "@cloudflare/workers-types": "^5.20260823.1",
     "typescript": "7.0.2",
     "vitest": "^4.1.11",
-    "wrangler": "^4.124.0"
+    "wrangler": "4.124.0"
   }
 }

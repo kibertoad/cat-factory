@@ -97,13 +97,14 @@ RUN echo 'harness:100000:65536' > /etc/subuid \
 # must be installed WITHOUT `--ignore-scripts` — otherwise the `claude` / `codex`
 # CLI is missing or non-functional at runtime. We then assert both CLIs actually
 # run so a broken install fails the build instead of every subscription job.
-ARG PI_VERSION=0.84.2
-# Claude Code is deliberately taken at its newest release, ahead of the 24h
-# `minimumReleaseAge` window the workspace dependencies are held to: it moves several
-# times a week and the harness tracks it closely. That exemption is specific to this
-# pin (an explicit call, re-made each time it is bumped), not to the other two CLIs.
-ARG CLAUDE_CODE_VERSION=2.1.237
-ARG CODEX_VERSION=0.148.0
+# All THREE agent CLIs are deliberately taken at their newest release, ahead of the 24h
+# `minimumReleaseAge` window the workspace dependencies are held to: each moves several
+# times a week and the harness tracks them closely. That exemption is specific to these
+# three pins (an explicit call, re-made each time they are bumped) and does NOT extend to
+# the Pi extensions below or to anything installed through the workspace lockfile.
+ARG PI_VERSION=0.84.3
+ARG CLAUDE_CODE_VERSION=2.1.243
+ARG CODEX_VERSION=0.149.1
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl procps psmisc && rm -rf /var/lib/apt/lists/*; \
     if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
@@ -155,8 +156,8 @@ USER harness
 # auto-detects it, writes the config and nudges the agent to use the tools
 # (WEB_SEARCH_PROVIDER pins the active provider). No key is baked into the image.
 # Both pinned for the same reproducibility reason as Pi itself.
-ARG PI_TODO_EXTENSION_VERSION=2.6.2
-ARG PI_WEB_TOOLS_EXTENSION_VERSION=2.6.2
+ARG PI_TODO_EXTENSION_VERSION=2.7.0
+ARG PI_WEB_TOOLS_EXTENSION_VERSION=2.7.0
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
     pi install "npm:@juicesharp/rpiv-todo@${PI_TODO_EXTENSION_VERSION}"; \

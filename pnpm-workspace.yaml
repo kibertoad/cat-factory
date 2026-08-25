@@ -46,6 +46,30 @@ overrides:
   'vite>esbuild': 0.28.1
   'tsx>esbuild': 0.28.1
   'nitropack>esbuild': 0.28.1
+  # ONE wrangler across the stack, for the same reason the three esbuild pins above exist.
+  # `@cloudflare/vitest-pool-workers` pins `wrangler` (and through it `workerd` + `miniflare`)
+  # EXACTLY, while our own range is a caret — so any in-range refresh floats our wrangler ahead
+  # of the one the test pool pins and the tree gains a SECOND workerd. That is not just ~100MB of
+  # duplicated platform binary per arch: the Worker suite runs inside the pool's workerd, so the
+  # runtime the tests prove and the runtime `wrangler deploy` ships would be different builds.
+  # Held to whatever `@cloudflare/vitest-pool-workers` pins; move it when that package moves.
+  wrangler: 4.124.0
+  # Babel 7 and Babel 8 coexist on purpose: Nuxt's build graph is on `@babel/core@7`, while
+  # Stryker 10's instrumenter moved to `@babel/core@8`. The three plugins below are OPTIONAL
+  # PEERS of the Nuxt packages, so pnpm fills those slots from whatever version of that name is
+  # already in the tree — which, once Stryker pulled the 8.x line in, paired a Babel 8 plugin
+  # with Babel 7 core. That is not merely a peer warning: a Babel 8 plugin's `declare()` asserts
+  # the core major and THROWS when loaded by 7, so the frontend build would break the moment Vue
+  # JSX or decorators are enabled. Scoping the names back to the 7.x line for their Nuxt parents
+  # restores the pairing Nuxt resolved with before Stryker 10 and leaves Stryker's own 8.x copies
+  # untouched. Consequence to know: `@babel/plugin-proposal-decorators` is now only in the tree
+  # on the 8.x line, so the Nuxt slot for it resolves to nothing rather than to 7.29.7. That is
+  # the supported absent-optional-peer path (Nuxt loads it only for `decorators: true`, which
+  # this SPA does not set) and is strictly safer than a cross-major pairing that throws on load.
+  '@nuxt/vite-builder>@babel/plugin-proposal-decorators': 7.29.7
+  '@nuxt/vite-builder>@babel/plugin-syntax-jsx': 7.29.7
+  '@nuxt/nitro-server>@babel/plugin-proposal-decorators': 7.29.7
+  '@nuxt/nitro-server>@babel/plugin-syntax-typescript': 7.29.7
   '@vue/compiler-core': 3.5.41
   '@vue/compiler-dom': 3.5.41
   '@vue/compiler-sfc': 3.5.41
@@ -90,7 +114,7 @@ allowBuilds:
 # packages: when upgrading, pick the latest version that already satisfies the
 # release-age rule instead. (The prior `nuxt` / `@nuxt/*` exception has been pruned:
 # Nuxt 4.5.x has aged past the window, so — as its own note promised — it self-heals
-# and no longer needs an exclusion. There are currently NO third-party exceptions.)
+# and no longer needs an exclusion.)
 minimumReleaseAgeExclude:
   - '@cat-factory/*'
   - '@toad-contracts/*'
@@ -98,3 +122,10 @@ minimumReleaseAgeExclude:
   - '@modular-frontend/*'
   - layered-loader
   - toad-scheduler
+  # PRUNE ME. The one third-party exception in the tree, and it is already stale: pg-boss
+  # 12.28.0 was ~20 minutes short of the window when this dependency refresh was cut, so it
+  # was taken deliberately rather than deferred to the next sweep. It has since aged past the
+  # gate, which means removing this line is a no-op re-resolve — do it in the next dependency
+  # PR. It is NOT precedent: the standing rule is still to pick the newest version that already
+  # satisfies the release-age rule instead of listing a version here.
+  - pg-boss@12.28.0
