@@ -19,7 +19,16 @@
   carve-out naming `EFFORT_REPORT_FILE` as the one write a read-only instruction permits, because
   the chokepoint hands every container kind both "create no files" and "write this file" and is the
   only place that sees both halves (a carve-out in `READ_ONLY_GUARDRAIL` could not reach the bespoke
-  `merger` / `on-call` prompts, which never pass through `systemPromptFor`). Also
+  `merger` / `on-call` prompts, which never pass through `systemPromptFor`). It also orders the
+  effort write BEFORE the final reply, never "at the end": a trailing write forces one more closing
+  turn after its tool result, and every harness keeps only the last message, so a
+  `FINAL_ANSWER_IN_REPLY` kind loses its whole answer to the afterthought (pinned in the same
+  spec). Two rules follow from that ordering reaching EVERY container kind. Its RATIONALE states
+  what the platform keeps, never what the reply is for: the side-effect coding kinds get this text
+  and deliberately not `FINAL_ANSWER_IN_REPLY`, so "your last message is your answer" would tell
+  them what that fragment forbids. And `PR_DESCRIPTION_GUIDANCE`, appended AFTER it on a PR-opening
+  dispatch, carries the SAME ordering: being the later text, whatever it says about timing is the
+  last ordering statement the agent reads. Also
   `REVIEW_FINDINGS_LAYOUT`, carried by the COMPANIONS, which asks each point for its own
   severity-graded `comments` entry (a `blocker` holds the run) and keeps the `summary` a verdict
   rather than a second copy of the list; preserved across a workspace override. A reviewer that

@@ -179,11 +179,12 @@ export const FOLLOW_UPS_FILE = '.cat-follow-ups.jsonl'
 
 /**
  * Appended to EVERY container-agent system prompt (at the container-dispatch chokepoint, see
- * `buildKindBody`). It asks the agent to end its work by writing a short, honest self-assessment
- * of the effort to a sentinel file — how hard/easy the work was, what reduced its effectiveness,
- * and the key obstacles it hit — which the harness lifts onto the result and the platform surfaces
- * in run details. This is a SIDE channel: it is kept out of the commit/PR, so writing it never
- * affects the deliverable, and the agent still completes its actual task regardless.
+ * `buildKindBody`). It asks the agent to close out its work by writing a short, honest
+ * self-assessment of the effort to a sentinel file — how hard/easy the work was, what reduced its
+ * effectiveness, and the key obstacles it hit — which the harness lifts onto the result and the
+ * platform surfaces in run details. This is a SIDE channel: it is kept out of the commit/PR, so
+ * writing it never affects the deliverable, and the agent still completes its actual task
+ * regardless.
  *
  * BOTH halves of the write/no-write reconciliation live HERE, because this is the only text that
  * reaches every container kind. The chokepoint appends it to the read-only kinds, whose guardrail
@@ -195,10 +196,33 @@ export const FOLLOW_UPS_FILE = '.cat-follow-ups.jsonl'
  * The timing clause is scoped to what the AGENT did ("any commit or push you made") rather than
  * asserting what the STEP does. A read-only step can still commit: the `spike` kind's findings are
  * committed and published by a backend post-op the agent takes no part in.
+ *
+ * The write is ordered BEFORE the final reply, never "at the end", and the text states why. The
+ * old "as the last thing you do" made a faithful agent answer first and write this file second,
+ * and the pending tool call forces one more closing turn after the tool result. Every harness
+ * reads only the very LAST message as the reply (the claude CLI's `result` event in
+ * `agent-runner.ts`, Pi's and Codex's last agent message alike), so for a kind whose deliverable
+ * IS its reply ({@link FINAL_ANSWER_IN_REPLY}) the one-line afterthought following the tool
+ * result displaced the actual answer. A real run lost an 18k-character architect design to this
+ * three rework rounds in a row, the companion correctly rejecting each round for "design body
+ * missing" while the design sat one message earlier in the transcript. Pinned in
+ * `containerAgentJobBody.spec.ts` beside the write/no-write pair.
+ *
+ * The REASON is stated as what the platform keeps, never as what the reply is FOR, because this
+ * text reaches every container kind including the side-effect ones (coder, ci-fixer,
+ * conflict-resolver, mocker) that `applySurfaceDirectives` deliberately withholds
+ * {@link FINAL_ANSWER_IN_REPLY} from: their product is a pushed commit and they legitimately end
+ * with no answer to give, so telling them their last message is their answer is the same wrong
+ * claim that fragment's own contract forbids. "The platform keeps only your very last message" is
+ * true on both sides of that split, and it is the whole of what the ordering rule needs.
+ *
+ * The ordering also binds the OTHER sentinel a dispatch may ask for: {@link PR_DESCRIPTION_GUIDANCE}
+ * is appended AFTER this text for a PR-opening coding kind, so a "write it at the end" there would
+ * be the LAST ordering statement the agent reads and would reinstate the trailing write this fixed.
  */
 export const EFFORT_REPORT_GUIDANCE =
-  'EFFORT SELF-ASSESSMENT — as the last thing you do, once your work is complete (including any ' +
-  'commit or push you made), write a ' +
+  'EFFORT SELF-ASSESSMENT — once your work is complete (including any commit or push you made) ' +
+  'and BEFORE you compose your final reply, write a ' +
   `file named \`${EFFORT_REPORT_FILE}\` in your working directory containing a SINGLE compact ` +
   'JSON object: {"difficulty":<1-10>,"summary":"<one or two sentences on how hard or easy this ' +
   'was and why>","reducedEffectiveness":"<what, if anything, reduced your effectiveness — ' +
@@ -208,7 +232,10 @@ export const EFFORT_REPORT_GUIDANCE =
   'this one file is expected even where your instructions forbid you to create, modify or commit ' +
   'files: it is the single exception those instructions permit, because the harness keeps it out ' +
   'of every commit, so writing it changes nothing in the repository. It is a side channel only: ' +
-  'never reference it in code and never add it to git. Write it exactly once, at the end.'
+  'never reference it in code and never add it to git. Write it exactly once. Ordering matters: ' +
+  'the effort file first, your final reply last, and no tool call after the reply. The platform ' +
+  'keeps only your very last message, so a tool call made after you have replied replaces what ' +
+  'you wrote with the brief remark that follows the tool result.'
 
 /**
  * Appended to EVERY container-agent system prompt at the same chokepoint as
@@ -305,6 +332,12 @@ export const PR_DESCRIPTION_FILE = '.cat-pr-description.md'
  * the PR falls back to the generic dispatch-time text (`prBody`), which is composed BEFORE the
  * agent runs and so can never describe the decisions actually made. This is a SIDE channel: the
  * platform keeps the file out of the commit, so writing it never affects the deliverable.
+ *
+ * Its closing sentence orders the write the same way {@link EFFORT_REPORT_GUIDANCE} does, and must
+ * keep doing so: the chokepoint appends THIS text after that one (`buildCodingAgentBody` folds it
+ * into the already-composed role prompt), so whatever it says about timing is the last ordering
+ * statement in the prompt. "At the end of your work" put a tool call back after the final reply,
+ * which is exactly the displacement the effort-report ordering exists to prevent.
  */
 export const PR_DESCRIPTION_GUIDANCE =
   'PULL REQUEST DESCRIPTION — when you have finished the work, write the reviewer-facing pull ' +
@@ -325,8 +358,8 @@ export const PR_DESCRIPTION_GUIDANCE =
   'mention accounts (`@name`), or put issue-closing wording such as "fixes" or "closes" in front ' +
   'of an issue link: the platform defuses all of those before publishing, so they would render ' +
   'as inert text rather than doing what you intended. This file is a side channel: it is kept ' +
-  'out of the commit, so never reference it in code and never add it to git. Write it once, at ' +
-  'the end of your work.'
+  'out of the commit, so never reference it in code and never add it to git. Write it exactly ' +
+  'once, when the work is complete and BEFORE you compose your final reply, never after it.'
 
 /**
  * Appended to a code/PR review agent's system prompt. It asks the reviewer to report, per

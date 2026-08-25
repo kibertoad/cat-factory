@@ -13,12 +13,6 @@ import {
   ValidationError,
 } from '@cat-factory/kernel'
 import type { AgentRouting } from '@cat-factory/agents'
-import {
-  EFFORT_REPORT_FILE,
-  EFFORT_REPORT_GUIDANCE,
-  EXECUTION_SANDBOX_GUIDANCE,
-  READ_ONLY_GUARDRAIL,
-} from '@cat-factory/agents'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   ContainerAgentExecutor,
@@ -38,6 +32,11 @@ import { siblingCheckoutDir } from '../src/agents/harnessContract.js'
 // (ModelRouter + a common-body + per-kind delta table) is behaviour-preserving, so these
 // snapshots must be byte-identical before and after — they are the diff-the-bodies guard
 // the plan calls for.
+//
+// Two clusters that had subjects of their own were split out of here when this file hit its size
+// budget: the multi-repo LAYOUT of one dispatch (`containerAgentMultiRepo.spec`) and the
+// DIRECTIVES a dispatch composes around a kind's prompt, read-only guardrail through
+// PR-description sentinel (`containerAgentDispatchDirectives.spec`).
 
 const PI_REF: ModelRef = { provider: 'workers-ai', model: '@cf/test/model' }
 
@@ -225,74 +224,6 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
     expect(withCatalog).toContain('Prefer an existing foundational service')
   })
 
-  // The two directives below are only ever composed TOGETHER here, at the container-dispatch
-  // chokepoint: the guardrail rides `systemPromptFor` and the effort report is appended by
-  // `buildKindBody`, so neither package can assert the pair on its own.
-  it('reconciles the read-only guardrail with the effort report it is handed', async () => {
-    await executor.startJob(context('architect'))
-    const systemPrompt = captured[0]!.spec.systemPrompt as string
-    expect(systemPrompt).toContain(READ_ONLY_GUARDRAIL)
-    expect(systemPrompt).toContain(EFFORT_REPORT_GUIDANCE)
-    // One instruction forbids creating files and the other orders one written, so the CARVE-OUT
-    // rides the effort report: it is the half that reaches every kind the other half can
-    // contradict. Without it an agent either disobeyed one of them or spent a turn asking which
-    // won, on every read-only run.
-    expect(EFFORT_REPORT_GUIDANCE).toContain(EFFORT_REPORT_FILE)
-    expect(EFFORT_REPORT_GUIDANCE).toMatch(/forbid you to create, modify or commit/)
-    // And the effort report no longer times itself off a commit the agent may not make.
-    expect(EFFORT_REPORT_GUIDANCE).not.toContain('after any commit/push')
-    // The guardrail claims nothing about the sentinel, so it needs no position relative to the
-    // report and stays true on the inline surfaces that also receive it.
-    expect(READ_ONLY_GUARDRAIL).not.toContain(EFFORT_REPORT_FILE)
-    expect(READ_ONLY_GUARDRAIL).not.toMatch(/instructions below/)
-  })
-
-  // The kinds whose write prohibition is written into a BESPOKE prompt rather than appended by
-  // `applySurfaceDirectives`. `composedSystemPromptFor` short-circuits for them, so a carve-out
-  // scoped off the surface never reaches them — which is why it lives on the effort report, the
-  // one text this chokepoint hands to every container kind whatever its prompt came from.
-  it('reconciles the pair for a bespoke container kind too, not only a surface-directed one', async () => {
-    for (const kind of ['on-call', 'merger']) {
-      const { executor: exec, captured: seen } = makeExecutor()
-      await exec.startJob(context(kind))
-      const systemPrompt = seen[0]!.spec.systemPrompt as string
-      expect(systemPrompt).toContain(EFFORT_REPORT_GUIDANCE)
-      // `on-call` is the case that bites: its own directives forbid every write, and nothing in
-      // its composition path can see the effort report it is about to be handed.
-      expect(systemPrompt).toMatch(/forbid you to create, modify or commit/)
-    }
-    // `on-call` is the case that bites: its own directives forbid every write, so without the
-    // carve-out riding the effort report it is handed an unsatisfiable pair on every dispatch.
-    const { executor: onCallExec, captured: onCallSeen } = makeExecutor()
-    await onCallExec.startJob(context('on-call'))
-    expect(onCallSeen[0]!.spec.systemPrompt as string).toContain(
-      'MUST NOT modify, commit or revert anything',
-    )
-  })
-
-  it('states the execution sandbox contract to every container kind, not just one', async () => {
-    // Platform facts no agent can derive from the checkout (every tool probed rather than assumed,
-    // no cluster or registry credentials, toolchain versions that are the environment's), plus the
-    // rule that an artifact this environment cannot execute is not incomplete for that reason.
-    // Absent, a coder and its reviewer each rediscovered that the Dockerfile they were asked for
-    // could not be built here.
-    for (const kind of ['coder', 'architect', 'reviewer', 'tester-api', 'merger']) {
-      const { executor: exec, captured: seen } = makeExecutor()
-      await exec.startJob(context(kind))
-      expect(seen[0]!.spec.systemPrompt as string).toContain(EXECUTION_SANDBOX_GUIDANCE)
-    }
-    // `reviewer` is in that list, which is what bounds how far the rule may go: unverifiable is
-    // not the same as correct, so the paragraph may not call the artifact correct nor tell the
-    // reviewer to withhold a defect it can actually see. Only the LIMIT is not a finding.
-    expect(EXECUTION_SANDBOX_GUIDANCE).not.toMatch(/complete and correct deliverable/)
-    expect(EXECUTION_SANDBOX_GUIDANCE).toMatch(/not raise the limit itself as a finding/)
-    expect(EXECUTION_SANDBOX_GUIDANCE).toMatch(/a defect you can actually see in the artifact/)
-    // And it describes the environment without naming one: the same body serves the harness image
-    // and, under `LOCAL_NATIVE_AGENTS`, the developer's own machine as a host process, where
-    // "an ephemeral Linux container" and "there is no Kubernetes tooling" are both false.
-    expect(EXECUTION_SANDBOX_GUIDANCE).toMatch(/a disposable working environment/)
-  })
-
   it('default (coder)', async () => {
     await executor.startJob(context('coder'))
     expect(captured[0]).toMatchSnapshot()
@@ -321,19 +252,6 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
     expect(spec.pushBranch).toBe('cat-factory/blk_1')
     expect(spec.pr).toBeDefined() // and opens a PR
     expect(spec.noChangesIsError).toBe(false)
-  })
-
-  // The reviewer-briefing (PR description) sentinel guidance rides ONLY a dispatch that opens a
-  // PR: the coder gets it; an in-place fixer (amends a PR whose description it doesn't own) and
-  // a code-commenter amend run do not.
-  it('asks a PR-opening coder for the reviewer briefing', async () => {
-    await executor.startJob(context('coder'))
-    expect(captured[0]!.spec.systemPrompt as string).toContain('PULL REQUEST DESCRIPTION')
-  })
-
-  it('does not ask an in-place fixer for the reviewer briefing', async () => {
-    await executor.startJob(context('fixer', { pullRequest: PR }))
-    expect(captured[0]!.spec.systemPrompt as string).not.toContain('PULL REQUEST DESCRIPTION')
   })
 
   // Read-only reference repos (doc-writer): a doc task with reference repos attached dispatches a
