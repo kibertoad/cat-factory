@@ -544,12 +544,12 @@ adapters) live in its own `AGENTS.md`.
 
 ### The `minimumReleaseAge` supply-chain gate
 
-Installs reject any registry package published inside the ~24h cutoff. The allow-list is
-`minimumReleaseAgeExclude` in `pnpm-workspace.yaml`.
+Installs reject any registry package published inside the 24h cutoff. **The gate is OFF unless
+`minimumReleaseAge: 1440` is set in `pnpm-workspace.yaml`**: pnpm has no default, so an unset value is
+not a shorter window but NO window, and `minimumReleaseAgeExclude` beside it then governs nothing.
 
-- **Only wildcard namespaces WE OWN** belong there (`@cat-factory/*`, `@toad-contracts/*`).
-- **Never add a per-version third-party exception**, and delete any that accrue (non-strict pnpm appends
-  them silently).
+- **Only wildcard namespaces WE OWN** belong on that allow-list (`@cat-factory/*`, `@toad-contracts/*`).
+- **Never add a per-version third-party exception**, and delete any that accrue.
 - **When upgrading, pick the latest version that already satisfies the rule**
   (`npm view <pkg> time --json`), staying within the compatible major.
 - **Do not touch the executor-harness** during a dependency sweep: its deps feed the published image, so

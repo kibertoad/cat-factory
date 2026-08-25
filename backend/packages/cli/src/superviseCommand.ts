@@ -22,6 +22,16 @@ import {
 import { resolveSuperviseConfig } from './supervise.js'
 
 /**
+ * Local wall-clock `HH:MM:SS` for a log prefix. Local rather than UTC on purpose: the reader is
+ * comparing these lines against a server log in the same terminal and against their own memory of
+ * when something broke, both of which are in local time.
+ */
+export function timestamp(at: Date = new Date()): string {
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return `${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}`
+}
+
+/**
  * Re-quote a token that contains whitespace. The child is launched as one shell string (see
  * `createChildLauncher`), so a path with a space in it would otherwise split into two arguments —
  * `C:\Program Files\nodejs\node.exe` being the case that matters on Windows.
@@ -107,8 +117,14 @@ export async function supervise(options: CliOptions): Promise<void> {
   const launcher = createChildLauncher({ command, cwd })
   const probe = createHealthProbe({ port, healthPath })
 
+  // Timestamped, because these lines are read INTERLEAVED with the supervised server's own output
+  // and are usually the only record of a transient outage. The supervised stack logs structured
+  // lines with their own timestamps; untimestamped supervisor lines could not be placed against
+  // them, so reconstructing when a stack was actually down meant interpolating from whatever
+  // neighbouring line happened to carry a clock. Local wall-clock time to the second matches what
+  // the reader sees elsewhere in the same terminal.
   const log = (message: string): void => {
-    process.stdout.write(`[supervise] ${message}\n`)
+    process.stdout.write(`[supervise ${timestamp()}] ${message}\n`)
   }
 
   const reaper = createPortReaper(shell, port, { log })
@@ -157,6 +173,22 @@ export async function supervise(options: CliOptions): Promise<void> {
     log,
     stopSignal: stopper.signal,
   })
+
+  // The one place an unexplained outage is still readable after the fact. Nothing crashed while it
+  // happened, so it leaves no trace in the supervised stack's own log, and on a supervisor left
+  // running for days the warning that named it has long since scrolled away. Repairs are summarised
+  // beside it because the contrast is the point: repairs are the supervisor working, unexplained
+  // outages are the stack cycling on its own.
+  log(
+    `stopped after ${outcome.ticks} probe(s): ${outcome.repairs} repair(s), ` +
+      `${outcome.unexplainedOutages} unexplained outage(s)`,
+  )
+  if (outcome.unexplainedOutages > 0) {
+    log(
+      '  ↳ the stack went down and came back on its own; nothing this supervisor did caused those. ' +
+        'Scroll back for the first one, which carries the likely cause.',
+    )
+  }
 
   // A supervisor that stopped because the command is broken must not report success — a wrapper
   // exiting 0 on a dead stack is the failure shape this whole command exists to make impossible.

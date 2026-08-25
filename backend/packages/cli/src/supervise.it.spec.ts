@@ -163,5 +163,19 @@ describe.skipIf(!existsSync(BIN))('cat-factory supervise (integration)', () => {
     expect(pids.length).toBeGreaterThanOrEqual(2)
     expect(pids[pids.length - 1]).not.toBe(firstPid)
     expect(output).toMatch(/repair #1/)
+
+    // Shut down cleanly and read the summary. This is the ONLY reader of the run's counters, and
+    // the only place they stay legible: on a supervisor left up for days, the line that reported
+    // each event scrolled away long ago, and an outage nothing repaired leaves no other trace at
+    // all. It has to be asserted out-of-process, because the counters only reach it through a
+    // real signal breaking the loop out of its poll interval.
+    process.kill(supervisor.pid as number, 'SIGINT')
+    const exited = await waitFor(() => Promise.resolve(supervisor?.exitCode !== null), 30_000)
+    expect(exited, `supervisor did not exit on SIGINT. Output:\n${output}`).toBe(true)
+    // Exit 0: it stopped because it was asked to, not because the command was broken.
+    expect(supervisor.exitCode).toBe(0)
+    expect(output, `no shutdown summary. Output:\n${output}`).toMatch(
+      /stopped after \d+ probe\(s\): \d+ repair\(s\), \d+ unexplained outage\(s\)/,
+    )
   })
 })
