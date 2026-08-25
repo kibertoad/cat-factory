@@ -1,5 +1,12 @@
 # @cat-factory/provider-cloudflare
 
+## 0.7.497
+
+### Patch Changes
+
+- @cat-factory/agents@0.142.4
+  - @cat-factory/kernel@0.318.1
+
 ## 0.7.496
 
 ### Patch Changes
