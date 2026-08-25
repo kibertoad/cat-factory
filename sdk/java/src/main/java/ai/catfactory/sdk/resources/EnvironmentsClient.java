@@ -14,8 +14,11 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The cluster this workspace provisions per-run environments onto: probe a candidate connection
- * without saving it, or bind one. The credential is write-only, so a read reports which secret
- * keys are stored and never their values.
+ * without saving it, bind one, or list what is already bound. The credential is write-only, so a
+ * read reports which secret keys are stored and never their values. The manifest-type catalog is
+ * the read under a service's `custom` provisioning pin: the ids a pin may name, each saying
+ * whether the deployment registered it in code or the workspace defined it, so a caller checks an
+ * id before a run pays to discover it resolves to nothing.
  * Reached from {@link CatFactoryClient}; not constructed directly.
  */
 public final class EnvironmentsClient {
@@ -54,6 +57,22 @@ public final class EnvironmentsClient {
      */
     public ListPublicEnvironmentConnectionsResponse listConnections() {
         return transport.request("GET", "/api/v1/environments/connections", null, Map.of(), new TypeReference<ListPublicEnvironmentConnectionsResponse>() {});
+    }
+
+    /**
+     * List the custom manifest types a service can pin
+     * Every custom-manifest-type id a service’s `custom` provisioning may name, with the label and
+     * default manifest path of each, and whether the deployment registered it in code
+     * (`registered`) or the workspace defined it (`workspace`). Those two are fixed by different
+     * people, which is why the source is reported. The read exists because a pin is checked
+     * against no registry on the way in: an id no handler serves is accepted and fails at the
+     * `deployer` step of a run already paid for, so a caller lists first and refuses before it
+     * spends.
+     * {@code GET /api/v1/environments/manifest-types} (operation {@code
+     * listPublicEnvironmentManifestTypes}).
+     */
+    public ListPublicEnvironmentManifestTypesResponse listManifestTypes() {
+        return transport.request("GET", "/api/v1/environments/manifest-types", null, Map.of(), new TypeReference<ListPublicEnvironmentManifestTypesResponse>() {});
     }
 
     /**

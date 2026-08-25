@@ -106,6 +106,14 @@ const EXPECTED: Record<string, unknown> = {
   webhookUrlSurvivesOmittedUpdate: true,
   webhookReadMatchesSaved: true,
   webhookNullAfterDelete: true,
+  // The transport diagnosis, which is the one failure a caller reads with no deployment to look
+  // at: all four clients must classify a refused connection as one (rather than asserting the
+  // deployment is unreachable) and must state what the client had seen from the origin. The
+  // MESSAGES differ per language and are not compared; what must agree is that each says both
+  // things.
+  connectionFailureIsTypedClass: true,
+  connectionFailureNamesTheCause: true,
+  connectionFailureStatesHistory: true,
   startedHasExecutionId: true,
   sseFramesAreKnown: true,
   runStatusIsKnown: true,

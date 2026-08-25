@@ -162,3 +162,39 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   }
   return (await response.json()) as T
 }
+
+/**
+ * A base URL with nothing behind it, for the case that asks each client what it says when the
+ * connection never lands.
+ *
+ * Allocated by BINDING port 0 and closing the listener again, rather than by naming a port
+ * believed to be free. Two things make the naive version wrong, and only one of them is obvious:
+ *
+ * - A guessed high port may be in use on the machine, and then the case reaches a real listener
+ *   and asserts nothing.
+ * - A LOW port may never be dialled at all. `fetch` implements the WHATWG bad-port list, so a
+ *   request to `http://127.0.0.1:1` is rejected before a socket is opened and the failure carries
+ *   no transport code to classify. Ports 1, 7, 9, 22, 25, 6000 and about seventy others are on
+ *   that list; Go, Python and Java implement no such rule, so the same fixture asks the four
+ *   clients about two DIFFERENT network conditions and only the TypeScript one goes red.
+ *
+ * The port is handed to all four programs so they diagnose the SAME condition, which is the only
+ * reading under which their four verdicts can be compared at all.
+ */
+export async function reserveDeadUrl(): Promise<string> {
+  const { createServer } = await import('node:net')
+  return await new Promise<string>((resolveUrl, reject) => {
+    const probe = createServer()
+    probe.once('error', reject)
+    probe.listen(0, '127.0.0.1', () => {
+      const address = probe.address()
+      if (address === null || typeof address === 'string') {
+        probe.close()
+        reject(new Error('sdk-smoketest: could not reserve a port to leave unlistened'))
+        return
+      }
+      const { port } = address
+      probe.close(() => resolveUrl(`http://127.0.0.1:${port}`))
+    })
+  })
+}

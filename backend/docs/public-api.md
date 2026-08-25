@@ -1061,22 +1061,23 @@ group is how a caller gets there without a browser: create the repository or ADO
 exists, connect the cluster, tell a service where its manifests live, and read back what the
 deployment actually has.
 
-| Method / path                                | Scope   | Behaviour                                                                                                                    |
-| -------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/v1/repos/bootstrap`               | `admin` | Create a repository and adapt it with the bootstrapper agent. `201` with a job to poll.                                      |
-| `GET /api/v1/repos/bootstrap/:jobId`         | `admin` | Poll one bootstrap. `404 bootstrap_job_not_found` for a job outside your workspace.                                          |
-| `GET /api/v1/repos/available`                | `admin` | The repositories your connection can REACH, linked or not. `?q=owner/name` point-reads one; `truncated` marks a capped list. |
-| `POST /api/v1/repos/link`                    | `admin` | Adopt a reachable repository by `owner`/`name`. Idempotent `200`; `404 repo_not_reachable` otherwise.                        |
-| `GET /api/v1/repos/:owner/:name/contents`    | `admin` | ONE file out of a LINKED repository, at `?ref=`. `?path=` is required; no directory listing.                                 |
-| `POST /api/v1/environments/connections/test` | `admin` | Probe a candidate cluster connection, persisting nothing. A refusal by the cluster is a `200` with `ok: false`.              |
-| `POST /api/v1/environments/connections`      | `admin` | Bind environment provisioning to a cluster. Idempotent: re-connecting replaces.                                              |
-| `GET /api/v1/environments/connections`       | `admin` | Every handler this workspace holds, with its secret KEYS and never their values.                                             |
-| `GET /api/v1/models`                         | `admin` | The models a run here could dispatch to, with `available` and `policyBlocked`.                                               |
-| `GET /api/v1/vcs/connection`                 | `admin` | The source-control connection and what it may do. `connection: null` when nothing is connected.                              |
-| `GET /api/v1/risk-policies`                  | `admin` | The risk policies, including which is the default for runs nothing is watching (yours). Pin one as `riskPolicyId`.           |
-| `GET /api/v1/model-presets`                  | `admin` | The model presets, including which is the workspace default. Pin one as `modelPresetId`.                                     |
-| `GET /api/v1/tracker/writeback`              | `admin` | What a task's linked tracker issue hears as its pull request opens, merges, or parks a review.                               |
-| `PATCH /api/v1/tracker/writeback`            | `admin` | Turn those actions on or off. MERGES: an action you omit keeps its stored value.                                             |
+| Method / path                                | Scope   | Behaviour                                                                                                                     |
+| -------------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/repos/bootstrap`               | `admin` | Create a repository and adapt it with the bootstrapper agent. `201` with a job to poll.                                       |
+| `GET /api/v1/repos/bootstrap/:jobId`         | `admin` | Poll one bootstrap. `404 bootstrap_job_not_found` for a job outside your workspace.                                           |
+| `GET /api/v1/repos/available`                | `admin` | The repositories your connection can REACH, linked or not. `?q=owner/name` point-reads one; `truncated` marks a capped list.  |
+| `POST /api/v1/repos/link`                    | `admin` | Adopt a reachable repository by `owner`/`name`. Idempotent `200`; `404 repo_not_reachable` otherwise.                         |
+| `GET /api/v1/repos/:owner/:name/contents`    | `admin` | ONE file out of a LINKED repository, at `?ref=`. `?path=` is required; no directory listing.                                  |
+| `POST /api/v1/environments/connections/test` | `admin` | Probe a candidate cluster connection, persisting nothing. A refusal by the cluster is a `200` with `ok: false`.               |
+| `POST /api/v1/environments/connections`      | `admin` | Bind environment provisioning to a cluster. Idempotent: re-connecting replaces.                                               |
+| `GET /api/v1/environments/connections`       | `admin` | Every handler this workspace holds, with its secret KEYS and never their values.                                              |
+| `GET /api/v1/environments/manifest-types`    | `admin` | Every custom-manifest-type id a service's `custom` provisioning may pin, and whether the deployment or the workspace owns it. |
+| `GET /api/v1/models`                         | `admin` | The models a run here could dispatch to, with `available` and `policyBlocked`.                                                |
+| `GET /api/v1/vcs/connection`                 | `admin` | The source-control connection and what it may do. `connection: null` when nothing is connected.                               |
+| `GET /api/v1/risk-policies`                  | `admin` | The risk policies, including which is the default for runs nothing is watching (yours). Pin one as `riskPolicyId`.            |
+| `GET /api/v1/model-presets`                  | `admin` | The model presets, including which is the workspace default. Pin one as `modelPresetId`.                                      |
+| `GET /api/v1/tracker/writeback`              | `admin` | What a task's linked tracker issue hears as its pull request opens, merges, or parks a review.                                |
+| `PATCH /api/v1/tracker/writeback`            | `admin` | Turn those actions on or off. MERGES: an action you omit keeps its stored value.                                              |
 
 **The reads here are `admin` rather than `read`, unlike `/repos` and `/pipelines`.** The difference
 is what they name: those name board CONTENT, where these name what the DEPLOYMENT has wired,
@@ -1283,6 +1284,48 @@ its own setup before and after) compares two stable lists rather than two insert
 Those two calls answer DIFFERENT questions, and a setup script wants both: `.../connections/test`
 proves the backend accepts your credential, this proves the workspace has a handler for it. Before the
 read existed a headless caller could only check the first and had to assume the second.
+
+**Nothing checks the `manifestId` you pin, so check it yourself before you spend a run.** The write
+validates the id as a STRING and against no registry: an id no handler serves is stored, reported
+back as configured, and fails at the `deployer` step of a run that has already paid for a design
+pass and an implementation. Refusing it at the write would narrow what a live integration may send,
+which this surface does not do (see the compatibility rules above), so the catalog is served beside
+it instead:
+
+```http
+GET /api/v1/environments/manifest-types
+200 { "manifestTypes": [ { "manifestId": "kargo", "label": "Kargo",
+                           "source": "registered",
+                           "defaultManifestPath": "deploy/.kargo.yml" } ] }
+```
+
+`source` is the half to act on: `registered` is a type this deployment holds in CODE, so an id
+missing from the list is a deployment change, where a missing `workspace` row is an edit anyone can
+make in the app. Those are different people to go and ask. `defaultManifestPath` is what a pin
+naming no `manifestPath` will deploy from, and `null` says the type declares none, so such a pin has
+nowhere to read a manifest. The list is ordered by `manifestId` for the same reason the handler list
+is ordered: a caller diffing two workspaces compares two stable lists.
+
+**Taking a pin back is the `infraless` member:**
+
+```http
+PATCH /api/v1/services/blk_...
+{ "provisioning": { "type": "infraless" } }
+```
+
+That leaves the service with no environment to provision, and it reads back with no `provisioning`
+at all: "stored infraless" and "never pinned" are the same fact to every reader in the platform, so
+the read does not invent a distinction between them. Omitting the key still means "leave the stored
+pin alone", which is what keeps a caller correcting a title from un-deploying a service, so the two
+are different edits and only the explicit `infraless` takes the pin back. It removes the WHOLE
+stored provisioning rather than the published half of it, engine leftovers the public shape cannot
+express included; a caller narrowing a pin sends the member it wants instead, and that patch
+overlays what is stored.
+
+It is a member rather than a `null` on the field because a null-valued optional field does not
+survive three of the four official clients: Go, Java and Python each drop one on the way out
+(`omitempty`, `@JsonInclude(NON_NULL)`, `if ... is not None`), so a null spelling of this edit
+would have been a silent no-op for every caller not on the TypeScript client.
 
 #### Reading what a run committed
 

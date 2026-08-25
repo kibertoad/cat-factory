@@ -10,6 +10,7 @@ import {
   CatFactoryTimeoutError,
   toApiError,
 } from './errors.ts'
+import { describeTransportFailure, type OriginHistory } from './diagnosis.ts'
 import { type EventStream, readEventStream } from './sse.ts'
 
 /** Per-call overrides. Every operation method takes one as its last argument. */
@@ -118,6 +119,13 @@ export class Transport {
    * supply it without rebuilding a configured client; a per-call `headers` entry still wins.
    */
   personalPassword: string | undefined
+  /**
+   * What this client has seen from the origin, kept so a transport failure can say whether the
+   * deployment was answering a moment ago. A response of ANY status counts: a 500 is still proof
+   * the origin is there, and it is the difference between "it restarted" and "that address never
+   * answered", which are the two readings a bare `failed to reach` collapses.
+   */
+  private readonly history: OriginHistory = { completedCalls: 0, lastCompletedAt: null }
 
   constructor(options: ClientOptions) {
     if (!options.baseUrl) throw new Error('cat-factory SDK: `baseUrl` is required.')
@@ -224,6 +232,8 @@ export class Transport {
           body: spec.body === undefined ? undefined : JSON.stringify(spec.body),
           signal: controller.signal,
         })
+        this.history.completedCalls += 1
+        this.history.lastCompletedAt = Date.now()
         if (response.ok) return response
 
         const requestId = response.headers.get('x-request-id')
@@ -260,7 +270,14 @@ export class Transport {
           continue
         }
         throw new CatFactoryConnectionError(
-          `cat-factory SDK: ${spec.method} ${spec.path} failed to reach ${this.baseUrl}.`,
+          describeTransportFailure({
+            method: spec.method,
+            path: spec.path,
+            baseUrl: this.baseUrl,
+            error: lastError,
+            history: this.history,
+            now: Date.now(),
+          }),
           { cause: lastError },
         )
       } finally {

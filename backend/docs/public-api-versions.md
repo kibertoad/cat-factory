@@ -977,3 +977,35 @@ one the Coder acted on; this is the only field that says the run advanced withou
 decision somebody made. The same fact appears in the run's verification report
 (`GET /api/v1/runs/{runId}/report`), whose payload gains a `followUps` section and moves to
 `version: 10`.
+
+## 1.61.0
+
+The two halves a `custom` provisioning pin was missing: a catalog to check an id against, and a
+way to take a pin back.
+
+`GET /api/v1/environments/manifest-types` publishes every custom-manifest-type id this workspace
+can pin, each with its `label`, its `defaultManifestPath` (null when the type declares none) and
+its `source`: `registered` for one the deployment holds in code, `workspace` for an editable row.
+Both tiers arrive as one list, the same one the app's own service inspector reads.
+
+It exists because nothing checks a pin on the way in, which is the part worth reading. A `custom`
+pin's `manifestId` is validated as a STRING and against no registry, so an id no handler serves is
+accepted, reported back as configured, and fails at the `deployer` step of a run that has already
+paid for a design pass and an implementation. Refusing the write instead would narrow what a live
+integration may send, which this surface does not do; the catalog is the additive answer, and a
+caller that lists before it pins can refuse before it spends.
+
+Alongside it, the service provisioning variant gains an `infraless` member, which
+`PATCH /api/v1/services/{serviceId}` accepts to take a stored pin back and leave the service with
+no environment to provision. Omitting the key keeps its existing meaning exactly (the stored pin is
+left alone, so a caller correcting a title does not un-deploy a service), and a member that was
+previously rejected is now accepted, so nothing a consumer sends today changes meaning. Taking a
+pin back removes the whole stored provisioning rather than the published half of it; a caller
+narrowing a pin sends the member it wants instead. Until this shipped, a suite that pinned a shared
+board's frame changed it permanently, because the variant had two members and neither meant "none".
+
+The undo is a MEMBER rather than a `provisioning: null`, and that choice is a constraint on this
+surface generally: a null-valued OPTIONAL field is not expressible from the Go, Java or Python
+clients, each of which drops one when serializing (`omitempty`, `@JsonInclude(NON_NULL)`,
+`if ... is not None`). A field where absent and null must mean different things is therefore a
+shape only the TypeScript client can drive, and `/api/v1` does not have one.

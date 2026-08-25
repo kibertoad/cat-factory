@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from cat_factory import (  # noqa: E402
     SDK_VERSION,
     CatFactoryClient,
+    CatFactoryConnectionError,
     CatFactoryForbiddenError,
     CatFactoryNotFoundError,
     CatFactoryUnauthorizedError,
@@ -54,6 +55,7 @@ def require_env(name: str) -> str:
 base_url = require_env("CAT_FACTORY_BASE_URL")
 api_key = require_env("CAT_FACTORY_API_KEY")
 read_key = require_env("CAT_FACTORY_READ_KEY")
+dead_url = require_env("CAT_FACTORY_SMOKETEST_DEAD_URL")
 out_path = require_env("CAT_FACTORY_SMOKETEST_OUT")
 
 observations: dict[str, object] = {}
@@ -237,6 +239,24 @@ def expect_insufficient_scope() -> None:
         observations["forbiddenCode"] = exc.code
 
 
+def expect_connection_refused() -> None:
+    # The one failure with no deployment on the other end of it, and the one whose MESSAGE is the
+    # whole product: a caller with no checkout reads this line and nothing else. All four clients
+    # must name the cause (nothing listening) rather than assert unreachability, and must say what
+    # this client had seen from the origin, which separates a restart from a bad address.
+    # The URL is RESERVED by the harness (a port bound and released), never named here: a
+    # fetch-based runtime refuses the WHATWG bad-port list before opening a socket, so a hardcoded
+    # low port asks the four clients different questions. See the harness's `reserveDeadUrl`.
+    unreachable = CatFactoryClient(base_url=dead_url, api_key=api_key, max_retries=0)
+    try:
+        unreachable.services.list()
+        failures.append("error: connection refused — expected a transport failure, got a success")
+    except CatFactoryConnectionError as exc:
+        observations["connectionFailureIsTypedClass"] = True
+        observations["connectionFailureNamesTheCause"] = "nothing is listening" in str(exc)
+        observations["connectionFailureStatesHistory"] = "has not completed a call" in str(exc)
+
+
 def start_task() -> None:
     body = StartPublicTask(pipeline_id=state["pipeline_id"] or None)
     task = client.tasks.start(state["task_id"], body)
@@ -294,6 +314,7 @@ step("webhook.get / set / delete", round_trip_webhook)
 step("error: not found", expect_not_found)
 step("error: unauthorized", expect_unauthorized)
 step("error: insufficient scope", expect_insufficient_scope)
+step("error: connection refused", expect_connection_refused)
 step("tasks.start", start_task)
 step("tasks.stream (SSE)", stream_task)
 step("tasks.getRun", get_run)

@@ -6,6 +6,7 @@ import {
   linkPublicRepoContract,
   listPublicAvailableReposContract,
   listPublicEnvironmentConnectionsContract,
+  listPublicEnvironmentManifestTypesContract,
   listPublicModelPresetsContract,
   listPublicRiskPoliciesContract,
   listPublicWiredModelsContract,
@@ -24,7 +25,9 @@ import {
   type ModelCatalog,
   type ModelPreset,
   type PublicAvailableRepo,
+  type CustomManifestType,
   type PublicBootstrapJob,
+  type PublicCustomManifestType,
   type PublicEnvironmentConnection,
   type PublicEnvironmentConnectionView,
   type PublicEnvironmentHandler,
@@ -782,6 +785,22 @@ function registerEnvironmentRoutes(app: Hono<AppEnv>): void {
     return c.json(toPublicConnectionView(view), 201)
   })
 
+  // What a `custom` pin may NAME, both tiers in one list: the manifest types this deployment
+  // registers in code and the rows this workspace defines. The service method is the SAME one the
+  // app's own inspector reads, so a caller checking an id before it pins cannot be told something
+  // different from what the engine will resolve.
+  //
+  // It exists because nothing checks a pin on the way in. `publicManifestIdSchema` checks a string
+  // format, so an id no handler serves is stored and fails at the `deployer` step of a run already
+  // paid for; refusing it at the write would narrow what a live integration may send (ADR 0034).
+  buildHonoRoute(app, listPublicEnvironmentManifestTypesContract, async (c) => {
+    const auth = await authorizeOrThrow(c, listPublicEnvironmentManifestTypesContract.minScope)
+    const environments = requireEnvironments(c)
+    const types = await environments.connectionService.listCustomTypes(auth.workspaceId)
+    const manifestTypes = types.map(toPublicManifestType).sort(byManifestId)
+    return c.json({ manifestTypes }, 200)
+  })
+
   // The read half. Ordered so a caller diffing two workspaces (or its own setup before and after)
   // compares two stable lists rather than two insertion orders.
   buildHonoRoute(app, listPublicEnvironmentConnectionsContract, async (c) => {
@@ -791,6 +810,32 @@ function registerEnvironmentRoutes(app: Hono<AppEnv>): void {
     const connections = handlers.map(toPublicHandler).sort(byHandlerIdentity)
     return c.json({ connections }, 200)
   })
+}
+
+/**
+ * Project one catalog entry onto what a caller pinning an id can act on.
+ *
+ * `fixerPrompt` and `acceptsInputHint` stay off it deliberately: the first is internal text this
+ * repo rewrites freely, and freezing either on a surface that may never be reshaped buys a caller
+ * nothing. `defaultManifestPath` is published because it is the value a pin that names no
+ * `manifestPath` will actually deploy from, and `null` says the type declares none rather than
+ * that the field is missing.
+ */
+export function toPublicManifestType(type: CustomManifestType): PublicCustomManifestType {
+  return {
+    manifestId: type.manifestId,
+    label: type.label,
+    source: type.source,
+    defaultManifestPath: type.defaultManifestPath ?? null,
+  }
+}
+
+/** By the id a pin names, comparing code units for the reason {@link byHandlerIdentity} gives. */
+export function byManifestId(
+  left: PublicCustomManifestType,
+  right: PublicCustomManifestType,
+): number {
+  return compareCodeUnits(left.manifestId, right.manifestId)
 }
 
 /**
@@ -896,6 +941,13 @@ function mergeProvisioning(
 ): ServiceProvisioning {
   const base = stored?.type === patch.type ? stored : undefined
   switch (patch.type) {
+    case 'infraless':
+      // Taking the pin back, and the ONE member that does not overlay: `...base` is deliberately
+      // not spread even when the stored column is already `infraless`. The whole bag belongs to
+      // the engine being left behind, so carrying any of it forward would leave a service that
+      // provisions nothing still holding another engine's images and Secret injections, ready to
+      // come back the next time someone pins it.
+      return { type: 'infraless' }
     case 'kubernetes':
       return {
         ...base,

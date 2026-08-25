@@ -127,6 +127,17 @@ it is rather than the obvious way.
    pull request is read off the run's REPORT (`checkEphemeralEnvironment`); a claim about the
    MERGED code is provisioned fresh from the default branch. Neither half can cover both.
 
+9. **The create itself is the one window a client cannot close, and a resumed pass must be read
+   knowing it.** `fileAndDrive` records a task id on the line after the create, which is as early as
+   any client can: if the create's response is lost in transit, the deployment may have made the row
+   and the id never reaches the caller, so nothing is recorded and the next pass files a second task.
+   That is the same rule as 7 meeting the one state a client cannot observe itself entering, and it
+   is not fixable by reordering: closing it needs a caller-supplied idempotency key on the `/api/v1`
+   writes that cost real work, which is a permanent shape on a frozen surface and a decision of its
+   own. What a pass leaves behind is a task with no run started and no budget spent, and the SDK's
+   connection diagnosis is what tells this apart from a create that never landed: it names the cause
+   and says whether the deployment had been answering.
+
 ## Seams
 
 Four things the kit deliberately does NOT decide, because only a suite can:

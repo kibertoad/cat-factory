@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type {
   Block,
   BootstrapJob,
+  CustomManifestType,
   EnvironmentHandlerView,
   GitHubAvailableRepo,
   GitHubConnection,
@@ -22,6 +23,8 @@ import type { ServerContainer } from '../../http/env.js'
 import {
   asVcsRefusal,
   byHandlerIdentity,
+  byManifestId,
+  toPublicManifestType,
   readGradableFile,
   readVcsConnection,
   toBlockPatch,
@@ -153,6 +156,37 @@ describe('toBlockPatch', () => {
       localDevOnly: true,
     } as ServiceProvisioning)
     expect(patch.provisioning).toEqual({ type: 'custom', manifestId: 'kargo', localDevOnly: true })
+  })
+
+  it('TAKES THE PIN BACK on an explicit infraless, which is how a caller undoes its own write', () => {
+    // Omitting and naming `infraless` are different edits: omitted LEAVES the stored pin (a caller
+    // correcting a title must not un-deploy a service), and until `infraless` was a member a suite
+    // that pinned a shared board's frame changed it permanently. It is a MEMBER rather than a null
+    // because a null-valued optional field does not survive the Go, Java or Python clients, which
+    // would have made the undo a silent no-op for three of the four.
+    const patch = toBlockPatch({ provisioning: { type: 'infraless' } }, {
+      type: 'custom',
+      manifestId: 'kargo',
+      manifestPath: 'deploy/preview.yml',
+    } as ServiceProvisioning)
+    expect(patch.provisioning).toEqual({ type: 'infraless' })
+    // And the un-pinned service reads back with no `provisioning` at all, which is what a caller
+    // checking its own undo sees: "stored infraless" and "never pinned" are one fact here.
+    expect('provisioning' in toPublicService(frame({ provisioning: patch.provisioning }))).toBe(
+      false,
+    )
+  })
+
+  it('drops the WHOLE stored bag when the pin is taken back, engine leftovers included', () => {
+    // The one member that does not overlay. Anything the public shape cannot express (image
+    // overrides, Secret injections) belongs to the engine being left behind, so a service that
+    // provisions nothing must not keep it waiting to come back on the next pin.
+    const patch = toBlockPatch({ provisioning: { type: 'infraless' } }, {
+      type: 'kubernetes',
+      manifestSource: { type: 'colocated', path: 'deploy/k8s' },
+      localDevOnly: true,
+    } as ServiceProvisioning)
+    expect(patch.provisioning).toEqual({ type: 'infraless' })
   })
 
   it('distinguishes an empty-string description from an omitted one', () => {
@@ -640,5 +674,50 @@ describe('readGradableFile', () => {
         'main',
       ),
     ).rejects.toBeInstanceOf(UnavailableError)
+  })
+})
+
+describe('toPublicManifestType', () => {
+  const registered = (overrides: Partial<CustomManifestType> = {}): CustomManifestType =>
+    ({
+      manifestId: 'kargo',
+      label: 'Kargo',
+      source: 'registered',
+      ...overrides,
+    }) as CustomManifestType
+
+  it('publishes what a caller pinning an id can act on, and nothing it cannot', () => {
+    // `fixerPrompt` is internal text this repo rewrites freely and `acceptsInputHint` describes an
+    // input shape the caller does not send here: freezing either on `/api/v1` buys nobody anything.
+    expect(
+      toPublicManifestType(
+        registered({
+          defaultManifestPath: 'deploy/preview.yaml',
+          fixerPrompt: 'write the manifest',
+          acceptsInputHint: '{ image }',
+        }),
+      ),
+    ).toEqual({
+      manifestId: 'kargo',
+      label: 'Kargo',
+      source: 'registered',
+      defaultManifestPath: 'deploy/preview.yaml',
+    })
+  })
+
+  it('reports a declared-nothing default as null rather than omitting the field', () => {
+    // An absent key and a null read differently to a generated client, and "this type declares no
+    // default path" is a fact a caller acts on: a pin naming no `manifestPath` deploys nothing.
+    expect(toPublicManifestType(registered()).defaultManifestPath).toBeNull()
+  })
+
+  it('orders by the id a pin names, comparing code units', () => {
+    const ids = [registered({ manifestId: 'nomad' }), registered({ manifestId: 'Kargo' })]
+      .map(toPublicManifestType)
+      .sort(byManifestId)
+      .map((type) => type.manifestId)
+    // Code units, not a locale collation: the same catalog must serialise identically from a
+    // workerd isolate and a Node build with a different ICU.
+    expect(ids).toEqual(['Kargo', 'nomad'])
   })
 })

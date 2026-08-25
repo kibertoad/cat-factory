@@ -138,6 +138,19 @@ discarding a configured client (and its connection pool) to send one header is n
 holds it in an `atomic.Pointer` and Java in a `volatile` field, because both clients are documented
 as safe to share across threads and this is the one piece of their configuration that moves.
 
+**The connection-failure cause vocabulary is PORTED into each transport, and pinned by a guard.**
+A transport failure is classified rather than reported as a reachability verdict, and the member
+list it classifies into is the platform's own `connectionFailureCauseSchema` (in
+`@cat-factory/contracts`, because the SPA holds the translated copy per member). No client can
+import it, so each re-states it against the codes, exception types and errnos its own runtime
+produces. Four copies is the cost of the no-dependency promise; four copies DRIFTING is not, and
+nothing inside an SDK can notice, because no test in a client can see the picklist. So
+`node scripts/check-sdk-connection-causes.mjs` reads the picklist and all four ported lists and
+fails on any disagreement, in both directions: a member added to the platform that a client cannot
+name, and a member a client still claims after the platform retired it. It runs in the always-on
+repo-guards CI job. What each cause is MATCHED ON stays per-language and is pinned by that client's
+own tests.
+
 ## Smoketests
 
 [`backend/internal/sdk-smoketest`](../backend/internal/sdk-smoketest) boots a real Node backend
@@ -149,6 +162,13 @@ The comparison is the point. A per-SDK test can only assert that a client matche
 author expected; four reports compared against each other catch one language decoding a field
 differently, mapping a refusal to the wrong class, dropping a null, or paginating one page
 short, including when nobody had written down what the right answer was.
+
+**A fixture the four clients do not experience identically compares nothing.** The
+connection-failure case is the one to watch: its base URL is a port the harness RESERVES (binds,
+then closes) and passes to all four, never a port named in the source. A named low port looks
+inert and is not: `fetch` implements the WHATWG bad-port list, so a TypeScript client never opens a
+socket to `127.0.0.1:1` and classifies a rejection the other three, which have no such rule, never
+see.
 
 ```sh
 DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test \

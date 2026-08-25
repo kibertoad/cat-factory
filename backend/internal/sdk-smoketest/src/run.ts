@@ -31,7 +31,7 @@ import { existsSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { seedWorkspace, startBackend } from './backend.ts'
+import { reserveDeadUrl, seedWorkspace, startBackend } from './backend.ts'
 import { compareGatekeeperReport, runGatekeeperPhase } from './gatekeeper.ts'
 import { compareMcpReport, MCP_BIN, runMcpPhase } from './mcp.ts'
 import { compareHostedMcpReport, runHostedMcpPhase } from './mcpHosted.ts'
@@ -66,6 +66,8 @@ if (selected.length === 0 && !runMcp && !runHosted && !runGatekeeper) {
 
 const workDir = await mkdtemp(join(tmpdir(), 'cat-factory-sdk-smoketest-'))
 const backend = await startBackend(port)
+// Reserved ONCE, so the four clients diagnose the same unlistened port rather than four of them.
+const deadUrl = await reserveDeadUrl()
 const reports: SdkReport[] = []
 const skipped: string[] = []
 const errored: string[] = []
@@ -162,6 +164,7 @@ try {
           baseUrl: backend.baseUrl,
           adminKey: seeded.adminKey,
           readKey: seeded.readKey,
+          deadUrl,
           outPath: join(workDir, `${runner.name}.json`),
         }),
       )

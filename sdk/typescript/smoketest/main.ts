@@ -16,6 +16,7 @@
 import { writeFileSync } from 'node:fs'
 import {
   CatFactoryClient,
+  CatFactoryConnectionError,
   CatFactoryForbiddenError,
   CatFactoryNotFoundError,
   CatFactoryUnauthorizedError,
@@ -25,6 +26,7 @@ import {
 const baseUrl = requireEnv('CAT_FACTORY_BASE_URL')
 const apiKey = requireEnv('CAT_FACTORY_API_KEY')
 const readOnlyKey = requireEnv('CAT_FACTORY_READ_KEY')
+const deadUrl = requireEnv('CAT_FACTORY_SMOKETEST_DEAD_URL')
 const outPath = requireEnv('CAT_FACTORY_SMOKETEST_OUT')
 
 function requireEnv(name: string): string {
@@ -206,6 +208,30 @@ await step('error: insufficient scope', async () => {
       observations.forbiddenStatus = error.status
       observations.forbiddenCode = error.code
     }
+  }
+})
+
+await step('error: connection refused', async () => {
+  // The one failure with no deployment on the other end of it, and the one whose MESSAGE is the
+  // whole product: a caller with no checkout reads this line and nothing else. All four clients
+  // must name the cause (nothing listening) rather than assert unreachability, and must say what
+  // this client had seen from the origin, which is what separates a restart from a bad address.
+  // The URL is RESERVED by the harness (a port bound and released), never named here: `fetch`
+  // refuses the WHATWG bad-port list before opening a socket, so a hardcoded low port asks this
+  // client a different question than it asks the other three. See `reserveDeadUrl`.
+  const unreachable = new CatFactoryClient({
+    baseUrl: deadUrl,
+    apiKey,
+    maxRetries: 0,
+  })
+  try {
+    await unreachable.services.list()
+    failures.push('error: connection refused — expected a transport failure, got a success')
+  } catch (error) {
+    observations.connectionFailureIsTypedClass = error instanceof CatFactoryConnectionError
+    const message = error instanceof Error ? error.message : String(error)
+    observations.connectionFailureNamesTheCause = message.includes('nothing is listening')
+    observations.connectionFailureStatesHistory = message.includes('has not completed a call')
   }
 })
 

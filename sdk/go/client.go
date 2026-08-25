@@ -83,6 +83,12 @@ type Client struct {
 	// one field is settable after construction: see SetPersonalPassword.
 	personalPassword atomic.Pointer[string]
 
+	// What this client has seen from the origin, so a transport failure can say whether the
+	// deployment was answering a moment ago. A response of ANY status counts: a 500 is still
+	// proof the origin is there, and that is the difference between "it restarted" and "that
+	// address never answered", which are the two readings a bare "failed to reach" collapses.
+	origin originTracker
+
 	// Headless jobs: a public, inline pipeline run against a brief.
 	Jobs *JobsService
 	// The workspace's board services.
@@ -420,8 +426,9 @@ func (c *Client) do(ctx context.Context, spec requestSpec, kind responseKind, re
 			if timedOut {
 				return nil, &TimeoutError{Method: spec.Method, Path: spec.Path, Timeout: c.timeout}
 			}
-			return nil, &ConnectionError{Method: spec.Method, Path: spec.Path, Err: err}
+			return nil, c.connectionFailure(spec, err)
 		}
+		c.recordAnswer()
 		if response.StatusCode < 400 {
 			// Headers are in, so a stream's deadline is done: what follows is the stream itself.
 			deadline.headersReceived()
@@ -452,6 +459,27 @@ func (c *Client) do(ctx context.Context, spec requestSpec, kind responseKind, re
 	}
 }
 
+// recordAnswer notes that the origin ANSWERED, which is what a later failure is read against.
+func (c *Client) recordAnswer() {
+	c.origin.recordAnswer()
+}
+
+// history is what this client can say about the origin at the moment a request failed.
+func (c *Client) history() originHistory {
+	return c.origin.snapshot()
+}
+
+// connectionFailure wraps a transport fault in the classified account of it. The wrapped error is
+// kept verbatim, so errors.Is/errors.As still answer for a caller branching on the cause.
+func (c *Client) connectionFailure(spec requestSpec, err error) *ConnectionError {
+	return &ConnectionError{
+		Method:    spec.Method,
+		Path:      spec.Path,
+		Err:       err,
+		diagnosis: describeTransportFailure(spec.Method, spec.Path, c.baseURL, err, c.history()),
+	}
+}
+
 // cancellingBody ties a response body's lifetime to its attempt, so the attempt is released
 // exactly when the caller closes the body rather than being leaked or, worse, cancelled while the
 // body is still being read (which is what would kill an SSE stream the moment it was handed over).
@@ -476,7 +504,7 @@ func (c *Client) request(ctx context.Context, spec requestSpec, out any) error {
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		return &ConnectionError{Method: spec.Method, Path: spec.Path, Err: err}
+		return c.connectionFailure(spec, err)
 	}
 	if len(body) == 0 {
 		return nil
@@ -514,7 +542,7 @@ func (c *Client) requestBytes(ctx context.Context, spec requestSpec) ([]byte, er
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		return nil, &ConnectionError{Method: spec.Method, Path: spec.Path, Err: err}
+		return nil, c.connectionFailure(spec, err)
 	}
 	return body, nil
 }

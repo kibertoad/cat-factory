@@ -156,6 +156,30 @@ describe('updatePublicServiceSchema', () => {
       title: 'Catalog API',
     })
   })
+
+  it('admits an infraless provisioning as the one field that IS the patch', () => {
+    // Taking the pin back is a real edit, so it has to satisfy the at-least-one-field check the
+    // same way a title does. The check reads through `!== undefined`, which is what keeps the two
+    // apart: omitted leaves the stored pin alone, and only an explicit member takes it back.
+    expect(v.parse(updatePublicServiceSchema, { provisioning: { type: 'infraless' } })).toEqual({
+      provisioning: { type: 'infraless' },
+    })
+  })
+
+  it('refuses a NULL provisioning, because the undo is a member', () => {
+    // Not an oversight, and the reason is about the CLIENTS rather than the schema. A null-valued
+    // optional field does not survive the Go, Java or Python clients, each of which drops one when
+    // serializing, so a null spelling of this edit would reach the server as an omission and
+    // silently leave the pin in place for three of the four. `infraless` says the same thing and
+    // is expressible everywhere.
+    expect(() => v.parse(updatePublicServiceSchema, { provisioning: null })).toThrow()
+  })
+
+  it('still refuses a provisioning that is not a member', () => {
+    // The new member widens what is accepted and nothing else: a garbled variant is still a 400
+    // rather than a pin stored as a shape no deploy can read.
+    expect(() => v.parse(updatePublicServiceSchema, { provisioning: { type: 'nomad' } })).toThrow()
+  })
 })
 
 describe('linkPublicRepoSchema', () => {

@@ -653,6 +653,42 @@ export const publicEnvironmentHandlerListSchema = v.object({
 })
 export type PublicEnvironmentHandlerList = v.InferOutput<typeof publicEnvironmentHandlerListSchema>
 
+/**
+ * One entry of the workspace's custom-manifest-type catalog: what a `custom` pin may NAME.
+ *
+ * The read that was missing under the pin itself. A `custom` pin is a `manifestId` matched against
+ * a handler, and nothing on the write path checks it: `publicManifestIdSchema` checks a string
+ * FORMAT and no registry, so an id no handler serves is accepted and the failure surfaces at the
+ * `deployer` step of a run that has already been paid for. Refusing it at the write would be the
+ * cleanest statement of that and is a break under ADR 0034 (it narrows what a live integration may
+ * send), so the answer is additive: publish what is pinnable and let a caller check before it
+ * spends.
+ *
+ * `source` is the half a caller acts on. A `registered` type is code in the deployment's own
+ * composition root, so an id missing from this list is a deployment change; a `workspace` one is a
+ * row, editable in the app. Those take different people, which is why the field is published rather
+ * than left to be inferred from the id.
+ *
+ * `fixerPrompt` and `acceptsInputHint` are deliberately NOT published. A prompt is internal text
+ * this repo rewrites freely, and freezing it on a surface that may never be reshaped buys a caller
+ * nothing it can act on.
+ */
+export const publicCustomManifestTypeSchema = v.object({
+  /** The id a service's `custom` provisioning pins. */
+  manifestId: v.string(),
+  label: v.string(),
+  /** `registered` (code, in the deployment's composition root) or `workspace` (an editable row). */
+  source: v.picklist(['registered', 'workspace']),
+  /** Where the manifest is read from when a pin names no `manifestPath`; null when it declares none. */
+  defaultManifestPath: v.nullable(v.string()),
+})
+export type PublicCustomManifestType = v.InferOutput<typeof publicCustomManifestTypeSchema>
+
+export const publicCustomManifestTypeListSchema = v.object({
+  manifestTypes: v.array(publicCustomManifestTypeSchema),
+})
+export type PublicCustomManifestTypeList = v.InferOutput<typeof publicCustomManifestTypeListSchema>
+
 // ---- 4. A service's provisioning (the SOURCE half) --------------------------
 
 /**
@@ -681,6 +717,29 @@ export type PublicEnvironmentHandlerList = v.InferOutput<typeof publicEnvironmen
  */
 export const publicServiceProvisioningSchema = v.variant('type', [
   v.object({ type: v.literal('kubernetes'), manifestSource: publicKubernetesManifestSourceSchema }),
+  /**
+   * No environment: the member that TAKES A PIN BACK.
+   *
+   * A service that names no engine is a state the platform has always had (every reader treats an
+   * absent provisioning column as exactly this), and it was the one state this surface could not
+   * say. So a caller could pin a service and never unpin it, and a suite that pinned a shared
+   * board's frame changed it permanently.
+   *
+   * It is a MEMBER rather than a `null` on the patch field deliberately. A null would have made
+   * `provisioning` the only field in `/api/v1` where absent and present-but-null mean different
+   * things, and that distinction does not survive into three of the four official clients: Go,
+   * Java and Python all drop a null-valued optional field on the way out (`omitempty`,
+   * `@JsonInclude(NON_NULL)`, `if ... is not None`), so the clear would have silently degraded
+   * into a leave-alone edit for everyone not on the TypeScript client. A named member is
+   * expressible everywhere, and it says what the service BECOMES rather than only what it stops
+   * being.
+   *
+   * Asymmetric with the read on purpose: a service provisioned this way reports NO `provisioning`
+   * key rather than this member, because "stored infraless" and "never pinned" are the same fact
+   * to every reader in the platform, and publishing them as two would invent a distinction with
+   * nothing behind it.
+   */
+  v.object({ type: v.literal('infraless') }),
   v.object({
     type: v.literal('custom'),
     /**
@@ -708,6 +767,18 @@ export const updatePublicServiceSchema = v.pipe(
   v.object({
     title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
     description: v.optional(descriptionField),
+    /**
+     * Where this service's per-run manifests live. Omitted LEAVES the stored pin alone; sending
+     * `{ type: 'infraless' }` takes it back, leaving the service with no environment to provision.
+     *
+     * Omission has to keep meaning "leave alone" or a caller correcting a title would un-deploy a
+     * service, which is why taking a pin back needs a member of its own rather than an absence.
+     *
+     * `infraless` clears the WHOLE stored provisioning, not the published half of it: the service
+     * is left as one with no environment, which is what taking a pin back means. A caller
+     * NARROWING a pin rather than removing it sends the member it wants instead, and that patch
+     * overlays the stored bag.
+     */
     provisioning: v.optional(publicServiceProvisioningSchema),
   }),
   v.check(

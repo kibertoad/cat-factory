@@ -20,6 +20,7 @@ from collections.abc import Callable, Mapping
 from typing import Any
 from urllib.parse import urlencode
 
+from ._diagnosis import OriginHistory, describe_transport_failure
 from ._sse import EventStream
 from .errors import (
     CatFactoryConnectionError,
@@ -30,7 +31,7 @@ from .errors import (
 )
 
 #: SDK version, stamped into ``User-Agent``. Kept in step with pyproject.toml by ``check:sdk``.
-SDK_VERSION = "0.5.0"
+SDK_VERSION = "0.6.0"
 
 #: Methods that may be replayed after a failure.
 #:
@@ -78,6 +79,11 @@ class Transport:
             **dict(headers or {}),
         }
         self._opener = opener or urllib.request.build_opener()
+        # What this client has seen from the origin, so a transport failure can say whether the
+        # deployment was answering a moment ago. A response of ANY status counts: a 500 is still
+        # proof the origin is there, and that is the difference between "it restarted" and "that
+        # address never answered", which are the two readings a bare "failed to reach" collapses.
+        self._history = OriginHistory()
         #: The personal password sent on every request while set, for a key bound to a user.
         #: Mutable, because a caller learns it is needed from a 428 and must be able to supply it
         #: without rebuilding a configured client.
@@ -155,15 +161,19 @@ class Transport:
         caller --- who knows which events it has already acted on --- is the only party that can
         decide whether that is safe.
         """
-        request = self._build(method, path, body, query, "text/event-stream")
         try:
+            request = self._build(method, path, body, query, "text/event-stream")
             # No `with`: the response IS the stream, and closing it here would close the socket
             # the caller is about to read from. `EventStream.close()` owns it from now on.
             raw = self._opener.open(request, timeout=timeout or self._timeout)
         except urllib.error.HTTPError as exc:
+            self._record_answer()
             raise self._from_http_error(exc) from exc
+        except ValueError as exc:
+            raise self._rejected_before_send(exc, method, path) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise self._from_transport_error(exc, method, path) from exc
+        self._record_answer()
         _release_read_deadline(raw)
         return EventStream(raw)
 
@@ -208,11 +218,14 @@ class Transport:
         deadline = timeout if timeout is not None else self._timeout
 
         for attempt in range(budget + 1):
-            request = self._build(method, path, body, query, accept)
             try:
+                request = self._build(method, path, body, query, accept)
                 with self._opener.open(request, timeout=deadline) as response:
+                    self._record_answer()
                     return response.read()
             except urllib.error.HTTPError as exc:
+                # An HTTPError IS a response: the origin answered, whatever it answered with.
+                self._record_answer()
                 retriable = method in _IDEMPOTENT and exc.code in _RETRIABLE_STATUS
                 if attempt < budget and retriable:
                     # Honour `Retry-After` when the server states one: it is the deployment's own
@@ -220,6 +233,8 @@ class Transport:
                     time.sleep(_retry_after(exc) or _backoff_seconds(attempt))
                     continue
                 raise self._from_http_error(exc) from exc
+            except ValueError as exc:
+                raise self._rejected_before_send(exc, method, path) from exc
             except (urllib.error.URLError, TimeoutError, OSError) as exc:
                 if attempt < budget and method in _IDEMPOTENT:
                     time.sleep(_backoff_seconds(attempt))
@@ -235,6 +250,37 @@ class Transport:
             parsed = raw.decode("utf-8", errors="replace")
         return to_api_error(exc.code, parsed, exc.headers.get("x-request-id"))
 
+    def _record_answer(self) -> None:
+        """Note that the origin ANSWERED, which is what a later failure is read against."""
+        self._history.completed_calls += 1
+        self._history.last_completed_at = time.monotonic()
+
+    def _rejected_before_send(
+        self, exc: ValueError, method: str, path: str
+    ) -> CatFactoryError:
+        """Diagnose a request the stdlib refused to send at all.
+
+        ``http.client`` rejects a header value carrying a control character with a bare
+        ``ValueError``, and ``urllib.request.Request`` rejects a base URL that is not a URL the
+        same way. Both happen BEFORE a socket is opened, and neither is an ``OSError``, so
+        neither reached the ``except`` that classifies: the ``invalid-header`` cause existed
+        with nothing able to produce it, and an API key pasted with a line break in it surfaced
+        as a stdlib traceback rather than as the one sentence naming what to fix.
+
+        Never retried, unlike a transport failure: the same inputs build the same rejection
+        every time, so a retry spends the budget to arrive at the identical message.
+        """
+        return CatFactoryConnectionError(
+            describe_transport_failure(
+                method=method,
+                path=path,
+                base_url=self._base_url,
+                exc=exc,
+                history=self._history,
+                now=time.monotonic(),
+            )
+        )
+
     def _from_transport_error(self, exc: Exception, method: str, path: str) -> CatFactoryError:
         # A timeout and a connection failure need DIFFERENT reactions --- one may succeed with a
         # longer budget, the other will not --- so they stay apart rather than collapsing into
@@ -243,8 +289,17 @@ class Transport:
             return CatFactoryTimeoutError(
                 f"cat-factory SDK: {method} {path} exceeded its deadline."
             )
+        # Everything else is CLASSIFIED rather than reported as a reachability verdict: see
+        # ``_diagnosis.py`` for why "failed to reach" was the one reading that could be false.
         return CatFactoryConnectionError(
-            f"cat-factory SDK: {method} {path} failed to reach {self._base_url} ({exc})."
+            describe_transport_failure(
+                method=method,
+                path=path,
+                base_url=self._base_url,
+                exc=exc,
+                history=self._history,
+                now=time.monotonic(),
+            )
         )
 
 

@@ -20,6 +20,7 @@ package ai.catfactory.sdk.smoketest;
 
 import ai.catfactory.sdk.CatFactoryClient;
 import ai.catfactory.sdk.CatFactoryApiException;
+import ai.catfactory.sdk.CatFactoryConnectionException;
 import ai.catfactory.sdk.CatFactoryForbiddenException;
 import ai.catfactory.sdk.CatFactoryNotFoundException;
 import ai.catfactory.sdk.CatFactoryUnauthorizedException;
@@ -71,6 +72,7 @@ public final class Smoketest {
         String baseUrl = requireEnv("CAT_FACTORY_BASE_URL");
         String apiKey = requireEnv("CAT_FACTORY_API_KEY");
         String readKey = requireEnv("CAT_FACTORY_READ_KEY");
+        String deadUrl = requireEnv("CAT_FACTORY_SMOKETEST_DEAD_URL");
         Path out = Path.of(requireEnv("CAT_FACTORY_SMOKETEST_OUT"));
 
         Smoketest smoketest = new Smoketest();
@@ -83,7 +85,7 @@ public final class Smoketest {
         CatFactoryClient readClient =
                 CatFactoryClient.builder().baseUrl(baseUrl).apiKey(readKey).build();
 
-        smoketest.run(client, readClient, baseUrl);
+        smoketest.run(client, readClient, baseUrl, deadUrl);
 
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("sdk", "java");
@@ -103,7 +105,8 @@ public final class Smoketest {
         System.out.println("java smoketest completed");
     }
 
-    private void run(CatFactoryClient client, CatFactoryClient readClient, String baseUrl) {
+    private void run(
+            CatFactoryClient client, CatFactoryClient readClient, String baseUrl, String deadUrl) {
         step("services.list", () -> {
             var result = client.services().list();
             observations.put("serviceCount", result.services().size());
@@ -298,6 +301,34 @@ public final class Smoketest {
                 observations.put("forbiddenIsTypedClass", true);
                 observations.put("forbiddenStatus", exc.status());
                 observations.put("forbiddenCode", exc.code());
+            }
+        });
+
+        step("error: connection refused", () -> {
+            // The one failure with no deployment on the other end of it, and the one whose MESSAGE
+            // is the whole product: a caller with no checkout reads this line and nothing else. All
+            // four clients must name the cause (nothing listening) rather than assert
+            // unreachability, and must say what this client had seen from the origin, which
+            // separates a restart from a bad address.
+            // The key is a placeholder because nothing ever reads it: the request fails before a
+            // connection exists to send it over, which is the whole point of the case.
+            // The URL is RESERVED by the harness (a port bound and released), never named here: a
+            // fetch-based runtime refuses the WHATWG bad-port list before opening a socket, so a
+            // hardcoded low port asks the four clients different questions. See `reserveDeadUrl`.
+            CatFactoryClient unreachable =
+                    CatFactoryClient.builder()
+                            .baseUrl(deadUrl)
+                            .apiKey("cf_live_pak_0000.deadbeef")
+                            .maxRetries(0)
+                            .build();
+            try {
+                unreachable.services().list();
+                failures.add("error: connection refused — expected a transport failure, got a success");
+            } catch (CatFactoryConnectionException exc) {
+                observations.put("connectionFailureIsTypedClass", true);
+                String message = exc.getMessage() == null ? "" : exc.getMessage();
+                observations.put("connectionFailureNamesTheCause", message.contains("nothing is listening"));
+                observations.put("connectionFailureStatesHistory", message.contains("has not completed a call"));
             }
         });
 
