@@ -44,11 +44,16 @@ wrangler without the types beside it, from the newest published version, quietly
 visible instead of silent. The published `peerDependencies` range on `@cat-factory/gatekeeper-worker`
 stays wide, as a library's must.
 
-**Stryker 10's floors are provisional, and now say so.** The refresh described the major as a Node 20
-drop; it also added `emptyExpressionMutator` to the default set, enlarging the mutant population in
-all three mutated packages, and the score floors were last measured under 9.6.1. Each floor now
-records the version that measured it, and `docs/internal/mutation-testing.md` makes a Stryker major a
-re-measure, because a floor is only a fact about the mutator set behind it.
+**Stryker 10's floors are re-measured, and kernel's had almost no margin left.** The refresh
+described the major as a Node 20 drop; it also added `emptyExpressionMutator` to the default set,
+enlarging the mutant population, and the floors were last measured under 9.6.1. Re-measured on CI:
+gates 651 -> 669 mutants and 90.78 -> 90.58, spend 396 -> 400 and 97.73 -> 97.25, both absorbed with
+the floor untouched. Kernel took all of it, 7,316 -> 7,908 and 84.23 -> 82.37 against a floor of 82,
+turning a 2.23-point margin into 0.37: one untested module short of a red nightly that would have
+read as a regression rather than as scope growth. Its covered score held (85.79 -> 85.56), so
+nothing stopped being pinned, and the floor drops to 80. Each floor now records the version that
+measured it, and `docs/internal/mutation-testing.md` makes a Stryker major a re-measure, because a
+floor is only a fact about the mutator set behind it.
 
 Also drops `@cat-factory/deploy-harness` from the refresh's changeset. Nothing in that package moved,
 and its version IS the deploy image tag, so versioning it would have rolled every deploy pin to

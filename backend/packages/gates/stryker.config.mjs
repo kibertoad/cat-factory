@@ -9,10 +9,12 @@ import { defineMutationConfig } from '../../../scripts/stryker-base.mjs'
 // public seam a deployment uses and has its own suite, so it is behaviour rather than a barrel.
 export default defineMutationConfig({
   mutate: ['src/**/*.ts', '!src/**/*.test.ts'],
-  // Measured 90.78% total / 92.06% covered over 651 mutants, UNDER STRYKER 9.6.1, less the
-  // two-point margin. The installed Stryker is 10.0.0, whose added `emptyExpressionMutator`
-  // re-bases this: gates is a package of probes and dispatches, so the new mutants land squarely
-  // in its call-heavy escalation paths. Re-measure before reading a dip as a regression. The two
+  // Measured 90.58% total / 91.82% covered over 669 mutants, UNDER STRYKER 10.0.0, less the
+  // two-point margin. The floor is UNCHANGED across that major: the population went 651 -> 669 and
+  // the total moved 0.2 points, which the margin absorbed exactly as it is meant to. Gates is the
+  // package the added `emptyExpressionMutator` was expected to hit hardest (it is probes and
+  // dispatches, so nearly every statement is a call), and it did not, because those calls are what
+  // its suites assert on. The two
   // columns moved by wildly different amounts on the same tests: the human-review gate's
   // resolve-nothing rounds plus `onExhausted` took the package's `NoCoverage` from 27 to 9 and the
   // total up 2.6 points, while the covered score moved 0.07 (91.99% to 92.06%). That is the

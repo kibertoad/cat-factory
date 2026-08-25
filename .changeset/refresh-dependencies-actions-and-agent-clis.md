@@ -56,9 +56,8 @@ newest release each declared range already admits):
 - **Tooling**: `@stryker-mutator/*@9.6.1 → 10.0.0` and pnpm `11.22.0 → 11.23.0`. Stryker 10 drops
   Node 20 (CI runs 26) and ALSO adds `emptyExpressionMutator` to the default mutator set, which
   enlarges every mutated package's mutant population. The three score floors were measured under
-  9.6.1 and have not been re-measured against the new population, so they are provisional until the
-  nightly reports; `docs/internal/mutation-testing.md` now records which version each floor was
-  measured under.
+  9.6.1; they have since been re-measured against the new population and kernel's lowered to 80,
+  with `docs/internal/mutation-testing.md` recording which version each floor was measured under.
 
 **Changesets moves as a coupled major**: `@changesets/cli@^2.31.1 → ^3.0.1` plus
 `changesets/action@v1.9.0 → v2.1.1`, which refuse each other's majors. Two behaviour changes had to
