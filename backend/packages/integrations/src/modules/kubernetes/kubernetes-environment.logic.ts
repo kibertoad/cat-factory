@@ -7,12 +7,11 @@ import type {
 } from '@cat-factory/kernel'
 import {
   describeWildcardDnsShift,
-  describeWildcardDnsShiftProblem,
   kubernetesConnectionConfigSchema,
   kubernetesProvisionConfigSchema,
   parseStoredProviderConfig,
-  wildcardDnsShiftRemedies,
 } from '@cat-factory/contracts'
+import { describeMisresolvingHostProblem } from '../environments/environments.logic.js'
 import { parseAllDocuments } from 'yaml'
 import { apiBase, k8sName, labelValue } from './kubernetes.logic.js'
 
@@ -147,8 +146,16 @@ export function renderTemplate(template: string, vars: Record<string, string>): 
  * then collide on one namespace — and since `ensureNamespace` treats the resulting 409
  * as idempotent, the second PR's manifests would be applied INTO the first's live
  * environment (and its teardown would delete the wrong namespace). So prefer
- * `<repoName>-<pullNumber>`, falling back to the globally-unique block id, and only to a
+ * `<repoName>-pr<pullNumber>`, falling back to the globally-unique block id, and only to a
  * bare PR number when neither repo nor block context is present (a manual provision).
+ *
+ * **The `pr` is load-bearing** and is not decoration: a name ending in a separator plus digits
+ * opens a four-octet window of its own in front of a wildcard-DNS host, so the platform's own
+ * default composed with the host shape its own docs recommend published an address on somebody
+ * else's network (`cf-env-catalog-api-5.127.0.0.1.nip.io` answers 5.127.0.0). Rendering `pr5`
+ * ends the label with a letter, which is not an octet. `describeWildcardDnsShift` in contracts
+ * owns the rule and {@link describeUnreachableIngressHost} refuses what an operator's own
+ * template composes; this is the half the platform is responsible for on its own.
  */
 export function resolveNamespace(
   config: KubernetesEnvironmentConfig,
@@ -157,10 +164,9 @@ export function resolveNamespace(
   if (config.namespaceTemplate) {
     return k8sName(renderTemplate(config.namespaceTemplate, inputs), '', 63, 'env')
   }
+  const pull = inputs.pullNumber ? `pr${inputs.pullNumber}` : undefined
   const suffix =
-    inputs.repoName && inputs.pullNumber
-      ? `${inputs.repoName}-${inputs.pullNumber}`
-      : inputs.blockId || inputs.pullNumber || 'env'
+    inputs.repoName && pull ? `${inputs.repoName}-${pull}` : inputs.blockId || pull || 'env'
   return k8sName(suffix, ENV_NAMESPACE_PREFIX, 63, 'env')
 }
 
@@ -326,46 +332,74 @@ export function deriveUrl(
 }
 
 /**
- * Refuse a derived URL whose wildcard-DNS host answers a DIFFERENT address than the one the
- * operator wrote into the template. `null` when there is nothing wrong, which is every ordinary
- * host and every correctly-composed wildcard one.
+ * Refuse a RENDERED ingress host that cannot reach this cluster, or `null` when there is nothing
+ * wrong. `ingressTemplate` only: a status-backed source has rendered nothing yet at provision
+ * time, and its live host is graded where every provider's published URL is
+ * (`describeMisresolvingEnvironmentUrl`, run by `EnvironmentProvisioningService`).
  *
- * This is the one environment failure the platform can see coming and previously did not. An
- * ingress-template URL is a CLAIM: it is rendered from config, published as the environment's
- * address, and nothing between here and the tester ever asks whether it points at this cluster.
- * Readiness cannot catch it either, because readiness is workload readiness (the pods are fine;
- * they are just unreachable through that name). So the run rolled out, reported `ready`, and
- * spent a tester agent for eight minutes on an address belonging to someone else before failing
- * with a connection error that named the cluster rather than the config.
+ * It grades the rendered host STRING rather than re-parsing the URL that host went into, and the
+ * difference is not cosmetic: a URL's authority stops at the first `/`, so a template rendering
+ * `{{branch}}` (which is `cat-factory/<taskId>`) yields `http://cat-factory/task_….127.0.0.1.nip.io`,
+ * whose authority is the bare `cat-factory`. Read that way the name looks like an ordinary host
+ * with nothing to say about it, when what actually happened is that the template produced
+ * something no resolver will ever be asked for.
  *
- * **Refusing is the honest disposition rather than a warning**, and it costs nothing that was
- * working: a mis-resolving host makes the environment unreachable to every consumer, so there is
- * no deployment this turns from green to red. `config_incomplete` is the reason at the call site
- * because the fix is a person editing the workspace's connection, and the one thing an automated
- * fixer must not do here is edit the checkout: the manifests are correct.
+ * So there are two causes here, and they need different fixes: a rendered host that is not a
+ * hostname at all (the template filled a hole with a value carrying a `/`, a space, an
+ * underscore) and one that IS a hostname but whose wildcard-DNS answer is a different network.
  *
- * Deliberately at PROVISION only, not on the `status()` re-derivation. The condition is a fact
- * about configuration, not about the cluster, so it cannot appear part-way through a run, and
- * raising it on every poll would restate one config error as a stream of environment failures.
+ * **Called BEFORE anything is applied**, which is the whole reason it is on this side rather than
+ * only at the publication seam: by the time a provisioned URL is graded there, this provider has
+ * created the namespace, written the registry pull Secret into it and applied every workload, and
+ * a failed provision records no `externalId`, so nothing would ever reclaim them. The inputs are a
+ * config template and the vars, neither of which the cluster contributes to, so nothing is lost by
+ * asking first.
  */
-export function describeMisresolvingEnvironmentUrl(url: string | null): string | null {
-  if (!url) return null
-  let hostname: string
-  try {
-    hostname = new URL(url).hostname
-  } catch {
-    // Not this rule's failure to report. A URL the platform cannot parse is already refused by
-    // the environment URL-safety policy, which says so far better than a DNS note would.
-    // silent-catch-ok: an unparseable URL IS "no verdict available" here.
+export function describeUnreachableIngressHost(
+  url: KubernetesUrlSource,
+  vars: Record<string, string>,
+): string | null {
+  if (url.source !== 'ingressTemplate') return null
+  const host = renderTemplate(url.hostTemplate, vars).trim()
+  if (!host) return null
+  const malformed = describeMalformedHost(url.hostTemplate, host)
+  if (malformed) return malformed
+  const shift = describeWildcardDnsShift(host)
+  return shift ? describeMisresolvingHostProblem(shift) : null
+}
+
+/** A label of letters, digits and dashes, not starting or ending on a dash. */
+const HOSTNAME_LABEL = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/
+
+/**
+ * A rendered host that is not a hostname, named together with the template that produced it.
+ *
+ * Both halves are needed to act on it: the template is what the operator will edit and the
+ * rendered value is the only thing that shows WHICH hole misbehaved. Case is folded first,
+ * because an upper-case name resolves perfectly well and refusing it would put this rule in front
+ * of a Kubernetes naming rule the apiserver already reports clearly.
+ *
+ * **An EMPTY label is deliberately not this rule's business**, and that is a boundary rather than
+ * an oversight. It means a placeholder rendered to nothing, which for a run-supplied key is the
+ * documented lenient substitution and for a config-supplied one is already refused by name
+ * (`describeUnfilledConfigPlaceholders`). Claiming it here would answer a missing-variable
+ * failure with a paragraph about legal hostname characters: the wrong fix, stated confidently.
+ * What this rule owns is a host that was fully composed and is still not a name.
+ */
+function describeMalformedHost(template: string, host: string): string | null {
+  const labels = host.toLowerCase().replace(/[.]$/, '').split('.')
+  if (labels.some((label) => label === '')) return null
+  if (
+    host.length <= 253 &&
+    labels.every((label) => label.length <= 63 && HOSTNAME_LABEL.test(label))
+  ) {
     return null
   }
-  const shift = describeWildcardDnsShift(hostname)
-  if (!shift) return null
   return (
-    `The environment URL cannot reach this cluster: ${describeWildcardDnsShiftProblem(shift)}. ` +
-    `Fix the workspace's Kubernetes connection, not the manifests, which are correct. ` +
-    wildcardDnsShiftRemedies(shift)
-      .map((remedy, index) => `(${index + 1}) ${remedy}`)
-      .join(' ')
+    `The environment URL cannot reach this cluster: the host template '${template}' rendered ` +
+    `'${host}', which is not a hostname. A label may hold only letters, digits and '-', at most ` +
+    `63 characters each and 253 in total. Check what the template's placeholders fill with: ` +
+    `{{branch}} is 'cat-factory/<taskId>', whose '/' ends the host and turns the rest into a ` +
+    `path. {{namespace}} is sanitized to a single RFC1123 label and is the safe one to build on.`
   )
 }

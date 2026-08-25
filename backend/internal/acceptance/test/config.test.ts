@@ -117,7 +117,8 @@ describe('resolveConfig', () => {
     // relative default resolved anywhere else is a state directory an operator cannot find.
     expect(config.stateDir).toBe(join(packageRoot, '.acceptance'))
     expect(config.runBudgetMs).toBe(90 * 60 * 1000)
-    // nip.io resolves `<anything>.127.0.0.1` to loopback, so the default template needs no DNS.
+    // The default needs no DNS of your own: nip.io answers from the address written into the
+    // name. Not from `<anything>.127.0.0.1` though, which is why the pair is graded in preflight.
     expect(config.cluster.ingressHostTemplate).toContain('127.0.0.1.nip.io')
     // Defaulted rather than left unset, because "unset" is not a neutral state here: the platform
     // renders an absent `{{image}}` as the empty string, which the apiserver then refuses as a

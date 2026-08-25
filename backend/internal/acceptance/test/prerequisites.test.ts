@@ -92,16 +92,6 @@ function baseContext(): Partial<PreflightContext> {
 }
 
 /** Run one prerequisite against a fake deployment and assert it refused, returning the verdict. */
-/** Run one prerequisite and hand back whatever it concluded, refusal or not. */
-async function verdictOf(
-  id: string,
-  context: Partial<PreflightContext>,
-): Promise<PrerequisiteVerdict> {
-  const prerequisite = PREREQUISITES.find((entry) => entry.id === id)
-  if (!prerequisite) throw new Error(`no prerequisite '${id}'`)
-  return prerequisite.check({ ...baseContext(), ...context } as PreflightContext)
-}
-
 async function refusal(
   id: string,
   context: Partial<PreflightContext>,
@@ -996,8 +986,35 @@ describe('ingress-template', () => {
   it('passes the shipped defaults, which are chosen to compose', async () => {
     // The guard on the guard: the two defaults are only correct TOGETHER, so a change to either
     // that reintroduces the shift fails here rather than in a live pass.
-    const verdict = await verdictOf('ingress-template', { config: config() })
-    expect(verdict.status).toBe('satisfied')
+    const detail = await satisfied('ingress-template', { config: config() })
+    expect(detail).toContain('cf-acc-pr1.127.0.0.1.nip.io')
+  })
+
+  it('grades every repository the pass provisions, not just the first', async () => {
+    // A namespace template naming {{repoName}} composes a DIFFERENT host per repository, so one
+    // can shift while the other does not. Grading the backend alone let that configuration reach
+    // a live pass, where it died at the frontend's tester with everything upstream green.
+    const verdict = await refusal('ingress-template', {
+      config: config({
+        cluster: { ...config().cluster, namespaceTemplate: '{{repoName}}' },
+        repos: { backend: 'catalog-api', frontend: 'catalog-2' },
+      }),
+    })
+    expect(verdict.problem).toContain('catalog-2')
+    expect(verdict.problem).toContain('2.127.0.0')
+  })
+
+  it('names the placeholders a provision actually fills, read off the renderer', async () => {
+    // The hand-written list this replaced was six keys short, which refuses a working template
+    // with a message naming the wrong vocabulary.
+    const verdict = await refusal('ingress-template', {
+      config: config({
+        cluster: { ...config().cluster, namespaceTemplate: 'cf-acc-{{commitSha}}' },
+      }),
+    })
+    for (const key of ['{{pullNumber}}', '{{repoName}}', '{{blockId}}', '{{title}}', '{{type}}']) {
+      expect(verdict.remedy.steps.join(' ')).toContain(key)
+    }
   })
 })
 

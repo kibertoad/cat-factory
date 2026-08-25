@@ -554,7 +554,7 @@ async function copyAutoSetupCommand() {
       <UInput
         v-model="form.namespaceTemplate"
         class="font-mono"
-        placeholder="cf-env-{{pullNumber}}"
+        placeholder="cf-env-pr{{pullNumber}}"
       />
     </UFormField>
 

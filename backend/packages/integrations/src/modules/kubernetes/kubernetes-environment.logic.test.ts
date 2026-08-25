@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { Block, KubernetesEnvironmentConfig } from '@cat-factory/kernel'
-import { frontendOriginsForService } from '@cat-factory/contracts'
+import type { Block, KubernetesEnvironmentConfig, KubernetesUrlSource } from '@cat-factory/kernel'
+import { describeWildcardDnsShift, frontendOriginsForService } from '@cat-factory/contracts'
 import { classifyDeploymentReadiness } from './kubernetes.logic.js'
 import {
-  describeMisresolvingEnvironmentUrl,
   deriveUrl,
+  describeUnreachableIngressHost,
   extractLoadBalancerAddress,
   isManifestFile,
   parseManifests,
@@ -59,14 +59,26 @@ describe('resolveNamespace', () => {
     expect(ns).toBe('cf-env-42')
   })
 
-  it('falls back to the PR number when no template is set', () => {
-    expect(resolveNamespace(baseConfig, { pullNumber: '7' })).toBe('cf-env-7')
+  it('falls back to the PR number when no template is set, ending on a letter', () => {
+    expect(resolveNamespace(baseConfig, { pullNumber: '7' })).toBe('cf-env-pr7')
   })
 
   it('qualifies the default with the repo so same-PR-number repos do not collide', () => {
-    // Two repos in one workspace can both open PR #7; a bare cf-env-7 would collide.
-    expect(resolveNamespace(baseConfig, { repoName: 'web', pullNumber: '7' })).toBe('cf-env-web-7')
-    expect(resolveNamespace(baseConfig, { repoName: 'api', pullNumber: '7' })).toBe('cf-env-api-7')
+    // Two repos in one workspace can both open PR #7; a bare cf-env-pr7 would collide.
+    expect(resolveNamespace(baseConfig, { repoName: 'web', pullNumber: '7' })).toBe(
+      'cf-env-web-pr7',
+    )
+    expect(resolveNamespace(baseConfig, { repoName: 'api', pullNumber: '7' })).toBe(
+      'cf-env-api-pr7',
+    )
+  })
+
+  it('composes with a wildcard-DNS host instead of shifting it, which is why the pr is there', () => {
+    // The platform's OWN default was half of the pairing that published an address on another
+    // network: `cf-env-web-7` in front of the loopback host its docs recommend answers 7.127.0.0.
+    // A default that only stopped being wrong once an operator overrode it is not a default.
+    const host = `${resolveNamespace(baseConfig, { repoName: 'web', pullNumber: '7' })}.127.0.0.1.nip.io`
+    expect(describeWildcardDnsShift(host)).toBeNull()
   })
 
   it('falls back to the globally-unique block id when there is no repo context', () => {
@@ -229,11 +241,19 @@ describe('classifyDeploymentReadiness', () => {
   })
 })
 
-describe('describeMisresolvingEnvironmentUrl', () => {
+describe('describeUnreachableIngressHost', () => {
+  const ingress = (hostTemplate: string): KubernetesUrlSource => ({
+    source: 'ingressTemplate',
+    hostTemplate,
+    scheme: 'http',
+  })
+
   it('refuses the composition that cost a run its tester step', () => {
-    // `cf-acc-5` is the acceptance suite's per-PR namespace for pull request 5, in front of the
-    // loopback host the k3s doc recommends. Resolves to 5.127.0.0, which is not this cluster.
-    const refusal = describeMisresolvingEnvironmentUrl('http://cf-acc-5.127.0.0.1.nip.io')
+    // `cf-acc-5` is the per-PR namespace for pull request 5 in front of the loopback host the k3s
+    // doc recommends. It resolves to 5.127.0.0, which is not this cluster.
+    const refusal = describeUnreachableIngressHost(ingress('{{namespace}}.127.0.0.1.nip.io'), {
+      namespace: 'cf-acc-5',
+    })
     expect(refusal).toContain('5.127.0.0')
     expect(refusal).toContain('127.0.0.1')
   })
@@ -241,34 +261,61 @@ describe('describeMisresolvingEnvironmentUrl', () => {
   it('sends the fix at the connection and says the manifests are not at fault', () => {
     // The disposition matters more than the wording: this failure classifies as
     // `config_incomplete` so no fixer is dispatched at a checkout that is already correct.
-    const refusal = describeMisresolvingEnvironmentUrl('http://cf-acc-5.127.0.0.1.nip.io')
-    expect(refusal).toContain('Kubernetes connection')
+    const refusal = describeUnreachableIngressHost(ingress('{{namespace}}.127.0.0.1.nip.io'), {
+      namespace: 'cf-acc-5',
+    })
+    expect(refusal).toContain('environment connection')
     expect(refusal).toContain('manifests, which are correct')
   })
 
-  it('reads the host out of a URL carrying a port', () => {
-    expect(describeMisresolvingEnvironmentUrl('http://cf-acc-5.127.0.0.1.nip.io:18080')).toContain(
-      '5.127.0.0',
-    )
+  it('refuses a rendered host a URL would truncate rather than grading the truncation', () => {
+    // The template the guided k3s setup used to write. `{{branch}}` is `cat-factory/<taskId>`, so
+    // the URL becomes `http://cat-factory/task_….127.0.0.1.nip.io`, whose AUTHORITY is the bare
+    // `cat-factory` — an unremarkable-looking name with no wildcard suffix and nothing to report.
+    // Graded as the rendered string, what actually happened is visible.
+    const refusal = describeUnreachableIngressHost(ingress('{{branch}}.127.0.0.1.nip.io'), {
+      branch: 'cat-factory/task_19312e8862264172b1fa1051',
+    })
+    expect(refusal).toContain('not a hostname')
+    expect(refusal).toContain('cat-factory/task_19312e8862264172b1fa1051.127.0.0.1.nip.io')
+    expect(refusal).toContain('{{branch}}.127.0.0.1.nip.io')
+  })
+
+  it.each(['{{namespace}} .example.com', '{{namespace}}_1.example.com'])(
+    'refuses %s, which renders no name a resolver is ever asked for',
+    (template) => {
+      expect(describeUnreachableIngressHost(ingress(template), { namespace: 'app' })).toContain(
+        'not a hostname',
+      )
+    },
+  )
+
+  it('leaves a placeholder that rendered EMPTY to the rule that owns missing values', () => {
+    // `.preview.example.com` is unreachable, but the cause is a hole nothing filled, and
+    // answering it here would hand back hostname-character advice for a missing-variable fault.
+    expect(describeUnreachableIngressHost(ingress('{{branch}}.preview.example.com'), {})).toBeNull()
   })
 
   it.each([
     // The same cluster, addressed by a namespace whose last label ends in a letter.
-    'http://cf-env-catalog-api-pr5.127.0.0.1.nip.io',
+    { template: '{{namespace}}.127.0.0.1.nip.io', vars: { namespace: 'cf-env-catalog-api-pr5' } },
     // An ordinary hostname, whatever digits it carries.
-    'http://env-5.preview.example.com',
-    // A LoadBalancer address, the other URL source.
-    'http://192.168.1.40',
-  ])('passes %s', (url) => {
-    expect(describeMisresolvingEnvironmentUrl(url)).toBeNull()
+    { template: '{{namespace}}.preview.example.com', vars: { namespace: 'env-5' } },
+    // Upper case resolves perfectly well; the apiserver owns what an Ingress host may look like.
+    { template: '{{namespace}}.Example.COM', vars: { namespace: 'App' } },
+  ])('passes $template', ({ template, vars }) => {
+    expect(describeUnreachableIngressHost(ingress(template), vars)).toBeNull()
   })
 
-  it('says nothing when there is no URL yet, which is the status-backed sources on provision', () => {
-    expect(describeMisresolvingEnvironmentUrl(null)).toBeNull()
+  it('says nothing for a status-backed source, which has rendered nothing yet', () => {
+    // Its live host is graded where every provider's published URL is, on the way to being
+    // recorded. Answering here would be answering about a value that does not exist.
+    expect(
+      describeUnreachableIngressHost({ source: 'ingressStatus', scheme: 'http' }, {}),
+    ).toBeNull()
   })
 
-  it('leaves an unparseable URL to the policy that already refuses it', () => {
-    // Answering here would put a DNS note in front of a failure that is not about DNS.
-    expect(describeMisresolvingEnvironmentUrl('not a url')).toBeNull()
+  it('says nothing when the template renders empty, which is a hole this rule does not own', () => {
+    expect(describeUnreachableIngressHost(ingress('{{namespace}}'), {})).toBeNull()
   })
 })

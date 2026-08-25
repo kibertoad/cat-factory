@@ -280,7 +280,7 @@ describe('ingressHostTemplate / ingressUrlPort', () => {
       controller: 'traefik',
       attribution: 'cluster',
     } as const
-    expect(ingressHostTemplate(ready)).toBe('{{branch}}.127.0.0.1.nip.io')
+    expect(ingressHostTemplate(ready)).toBe('{{namespace}}.127.0.0.1.nip.io')
     expect(ingressHostTemplate(ready)).not.toContain(':')
     expect(ingressUrlPort(ready)).toBe(8080)
   })

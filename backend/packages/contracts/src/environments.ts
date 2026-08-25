@@ -554,7 +554,7 @@ export const kubernetesEngineConfigSchema = v.object({
   /** Skip apiserver TLS verification — strongly discouraged; kind/dev clusters only. */
   insecureSkipTlsVerify: v.optional(v.boolean()),
   /**
-   * Namespace name template for the per-PR environment, e.g. `cf-env-{{pullNumber}}`. With
+   * Namespace name template for the per-PR environment, e.g. `cf-env-pr{{pullNumber}}`. With
    * `renderer: 'kustomize'`, ABSENT ⇒ honor the overlay's own `namespace:` when it pins one
    * (the shared-namespace ephemeral-env shape, where base + overlay name a fixed namespace);
    * SET ⇒ override it (the adapter sets the namespace at build time) for true per-PR

@@ -72,10 +72,18 @@ export type ClusterConfig = {
   insecureSkipTlsVerify: boolean
   /**
    * Host template the environment URL is derived from. The default works on any k3d/k3s with
-   * Traefik: `nip.io` resolves `<anything>.127.0.0.1` to loopback, so no DNS or hosts-file edit
-   * stands between the run and a reachable environment.
+   * Traefik and needs no DNS or hosts-file edit of your own, because `nip.io` answers from the
+   * address written into the name.
+   *
+   * **NOT from `<anything>`**, which is what this used to claim: these resolvers take the
+   * LEFTMOST four-octet run in a name and read `-` and `.` alike, so a prefix ending in a
+   * separator plus digits answers its own address instead
+   * (`cf-acc-5.127.0.0.1.nip.io` is 5.127.0.0). Which prefixes are safe is a property of
+   * {@link namespaceTemplate}, which is why the `ingress-template` preflight grades the pair
+   * rather than this value alone.
    */
   ingressHostTemplate: string
+  /** Per-PR namespace template. Only correct COMPOSED with {@link ingressHostTemplate}. */
   namespaceTemplate: string
   /**
    * What the manifests' `{{image}}` placeholder resolves to, per pull request.

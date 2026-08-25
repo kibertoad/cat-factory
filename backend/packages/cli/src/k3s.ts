@@ -1,5 +1,5 @@
 import { type CliOptions, OPTION_DEFAULTS } from './args.js'
-import { buildK3sSetupUrl } from './k3s-handler.js'
+import { buildK3sSetupUrl, DEFAULT_NAMESPACE_TEMPLATE } from './k3s-handler.js'
 import { createNodeShell, type HostShell, renderCommandLine } from './host-shell.js'
 import { createConsoleIo, type Io } from './io.js'
 import {
@@ -309,8 +309,8 @@ function printInstallGuidance(
 /**
  * The environment-URL half of the summary, rendered from the PROBE rather than from a fixed
  * script. This is the line the whole change turns on: it used to state "Ingress host template" +
- * `{{branch}}.127.0.0.1.nip.io` unconditionally, including on a reused cluster the command had
- * never looked at, and an operator who typed it got an environment whose URL answered nothing.
+ * a fixed nip.io template unconditionally, including on a reused cluster the command had never
+ * looked at, and an operator who typed it got an environment whose URL answered nothing.
  *
  * Three outcomes, three different things to say, per the degrade-loudly rule: verified working,
  * verified missing (with the fix), and could-not-tell (which is NOT the same as missing, and must
@@ -427,7 +427,7 @@ function printConnectionSummary(connection: ResolvedConnection, io: Io): void {
       'Open Settings → Infrastructure → Kubernetes → Local k3s and enter:',
       `  • API server URL:          ${connection.apiServerUrl}`,
       `  • Skip TLS verification:   yes (local self-signed cert)`,
-      `  • Namespace template:      cf-env-{{pullNumber}}`,
+      `  • Namespace template:      ${DEFAULT_NAMESPACE_TEMPLATE}`,
       ...renderUrlSourceLines(connection),
       '',
       'Then paste this ServiceAccount token into the "ServiceAccount token" field and click Test → Save:',

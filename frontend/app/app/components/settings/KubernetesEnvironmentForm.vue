@@ -406,7 +406,7 @@ function optional(label: string): string {
       <UInput
         v-model="form.namespaceTemplate"
         class="font-mono"
-        placeholder="cf-env-{{pullNumber}}"
+        placeholder="cf-env-pr{{pullNumber}}"
       />
     </UFormField>
 

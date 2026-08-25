@@ -1,4 +1,4 @@
-import { registerEnvironmentHandlerSchema } from '@cat-factory/contracts'
+import { describeWildcardDnsShift, registerEnvironmentHandlerSchema } from '@cat-factory/contracts'
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
 import {
@@ -159,5 +159,28 @@ describe('buildK3sSetupUrl', () => {
     expect(url.pathname).toBe('/board')
     expect(url.searchParams.get('x')).toBe('1')
     expect(url.searchParams.get('apiServerUrl')).toBe('https://127.0.0.1:6550')
+  })
+})
+
+describe('the two templates the guided setup writes', () => {
+  // A guard on the guard. Each constant is fine on its own and the pair is what a provision
+  // uses, so the only assertion worth making is about the name they COMPOSE. It is also the
+  // assertion that would have caught the original bug: both halves rendered perfectly, and
+  // `cf-env-5.127.0.0.1.nip.io` answered 5.127.0.0.
+  const renderedHost = (pullNumber: string, namespace = DEFAULT_NAMESPACE_TEMPLATE) =>
+    INGRESS_HOST_TEMPLATE.replace('{{namespace}}', namespace.replace('{{pullNumber}}', pullNumber))
+
+  it.each(['1', '5', '42', '128'])('composes a host carrying one address for PR %s', (pull) => {
+    expect(describeWildcardDnsShift(renderedHost(pull))).toBeNull()
+  })
+
+  it('would have caught the namespace template it replaced', () => {
+    expect(describeWildcardDnsShift(renderedHost('5', 'cf-env-{{pullNumber}}'))).not.toBeNull()
+  })
+
+  it('builds its host from the namespace, the one per-PR value already a DNS label', () => {
+    // `{{branch}}` is `cat-factory/<taskId>`: the slash ends the host and turns the rest into a
+    // path, so the URL names `cat-factory` and the Ingress declaring it is refused outright.
+    expect(INGRESS_HOST_TEMPLATE).not.toContain('{{branch}}')
   })
 })

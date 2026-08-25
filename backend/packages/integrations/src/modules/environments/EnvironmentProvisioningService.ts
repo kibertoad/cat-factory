@@ -43,6 +43,7 @@ import {
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
 import {
   assertSafeEnvironmentUrl,
+  describeMisresolvingEnvironmentUrl,
   type EnvironmentIdentity,
   recordToHandle,
   shouldTeardownSuperseded,
@@ -279,6 +280,24 @@ export class EnvironmentProvisioningService {
   }
 
   /**
+   * Every grade an environment URL has to pass before it is recorded, in the ONE place every
+   * provider's URL passes through: the sync provision, the async finalize, and the status
+   * reconcile all settle here.
+   *
+   * The two are a pair on purpose. Safety says the URL may not be FETCHED (an internal host, an
+   * embedded credential); reachability says it does not name this deployment at all, which is
+   * the failure a rendered wildcard-DNS host produces silently. Grading them together is what
+   * keeps the second one provider-agnostic: a container-rendered URL a deploy harness hands back
+   * and a host read off a live Ingress are checked exactly as a URL derived in process is.
+   */
+  private assertPublishableUrl(url: string | null): void {
+    if (!url) return
+    assertSafeEnvironmentUrl(url, 'environment URL', this.urlPolicy)
+    const misresolving = describeMisresolvingEnvironmentUrl(url)
+    if (misresolving) throw new ValidationError(misresolving)
+  }
+
+  /**
    * Whether the workspace can provision a service's declared provisioning — the lightweight
    * start-time check the Tester's infra gate + the Deployer-config gate use (no provider build / no
    * secret decrypt). `infraless` resolves trivially (it provisions nothing); any other type needs a
@@ -512,9 +531,7 @@ export class EnvironmentProvisioningService {
     // deploy clone inputs aren't needed here — skip minting a fresh clone token.
     const req = await this.buildProvisionRequest(args, resolved.manifest, resolved.resolveSecret)
     const provisioned = capability.finalizeProvision(view, req)
-    if (provisioned.url) {
-      assertSafeEnvironmentUrl(provisioned.url, 'environment URL', this.urlPolicy)
-    }
+    this.assertPublishableUrl(provisioned.url)
     return this.recordProvisioned(
       args,
       resolved.manifest,
@@ -725,9 +742,7 @@ export class EnvironmentProvisioningService {
       await this.captureProvisionFailure(args, resolved, getErrorMessage(error))
       throw error
     }
-    if (provisioned.url) {
-      assertSafeEnvironmentUrl(provisioned.url, 'environment URL', this.urlPolicy)
-    }
+    this.assertPublishableUrl(provisioned.url)
     return this.recordProvisioned(
       args,
       resolved.manifest,
@@ -927,9 +942,7 @@ export class EnvironmentProvisioningService {
       })
       throw error
     }
-    if (provisioned.url) {
-      assertSafeEnvironmentUrl(provisioned.url, 'environment URL', this.urlPolicy)
-    }
+    this.assertPublishableUrl(provisioned.url)
 
     const patch = {
       status: provisioned.status,

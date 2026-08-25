@@ -219,6 +219,12 @@ type ImageTemplateKey =
  * binds is provisioned without them). They are sampled as present anyway: a template naming one
  * is refused either way, and refusing it as "not a legal reference" is true where "a provision
  * does not fill it" would not be.
+ *
+ * Their VALUES carry `pr1` rather than `1`, and that is not cosmetic either: these are the
+ * platform's own written examples of an environment URL, and `cf-acc-1.127.0.0.1.nip.io` is
+ * precisely the name the `ingress-template` preflight now refuses (it answers 1.127.0.0). A
+ * sample showing the shape the check rejects teaches the wrong thing to every operator and agent
+ * that reads it.
  */
 export function imageTemplateSample(repo: { owner: string; name: string }): ImageTemplateSample {
   return {
@@ -231,8 +237,8 @@ export function imageTemplateSample(repo: { owner: string; name: string }): Imag
     pullUrl: `https://github.com/${repo.owner}/${repo.name}/pull/1`,
     repoOwner: repo.owner,
     repoName: repo.name,
-    frontendOrigins: 'http://cf-acc-1.127.0.0.1.nip.io',
-    peerEnvUrls: 'catalog-web=http://cf-acc-1.127.0.0.1.nip.io',
+    frontendOrigins: 'http://cf-acc-pr1.127.0.0.1.nip.io',
+    peerEnvUrls: 'catalog-web=http://cf-acc-pr1.127.0.0.1.nip.io',
   }
 }
 

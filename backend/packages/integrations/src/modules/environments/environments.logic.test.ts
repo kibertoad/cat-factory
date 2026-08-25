@@ -5,6 +5,7 @@ import { assertSafeAtlassianBaseUrl } from '@cat-factory/kernel'
 import { frontendOriginsForService } from '@cat-factory/contracts'
 import {
   assertSafeEnvironmentUrl,
+  describeMisresolvingEnvironmentUrl,
   type EnvironmentIdentity,
   interpolateTemplate,
   shouldTeardownSuperseded,
@@ -230,5 +231,40 @@ describe('shouldTeardownSuperseded', () => {
     // The async `provisioning` insert has externalId=null; a matching type/engine ⇒ assume the
     // deterministic same-namespace overwrite, so do NOT tear down (the TTL reaper is the backstop).
     expect(shouldTeardownSuperseded(k8s('cf-env-1'), k8s(null))).toBe(false)
+  })
+})
+
+describe('describeMisresolvingEnvironmentUrl', () => {
+  it('refuses the composition that cost a run its tester step', () => {
+    // `cf-acc-5` is the per-PR namespace for pull request 5 in front of the loopback host the k3s
+    // doc recommends. It resolves to 5.127.0.0, which is not the cluster that rolled out.
+    const refusal = describeMisresolvingEnvironmentUrl('http://cf-acc-5.127.0.0.1.nip.io')
+    expect(refusal).toContain('5.127.0.0')
+    expect(refusal).toContain('127.0.0.1')
+    expect(refusal).toContain('manifests, which are correct')
+  })
+
+  it('reads the host out of a URL carrying a port', () => {
+    expect(describeMisresolvingEnvironmentUrl('http://cf-acc-5.127.0.0.1.nip.io:18080')).toContain(
+      '5.127.0.0',
+    )
+  })
+
+  it.each([
+    // The same cluster, addressed by a namespace whose last label ends in a letter.
+    'http://cf-env-catalog-api-pr5.127.0.0.1.nip.io',
+    // An ordinary hostname, whatever digits it carries.
+    'http://env-5.preview.example.com',
+    // A LoadBalancer address, the other URL source.
+    'http://192.168.1.40',
+    // A bracketed IPv6 literal, which carries no name to mis-read.
+    'http://[2001:db8::1]:8080',
+  ])('passes %s', (url) => {
+    expect(describeMisresolvingEnvironmentUrl(url)).toBeNull()
+  })
+
+  it('leaves an unparseable URL to the policy that already refuses it', () => {
+    // Answering here would put a DNS note in front of a failure that is not about DNS.
+    expect(describeMisresolvingEnvironmentUrl('not a url')).toBeNull()
   })
 })

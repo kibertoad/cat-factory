@@ -11,7 +11,7 @@ import type {
 import type { EnvironmentRecord, UrlSafetyPolicy } from '@cat-factory/kernel'
 import { connectionFailureResult, STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
 import { safeFetch } from '../shared/safe-fetch.js'
-import { assertSafePublicUrl } from '../shared/url-guard.js'
+import { assertSafePublicUrl, publicUrlHost } from '../shared/url-guard.js'
 
 // Pure helpers for the ephemeral-environment integration: SSRF validation of the
 // URLs we fetch/expose, `{{var}}` interpolation over a bounded scope, dot-path
@@ -26,7 +26,14 @@ import { assertSafePublicUrl } from '../shared/url-guard.js'
  * Disposer leaves the environment to the TTL sweep), and the SPA has to name the same two kinds.
  */
 export { DEPLOYER_AGENT_KIND, DISPOSER_AGENT_KIND } from '@cat-factory/contracts'
-import { DEPLOYER_AGENT_KIND, DISPOSER_AGENT_KIND } from '@cat-factory/contracts'
+import {
+  DEPLOYER_AGENT_KIND,
+  describeWildcardDnsShift,
+  describeWildcardDnsShiftProblem,
+  DISPOSER_AGENT_KIND,
+  wildcardDnsShiftRemedies,
+} from '@cat-factory/contracts'
+import type { WildcardDnsShift } from '@cat-factory/contracts'
 /** Board category for environment blocks (a deployer pipeline typically runs here). */
 export const ENVIRONMENT_BLOCK_TYPE = 'environment'
 
@@ -165,6 +172,59 @@ export function assertSafeEnvironmentUrl(
   policy: UrlSafetyPolicy = STRICT_URL_SAFETY_POLICY,
 ): void {
   assertSafePublicUrl(url, { subject: 'Environment', label, policy })
+}
+
+/**
+ * Refuse an environment URL whose wildcard-DNS host answers a DIFFERENT address than the one the
+ * operator wrote into it. `null` when there is nothing wrong, which is every ordinary host and
+ * every correctly-composed wildcard one.
+ *
+ * This is the one environment failure the platform can see coming and previously did not. An
+ * environment URL is a CLAIM: it is derived from config (or read back off a rendered Ingress),
+ * published as the environment's address, and nothing between here and the tester ever asks
+ * whether it points at this deployment. Readiness cannot catch it either, because readiness is
+ * workload readiness (the pods are fine; they are just unreachable through that name). So a run
+ * rolled out, reported `ready`, and spent a tester agent for eight minutes on an address
+ * belonging to someone else before failing with a connection error that named the cluster rather
+ * than the config.
+ *
+ * **Refusing is the honest disposition rather than a warning**, and it costs nothing that was
+ * working: a mis-resolving host makes the environment unreachable to every consumer, so there is
+ * no deployment this turns from green to red.
+ *
+ * It sits BESIDE {@link assertSafeEnvironmentUrl} because it answers the same kind of question
+ * about the same value, and because that pairing is what makes it provider-agnostic: the three
+ * places an environment URL is published (`EnvironmentProvisioningService`'s sync
+ * provision, its async finalize, and its status reconcile) all run the pair, so a URL rendered
+ * inside a deploy container or read off a live Ingress is graded exactly as one derived in
+ * process is. A check bolted to one provider's synchronous path would have covered a third of
+ * the ways this URL reaches a user.
+ */
+export function describeMisresolvingEnvironmentUrl(url: string): string | null {
+  const host = publicUrlHost(url)
+  // Not this rule's failure to report. A URL the platform cannot parse is already refused by the
+  // environment URL-safety policy, which says so far better than a DNS note would.
+  if (host === null) return null
+  const shift = describeWildcardDnsShift(host)
+  return shift ? describeMisresolvingHostProblem(shift) : null
+}
+
+/**
+ * The refusal wording, shared by this seam and by the Kubernetes provider's earlier one so the
+ * two do not become two accounts of the same fault.
+ *
+ * It names the manifests as CORRECT on purpose: the automated instinct on an environment failure
+ * is to send a fixer at the checkout, and the one thing that cannot help here is editing the
+ * files. The fix is a person editing the connection.
+ */
+export function describeMisresolvingHostProblem(shift: WildcardDnsShift): string {
+  return (
+    `The environment URL cannot reach this deployment: ${describeWildcardDnsShiftProblem(shift)}. ` +
+    `Fix the environment connection, not the manifests, which are correct. ` +
+    wildcardDnsShiftRemedies(shift)
+      .map((remedy, index) => `(${index + 1}) ${remedy}`)
+      .join(' ')
+  )
 }
 
 /** Validate every URL a manifest will fetch (defence against SSRF). */

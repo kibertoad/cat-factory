@@ -131,14 +131,46 @@ describe('describeWildcardDnsShiftProblem', () => {
     expect(problem).toContain('5.127.0.0')
     expect(problem).toContain('127.0.0.1')
   })
+})
 
-  it('offers a remedy that keeps the digits, which are doing necessary work', () => {
+describe('wildcardDnsShiftRemedies', () => {
+  const remediesFor = (host: string) => wildcardDnsShiftRemedies(describeWildcardDnsShift(host)!)
+
+  it('keeps the digits, which are doing necessary work', () => {
     // A namespace has to stay unique per environment, so a remedy that just deleted the pull
     // number would trade a wrong address for a collision.
-    expect(wildcardDnsShiftRemedies(shift!)[0]).toContain('{{pullNumber}}')
+    expect(remediesFor('cf-acc-5.127.0.0.1.nip.io')[0]).toContain('{{pullNumber}}')
   })
 
   it('offers the dashed address as written, not as a description of one', () => {
-    expect(wildcardDnsShiftRemedies(shift!)[1]).toContain('127-0-0-1.nip.io')
+    expect(remediesFor('cf-acc-5.127.0.0.1.nip.io')[1]).toContain('127-0-0-1.nip.io')
+  })
+
+  it('flips the address to dots when the operator already wrote it with dashes', () => {
+    // The remedy used to say "write the address with dashes" whatever the host looked like, which
+    // for this one is a description of what the operator already did. A prefix extends a dashed
+    // run exactly as it extends a dotted one; only mixing the two separators breaks the window.
+    const remedies = remediesFor('cf-env-app-5-127-0-0-1.nip.io')
+    expect(remedies[1]).toContain("'127.0.0.1.nip.io' rather than '127-0-0-1.nip.io'")
+  })
+
+  it('offers no respelling at all when respelling would not help', () => {
+    // A prefix carrying a COMPLETE address of its own answers first no matter what separates it
+    // from the tail, so both of the cheap fixes are off the table and saying so is the honest
+    // answer. Verified by re-grading the candidate rather than by guessing from the shape.
+    const remedies = remediesFor('10-0-0-1.foo.127.0.0.1.nip.io')
+    expect(remedies.some((remedy) => remedy.includes('other separator'))).toBe(false)
+    expect(remedies[0]).toContain('10.0.0.1')
+  })
+
+  it('drops the end-with-a-letter fix when the prefix is a whole address', () => {
+    // Telling someone to end `10-0-0-1` with a letter would not remove the address it spells.
+    expect(remediesFor('10-0-0-1.foo.127.0.0.1.nip.io')[0]).not.toContain('{{pullNumber}}')
+  })
+
+  it('always ends on the fix that works whatever the name looks like', () => {
+    for (const host of ['cf-acc-5.127.0.0.1.nip.io', '10-0-0-1.foo.127.0.0.1.nip.io']) {
+      expect(remediesFor(host).at(-1)).toContain('a host you control')
+    }
   })
 })

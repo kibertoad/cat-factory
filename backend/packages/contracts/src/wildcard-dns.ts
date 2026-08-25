@@ -11,12 +11,13 @@
 //     cf-acc-5.127.0.0.1.nip.io   ->  5.127.0.0     (a stranger's network)
 //     app.127.0.0.1.nip.io        ->  127.0.0.1     (the control, one label different)
 //
-// Both halves of that pairing are things the platform itself produces. The default per-PR
-// namespace is `cf-env-<repoName>-<pullNumber>`, which ends in a separator plus digits for every
-// pull request ever opened, and `backend/docs/local-k3s-environments.md` recommends exactly this
-// host shape. Composed, they yield an environment that rolls out, reports `ready`, publishes an
-// address pointing somewhere else entirely, and dies at the `tester` step forty minutes later
-// with a connection error naming nothing that would lead anyone back to here.
+// Both halves of that pairing were things the platform itself produced. The per-PR namespace
+// default ended in `-<pullNumber>`, which has that shape for every pull request ever opened, and
+// `backend/docs/local-k3s-environments.md` recommends exactly this host shape. Composed, they
+// yielded an environment that rolled out, reported `ready`, published an address pointing
+// somewhere else entirely, and died at the `tester` step forty minutes later with a connection
+// error naming nothing that would lead anyone back to here. The defaults now render `pr<n>`, and
+// this rule is what stops an operator's own templates re-composing the same name.
 //
 // **The rule is exact, not a heuristic**, which is what lets a caller REFUSE on it: every clause
 // below was read off live resolutions rather than off nip.io's source (the fixtures in the test
@@ -46,8 +47,7 @@ export type WildcardDnsSuffix = (typeof WILDCARD_DNS_SUFFIXES)[number]
 
 /** The wildcard-DNS service a host is served by, or `null` for an ordinary hostname. */
 export function wildcardDnsSuffix(host: string): WildcardDnsSuffix | null {
-  const lower = host.trim().toLowerCase().replace(/\.$/, '')
-  return WILDCARD_DNS_SUFFIXES.find((suffix) => lower.endsWith(`.${suffix}`)) ?? null
+  return parseWildcardHost(host).suffix
 }
 
 /**
@@ -62,21 +62,51 @@ function isOctet(text: string): boolean {
   return /^(?:0|[1-9][0-9]{0,2})$/.test(text) && Number(text) <= 255
 }
 
+/** The separator a four-octet run is written with. A run may not mix the two. */
+type WildcardDnsSeparator = '.' | '-'
+
+/** One four-octet run as the resolver finds it, kept with where and how it is written. */
+interface WildcardDnsWindow {
+  /** The address in dotted form, whatever it is spelled with in the name. */
+  address: string
+  /** The separator its four octets are joined by IN THE NAME. */
+  separator: WildcardDnsSeparator
+  /** Index of its first label in {@link ParsedWildcardHost.parts}. */
+  start: number
+}
+
 /**
- * Every four-octet address embedded in a host, left to right, as the resolver would find them.
+ * A host read once: normalised, split, and scanned for the addresses it carries.
+ *
+ * ONE parse per public call, because the three things every caller needs (the suffix, the
+ * normalised host, the windows) are all products of the same scan. They used to be recomputed
+ * independently, which is not just wasted work: it left two copies of the normalisation rule that
+ * could disagree the moment either was changed on its own.
+ */
+interface ParsedWildcardHost {
+  /** Trimmed, lowercased, with a root dot removed: the form every answer is phrased in. */
+  host: string
+  suffix: WildcardDnsSuffix | null
+  /** Even indices are labels, odd indices the separator that preceded each one. */
+  parts: string[]
+  windows: readonly WildcardDnsWindow[]
+}
+
+/**
+ * Read a host once, finding every four-octet address it embeds, left to right, as the resolver
+ * would.
  *
  * Splitting on the separators is what enforces the label boundary: `pr5` and `5x` are single
  * tokens and neither is an octet, which is why `cf-acc-pr5.127.0.0.1.nip.io` resolves correctly
  * where `cf-acc-5.127.0.0.1.nip.io` does not. Windows OVERLAP by design (`1.2.3.4.5` holds both
  * `1.2.3.4` and `2.3.4.5`), because the resolver's own scan does.
  */
-export function wildcardDnsWindows(host: string): string[] {
-  const suffix = wildcardDnsSuffix(host)
-  const lower = host.trim().toLowerCase().replace(/\.$/, '')
-  const scanned = suffix ? lower.slice(0, -(suffix.length + 1)) : lower
-  // Even indices are labels, odd indices the separator that preceded each one.
+function parseWildcardHost(host: string): ParsedWildcardHost {
+  const normalised = host.trim().toLowerCase().replace(/\.$/, '')
+  const suffix = WILDCARD_DNS_SUFFIXES.find((entry) => normalised.endsWith(`.${entry}`)) ?? null
+  const scanned = suffix ? normalised.slice(0, -(suffix.length + 1)) : normalised
   const parts = scanned.split(/([.-])/)
-  const windows: string[] = []
+  const windows: WildcardDnsWindow[] = []
   for (let i = 0; i + 6 < parts.length; i += 2) {
     const labels = [parts[i], parts[i + 2], parts[i + 4], parts[i + 6]]
     if (labels.some((label) => label === undefined || !isOctet(label))) continue
@@ -84,10 +114,22 @@ export function wildcardDnsWindows(host: string): string[] {
     // resolves to 127.0.0.1 precisely because the run starting at `5` mixes `.` and `-`, so the
     // resolver does not read it as an address at all.
     const separators = [parts[i + 1], parts[i + 3], parts[i + 5]]
+    const separator = separators[0]
     if (new Set(separators).size !== 1) continue
-    windows.push(labels.join('.'))
+    if (separator !== '.' && separator !== '-') continue
+    windows.push({ address: labels.join('.'), separator, start: i })
   }
-  return windows
+  return { host: normalised, suffix, parts, windows }
+}
+
+/**
+ * Every four-octet address embedded in a host, left to right, in dotted form.
+ *
+ * The addresses alone, for a caller that only wants to know what a name carries;
+ * {@link parseWildcardHost} owns what makes one.
+ */
+export function wildcardDnsWindows(host: string): string[] {
+  return parseWildcardHost(host).windows.map((window) => window.address)
 }
 
 /**
@@ -115,13 +157,17 @@ export type WildcardDnsShift = {
  * two DIFFERENT addresses can send a caller somewhere it did not ask for.
  */
 export function describeWildcardDnsShift(host: string): WildcardDnsShift | null {
-  const suffix = wildcardDnsSuffix(host)
-  if (!suffix) return null
-  const windows = wildcardDnsWindows(host)
-  const resolved = windows[0]
-  const trailing = windows[windows.length - 1]
-  if (!resolved || !trailing || resolved === trailing) return null
-  return { host: host.trim().toLowerCase().replace(/\.$/, ''), suffix, resolved, trailing }
+  const parsed = parseWildcardHost(host)
+  if (!parsed.suffix) return null
+  const resolved = parsed.windows[0]
+  const trailing = parsed.windows[parsed.windows.length - 1]
+  if (!resolved || !trailing || resolved.address === trailing.address) return null
+  return {
+    host: parsed.host,
+    suffix: parsed.suffix,
+    resolved: resolved.address,
+    trailing: trailing.address,
+  }
 }
 
 /**
@@ -140,22 +186,88 @@ export function describeWildcardDnsShiftProblem(shift: WildcardDnsShift): string
   )
 }
 
+/** The trailing address as it is WRITTEN in `host` (dotted or dashed), for quoting back. */
+function trailingAddressAsWritten(host: string): string | null {
+  const { windows } = parseWildcardHost(host)
+  const trailing = windows[windows.length - 1]
+  return trailing ? trailing.address.replace(/\./g, trailing.separator) : null
+}
+
+/**
+ * The same host with the trailing address spelled using the OTHER separator, or `null` when the
+ * host carries no address to respell.
+ *
+ * What makes a respelling a fix is the uniform-separator rule: a prefix can only extend a run it
+ * shares a separator with, so flipping the address's own separator breaks the earlier window
+ * without touching the prefix. WHICH direction that is depends on what the operator already
+ * wrote, which is the part the remedy used to assume rather than read.
+ */
+function respellTrailingAddress(host: string): string | null {
+  const parsed = parseWildcardHost(host)
+  const trailing = parsed.windows[parsed.windows.length - 1]
+  if (!trailing) return null
+  const flipped: WildcardDnsSeparator = trailing.separator === '.' ? '-' : '.'
+  const parts = [...parsed.parts]
+  parts[trailing.start + 1] = flipped
+  parts[trailing.start + 3] = flipped
+  parts[trailing.start + 5] = flipped
+  const scanned = parts.join('')
+  return parsed.suffix ? `${scanned}.${parsed.suffix}` : scanned
+}
+
+/**
+ * Whether the answering window runs INTO the trailing address rather than sitting entirely ahead
+ * of it.
+ *
+ * Overlapping is the ordinary case, and the one "end the prefix with a letter" addresses: the
+ * prefix's last label became the address's first octet. Disjoint means the prefix carries a
+ * complete address of its own, which no separator change removes, so telling someone to re-spell
+ * anything would be advice that cannot work.
+ */
+function shiftedWindowsOverlap(host: string): boolean {
+  const { windows } = parseWildcardHost(host)
+  const first = windows[0]
+  const last = windows[windows.length - 1]
+  return first !== undefined && last !== undefined && first.start + 6 >= last.start
+}
+
 /**
  * How to make a mis-resolving host resolve, given that the address is not the part that is wrong.
+ *
+ * **Every remedy is VERIFIED against the rule above before it is offered**, rather than derived
+ * from the mere fact that a shift exists. The respelling used to print "write the address with
+ * dashes" unconditionally, which for a host already written `…-5-127-0-0-1.nip.io` described the
+ * broken configuration back to the person who wrote it: a prefix extends a dashed run exactly as
+ * it extends a dotted one, and only MIXING the two breaks it. So the candidate fix is now
+ * computed, re-graded, and dropped when it would not have helped.
  *
  * Ordered by how little each one disturbs: the digits are almost always a pull-request number
  * doing necessary work (a namespace has to be unique per environment), so the first two fixes
  * keep them and break the SEPARATOR that lets them be read as an octet.
  */
 export function wildcardDnsShiftRemedies(shift: WildcardDnsShift): readonly string[] {
-  return [
-    `End the prefix with a letter rather than a separator and digits: a namespace template of ` +
-      `'…-pr{{pullNumber}}' renders 'pr5', which is not an octet, where '…-{{pullNumber}}' ` +
-      `renders '5', which is.`,
-    `Or write the address with dashes instead of dots ('${shift.trailing.replace(/\./g, '-')}` +
-      `.${shift.suffix}'): a run mixing the two separators is not read as an address, so the ` +
-      `prefix can no longer open one.`,
+  const remedies: string[] = [
+    shiftedWindowsOverlap(shift.host)
+      ? `End the prefix with a letter rather than a separator and digits: a namespace template ` +
+        `of '…-pr{{pullNumber}}' renders 'pr5', which is not an octet, where '…-{{pullNumber}}' ` +
+        `renders '5', which is.`
+      : `Take the address out of the prefix: '${shift.resolved}' is a complete four-octet run ` +
+        `standing on its own ahead of '${shift.trailing}', so no change to what separates them ` +
+        `can stop it answering first.`,
+  ]
+  const respelled = respellTrailingAddress(shift.host)
+  const written = trailingAddressAsWritten(shift.host)
+  if (respelled !== null && written !== null && describeWildcardDnsShift(respelled) === null) {
+    remedies.push(
+      `Or spell the address with the other separator ` +
+        `('${trailingAddressAsWritten(respelled)}.${shift.suffix}' rather than ` +
+        `'${written}.${shift.suffix}'): a four-octet run has to use ONE separator throughout, so ` +
+        `a prefix joined on with the other one can no longer extend it.`,
+    )
+  }
+  remedies.push(
     `Or serve the environments from a host you control, where the address is in a DNS record ` +
       `rather than in the name.`,
-  ]
+  )
+  return remedies
 }
