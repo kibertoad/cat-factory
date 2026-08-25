@@ -207,6 +207,18 @@ export const FOLLOW_UPS_FILE = '.cat-follow-ups.jsonl'
  * three rework rounds in a row, the companion correctly rejecting each round for "design body
  * missing" while the design sat one message earlier in the transcript. Pinned in
  * `containerAgentJobBody.spec.ts` beside the write/no-write pair.
+ *
+ * The REASON is stated as what the platform keeps, never as what the reply is FOR, because this
+ * text reaches every container kind including the side-effect ones (coder, ci-fixer,
+ * conflict-resolver, mocker) that `applySurfaceDirectives` deliberately withholds
+ * {@link FINAL_ANSWER_IN_REPLY} from: their product is a pushed commit and they legitimately end
+ * with no answer to give, so telling them their last message is their answer is the same wrong
+ * claim that fragment's own contract forbids. "The platform keeps only your very last message" is
+ * true on both sides of that split, and it is the whole of what the ordering rule needs.
+ *
+ * The ordering also binds the OTHER sentinel a dispatch may ask for: {@link PR_DESCRIPTION_GUIDANCE}
+ * is appended AFTER this text for a PR-opening coding kind, so a "write it at the end" there would
+ * be the LAST ordering statement the agent reads and would reinstate the trailing write this fixed.
  */
 export const EFFORT_REPORT_GUIDANCE =
   'EFFORT SELF-ASSESSMENT — once your work is complete (including any commit or push you made) ' +
@@ -221,9 +233,9 @@ export const EFFORT_REPORT_GUIDANCE =
   'files: it is the single exception those instructions permit, because the harness keeps it out ' +
   'of every commit, so writing it changes nothing in the repository. It is a side channel only: ' +
   'never reference it in code and never add it to git. Write it exactly once. Ordering matters: ' +
-  'the effort file first, your final reply last, and no tool call after the reply. Only the text ' +
-  'of your very last message is read as your answer, so a tool call made after you have answered ' +
-  'displaces the answer with whatever short remark follows the tool result.'
+  'the effort file first, your final reply last, and no tool call after the reply. The platform ' +
+  'keeps only your very last message, so a tool call made after you have replied replaces what ' +
+  'you wrote with the brief remark that follows the tool result.'
 
 /**
  * Appended to EVERY container-agent system prompt at the same chokepoint as
@@ -320,6 +332,12 @@ export const PR_DESCRIPTION_FILE = '.cat-pr-description.md'
  * the PR falls back to the generic dispatch-time text (`prBody`), which is composed BEFORE the
  * agent runs and so can never describe the decisions actually made. This is a SIDE channel: the
  * platform keeps the file out of the commit, so writing it never affects the deliverable.
+ *
+ * Its closing sentence orders the write the same way {@link EFFORT_REPORT_GUIDANCE} does, and must
+ * keep doing so: the chokepoint appends THIS text after that one (`buildCodingAgentBody` folds it
+ * into the already-composed role prompt), so whatever it says about timing is the last ordering
+ * statement in the prompt. "At the end of your work" put a tool call back after the final reply,
+ * which is exactly the displacement the effort-report ordering exists to prevent.
  */
 export const PR_DESCRIPTION_GUIDANCE =
   'PULL REQUEST DESCRIPTION — when you have finished the work, write the reviewer-facing pull ' +
@@ -340,8 +358,8 @@ export const PR_DESCRIPTION_GUIDANCE =
   'mention accounts (`@name`), or put issue-closing wording such as "fixes" or "closes" in front ' +
   'of an issue link: the platform defuses all of those before publishing, so they would render ' +
   'as inert text rather than doing what you intended. This file is a side channel: it is kept ' +
-  'out of the commit, so never reference it in code and never add it to git. Write it once, at ' +
-  'the end of your work.'
+  'out of the commit, so never reference it in code and never add it to git. Write it exactly ' +
+  'once, when the work is complete and BEFORE you compose your final reply, never after it.'
 
 /**
  * Appended to a code/PR review agent's system prompt. It asks the reviewer to report, per
