@@ -95,6 +95,24 @@ supervising from anywhere else needs it set.
   dies with `EADDRINUSE`, turning one outage into a restart loop. Reaping by port means SIGKILLing a
   process it was never handed, so every kill **names** the pid and the command behind it, and it only
   ever runs once the supervisor's own child is confirmed dead.
+- **Names an outage it did _not_ cause.** If the stack stops answering and comes back with no repair
+  of ours in between, something restarted it underneath the supervisor — on a `node --watch`
+  deployment, usually a file-change storm that cycles the server several times in a row. Nothing
+  crashes and every process stays alive, so the only symptom is a client mid-request failing with
+  `ECONNREFUSED` against a stack that looks perfectly healthy by the time anyone looks. That
+  recovery is reported as a **warning** carrying how long the stack was down and a running
+  `unexplained outage #N` count, with the likely cause spelled out on the first occurrence:
+
+  ```text
+  [supervise 11:50:53] • health probe failed (1/3)
+  [supervise 11:51:03] ⚠ serving again after 19.3s down since the first failed probe
+                         (2 failed probe(s)) — unexplained outage #1, no repair of ours caused it
+  ```
+
+  Every `[supervise]` line is **timestamped**, because these are read interleaved with the
+  supervised server's own structured logs and are usually the only record that a transient outage
+  happened at all — placing them against that log used to mean interpolating from whichever
+  neighbouring line happened to carry a clock.
 
 Two failures it deliberately does **not** retry, because retrying either would reproduce the exact
 pathology this command exists to end, a restart loop that reads as progress:

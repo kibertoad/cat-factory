@@ -371,6 +371,15 @@ export interface SupervisorOutcome {
   /** Dependencies that reported a state only an operator can clear, by label. */
   blocked: string[]
   /**
+   * Outages the stack recovered from BY ITSELF — it stopped answering and came back with no repair
+   * of ours in between, so something restarted it underneath us. Counted separately from `repairs`
+   * because the two have opposite meanings for whoever is reading: a repair is the supervisor doing
+   * its job, while an unexplained outage is a symptom of the supervised stack cycling on its own
+   * (a `node --watch` file-change storm being the usual cause). A run that ends with several of
+   * these looks perfectly healthy by every other measure.
+   */
+  unexplainedOutages: number
+  /**
    * Set when the supervisor STOPPED trying, with the reason. Restarting cannot fix a command that
    * is simply broken, so `maxFailedStarts` consecutive restarts that never reached a serving state
    * end the loop and report — the caller turns this into a non-zero exit.
@@ -413,6 +422,53 @@ async function ensureDependencies(
 const RESTART_SETTLE_MS = 1_500
 
 /**
+ * Render a downtime for a human reading a scrolling log: `8.4s`, `1m 12s`. Sub-minute durations keep
+ * a decimal because the interesting ones are short — a watch storm is over in seconds, and "8s" vs
+ * "8.4s" is the difference between a rounded guess and a measurement.
+ */
+export function formatDowntime(ms: number): string {
+  if (ms < 60_000) return `${(ms / 1_000).toFixed(1)}s`
+  const totalSeconds = Math.round(ms / 1_000)
+  return `${Math.floor(totalSeconds / 60)}m ${String(totalSeconds % 60).padStart(2, '0')}s`
+}
+
+/**
+ * Report an outage the stack recovered from on its own, and return the new running count.
+ *
+ * Reaching a `recovered` action means NO repair of ours ran during the outage — a repair resets the
+ * counters and re-bases the grace window, so the first serving tick after one reports plain
+ * `serving`. So this branch is always something else having cycled the stack, which is worth a
+ * warning rather than the bland success it used to log: the failure it explains (a client failing
+ * with `ECONNREFUSED` against a stack that looks perfectly healthy by the time anyone looks) leaves
+ * no other trace, because nothing crashed and every process involved is still alive.
+ *
+ * The cause hint is printed only on the FIRST occurrence, the same warn-once rule
+ * {@link ensureDependencies} follows, so a flapping stack does not bury its own diagnosis in repeats.
+ */
+function reportUnexplainedOutage(
+  log: (message: string) => void,
+  action: { afterFailures: number; downMs: number },
+  previousCount: number,
+): number {
+  const count = previousCount + 1
+  log(
+    `⚠ serving again after ${formatDowntime(action.downMs)} down since the first failed ` +
+      `probe (${action.afterFailures} failed probe(s)) — unexplained outage #${count}, ` +
+      'no repair of ours caused it',
+  )
+  if (count === 1) {
+    log(
+      '  ↳ something restarted the stack underneath the supervisor. On a `node --watch` ' +
+        'deployment this is usually a file-change storm: the watcher cycles the server several ' +
+        'times, the port is unbound for a few seconds, and any client mid-request fails with ' +
+        'ECONNREFUSED while nothing crashes. Check the server log for repeated "Restarting" ' +
+        'lines with no error between them.',
+    )
+  }
+  return count
+}
+
+/**
  * Run the supervision loop: start the child, then probe on an interval and repair when the
  * decisions in `supervise.ts` say so. Returns when `stopSignal` aborts, when the crash-loop budget
  * is spent, or when `maxTicks` is reached (tests) — in production, otherwise never.
@@ -426,6 +482,7 @@ export async function runSupervisor(deps: SupervisorDeps): Promise<SupervisorOut
   let ticks = 0
   let blocked: string[] = []
   let gaveUp: string | undefined
+  let unexplainedOutages = 0
   const warned = new Set<string>()
 
   // A child that has exited is a fact the probe can only infer, slowly. Tracked per generation so a
@@ -489,7 +546,7 @@ export async function runSupervisor(deps: SupervisorDeps): Promise<SupervisorOut
         log(`✔ resumed after ${Math.round(action.driftMs / 1000)}s — the stack is still serving`)
         break
       case 'recovered':
-        log(`✔ serving again (after ${action.afterFailures} failed probe(s))`)
+        unexplainedOutages = reportUnexplainedOutage(log, action, unexplainedOutages)
         break
       case 'counting':
         log(`• health probe failed (${action.failures}/${action.threshold})`)
@@ -525,5 +582,5 @@ export async function runSupervisor(deps: SupervisorDeps): Promise<SupervisorOut
     if (killed.length > 0) log(`↯ reaped ${killed.length} orphaned listener(s) on shutdown`)
   }
 
-  return { ticks, repairs, blocked, gaveUp }
+  return { ticks, repairs, blocked, gaveUp, unexplainedOutages }
 }

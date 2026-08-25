@@ -35,6 +35,16 @@ import { resolveSuperviseConfig } from './supervise.js'
  * the backslash through and treat the quote as closing the argument), and doubles the quote instead.
  * `platform` is injectable so both dialects are testable from either host.
  */
+/**
+ * Local wall-clock `HH:MM:SS` for a log prefix. Local rather than UTC on purpose: the reader is
+ * comparing these lines against a server log in the same terminal and against their own memory of
+ * when something broke, both of which are in local time.
+ */
+export function timestamp(at: Date = new Date()): string {
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return `${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}`
+}
+
 export function quoteToken(token: string, platform: string = process.platform): string {
   if (token === '') return '""'
   if (!/[\s"]/.test(token)) return token
@@ -107,8 +117,14 @@ export async function supervise(options: CliOptions): Promise<void> {
   const launcher = createChildLauncher({ command, cwd })
   const probe = createHealthProbe({ port, healthPath })
 
+  // Timestamped, because these lines are read INTERLEAVED with the supervised server's own output
+  // and are usually the only record of a transient outage. The supervised stack logs structured
+  // lines with their own timestamps; untimestamped supervisor lines could not be placed against
+  // them, so reconstructing when a stack was actually down meant interpolating from whatever
+  // neighbouring line happened to carry a clock. Local wall-clock time to the second matches what
+  // the reader sees elsewhere in the same terminal.
   const log = (message: string): void => {
-    process.stdout.write(`[supervise] ${message}\n`)
+    process.stdout.write(`[supervise ${timestamp()}] ${message}\n`)
   }
 
   const reaper = createPortReaper(shell, port, { log })

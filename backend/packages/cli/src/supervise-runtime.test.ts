@@ -7,6 +7,7 @@ import {
   createComposeDependency,
   createHealthProbe,
   createPortReaper,
+  formatDowntime,
   type HealthProbe,
   OperatorActionRequiredError,
   runSupervisor,
@@ -512,5 +513,73 @@ describe('createHealthProbe', () => {
     })
     await expect(createHealthProbe({ port, healthPath: '/ready' }).serving()).resolves.toBe(true)
     await expect(createHealthProbe({ port, healthPath: '/health' }).serving()).resolves.toBe(false)
+  })
+})
+
+describe('formatDowntime', () => {
+  it('keeps a decimal under a minute, where the interesting outages live', () => {
+    expect(formatDowntime(19_300)).toBe('19.3s')
+    expect(formatDowntime(900)).toBe('0.9s')
+  })
+
+  it('switches to minutes and pads the seconds', () => {
+    expect(formatDowntime(72_000)).toBe('1m 12s')
+    expect(formatDowntime(65_000)).toBe('1m 05s')
+  })
+})
+
+describe('runSupervisor — unexplained outages', () => {
+  it('reports a self-healed outage with its duration instead of a bland success', async () => {
+    const logs: string[] = []
+    // Down for one tick, then back — below the failure threshold, so NOTHING here repairs it. That
+    // is the shape of a `node --watch` file-change storm: the stack cycles underneath us.
+    const outcome = await runSupervisor({
+      config,
+      clock: fakeClock(),
+      probe: scriptedProbe([false, true]),
+      launcher: fakeLauncher(),
+      log: (m) => logs.push(m),
+      maxTicks: 2,
+    })
+
+    expect(outcome.repairs).toBe(0)
+    expect(outcome.unexplainedOutages).toBe(1)
+    const output = logs.join('\n')
+    expect(output).toContain('unexplained outage #1')
+    expect(output).toContain('1.0s down')
+    expect(output).toContain('no repair of ours caused it')
+  })
+
+  it('explains the likely cause once, not on every recurrence', async () => {
+    const logs: string[] = []
+    const outcome = await runSupervisor({
+      config,
+      clock: fakeClock(),
+      probe: scriptedProbe([false, true, false, true]),
+      launcher: fakeLauncher(),
+      log: (m) => logs.push(m),
+      maxTicks: 4,
+    })
+
+    expect(outcome.unexplainedOutages).toBe(2)
+    const hints = logs.filter((line) => line.includes('file-change storm'))
+    expect(hints).toHaveLength(1)
+    expect(logs.join('\n')).toContain('unexplained outage #2')
+  })
+
+  it('does NOT count an outage the supervisor itself repaired', async () => {
+    // Never serving: the threshold is reached and a repair runs, so this is the supervisor doing its
+    // job — the opposite of an unexplained outage, and it must not inflate that counter.
+    const outcome = await runSupervisor({
+      config,
+      clock: fakeClock(),
+      probe: scriptedProbe([false]),
+      launcher: fakeLauncher(),
+      log: () => {},
+      maxTicks: 2,
+    })
+
+    expect(outcome.repairs).toBeGreaterThan(0)
+    expect(outcome.unexplainedOutages).toBe(0)
   })
 })

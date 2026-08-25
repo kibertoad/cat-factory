@@ -45,8 +45,52 @@ describe('step — healthy', () => {
   it('reports recovery when it was previously failing, and clears the count', () => {
     const now = 1_000_000
     const { state, action } = step(settled(now, 2), { now, serving: true }, config)
-    expect(action).toEqual({ kind: 'recovered', afterFailures: 2 })
+    expect(action).toEqual({ kind: 'recovered', afterFailures: 2, downMs: 0 })
     expect(state.failures).toBe(0)
+  })
+})
+
+describe('step — outage duration', () => {
+  it('stamps the start of an outage when the first failure is counted', () => {
+    const now = 1_000_000
+    const { state } = step(settled(now), { now, serving: false }, config)
+    expect(state.notServingSince).toBe(now)
+  })
+
+  it('keeps the ORIGINAL stamp across further failures, so the window is not restarted', () => {
+    const first = 1_000_000
+    const one = step(settled(first), { now: first, serving: false }, config)
+    const second = first + config.pollMs
+    const two = step(one.state, { now: second, serving: false }, config)
+    expect(two.state.notServingSince).toBe(first)
+  })
+
+  it('reports how long the stack was down, measured from the first failed probe', () => {
+    const down = 1_000_000
+    const failed = step(settled(down), { now: down, serving: false }, config)
+    const back = down + 19_300
+    const { state, action } = step(failed.state, { now: back, serving: true }, config)
+    expect(action).toEqual({ kind: 'recovered', afterFailures: 1, downMs: 19_300 })
+    // Cleared on recovery, so the NEXT outage measures its own window rather than accumulating.
+    expect(state.notServingSince).toBeUndefined()
+  })
+
+  it('does not count a cold boot as an outage — grace-window ticks leave the stamp unset', () => {
+    const now = 1_000_000
+    const booting: SuperviseState = {
+      failures: 0,
+      quietUntil: now + 30_000,
+      lastTickAt: now - config.pollMs,
+    }
+    const { state, action } = step(booting, { now, serving: false }, config)
+    expect(action.kind).toBe('grace')
+    expect(state.notServingSince).toBeUndefined()
+  })
+
+  it('stamps the outage when a repair is triggered, so the ladder can report it too', () => {
+    const now = 1_000_000
+    const { state } = step(settled(now, 2), { now, serving: false }, config)
+    expect(state.notServingSince).toBe(now)
   })
 })
 

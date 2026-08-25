@@ -84,14 +84,38 @@ export interface SuperviseState {
   quietUntil: number
   /** When the previous tick ran — the basis for clock-jump (sleep) detection. */
   lastTickAt: number
+  /**
+   * When the FIRST failed probe of the current outage was counted; `undefined` whenever the stack
+   * is serving. This is what lets a recovery report how long the stack was actually unreachable
+   * ({@link SuperviseAction} `recovered.downMs`) instead of only how many probes missed.
+   *
+   * Deliberately set when a failure is COUNTED, not on any non-serving observation, so a cold boot
+   * inside the grace window is not reported as an outage — the port is legitimately unbound while
+   * the workspace builds and migrations run. The consequence is that the measured window starts at
+   * the first failed probe rather than at the instant the stack went down, so it UNDER-reports by
+   * up to one `pollMs`; the log says "since the first failed probe" rather than claiming precision
+   * the probe interval cannot deliver.
+   */
+  notServingSince?: number
 }
 
 /** What the runtime should do about this tick. Every branch of {@link step} names one. */
 export type SuperviseAction =
   /** Serving, and it was serving before too — nothing to say. */
   | { kind: 'serving' }
-  /** Serving again after one or more failed probes, without needing a repair. */
-  | { kind: 'recovered'; afterFailures: number }
+  /**
+   * Serving again after one or more failed probes, without needing a repair.
+   *
+   * This is the SELF-HEALED outage, and it is worth saying loudly rather than logging as a plain
+   * success: reaching it means the stack stopped answering and came back with no repair of ours in
+   * between, so something restarted it underneath the supervisor. On a `node --watch` deployment
+   * that is usually a file-change storm — the watcher cycles the server several times in a row, the
+   * port is unbound for a few seconds, and any client mid-request fails with `ECONNREFUSED` while
+   * every process involved stays alive and the server log shows no crash. Without the duration and
+   * the "we did not cause this" framing, the only trace left is two probe-failure lines that read
+   * like noise.
+   */
+  | { kind: 'recovered'; afterFailures: number; downMs: number }
   /** Not serving, but inside a boot/resume grace window — wait it out. */
   | { kind: 'grace'; msLeft: number }
   /** Not serving; failure counted but still below the threshold. */
@@ -159,7 +183,12 @@ export function step(
       }
     }
     return {
-      state: { failures: 0, quietUntil, lastTickAt: now },
+      state: {
+        failures: 0,
+        quietUntil,
+        lastTickAt: now,
+        notServingSince: state.notServingSince ?? now,
+      },
       action: {
         kind: 'repair',
         reason: `not serving after a ${Math.round(driftMs / 1000)}s stall (host slept?)`,
@@ -170,14 +199,26 @@ export function step(
   if (serving) {
     const action: SuperviseAction =
       state.failures > 0
-        ? { kind: 'recovered', afterFailures: state.failures }
+        ? {
+            kind: 'recovered',
+            afterFailures: state.failures,
+            // `notServingSince` is always set by the time a failure has been counted, so the
+            // fallback only guards against a hand-built state in a test: report 0 rather than a
+            // duration measured from an unrelated clock origin.
+            downMs: now - (state.notServingSince ?? now),
+          }
         : { kind: 'serving' }
     return { state: { failures: 0, quietUntil: state.quietUntil, lastTickAt: now }, action }
   }
 
   if (observation.childExited === true) {
     return {
-      state: { failures: 0, quietUntil: state.quietUntil, lastTickAt: now },
+      state: {
+        failures: 0,
+        quietUntil: state.quietUntil,
+        lastTickAt: now,
+        notServingSince: state.notServingSince ?? now,
+      },
       action: { kind: 'repair', reason: 'the supervised command exited' },
     }
   }
@@ -189,15 +230,16 @@ export function step(
     }
   }
 
+  const notServingSince = state.notServingSince ?? now
   const failures = state.failures + 1
   if (failures >= config.failureThreshold) {
     return {
-      state: { failures: 0, quietUntil: state.quietUntil, lastTickAt: now },
+      state: { failures: 0, quietUntil: state.quietUntil, lastTickAt: now, notServingSince },
       action: { kind: 'repair', reason: `${failures} consecutive failed health probes` },
     }
   }
   return {
-    state: { failures, quietUntil: state.quietUntil, lastTickAt: now },
+    state: { failures, quietUntil: state.quietUntil, lastTickAt: now, notServingSince },
     action: { kind: 'counting', failures, threshold: config.failureThreshold },
   }
 }
