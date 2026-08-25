@@ -90,6 +90,13 @@ the name: it stays unresolvable until some later install re-links it, and `pnpm 
 with `cat-factory: not found` on exactly the fresh clone the instructions above describe.
 The built file, addressed by path, is there the moment `predev` finishes.
 
+That path is checked rather than trusted. `scripts/check-workspace-bin-scripts.mjs` asserts
+both halves of the rule: that no script spawns an unlinkable workspace bin by name, and that
+a script spawning another package's build output addresses the path that package declares as
+its `bin`. The second half is what keeps the hardcoded `dist/bin.js` above honest, because
+moving the CLI's build output would otherwise update its own manifest, leave `predev` green,
+and surface here as `Cannot find module` on the next `pnpm dev`.
+
 The same warning is emitted for `@cat-factory/cli` under `backend/internal/acceptance` and
 for `@cat-factory/mcp-server` under `backend/packages/server`. Both of those consume the
 package as a **library** and neither runs its binary, so there the missing shim costs

@@ -4,16 +4,24 @@
 // `node_modules/.bin` shim `pnpm install` could not create, because the bin points at a `dist/`
 // file no fresh checkout has yet. The rule, the failure it produces and what is deliberately out
 // of scope live in `workspace-bin-scripts.mjs` (the testable detection half); this is the CLI
-// that ci.yml's repo-guards job runs.
+// that ci.yml's repo-guards job runs. It checks the other half of the same rule too: the by-path
+// spawn that replaces the bin name must address the path the owning package DECLARES as that
+// bin, so moving the build output breaks the build rather than someone's `pnpm dev`.
 //
 // Usage:  node scripts/check-workspace-bin-scripts.mjs
-// Exit 0 = clean; exit 1 = at least one script spawns an unlinkable workspace bin by name.
+// Exit 0 = clean; exit 1 = a script spawns an unlinkable workspace bin by name, or spawns
+// another workspace package's build output at a path that package does not declare as a bin.
 
 import { execFileSync } from 'node:child_process'
 import { globSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { collectUnlinkableBins, findWorkspaceBinCalls } from './workspace-bin-scripts.mjs'
+import {
+  collectBinTargets,
+  collectUnlinkableBins,
+  findBinPathDrift,
+  findWorkspaceBinCalls,
+} from './workspace-bin-scripts.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -56,10 +64,12 @@ const tracked = new Set(
     .filter(Boolean),
 )
 
-const unlinkableBins = collectUnlinkableBins(manifests, (repoPath) => tracked.has(repoPath))
-const findings = findWorkspaceBinCalls(manifests, unlinkableBins)
+const isTracked = (path) => tracked.has(path)
+const unlinkableBins = collectUnlinkableBins(manifests, isTracked)
+const nameCalls = findWorkspaceBinCalls(manifests, unlinkableBins)
+const pathDrift = findBinPathDrift(manifests, collectBinTargets(manifests), isTracked)
 
-for (const { path, script, command, bin, owner } of findings) {
+for (const { path, script, command, bin, owner } of nameCalls) {
   console.error(
     `${path}: script "${script}" spawns "${bin}", a bin of the workspace package ${owner}:\n` +
       `    ${command}\n` +
@@ -70,10 +80,23 @@ for (const { path, script, command, bin, owner } of findings) {
   )
 }
 
-if (findings.length > 0) {
+for (const { path, script, command, spawned, owner, targets } of pathDrift) {
+  console.error(
+    `${path}: script "${script}" spawns a build output of ${owner} that it does not declare:\n` +
+      `    ${command}\n` +
+      `  the path resolves to "${spawned}", but ${owner} declares its bin at ` +
+      `${targets.map((t) => `"${t}"`).join(', ')}.\n` +
+      `  Spawning by path is right (the bin NAME cannot link on a fresh checkout), but the path\n` +
+      `  has to be the declared one, or moving that build output leaves this script green here\n` +
+      `  and failing with "Cannot find module" at run time.`,
+  )
+}
+
+if (nameCalls.length + pathDrift.length > 0) {
   process.exit(1)
 }
 console.log(
   `check-workspace-bin-scripts: ${manifests.length} manifests, ${unlinkableBins.size} bins that ` +
-    `cannot link on a fresh checkout, none spawned by name.`,
+    `cannot link on a fresh checkout, none spawned by name, every by-path spawn at its ` +
+    `declared target.`,
 )

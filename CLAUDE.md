@@ -583,7 +583,7 @@ recipe, release-PR re-sync, new-published-package checklist: [`docs/internal/rel
 - `node scripts/check-doc-links.mjs`, `check-doc-anchors.mjs`, `check-shipped-doc-links.mjs`: an ordinary markdown link, a doc URL built in CODE, and a shipped tarball's links each resolve to a file AND a heading.
 - `node scripts/check-{test-lane,conformance-group}-parity.mjs`: `pnpm test:quick` excludes what CI's no-DB lane does; every conformance group runs on every facade.
 - `node scripts/check-deploy-placeholders.mjs`: the `deploy/*` templates hold placeholders, never real ids.
-- `node scripts/check-workspace-bin-scripts.mjs`: no package script spawns a workspace CLI by its bin NAME (that shim cannot link on a fresh checkout); spawn the built entry by path.
+- `node scripts/check-workspace-bin-scripts.mjs`: no package script spawns a workspace CLI by its bin NAME (that shim cannot link on a fresh checkout), and the by-path spawn that replaces it addresses the path the owning package DECLARES as that bin.
 - `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs them all).
 - `pnpm exec changeset status --since=origin/main`: after committing locally.
 - `pnpm lint:monorepo` (sherif): cross-package dependency-version consistency.
