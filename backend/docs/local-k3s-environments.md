@@ -80,10 +80,11 @@ If you'd rather wire it by hand (or the guided flow can't run on your host), do 
      cluster. Node/local honors custom-CA TLS via undici; the Cloudflare Worker does not, so a
      CA/insecure config is rejected there at registration.
    - `apiToken`: the ServiceAccount token (stored encrypted).
-   - the **URL derivation** (an ingress-template host like `{{branch}}.127.0.0.1.nip.io`, or a
-     `serviceStatus` LoadBalancer with k3s ServiceLB) + the `namespaceTemplate`.
+   - the **URL derivation** (an ingress-template host like `{{namespace}}.127.0.0.1.nip.io`, or a
+     `serviceStatus` LoadBalancer with k3s ServiceLB) + the `namespaceTemplate`. These two are
+     configured separately and are only correct **together**: see the third requirement below.
 
-     An ingress-template host needs **two** things, and neither is implied by the other. First an
+     An ingress-template host needs **three** things, and none is implied by the others. First an
      **ingress controller** in the cluster: a default k3d/k3s cluster bundles Traefik, but a
      cluster created with `--disable=traefik` has none, and kind ships none at all. Second a
      **host port published into it**: every local distribution runs the cluster inside Docker and
@@ -96,6 +97,27 @@ If you'd rather wire it by hand (or the guided flow can't run on your host), do 
      manual path is yours to check with `kubectl get ingressclass` and a `curl` at the host port.
      Also set the URL **scheme** to `http`: a local ingress controller serves TLS with a
      self-signed certificate, so an `https` environment URL fails on the certificate instead.
+
+     Third, and the one that reads as a cluster fault when it is a naming one: with a wildcard-DNS
+     host the rendered name must carry **exactly one address**, which constrains the
+     `namespaceTemplate` it is composed with. `nip.io` and `sslip.io` answer from the leftmost
+     four-octet run in a name and treat `-` and `.` as the same separator, so a namespace ending
+     in a separator plus digits contributes an address of its own and wins:
+
+     ```
+     cf-env-catalog-api-5.127.0.0.1.nip.io  ->  5.127.0.0     (somebody else's network)
+     cf-env-catalog-api-pr5.127.0.0.1.nip.io -> 127.0.0.1     (one character's difference)
+     ```
+
+     **The platform's own default namespace, `cf-env-<repoName>-<pullNumber>`, has that shape for
+     every pull request ever opened**, so leaving `namespaceTemplate` unset and pairing it with a
+     `nip.io` host is the trap rather than an exotic case. It cost a run four agents and a merged-
+     ready pull request before its `tester` step reported eight minutes of connection failures
+     against an address that was never this cluster. The provider now refuses such a provision
+     outright (`config_incomplete`, naming both addresses) rather than publishing the URL, so this
+     is a setup-time error, not a silent one. To fix it, end the namespace with a letter
+     (`…-pr{{pullNumber}}`), or write the address with dashes (`127-0-0-1.nip.io`), which no
+     prefix can extend because a run may not mix separators.
 
      A host port other than the scheme's default goes in the URL source's own **`port`** field,
      never inside `hostTemplate`. The rendered template is also the Ingress `spec.rules[].host`

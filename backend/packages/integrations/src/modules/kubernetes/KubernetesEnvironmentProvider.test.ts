@@ -161,6 +161,76 @@ describe('KubernetesEnvironmentProvider.provision', () => {
       provider.provision({ manifest, inputs: { pullNumber: '1' }, resolveSecret }),
     ).rejects.toThrow(/run repo/i)
   })
+
+  it('refuses a wildcard-DNS URL that would resolve to another network', async () => {
+    // The exact pairing that lost a run: a namespace ending in `-<pullNumber>` in front of the
+    // loopback nip.io host, which answers 5.127.0.0. Nothing downstream can notice, because the
+    // workloads are healthy and readiness is workload readiness, so the refusal has to be here.
+    stubFetch(() => ({ status: 200 }))
+    const misresolving = kubernetesConfigToManifest({
+      ...config,
+      namespaceTemplate: 'cf-acc-{{pullNumber}}',
+      url: {
+        source: 'ingressTemplate',
+        hostTemplate: '{{namespace}}.127.0.0.1.nip.io',
+        scheme: 'http',
+      },
+    })
+    await expect(
+      new KubernetesEnvironmentProvider().provision({
+        manifest: misresolving,
+        inputs: { pullNumber: '5', branch: 'feat' },
+        resolveSecret,
+        runRepo: runRepo({ 'k8s/app.yaml': DEPLOY_YAML }),
+      }),
+    ).rejects.toThrow(/5\.127\.0\.0/)
+  })
+
+  it('classifies that refusal as config_incomplete, so no fixer edits the checkout', async () => {
+    // The manifests are correct; the workspace connection is not. Sending a `deploy-fixer` at
+    // this would mean hard-coding an address the platform was supposed to substitute.
+    stubFetch(() => ({ status: 200 }))
+    const misresolving = kubernetesConfigToManifest({
+      ...config,
+      namespaceTemplate: 'cf-acc-{{pullNumber}}',
+      url: {
+        source: 'ingressTemplate',
+        hostTemplate: '{{namespace}}.127.0.0.1.nip.io',
+        scheme: 'http',
+      },
+    })
+    const error = await new KubernetesEnvironmentProvider()
+      .provision({
+        manifest: misresolving,
+        inputs: { pullNumber: '5', branch: 'feat' },
+        resolveSecret,
+        runRepo: runRepo({ 'k8s/app.yaml': DEPLOY_YAML }),
+      })
+      .catch((e: unknown) => e)
+    expect((error as { details?: { reason?: string } }).details?.reason).toBe('config_incomplete')
+  })
+
+  it('provisions normally when the same cluster is addressed by a letter-terminated namespace', async () => {
+    // The control for the two above: one character different in the namespace template, and the
+    // name carries exactly one address again.
+    stubFetch(() => ({ status: 200 }))
+    const fixed = kubernetesConfigToManifest({
+      ...config,
+      namespaceTemplate: 'cf-acc-pr{{pullNumber}}',
+      url: {
+        source: 'ingressTemplate',
+        hostTemplate: '{{namespace}}.127.0.0.1.nip.io',
+        scheme: 'http',
+      },
+    })
+    const result = await new KubernetesEnvironmentProvider().provision({
+      manifest: fixed,
+      inputs: { pullNumber: '5', branch: 'feat' },
+      resolveSecret,
+      runRepo: runRepo({ 'k8s/app.yaml': DEPLOY_YAML }),
+    })
+    expect(result.url).toBe('http://cf-acc-pr5.127.0.0.1.nip.io')
+  })
 })
 
 describe('KubernetesEnvironmentProvider.status', () => {

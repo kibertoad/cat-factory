@@ -6,9 +6,12 @@ import type {
   KubernetesUrlSource,
 } from '@cat-factory/kernel'
 import {
+  describeWildcardDnsShift,
+  describeWildcardDnsShiftProblem,
   kubernetesConnectionConfigSchema,
   kubernetesProvisionConfigSchema,
   parseStoredProviderConfig,
+  wildcardDnsShiftRemedies,
 } from '@cat-factory/contracts'
 import { parseAllDocuments } from 'yaml'
 import { apiBase, k8sName, labelValue } from './kubernetes.logic.js'
@@ -320,4 +323,49 @@ export function deriveUrl(
     return `${scheme}://${liveAddress}:${url.port}`
   }
   return `${scheme}://${liveAddress}`
+}
+
+/**
+ * Refuse a derived URL whose wildcard-DNS host answers a DIFFERENT address than the one the
+ * operator wrote into the template. `null` when there is nothing wrong, which is every ordinary
+ * host and every correctly-composed wildcard one.
+ *
+ * This is the one environment failure the platform can see coming and previously did not. An
+ * ingress-template URL is a CLAIM: it is rendered from config, published as the environment's
+ * address, and nothing between here and the tester ever asks whether it points at this cluster.
+ * Readiness cannot catch it either, because readiness is workload readiness (the pods are fine;
+ * they are just unreachable through that name). So the run rolled out, reported `ready`, and
+ * spent a tester agent for eight minutes on an address belonging to someone else before failing
+ * with a connection error that named the cluster rather than the config.
+ *
+ * **Refusing is the honest disposition rather than a warning**, and it costs nothing that was
+ * working: a mis-resolving host makes the environment unreachable to every consumer, so there is
+ * no deployment this turns from green to red. `config_incomplete` is the reason at the call site
+ * because the fix is a person editing the workspace's connection, and the one thing an automated
+ * fixer must not do here is edit the checkout: the manifests are correct.
+ *
+ * Deliberately at PROVISION only, not on the `status()` re-derivation. The condition is a fact
+ * about configuration, not about the cluster, so it cannot appear part-way through a run, and
+ * raising it on every poll would restate one config error as a stream of environment failures.
+ */
+export function describeMisresolvingEnvironmentUrl(url: string | null): string | null {
+  if (!url) return null
+  let hostname: string
+  try {
+    hostname = new URL(url).hostname
+  } catch {
+    // Not this rule's failure to report. A URL the platform cannot parse is already refused by
+    // the environment URL-safety policy, which says so far better than a DNS note would.
+    // silent-catch-ok: an unparseable URL IS "no verdict available" here.
+    return null
+  }
+  const shift = describeWildcardDnsShift(hostname)
+  if (!shift) return null
+  return (
+    `The environment URL cannot reach this cluster: ${describeWildcardDnsShiftProblem(shift)}. ` +
+    `Fix the workspace's Kubernetes connection, not the manifests, which are correct. ` +
+    wildcardDnsShiftRemedies(shift)
+      .map((remedy, index) => `(${index + 1}) ${remedy}`)
+      .join(' ')
+  )
 }

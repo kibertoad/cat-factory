@@ -32,7 +32,7 @@ function config(overrides: Partial<AcceptanceConfig> = {}): AcceptanceConfig {
       caCertPem: null,
       insecureSkipTlsVerify: true,
       ingressHostTemplate: '{{namespace}}.127.0.0.1.nip.io',
-      namespaceTemplate: 'cf-acc-{{pullNumber}}',
+      namespaceTemplate: 'cf-acc-pr{{pullNumber}}',
       imageTemplate: 'ghcr.io/{{repoOwner}}/{{repoName}}:pr-{{pullNumber}}',
     },
     vcs: { token: 'reporter-token', apiBaseUrl: 'https://api.github.com' },
@@ -92,6 +92,16 @@ function baseContext(): Partial<PreflightContext> {
 }
 
 /** Run one prerequisite against a fake deployment and assert it refused, returning the verdict. */
+/** Run one prerequisite and hand back whatever it concluded, refusal or not. */
+async function verdictOf(
+  id: string,
+  context: Partial<PreflightContext>,
+): Promise<PrerequisiteVerdict> {
+  const prerequisite = PREREQUISITES.find((entry) => entry.id === id)
+  if (!prerequisite) throw new Error(`no prerequisite '${id}'`)
+  return prerequisite.check({ ...baseContext(), ...context } as PreflightContext)
+}
+
 async function refusal(
   id: string,
   context: Partial<PreflightContext>,
@@ -956,6 +966,38 @@ describe('ingress-template', () => {
       }),
     })
     expect(commandsOf(verdict.remedy)[0]).toContain("'{{namespace}}.127.0.0.1.nip.io'")
+  })
+
+  it('refuses the namespace/host pair that lost a pass, naming the address it would reach', async () => {
+    // The regression this check was added for. Both templates render cleanly, which is why the
+    // check that graded them separately passed it, and in a live pass `cf-acc-5.127.0.0.1.nip.io`
+    // answered 5.127.0.0. That run reached a merged-ready pull request before the tester found
+    // out. The sample pull request here is number 1, so the graded name is `cf-acc-1…`, which is
+    // exactly the literal this check used to hard-code as its example of a HEALTHY host.
+    const verdict = await refusal('ingress-template', {
+      config: config({
+        cluster: { ...config().cluster, namespaceTemplate: 'cf-acc-{{pullNumber}}' },
+      }),
+    })
+    expect(verdict.problem).toContain('1.127.0.0')
+    expect(verdict.problem).toContain('cf-acc-1.127.0.0.1.nip.io')
+    expect(commandsOf(verdict.remedy)[0]).toContain("'cf-acc-pr{{pullNumber}}'")
+  })
+
+  it('refuses a namespace template holding a hole no provision fills', async () => {
+    const verdict = await refusal('ingress-template', {
+      config: config({
+        cluster: { ...config().cluster, namespaceTemplate: 'cf-acc-{{commitSha}}' },
+      }),
+    })
+    expect(verdict.problem).toContain('{{commitSha}}')
+  })
+
+  it('passes the shipped defaults, which are chosen to compose', async () => {
+    // The guard on the guard: the two defaults are only correct TOGETHER, so a change to either
+    // that reintroduces the shift fails here rather than in a live pass.
+    const verdict = await verdictOf('ingress-template', { config: config() })
+    expect(verdict.status).toBe('satisfied')
   })
 })
 

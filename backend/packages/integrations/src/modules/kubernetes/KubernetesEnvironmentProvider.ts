@@ -59,6 +59,7 @@ import {
   withPullSecretOnServiceAccounts,
 } from './kubernetes-registry-auth.logic.js'
 import {
+  describeMisresolvingEnvironmentUrl,
   deriveUrl,
   extractGatewayAddress,
   extractGatewayListenerHost,
@@ -212,6 +213,11 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     // For an ingress-template URL the address is known immediately; status-backed
     // sources resolve to null until `status()` reads the live LoadBalancer address.
     const url = deriveUrl(config.url, vars, null)
+    // Graded once the namespace has joined the vars, because the namespace is half of what
+    // mis-resolves: the template alone cannot be judged. See the helper for why this refuses
+    // rather than warns, and why it is not repeated on the status poll.
+    const misresolving = describeMisresolvingEnvironmentUrl(url)
+    if (misresolving) throw environmentFailure(misresolving, 'config_incomplete')
     return {
       externalId: namespace,
       url,

@@ -141,6 +141,36 @@ export function renderEnvironmentHost(hostTemplate: string, namespace: string): 
 }
 
 /**
+ * The namespace a pull request will be provisioned into, for composing with the host template.
+ *
+ * Exists because the two are only wrong TOGETHER: a namespace is a fine namespace whatever it
+ * ends in, and a host template is fine whatever it is prefixed with, and the environment is
+ * unreachable when one particular pair meets (see `describeWildcardDnsShift` in contracts). So
+ * the `ingress-template` prerequisite renders this and feeds it to {@link renderEnvironmentHost}
+ * rather than grading either half on its own.
+ *
+ * Rendered against the same sample as the image template, because the namespace template draws
+ * on the same per-PR vars. Lowercased because the platform sanitizes to an RFC1123 label, and
+ * NOT otherwise sanitized: `k8sName` lives in `@cat-factory/integrations`, which this suite does
+ * not depend on, and a second copy of that rule here would be a thing to drift. The cost is
+ * bounded and worth naming: a template whose sanitized form differs in a way that MATTERS here
+ * (an underscore, which `k8sName` turns into the `-` that opens an octet) is graded as its
+ * unsanitized self and can still slip past. The platform refuses it at provision either way;
+ * this check exists to move the common case in front of the spend, not to be the only guard.
+ */
+export function renderEnvironmentNamespace(
+  namespaceTemplate: string,
+  sample: ImageTemplateSample,
+): string | null {
+  const rendered = namespaceTemplate
+    .replace(PLACEHOLDER, (hole, key: string) =>
+      Object.hasOwn(sample, key) ? sample[key as ImageTemplateKey] : hole,
+    )
+    .toLowerCase()
+  return rendered.includes('{{') || rendered.includes('}}') ? null : rendered
+}
+
+/**
  * The per-pull-request values the platform fills an image template's holes with.
  *
  * **The KEY SET is the load-bearing half**, not the values: it decides which templates the gate

@@ -34,9 +34,20 @@ import {
 export const DEFAULT_INGRESS_PORT = 80
 
 /**
- * The host the rendered template resolves to. `nip.io` is wildcard DNS that maps
- * `<anything>.127.0.0.1.nip.io` to loopback with no local DNS setup, so the port probe below
- * targets loopback directly rather than resolving a sample hostname.
+ * The host the port probe connects to.
+ *
+ * Loopback directly, rather than a sample hostname, which keeps this probe answering the PORT
+ * question alone. That is still the right split, but the reason written here used to be that
+ * `nip.io` maps `<anything>.127.0.0.1.nip.io` to loopback, and **that is false**: these resolvers
+ * answer from the LEFTMOST four-octet run in a name and read `-` and `.` alike, so a prefix
+ * ending in a separator plus digits resolves somewhere else entirely
+ * (`cf-env-api-5.127.0.0.1.nip.io` is `5.127.0.0`). Resolving a sample here would therefore prove
+ * nothing about the template a workspace actually configures, since the sample and the real
+ * namespace differ in exactly the part that decides it.
+ *
+ * That half belongs to `describeWildcardDnsShift` in `@cat-factory/contracts`, which grades the
+ * rendered host and which the environment provider refuses a provision on. See
+ * `backend/docs/local-k3s-environments.md`.
  */
 export const INGRESS_PROBE_HOST = '127.0.0.1'
 

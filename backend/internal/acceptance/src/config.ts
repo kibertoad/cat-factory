@@ -19,17 +19,36 @@ import { OperatorRefusal, resolveStateDir } from '@cat-factory/acceptance-kit'
 import { packageRoot } from './packageRoot.ts'
 
 /**
- * The two templates a pass falls back to, exported because the CHECKS offer them as the fix.
+ * The three templates a pass falls back to, exported because the CHECKS offer them as the fix.
  *
- * Both `manifestTemplates.ts` remedies end on "unsetting the variable is also a fix, since the
+ * Every `manifestTemplates.ts` remedy ends on "unsetting the variable is also a fix, since the
  * default below is what it falls back to", and that sentence is only true while the value it
- * prints is the value {@link resolveConfig} actually falls back to. As two literals in two files
- * it was true by coincidence: changing the fallback would have handed the operator a pasteable
+ * prints is the value {@link resolveConfig} actually falls back to. As literals in two files it
+ * was true by coincidence: changing the fallback would have handed the operator a pasteable
  * command setting something else, with nothing failing.
  */
 export const DEFAULT_INGRESS_HOST_TEMPLATE = '{{namespace}}.127.0.0.1.nip.io'
 
 export const DEFAULT_IMAGE_TEMPLATE = 'ghcr.io/{{repoOwner}}/{{repoName}}:pr-{{pullNumber}}'
+
+/**
+ * **The `pr` is load-bearing and is the whole point of this constant.**
+ *
+ * This was `cf-acc-{{pullNumber}}` from the suite's first commit, which renders `cf-acc-5` and,
+ * in front of {@link DEFAULT_INGRESS_HOST_TEMPLATE}, produces `cf-acc-5.127.0.0.1.nip.io`. nip.io
+ * answers that with **5.127.0.0**: it takes the leftmost four-octet run in a name and reads `-`
+ * as a separator, so the pull-request number becomes the first octet of an address on somebody
+ * else's network. Every pull request number ends in a digit, so this was never occasionally
+ * wrong; it was wrong every time, and it stayed invisible until a pass first reached a step that
+ * actually opens the environment URL. That pass spent four agents, opened its pull request, and
+ * died at the tester after eight minutes of connection failures.
+ *
+ * Rendering `pr5` instead of `5` ends the label with a letter, which is not an octet, so the name
+ * carries exactly one address again. `@cat-factory/contracts`' `describeWildcardDnsShift` owns
+ * the rule, the `ingress-template` prerequisite applies it to whatever an operator overrides this
+ * with, and the platform refuses a provision that would mis-resolve.
+ */
+export const DEFAULT_NAMESPACE_TEMPLATE = 'cf-acc-pr{{pullNumber}}'
 
 /**
  * The doc that owns the cluster half of this setup, for the same reason the two defaults above are
@@ -349,7 +368,7 @@ export function resolveConfig(env: EnvRecord): ConfigResolution {
         ingressHostTemplate:
           trimmed(env.ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE) ?? DEFAULT_INGRESS_HOST_TEMPLATE,
         namespaceTemplate:
-          trimmed(env.ACCEPTANCE_K3S_NAMESPACE_TEMPLATE) ?? 'cf-acc-{{pullNumber}}',
+          trimmed(env.ACCEPTANCE_K3S_NAMESPACE_TEMPLATE) ?? DEFAULT_NAMESPACE_TEMPLATE,
         // GHCR under the repository's own owner, which needs no second credential decision on
         // either side: the workflow the briefs ask for pushes there with the `GITHUB_TOKEN` it
         // already has, and the platform wires the workspace's own VCS credential into each per-PR

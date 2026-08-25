@@ -3,6 +3,7 @@ import type { Block, KubernetesEnvironmentConfig } from '@cat-factory/kernel'
 import { frontendOriginsForService } from '@cat-factory/contracts'
 import { classifyDeploymentReadiness } from './kubernetes.logic.js'
 import {
+  describeMisresolvingEnvironmentUrl,
   deriveUrl,
   extractLoadBalancerAddress,
   isManifestFile,
@@ -225,5 +226,49 @@ describe('classifyDeploymentReadiness', () => {
         },
       }),
     ).toBe('gone')
+  })
+})
+
+describe('describeMisresolvingEnvironmentUrl', () => {
+  it('refuses the composition that cost a run its tester step', () => {
+    // `cf-acc-5` is the acceptance suite's per-PR namespace for pull request 5, in front of the
+    // loopback host the k3s doc recommends. Resolves to 5.127.0.0, which is not this cluster.
+    const refusal = describeMisresolvingEnvironmentUrl('http://cf-acc-5.127.0.0.1.nip.io')
+    expect(refusal).toContain('5.127.0.0')
+    expect(refusal).toContain('127.0.0.1')
+  })
+
+  it('sends the fix at the connection and says the manifests are not at fault', () => {
+    // The disposition matters more than the wording: this failure classifies as
+    // `config_incomplete` so no fixer is dispatched at a checkout that is already correct.
+    const refusal = describeMisresolvingEnvironmentUrl('http://cf-acc-5.127.0.0.1.nip.io')
+    expect(refusal).toContain('Kubernetes connection')
+    expect(refusal).toContain('manifests, which are correct')
+  })
+
+  it('reads the host out of a URL carrying a port', () => {
+    expect(describeMisresolvingEnvironmentUrl('http://cf-acc-5.127.0.0.1.nip.io:18080')).toContain(
+      '5.127.0.0',
+    )
+  })
+
+  it.each([
+    // The same cluster, addressed by a namespace whose last label ends in a letter.
+    'http://cf-env-catalog-api-pr5.127.0.0.1.nip.io',
+    // An ordinary hostname, whatever digits it carries.
+    'http://env-5.preview.example.com',
+    // A LoadBalancer address, the other URL source.
+    'http://192.168.1.40',
+  ])('passes %s', (url) => {
+    expect(describeMisresolvingEnvironmentUrl(url)).toBeNull()
+  })
+
+  it('says nothing when there is no URL yet, which is the status-backed sources on provision', () => {
+    expect(describeMisresolvingEnvironmentUrl(null)).toBeNull()
+  })
+
+  it('leaves an unparseable URL to the policy that already refuses it', () => {
+    // Answering here would put a DNS note in front of a failure that is not about DNS.
+    expect(describeMisresolvingEnvironmentUrl('not a url')).toBeNull()
   })
 })
