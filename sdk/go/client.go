@@ -39,7 +39,7 @@ import (
 )
 
 // Version is the SDK version, stamped into User-Agent. Kept in step by `pnpm check:sdk`.
-const Version = "0.45.1"
+const Version = "0.46.0"
 
 // Options configures a Client.
 type Options struct {

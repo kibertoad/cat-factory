@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/gates",
-  "version": "0.11.6",
+  "version": "0.11.7",
   "description": "The built-in polling-gate suite (CI, merge-conflicts, post-release health + the on-call escalation) for the Agent Architecture Board, authored entirely through the public gate-registry seam — depends only on @cat-factory/kernel + @cat-factory/contracts, never the engine. A deployment imports it for side effect and wires each gate's provider via the exported wireX handles.",
   "repository": {
     "type": "git",
@@ -36,8 +36,8 @@
     "@cat-factory/kernel": "workspace:*"
   },
   "devDependencies": {
-    "@stryker-mutator/core": "9.6.1",
-    "@stryker-mutator/vitest-runner": "9.6.1",
+    "@stryker-mutator/core": "10.0.0",
+    "@stryker-mutator/vitest-runner": "10.0.0",
     "typescript": "7.0.2",
     "vitest": "^4.1.11"
   }

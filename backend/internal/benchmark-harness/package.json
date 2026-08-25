@@ -16,16 +16,16 @@
     "bench": "node --experimental-strip-types src/cli.ts"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^4.0.39",
-    "@ai-sdk/openai": "^4.0.43",
-    "@ai-sdk/openai-compatible": "^3.0.31",
+    "@ai-sdk/anthropic": "^4.0.41",
+    "@ai-sdk/openai": "^4.0.46",
+    "@ai-sdk/openai-compatible": "^3.0.35",
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/executor-harness": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/orchestration": "workspace:*",
     "@cat-factory/spend": "workspace:*",
-    "ai": "^7.0.68",
+    "ai": "^7.0.77",
     "valibot": "^1.4.2",
     "workers-ai-provider": "^4.0.0"
   },

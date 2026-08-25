@@ -52,11 +52,12 @@ jobs:
       pull-requests: write # open/update the Release PR
       id-token: write # npm OIDC trusted publishing + provenance
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # changesets/action needs push credentials to create/update the Release
-          # PR branch; this is the one job that legitimately persists them.
-          persist-credentials: true # zizmor: ignore[artipacked]
+          # changesets/action v2 pushes the Release PR branch and the release tags
+          # through the GitHub API with the token handed to its own `github-token`
+          # input, so this job no longer needs git credentials left in the checkout.
+          persist-credentials: false
           # Use a PAT, not the default GITHUB_TOKEN: pushes/merges made with the
           # default token do NOT trigger further workflow runs (GitHub's
           # anti-recursion rule), so merging the Release PR with GITHUB_TOKEN
@@ -75,8 +76,13 @@ jobs:
 
       - name: Create Release PR or publish
         id: changesets
-        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
+        uses: changesets/action@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
         with:
+          # PAT so the Release PR it creates is authored by a real identity whose
+          # later merge re-triggers this workflow's publish job (see checkout above).
+          # v2 reads the token ONLY from this input: the GITHUB_TOKEN environment
+          # variable and the checkout's git credentials are no longer substitutes.
+          github-token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           # Run the root `version` npm script, NOT the action's default (which is a
           # bare `changeset version`). The action does NOT pick up the package.json
           # `version` script on its own, so without this input the post-bump
@@ -84,15 +90,15 @@ jobs:
           # with runner-image tag drift (harness bumped, deploy pins left behind) that
           # red-fails the "Guard runner image tag" check. Naming the script here is
           # what wires the auto-sync into every Release PR.
-          version: pnpm run version
-          # Builds every publishable package then runs `changeset publish`.
-          publish: pnpm ci:publish
-          title: 'Release Packages'
-          commit: 'chore: release packages'
+          version-script: pnpm run version
+          # Builds every publishable package then runs `changeset publish`. The action
+          # detects what was published from the file named by the CHANGESETS_OUTPUT env
+          # var it sets, so this script must pass its environment through to the CLI
+          # (pnpm does).
+          publish-script: pnpm ci:publish
+          pr-title: 'Release Packages'
+          commit-message: 'chore: release packages'
         env:
-          # PAT so the Release PR it creates is authored by a real identity whose
-          # later merge re-triggers this workflow's publish job (see checkout above).
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           # No NPM_TOKEN: publishing authenticates via npm OIDC trusted
           # publishing (the `id-token: write` permission above). Configure each
           # package's trusted publisher on npmjs.com to point at this workflow.
@@ -103,11 +109,11 @@ jobs:
       # version bump + publish run hands-off. Requires repo auto-merge enabled
       # and a required status check on `main` (otherwise `--auto` is rejected).
       - name: Enable auto-merge on the Release PR
-        if: steps.changesets.outputs.pullRequestNumber != ''
+        if: steps.changesets.outputs.pr-number != ''
         run: gh pr merge --auto --squash "$PR_NUMBER"
         env:
           # PAT here too: the auto-merge must be attributed to the PAT identity so
           # the merge push triggers the publish run. With GITHUB_TOKEN it merges
           # but the merge is a no-op for Actions and nothing publishes.
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ steps.changesets.outputs.pullRequestNumber }}
+          PR_NUMBER: ${{ steps.changesets.outputs.pr-number }}

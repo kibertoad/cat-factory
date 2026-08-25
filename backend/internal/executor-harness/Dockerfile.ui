@@ -65,7 +65,7 @@ RUN npm install -g playwright@1.62.1 \
 # not published under the bare `yarn` name (that package stops at 1.22), so it comes from
 # `@yarnpkg/cli-dist`, the same bundle corepack would have fetched. A repo declaring a DIFFERENT
 # pnpm in `packageManager` still gets that one: pnpm honours the field itself.
-RUN npm install -g pnpm@11.22.0 @yarnpkg/cli-dist@4.18.0
+RUN npm install -g pnpm@11.23.0 @yarnpkg/cli-dist@4.18.0
 RUN npm install -g serve@14.2.6
 ARG WIREMOCK_VERSION=3.13.1
 ENV WIREMOCK_JAR=/opt/wiremock/wiremock-standalone.jar

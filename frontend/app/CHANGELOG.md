@@ -1,5 +1,149 @@
 # @cat-factory/app
 
+## 0.285.0
+
+### Minor Changes
+
+- 08752da: Answering a Coder's question and RULING ON it are now different acts, and a decision the loop
+  budget throws away says so.
+  
+  A local run spent three implementer passes and about €4 producing three commits that reworded one
+  comment about a Kubernetes Ingress class, and the fourth walked the wording back to roughly where
+  the second left it. Nothing was broken: every part behaved as designed, and the design was the bug.
+  
+  The Coder asked a question nobody in the loop could answer (which IngressClass the target cluster
+  marks as default). Its answerer replied with a standing steer, the same string every time, because
+  that is all an unattended caller has. `resolution` did not exist, so the engine had exactly one
+  thing it could do with an answered question: fold it into another pass and tell the agent to apply
+  it. There was nothing to apply, so the agent did the only thing left and wrote its uncertainty into
+  the manifest comment, the README and the commit message, one wording per pass, re-raising the same
+  question under a new title each time. The loop ended on `maxLoops`, not on agreement, and then the
+  last round's answers were dropped in silence.
+  
+  **`POST …/follow-ups/…/answer` takes an optional `resolution`.** `answered` (the default, and
+  byte-for-byte the old behaviour) means the reply carries something to apply and buys a pass.
+  `closed` means the reply rules on the question: it clears the gate identically, spends nothing, and
+  rides into every later rework prompt under a heading that says the topic is settled and must not be
+  re-argued in the code or the commit message. The answerer picks; the engine does not try to read the
+  difference out of prose, which it cannot do. The public-API surface moves to `1.60.0`; the SPA's
+  answer box gains a second button.
+  
+  **Exhausting the send-back budget is no longer indistinguishable from converging.** The gate's
+  decision was a boolean whose `false` covered three different situations, one of which was "a
+  human's decision is about to be thrown away". It is now a named verdict, and the dropped items are
+  stamped `sendBackDropped`, warned about with the budget that ran out, counted under
+  `followup.send_back_dropped`, and reported on the pull request. Without the stamp such an item
+  stays `answered` with `sentToCoder` false forever, which reads exactly like an answer the Coder
+  applied.
+  
+  **The PR verification report gains a `followUps` section** (payload `version: 10`): what the Coder
+  flagged and what was decided, with the three dispositions that mean "not dealt with as triage
+  intended" called out above the table rather than left to be derived from a status column. Its
+  counts (`total`, `dropped`, `dismissedByPolicy`) are taken over every item the run surfaced rather
+  than over the rows the entries cap left visible, and the banner quotes `droppedBudget`, summed over
+  the steps that actually dropped something. A pipeline may place more than one follow-up-enabled
+  Coder, and a budget summed across all of them reads as half-spent while asserting it was spent.
+  
+  **A stamped drop is not permanent, and an unbudgeted step is not a drop.** Deciding an item again
+  clears `sendBackDropped`, so the send-back the budget could not pay for can be sent once the step
+  has a pass to spend; the stamp is terminal in the send-back selection, so left set it made that
+  item unsendable forever while the window claimed it had been sent. And a step whose `maxLoops` is
+  absent (persisted before the field existed) has the loop UNWIRED rather than exhausted: it passes
+  through as before instead of stamping every decided item, warning, and banner-ing a budget of 0/0
+  that nobody configured.
+  
+  **The acceptance suite closes questions instead of answering them.** It was the caller in the story
+  above, and its own file header had already reasoned through this exact failure for the clarity-review
+  gate. Its steer is a ruling, so it now sends one.
+  
+  **Fixed alongside, and part of why the agent had so little to work from:** the single-repo coding
+  path dropped `job.contextFiles` on the floor. Every sibling caller forwarded them;
+  `buildSingleRepoCodingSpec` did not. So a task whose brief was too long for `description` (and
+  therefore rode an attached document, which is the documented way to submit a real specification)
+  reached the implementer as a prompt naming `.cat-context/<file>.md` beside a checkout that had no
+  such directory. The agent rebuilt the brief from whatever summary the prompt carried and filed the
+  gap as a follow-up question. Bumps the runner image to `cat-factory-executor:1.130.0`.
+  
+  **The four SDK clients keep their published follow-up type names.** `PublicFollowUpItemKind` and
+  `PublicFollowUpItemStatus` are deduped enums, and adding the report's follow-ups section re-pointed
+  both onto a name derived from the section instead: a source break in four released clients,
+  arriving as ordinary generated churn. Both are now pinned in the emitter's `INLINE_ENUM_NAMES`, so
+  the only change to them is `closed` joining the status list. Python and Java are bumped to `0.5.0`,
+  which is what publishes them.
+
+### Patch Changes
+
+- 0cfa7a2: Refresh the dependency tree, the pinned GitHub Actions and the Docker images, and move the three bundled agent CLIs.
+  
+  **Registry deps** (direct ranges plus a full lockfile re-resolution, so transitives move to the
+  newest release each declared range already admits):
+  
+  - **AI SDK family** (held to the major that pairs with `workers-ai-provider`): `ai@^7.0.68 → ^7.0.77`,
+    `@ai-sdk/anthropic@^4.0.39 → ^4.0.41`, `@ai-sdk/openai@^4.0.43 → ^4.0.46`,
+    `@ai-sdk/openai-compatible@^3.0.31 → ^3.0.35`, `@ai-sdk/amazon-bedrock@^5.0.58 → ^5.0.61`.
+  - **Runtime deps**: `jose@^6.2.9 → ^6.2.10`, `pg-boss@^12.27.0 → ^12.28.0`,
+    `capnweb@^0.11.1 → ^0.12.0`, `@aws-sdk/client-s3@^3.1113.0 → ^3.1116.0`,
+    `@cloudflare/workers-types@^5.20260819.1 → ^5.20260823.1`.
+  - **Frontend**: `@nuxt/ui@^4.10.0 → ^4.11.0`, `happy-dom@^20.11.2 → ^20.11.6`,
+    `vue-tsc@^3.3.10 → ^3.3.11`. The frontend's `typescript@^6.0.3` is deliberately unchanged:
+    `vue-tsc` still resolves `typescript/lib/tsc`, a subpath TypeScript 7's exports map does not
+    expose, so the SPA stays on 6 until `vue-tsc` supports the Go port.
+  - **Tooling**: `@stryker-mutator/*@9.6.1 → 10.0.0` (its only breaking change is dropping Node 20;
+    CI runs 26) and pnpm `11.22.0 → 11.23.0`.
+  
+  **Changesets moves as a coupled major**: `@changesets/cli@^2.31.1 → ^3.0.1` plus
+  `changesets/action@v1.9.0 → v2.1.1`, which refuse each other's majors. Two behaviour changes had to
+  be pinned back to what this repo already relied on: `.changeset/config.json` now sets
+  `privatePackages: { version: true, tag: false }`, because v3 stopped versioning private packages by
+  default and `@cat-factory/executor-harness`'s version IS the runner image tag; and `release.yml`
+  takes the renamed inputs (`version-script`, `publish-script`, `pr-title`, `commit-message`), the
+  `pr-number` output, and the token through the `github-token` input, which v2 no longer accepts from
+  the environment. v2 pushes the release branch and tags through the GitHub API, so that job's
+  checkout no longer persists git credentials.
+  
+  **Held back, all inside the ~24h `minimumReleaseAge` window when this was cut**: `@types/node@26.3.0`,
+  `hono@4.13.4`, `oxlint@1.80.0`, `oxfmt@0.65.0`, `ai@7.0.78`, `@ai-sdk/openai-compatible@3.0.36`,
+  `@aws-sdk/client-s3@3.1117.0`. `pg-boss@12.28.0` was ~20 minutes short of the same window and was
+  taken anyway, so it is listed in `minimumReleaseAgeExclude` — the ONE third-party entry there, added
+  deliberately with a PRUNE ME note, since it has already aged past the gate and removing the line is
+  now a no-op re-resolve.
+  
+  **`wrangler` is now pinned by override**, not merely ranged. `@cloudflare/vitest-pool-workers@0.22.0`
+  pins `wrangler` (and through it `workerd` and `miniflare`) EXACTLY, so any in-range refresh floats our
+  caret ahead of the pool's pin and the tree gains a SECOND workerd — not just ~100MB of duplicated
+  platform binary per arch, but a runtime the Worker suite proves that is a different build from the one
+  `wrangler deploy` ships. The override holds it at whatever pool-workers pins, exactly as the three
+  esbuild pins beside it already do, and moves when that package moves.
+  
+  **Stryker 10 pulled Babel 8 into a tree whose Nuxt half is on Babel 7**, and the three Babel plugins
+  Nuxt declares as OPTIONAL PEERS were then filled from the 8.x line while still being handed
+  `@babel/core@7`. A Babel 8 plugin's `declare()` asserts the core major and throws, so
+  `pnpm-workspace.yaml` scopes those three names back to 7.x for their Nuxt parents.
+  
+  **The three agent CLIs the executor image bundles** move together and are all taken at their newest
+  release, ahead of the release-age window: Pi `0.84.2 → 0.84.3`, Claude Code `2.1.237 → 2.1.243`,
+  Codex `0.148.0 → 0.149.1`. That exemption is an explicit call re-made at each bump, and the
+  Dockerfile now says so for all three rather than for Claude Code alone. Pi's two extensions take the
+  ordinary aged pick, `2.6.2 → 2.7.0`. The UI image moves `pnpm 11.22.0 → 11.23.0` to match the
+  workspace; its Playwright (1.62.1), Yarn (4.18.0), `serve` (14.2.6) and WireMock (3.13.1) pins are
+  already current, as are the deploy image's kubectl `v1.36.4` / kustomize `v5.8.1` / helm `v4.2.4` and
+  both images' `node:26-trixie-slim` digest.
+  
+  The executor image tag therefore rolls to `1.130.0` (base + UI): republishing over a live tag does
+  not roll a deployment out. The deploy image is unchanged and stays at `0.2.15`.
+  
+  **Pinned GitHub Actions**: `actions/checkout v7.0.0 → v7.0.1`, `actions/setup-node v6.4.0 → v7.0.0`,
+  `actions/setup-java v5.7.0 → v6.0.0` (both majors are ESM rewrites with no change to the inputs used
+  here), `docker/build-push-action v7.2.0 → v7.3.0`, `docker/login-action v4.2.0 → v4.6.0`,
+  `docker/setup-buildx-action v4.1.0 → v4.3.0`, `docker/setup-qemu-action v4.1.0 → v4.2.0`,
+  `dorny/paths-filter v4.0.1 → v4.0.3`, `pnpm/action-setup v6.0.9 → v6.0.10`,
+  `rharkor/caching-for-turbo v2.5.0 → v2.5.1`, and `zizmorcore/zizmor-action v0.5.7 → v0.6.2`, which
+  raises the default zizmor from 1.26.1 to 1.29.0.
+- Updated dependencies [08752da]
+- Updated dependencies [0cfa7a2]
+- Updated dependencies [dc26bb5]
+  - @cat-factory/contracts@0.327.0
+
 ## 0.284.0
 
 ### Minor Changes

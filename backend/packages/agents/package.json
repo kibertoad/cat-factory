@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/agents",
-  "version": "0.142.1",
+  "version": "0.142.2",
   "description": "Agent catalog, routing, prompts and fragment library for the Agent Architecture Board.",
   "repository": {
     "type": "git",
@@ -32,14 +32,14 @@
     "precompile:templates": "node scripts/precompile-prompts.mjs"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^4.0.39",
-    "@ai-sdk/openai": "^4.0.43",
-    "@ai-sdk/openai-compatible": "^3.0.31",
+    "@ai-sdk/anthropic": "^4.0.41",
+    "@ai-sdk/openai": "^4.0.46",
+    "@ai-sdk/openai-compatible": "^3.0.35",
     "@ai-sdk/provider": "^4.0.7",
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/prompt-fragments": "workspace:*",
-    "ai": "^7.0.68",
+    "ai": "^7.0.77",
     "handlebars": "^4.7.9",
     "p-map": "^7.0.6",
     "valibot": "^1.4.2"
