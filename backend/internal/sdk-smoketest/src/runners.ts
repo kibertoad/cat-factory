@@ -18,6 +18,8 @@ export interface RunnerContext {
   baseUrl: string
   adminKey: string
   readKey: string
+  /** A base URL with nothing listening on it, for the connection-failure case. */
+  deadUrl: string
   /** Where this SDK writes its report. */
   outPath: string
 }
@@ -135,6 +137,7 @@ export async function runSdk(runner: SdkRunner, context: RunnerContext): Promise
     CAT_FACTORY_BASE_URL: context.baseUrl,
     CAT_FACTORY_API_KEY: context.adminKey,
     CAT_FACTORY_READ_KEY: context.readKey,
+    CAT_FACTORY_SMOKETEST_DEAD_URL: context.deadUrl,
     CAT_FACTORY_SMOKETEST_OUT: context.outPath,
   })
   const report = JSON.parse(await readFile(context.outPath, 'utf8')) as SdkReport

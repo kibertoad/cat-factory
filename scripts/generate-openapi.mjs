@@ -317,7 +317,7 @@ const OPERATION_DOCS = {
     tag: 'Services',
     summary: 'Patch a service, including where its per-run manifests live',
     description:
-      'Change a service’s authored fields, and declare its `provisioning`: where the manifests for a per-run environment are read from. That second half is what a connected cluster alone cannot supply, because the platform keeps “which cluster” (one per workspace) apart from “which manifests” (one set per service). An omitted `provisioning` leaves the stored one alone rather than clearing it, so correcting a title cannot un-deploy a service; send `provisioning: null` to CLEAR the pin, which leaves the service with no environment to provision. Board coordinates are deliberately absent, as they are on service creation.',
+      'Change a service’s authored fields, and declare its `provisioning`: where the manifests for a per-run environment are read from. That second half is what a connected cluster alone cannot supply, because the platform keeps “which cluster” (one per workspace) apart from “which manifests” (one set per service). An omitted `provisioning` leaves the stored one alone rather than clearing it, so correcting a title cannot un-deploy a service; send `provisioning: { "type": "infraless" }` to take the pin BACK, which leaves the service with no environment to provision and reads back with no `provisioning` at all. Board coordinates are deliberately absent, as they are on service creation.',
   },
   listPublicEnvironmentManifestTypes: {
     tag: 'Environments',

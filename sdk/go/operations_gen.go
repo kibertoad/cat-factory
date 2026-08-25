@@ -687,9 +687,10 @@ func (s *ServicesService) List(ctx context.Context) (*PublicServiceList, error) 
 // per-run environment are read from. That second half is what a connected cluster alone cannot
 // supply, because the platform keeps “which cluster” (one per workspace) apart from “which
 // manifests” (one set per service). An omitted `provisioning` leaves the stored one alone rather
-// than clearing it, so correcting a title cannot un-deploy a service; send `provisioning: null`
-// to CLEAR the pin, which leaves the service with no environment to provision. Board coordinates
-// are deliberately absent, as they are on service creation.
+// than clearing it, so correcting a title cannot un-deploy a service; send `provisioning: {
+// "type": "infraless" }` to take the pin BACK, which leaves the service with no environment to
+// provision and reads back with no `provisioning` at all. Board coordinates are deliberately
+// absent, as they are on service creation.
 // PATCH /api/v1/services/{serviceId} (operation updatePublicService).
 func (s *ServicesService) Update(ctx context.Context, serviceID string, body *UpdatePublicServiceRequest) (*PublicService, error) {
 	if body == nil {

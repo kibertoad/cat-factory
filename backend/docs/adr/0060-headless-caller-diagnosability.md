@@ -56,11 +56,21 @@ what that client had already seen from the origin, then the runtime's own cause 
   tiers as one list, projected from the same `EnvironmentConnectionService.listCustomTypes` the app's
   own inspector reads. It publishes `manifestId`, `label`, `source` and `defaultManifestPath`, and
   not `fixerPrompt` or `acceptsInputHint`.
-- **`PATCH /api/v1/services/{serviceId}` accepts `provisioning: null`** as CLEAR. Omitted keeps its
-  existing meaning exactly (the stored pin is left alone), and a value previously rejected becomes
-  accepted, so nothing a consumer sends today changes meaning. A clear is lowered onto the stored
-  column as the type that MEANS none rather than as a deleted key, because the patch replaces that
-  column wholesale.
+- **The service provisioning variant gains an `infraless` member**, which
+  `PATCH /api/v1/services/{serviceId}` accepts to TAKE A PIN BACK. Omitted keeps its existing
+  meaning exactly (the stored pin is left alone), and a member previously rejected becomes accepted,
+  so nothing a consumer sends today changes meaning. It is lowered onto the stored column as the
+  type that MEANS none rather than as a deleted key, because the patch replaces that column
+  wholesale, and it is the one member that does not overlay what is stored: the remainder belongs to
+  the engine being left behind.
+- **The undo is a MEMBER rather than a `provisioning: null`.** A null-valued OPTIONAL field is not
+  expressible from the Go, Java or Python clients: each drops one when serializing (`omitempty`,
+  `@JsonInclude(NON_NULL)`, `if ... is not None`), and Go cannot reach for `omitzero` while the SDK
+  is pinned at Go 1.23. A field where absent and null must mean different things is therefore a
+  shape only the TypeScript client can drive, so `/api/v1` does not have one: where a surface needs
+  a third state, it gets a named member. A named member also says what the service BECOMES rather
+  than only what it stops being, which answers the variant's own complaint that neither of its two
+  members meant "none".
 
 ## Rationale
 

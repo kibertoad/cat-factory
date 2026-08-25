@@ -40,8 +40,14 @@ import org.jspecify.annotations.Nullable;
  * and the HISTORY belongs to the {@link Transport} that made the earlier calls.
  *
  * <p>A PORT of the platform's own {@code ConnectionFailureCause} vocabulary, not an import of it:
- * this SDK's only runtime dependency is Jackson, by design. The four clients are kept saying the
- * same things by their own tests rather than by a shared module.
+ * this SDK's only runtime dependency is Jackson, by design.
+ *
+ * <p>What keeps the copy honest is {@code scripts/check-sdk-connection-causes.mjs}, a repo-level
+ * guard that reads the contracts picklist and all four ported lists and fails on any disagreement.
+ * It has to be a guard rather than a test in here: a test in this package cannot see the picklist,
+ * so it could only restate the list a second time and would stay green through the exact drift
+ * that matters. What each cause is MATCHED ON below is this runtime's own business, and is pinned
+ * by {@code ConnectionDiagnosisTest}.
  */
 final class ConnectionDiagnosis {
 
@@ -104,6 +110,9 @@ final class ConnectionDiagnosis {
     }
 
     private static @Nullable Cause classifyOne(Throwable link) {
+        // Read once at the top: the JDK gives several of these conditions no type of their own,
+        // only the wording the OS reported, and the ConnectException branch below needs it too.
+        String text = link.getMessage() == null ? "" : link.getMessage().toLowerCase(Locale.ROOT);
         // The certificate checks lead, because a TLS rejection arrives wrapped in the
         // SSLHandshakeException that carried it: answering with the wrapper is what sends an
         // operator looking for a proxy instead of pasting a CA bundle.
@@ -120,6 +129,22 @@ final class ConnectionDiagnosis {
             return Cause.DNS;
         }
         if (link instanceof ConnectException) {
+            // NOT unconditionally REFUSED. `java.net.ConnectException` is what the JDK raises for
+            // a refusal AND for an OS-level connect timeout ("Connection timed out"), which is
+            // reachable whenever the caller supplies an HttpClient with no connectTimeout: the
+            // JDK never gets to raise its own HttpConnectTimeoutException, and the kernel's
+            // ETIMEDOUT surfaces under this type instead. Answering REFUSED there produces
+            // "nothing is listening at ...", which is the exact false reachability verdict this
+            // class exists to remove: the packets were dropped IN FRONT of a deployment that may
+            // well be running. It is also the one condition on which this client would disagree
+            // with the other three, all of which read the errno. Only the wording separates a
+            // refusal from a timeout here, so the wording is what decides.
+            if (text.contains("timed out") || text.contains("timeout")) {
+                return Cause.TIMEOUT;
+            }
+            if (text.contains("network is unreachable") || text.contains("no route to host")) {
+                return Cause.UNREACHABLE;
+            }
             return Cause.REFUSED;
         }
         if (link instanceof NoRouteToHostException || link instanceof PortUnreachableException) {
@@ -131,7 +156,6 @@ final class ConnectionDiagnosis {
         if (link instanceof InterruptedException) {
             return Cause.ABORTED;
         }
-        String text = link.getMessage() == null ? "" : link.getMessage().toLowerCase(Locale.ROOT);
         if (link instanceof SSLHandshakeException || link instanceof SSLException) {
             for (String wording : TLS_PROTOCOL_TEXT) {
                 if (text.contains(wording)) {

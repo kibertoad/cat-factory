@@ -5052,8 +5052,10 @@ type PublicServiceProvisioning struct {
 	Kind string
 	// PublicServiceProvisioningVariant0 is set when type == "kubernetes".
 	PublicServiceProvisioningVariant0 *PublicServiceProvisioningVariant0
-	// PublicServiceProvisioningVariant1 is set when type == "custom".
+	// PublicServiceProvisioningVariant1 is set when type == "infraless".
 	PublicServiceProvisioningVariant1 *PublicServiceProvisioningVariant1
+	// PublicServiceProvisioningVariant2 is set when type == "custom".
+	PublicServiceProvisioningVariant2 *PublicServiceProvisioningVariant2
 	// Raw is the undecoded body, always populated.
 	Raw json.RawMessage
 }
@@ -5076,12 +5078,19 @@ func (u *PublicServiceProvisioning) UnmarshalJSON(data []byte) error {
 		}
 		u.PublicServiceProvisioningVariant0 = &out
 		return nil
-	case "custom":
+	case "infraless":
 		var out PublicServiceProvisioningVariant1
 		if err := json.Unmarshal(data, &out); err != nil {
 			return err
 		}
 		u.PublicServiceProvisioningVariant1 = &out
+		return nil
+	case "custom":
+		var out PublicServiceProvisioningVariant2
+		if err := json.Unmarshal(data, &out); err != nil {
+			return err
+		}
+		u.PublicServiceProvisioningVariant2 = &out
 		return nil
 	}
 	// An unknown variant is NOT an error: the surface is additive, and Raw + Kind still let
@@ -5096,6 +5105,9 @@ func (u PublicServiceProvisioning) MarshalJSON() ([]byte, error) {
 	}
 	if u.PublicServiceProvisioningVariant1 != nil {
 		return json.Marshal(u.PublicServiceProvisioningVariant1)
+	}
+	if u.PublicServiceProvisioningVariant2 != nil {
+		return json.Marshal(u.PublicServiceProvisioningVariant2)
 	}
 	if len(u.Raw) > 0 {
 		return u.Raw, nil
@@ -5207,6 +5219,11 @@ type PublicServiceProvisioningVariant0ManifestSourceVariant1 struct {
 
 // PublicServiceProvisioningVariant1 is the `PublicServiceProvisioningVariant1` wire model.
 type PublicServiceProvisioningVariant1 struct {
+	Type string `json:"type"`
+}
+
+// PublicServiceProvisioningVariant2 is the `PublicServiceProvisioningVariant2` wire model.
+type PublicServiceProvisioningVariant2 struct {
 	ManifestID string `json:"manifestId"`
 	// ManifestPath may be absent entirely.
 	ManifestPath *string `json:"manifestPath,omitempty"`

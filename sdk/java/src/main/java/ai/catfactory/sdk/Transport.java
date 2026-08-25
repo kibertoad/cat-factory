@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 
@@ -69,12 +69,26 @@ public final class Transport {
      *
      * <p>A response of ANY status counts: a 500 is still proof the origin is there, and that is the
      * difference between "it restarted" and "that address never answered", which are the two
-     * readings a bare "failed to reach" collapses. Atomic because a client is documented as safe to
-     * share across threads.
+     * readings a bare "failed to reach" collapses.
+     *
+     * <p>The count and the moment are held as ONE reference rather than as two {@code AtomicLong}s
+     * because they are one fact. With two, a reader landing between the two writes sees a call
+     * counted with no answer recorded yet, and the sentence built from that pair says the origin
+     * last answered at the epoch, which renders as "the last 29500000m ago" on the very first
+     * failure a concurrent client hits. As one reference, a count with no matching moment is not a
+     * state this field can hold. A client is documented as safe to share across threads.
      */
-    private final AtomicLong completedCalls = new AtomicLong();
+    private final AtomicReference<Answered> answered = new AtomicReference<>(Answered.NONE);
 
-    private final AtomicLong lastAnsweredMillis = new AtomicLong();
+    /**
+     * One answer tally: how many responses this transport has seen and when the last arrived.
+     *
+     * @param calls responses received, of any status
+     * @param atMillis when the last of them arrived; meaningless when {@code calls} is zero
+     */
+    private record Answered(long calls, long atMillis) {
+        static final Answered NONE = new Answered(0L, 0L);
+    }
 
     /**
      * The personal password sent on every request while set, for a key BOUND to a user.
@@ -194,7 +208,7 @@ public final class Transport {
      * whether that is safe.
      */
     public EventStream stream(String method, String path, Map<String, String> query) {
-        HttpRequest request = build(method, path, null, query, "text/event-stream");
+        HttpRequest request = buildOrDiagnose(method, path, null, query, "text/event-stream");
         try {
             HttpResponse<InputStream> response =
                     http.send(request, HttpResponse.BodyHandlers.ofInputStream());
@@ -238,7 +252,7 @@ public final class Transport {
             Map<String, String> query,
             String accept) {
         for (int attempt = 0; ; attempt++) {
-            HttpRequest request = build(method, path, body, query, accept);
+            HttpRequest request = buildOrDiagnose(method, path, body, query, accept);
             try {
                 HttpResponse<byte[]> response =
                         http.send(request, HttpResponse.BodyHandlers.ofByteArray());
@@ -282,8 +296,11 @@ public final class Transport {
 
     /** Note that the origin ANSWERED, which is what a later failure is read against. */
     private void recordAnswer() {
-        completedCalls.incrementAndGet();
-        lastAnsweredMillis.set(System.currentTimeMillis());
+        // Read the clock OUTSIDE the update: `updateAndGet` may re-apply its function when the
+        // compare-and-set loses, and a function that read the clock itself would then be timing
+        // the contention rather than the answer.
+        long now = System.currentTimeMillis();
+        answered.updateAndGet(prior -> new Answered(prior.calls() + 1L, now));
     }
 
     /**
@@ -292,13 +309,40 @@ public final class Transport {
      * caller unwrapping it finds exactly what the JDK reported.
      */
     private String diagnose(String method, String path, Throwable cause) {
-        long completed = completedCalls.get();
+        Answered seen = answered.get();
         ConnectionDiagnosis.OriginHistory history =
-                completed == 0
+                seen.calls() == 0
                         ? ConnectionDiagnosis.OriginHistory.NONE
                         : new ConnectionDiagnosis.OriginHistory(
-                                completed, System.currentTimeMillis() - lastAnsweredMillis.get());
+                                seen.calls(), System.currentTimeMillis() - seen.atMillis());
         return ConnectionDiagnosis.describe(method, path, baseUrl, cause, history);
+    }
+
+    /**
+     * Build a request, or report the failure to build one the same way every other transport
+     * failure is reported.
+     *
+     * <p>The JDK raises {@link IllegalArgumentException} from {@code HttpRequest.Builder.build()}
+     * for a header value carrying a control character, and from {@code URI.create} for a base URL
+     * that is not a URI. Both happen BEFORE a socket exists, and both used to escape this class
+     * raw: {@code ConnectionDiagnosis.Cause#INVALID_HEADER} existed with nothing able to reach it,
+     * so an API key pasted with a line break in it surfaced as a bare JDK exception rather than as
+     * the one sentence that names what a caller has to fix.
+     *
+     * <p>Deliberately NOT retried, unlike a transport failure: the same inputs build the same
+     * rejection every time, so a retry spends the budget to arrive at the identical message.
+     */
+    private HttpRequest buildOrDiagnose(
+            String method,
+            String path,
+            @Nullable Object body,
+            Map<String, String> query,
+            String accept) {
+        try {
+            return build(method, path, body, query, accept);
+        } catch (IllegalArgumentException cause) {
+            throw new CatFactoryConnectionException(diagnose(method, path, cause), cause);
+        }
     }
 
     private HttpRequest build(

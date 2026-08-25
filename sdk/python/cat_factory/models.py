@@ -11866,6 +11866,33 @@ class PublicServiceProvisioningVariant0ManifestSourceVariant1:
 class PublicServiceProvisioningVariant1:
     """`PublicServiceProvisioningVariant1`, as carried on the wire."""
 
+    type_: str
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicServiceProvisioningVariant1":
+        """Decode a `PublicServiceProvisioningVariant1` from its JSON object."""
+        known = {"type"}
+        return cls(
+            type_=data.get("type"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["type"] = self.type_
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicServiceProvisioningVariant2:
+    """`PublicServiceProvisioningVariant2`, as carried on the wire."""
+
     manifest_id: str
     type_: str
     #: May be absent entirely.
@@ -11877,8 +11904,8 @@ class PublicServiceProvisioningVariant1:
     extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "PublicServiceProvisioningVariant1":
-        """Decode a `PublicServiceProvisioningVariant1` from its JSON object."""
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicServiceProvisioningVariant2":
+        """Decode a `PublicServiceProvisioningVariant2` from its JSON object."""
         known = {"manifestId", "type", "manifestPath"}
         return cls(
             manifest_id=data.get("manifestId"),
@@ -13888,8 +13915,8 @@ def decode_public_decision(data: Mapping[str, Any]) -> PublicDecision:
     raise ValueError(f"Unknown PublicDecision kind: {tag!r}")
 
 
-#: `PublicServiceProvisioning` — one of: PublicServiceProvisioningVariant0, PublicServiceProvisioningVariant1. Discriminated by `type`; decode with `decode_public_service_provisioning`.
-PublicServiceProvisioning: TypeAlias = PublicServiceProvisioningVariant0 | PublicServiceProvisioningVariant1
+#: `PublicServiceProvisioning` — one of: PublicServiceProvisioningVariant0, PublicServiceProvisioningVariant1, PublicServiceProvisioningVariant2. Discriminated by `type`; decode with `decode_public_service_provisioning`.
+PublicServiceProvisioning: TypeAlias = PublicServiceProvisioningVariant0 | PublicServiceProvisioningVariant1 | PublicServiceProvisioningVariant2
 
 def decode_public_service_provisioning(data: Mapping[str, Any]) -> PublicServiceProvisioning:
     """Decode a `PublicServiceProvisioning` by its `type` tag.
@@ -13900,8 +13927,10 @@ def decode_public_service_provisioning(data: Mapping[str, Any]) -> PublicService
     tag = data.get("type")
     if tag == "kubernetes":
         return PublicServiceProvisioningVariant0.from_dict(data)
-    if tag == "custom":
+    if tag == "infraless":
         return PublicServiceProvisioningVariant1.from_dict(data)
+    if tag == "custom":
+        return PublicServiceProvisioningVariant2.from_dict(data)
     raise ValueError(f"Unknown PublicServiceProvisioning type: {tag!r}")
 
 

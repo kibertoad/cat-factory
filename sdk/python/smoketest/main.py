@@ -55,6 +55,7 @@ def require_env(name: str) -> str:
 base_url = require_env("CAT_FACTORY_BASE_URL")
 api_key = require_env("CAT_FACTORY_API_KEY")
 read_key = require_env("CAT_FACTORY_READ_KEY")
+dead_url = require_env("CAT_FACTORY_SMOKETEST_DEAD_URL")
 out_path = require_env("CAT_FACTORY_SMOKETEST_OUT")
 
 observations: dict[str, object] = {}
@@ -243,7 +244,10 @@ def expect_connection_refused() -> None:
     # whole product: a caller with no checkout reads this line and nothing else. All four clients
     # must name the cause (nothing listening) rather than assert unreachability, and must say what
     # this client had seen from the origin, which separates a restart from a bad address.
-    unreachable = CatFactoryClient(base_url="http://127.0.0.1:1", api_key=api_key, max_retries=0)
+    # The URL is RESERVED by the harness (a port bound and released), never named here: a
+    # fetch-based runtime refuses the WHATWG bad-port list before opening a socket, so a hardcoded
+    # low port asks the four clients different questions. See the harness's `reserveDeadUrl`.
+    unreachable = CatFactoryClient(base_url=dead_url, api_key=api_key, max_retries=0)
     try:
         unreachable.services.list()
         failures.append("error: connection refused — expected a transport failure, got a success")

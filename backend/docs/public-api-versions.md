@@ -995,11 +995,17 @@ paid for a design pass and an implementation. Refusing the write instead would n
 integration may send, which this surface does not do; the catalog is the additive answer, and a
 caller that lists before it pins can refuse before it spends.
 
-Alongside it, `PATCH /api/v1/services/{serviceId}` accepts `provisioning: null`, which CLEARS the
-stored pin and leaves the service with no environment to provision. Omitting the key keeps its
-existing meaning exactly (the stored pin is left alone, so a caller correcting a title does not
-un-deploy a service), and a value that was previously rejected is now accepted, so nothing a
-consumer sends today changes meaning. Clearing removes the whole stored provisioning rather than
-the published half of it, which is what taking a pin back means; a caller narrowing a pin sends the
-member it wants instead. Until this shipped, a suite that pinned a shared board's frame changed it
-permanently, because the provisioning variant has two members and neither means "none".
+Alongside it, the service provisioning variant gains an `infraless` member, which
+`PATCH /api/v1/services/{serviceId}` accepts to take a stored pin back and leave the service with
+no environment to provision. Omitting the key keeps its existing meaning exactly (the stored pin is
+left alone, so a caller correcting a title does not un-deploy a service), and a member that was
+previously rejected is now accepted, so nothing a consumer sends today changes meaning. Taking a
+pin back removes the whole stored provisioning rather than the published half of it; a caller
+narrowing a pin sends the member it wants instead. Until this shipped, a suite that pinned a shared
+board's frame changed it permanently, because the variant had two members and neither meant "none".
+
+The undo is a MEMBER rather than a `provisioning: null`, and that choice is a constraint on this
+surface generally: a null-valued OPTIONAL field is not expressible from the Go, Java or Python
+clients, each of which drops one when serializing (`omitempty`, `@JsonInclude(NON_NULL)`,
+`if ... is not None`). A field where absent and null must mean different things is therefore a
+shape only the TypeScript client can drive, and `/api/v1` does not have one.

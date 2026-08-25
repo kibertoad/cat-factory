@@ -107,4 +107,55 @@ class ConnectionDiagnosisTest {
         assertTrue(refused.contains("nothing is listening at " + BASE_URL), refused);
         assertTrue(refused.contains("has not completed a call against " + BASE_URL + " yet"), refused);
     }
+
+    @Test
+    @DisplayName("a ConnectException that TIMED OUT is a timeout, not a refusal")
+    void aConnectExceptionThatTimedOutIsNotARefusal() {
+        // `java.net.ConnectException` covers both, and only the OS wording separates them. It is
+        // reachable whenever the caller supplies an HttpClient with no connectTimeout: the JDK
+        // never raises its own HttpConnectTimeoutException, and the kernel's ETIMEDOUT arrives
+        // under this type instead.
+        //
+        // Answering REFUSED there would render "nothing is listening at ...", which is the exact
+        // false reachability verdict this class exists to remove: the packets were dropped in
+        // front of a deployment that may well be running. It is also the one condition on which
+        // this client would disagree with the other three, all of which read the errno.
+        assertEquals(
+                ConnectionDiagnosis.Cause.TIMEOUT,
+                ConnectionDiagnosis.classify(
+                        wrapped(new ConnectException("Connection timed out: connect"))));
+        assertTrue(
+                describe(
+                                wrapped(new ConnectException("Connection timed out: connect")),
+                                ConnectionDiagnosis.OriginHistory.NONE)
+                        .contains("did not answer before the connection timed out"));
+
+        // The refusal still reads as one, so the wording check narrows rather than replaces.
+        assertEquals(
+                ConnectionDiagnosis.Cause.REFUSED,
+                ConnectionDiagnosis.classify(wrapped(new ConnectException("Connection refused"))));
+    }
+
+    @Test
+    @DisplayName("a ConnectException naming an unreachable network is not a refusal either")
+    void aConnectExceptionNamingAnUnreachableNetworkIsNotARefusal() {
+        assertEquals(
+                ConnectionDiagnosis.Cause.UNREACHABLE,
+                ConnectionDiagnosis.classify(
+                        wrapped(new ConnectException("Network is unreachable: connect"))));
+    }
+
+    @Test
+    @DisplayName("an illegal header value is named as one")
+    void anIllegalHeaderValueIsNamedAsOne() {
+        // The cause that had no producer until `Transport` learned to diagnose a request it could
+        // not BUILD: `HttpRequest.Builder.build()` raises this before any socket exists, and it is
+        // not an IOException, so it used to escape the transport uncaught.
+        IllegalArgumentException illegal =
+                new IllegalArgumentException("illegal value for header authorization");
+        assertEquals(ConnectionDiagnosis.Cause.INVALID_HEADER, ConnectionDiagnosis.classify(illegal));
+        assertTrue(
+                describe(illegal, ConnectionDiagnosis.OriginHistory.NONE)
+                        .contains("not allowed in one"));
+    }
 }

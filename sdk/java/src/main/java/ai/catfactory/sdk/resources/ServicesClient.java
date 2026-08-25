@@ -89,8 +89,9 @@ public final class ServicesClient {
      * cannot supply, because the platform keeps “which cluster” (one per workspace) apart from
      * “which manifests” (one set per service). An omitted `provisioning` leaves the stored one
      * alone rather than clearing it, so correcting a title cannot un-deploy a service; send
-     * `provisioning: null` to CLEAR the pin, which leaves the service with no environment to
-     * provision. Board coordinates are deliberately absent, as they are on service creation.
+     * `provisioning: { "type": "infraless" }` to take the pin BACK, which leaves the service with
+     * no environment to provision and reads back with no `provisioning` at all. Board coordinates
+     * are deliberately absent, as they are on service creation.
      * {@code PATCH /api/v1/services/{serviceId}} (operation {@code updatePublicService}).
      */
     public PublicService update(String serviceId, UpdatePublicServiceRequest body) {

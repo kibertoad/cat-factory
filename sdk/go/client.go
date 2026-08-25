@@ -87,9 +87,7 @@ type Client struct {
 	// deployment was answering a moment ago. A response of ANY status counts: a 500 is still
 	// proof the origin is there, and that is the difference between "it restarted" and "that
 	// address never answered", which are the two readings a bare "failed to reach" collapses.
-	// Atomic for the same reason as the field above: a Client is safe for concurrent use.
-	completedCalls  atomic.Int64
-	lastAnsweredUTC atomic.Int64
+	origin originTracker
 
 	// Headless jobs: a public, inline pipeline run against a brief.
 	Jobs *JobsService
@@ -463,20 +461,12 @@ func (c *Client) do(ctx context.Context, spec requestSpec, kind responseKind, re
 
 // recordAnswer notes that the origin ANSWERED, which is what a later failure is read against.
 func (c *Client) recordAnswer() {
-	c.completedCalls.Add(1)
-	c.lastAnsweredUTC.Store(time.Now().UnixNano())
+	c.origin.recordAnswer()
 }
 
 // history is what this client can say about the origin at the moment a request failed.
 func (c *Client) history() originHistory {
-	completed := c.completedCalls.Load()
-	if completed == 0 {
-		return originHistory{}
-	}
-	return originHistory{
-		completedCalls:  int(completed),
-		sinceLastAnswer: time.Since(time.Unix(0, c.lastAnsweredUTC.Load())),
-	}
+	return c.origin.snapshot()
 }
 
 // connectionFailure wraps a transport fault in the classified account of it. The wrapped error is

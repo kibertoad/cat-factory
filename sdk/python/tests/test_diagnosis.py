@@ -15,7 +15,9 @@ import ssl
 import urllib.error
 
 from cat_factory._diagnosis import (
+    CAUSES,
     OriginHistory,
+    _verdict,
     classify_transport_failure,
     describe_transport_failure,
 )
@@ -86,3 +88,36 @@ def test_claims_nothing_about_the_origin_when_the_request_never_left() -> None:
     built = _describe(ValueError("Invalid header value b'key\\nwith-a-newline'"))
     assert "a header value holds a character that is not allowed in one" in built
     assert "nothing is listening" not in built
+
+
+def test_every_cause_renders_its_own_sentence() -> None:
+    """``CAUSES`` is the declared vocabulary, and this is what makes it load-bearing.
+
+    ``_verdict`` is an ``if`` chain ending in the ``unknown`` sentence, so Python (unlike the
+    TypeScript union and the Java enum, both of which the compiler checks) cannot tell that a
+    member has no branch. A cause added without one would render "ended before any response
+    arrived": a verdict claiming nothing was learned about the origin, for a failure the client
+    had in fact recognised. That is the degrade-quietly failure the whole module exists to remove,
+    reappearing one level up.
+
+    Distinctness is the assertion rather than non-emptiness, because a member that fell through
+    would produce a sentence that IS non-empty: the ``unknown`` one.
+    """
+    verdicts = {cause: _verdict(cause, "https://cat.example.test") for cause in CAUSES}
+    assert set(verdicts) == set(CAUSES)
+    assert all(verdicts.values()), "every cause owes a sentence"
+    assert len(set(verdicts.values())) == len(CAUSES), (
+        "two causes render the same sentence, which means one of them has no branch of its own "
+        f"and fell through to the `unknown` verdict: {sorted(verdicts.items())}"
+    )
+
+
+def test_a_header_value_rejected_before_the_socket_is_named_as_one() -> None:
+    """The cause that had no producer until the transport learned to catch a ``ValueError``.
+
+    ``http.client`` rejects a header value carrying a control character with a bare ``ValueError``,
+    which is neither an ``OSError`` nor a ``URLError``: it used to escape the transport uncaught.
+    """
+    rejected = ValueError("Invalid header value b'Bearer cf_live_pak_0000.a\\nb'")
+    assert classify_transport_failure(rejected) == "invalid-header"
+    assert "not allowed in one" in _describe(rejected)

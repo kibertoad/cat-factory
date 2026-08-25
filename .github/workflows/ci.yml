@@ -518,6 +518,13 @@ jobs:
       - name: Guard gate-approval raises
         run: node scripts/check-gate-approval-raise.mjs
 
+      # Requires the connection-failure cause vocabulary ported into each of the four published
+      # SDKs to still agree with the canonical one in contracts. The SDKs have no dependencies by
+      # design, so no test inside one can see that list, and drift is silent in both directions.
+      # Its fixtures run in the `node --test` step above. Pure node, no install.
+      - name: Guard SDK connection-failure vocabularies
+        run: node scripts/check-sdk-connection-causes.mjs
+
       # Requires every markdown file that SHIPS in a published tarball to link inside its own
       # package. An escaping relative link resolves perfectly from a checkout and is dead for the
       # consumer who installed the package, so it is invisible to everyone able to fix it: an org

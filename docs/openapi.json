@@ -5149,6 +5149,17 @@
               },
               {
                 "properties": {
+                  "type": {
+                    "const": "infraless"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
                   "manifestId": {
                     "maxLength": 64,
                     "minLength": 1,
@@ -19135,7 +19146,7 @@
         "x-min-scope": "admin"
       },
       "patch": {
-        "description": "Change a service’s authored fields, and declare its `provisioning`: where the manifests for a per-run environment are read from. That second half is what a connected cluster alone cannot supply, because the platform keeps “which cluster” (one per workspace) apart from “which manifests” (one set per service). An omitted `provisioning` leaves the stored one alone rather than clearing it, so correcting a title cannot un-deploy a service; send `provisioning: null` to CLEAR the pin, which leaves the service with no environment to provision. Board coordinates are deliberately absent, as they are on service creation.",
+        "description": "Change a service’s authored fields, and declare its `provisioning`: where the manifests for a per-run environment are read from. That second half is what a connected cluster alone cannot supply, because the platform keeps “which cluster” (one per workspace) apart from “which manifests” (one set per service). An omitted `provisioning` leaves the stored one alone rather than clearing it, so correcting a title cannot un-deploy a service; send `provisioning: { \"type\": \"infraless\" }` to take the pin BACK, which leaves the service with no environment to provision and reads back with no `provisioning` at all. Board coordinates are deliberately absent, as they are on service creation.",
         "operationId": "updatePublicService",
         "parameters": [
           {
@@ -19157,108 +19168,112 @@
                     "type": "string"
                   },
                   "provisioning": {
-                    "anyOf": [
+                    "oneOf": [
                       {
-                        "oneOf": [
-                          {
-                            "properties": {
-                              "manifestSource": {
-                                "oneOf": [
-                                  {
-                                    "properties": {
-                                      "path": {
-                                        "maxLength": 500,
-                                        "minLength": 1,
-                                        "type": "string"
-                                      },
-                                      "renderer": {
-                                        "enum": [
-                                          "raw",
-                                          "kustomize"
-                                        ],
-                                        "type": "string"
-                                      },
-                                      "type": {
-                                        "const": "colocated"
-                                      }
-                                    },
-                                    "required": [
-                                      "type",
-                                      "path"
-                                    ],
-                                    "type": "object"
+                        "properties": {
+                          "manifestSource": {
+                            "oneOf": [
+                              {
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 500,
+                                    "minLength": 1,
+                                    "type": "string"
                                   },
-                                  {
-                                    "properties": {
-                                      "path": {
-                                        "maxLength": 500,
-                                        "minLength": 1,
-                                        "type": "string"
-                                      },
-                                      "ref": {
-                                        "minLength": 1,
-                                        "type": "string"
-                                      },
-                                      "renderer": {
-                                        "enum": [
-                                          "raw",
-                                          "kustomize"
-                                        ],
-                                        "type": "string"
-                                      },
-                                      "repo": {
-                                        "pattern": "^[^/\\s]+\\/[^/\\s]+$",
-                                        "type": "string"
-                                      },
-                                      "type": {
-                                        "const": "separate"
-                                      }
-                                    },
-                                    "required": [
-                                      "type",
-                                      "repo",
-                                      "path"
+                                  "renderer": {
+                                    "enum": [
+                                      "raw",
+                                      "kustomize"
                                     ],
-                                    "type": "object"
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "const": "colocated"
                                   }
-                                ]
+                                },
+                                "required": [
+                                  "type",
+                                  "path"
+                                ],
+                                "type": "object"
                               },
-                              "type": {
-                                "const": "kubernetes"
+                              {
+                                "properties": {
+                                  "path": {
+                                    "maxLength": 500,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "ref": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "renderer": {
+                                    "enum": [
+                                      "raw",
+                                      "kustomize"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "repo": {
+                                    "pattern": "^[^/\\s]+\\/[^/\\s]+$",
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "const": "separate"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "repo",
+                                  "path"
+                                ],
+                                "type": "object"
                               }
-                            },
-                            "required": [
-                              "type",
-                              "manifestSource"
-                            ],
-                            "type": "object"
+                            ]
                           },
-                          {
-                            "properties": {
-                              "manifestId": {
-                                "maxLength": 64,
-                                "minLength": 1,
-                                "pattern": "^[a-z0-9][a-z0-9-]*$",
-                                "type": "string"
-                              },
-                              "manifestPath": {
-                                "maxLength": 500,
-                                "type": "string"
-                              },
-                              "type": {
-                                "const": "custom"
-                              }
-                            },
-                            "required": [
-                              "type",
-                              "manifestId"
-                            ],
-                            "type": "object"
+                          "type": {
+                            "const": "kubernetes"
                           }
-                        ]
+                        },
+                        "required": [
+                          "type",
+                          "manifestSource"
+                        ],
+                        "type": "object"
                       },
                       {
-                        "type": "null"
+                        "properties": {
+                          "type": {
+                            "const": "infraless"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "properties": {
+                          "manifestId": {
+                            "maxLength": 64,
+                            "minLength": 1,
+                            "pattern": "^[a-z0-9][a-z0-9-]*$",
+                            "type": "string"
+                          },
+                          "manifestPath": {
+                            "maxLength": 500,
+                            "type": "string"
+                          },
+                          "type": {
+                            "const": "custom"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "manifestId"
+                        ],
+                        "type": "object"
                       }
                     ]
                   },

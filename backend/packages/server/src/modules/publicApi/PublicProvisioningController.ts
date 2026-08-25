@@ -913,24 +913,8 @@ export function toBlockPatch(
     ...(input.description === undefined ? {} : { description: input.description }),
     ...(input.provisioning === undefined
       ? {}
-      : { provisioning: clearOrMerge(input.provisioning, stored) }),
+      : { provisioning: mergeProvisioning(input.provisioning, stored) }),
   }
-}
-
-/**
- * A supplied `provisioning` lowered onto the stored column: `null` CLEARS, a member MERGES.
- *
- * Clearing writes the type that MEANS none rather than deleting the key. `updateBlock` replaces
- * the column wholesale, so "absent" is not something a patch can express, and a stored
- * `{ type: 'infraless' }` is what every reader already treats an absent column as. It clears the
- * WHOLE bag, which is what taking a pin back means; a caller narrowing a pin sends the member it
- * wants instead.
- */
-function clearOrMerge(
-  patch: PublicServiceProvisioning | null,
-  stored: ServiceProvisioning | undefined,
-): ServiceProvisioning {
-  return patch === null ? { type: 'infraless' } : mergeProvisioning(patch, stored)
 }
 
 /**
@@ -957,6 +941,13 @@ function mergeProvisioning(
 ): ServiceProvisioning {
   const base = stored?.type === patch.type ? stored : undefined
   switch (patch.type) {
+    case 'infraless':
+      // Taking the pin back, and the ONE member that does not overlay: `...base` is deliberately
+      // not spread even when the stored column is already `infraless`. The whole bag belongs to
+      // the engine being left behind, so carrying any of it forward would leave a service that
+      // provisions nothing still holding another engine's images and Secret injections, ready to
+      // come back the next time someone pins it.
+      return { type: 'infraless' }
     case 'kubernetes':
       return {
         ...base,

@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.sun.net.httpserver.HttpServer;
@@ -134,6 +135,53 @@ class TransportTest {
                                             new TypeReference<Map<String, Object>>() {}));
             assertInstanceOf(CatFactoryServerException.class, thrown);
             assertEquals("unavailable", thrown.code());
+        } finally {
+            recorded.server().stop(0);
+        }
+    }
+
+    @Test
+    @DisplayName("a request the JDK refuses to BUILD is diagnosed, not thrown raw")
+    void aRequestTheJdkRefusesToBuildIsDiagnosed() throws IOException {
+        // `HttpRequest.Builder.build()` raises IllegalArgumentException for a header value holding
+        // a control character, before any socket exists. It sat OUTSIDE the try, so it escaped the
+        // transport as a bare JDK exception: a caller who pasted an API key with a line break in
+        // it got a stack trace naming nothing they could act on, and the INVALID_HEADER cause had
+        // no way to be produced at all.
+        Recorded recorded = serve(200, "{}");
+        try {
+            Transport transport =
+                    transportFor(recorded.server(), Map.of("x-trace", "line-one\nline-two"));
+            CatFactoryConnectionException failure =
+                    assertThrows(
+                            CatFactoryConnectionException.class,
+                            () ->
+                                    transport.request(
+                                            "GET",
+                                            "/thing",
+                                            null,
+                                            Map.of(),
+                                            new TypeReference<Map<String, Object>>() {}));
+            assertTrue(
+                    failure.getMessage().contains("not allowed in one"),
+                    "expected the invalid-header sentence, got: " + failure.getMessage());
+        } finally {
+            recorded.server().stop(0);
+        }
+    }
+
+    @Test
+    @DisplayName("a stream the JDK refuses to BUILD is diagnosed the same way")
+    void aStreamTheJdkRefusesToBuildIsDiagnosed() throws IOException {
+        // The second call site. `stream` built its request outside the try as well, so the two
+        // had to be fixed together or an SSE caller kept the raw throw.
+        Recorded recorded = serve(200, "");
+        try {
+            Transport transport =
+                    transportFor(recorded.server(), Map.of("x-trace", "line-one\nline-two"));
+            assertThrows(
+                    CatFactoryConnectionException.class,
+                    () -> transport.stream("GET", "/events", Map.of()));
         } finally {
             recorded.server().stop(0);
         }

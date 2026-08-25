@@ -104,3 +104,48 @@ func TestConnectionErrorFallsBackWhenBuiltOutsideTheTransport(t *testing.T) {
 		t.Fatalf("Error() = %q, want the plain rendering", err.Error())
 	}
 }
+
+// TestOriginHistoryIsNeverCountedWithoutItsMoment pins the invariant that made the count and the
+// timestamp one guarded value rather than two atomics.
+//
+// With two, a reader landing between the two writes saw a call counted with no answer recorded,
+// and the sentence built from that pair said the origin last answered at the zero instant: "the
+// last 29500000m ago" on the very first failure a concurrent client hit. Run under `-race` this
+// also asserts there is no data race on either half.
+func TestOriginHistoryIsNeverCountedWithoutItsMoment(t *testing.T) {
+	var tracker originTracker
+	start := time.Now()
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		for i := 0; i < 2000; i++ {
+			tracker.recordAnswer()
+		}
+	}()
+
+	for i := 0; i < 2000; i++ {
+		history := tracker.snapshot()
+		if history.completedCalls == 0 {
+			// No answer recorded yet, which is its own honest state.
+			continue
+		}
+		// The assertion: a counted call always has a real moment behind it. A torn read shows up
+		// as an age measured from the zero time, which is decades rather than microseconds; a
+		// clock read outside the lock shows up as a NEGATIVE age, an origin answering in the
+		// future. Both are pinned here because the first fix produced the second.
+		if history.sinceLastAnswer < 0 || history.sinceLastAnswer > time.Since(start)+time.Second {
+			t.Fatalf(
+				"read %d completed calls with an impossible age of %s: the count and the moment were torn apart",
+				history.completedCalls,
+				history.sinceLastAnswer,
+			)
+		}
+	}
+	<-done
+
+	final := tracker.snapshot()
+	if final.completedCalls != 2000 {
+		t.Fatalf("expected every recorded answer to be counted, got %d", final.completedCalls)
+	}
+}

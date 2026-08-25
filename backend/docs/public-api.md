@@ -1306,19 +1306,26 @@ naming no `manifestPath` will deploy from, and `null` says the type declares non
 nowhere to read a manifest. The list is ordered by `manifestId` for the same reason the handler list
 is ordered: a caller diffing two workspaces compares two stable lists.
 
-**Taking a pin back is `provisioning: null`:**
+**Taking a pin back is the `infraless` member:**
 
 ```http
 PATCH /api/v1/services/blk_...
-{ "provisioning": null }
+{ "provisioning": { "type": "infraless" } }
 ```
 
-That CLEARS the stored pin and leaves the service with no environment to provision, and it reads
-back with no `provisioning` at all. Omitting the key still means "leave the stored pin alone", which
-is what keeps a caller correcting a title from un-deploying a service, so the two are different
-edits and only the explicit null clears. Clearing removes the WHOLE stored provisioning rather than
-the published half of it, which is what taking a pin back means; a caller narrowing a pin sends the
-member it wants instead.
+That leaves the service with no environment to provision, and it reads back with no `provisioning`
+at all: "stored infraless" and "never pinned" are the same fact to every reader in the platform, so
+the read does not invent a distinction between them. Omitting the key still means "leave the stored
+pin alone", which is what keeps a caller correcting a title from un-deploying a service, so the two
+are different edits and only the explicit `infraless` takes the pin back. It removes the WHOLE
+stored provisioning rather than the published half of it, engine leftovers the public shape cannot
+express included; a caller narrowing a pin sends the member it wants instead, and that patch
+overlays what is stored.
+
+It is a member rather than a `null` on the field because a null-valued optional field does not
+survive three of the four official clients: Go, Java and Python each drop one on the way out
+(`omitempty`, `@JsonInclude(NON_NULL)`, `if ... is not None`), so a null spelling of this edit
+would have been a silent no-op for every caller not on the TypeScript client.
 
 #### Reading what a run committed
 

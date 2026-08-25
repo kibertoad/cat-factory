@@ -4,24 +4,15 @@
 package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PublicServiceProvisioningVariant1} wire model.
- * @param manifestId Length 1..64.
- * @param manifestPath May be absent entirely. Length 0..500.
  * @param type the {@code type} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicServiceProvisioningVariant1(
-    /** Length 1..64. */
-    @JsonProperty("manifestId") String manifestId,
-
-    /** May be absent entirely. Length 0..500. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("manifestPath") @Nullable String manifestPath,
-
     @JsonProperty("type") String type
 ) implements PublicServiceProvisioning {
 
@@ -37,21 +28,7 @@ public record PublicServiceProvisioningVariant1(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
-        private @Nullable String manifestId;
-        private @Nullable String manifestPath;
         private @Nullable String type;
-
-        /** Set {@code manifestId}. */
-        public Builder manifestId(@Nullable String manifestId) {
-            this.manifestId = manifestId;
-            return this;
-        }
-
-        /** Set {@code manifestPath}. */
-        public Builder manifestPath(@Nullable String manifestPath) {
-            this.manifestPath = manifestPath;
-            return this;
-        }
 
         /** Set {@code type}. */
         public Builder type(@Nullable String type) {
@@ -61,7 +38,7 @@ public record PublicServiceProvisioningVariant1(
 
         /** Build the {@link PublicServiceProvisioningVariant1}. */
         public PublicServiceProvisioningVariant1 build() {
-            return new PublicServiceProvisioningVariant1(manifestId, manifestPath, type);
+            return new PublicServiceProvisioningVariant1(type);
         }
     }
 }

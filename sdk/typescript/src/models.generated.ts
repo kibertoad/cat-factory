@@ -2834,6 +2834,7 @@ export interface PublicServiceList {
 export type PublicServiceProvisioning =
   | PublicServiceProvisioningVariant0
   | PublicServiceProvisioningVariant1
+  | PublicServiceProvisioningVariant2
 
 export interface PublicServiceProvisioningVariant0 {
   manifestSource: PublicServiceProvisioningVariant0ManifestSource
@@ -2868,6 +2869,10 @@ export interface PublicServiceProvisioningVariant0ManifestSourceVariant1 {
 }
 
 export interface PublicServiceProvisioningVariant1 {
+  type: 'infraless'
+}
+
+export interface PublicServiceProvisioningVariant2 {
   /** Length 1..64. */
   manifestId: string
   /** Length 0..500. */
@@ -3279,7 +3284,7 @@ export interface TestPublicEnvironmentConnectionResponse {
 export interface UpdatePublicServiceRequest {
   /** Length 0..2000. */
   description?: string
-  provisioning?: PublicServiceProvisioning | null
+  provisioning?: PublicServiceProvisioning
   /** Length 1..200. */
   title?: string
 }

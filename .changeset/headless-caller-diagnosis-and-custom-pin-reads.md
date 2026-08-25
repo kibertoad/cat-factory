@@ -21,5 +21,8 @@ error class and its cause are unchanged, so this is additive.
 On `/api/v1` (surface version 1.61.0, additive): `GET /api/v1/environments/manifest-types` publishes
 every id a service's `custom` provisioning may pin, because nothing validates a pin on the way in
 and an unserved id currently fails at the `deployer` step of a run already paid for. Alongside it,
-`PATCH /api/v1/services/{serviceId}` accepts `provisioning: null` to CLEAR a pin; omitting the key
-still leaves the stored pin alone, so no request a consumer sends today changes meaning.
+the service provisioning variant gains an `infraless` member, which
+`PATCH /api/v1/services/{serviceId}` accepts to TAKE A PIN BACK; omitting the key still leaves the
+stored pin alone, so no request a consumer sends today changes meaning. The undo is a member rather
+than a `provisioning: null` because a null-valued optional field is not expressible from the Go,
+Java or Python clients, which each drop one when serializing.

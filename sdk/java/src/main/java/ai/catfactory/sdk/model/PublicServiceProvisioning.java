@@ -8,7 +8,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
 /**
  * A {@code PublicServiceProvisioning} — one of: PublicServiceProvisioningVariant0,
- * PublicServiceProvisioningVariant1.
+ * PublicServiceProvisioningVariant1, PublicServiceProvisioningVariant2.
  * Discriminated by {@code type}. Sealed, so a Java 21 switch pattern and a Kotlin {@code when} are
  * both exhaustive with no default branch.
  */
@@ -19,6 +19,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
         visible = true)
 @JsonSubTypes({
     @JsonSubTypes.Type(value = PublicServiceProvisioningVariant0.class, name = "kubernetes"),
-    @JsonSubTypes.Type(value = PublicServiceProvisioningVariant1.class, name = "custom")
+    @JsonSubTypes.Type(value = PublicServiceProvisioningVariant1.class, name = "infraless"),
+    @JsonSubTypes.Type(value = PublicServiceProvisioningVariant2.class, name = "custom")
 })
-public sealed interface PublicServiceProvisioning permits PublicServiceProvisioningVariant0, PublicServiceProvisioningVariant1 {}
+public sealed interface PublicServiceProvisioning permits PublicServiceProvisioningVariant0, PublicServiceProvisioningVariant1, PublicServiceProvisioningVariant2 {}

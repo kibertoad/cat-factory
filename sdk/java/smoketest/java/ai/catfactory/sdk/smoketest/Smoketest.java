@@ -72,6 +72,7 @@ public final class Smoketest {
         String baseUrl = requireEnv("CAT_FACTORY_BASE_URL");
         String apiKey = requireEnv("CAT_FACTORY_API_KEY");
         String readKey = requireEnv("CAT_FACTORY_READ_KEY");
+        String deadUrl = requireEnv("CAT_FACTORY_SMOKETEST_DEAD_URL");
         Path out = Path.of(requireEnv("CAT_FACTORY_SMOKETEST_OUT"));
 
         Smoketest smoketest = new Smoketest();
@@ -310,9 +311,12 @@ public final class Smoketest {
             // separates a restart from a bad address.
             // The key is a placeholder because nothing ever reads it: the request fails before a
             // connection exists to send it over, which is the whole point of the case.
+            // The URL is RESERVED by the harness (a port bound and released), never named here: a
+            // fetch-based runtime refuses the WHATWG bad-port list before opening a socket, so a
+            // hardcoded low port asks the four clients different questions. See `reserveDeadUrl`.
             CatFactoryClient unreachable =
                     CatFactoryClient.builder()
-                            .baseUrl("http://127.0.0.1:1")
+                            .baseUrl(deadUrl)
                             .apiKey("cf_live_pak_0000.deadbeef")
                             .maxRetries(0)
                             .build();

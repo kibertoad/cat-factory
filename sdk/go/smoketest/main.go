@@ -51,6 +51,7 @@ func main() {
 	baseURL := requireEnv("CAT_FACTORY_BASE_URL")
 	apiKey := requireEnv("CAT_FACTORY_API_KEY")
 	readKey := requireEnv("CAT_FACTORY_READ_KEY")
+	deadURL := requireEnv("CAT_FACTORY_SMOKETEST_DEAD_URL")
 	outPath := requireEnv("CAT_FACTORY_SMOKETEST_OUT")
 
 	observations := map[string]any{}
@@ -359,8 +360,11 @@ func main() {
 		// clients must name the cause (nothing listening) rather than assert unreachability, and
 		// must say what this client had seen from the origin, which separates a restart from a bad
 		// address.
+		// The URL is RESERVED by the harness (a port bound and released), never named here: a
+		// fetch-based runtime refuses the WHATWG bad-port list before opening a socket, so a
+		// hardcoded low port asks the four clients different questions. See `reserveDeadUrl`.
 		unreachable, err := catfactory.New(catfactory.Options{
-			BaseURL:    "http://127.0.0.1:1",
+			BaseURL:    deadURL,
 			APIKey:     apiKey,
 			MaxRetries: -1,
 		})

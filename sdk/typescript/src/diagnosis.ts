@@ -12,9 +12,15 @@
 // value's chain, and the HISTORY belongs to the client instance that made the earlier calls.
 //
 // A PORT of the platform's own `ConnectionFailureCause` vocabulary (kernel's
-// `connection-failure.logic.ts`), not an import of it. This SDK declares no dependencies by
-// design, so reaching across that boundary is not available; `test/diagnosis.test.ts` pins that
-// the vocabulary still agrees with the one it was ported from.
+// `connection-failure.logic.ts`, owned by `@cat-factory/contracts`), not an import of it. This SDK
+// declares no dependencies by design, so reaching across that boundary is not available.
+//
+// What keeps the copy honest is `scripts/check-sdk-connection-causes.mjs`, a repo-level guard that
+// reads the contracts picklist and all four ported lists and fails on any disagreement. It has to
+// be a guard rather than a test in here: a test in this package cannot see the picklist, so it
+// could only restate the list a second time and would stay green through the exact drift that
+// matters. What each cause is MATCHED ON below is this runtime's own business, and is pinned by
+// `test/diagnosis.test.ts`.
 
 /**
  * Why a request never produced a response. `unknown` is a real member: an unrecognised chain is

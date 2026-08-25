@@ -12,8 +12,14 @@
 // the HISTORY belongs to the Client that made the earlier calls.
 //
 // A PORT of the platform's own ConnectionFailureCause vocabulary, not an import of it: this SDK
-// has no dependencies outside the standard library by design. The four clients are kept saying the
-// same things by their own tests rather than by a shared module.
+// has no dependencies outside the standard library by design.
+//
+// What keeps the copy honest is scripts/check-sdk-connection-causes.mjs, a repo-level guard that
+// reads the contracts picklist and all four ported lists and fails on any disagreement. It has to
+// be a guard rather than a test in here: a test in this package cannot see the picklist, so it
+// could only restate the list a second time and would stay green through the exact drift that
+// matters. What each cause is MATCHED ON below is this runtime's own business, and is pinned by
+// diagnosis_test.go.
 
 package catfactory
 
@@ -26,6 +32,7 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -57,6 +64,50 @@ type originHistory struct {
 	completedCalls int
 	// sinceLastAnswer is how long ago the last of them answered; only read when completedCalls > 0.
 	sinceLastAnswer time.Duration
+}
+
+// originTracker is the one owner of what this client has seen from the origin.
+//
+// The count and the moment are ONE fact, and they are kept behind one lock rather than in two
+// atomics because a reader between the two writes of a two-atomic version would see a call
+// counted with no answer recorded yet, and the sentence built from that says the origin last
+// answered at the zero instant, which renders as "the last 29500000m ago" on the very first
+// failure a concurrent client hits. A count that has no matching moment is not a state this type
+// can be in, which is a stronger guarantee than a comment telling the reader not to look.
+//
+// A Client is documented as safe for concurrent use, so this is reached from many goroutines; the
+// lock is taken once per completed call and once per failure, neither of which is a hot path
+// beside the request they belong to.
+type originTracker struct {
+	mu           sync.Mutex
+	calls        int
+	lastAnswered time.Time
+}
+
+// recordAnswer notes one answer from the origin.
+//
+// The clock is read UNDER the lock, as it is in snapshot: a moment captured by the caller before
+// it acquires can be older than an answer another goroutine has since recorded, and the age
+// computed from that pair comes out NEGATIVE, which renders as an origin that answered in the
+// future. Reading both stamps inside the same critical section orders them by construction.
+func (t *originTracker) recordAnswer() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.calls++
+	t.lastAnswered = time.Now()
+}
+
+// snapshot reads both halves together, so the pair a diagnosis is built from is always consistent.
+func (t *originTracker) snapshot() originHistory {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.calls == 0 {
+		return originHistory{}
+	}
+	return originHistory{
+		completedCalls:  t.calls,
+		sinceLastAnswer: time.Since(t.lastAnswered),
+	}
 }
 
 // classifyTransportFailure names the cause of a whole chain, MOST SPECIFIC first.

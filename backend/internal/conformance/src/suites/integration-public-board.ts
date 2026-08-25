@@ -96,11 +96,15 @@ function defineCustomProvisioningPins(harness: ConformanceHarness): void {
       )
     })
 
-    it('CLEARS a pin on an explicit null, and leaves an omitted one alone', async () => {
+    it('TAKES a pin back on an explicit infraless, and leaves an omitted one alone', async () => {
       // The pair, in the order a caller hits it. A suite that pins a shared board's frame had no
-      // way to undo the write, because the provisioning variant has two members and neither means
+      // way to undo the write, because the provisioning variant had two members and neither meant
       // "none"; and the omission must keep meaning "leave it alone", or a caller correcting a
       // title would un-deploy the service.
+      //
+      // Undoing is a MEMBER rather than a null because a null-valued optional field does not
+      // survive three of the four official clients (Go, Java and Python all drop one on the way
+      // out), which would have made this exact edit a silent no-op for most callers.
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace()
       const admin = await mintPublicApiKey(app, workspace.id, 'admin', 'pins')
@@ -129,7 +133,7 @@ function defineCustomProvisioningPins(harness: ConformanceHarness): void {
       const cleared = await app.call<{ provisioning?: unknown }>(
         'PATCH',
         `/api/v1/services/${serviceId}`,
-        { provisioning: null },
+        { provisioning: { type: 'infraless' } },
         admin,
       )
       expect(cleared.status).toBe(200)
