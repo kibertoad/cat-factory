@@ -526,28 +526,53 @@ describe('formatDowntime', () => {
     expect(formatDowntime(72_000)).toBe('1m 12s')
     expect(formatDowntime(65_000)).toBe('1m 05s')
   })
+
+  it('crosses to minutes on the value it RENDERS, never printing "60.0s"', () => {
+    // Branching on the raw milliseconds took this into the sub-minute arm and then rounded up
+    // inside it, printing a duration in a unit the format stops at.
+    expect(formatDowntime(59_980)).toBe('1m 00s')
+    expect(formatDowntime(59_400)).toBe('59.4s')
+  })
 })
 
-describe('runSupervisor — unexplained outages', () => {
+describe('runSupervisor — recoveries', () => {
   it('reports a self-healed outage with its duration instead of a bland success', async () => {
     const logs: string[] = []
-    // Down for one tick, then back — below the failure threshold, so NOTHING here repairs it. That
-    // is the shape of a `node --watch` file-change storm: the stack cycles underneath us.
+    // Serving FIRST, then down for one tick, then back — below the failure threshold, so nothing
+    // here repairs it. That is the shape of a `node --watch` file-change storm: a stack that was
+    // demonstrably up gets cycled underneath us.
     const outcome = await runSupervisor({
       config,
       clock: fakeClock(),
-      probe: scriptedProbe([false, true]),
+      probe: scriptedProbe([true, false, true]),
       launcher: fakeLauncher(),
       log: (m) => logs.push(m),
-      maxTicks: 2,
+      maxTicks: 3,
     })
 
     expect(outcome.repairs).toBe(0)
     expect(outcome.unexplainedOutages).toBe(1)
     const output = logs.join('\n')
     expect(output).toContain('unexplained outage #1')
-    expect(output).toContain('1.0s down')
+    expect(output).toContain('1.0s')
     expect(output).toContain('no repair of ours caused it')
+  })
+
+  it('qualifies the duration with the poll interval it was measured against', async () => {
+    // Both ends of the window are quantized to the poll interval and the errors point in opposite
+    // directions, so the number is the truth ± one poll. A reader handed it bare cannot tell that a
+    // sub-second blip and a full-interval outage render identically.
+    const logs: string[] = []
+    await runSupervisor({
+      config,
+      clock: fakeClock(),
+      probe: scriptedProbe([true, false, true]),
+      launcher: fakeLauncher(),
+      log: (m) => logs.push(m),
+      maxTicks: 3,
+    })
+
+    expect(logs.join('\n')).toContain('give or take the 1s poll interval')
   })
 
   it('explains the likely cause once, not on every recurrence', async () => {
@@ -555,10 +580,10 @@ describe('runSupervisor — unexplained outages', () => {
     const outcome = await runSupervisor({
       config,
       clock: fakeClock(),
-      probe: scriptedProbe([false, true, false, true]),
+      probe: scriptedProbe([true, false, true, false, true]),
       launcher: fakeLauncher(),
       log: (m) => logs.push(m),
-      maxTicks: 4,
+      maxTicks: 5,
     })
 
     expect(outcome.unexplainedOutages).toBe(2)
@@ -581,5 +606,46 @@ describe('runSupervisor — unexplained outages', () => {
 
     expect(outcome.repairs).toBeGreaterThan(0)
     expect(outcome.unexplainedOutages).toBe(0)
+  })
+
+  it('does NOT count a boot that outran the grace window as an outage', async () => {
+    // The stack has never answered, so nothing was running for a third party to restart: this is
+    // the supervisor watching its own child bind late. Reporting it as `no repair of ours caused
+    // it` would blame an invisible third party for the supervisor's own start.
+    const logs: string[] = []
+    const outcome = await runSupervisor({
+      config,
+      clock: fakeClock(),
+      probe: scriptedProbe([false, true]),
+      launcher: fakeLauncher(),
+      log: (m) => logs.push(m),
+      maxTicks: 2,
+    })
+
+    expect(outcome.unexplainedOutages).toBe(0)
+    const output = logs.join('\n')
+    expect(output).toContain('slow start')
+    expect(output).toContain('raise --boot-grace')
+    expect(output).not.toContain('unexplained outage')
+  })
+
+  it('does NOT count a RESTARTED stack binding late as an outage', async () => {
+    // The same misattribution one layer up, and the one that actually reaches production: a repair
+    // re-bases the grace window, so a restart slower than it recovers with failures on the clock.
+    const logs: string[] = []
+    const outcome = await runSupervisor({
+      config,
+      clock: fakeClock(),
+      // Down long enough to trip the threshold and force a repair, then still down for a tick past
+      // the restarted child's grace window, then serving.
+      probe: scriptedProbe([false, false, false, true]),
+      launcher: fakeLauncher(),
+      log: (m) => logs.push(m),
+      maxTicks: 4,
+    })
+
+    expect(outcome.repairs).toBeGreaterThan(0)
+    expect(outcome.unexplainedOutages).toBe(0)
+    expect(logs.join('\n')).not.toContain('unexplained outage')
   })
 })

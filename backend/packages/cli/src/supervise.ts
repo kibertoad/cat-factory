@@ -91,13 +91,48 @@ export interface SuperviseState {
    *
    * Deliberately set when a failure is COUNTED, not on any non-serving observation, so a cold boot
    * inside the grace window is not reported as an outage — the port is legitimately unbound while
-   * the workspace builds and migrations run. The consequence is that the measured window starts at
-   * the first failed probe rather than at the instant the stack went down, so it UNDER-reports by
-   * up to one `pollMs`; the log says "since the first failed probe" rather than claiming precision
-   * the probe interval cannot deliver.
+   * the workspace builds and migrations run.
+   *
+   * BOTH ends of the resulting window are quantized to the poll interval, and the errors point in
+   * OPPOSITE directions: the start is the first probe that missed, which is up to one `pollMs`
+   * AFTER the stack actually went down, while the end is the probe that saw it again, up to one
+   * `pollMs` after it actually came back. So the measurement is the true duration ± one `pollMs`,
+   * not a floor — at the default 10s poll a 100ms blip straddling a tick boundary measures a full
+   * 10s. A reader must be told the resolution alongside the number, which is why every rendering
+   * of it names the poll interval it was measured against.
    */
   notServingSince?: number
+  /**
+   * Whether the stack has been observed SERVING since the child now running was started.
+   *
+   * This is what separates the two ways a recovery can be reached, which need opposite reactions
+   * (see {@link RecoveryCause}). Required rather than optional: a state literal that forgets it
+   * must fail to typecheck, because either default silently misattributes one of the two cases —
+   * defaulting to `true` reports our own overrunning boot as an outage nothing explains, and
+   * defaulting to `false` suppresses the loud warning a genuine outage exists to raise.
+   */
+  servedSinceStart: boolean
 }
+
+/**
+ * Why a stack that was failing probes is answering again. Both reach {@link step}'s `recovered`
+ * action, and reporting them the same way is what made the original diagnosis wrong: they are
+ * opposite facts about who caused the gap, and they have different remedies.
+ */
+export type RecoveryCause =
+  /**
+   * The stack had SERVED since it was started, then stopped, then came back with no repair of ours
+   * in between — so something restarted it underneath the supervisor. This is the outage worth
+   * shouting about; nothing else records it.
+   */
+  | 'unexplained'
+  /**
+   * The stack had NEVER served since the supervisor started it, so nothing cycled underneath us:
+   * our own boot simply outlasted `bootGraceMs` and the probes that missed were watching a stack
+   * that had not finished coming up. Reported (the grace window is mistuned, and a few more missed
+   * probes would have restarted a boot that was about to succeed) but never as an outage.
+   */
+  | 'slow-start'
 
 /** What the runtime should do about this tick. Every branch of {@link step} names one. */
 export type SuperviseAction =
@@ -106,16 +141,18 @@ export type SuperviseAction =
   /**
    * Serving again after one or more failed probes, without needing a repair.
    *
-   * This is the SELF-HEALED outage, and it is worth saying loudly rather than logging as a plain
-   * success: reaching it means the stack stopped answering and came back with no repair of ours in
-   * between, so something restarted it underneath the supervisor. On a `node --watch` deployment
-   * that is usually a file-change storm — the watcher cycles the server several times in a row, the
-   * port is unbound for a few seconds, and any client mid-request fails with `ECONNREFUSED` while
+   * `cause` says which of the two very different things just happened, and the caller MUST branch
+   * on it rather than treating every recovery as an outage. A `'unexplained'` recovery is the
+   * self-healed outage worth saying loudly: the stack stopped answering and came back with nothing
+   * of ours in between, so something restarted it underneath the supervisor — on a `node --watch`
+   * deployment usually a file-change storm, which cycles the server several times in a row, leaves
+   * the port unbound for a few seconds, and kills any client mid-request with `ECONNREFUSED` while
    * every process involved stays alive and the server log shows no crash. Without the duration and
-   * the "we did not cause this" framing, the only trace left is two probe-failure lines that read
-   * like noise.
+   * the "we did not cause this" framing, the only trace left is two probe-failure lines reading
+   * like noise. A `'slow-start'` recovery is the supervisor watching its OWN child finish booting
+   * past the grace window, which is a mistuned window rather than an outage.
    */
-  | { kind: 'recovered'; afterFailures: number; downMs: number }
+  | { kind: 'recovered'; afterFailures: number; downMs: number; cause: RecoveryCause }
   /** Not serving, but inside a boot/resume grace window — wait it out. */
   | { kind: 'grace'; msLeft: number }
   /** Not serving; failure counted but still below the threshold. */
@@ -127,7 +164,12 @@ export type SuperviseAction =
 
 /** State for a freshly started child: clean counters and a full boot grace window. */
 export function initialState(now: number, config: SuperviseConfig): SuperviseState {
-  return { failures: 0, quietUntil: now + config.bootGraceMs, lastTickAt: now }
+  return {
+    failures: 0,
+    quietUntil: now + config.bootGraceMs,
+    lastTickAt: now,
+    servedSinceStart: false,
+  }
 }
 
 /**
@@ -140,9 +182,18 @@ export function initialState(now: number, config: SuperviseConfig): SuperviseSta
  * repair's own duration as drift, read a slow-but-successful recovery as a host suspend, and — since
  * resume detection deliberately outranks the boot-grace window — immediately kill the child it just
  * started. Re-basing means the clock-jump signal only ever measures time we were genuinely idle.
+ *
+ * `servedSinceStart` restarts at `false` for the same reason it starts there on a cold boot: the
+ * child now running has never answered, so probes that miss while it comes up are watching OUR
+ * restart finish, not something cycling the stack underneath us.
  */
 export function stateAfterStart(now: number, config: SuperviseConfig): SuperviseState {
-  return { failures: 0, quietUntil: now + config.bootGraceMs, lastTickAt: now }
+  return {
+    failures: 0,
+    quietUntil: now + config.bootGraceMs,
+    lastTickAt: now,
+    servedSinceStart: false,
+  }
 }
 
 /**
@@ -178,17 +229,15 @@ export function step(
     const quietUntil = Math.max(state.quietUntil, now + config.resumeGraceMs)
     if (serving) {
       return {
-        state: { failures: 0, quietUntil, lastTickAt: now },
+        state: { failures: 0, quietUntil, lastTickAt: now, servedSinceStart: true },
         action: { kind: 'resumed', driftMs },
       }
     }
+    // No outage stamp here, nor on either repair branch below: a `repair` is always followed by a
+    // respawn, and `stateAfterStart` replaces this state wholesale the moment the new child exists.
+    // Carrying a window forward into it would be state no reader can ever reach.
     return {
-      state: {
-        failures: 0,
-        quietUntil,
-        lastTickAt: now,
-        notServingSince: state.notServingSince ?? now,
-      },
+      state: { failures: 0, quietUntil, lastTickAt: now, servedSinceStart: state.servedSinceStart },
       action: {
         kind: 'repair',
         reason: `not serving after a ${Math.round(driftMs / 1000)}s stall (host slept?)`,
@@ -206,9 +255,17 @@ export function step(
             // fallback only guards against a hand-built state in a test: report 0 rather than a
             // duration measured from an unrelated clock origin.
             downMs: now - (state.notServingSince ?? now),
+            // The whole distinction: only a stack that had ALREADY answered under this child can
+            // have been taken down by something other than us. One that never answered was still
+            // booting, and blaming an invisible third party for our own slow start is exactly the
+            // misdiagnosis this reporting exists to prevent.
+            cause: state.servedSinceStart ? 'unexplained' : 'slow-start',
           }
         : { kind: 'serving' }
-    return { state: { failures: 0, quietUntil: state.quietUntil, lastTickAt: now }, action }
+    return {
+      state: { failures: 0, quietUntil: state.quietUntil, lastTickAt: now, servedSinceStart: true },
+      action,
+    }
   }
 
   if (observation.childExited === true) {
@@ -217,7 +274,7 @@ export function step(
         failures: 0,
         quietUntil: state.quietUntil,
         lastTickAt: now,
-        notServingSince: state.notServingSince ?? now,
+        servedSinceStart: state.servedSinceStart,
       },
       action: { kind: 'repair', reason: 'the supervised command exited' },
     }
@@ -230,16 +287,22 @@ export function step(
     }
   }
 
-  const notServingSince = state.notServingSince ?? now
+  const { quietUntil, servedSinceStart } = state
   const failures = state.failures + 1
   if (failures >= config.failureThreshold) {
     return {
-      state: { failures: 0, quietUntil: state.quietUntil, lastTickAt: now, notServingSince },
+      state: { failures: 0, quietUntil, lastTickAt: now, servedSinceStart },
       action: { kind: 'repair', reason: `${failures} consecutive failed health probes` },
     }
   }
   return {
-    state: { failures, quietUntil: state.quietUntil, lastTickAt: now, notServingSince },
+    state: {
+      failures,
+      quietUntil,
+      lastTickAt: now,
+      notServingSince: state.notServingSince ?? now,
+      servedSinceStart,
+    },
     action: { kind: 'counting', failures, threshold: config.failureThreshold },
   }
 }

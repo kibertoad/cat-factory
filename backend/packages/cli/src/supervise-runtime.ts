@@ -13,7 +13,13 @@ import { spawn } from 'node:child_process'
 import http from 'node:http'
 import net from 'node:net'
 import { COMMAND_NOT_FOUND, type HostShell } from './host-shell.js'
-import { initialState, type SuperviseConfig, stateAfterStart, step } from './supervise.js'
+import {
+  initialState,
+  type RecoveryCause,
+  type SuperviseConfig,
+  stateAfterStart,
+  step,
+} from './supervise.js'
 
 /** Probes whether the supervised service is actually SERVING (not merely booted). */
 export interface HealthProbe {
@@ -376,7 +382,13 @@ export interface SupervisorOutcome {
    * because the two have opposite meanings for whoever is reading: a repair is the supervisor doing
    * its job, while an unexplained outage is a symptom of the supervised stack cycling on its own
    * (a `node --watch` file-change storm being the usual cause). A run that ends with several of
-   * these looks perfectly healthy by every other measure.
+   * these looks perfectly healthy by every other measure, which is why the caller REPORTS this at
+   * shutdown rather than only logging each occurrence: on a supervisor left running for days the
+   * individual lines have long since scrolled away, and nothing else records that they happened.
+   *
+   * A recovery from the supervisor's OWN slow-binding child is deliberately not counted here (see
+   * {@link RecoveryCause}); it is reported at the moment it happens and nowhere else, because the
+   * remedy is a `--boot-grace` the reader is looking straight at.
    */
   unexplainedOutages: number
   /**
@@ -425,47 +437,107 @@ const RESTART_SETTLE_MS = 1_500
  * Render a downtime for a human reading a scrolling log: `8.4s`, `1m 12s`. Sub-minute durations keep
  * a decimal because the interesting ones are short — a watch storm is over in seconds, and "8s" vs
  * "8.4s" is the difference between a rounded guess and a measurement.
+ *
+ * The unit is chosen from the SAME rounded value that gets rendered, never from the raw input.
+ * Branching on the raw `ms` lets 59_980 take the sub-minute path and then round up inside it,
+ * printing "60.0s": a duration in a unit this format explicitly stops at, which reads as a bug in
+ * the measurement rather than in its rendering.
  */
 export function formatDowntime(ms: number): string {
-  if (ms < 60_000) return `${(ms / 1_000).toFixed(1)}s`
   const totalSeconds = Math.round(ms / 1_000)
+  if (totalSeconds < 60) return `${(ms / 1_000).toFixed(1)}s`
   return `${Math.floor(totalSeconds / 60)}m ${String(totalSeconds % 60).padStart(2, '0')}s`
 }
 
+/** Everything {@link reportRecovery} needs to turn one `recovered` action into log lines. */
+interface RecoveryReport {
+  log: (message: string) => void
+  action: { afterFailures: number; downMs: number; cause: RecoveryCause }
+  config: SuperviseConfig
+  /**
+   * Causes whose explanatory hint has already been printed. The warn-once rule
+   * {@link ensureDependencies} follows, applied per cause so a flapping stack does not bury its own
+   * diagnosis in repeats — and so a later slow start still gets its own explanation rather than
+   * inheriting the silence earned by an unrelated outage.
+   */
+  hinted: Set<RecoveryCause>
+  unexplainedOutages: number
+}
+
 /**
- * Report an outage the stack recovered from on its own, and return the new running count.
+ * Report a recovery, and return the new running count of outages we did NOT cause.
  *
- * Reaching a `recovered` action means NO repair of ours ran during the outage — a repair resets the
- * counters and re-bases the grace window, so the first serving tick after one reports plain
- * `serving`. So this branch is always something else having cycled the stack, which is worth a
- * warning rather than the bland success it used to log: the failure it explains (a client failing
- * with `ECONNREFUSED` against a stack that looks perfectly healthy by the time anyone looks) leaves
- * no other trace, because nothing crashed and every process involved is still alive.
+ * Both causes arrive here as the same `recovered` action and they must not be reported the same
+ * way, because they are opposite claims about who caused the gap. Only `'unexplained'` is an
+ * outage: the stack had already answered under this child, then stopped, then came back with no
+ * repair of ours in between, so something restarted it underneath us. That one leaves no other
+ * trace (nothing crashed, every process is still alive, `/health` answers again by the time anyone
+ * looks), which is why it is a warning with a running count instead of the bland success it used
+ * to log.
  *
- * The cause hint is printed only on the FIRST occurrence, the same warn-once rule
- * {@link ensureDependencies} follows, so a flapping stack does not bury its own diagnosis in repeats.
+ * `'slow-start'` is the supervisor watching its OWN child bind late: reported, because the grace
+ * window is mistuned and a few more missed probes would have restarted a boot that was about to
+ * succeed, but never counted as an outage and never attributed to a third party. Collapsing the two
+ * is the misdiagnosis this whole report exists to prevent — it would turn every cold boot slower
+ * than `--boot-grace`, and every repair whose restart is, into `no repair of ours caused it`.
+ *
+ * Every duration is qualified with the poll interval it was measured against. Both ends of the
+ * window are quantized to that interval and the errors point in opposite directions, so the number
+ * is the truth ± one poll: at the default 10s poll a 100ms blip can render as a full 10s, and a
+ * reader given `19.3s` with no resolution beside it has no way to know that.
  */
-function reportUnexplainedOutage(
-  log: (message: string) => void,
-  action: { afterFailures: number; downMs: number },
-  previousCount: number,
-): number {
-  const count = previousCount + 1
-  log(
-    `⚠ serving again after ${formatDowntime(action.downMs)} down since the first failed ` +
-      `probe (${action.afterFailures} failed probe(s)) — unexplained outage #${count}, ` +
-      'no repair of ours caused it',
-  )
-  if (count === 1) {
-    log(
-      '  ↳ something restarted the stack underneath the supervisor. On a `node --watch` ' +
-        'deployment this is usually a file-change storm: the watcher cycles the server several ' +
-        'times, the port is unbound for a few seconds, and any client mid-request fails with ' +
-        'ECONNREFUSED while nothing crashes. Check the server log for repeated "Restarting" ' +
-        'lines with no error between them.',
-    )
+function reportRecovery(report: RecoveryReport): number {
+  const { log, action, config, hinted, unexplainedOutages } = report
+  const span = formatDowntime(action.downMs)
+  // Trails the duration in both wordings: the resolution has to sit where the number is read, not
+  // in a legend somewhere else, or `19.3s` is taken for a measurement rather than a bucket.
+  const qualifier =
+    `, give or take the ${config.pollMs / 1_000}s poll interval ` +
+    `(${action.afterFailures} failed probe(s))`
+  const hint = (message: string): void => {
+    if (hinted.has(action.cause)) return
+    hinted.add(action.cause)
+    log(`  ↳ ${message}`)
   }
-  return count
+
+  switch (action.cause) {
+    case 'unexplained': {
+      const count = unexplainedOutages + 1
+      log(
+        `⚠ serving again after ${span} down since the first failed probe${qualifier} — ` +
+          `unexplained outage #${count}, no repair of ours caused it`,
+      )
+      hint(
+        'something restarted the stack underneath the supervisor. On a `node --watch` ' +
+          'deployment this is usually a file-change storm: the watcher cycles the server several ' +
+          'times, the port is unbound for a few seconds, and any client mid-request fails with ' +
+          'ECONNREFUSED while nothing crashes. Check the server log for repeated "Restarting" ' +
+          'lines with no error between them.',
+      )
+      return count
+    }
+    case 'slow-start': {
+      log(
+        `⚠ serving after a slow start: ${span} past the boot grace window${qualifier} — ` +
+          'our own start finishing late, not an outage',
+      )
+      hint(
+        'the stack had not answered once since the supervisor started it, so nothing cycled ' +
+          `underneath us: the boot simply outran --boot-grace (${config.bootGraceMs / 1_000}s). ` +
+          `${action.afterFailures} of the ${config.failureThreshold} failed probes needed to ` +
+          'restart it were already on the clock, so raise --boot-grace if this stack is normally ' +
+          'this slow to bind.',
+      )
+      return unexplainedOutages
+    }
+    default: {
+      // Exhaustiveness: a new `RecoveryCause` must state how it is reported rather than
+      // inheriting whichever branch happens to sit last. Falling through to the outage wording
+      // would re-create the exact misattribution this function was split up to end.
+      const unreachable: never = action.cause
+      throw new Error(`unhandled recovery cause: ${String(unreachable)}`)
+    }
+  }
 }
 
 /**
@@ -484,6 +556,7 @@ export async function runSupervisor(deps: SupervisorDeps): Promise<SupervisorOut
   let gaveUp: string | undefined
   let unexplainedOutages = 0
   const warned = new Set<string>()
+  const hinted = new Set<RecoveryCause>()
 
   // A child that has exited is a fact the probe can only infer, slowly. Tracked per generation so a
   // dead PREDECESSOR's late `exited` can never be read as the current child having died.
@@ -546,7 +619,7 @@ export async function runSupervisor(deps: SupervisorDeps): Promise<SupervisorOut
         log(`✔ resumed after ${Math.round(action.driftMs / 1000)}s — the stack is still serving`)
         break
       case 'recovered':
-        unexplainedOutages = reportUnexplainedOutage(log, action, unexplainedOutages)
+        unexplainedOutages = reportRecovery({ log, action, config, hinted, unexplainedOutages })
         break
       case 'counting':
         log(`• health probe failed (${action.failures}/${action.threshold})`)

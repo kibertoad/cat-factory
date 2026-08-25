@@ -95,19 +95,30 @@ supervising from anywhere else needs it set.
   dies with `EADDRINUSE`, turning one outage into a restart loop. Reaping by port means SIGKILLing a
   process it was never handed, so every kill **names** the pid and the command behind it, and it only
   ever runs once the supervisor's own child is confirmed dead.
-- **Names an outage it did _not_ cause.** If the stack stops answering and comes back with no repair
-  of ours in between, something restarted it underneath the supervisor — on a `node --watch`
-  deployment, usually a file-change storm that cycles the server several times in a row. Nothing
-  crashes and every process stays alive, so the only symptom is a client mid-request failing with
-  `ECONNREFUSED` against a stack that looks perfectly healthy by the time anyone looks. That
-  recovery is reported as a **warning** carrying how long the stack was down and a running
-  `unexplained outage #N` count, with the likely cause spelled out on the first occurrence:
+- **Names an outage it did _not_ cause.** If a stack that had already answered stops answering and
+  comes back with no repair of ours in between, something restarted it underneath the supervisor —
+  on a `node --watch` deployment, usually a file-change storm that cycles the server several times
+  in a row. Nothing crashes and every process stays alive, so the only symptom is a client
+  mid-request failing with `ECONNREFUSED` against a stack that looks perfectly healthy by the time
+  anyone looks. That recovery is reported as a **warning** carrying how long the stack was down and
+  a running `unexplained outage #N` count, with the likely cause spelled out on the first
+  occurrence, and the running total repeated in a summary line at shutdown:
 
   ```text
   [supervise 11:50:53] • health probe failed (1/3)
-  [supervise 11:51:03] ⚠ serving again after 19.3s down since the first failed probe
-                         (2 failed probe(s)) — unexplained outage #1, no repair of ours caused it
+  [supervise 11:51:03] ⚠ serving again after 19.3s down since the first failed probe, give or
+                         take the 10s poll interval (2 failed probe(s)) —
+                         unexplained outage #1, no repair of ours caused it
   ```
+
+  A recovery where the stack had **never** answered since the supervisor started it is reported
+  separately, as a slow start rather than an outage: nothing cycled underneath us, the boot simply
+  outran `--boot-grace`. That distinction is the whole value of the warning — without it every cold
+  boot, and every repair whose restarted stack binds late, claims a third party caused it.
+
+  Both durations name the poll interval they were measured against. Each end of the window is
+  quantized to that interval and the errors point in opposite directions, so the number is the truth
+  ± one poll: at a 10s poll a 100ms blip and a 10s outage render the same.
 
   Every `[supervise]` line is **timestamped**, because these are read interleaved with the
   supervised server's own structured logs and are usually the only record that a transient outage

@@ -15,9 +15,46 @@ const config: SuperviseConfig = resolveSuperviseConfig({
   failureThreshold: 3,
 })
 
-/** A state that is past every grace window, so failures count immediately. */
+/**
+ * A state that is past every grace window, so failures count immediately — and that has ALREADY
+ * seen the stack serve, which is what a supervisor watching a long-running child looks like. The
+ * `servedSinceStart` half matters: it is what separates an outage something else caused from our
+ * own child still binding, so a helper that quietly said `false` would classify every recovery
+ * built on it as a slow start.
+ */
 function settled(now: number, failures = 0): SuperviseState {
-  return { failures, quietUntil: now - 1, lastTickAt: now - config.pollMs }
+  return { failures, quietUntil: now - 1, lastTickAt: now - config.pollMs, servedSinceStart: true }
+}
+
+/**
+ * Walk `answers.length` ticks forward one `pollMs` at a time from `startedAt`, returning the last
+ * tick's result. Real ticks, never one big jump: a jump larger than `clockJumpMs` is by design read
+ * as a host suspend, so a test that fast-forwards past a grace window lands in the resume branch
+ * and proves nothing about the window it meant to outlast.
+ */
+function walk(
+  startedAt: number,
+  state: SuperviseState,
+  answers: boolean[],
+): ReturnType<typeof step> {
+  let current = state
+  let result = step(current, { now: startedAt, serving: answers[0] ?? false }, config)
+  answers.forEach((serving, index) => {
+    if (index === 0) return
+    current = result.state
+    result = step(current, { now: startedAt + index * config.pollMs, serving }, config)
+  })
+  return result
+}
+
+/** A state for a child that has been started but has never yet answered a probe. */
+function booting(now: number, graceMs = 30_000): SuperviseState {
+  return {
+    failures: 0,
+    quietUntil: now + graceMs,
+    lastTickAt: now - config.pollMs,
+    servedSinceStart: false,
+  }
 }
 
 describe('resolveSuperviseConfig', () => {
@@ -45,7 +82,12 @@ describe('step — healthy', () => {
   it('reports recovery when it was previously failing, and clears the count', () => {
     const now = 1_000_000
     const { state, action } = step(settled(now, 2), { now, serving: true }, config)
-    expect(action).toEqual({ kind: 'recovered', afterFailures: 2, downMs: 0 })
+    expect(action).toEqual({
+      kind: 'recovered',
+      afterFailures: 2,
+      downMs: 0,
+      cause: 'unexplained',
+    })
     expect(state.failures).toBe(0)
   })
 })
@@ -70,39 +112,95 @@ describe('step — outage duration', () => {
     const failed = step(settled(down), { now: down, serving: false }, config)
     const back = down + 19_300
     const { state, action } = step(failed.state, { now: back, serving: true }, config)
-    expect(action).toEqual({ kind: 'recovered', afterFailures: 1, downMs: 19_300 })
+    expect(action).toEqual({
+      kind: 'recovered',
+      afterFailures: 1,
+      downMs: 19_300,
+      cause: 'unexplained',
+    })
     // Cleared on recovery, so the NEXT outage measures its own window rather than accumulating.
     expect(state.notServingSince).toBeUndefined()
   })
 
   it('does not count a cold boot as an outage — grace-window ticks leave the stamp unset', () => {
     const now = 1_000_000
-    const booting: SuperviseState = {
-      failures: 0,
-      quietUntil: now + 30_000,
-      lastTickAt: now - config.pollMs,
-    }
-    const { state, action } = step(booting, { now, serving: false }, config)
+    const { state, action } = step(booting(now), { now, serving: false }, config)
     expect(action.kind).toBe('grace')
     expect(state.notServingSince).toBeUndefined()
   })
 
-  it('stamps the outage when a repair is triggered, so the ladder can report it too', () => {
+  it('carries NO stamp into a repair, whose state a respawn replaces wholesale', () => {
+    // The repair branches deliberately return no outage window: `runSupervisor` answers every
+    // `repair` by restarting, and `stateAfterStart` overwrites this state the moment the new child
+    // exists. A stamp here would be a value no reader can reach, and a test pinning one would
+    // assert a contract nothing honours.
     const now = 1_000_000
-    const { state } = step(settled(now, 2), { now, serving: false }, config)
-    expect(state.notServingSince).toBe(now)
+    const { state, action } = step(settled(now, 2), { now, serving: false }, config)
+    expect(action.kind).toBe('repair')
+    expect(state.notServingSince).toBeUndefined()
+  })
+})
+
+describe('step — who caused the gap', () => {
+  it('blames nobody for a boot that outran the grace window', () => {
+    // The misdiagnosis this exists to prevent: a cold boot slower than `bootGraceMs` counts real
+    // failures and then recovers, which looked exactly like an outage a third party caused. The
+    // stack had never answered, so there was nothing running for anything to restart.
+    const started = 1_000_000
+    // Grace out, one probe that misses because the port is not bound yet, then the port binds.
+    // The grace window swallows the ticks strictly inside it; the one landing ON its edge is the
+    // first that counts, so exactly one failure is on the clock when the port finally binds.
+    const insideGrace = config.bootGraceMs / config.pollMs - 1
+    const answers = [...Array<boolean>(insideGrace + 1).fill(false), true]
+    const { action } = walk(started + config.pollMs, initialState(started, config), answers)
+    expect(action).toMatchObject({ kind: 'recovered', afterFailures: 1, cause: 'slow-start' })
+  })
+
+  it("does not blame a third party for the supervisor's OWN restart binding late", () => {
+    // Same shape one layer up: the repair itself re-bases the grace window, so a restarted stack
+    // that takes longer than `bootGraceMs` to bind used to recover as `no repair of ours caused
+    // it` — naming an invisible third party for a gap the supervisor had just created.
+    const restartedAt = 2_000_000
+    // The grace window swallows the ticks strictly inside it; the one landing ON its edge is the
+    // first that counts, so exactly one failure is on the clock when the port finally binds.
+    const insideGrace = config.bootGraceMs / config.pollMs - 1
+    const answers = [...Array<boolean>(insideGrace + 1).fill(false), true]
+    const { action } = walk(
+      restartedAt + config.pollMs,
+      stateAfterStart(restartedAt, config),
+      answers,
+    )
+    expect(action).toMatchObject({ cause: 'slow-start' })
+  })
+
+  it('calls it unexplained once the stack has served, then gone, then come back', () => {
+    // The genuine article: the stack answered, stopped answering, and came back with no repair in
+    // between, so something cycled it underneath the supervisor.
+    const started = 1_000_000
+    // Answers immediately, keeps answering out past the grace window, then drops one probe.
+    const graceTicks = config.bootGraceMs / config.pollMs
+    const answers = [...Array<boolean>(graceTicks + 1).fill(true), false, true]
+    const { action } = walk(started + config.pollMs, initialState(started, config), answers)
+    expect(action).toMatchObject({ cause: 'unexplained' })
+  })
+
+  it('a resume that finds the stack alive counts as having served', () => {
+    const lastTickAt = 1_000_000
+    const now = lastTickAt + 600_000
+    const state: SuperviseState = {
+      failures: 0,
+      quietUntil: 0,
+      lastTickAt,
+      servedSinceStart: false,
+    }
+    expect(step(state, { now, serving: true }, config).state.servedSinceStart).toBe(true)
   })
 })
 
 describe('step — boot grace', () => {
   it('does not count a failure while inside the grace window', () => {
     const now = 1_000_000
-    const state: SuperviseState = {
-      failures: 0,
-      quietUntil: now + 30_000,
-      lastTickAt: now - config.pollMs,
-    }
-    const result = step(state, { now, serving: false }, config)
+    const result = step(booting(now), { now, serving: false }, config)
     expect(result.action).toEqual({ kind: 'grace', msLeft: 30_000 })
     expect(result.state.failures).toBe(0)
   })
@@ -146,12 +244,7 @@ describe('step — the child process exited', () => {
 
   it('outranks the boot-grace window', () => {
     const now = 1_000_000
-    const state: SuperviseState = {
-      failures: 0,
-      quietUntil: now + 30_000,
-      lastTickAt: now - config.pollMs,
-    }
-    expect(step(state, { now, serving: false, childExited: true }, config).action.kind).toBe(
+    expect(step(booting(now), { now, serving: false, childExited: true }, config).action.kind).toBe(
       'repair',
     )
   })
@@ -182,12 +275,7 @@ describe('step — failure accumulation', () => {
 
   it('repairs on the threshold-th consecutive failure and resets the count', () => {
     const now = 1_000_000
-    const state: SuperviseState = {
-      failures: 2,
-      quietUntil: now - 1,
-      lastTickAt: now - config.pollMs,
-    }
-    const { state: next, action } = step(state, { now, serving: false }, config)
+    const { state: next, action } = step(settled(now, 2), { now, serving: false }, config)
     expect(action).toEqual({
       kind: 'repair',
       reason: '3 consecutive failed health probes',
@@ -213,7 +301,7 @@ describe('step — sleep/resume detection', () => {
   it('treats a badly late tick as a resume and confirms a surviving stack', () => {
     const lastTickAt = 1_000_000
     const now = lastTickAt + 600_000 // ten minutes late: the host was suspended
-    const state: SuperviseState = { failures: 0, quietUntil: 0, lastTickAt }
+    const state: SuperviseState = { failures: 0, quietUntil: 0, lastTickAt, servedSinceStart: true }
     const { state: next, action } = step(state, { now, serving: true }, config)
     expect(action.kind).toBe('resumed')
     // The resume grace is armed even on success: Docker/Postgres may still be waking.
@@ -223,7 +311,7 @@ describe('step — sleep/resume detection', () => {
   it('repairs IMMEDIATELY after a resume, without waiting out the threshold', () => {
     const lastTickAt = 1_000_000
     const now = lastTickAt + 3_600_000 // an hour asleep
-    const state: SuperviseState = { failures: 0, quietUntil: 0, lastTickAt }
+    const state: SuperviseState = { failures: 0, quietUntil: 0, lastTickAt, servedSinceStart: true }
     const { action } = step(state, { now, serving: false }, config)
     expect(action.kind).toBe('repair')
     expect(action).toMatchObject({ reason: expect.stringContaining('host slept?') })
@@ -233,7 +321,12 @@ describe('step — sleep/resume detection', () => {
     const lastTickAt = 1_000_000
     const now = lastTickAt + 600_000
     // Still inside a boot grace, which would normally suppress the failure entirely.
-    const state: SuperviseState = { failures: 0, quietUntil: now + 30_000, lastTickAt }
+    const state: SuperviseState = {
+      failures: 0,
+      quietUntil: now + 30_000,
+      lastTickAt,
+      servedSinceStart: true,
+    }
     const { action } = step(state, { now, serving: false }, config)
     expect(action.kind).toBe('repair')
   })
@@ -242,7 +335,7 @@ describe('step — sleep/resume detection', () => {
     const lastTickAt = 1_000_000
     // Late, but under the 3-interval threshold: a busy event loop, not a suspend.
     const now = lastTickAt + config.pollMs + config.clockJumpMs - 1
-    const state: SuperviseState = { failures: 0, quietUntil: 0, lastTickAt }
+    const state: SuperviseState = { failures: 0, quietUntil: 0, lastTickAt, servedSinceStart: true }
     const { action } = step(state, { now, serving: true }, config)
     expect(action).toEqual({ kind: 'serving' })
   })
