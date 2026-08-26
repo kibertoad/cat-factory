@@ -16,7 +16,13 @@ subshell where its exit status was unobservable, so the Tester's local-infra sta
 became a no-infra run everywhere, and had done since it shipped. Both packages are installed now,
 and the entrypoint waits for the daemon on a bounded window (in the background, so it never delays
 the container's boot) and RECORDS the verdict: `GET /health` reports it, and the compose stand-up
-refuses a decided absence with the cause instead of running compose against nothing.
+refuses a confirmed absence with the cause instead of running compose against nothing.
+
+What the entrypoint records describes BOOT, and a warm-pool container outlives its boot, so the
+stand-up re-checks a recorded absence against a live daemon before refusing on it: a sidecar that
+took longer to come up than the bounded wait allows is not latched into refusing local infra for
+the container's whole life. The record still supplies what only the record holds, the cause and the
+daemon's own log tail.
 
 `infraSetup` gains `dockerAvailable` on the wire (harness → `RunnerInfraSetup` →
 `testerInfraSetupSchema`), and the test window says "No Docker daemon in the executor" rather than

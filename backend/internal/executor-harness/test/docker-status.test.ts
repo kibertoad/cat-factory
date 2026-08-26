@@ -1,8 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { dockerUnavailableReason, readDockerStatus } from '../src/docker-status.js'
+import {
+  describeDockerAbsence,
+  readDockerStatus,
+  resolveDockerVerdict,
+} from '../src/docker-status.js'
 
 // The reader for the verdict `entrypoint.sh` records about this container's Docker daemon.
 // The whole value of it is the THREE-valued answer, so most of what is asserted here is that
@@ -71,21 +75,21 @@ describe('readDockerStatus', () => {
   })
 })
 
-describe('dockerUnavailableReason', () => {
+describe('describeDockerAbsence', () => {
   it('names the cause per source', () => {
     expect(
-      dockerUnavailableReason({ available: false, source: 'none', reason: 'missing' }),
+      describeDockerAbsence({ available: false, source: 'none', reason: 'missing' }),
     ).toContain('ships no Docker daemon')
     expect(
-      dockerUnavailableReason({ available: false, source: 'external', reason: 'unreachable' }),
+      describeDockerAbsence({ available: false, source: 'external', reason: 'unreachable' }),
     ).toContain('unreachable')
     expect(
-      dockerUnavailableReason({ available: false, source: 'rootless', reason: 'failed' }),
+      describeDockerAbsence({ available: false, source: 'rootless', reason: 'failed' }),
     ).toContain('rootless Docker daemon')
   })
 
   it('appends the recorded detail so the cause is not merely a category', () => {
-    const reason = dockerUnavailableReason({
+    const reason = describeDockerAbsence({
       available: false,
       source: 'rootless',
       reason: 'failed',
@@ -97,12 +101,63 @@ describe('dockerUnavailableReason', () => {
     )
   })
 
-  it('answers null for anything that is not a decided absence', () => {
+  it('does not attribute an unnamed source to the rootless daemon', () => {
+    // The reachable case, not a hypothetical: the reader above keeps a recorded `false` while
+    // degrading a source word this build does not know, so a status file from a NEWER entrypoint
+    // lands here as `unreported`. Guessing "rootless" would send a human to fix the one thing the
+    // verdict never mentioned.
+    const reason = describeDockerAbsence({
+      available: false,
+      source: 'unreported',
+      reason: 'failed',
+    })
+    expect(reason).not.toContain('rootless')
+    expect(reason).toContain('did not say which one')
+  })
+})
+
+describe('resolveDockerVerdict', () => {
+  const serving = () => Promise.resolve(true)
+  const dead = () => Promise.resolve(false)
+
+  it('refuses a recorded absence a live daemon does not contradict', async () => {
+    const verdict = await resolveDockerVerdict(
+      { available: false, source: 'rootless', reason: 'failed', detail: 'rootlesskit: no ip' },
+      dead,
+    )
+    expect(verdict.available).toBe(false)
+    expect(verdict.refusal).toContain('rootlesskit: no ip')
+  })
+
+  it('lets a daemon that came up after boot overrule the recorded absence', async () => {
+    // The warm-pool case. The entrypoint probes ONCE, within a bounded wait; a container serves
+    // many jobs. A sidecar that needed longer than that wait is serving perfectly well by the
+    // second job, and refusing off the boot record alone would latch this container into refusing
+    // local infra that works, for its whole life.
+    const verdict = await resolveDockerVerdict(
+      { available: false, source: 'external', reason: 'unreachable' },
+      serving,
+    )
+    expect(verdict).toEqual({ available: true })
+  })
+
+  it('leaves an undecided verdict undecided rather than probing it into a refusal', async () => {
+    const probe = vi.fn(dead)
+    const verdict = await resolveDockerVerdict(
+      { available: undefined, source: 'rootless', reason: 'probing' },
+      probe,
+    )
+    expect(verdict).toEqual({ available: undefined })
+    // The third value exists so that nothing turns "not decided" into a refusal, and a probe here
+    // is exactly what would.
+    expect(probe).not.toHaveBeenCalled()
+  })
+
+  it('carries a recorded success through without a probe', async () => {
+    const probe = vi.fn(dead)
     expect(
-      dockerUnavailableReason({ available: true, source: 'rootless', reason: 'serving' }),
-    ).toBeNull()
-    expect(
-      dockerUnavailableReason({ available: undefined, source: 'unreported', reason: 'none' }),
-    ).toBeNull()
+      await resolveDockerVerdict({ available: true, source: 'rootless', reason: 'serving' }, probe),
+    ).toEqual({ available: true })
+    expect(probe).not.toHaveBeenCalled()
   })
 })

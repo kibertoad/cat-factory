@@ -1,4 +1,6 @@
+import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
+import { promisify } from 'node:util'
 
 // What this container knows about its own Docker daemon, as recorded by `entrypoint.sh`.
 //
@@ -10,6 +12,10 @@ import { readFile } from 'node:fs/promises'
 // a compose error in a prompt note. This module is the answer that was missing: the entrypoint
 // probes the daemon once and records the verdict, and everything that would otherwise ASSUME a
 // daemon reads it instead.
+//
+// The recorded verdict describes BOOT, and a container outlives its boot, so nothing refuses on
+// it unconfirmed: `resolveDockerVerdict` re-checks a recorded absence against a live daemon and
+// keeps the record for what only the record holds, the cause and the daemon's own log tail.
 //
 // The three-valued shape is deliberate and is the point (CLAUDE.md, "Degrade loudly"): a daemon
 // that FAILED and a daemon nobody asked about are different facts with different correct
@@ -107,16 +113,89 @@ export async function readDockerStatus(
  * consequence, because the agent's next move differs: with no daemon there is nothing to retry,
  * and the useful run is the one that tests what it can and flags the dependency gap.
  *
- * Returns `null` for anything that is not a decided absence, so the caller's branch reads as the
- * refusal it is rather than as a message lookup that might come back empty.
+ * TOTAL over {@link DockerSource}, deliberately. `unreported` is not a hypothetical arm: the
+ * reader above preserves a recorded `available: false` while degrading a source word this build
+ * does not know, so an absence whose source is `unreported` is exactly what a status file written
+ * by a NEWER entrypoint produces here. A ternary chain ending in the rootless arm answered that
+ * case by naming a daemon nobody said anything about: a guess, in the one sentence whose entire
+ * job is to tell a human which thing to go and fix. The `never` arm keeps the compile-time half:
+ * adding a source without a sentence stops building.
  */
-export function dockerUnavailableReason(status: DockerStatus): string | null {
-  if (status.available !== false) return null
-  const cause =
-    status.source === 'none'
-      ? 'this executor image ships no Docker daemon'
-      : status.source === 'external'
-        ? 'the external Docker daemon this container was pointed at is unreachable'
-        : 'this container could not start its rootless Docker daemon'
-  return status.detail ? `${cause} (${status.detail})` : cause
+export function describeDockerAbsence(status: DockerStatus): string {
+  return status.detail
+    ? `${absenceCause(status.source)} (${status.detail})`
+    : absenceCause(status.source)
+}
+
+function absenceCause(source: DockerSource): string {
+  switch (source) {
+    case 'none':
+      return 'this executor image ships no Docker daemon'
+    case 'external':
+      return 'the external Docker daemon this container was pointed at is unreachable'
+    case 'rootless':
+      return 'this container could not start its rootless Docker daemon'
+    case 'unreported':
+      return 'no Docker daemon answered in this container, and the recorded verdict did not say which one was tried'
+    default:
+      return unnamedSource(source)
+  }
+}
+
+function unnamedSource(source: never): string {
+  return `no Docker daemon answered in this container (unrecognised source ${JSON.stringify(source)})`
+}
+
+/** Whether a daemon is answering RIGHT NOW. Injected so the unit suite can state either answer. */
+export type DockerProbe = () => Promise<boolean>
+
+/** A live probe may not outlast the thing it is guarding; a hung socket is an absent daemon here. */
+const PROBE_TIMEOUT_MS = 10_000
+
+const execFileAsync = promisify(execFile)
+
+/**
+ * The default {@link DockerProbe}: `docker version` talks to the SERVER, unlike the client-only
+ * `docker --version`, which answers happily with no daemon at all.
+ */
+export const probeDockerServing: DockerProbe = async () => {
+  try {
+    await execFileAsync('docker', ['version', '--format', '{{.Server.Version}}'], {
+      timeout: PROBE_TIMEOUT_MS,
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** What a stand-up is entitled to conclude about the daemon at the moment it is about to run. */
+export interface DockerVerdict {
+  /** Three-valued exactly as {@link DockerStatus.available}, and read the same way. */
+  available: boolean | undefined
+  /** Set only for a CONFIRMED absence: the sentence to refuse with. Absent means proceed. */
+  refusal?: string
+}
+
+/**
+ * Resolve what to do now, from what boot recorded plus what a daemon says today.
+ *
+ * `entrypoint.sh` probes once, at boot, within a bounded wait. A container outlives that: a warm
+ * pool serves many jobs from one, and a sidecar daemon that took longer than the wait allows is
+ * serving perfectly well by the second job. Refusing off the recorded verdict alone latches that
+ * container into refusing local infra that in fact works, for its whole life, with a stale
+ * sentence explaining why. So a recorded absence is a HYPOTHESIS here, and the live probe settles
+ * it; the recorded verdict is still what supplies the cause and the daemon's own log tail, which
+ * no probe can reconstruct.
+ *
+ * Only a recorded `false` is re-confirmed. "Not decided" keeps attempting exactly as before: the
+ * point of the third value is that nothing turns it into a refusal, and a probe here would.
+ */
+export async function resolveDockerVerdict(
+  status: DockerStatus,
+  probe: DockerProbe = probeDockerServing,
+): Promise<DockerVerdict> {
+  if (status.available !== false) return { available: status.available }
+  if (await probe()) return { available: true }
+  return { available: false, refusal: describeDockerAbsence(status) }
 }

@@ -135,6 +135,11 @@ const server = createServer((req, res) => {
       // the alternative was every agent discovering an absent daemon for itself, one failed
       // compose command at a time. Reported, never enforced here: what REFUSES on it is the
       // stand-up in agent.ts, which is the only place that knows a job wanted a daemon.
+      //
+      // Deliberately the BOOT record, not a live probe. /health is polled, and a probe per poll
+      // would spawn a process per poll to answer a question this endpoint is not the one to act
+      // on; the stand-up re-confirms a recorded absence at the moment it matters
+      // (`resolveDockerVerdict`), so a stale negative here never becomes a stale refusal there.
       return send(res, 200, {
         status: 'ok',
         ...(HARNESS_VERSION ? { version: HARNESS_VERSION } : {}),

@@ -339,6 +339,14 @@ normal state under the native host transport (`LOCAL_NATIVE_AGENTS`) where the h
 developer's machine with no entrypoint. Undecided attempts the stand-up; only a decided absence
 refuses it.
 
+What is recorded describes BOOT, and a container outlives its boot: a warm pool serves many jobs
+from one, and a sidecar daemon that took longer to come up than the entrypoint's bounded wait
+allows is serving perfectly well by the second job. So a recorded absence is a hypothesis, not the
+refusal: `resolveDockerVerdict` re-checks it against a live daemon at the moment a stand-up is
+about to run, and the record supplies what only the record holds, the cause and the daemon's own
+log tail. `GET /health` deliberately keeps reporting the boot record rather than probing per poll,
+since it is not the surface that acts on the answer.
+
 Why it is written down at all: the image shipped for months with `docker-ce-rootless-extras` (the
 wrappers that START a daemon) and no `docker-ce` (the daemon itself), and no `iproute2` for the
 network rootlesskit builds. The entrypoint backgrounded the start in a subshell where its exit

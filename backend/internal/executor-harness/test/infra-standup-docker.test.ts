@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { standUpInfra } from '../src/agent.js'
+import { standUpInfra } from '../src/infra-standup.js'
 import { silentLogger } from './helpers.js'
 
 // The Tester's local docker-compose stand-up against the container's OWN verdict about its Docker
@@ -21,6 +21,14 @@ async function withStatus(contents: string): Promise<void> {
 
 const infra = { environment: 'local' as const, composePath: 'docker-compose.yml' }
 
+/**
+ * A refusal rests on a LIVE daemon check, not on the boot record alone, so every case below says
+ * what the probe answers. Injected rather than mocked away because the CI runner this suite runs
+ * on has a working daemon of its own: without it, "the image has no daemon" would be contradicted
+ * by the host and the assertions would swap meaning depending on where they ran.
+ */
+const noDaemon = () => Promise.resolve(false)
+
 describe('standUpInfra against the container docker verdict', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
@@ -28,7 +36,7 @@ describe('standUpInfra against the container docker verdict', () => {
 
   it('refuses, and names the cause, when the image has no daemon', async () => {
     await withStatus('{"available":false,"source":"none","reason":"missing"}')
-    const result = await standUpInfra(tmpdir(), infra, undefined, silentLogger)
+    const result = await standUpInfra(tmpdir(), infra, undefined, silentLogger, noDaemon)
     expect(result.started).toBe(false)
     expect(result.record?.dockerAvailable).toBe(false)
     // The exact cause, not a compose connection error: this is what tells a human the fix is the
@@ -44,7 +52,7 @@ describe('standUpInfra against the container docker verdict', () => {
     await withStatus(
       '{"available":false,"source":"rootless","reason":"failed","detail":"rootlesskit: no ip"}',
     )
-    const result = await standUpInfra(tmpdir(), infra, undefined, silentLogger)
+    const result = await standUpInfra(tmpdir(), infra, undefined, silentLogger, noDaemon)
     expect(result.record?.error).toContain('rootlesskit: no ip')
   })
 
@@ -52,7 +60,7 @@ describe('standUpInfra against the container docker verdict', () => {
     vi.stubEnv('HARNESS_DOCKER_STATUS_FILE', join(tmpdir(), 'cf-no-such-status.json'))
     // The compose file does not exist, so the attempt fails — the point is that it was MADE and
     // that the record does not assert a daemon verdict this container never reached.
-    const result = await standUpInfra(tmpdir(), infra, undefined, silentLogger)
+    const result = await standUpInfra(tmpdir(), infra, undefined, silentLogger, noDaemon)
     expect(result.started).toBe(false)
     expect(result.record?.dockerAvailable).toBeUndefined()
     expect(result.record?.error).not.toContain('ships no Docker daemon')
@@ -65,8 +73,23 @@ describe('standUpInfra against the container docker verdict', () => {
       { environment: 'local', noInfraDependencies: true },
       undefined,
       silentLogger,
+      noDaemon,
     )
     // Nothing wanted a daemon, so nothing is reported about one.
     expect(result).toEqual({ started: false })
+  })
+
+  it('attempts anyway when the recorded absence is contradicted by a live daemon', async () => {
+    // A warm-pool container whose sidecar took longer to come up than the entrypoint's bounded
+    // wait allows. The boot record still says unreachable; the daemon is serving. Refusing off
+    // the record alone would deny this container local infra for the rest of its life.
+    await withStatus('{"available":false,"source":"external","reason":"unreachable"}')
+    const result = await standUpInfra(tmpdir(), infra, undefined, silentLogger, () =>
+      Promise.resolve(true),
+    )
+    // The compose file does not exist, so the attempt fails. The point is that it was MADE, and
+    // that the record claims the daemon it actually reached.
+    expect(result.record?.dockerAvailable).toBe(true)
+    expect(result.record?.error).not.toContain('unreachable')
   })
 })

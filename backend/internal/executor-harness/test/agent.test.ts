@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parseAgentJob } from '../src/job.js'
 import {
-  buildInfraNotes,
   buildPreviewOutcome,
   exploreCheckoutRefs,
   ralphUnsupportedOnMultiRepo,
 } from '../src/agent.js'
+import { buildInfraNotes } from '../src/infra-standup.js'
 import { installCommand } from '../src/frontend-infra.js'
 
 // The generic, manifest-driven agent kind's body validator. The handler itself

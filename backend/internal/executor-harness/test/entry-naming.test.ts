@@ -35,10 +35,16 @@ const source = readFileSync(new URL('../src/harness-server.ts', import.meta.url)
  */
 const GENERIC_ENTRY_NAMES = ['server.js', 'index.js', 'app.js', 'main.js', 'server.mjs']
 
-/** The `dist/…` path the container executes, read off the `exec` line of the entrypoint. */
+/**
+ * The `dist/…` path the container executes, read off the `exec` line of the entrypoint.
+ *
+ * The line carries an `env NAME=VALUE …` prefix (that is how `NODE_ENV=production` reaches the
+ * harness process without being baked into the image, where npm would read it inside the agent's
+ * checkout), so the assignments are skipped and the entry is the argument after `node`.
+ */
 function entrypointTarget(): string {
-  const match = /^exec node (\S+)\s*$/m.exec(entrypoint)
-  if (!match?.[1]) throw new Error('entrypoint.sh has no `exec node <entry>` line to read')
+  const match = /^exec (?:env (?:[A-Za-z_][A-Za-z0-9_]*=\S* )+)?node (\S+)\s*$/m.exec(entrypoint)
+  if (!match?.[1]) throw new Error('entrypoint.sh has no `exec [env …] node <entry>` line to read')
   return match[1]
 }
 
