@@ -480,6 +480,7 @@ export { PLATFORM_DELIVERY_CONTRACT } from './agents/prompts/delivery-contract.j
 export {
   EFFORT_REPORT_FILE,
   appendContainerDispatchDirectives,
+  BACKGROUND_PROCESS_GUIDANCE,
   CONTAINER_DISPATCH_DIRECTIVES,
   EFFORT_REPORT_GUIDANCE,
   EXECUTION_SANDBOX_GUIDANCE,
