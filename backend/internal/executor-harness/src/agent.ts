@@ -31,6 +31,7 @@ import {
 import { inferVcsProvider, openPullRequest } from './vcs-api.js'
 import type { PiRunStats, RunDiagnostics } from './pi-reduction.js'
 import { applyPrDescription } from './pr-description.js'
+import { withSalvageOnlyNote } from './salvage.js'
 import { makeDirClaimer } from './checkout-dir.js'
 import { noChangesReason, runCodingAgent } from './coding-agent.js'
 import { runMultiRepoCoding } from './multi-repo-coding.js'
@@ -945,6 +946,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
     reproductionReport,
     effortReport,
     prDescription,
+    salvageOnly,
   } = await runCodingAgent(buildSingleRepoCodingSpec(job, pushBranch), opts)
   // Ralph loop: the harness-computed validation verdict, forwarded onto the coding result as
   // `ralphVerdict` so the backend's `toRunResult` lifts it onto `AgentRunResult.ralphVerdict`.
@@ -1020,8 +1022,10 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
       ghToken: job.ghToken,
       head: pushBranch,
       base: job.repo.baseBranch,
-      // The agent-authored briefing (title/body) wins field-wise over the dispatch-time text.
-      pr: applyPrDescription(job.pr, prDescription),
+      // The agent-authored briefing (title/body) wins field-wise over the dispatch-time text,
+      // and a branch that is nothing but salvage says so above whichever body won: the agent
+      // committed nothing here, so no briefing on it describes a change anyone proposed.
+      pr: withSalvageOnlyNote(applyPrDescription(job.pr, prDescription), salvageOnly === true),
       // A resumed run's PR is already open, so refresh it rather than lose the briefing to the
       // duplicate-PR 422 — only from a REAL briefing (see `refreshExisting` for why).
       ...(prDescription ? { refreshExisting: true } : {}),

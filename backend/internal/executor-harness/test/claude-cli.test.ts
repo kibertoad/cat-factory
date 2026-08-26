@@ -35,13 +35,33 @@ const satisfyingGrant = (): string[] => CLAUDE_TOOL_CAPABILITIES.map((c) => c.sp
 
 describe('claudeCliArgs', () => {
   const args = (tools: readonly string[]) =>
-    claudeCliArgs({ model: 'sonnet', tools, mcpArgs: [], appendArgs: [] })
+    claudeCliArgs({ model: 'sonnet', tools, declareTools: true, mcpArgs: [], appendArgs: [] })
 
   it('declares the tool set rather than taking the CLI’s headless default', () => {
     const argv = args(CLAUDE_TOOL_SET)
     const at = argv.indexOf('--tools')
     expect(at).toBeGreaterThan(-1)
     expect(argv[at + 1]).toBe(CLAUDE_TOOL_SET.join(','))
+  })
+
+  it('withholds the flag entirely when the CLI is not this image’s', () => {
+    // An ambient run drives the developer's own `claude`, of unknown version. A tool NAME it does
+    // not carry is dropped silently, which is what makes the set safe to over-include; an
+    // unrecognised FLAG exits before the run starts, so the whole declaration is withheld rather
+    // than trimmed. Nothing else about the argv changes.
+    const declared = args(CLAUDE_TOOL_SET)
+    const ambient = claudeCliArgs({
+      model: 'sonnet',
+      tools: CLAUDE_TOOL_SET,
+      declareTools: false,
+      mcpArgs: [],
+      appendArgs: [],
+    })
+    expect(ambient).not.toContain('--tools')
+    expect(ambient).not.toContain(CLAUDE_TOOL_SET.join(','))
+    expect(ambient).toEqual(
+      declared.filter((a) => a !== '--tools' && a !== CLAUDE_TOOL_SET.join(',')),
+    )
   })
 
   it('keeps every variadic flag terminated by a following flag, never a positional', () => {
@@ -51,6 +71,7 @@ describe('claudeCliArgs', () => {
     const argv = claudeCliArgs({
       model: 'sonnet',
       tools: CLAUDE_TOOL_SET,
+      declareTools: true,
       mcpArgs: ['--mcp-config', '/tmp/mcp.json', '--strict-mcp-config', '--allowedTools', 'a,b'],
       appendArgs: ['--append-system-prompt', 'be brief'],
     })

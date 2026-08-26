@@ -683,6 +683,17 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   // The built-in tools this run declares, named ONCE: the same list rides `--tools` and the
   // `--allowedTools` re-grant, which is additive rather than inert (see `claudeAllowedToolPatterns`).
   const tools = CLAUDE_TOOL_SET
+  // ...but `--tools` itself is withheld from an ambient run, whose `claude` is the developer's own
+  // rather than this image's pinned one: an unrecognised FLAG fails the whole run, where an
+  // unrecognised tool NAME is merely dropped. See `claudeCliArgs`. The re-grant is unaffected
+  // (`--allowedTools` long predates this), so a tool-server run still unlocks what it wires.
+  const declareTools = opts.ambientAuth !== true
+  const declaredTools = declareTools ? tools : []
+  if (!declareTools) {
+    opts.log?.info(
+      'claude-code: taking the CLI’s default tool surface (ambient CLI, version unknown)',
+    )
+  }
 
   const secrets = opts.subscriptionToken ? secretsToRedact(opts.subscriptionToken) : []
   const capture = openClaudeCallCapture(opts, { prompt, folded, secrets })
@@ -730,7 +741,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     reportToolServerStartup(event, opts.onToolServers)
     // The same startup event answers what the CLI granted of what we asked for; a capability it
     // named no tool for is a silent capability loss otherwise (see `assertClaudeToolsCurrent`).
-    assertClaudeToolsCurrent(event, tools, opts.log)
+    assertClaudeToolsCurrent(event, declaredTools, opts.log)
     // A subagent's turns ride the parent's stdout tagged with the dispatch that spawned them;
     // `telemetry` routes them off the parent's chain (and decides who bills them). Progress, slice
     // tracking, the guard and `stats` below deliberately see EVERY event: a subagent grinding on
@@ -820,7 +831,13 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     const { stderrTail } = await streamCli(
       {
         command: 'claude',
-        args: claudeCliArgs({ model: opts.model, tools, mcpArgs: home.mcpArgs, appendArgs }),
+        args: claudeCliArgs({
+          model: opts.model,
+          tools,
+          declareTools,
+          mcpArgs: home.mcpArgs,
+          appendArgs,
+        }),
       },
       prompt,
       { ...opts, signal: runSignal },

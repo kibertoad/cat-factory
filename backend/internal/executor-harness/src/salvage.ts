@@ -270,6 +270,63 @@ export async function salvageUntrackedWork(args: {
 }
 
 /**
+ * Fold a later salvage pass onto an earlier one, so a run that salvaged TWICE reports what both
+ * passes did rather than only the last.
+ *
+ * A coding run salvages at each point where the next thing to happen reads COMMITS rather than the
+ * working tree: once before the pre-PR gates (which is what lets them run at all on a run whose
+ * only product is untracked files), and again at the settle, because a gate's repair round runs
+ * the agent afresh and can leave new files of its own. On almost every run the second pass is
+ * `none` (the first one already committed everything), so this is a cheap way to keep ONE honest
+ * report instead of two half-truths.
+ *
+ * Counts are summed only when BOTH passes committed, because only then are the two sets disjoint.
+ * A pass that refused or failed sees the same files again on the next pass, so summing there would
+ * double-count the one loss; instead the more significant status wins outright, `failed` over
+ * `refused` over `committed`, on the rule that a pass which could NOT keep its files is the fact a
+ * human has to act on and must not be hidden by a later pass that found nothing left to do. Ties
+ * take the later pass, whose numbers are the current ones.
+ *
+ * `withheld` is always the union: a credential-bearing file either pass declined to commit has to
+ * be named whatever else happened, since naming it is what lets someone rotate what it held.
+ */
+export function foldSalvageReports(previous: SalvageReport, next: SalvageReport): SalvageReport {
+  if (next.status === 'none') return withWithheld(previous, next)
+  if (previous.status === 'none') return withWithheld(next, previous)
+  if (previous.status === 'committed' && next.status === 'committed') {
+    return withWithheld(
+      {
+        status: 'committed',
+        files: [...previous.files, ...next.files].slice(0, REPORTED_PATHS),
+        fileCount: previous.fileCount + next.fileCount,
+        totalBytes: previous.totalBytes + next.totalBytes,
+        ...((next.commitSha ?? previous.commitSha)
+          ? { commitSha: next.commitSha ?? previous.commitSha }
+          : {}),
+      },
+      previous,
+    )
+  }
+  return SALVAGE_STATUS_RANK[previous.status] > SALVAGE_STATUS_RANK[next.status]
+    ? withWithheld(previous, next)
+    : withWithheld(next, previous)
+}
+
+/** Which status a fold keeps when the two passes disagree; see {@link foldSalvageReports}. */
+const SALVAGE_STATUS_RANK: Record<SalvageReport['status'], number> = {
+  none: 0,
+  committed: 1,
+  refused: 2,
+  failed: 3,
+}
+
+/** `kept` with `other`'s withheld paths merged in, de-duplicated and order-preserving. */
+function withWithheld(kept: SalvageReport, other: SalvageReport): SalvageReport {
+  const union = [...new Set([...(kept.withheld ?? []), ...(other.withheld ?? [])])]
+  return union.length > 0 ? { ...kept, withheld: union } : kept
+}
+
+/**
  * How the run that left these files behind ended. It decides what the commit message SAYS, which
  * is the whole point of marking a salvage: a commit arriving on a branch with no explanation is
  * indistinguishable from work the agent chose to make and someone chose to keep.
@@ -322,6 +379,22 @@ export function salvageOnlyNotice(): string {
   )
 }
 
+/**
+ * Put {@link salvageOnlyNotice} at the top of a pull request that is nothing but a salvage.
+ *
+ * Only the BODY is marked. A title carrying it would follow the PR into every list and
+ * notification a maintainer sees, which is a lot of noise for a caveat that belongs beside the
+ * diff, and the salvage commit's own message elaborates on it there.
+ *
+ * Lives here rather than beside either caller because BOTH open pull requests off a salvage-only
+ * branch: the multi-repo push phase, per leg, and the single-repo one. It was the multi-repo path
+ * alone for a while, which meant the same branch shape opened an unmarked PR depending only on how
+ * many repositories the run happened to clone.
+ */
+export function withSalvageOnlyNote<T extends { body: string }>(pr: T, salvageOnly: boolean): T {
+  return salvageOnly ? { ...pr, body: `${salvageOnlyNotice()}\n\n${pr.body}` } : pr
+}
+
 /** Total size of `paths` under `dir`; a file that cannot be stat'd counts as zero rather than failing. */
 async function measure(dir: string, paths: string[]): Promise<number> {
   const sizes = await Promise.all(
@@ -351,14 +424,21 @@ export interface SalvageDelivery {
  * reports, so the person reading "the run was killed" is told in the same breath what became of
  * its work: on the branch and reviewed by nobody, still in the container, or never committed.
  *
+ * `occasion` is the SAME fact {@link salvageCommitMessage} is given, and for the same reason: how
+ * the run ended is what decides how much to trust the files. A run that was killed left them
+ * mid-thought; a run that settled simply never added them, and telling a human a clean run "was
+ * aborted" describes a failure that did not happen. The two texts had drifted precisely here,
+ * which is why the occasion is now a parameter of both rather than a constant inside one.
+ *
  * `delivery` is supplied by whoever pushed. Absent means the caller is on a path where the
  * ordinary push follows (the settle path), so there is nothing extra to say.
  */
 export function describeSalvage(
   report: SalvageReport,
+  occasion: SalvageOccasion,
   delivery?: SalvageDelivery,
 ): string | undefined {
-  const parts = [describeOutcome(report, delivery), describeWithheld(report)].filter(
+  const parts = [describeOutcome(report, occasion, delivery), describeWithheld(report)].filter(
     (part): part is string => part !== undefined,
   )
   return parts.length > 0 ? parts.join(' ') : undefined
@@ -367,6 +447,7 @@ export function describeSalvage(
 /** The fate of the files the salvage DID try to keep. */
 function describeOutcome(
   report: SalvageReport,
+  occasion: SalvageOccasion,
   delivery: SalvageDelivery | undefined,
 ): string | undefined {
   switch (report.status) {
@@ -378,9 +459,13 @@ function describeOutcome(
           ? `commit ${report.commitSha ?? 'unknown'}, which could NOT be pushed ` +
             `(${delivery.reason ?? 'the push failed'}) and so is lost with the container`
           : `commit ${report.commitSha ?? 'unknown'}`
+      const why =
+        occasion.kind === 'aborted'
+          ? 'this run was aborted'
+          : 'the agent finished without committing them'
       return (
         `${report.fileCount} uncommitted new file(s) the agent left behind were salvaged into ` +
-        `${landed}; this run was aborted, so review them before trusting them.`
+        `${landed}; ${why}, so review them before trusting them.`
       )
     }
     case 'refused':

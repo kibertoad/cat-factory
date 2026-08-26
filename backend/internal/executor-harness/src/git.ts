@@ -665,6 +665,13 @@ export async function workingTreeStatus(dir: string, signal?: AbortSignal): Prom
  * path in ONE command, that one name discards the whole all-or-nothing salvage, exactly as an
  * unquoted accented name did. `:(literal)` matches the entry as itself and nothing else.
  *
+ * The commit is SCOPED to those same pathspecs, and so is the staged-anything check above it. A
+ * bare `git commit` takes whatever the index holds, which is not the same set: an agent killed
+ * mid-flight leaves its own `git add` staged, and that content would then land under a message
+ * naming only the paths passed here, counted by a caller that had never looked at it. The commit
+ * and the claim made about it have to describe ONE set of files. Content the agent staged and this
+ * call did not name stays staged for whoever commits it next.
+ *
  * The caller has already decided WHICH paths belong; this only commits them.
  */
 export async function commitPaths(
@@ -674,10 +681,14 @@ export async function commitPaths(
   signal?: AbortSignal,
 ): Promise<string | null> {
   if (paths.length === 0) return null
-  await git(['add', '--', ...paths.map(literalPathspec)], { cwd: dir, signal })
-  const staged = await git(['diff', '--cached', '--name-only'], { cwd: dir, signal })
+  const pathspecs = paths.map(literalPathspec)
+  await git(['add', '--', ...pathspecs], { cwd: dir, signal })
+  const staged = await git(['diff', '--cached', '--name-only', '--', ...pathspecs], {
+    cwd: dir,
+    signal,
+  })
   if (staged.trim() === '') return null
-  await git(['commit', '-m', message], { cwd: dir, signal })
+  await git(['commit', '-m', message, '--', ...pathspecs], { cwd: dir, signal })
   return headCommit(dir, signal)
 }
 
