@@ -115,6 +115,39 @@ Bootstrap differs at the ends: it may start from an empty dir, and **resets
 history to one commit and force-pushes** the default branch instead of opening a
 PR. Blueprint **commits onto a branch** (no history reset) and returns the tree.
 
+### The environment is probed once, not by the agent
+
+Before any mode branches, `handleAgent` probes the machine it is about to run on and appends an
+`ENVIRONMENT INVENTORY` block to the job's system prompt (`src/environment-inventory.ts`). It names
+the toolchain that answered and its versions, the curated list of tools that did not, and whether a
+Docker DAEMON is actually reachable.
+
+It exists because the platform used to ask every agent to find this out for itself, and every agent
+did: in one measured run an architect ran `for c in docker kubectl helm kustomize; …` and then
+`docker info`, and the coder it handed off to rediscovered both answers thirty calls later. Four
+calls out of a forty-call budget for facts this process holds before the agent's first turn. The
+backend cannot hold them (it composes its prompt before a transport is chosen, and the same body
+reaches this image, a deployment's own image variant and, under `LOCAL_NATIVE_AGENTS`, the
+developer's own machine), so it states the POLICY and names no tooling at all.
+
+Three rules bind anything added to it:
+
+- **A failed probe is not an absence.** Only `ENOENT` means "not installed"; a timeout or a refused
+  spawn renders on its own line as could-not-be-determined, because the two lead an agent to
+  opposite next moves.
+- **An unlisted tool is unknown too**, which the block's last line says. The probe list is curated,
+  so silence about `terraform` must not read as its absence.
+- **The Docker daemon is answered by running `docker info`**, never by finding the CLI. The CLI is
+  installed in this image unconditionally, `entrypoint.sh` starts the rootless daemon best-effort
+  and execs the server without waiting for it, so at job start this probe is the only thing that
+  knows how that went.
+
+Composed at exactly ONE point, onto the job's own `systemPrompt`, which every mode already forwards
+and all three CLIs already carry (claude-code's `--append-system-prompt` and its oversized-argv
+fallback, Codex's fold, Pi's `AGENTS.md`). `test/environment-inventory.coverage.test.ts` pins that:
+a mode that folded its own copy would state the machine twice, and one that folded none would leave
+its agent probing, with nothing failing either way.
+
 ### The work-branch push is CHECKPOINTED, so it is lease-guarded
 
 Step 8's push is not the run's first: every `JOB_CHECKPOINT_INTERVAL_MS` (60s) the harness pushes
@@ -348,6 +381,7 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 | `src/bootstrap-mode.ts` | The repo-bootstrap MODE: clone-a-reference-or-scaffold → run the agent → refuse to push an empty tree → reinit + force-push to the pre-created target repo. |
 | `src/artifact-upload.ts` | The OUTBOUND half of the artifact seam: parses the body's `artifactUpload` and projects it onto the agent's env as `ARTIFACT_UPLOAD_URL` / `ARTIFACT_UPLOAD_TOKEN`, registering the token for redaction first. Passes through what the body carries and decides nothing: which kinds get the seam is the backend's call. |
 | `src/codex-images.ts` | Codex's own `image_gen` output, staged where the agent can reach it: creates `$CODEX_HOME/generated_images` as a symlink into `.cat-context/binary-output/generated/` before the CLI starts, sweeps anything a failed redirect left behind, and unlinks (never follows) the redirect at teardown — a failed unlink is REPORTED, because that unlink is what stops the recursive delete reaching the checkout. Exists because codex exposes no path for what it generated AND `$CODEX_HOME` holds the run's decrypted credential, so neither asking the agent nor sending it there is available. |
+| `src/environment-inventory.ts` | What the MACHINE holds, probed once per job and appended to the agent's system prompt as an ENVIRONMENT INVENTORY block. The only layer that can state it: the backend composes its prompt before a transport is chosen, and the same body serves this image, a deployment's own variant and the developer's laptop under `LOCAL_NATIVE_AGENTS`. Three-valued on purpose, so a probe that failed renders as unknown rather than as an absence, and the Docker DAEMON is answered by running `docker info` rather than by finding the CLI, which is installed here either way. See [The environment is probed once, not by the agent](#the-environment-is-probed-once-not-by-the-agent). |
 | `src/agent-shared.ts` | The few helpers every agent MODE shares (effort-report folding, the capability fields forwarded to `runAgentInWorkspace`). |
 | `src/logger.ts`    | Structured logging.                                                                                     |
 

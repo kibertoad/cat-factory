@@ -304,6 +304,16 @@ not claim). Anything else is a DEPLOYMENT's variant, mapped to an image by its r
 | Cloudflare            | a `[[containers]]` class (subclass the exported `RunContainer`) plus a durable-object binding named `RUNNER_CONTAINER_PIXEL_TOOLS`, because a Container's image is pinned per CLASS |
 | manifest-driven pool  | forwarded verbatim as `{{input.image}}`; the pool maps it                                                                                                                           |
 
+**A variant needs no prompt of its own to describe itself.** The harness probes the machine at job
+start and appends an `ENVIRONMENT INVENTORY` block to the agent's system prompt, so a deployment
+that ships `pixel-tools` with ImageMagick on it has that stated to the agent without registering a
+word about it; conversely, no dispatch-time prompt claims a tool the variant does not carry. That is
+also why the shipped `EXECUTION_SANDBOX_GUIDANCE` names no tooling at all: it is composed before a
+transport is chosen and cannot know which image (or, under `LOCAL_NATIVE_AGENTS`, whose laptop) will
+serve the job. The probe list is curated, so a variant's own headline tool may not be on it: the
+block's closing line keeps an unprobed tool honestly unknown rather than reported absent. See
+[the harness README](https://github.com/kibertoad/cat-factory/blob/main/backend/internal/executor-harness/README.md#the-environment-is-probed-once-not-by-the-agent).
+
 Two rules make this safe, and both were learned the hard way.
 
 **A variant is part of the CONTAINER's identity, not a dispatch-time hint.** The container is per

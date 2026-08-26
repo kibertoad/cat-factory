@@ -493,6 +493,7 @@ export {
   PR_DESCRIPTION_FILE,
   PR_DESCRIPTION_GUIDANCE,
   STANDARDS_SECTION_OPENER,
+  TOOL_PREFERENCE_GUIDANCE,
 } from './agents/prompts/shared.js'
 
 // Deterministic, container-free rendering + lenient coercion of the in-repo

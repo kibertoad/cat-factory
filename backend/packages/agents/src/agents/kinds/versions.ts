@@ -91,7 +91,11 @@ export const PROMPT_VERSIONS = {
   // section nobody injected — which is what the graders kept reporting, from both sides: a
   // reviewer judging against blocks it could not find, and an implementer told to treat as hard
   // requirements standards it was never given.
-  build: { id: 'build', version: 7, text: standardSystemPrompt('build') },
+  // v8: the shared delivery contract now asks for a commit per coherent chunk instead of leaving
+  // the timing open. v6 told the agent its commits are published as they are made, which is only
+  // half a guarantee: the checkpoint push can publish nothing when the agent batches everything to
+  // the end, which is how one killed run lost its whole deliverable.
+  build: { id: 'build', version: 8, text: standardSystemPrompt('build') },
   // Brought under version control alongside the implementation-state axis: the spec-writer now
   // emits `requirementItem.state`, and its output is the durable behaviour contract every later
   // step reads, so a change to it needs to be attributable like the standard phases. Numbering
