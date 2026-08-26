@@ -141,6 +141,18 @@ export function claudeCliArgs(opts: {
   model: string
   /** The built-in tools this run asks for; see {@link CLAUDE_TOOL_SET}. */
   tools: readonly string[]
+  /**
+   * Whether to DECLARE that set with `--tools`, or take whatever the CLI defaults to.
+   *
+   * False for an `ambientAuth` run, which is the one case where the CLI is not this image's. A
+   * name the build does not carry is dropped silently, which is what makes {@link CLAUDE_TOOL_SET}
+   * safe to be over-inclusive, but that rule is about tool NAMES. An unrecognised FLAG is a
+   * different failure: the CLI exits before the run starts. Everywhere else the image pins the
+   * version and the flag is measured against it; on a developer's own machine the harness knows
+   * neither which `claude` is on the PATH nor how old it is, and the cost of guessing wrong is
+   * every local native run, not a thinner tool surface on one.
+   */
+  declareTools: boolean
   /** `--mcp-config` + `--strict-mcp-config` + any `--allowedTools`; empty when no server is wired. */
   mcpArgs: readonly string[]
   /** `--append-system-prompt <prompt>`, or empty when the prompt was folded into stdin. */
@@ -160,8 +172,7 @@ export function claudeCliArgs(opts: {
     '--model',
     opts.model,
     // Declared rather than defaulted: see this module's header for what the default set costs.
-    '--tools',
-    opts.tools.join(','),
+    ...(opts.declareTools ? ['--tools', opts.tools.join(',')] : []),
     ...opts.mcpArgs,
     ...opts.appendArgs,
   ]
@@ -180,6 +191,11 @@ export function claudeCliArgs(opts: {
  * Best-effort and never throws: a run whose tool surface is short is still a run, and the honest
  * disposition for a floor this image cannot verify is to SAY it could not be read, not to fail the
  * job and not to stay silent (which reads exactly like a satisfied request).
+ *
+ * `requested` is what the argv actually DECLARED, so an ambient run (which declares nothing, see
+ * {@link claudeCliArgs}) passes none and the line says the surface is the CLI's own default. The
+ * floor is still read back there: "the default set carries no search tool" and "we asked for one
+ * and did not get it" are both worth a line, and they are not the same fact or the same fix.
  */
 export function assertClaudeToolsCurrent(
   event: Record<string, unknown>,
@@ -192,7 +208,7 @@ export function assertClaudeToolsCurrent(
   const cliVersion = version ? { cliVersion: version } : {}
   if (!Array.isArray(event.tools)) {
     log.warn('claude-code announced no tool list, so this run has an unverified tool surface', {
-      requestedTools: [...requested],
+      ...(requested.length > 0 ? { requestedTools: [...requested] } : { toolsDeclared: false }),
       ...cliVersion,
     })
     return
@@ -202,7 +218,7 @@ export function assertClaudeToolsCurrent(
     (c) => c.capability,
   )
   const fields = {
-    requestedTools: [...requested],
+    ...(requested.length > 0 ? { requestedTools: [...requested] } : { toolsDeclared: false }),
     grantedTools: [...granted].sort(),
     ...cliVersion,
   }

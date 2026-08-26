@@ -68,8 +68,10 @@ import {
 } from './pr-template.js'
 import {
   describeSalvage,
+  foldSalvageReports,
   salvageUntrackedWork,
   type SalvageDelivery,
+  type SalvageOccasion,
   type SalvageReport,
 } from './salvage.js'
 
@@ -267,6 +269,12 @@ export interface CodingAgentOutcome {
    * clean pass.
    */
   salvage?: SalvageReport
+  /**
+   * This branch is NOTHING BUT salvage: the agent committed to it not once, and everything on it
+   * is files it left uncommitted in the checkout. Set only when a pull request would present that
+   * as a proposed change, so the caller can say so in the body before anyone reads the diff.
+   */
+  salvageOnly?: boolean
 }
 
 /**
@@ -597,54 +605,31 @@ export async function runCodingAgent(
         const listUncommittedNewFiles = (): Promise<string[]> =>
           listUntrackedFiles(workDir, opts.signal)
 
-        // BUGFIX REPRODUCTION PROOF: run the run's declared reproduction command against the
-        // pre-fix tree and the tree the PR will open from, and record whether it was red then
-        // green. Runs BEFORE the validation loop below, deliberately: validation is the GATE
-        // ("only a green checkout opens a PR"), so it has to stay the last thing that touches the
-        // tree — otherwise a reproduction repair round could leave the checkout red behind it and
-        // the PR would open anyway. Keyed purely off the job body carrying a spec (no agent-kind
-        // switch); absent ⇒ a no-op and the flow below is byte-for-byte what it was.
-        const reproduction = spec.reproduction
-        let reproductionReport: ReproductionReport | undefined
-        if (reproduction && (await producedWork(dir, spec, baseSha, resumed, opts))) {
-          opts.onPhase?.('reproduction')
-          reproductionReport = await runReproductionLoop({
-            dir,
-            baseSha,
-            // Re-read per attempt: a repair pass commits, so the final tree moves under the loop.
-            // `producedWork` has already committed forgotten tracked edits, and each repair round
-            // re-commits before the next read.
-            resolveFinalSha: async () => {
-              await commitTrackedEdits(dir, spec.commitMessage, signal)
-              return headCommit(dir, signal)
-            },
-            ...(serviceDirectory ? { serviceDirectory } : {}),
-            spec: reproduction,
-            logger,
-            opts,
-            runAgentPass,
-            onAgentPass: foldPass,
-            listUncommittedNewFiles,
-            // Only a RESUMED run can have a pre-fix tree that already carries work: a fresh run
-            // branched off base, so `baseSha` IS base. Wiring the probe unconditionally would buy
-            // an always-empty answer for the price of a fetch — and a fresh clone is shallow, so
-            // it could not resolve a merge base to answer with anyway. Lazy inside the loop: it
-            // only runs if a tree comes back green.
-            ...(resumed
-              ? {
-                  listBaseTreeChanges: () =>
-                    changedFilesSinceBase(
-                      dir,
-                      spec.repo.baseBranch,
-                      spec.ghToken,
-                      baseSha,
-                      opts.signal,
-                    ),
-                }
-              : {}),
-          })
-          opts.onPhase?.('agent')
-        }
+        // Commit what the agent left uncommitted, BEFORE the two pre-PR phases below read the
+        // branch. See {@link settleAgentWork} for why the order is the whole point.
+        const { committedOwnWork, preGateSalvage } = await settleAgentWork(
+          dir,
+          spec,
+          baseSha,
+          logger,
+          opts,
+        )
+
+        // BUGFIX REPRODUCTION PROOF, run before the validation loop below. See
+        // {@link runReproductionPhase} for why that order is load-bearing. A no-op when the job
+        // body carries no reproduction spec.
+        const reproductionReport = await runReproductionPhase({
+          dir,
+          spec,
+          baseSha,
+          resumed,
+          logger,
+          opts,
+          ...(serviceDirectory ? { serviceDirectory } : {}),
+          runAgentPass,
+          onAgentPass: foldPass,
+          listUncommittedNewFiles,
+        })
         // PRE-PR VALIDATION: run the service's configured checks against the checkout and, while
         // they fail and budget remains, hand the captured output back to the agent and run it
         // again. Sits BETWEEN the agent and the finalize/push/PR step so a red checkout never
@@ -670,6 +655,8 @@ export async function runCodingAgent(
         outcome = await finalizeCodingRun({
           validationReport,
           reproductionReport,
+          preGateSalvage,
+          committedOwnWork,
           dir,
           spec,
           logger,
@@ -701,7 +688,13 @@ export async function runCodingAgent(
         // handed the rescue's push and a rescue starting behind a checkpoint would be handed a
         // push made BEFORE the salvage commit existed — reporting as pushed a commit that is not.
         clearInterval(checkpoint)
-        throw await withSalvagedWork(error, { dir, logger, pushWorkOnce, inFlightPush })
+        throw await withSalvagedWork(error, {
+          dir,
+          commitMessage: spec.commitMessage,
+          logger,
+          pushWorkOnce,
+          inFlightPush,
+        })
       } finally {
         // Safety net for the throw path (the happy path already cleared these above).
         clearInterval(checkpoint)
@@ -724,9 +717,17 @@ export async function runCodingAgent(
 function withSalvageNote(summary: string, salvage: SalvageReport): string {
   const missedWork = salvage.status === 'refused' || salvage.status === 'failed'
   if (!missedWork && (salvage.withheld?.length ?? 0) === 0) return summary
-  const note = describeSalvage(salvage)
+  const note = describeSalvage(salvage, SETTLED)
   return note ? `${note}\n\n${summary}` : summary
 }
+
+/**
+ * How the run ended, for every salvage on the settle path: the agent finished, it simply never
+ * added these files. Named once because the commit message and the human-readable note are both
+ * given it, and a settle-path salvage that describes itself as an abort reports a failure that
+ * did not happen.
+ */
+const SETTLED: SalvageOccasion = { kind: 'settled' }
 
 /**
  * How long the rescue of an aborted run's work gets, on its own clock.
@@ -781,23 +782,37 @@ export async function withSalvagedWork(
   error: unknown,
   args: {
     dir: string
+    /** The message the run's own commits carry, reused for the tracked edits rescued below. */
+    commitMessage: string
     logger: Logger
     pushWorkOnce: (override?: AbortSignal) => Promise<void>
     inFlightPush: () => Promise<void> | null
   },
 ): Promise<unknown> {
   const cause = error instanceof Error ? error.message : String(error)
+  const occasion: SalvageOccasion = { kind: 'aborted', cause }
   const signal = rescueSignal()
   await drainInFlightPush(args.inFlightPush, args.logger)
+  // Edits to files git ALREADY tracks, committed under the run's own message before the salvage
+  // takes the untracked ones. On the settle path this has run several times already; here it has
+  // never run at all, and a killed agent leaves edits behind exactly as it leaves new files.
+  // Naming them separately is also what keeps the salvage's own count honest: `commitPaths`
+  // commits the paths it was given and no others, so anything not swept up here is simply lost.
+  // Best-effort: a failure here must not cost the salvage that follows it.
+  await commitTrackedEdits(args.dir, args.commitMessage, signal).catch((commitError: unknown) => {
+    args.logger.warn('coding-agent: could not commit the tracked edits an aborted run left', {
+      reason: commitError instanceof Error ? commitError.message : String(commitError),
+    })
+  })
   const note = await salvageUntrackedWork({
     dir: args.dir,
-    occasion: { kind: 'aborted', cause },
+    occasion,
     logger: args.logger,
     signal,
   })
     .then(async (report) => {
-      if (report.status !== 'committed') return describeSalvage(report)
-      return describeSalvage(report, await deliverSalvage(args, signal))
+      if (report.status !== 'committed') return describeSalvage(report, occasion)
+      return describeSalvage(report, occasion, await deliverSalvage(args, signal))
     })
     .catch((salvageError: unknown) => {
       args.logger.error('coding-agent: salvage of an aborted run failed', {
@@ -975,6 +990,10 @@ async function finalizeCodingRun(args: {
   validationReport?: ValidationReport
   /** The reproduction proof's last attempt, attached to the outcome (absent when unconfigured). */
   reproductionReport?: ReproductionReport
+  /** What the salvage pass that ran ahead of the pre-PR phases recovered; folded with the mop-up. */
+  preGateSalvage: SalvageReport
+  /** Whether the branch carried commits of the agent's OWN, read before that salvage committed. */
+  committedOwnWork: boolean
   dir: string
   spec: CodingAgentSpec
   logger: Logger
@@ -994,6 +1013,8 @@ async function finalizeCodingRun(args: {
   const {
     validationReport,
     reproductionReport,
+    preGateSalvage,
+    committedOwnWork,
     dir,
     spec,
     logger,
@@ -1043,19 +1064,24 @@ async function finalizeCodingRun(args: {
   const inflight = inFlightPush()
   if (inflight) await inflight.catch(() => {})
 
-  // Recover the untracked, non-ignored files the agent left behind. `commitTrackedEdits` above
-  // only captures edits to ALREADY tracked files, so a NEW file the agent created and forgot to
-  // commit used to be listed, warned about and dropped — and on a greenfield task EVERY file is
-  // new, which made that warning the whole deliverable going in the bin. Observable is not
-  // recovered, so commit them. Guardrails (a dependency/build deny-list, a file-count and byte
-  // bound, an all-or-nothing refusal over it) live in `salvage.ts`; this path is coding mode by
-  // construction, which is the other rule it must obey.
-  const salvage = await salvageUntrackedWork({
-    dir,
-    occasion: { kind: 'settled' },
-    logger,
-    ...(signal ? { signal } : {}),
-  })
+  // The MOP-UP salvage. The caller already ran one ahead of the pre-PR phases (see there for why
+  // the order matters); this second pass exists because a validation or reproduction REPAIR round
+  // runs the agent afresh and can leave new files of its own after that first pass. On a run with
+  // no repair round it finds nothing and folds away to the earlier report.
+  const salvage = foldSalvageReports(
+    preGateSalvage,
+    await salvageUntrackedWork({
+      dir,
+      occasion: SETTLED,
+      logger,
+      ...(signal ? { signal } : {}),
+    }),
+  )
+  // A branch whose ENTIRE content is salvage is not a change anyone proposed, and its reviewer has
+  // to be told that before reading it as one. `committedOwnWork` is the caller's pre-salvage read;
+  // a RESUMED run carries prior commits of the agent's own regardless of what this pass added, so
+  // it is never salvage-only. The multi-repo path marks its peer PRs the same way.
+  const salvageOnly = !resumed && !committedOwnWork && salvage.status === 'committed'
   // A salvage that COMMITTED needs no announcement: its files are in the push and its commit
   // message says where they came from. A refused or failed one means work the agent produced is
   // NOT in the pull request, on a run that otherwise reads as a clean pass — so say it in the
@@ -1109,6 +1135,7 @@ async function finalizeCodingRun(args: {
       ...(effortReport ? { effortReport } : {}),
       ...(prDescription ? { prDescription } : {}),
       ...(salvage.status === 'none' ? {} : { salvage }),
+      ...(salvageOnly ? { salvageOnly: true } : {}),
     }
   }
 
@@ -1139,9 +1166,13 @@ async function finalizeCodingRun(args: {
  *
  * Commits forgotten edits to tracked files first, exactly as {@link finalizeCodingRun} does, so
  * an agent that edited-but-didn't-commit still counts as work. That call is idempotent, so
- * finalize repeating it later is a no-op. Uncommitted NEW files are invisible here — but they
- * are equally invisible to finalize, so a run whose only product is an uncommitted new file is
- * a no-op on both paths, and the checks would have nothing to gate anyway.
+ * finalize repeating it later is a no-op.
+ *
+ * Uncommitted NEW files are invisible to it, which is why {@link settleAgentWork} runs ahead of
+ * every caller and commits them. Reading commits is the whole point of this gate, and it used to
+ * mean that a run whose only product was new files (a greenfield task, where that is ALL of
+ * them) answered `false` here and skipped the checks, only for the salvage to commit the lot
+ * afterwards and open a pull request nothing had validated.
  */
 async function producedWork(
   dir: string,
@@ -1152,6 +1183,110 @@ async function producedWork(
 ): Promise<boolean> {
   await commitTrackedEdits(dir, spec.commitMessage, opts.signal)
   return resumed || (await branchHasCommitsSince(dir, baseSha, opts.signal))
+}
+
+/**
+ * The bugfix reproduction proof: run the run's declared reproduction command against the pre-fix
+ * tree and the tree the PR will open from, and record whether it was red then green.
+ *
+ * Runs BEFORE the pre-PR validation loop, deliberately: validation is the GATE ("only a green
+ * checkout opens a PR"), so it has to stay the last thing that touches the tree — otherwise a
+ * reproduction repair round could leave the checkout red behind it and the PR would open anyway.
+ * Keyed purely off the job body carrying a spec (no agent-kind switch); absent ⇒ `undefined` and
+ * the flow around it is byte-for-byte what it was.
+ */
+async function runReproductionPhase<TRun>(args: {
+  dir: string
+  spec: CodingAgentSpec
+  baseSha: string
+  resumed: boolean
+  logger: Logger
+  opts: RunOptions
+  serviceDirectory?: string
+  runAgentPass: (userPrompt: string) => Promise<TRun>
+  onAgentPass: (run: TRun) => void
+  listUncommittedNewFiles: () => Promise<string[]>
+}): Promise<ReproductionReport | undefined> {
+  const { dir, spec, baseSha, resumed, logger, opts, serviceDirectory } = args
+  const { signal } = opts
+  const reproduction = spec.reproduction
+  if (!reproduction || !(await producedWork(dir, spec, baseSha, resumed, opts))) return undefined
+  opts.onPhase?.('reproduction')
+  const report = await runReproductionLoop({
+    dir,
+    baseSha,
+    // Re-read per attempt: a repair pass commits, so the final tree moves under the loop.
+    // `producedWork` has already committed forgotten tracked edits, and each repair round
+    // re-commits before the next read.
+    resolveFinalSha: async () => {
+      await commitTrackedEdits(dir, spec.commitMessage, signal)
+      return headCommit(dir, signal)
+    },
+    ...(serviceDirectory ? { serviceDirectory } : {}),
+    spec: reproduction,
+    logger,
+    opts,
+    runAgentPass: args.runAgentPass,
+    onAgentPass: args.onAgentPass,
+    listUncommittedNewFiles: args.listUncommittedNewFiles,
+    // Only a RESUMED run can have a pre-fix tree that already carries work: a fresh run branched
+    // off base, so `baseSha` IS base. Wiring the probe unconditionally would buy an always-empty
+    // answer for the price of a fetch — and a fresh clone is shallow, so it could not resolve a
+    // merge base to answer with anyway. Lazy inside the loop: it only runs if a tree comes back
+    // green.
+    ...(resumed
+      ? {
+          listBaseTreeChanges: () =>
+            changedFilesSinceBase(dir, spec.repo.baseBranch, spec.ghToken, baseSha, opts.signal),
+        }
+      : {}),
+  })
+  opts.onPhase?.('agent')
+  return report
+}
+
+/**
+ * Commit everything the settled agent left behind, and say whether the branch already carried
+ * commits of its OWN before that.
+ *
+ * Runs between the agent and the two pre-PR phases, and the ORDER is the whole point. Both phases
+ * are gated on {@link producedWork}, which reads COMMITS. The salvage used to run last, at the
+ * settle, which left that gate false for exactly the runs the salvage exists to save: a greenfield
+ * task whose every file is new and uncommitted skipped the validation loop entirely, and then
+ * opened a pull request with no validation report at all, so "only a green checkout opens a PR"
+ * held for every run except those. Committing first is what puts that work in front of the gate.
+ *
+ * `commitTrackedEdits` only captures edits to files git ALREADY tracks, so a NEW file the agent
+ * created and forgot to add used to be listed, warned about and dropped. Guardrails on what may be
+ * swept up (a dependency/build deny-list, a file-count and byte bound, an all-or-nothing refusal
+ * over it) live in `salvage.ts`; this path is coding mode by construction, which is the other rule
+ * it must obey.
+ *
+ * `committedOwnWork` is read BETWEEN the two, and that is not incidental. Afterwards the salvage's
+ * own commit makes the branch look advanced, and the two are not the same claim: work the agent
+ * committed is a change it chose to make, where a salvage-only branch is one built entirely out of
+ * what it left lying in the checkout. Only the second has to say so on the pull request it opens.
+ *
+ * A repair round runs the agent afresh and can leave new files of its own, so `finalizeCodingRun`
+ * runs a second, mop-up pass and folds the two reports.
+ */
+async function settleAgentWork(
+  dir: string,
+  spec: CodingAgentSpec,
+  baseSha: string,
+  logger: Logger,
+  opts: RunOptions,
+): Promise<{ committedOwnWork: boolean; preGateSalvage: SalvageReport }> {
+  const { signal } = opts
+  await commitTrackedEdits(dir, spec.commitMessage, signal)
+  const committedOwnWork = await branchHasCommitsSince(dir, baseSha, signal)
+  const preGateSalvage = await salvageUntrackedWork({
+    dir,
+    occasion: SETTLED,
+    logger,
+    ...(signal ? { signal } : {}),
+  })
+  return { committedOwnWork, preGateSalvage }
 }
 
 /**

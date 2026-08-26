@@ -68,6 +68,7 @@ describe('withSalvagedWork (rescuing an aborted run)', () => {
     const pushSignals: (AbortSignal | undefined)[] = []
     const rethrown = await withSalvagedWork(new Error('inactivity timeout'), {
       dir,
+      commitMessage: 'wip: agent changes',
       logger: silentLogger,
       pushWorkOnce: async (override) => {
         pushSignals.push(override)
@@ -81,6 +82,43 @@ describe('withSalvagedWork (rescuing an aborted run)', () => {
     expect((rethrown as Error).message).toMatch(/inactivity timeout/)
     expect((rethrown as Error).message).toMatch(/salvaged into commit/)
     expect((rethrown as Error).message).not.toMatch(/could NOT be pushed/)
+  })
+
+  it('rescues the agent’s edits to TRACKED files too, under the run’s own message', async () => {
+    // The salvage commits the paths it was given and no others (`commitPaths`), so an edit to a
+    // file git already tracks is not swept up by it, staged or not. On the settle path
+    // `commitTrackedEdits` has run several times by now; on this one it had never run at all, and
+    // a killed agent leaves edits behind exactly as it leaves new files.
+    await writeFile(join(dir, 'README.md'), '# edited mid-flight\n', 'utf8')
+    await writeFile(join(dir, 'staged.md'), 'staged but not committed\n', 'utf8')
+    await git('add', 'staged.md')
+
+    await withSalvagedWork(new Error('inactivity timeout'), {
+      dir,
+      commitMessage: 'wip: agent changes',
+      logger: silentLogger,
+      pushWorkOnce: async () => {},
+      inFlightPush: () => null,
+    })
+
+    // Nothing is left uncommitted: the tracked edit and the staged new file under the run's own
+    // message, the untracked source file under the salvage's.
+    const status = String(
+      await exec('git', ['status', '--porcelain'], { cwd: dir }).then((r) => r.stdout),
+    ).trim()
+    expect(status).toBe('')
+    const subjects = String(
+      await exec('git', ['log', '--format=%s', '-3'], { cwd: dir }).then((r) => r.stdout),
+    )
+    expect(subjects).toMatch(/salvage 1 uncommitted file from an aborted agent run/)
+    expect(subjects).toMatch(/wip: agent changes/)
+    // The salvage commit names ONLY the untracked file: its count and its contents agree.
+    const salvaged = String(
+      await exec('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: dir }).then(
+        (r) => r.stdout,
+      ),
+    ).trim()
+    expect(salvaged).toBe('src.ts')
   })
 
   it('drains the checkpoint push already in flight BEFORE it salvages and pushes', async () => {
@@ -98,6 +136,7 @@ describe('withSalvagedWork (rescuing an aborted run)', () => {
     let headAtPush: string | undefined
     const rescue = withSalvagedWork(new Error('max duration exceeded'), {
       dir,
+      commitMessage: 'wip: agent changes',
       logger: silentLogger,
       pushWorkOnce: async () => {
         order.push('rescue-push')
@@ -119,6 +158,7 @@ describe('withSalvagedWork (rescuing an aborted run)', () => {
   it('does not let a failed checkpoint push stop the rescue', async () => {
     const rethrown = await withSalvagedWork(new Error('inactivity timeout'), {
       dir,
+      commitMessage: 'wip: agent changes',
       logger: silentLogger,
       pushWorkOnce: async () => {},
       inFlightPush: () => Promise.reject(new Error('remote hung up')),
@@ -129,6 +169,7 @@ describe('withSalvagedWork (rescuing an aborted run)', () => {
   it('says the commit is LOST when its push fails, rather than naming it as delivered', async () => {
     const rethrown = await withSalvagedWork(new Error('inactivity timeout'), {
       dir,
+      commitMessage: 'wip: agent changes',
       logger: silentLogger,
       pushWorkOnce: async () => {
         throw new Error('non-fast-forward')
@@ -147,6 +188,7 @@ describe('withSalvagedWork (rescuing an aborted run)', () => {
     const original = new Error('inactivity timeout')
     const rethrown = await withSalvagedWork(original, {
       dir,
+      commitMessage: 'wip: agent changes',
       logger: silentLogger,
       pushWorkOnce: async () => {
         throw new Error('should never be pushed')

@@ -6,15 +6,22 @@ import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   classifySalvagePath,
+  foldSalvageReports,
   salvageCommitMessage,
   salvageOnlyNotice,
   salvageUntrackedWork,
   describeSalvage,
+  withSalvageOnlyNote,
+  type SalvageOccasion,
+  type SalvageReport,
 } from '../src/salvage.js'
-import { headCommit } from '../src/git.js'
+import { commitPaths, headCommit } from '../src/git.js'
 import type { Logger } from '../src/logger.js'
 
 const exec = promisify(execFile)
+
+const SETTLED: SalvageOccasion = { kind: 'settled' }
+const ABORTED: SalvageOccasion = { kind: 'aborted', cause: 'no progress' }
 
 const silentLogger: Logger = {
   debug: () => {},
@@ -104,6 +111,23 @@ describe('salvageCommitMessage', () => {
   })
 })
 
+describe('withSalvageOnlyNote', () => {
+  it('puts the notice above the briefing, and touches nothing else', () => {
+    const pr = { title: 'Add the thing', body: '## Summary\n\nIt adds the thing.' }
+    const marked = withSalvageOnlyNote(pr, true)
+    expect(marked.body.startsWith(salvageOnlyNotice())).toBe(true)
+    expect(marked.body).toContain(pr.body)
+    // The TITLE is deliberately untouched: it follows the PR into every list and notification a
+    // maintainer sees, which is a lot of noise for a caveat that belongs beside the diff.
+    expect(marked.title).toBe(pr.title)
+  })
+
+  it('is byte-for-byte the input when the branch carries the agent’s own work', () => {
+    const pr = { title: 'Add the thing', body: 'It adds the thing.' }
+    expect(withSalvageOnlyNote(pr, false)).toEqual(pr)
+  })
+})
+
 describe('salvageOnlyNotice', () => {
   it('tells a reviewer, before the diff, that nobody proposed this branch', () => {
     const notice = salvageOnlyNotice()
@@ -113,6 +137,64 @@ describe('salvageOnlyNotice', () => {
     expect(notice).toMatch(/committed nothing to this repository/)
     expect(notice).toMatch(/Nothing has reviewed them/)
     expect(notice).toMatch(/sibling repository/)
+  })
+})
+
+describe('foldSalvageReports', () => {
+  const report = (over: Partial<SalvageReport>): SalvageReport => ({
+    status: 'none',
+    files: [],
+    fileCount: 0,
+    totalBytes: 0,
+    ...over,
+  })
+  const committed = (fileCount: number, sha: string, files: string[] = []): SalvageReport =>
+    report({ status: 'committed', fileCount, totalBytes: fileCount * 10, commitSha: sha, files })
+
+  it('folds a `none` pass away in either direction, which is the ordinary run', () => {
+    const only = committed(3, 'aaa')
+    expect(foldSalvageReports(only, report({}))).toEqual(only)
+    expect(foldSalvageReports(report({}), only)).toEqual(only)
+  })
+
+  it('sums two COMMITTED passes, whose file sets are disjoint by construction', () => {
+    // The first pass committed its files, so the second cannot see them again, only a repair
+    // round's NEW files. Summing is the only reading that describes the branch.
+    const folded = foldSalvageReports(committed(3, 'aaa', ['a.ts']), committed(2, 'bbb', ['b.ts']))
+    expect(folded.status).toBe('committed')
+    expect(folded.fileCount).toBe(5)
+    expect(folded.totalBytes).toBe(50)
+    expect(folded.files).toEqual(['a.ts', 'b.ts'])
+    // The LAST commit that landed: the caller is about to push the branch carrying both.
+    expect(folded.commitSha).toBe('bbb')
+  })
+
+  it('never sums a REFUSED pass, which sees the same files again on the next one', () => {
+    const refused = report({ status: 'refused', fileCount: 400, reason: 'over the bounds' })
+    const folded = foldSalvageReports(refused, refused)
+    expect(folded.fileCount).toBe(400)
+    expect(folded.reason).toMatch(/over the bounds/)
+  })
+
+  it('keeps the pass that could NOT keep its files over one that merely committed', () => {
+    const failed = report({ status: 'failed', fileCount: 2, reason: 'the commit failed' })
+    expect(foldSalvageReports(committed(3, 'aaa'), failed).status).toBe('failed')
+    expect(foldSalvageReports(failed, committed(3, 'aaa')).status).toBe('failed')
+    // …and `failed` outranks `refused`, which outranks `committed`.
+    const refused = report({ status: 'refused', fileCount: 400 })
+    expect(foldSalvageReports(refused, failed).status).toBe('failed')
+    expect(foldSalvageReports(refused, committed(1, 'aaa')).status).toBe('refused')
+  })
+
+  it('names every withheld credential, whichever pass declined it and whichever status won', () => {
+    // Naming the file is what lets someone rotate what it held, so it survives the fold whatever
+    // else it loses, including onto a pass that had nothing of its own to say.
+    const first = report({ status: 'none', withheld: ['.env'] })
+    const second = committed(1, 'aaa')
+    second.withheld = ['deploy/id_rsa', '.env']
+    const folded = foldSalvageReports(first, second)
+    expect(folded.status).toBe('committed')
+    expect(folded.withheld).toEqual(['deploy/id_rsa', '.env'])
   })
 })
 
@@ -212,7 +294,7 @@ describe('salvageUntrackedWork (against a real repository)', () => {
     expect(await headCommit(dir)).toBe(before)
     // Nothing was committed: a partial salvage would read as a complete change.
     expect(await status()).toMatch(/\?\? file-0\.ts/)
-    expect(describeSalvage(report)).toMatch(/NOT salvaged/)
+    expect(describeSalvage(report, SETTLED)).toMatch(/NOT salvaged/)
   })
 
   it('refuses on the BYTE bound too, with the file count well inside its own', async () => {
@@ -295,7 +377,7 @@ describe('salvageUntrackedWork (against a real repository)', () => {
     expect(tracked).not.toContain('id_rsa')
     expect(tracked.split('\n')).not.toContain('.env')
     // Withholding is a decision someone has to know about, so it is stated and the paths named.
-    const note = describeSalvage(report)
+    const note = describeSalvage(report, SETTLED)
     expect(note).toMatch(/withheld from the salvage/)
     expect(note).toContain('.env')
     expect(note).toContain('id_rsa')
@@ -312,7 +394,7 @@ describe('salvageUntrackedWork (against a real repository)', () => {
     })
     expect(report.status).toBe('none')
     expect(report.withheld).toEqual(['.env'])
-    expect(describeSalvage(report)).toMatch(/withheld from the salvage/)
+    expect(describeSalvage(report, SETTLED)).toMatch(/withheld from the salvage/)
   })
 
   it('says a salvage commit that was not pushed is LOST, never names it as delivered', async () => {
@@ -324,11 +406,68 @@ describe('salvageUntrackedWork (against a real repository)', () => {
     })
     expect(report.status).toBe('committed')
 
-    expect(describeSalvage(report, { pushed: true })).not.toMatch(/lost with the container/)
-    const failed = describeSalvage(report, { pushed: false, reason: 'remote hung up' })
+    expect(describeSalvage(report, ABORTED, { pushed: true })).not.toMatch(
+      /lost with the container/,
+    )
+    const failed = describeSalvage(report, ABORTED, { pushed: false, reason: 'remote hung up' })
     expect(failed).toMatch(/could NOT be pushed/)
     expect(failed).toMatch(/remote hung up/)
     expect(failed).toMatch(/lost with the container/)
+  })
+
+  it('says an ABORTED run was aborted and a SETTLED one merely never committed', async () => {
+    // The commit message has always taken the occasion; the note beside it hardcoded the aborted
+    // reading, so a clean run that simply forgot to `git add` was told its run had been killed.
+    await writeFile(join(dir, 'src.ts'), 'export const x = 1\n', 'utf8')
+    const report = await salvageUntrackedWork({ dir, occasion: SETTLED, logger: silentLogger })
+    expect(report.status).toBe('committed')
+
+    const settled = describeSalvage(report, SETTLED)
+    expect(settled).toMatch(/finished without committing them/)
+    expect(settled).not.toMatch(/aborted/)
+    expect(describeSalvage(report, ABORTED)).toMatch(/this run was aborted/)
+    // Both still tell a reader the files carry nobody's judgement.
+    expect(settled).toMatch(/review them before trusting them/)
+  })
+
+  it('commits ONLY the paths it was given, leaving an index the agent left populated', async () => {
+    // An agent killed mid-flight can leave its own `git add` staged. A bare `git commit` would
+    // sweep that content into the salvage commit, under a message naming only the untracked
+    // files and counted by a report that never saw it.
+    await writeFile(join(dir, 'README.md'), '# edited by the agent\n', 'utf8')
+    await git('add', 'README.md')
+    await writeFile(join(dir, 'new.ts'), 'export const y = 2\n', 'utf8')
+
+    const report = await salvageUntrackedWork({ dir, occasion: ABORTED, logger: silentLogger })
+    expect(report.status).toBe('committed')
+    expect(report.fileCount).toBe(1)
+
+    const committed = String(
+      await exec('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: dir }).then(
+        (r) => r.stdout,
+      ),
+    ).trim()
+    expect(committed).toBe('new.ts')
+    // The agent's staged edit is untouched and still staged, for whoever commits it next.
+    expect(await status()).toMatch(/^M  README\.md$/m)
+  })
+
+  it('returns null rather than committing when only OTHER paths are staged', async () => {
+    // The staged-anything check is scoped too: a populated index for paths this call did not name
+    // is not "there is something to commit here". Unscoped, this would commit the agent's staged
+    // README edit under the message below and report a sha for a salvage that salvaged nothing.
+    await mkdir(join(dir, 'src'), { recursive: true })
+    await writeFile(join(dir, 'src/keep.ts'), 'export const k = 1\n', 'utf8')
+    await git('add', '-A')
+    await git('commit', '-m', 'the agent’s own commit')
+    await writeFile(join(dir, 'README.md'), '# edited\n', 'utf8')
+    await git('add', 'README.md')
+    const before = await headCommit(dir)
+
+    // `src/keep.ts` is tracked and unchanged, so this call has nothing of its OWN to commit.
+    expect(await commitPaths(dir, ['src/keep.ts'], 'should not land')).toBeNull()
+    expect(await headCommit(dir)).toBe(before)
+    expect(await status()).toMatch(/^M  README\.md$/m)
   })
 
   it('reports nothing to do when the agent committed everything', async () => {
@@ -338,23 +477,40 @@ describe('salvageUntrackedWork (against a real repository)', () => {
       logger: silentLogger,
     })
     expect(report.status).toBe('none')
-    expect(describeSalvage(report)).toBeUndefined()
+    expect(describeSalvage(report, SETTLED)).toBeUndefined()
   })
 })
 
 describe('coding mode only', () => {
   // A read-only kind (merger, blueprinter, the explore paths) has no work branch to carry a
   // commit and must never be given one. There is no runtime flag to assert that against: what
-  // makes it true is WHICH modules can reach the salvage at all, so assert that, derived from
-  // the sources rather than restated as a number.
-  it('is reachable only from the coding paths', async () => {
+  // makes it true is WHICH modules can reach the COMMITTING entry point at all, so assert that,
+  // derived from the sources rather than restated as a number.
+  //
+  // The module's other exports are pure text (`salvageOnlyNotice` and the `withSalvageOnlyNote`
+  // that places it, `describeSalvage`, `salvageCommitMessage`) and commit nothing, which is why
+  // the two assertions below are separate: `agent.ts` legitimately reaches the second set to mark
+  // a salvage-only pull request, and must not thereby be granted the first.
+  const importersOf = async (needle: string): Promise<string[]> => {
     const srcDir = new URL('../src/', import.meta.url)
     const files = (await readdir(srcDir)).filter((name) => name.endsWith('.ts'))
     const importers: string[] = []
     for (const name of files) {
       const body = await readFile(new URL(name, srcDir), 'utf8')
-      if (body.includes("from './salvage.js'")) importers.push(name)
+      const imports = /import\s*\{([^}]*)\}\s*from '\.\/salvage\.js'/.exec(body)?.[1]
+      if (imports?.includes(needle)) importers.push(name)
     }
-    expect(importers.sort()).toEqual(['coding-agent.ts', 'multi-repo-coding.ts'])
+    return importers.sort()
+  }
+
+  it('can be COMMITTED only from the coding paths', async () => {
+    expect(await importersOf('salvageUntrackedWork')).toEqual([
+      'coding-agent.ts',
+      'multi-repo-coding.ts',
+    ])
+  })
+
+  it('lets the PR-opening paths reach the notice, which writes nothing', async () => {
+    expect(await importersOf('withSalvageOnlyNote')).toEqual(['agent.ts', 'multi-repo-coding.ts'])
   })
 })

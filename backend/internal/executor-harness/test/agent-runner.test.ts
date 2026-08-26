@@ -150,14 +150,20 @@ describe.skipIf(!unix)('runClaudeCode system-prompt carriage', () => {
 })
 
 describe.skipIf(!unix)('runClaudeCode declared tool surface', () => {
-  const runWith = async (): Promise<string[]> => {
+  /**
+   * A run against the IMAGE's own CLI, which is the one whose flag surface this harness has
+   * measured, so `ambientAuth` is deliberately absent here (see the ambient case below) and a
+   * leased subscription token stands in for it.
+   */
+  const runWith = async (over: Record<string, unknown> = {}): Promise<string[]> => {
     recordingCli('claude')
     const outcome = await runClaudeCode({
       cwd,
       model: 'claude-opus-4-8',
       systemPrompt: 'ROLE',
       userPrompt: 'TASK',
-      ambientAuth: true,
+      subscriptionToken: 'sk-ant-oat-test',
+      ...over,
     })
     expect(outcome.summary).toBe('ok')
     return JSON.parse(readFileSync(join(cwd, 'argv.json'), 'utf8')) as string[]
@@ -175,6 +181,19 @@ describe.skipIf(!unix)('runClaudeCode declared tool surface', () => {
     const argv = await runWith()
     const declared = argv[argv.indexOf('--tools') + 1]!.split(',')
     expect(declared).toEqual(expect.arrayContaining(['WebSearch', 'WebFetch', 'Grep']))
+  })
+
+  it('declares NOTHING to an ambient CLI, which is the developer’s own and unpinned', async () => {
+    // The over-inclusive set is safe because a tool NAME the build lacks is dropped silently. That
+    // is not true of the FLAG carrying it: an unrecognised one exits before the run starts, and
+    // here the harness knows neither which `claude` is on the PATH nor how old it is. A thinner
+    // tool surface on a local run beats no local run at all.
+    const argv = await runWith({ ambientAuth: true, subscriptionToken: undefined })
+    expect(argv).not.toContain('--tools')
+    expect(argv).not.toContain(CLAUDE_TOOL_SET.join(','))
+    // Everything else about the invocation is unchanged.
+    expect(argv).toContain('--permission-mode')
+    expect(argv[argv.indexOf('--model') + 1]).toBe('claude-opus-4-8')
   })
 })
 

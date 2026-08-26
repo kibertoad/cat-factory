@@ -344,9 +344,40 @@ export const TOOL_PREFERENCE_GUIDANCE =
   'loosens the instruction not to change the repository.'
 
 /**
+ * Appended beside {@link TOOL_PREFERENCE_GUIDANCE} at the same chokepoint: how to stop what you
+ * started, for the kinds that background a server or a watcher in order to test it.
+ *
+ * From a local `pl_build` run whose reviewer verified a dev script by backgrounding it: four of its
+ * seventeen shell calls ended in a PATTERN-matching kill whose pattern also matched the shell
+ * running it, so the shell signalled itself. Each call had already produced its evidence, which is
+ * why that review survived intact, but the cost is real and threefold. The commands after the kill
+ * never ran, so a second watcher was left alive and the NEXT agent spent two of its own calls
+ * hunting it down. A self-inflicted kill is indistinguishable from a failing tool to the progress
+ * guard, which aborts a job at `JOB_MAX_CONSECUTIVE_TOOL_ERRORS` consecutive failures, so it spends
+ * a budget that exists to catch a stuck agent. And the tool-call rollup orders most-broken-first to
+ * answer "which tool to look at", so the shell ranked as that run's broken tool while nothing had
+ * broken.
+ *
+ * Phrased as a property of pattern-matching kills rather than as a named tool, for the reason
+ * {@link EXECUTION_SANDBOX_GUIDANCE} names no tool either: the same body reaches the harness image
+ * and, under `LOCAL_NATIVE_AGENTS`, a developer's own machine, where any particular one may not
+ * exist.
+ */
+export const BACKGROUND_PROCESS_GUIDANCE =
+  'BACKGROUND PROCESSES: anything you start in the background (a server, a watcher, a dev loop) ' +
+  'outlives the shell command that started it, so stop it yourself once you have what you needed ' +
+  'from it. Kill it by the PID you captured when you started it. A PATTERN-matching kill is the ' +
+  'trap: the pattern is matched against every process command line, and the shell running your ' +
+  'command has that command line too, so a pattern taken from the command you want to stop ' +
+  'matches your own shell as well. Your shell is killed, every later command in that same ' +
+  'invocation is skipped (a trailing `true` does not save it), the call comes back to the platform ' +
+  'as a failure, and the process you meant to stop is frequently still running. Capture the PID, ' +
+  'or match on something that cannot appear in your own command line.'
+
+/**
  * The directives the container-dispatch chokepoint appends to EVERY container job, in the order it
- * appends them: the environment's policy, which tool to reach for, then the effort
- * self-assessment.
+ * appends them: the environment's policy, which tool to reach for, how to stop what it
+ * backgrounded, then the effort self-assessment.
  *
  * The effort report stays LAST because its closing sentences are the prompt's ordering statement
  * (the sentinel file before the final reply, and no tool call after it); a directive appended
@@ -365,6 +396,7 @@ export const TOOL_PREFERENCE_GUIDANCE =
 export const CONTAINER_DISPATCH_DIRECTIVES = [
   EXECUTION_SANDBOX_GUIDANCE,
   TOOL_PREFERENCE_GUIDANCE,
+  BACKGROUND_PROCESS_GUIDANCE,
   EFFORT_REPORT_GUIDANCE,
 ] as const
 
