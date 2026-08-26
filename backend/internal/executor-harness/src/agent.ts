@@ -333,6 +333,13 @@ export async function handleAgent(job: AgentJob, opts: RunOptions = {}): Promise
     // job's own system prompt. Every mode, every repair round and all three agent CLIs read that
     // one field, so none of them can end up without the block and none can carry it twice.
     // `preview` returns above because it runs no agent at all, so there is no prompt to fold onto.
+    //
+    // This sits on the critical path AHEAD of the clone, which is the cost of having one
+    // composition point instead of one per mode (each mode owns its own clone, so there is no
+    // single post-clone place to put this). The pass is sized for that: everything in it runs
+    // concurrently, every probe is a call that answers in milliseconds or is wedged, and the one
+    // deliberate wait is a single short retry for a daemon that is still starting.
+
     const staged: AgentJob = {
       ...job,
       systemPrompt: await appendEnvironmentInventory(job.systemPrompt, {

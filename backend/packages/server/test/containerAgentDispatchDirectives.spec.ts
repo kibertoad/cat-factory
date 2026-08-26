@@ -23,9 +23,9 @@ import {
 } from '../src/agents/ContainerAgentExecutor.js'
 import type { ContainerSessionService } from '../src/containers/ContainerSessionService.js'
 
-// The DIRECTIVES a dispatch appends around a kind's own prompt: the read-only guardrail, the two
-// unconditional `CONTAINER_DISPATCH_DIRECTIVES` (execution sandbox, effort report) and the
-// PR-description sentinel a PR-opening coding kind gets on top. Split out of
+// The DIRECTIVES a dispatch appends around a kind's own prompt: the read-only guardrail, the three
+// unconditional `CONTAINER_DISPATCH_DIRECTIVES` (execution sandbox, tool preference, effort report)
+// and the PR-description sentinel a PR-opening coding kind gets on top. Split out of
 // `containerAgentJobBody.spec` (which pins the per-kind body SHAPES) when that file hit its size
 // budget, the same way `containerAgentMultiRepo.spec` was: these texts are composed from three
 // different places and only meet at this chokepoint, so what they assert is the COMPOSITION, not
@@ -265,6 +265,33 @@ describe('ContainerAgentExecutor dispatch directives', () => {
     // final reply, and no tool call after it). A directive appended after it would be the last
     // thing the agent reads about ordering, which is the displacement that cost an architect run
     // its 18k-character design.
+    //
+    // This pins the ARRAY's order only, and the array is not the whole prompt: `buildKindBody`
+    // appends the follow-up, bug-fix, skill and tool-server sections after it, and the HARNESS
+    // appends its `ENVIRONMENT INVENTORY` block after all of them. So what has to hold downstream
+    // of here is the property, not the position, and each of those texts owns its own half of it.
+    // The inventory block's half is pinned in the harness suite, next to the text it governs
+    // (`environment-inventory.test.ts`, "closes on a FACT, and asks for no tool call after it").
     expect(CONTAINER_DISPATCH_DIRECTIVES.at(-1)).toBe(EFFORT_REPORT_GUIDANCE)
+  })
+
+  it('appends nothing after the effort report that CONTRADICTS its ordering', async () => {
+    // The invariant the assertion above cannot reach, asserted over the delivered tail rather than
+    // over the directive array, which is where the ordering rule is actually competed with.
+    //
+    // Restating the ordering there is fine and `PR_DESCRIPTION_GUIDANCE` deliberately does it
+    // ("BEFORE you compose your final reply, never after it"), because a later section that stays
+    // SILENT on ordering while asking for a write is how a faithful agent ends up writing after
+    // answering. What may not appear is the opposite instruction: work placed after the reply, or
+    // an errand deferred to the end.
+    for (const kind of ['coder', 'architect', 'reviewer']) {
+      const prompt = await promptFor(kind)
+      const tail = prompt.slice(
+        prompt.indexOf(EFFORT_REPORT_GUIDANCE) + EFFORT_REPORT_GUIDANCE.length,
+      )
+      expect(tail).not.toMatch(/as the last thing you do/i)
+      expect(tail).not.toMatch(/after (your|the) (final )?(reply|answer|response)/i)
+      expect(tail).not.toMatch(/(finally|lastly),/i)
+    }
   })
 })

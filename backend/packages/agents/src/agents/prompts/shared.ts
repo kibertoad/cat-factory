@@ -271,6 +271,13 @@ export const EFFORT_REPORT_GUIDANCE =
  * promise an inventory: an older image paired with a newer backend appends none, and asserting
  * what the dispatch did not deliver is the defect class this is on the other side of.
  *
+ * Which is why the probe clause is CONDITIONAL rather than dropped. Deleting it outright (this
+ * text used to say "probe for a tool before relying on it") read correctly only against an image
+ * new enough to append the inventory: one version behind is the normal state of running a
+ * deployment, and there the agent got neither the facts nor leave to go and find them, which is
+ * strictly worse than what it had before. "Where the platform has stated it, take it as given;
+ * where it has not, check" is true in both worlds and needs to know about neither.
+ *
  * The closing rule is the part that pays for the paragraph, and it stops one step short of the
  * claim it would be convenient to make: unverifiable is not the same as correct. An artifact this
  * environment cannot execute is not INCOMPLETE for that reason, and the limit itself is not a
@@ -289,7 +296,9 @@ export const EXECUTION_SANDBOX_GUIDANCE =
   'EXECUTION SANDBOX: you run in a disposable working environment the platform provisions for ' +
   'this step, holding a fresh clone of the repository. What that environment does and does not ' +
   "contain is the platform's business, and a tool it does not provide is not a defect in the " +
-  'work. The platform hands you no cluster or container-registry credentials, so applying a ' +
+  'work. Where the platform has stated what this machine holds, take that as given rather than ' +
+  'spending a turn re-checking it; where it has not, check for a tool before relying on it. ' +
+  'The platform hands you no cluster or container-registry credentials, so applying a ' +
   'manifest, reaching a cluster and pulling or pushing an image are out of scope for this step ' +
   'unless this run handed you a credential for them. Toolchain versions here are the ' +
   "ENVIRONMENT's, not necessarily your target's, so a version warning or failure against the " +
@@ -316,13 +325,23 @@ export const EXECUTION_SANDBOX_GUIDANCE =
  * CORRECTNESS depends on the answer has to hold whichever tool was used. Kept short and kept HERE
  * rather than in a track prompt: it is the same advice for every container kind, and a per-kind
  * copy is a per-kind chance to drift.
+ *
+ * The read-only clause is the same reconciliation {@link EFFORT_REPORT_GUIDANCE} carries and for
+ * the same reason: the chokepoint appends this to the read-only kinds too, whose guardrail forbids
+ * modifying files, so "use your file tools to edit files" arrives as the later half of a
+ * contradictory pair. An agent handed one either disobeys a half or spends a turn asking which
+ * wins. The clause resolves it in the direction that is never wrong (the guardrail wins) and keeps
+ * the nudge for the READ, which is what a reviewer spends its tools on anyway.
  */
 export const TOOL_PREFERENCE_GUIDANCE =
-  'TOOLS: use your file tools to read and edit files, and the shell for running things (builds, ' +
-  'tests, git, package managers). Rewriting a file through a shell heredoc or an in-place `sed` ' +
+  'TOOLS: use your file tools to read files, and to edit them wherever your instructions have you ' +
+  'changing files at all; use the shell for running things (builds, tests, git, package ' +
+  'managers). Rewriting a file through a shell heredoc or an in-place `sed` ' +
   'is easy to get subtly wrong, truncates silently on a quoting slip, and leaves you no diff of ' +
   'what you changed, where an edit tool fails loudly instead. A bulk mechanical rewrite across ' +
-  'many files is the exception where a script is the right answer: read back what it wrote.'
+  'many files is the exception where a script is the right answer: read back what it wrote. Where ' +
+  'this step is read-only, all of this is about which tool you READ with, and nothing here ' +
+  'loosens the instruction not to change the repository.'
 
 /**
  * The directives the container-dispatch chokepoint appends to EVERY container job, in the order it

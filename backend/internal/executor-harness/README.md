@@ -141,6 +141,18 @@ Three rules bind anything added to it:
   installed in this image unconditionally, `entrypoint.sh` starts the rootless daemon best-effort
   and execs the server without waiting for it, so at job start this probe is the only thing that
   knows how that went.
+- **A daemon that is STARTING is not a daemon that is absent.** Because the entrypoint does not
+  wait, the backend dispatches seconds before there is a socket, and `docker info` is then refused
+  at once rather than slowly. So a refusal is read against `DOCKER_HOST`, which the entrypoint sets
+  whenever something is meant to serve a daemon here: unset means nothing was coming and the
+  absence is stated definitively, set means one short retry and then could-not-be-determined. The
+  absent wording tells an agent `docker compose up` "will fail here whatever the CLI reports", which
+  is a prohibition, so it may only be reached where nothing is going to answer.
+- **A tool the platform did not provide is not installable system-wide either**, since the job runs
+  unprivileged. The line says that instead of banning installation outright: `pnpm` is absent from
+  this image (only the UI variant carries it), so it is routinely the package manager the job's own
+  repository declares, and a flat prohibition pushed agents onto `npm install` against a pnpm
+  lockfile. Reaching a project's own manager for that project alone is allowed and named.
 
 Composed at exactly ONE point, onto the job's own `systemPrompt`, which every mode already forwards
 and all three CLIs already carry (claude-code's `--append-system-prompt` and its oversized-argv

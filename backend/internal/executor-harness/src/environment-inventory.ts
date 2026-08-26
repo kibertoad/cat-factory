@@ -27,7 +27,10 @@ import { log, type Logger } from './logger.js'
 //     "nobody looked", never as "it isn't there".
 //   - The Docker DAEMON is a separate fact from the docker CLI, and it is the one that decides
 //     anything: `command -v docker` succeeds in this image and `docker build` still fails, which
-//     is the half-truth the old instruction produced. It is answered by RUNNING `docker info`.
+//     is the half-truth the old instruction produced. It is answered by RUNNING `docker info`, and
+//     a daemon this machine is CONFIGURED for but which has not answered yet is a fourth state
+//     that resolves to `unknown`, never to the absence a refused connection looks like: the
+//     image's daemon is started in the background and the job begins before it is ready.
 //
 // Deliberately NOT here: the agent's own tools (web search, file tools, MCP servers). Those are
 // the CLI's, they differ per harness, and each is already stated where it is true. Claiming one
@@ -42,9 +45,16 @@ const execFileAsync = promisify(execFile)
  * Classification into presence lives in pure code below, because the two callers classify the
  * same result differently: a non-zero exit proves an ordinary tool is installed and proves the
  * Docker daemon is not reachable.
+ *
+ * `found` is the outcome with no exit code, and it exists so that the Windows second look cannot
+ * be mistaken for a run: the platform's own oracle located the binary and NOTHING WAS EXECUTED.
+ * Collapsing it into `ran` with a synthesised `exitCode: 0` is what let `docker info` report a
+ * reachable daemon on the strength of `where docker`, which is the CLI-for-daemon half-truth this
+ * whole file exists to remove.
  */
 export type ProbeResult =
   | { outcome: 'ran'; exitCode: number; output: string }
+  | { outcome: 'found' }
   | { outcome: 'missing' }
   | { outcome: 'failed'; reason: string }
 
@@ -71,7 +81,8 @@ export interface EnvironmentInventory {
   /**
    * Whether a Docker daemon actually answered: the readiness fact, not the CLI's presence. The
    * image's `entrypoint.sh` starts a rootless daemon BEST-EFFORT and execs the server without
-   * waiting for it, so at job start this probe is the only thing that knows how that went.
+   * waiting for it, so at job start this probe is the only thing that knows how that went, and
+   * "has not answered yet" is one of its answers (see {@link probeDockerDaemon}).
    */
   dockerDaemon: ToolPresence
 }
@@ -106,18 +117,32 @@ const PROBES: ReadonlyArray<{
   { name: 'kustomize', command: 'kustomize', args: ['version'], showVersion: false },
 ]
 
-/** The daemon readiness probe, run only once its CLI has answered. */
+/** The daemon readiness probe: the one probe whose EXIT CODE, not its presence, is the answer. */
 const DOCKER_INFO: { command: string; args: string[] } = {
   command: 'docker',
   args: ['info', '--format', '{{.ServerVersion}}'],
 }
 
 /**
- * A `--version` call is either instant or wedged, so ten seconds is far past the first and well
- * inside the inactivity watchdog. `docker info` against a daemon still coming up is the one that
- * can genuinely take a moment, and that is what the ceiling is sized for.
+ * Every probe here is either instant or wedged: a `--version` banner, and a `docker info` that
+ * either connects or is REFUSED by a missing socket in milliseconds. So the ceiling is sized to
+ * cut a wedged binary out of the job's critical path, not to wait for anything.
+ *
+ * It used to be ten seconds, on the stated grounds that `docker info` "can genuinely take a
+ * moment" against a daemon still coming up. That was wrong in the way that matters: a daemon that
+ * is not up yet has no socket to connect to, so docker exits non-zero AT ONCE and the ceiling is
+ * never reached. Waiting for a starting daemon is a different problem and is solved where it
+ * actually lives, in {@link probeDockerDaemon}'s retry.
  */
-const PROBE_TIMEOUT_MS = 10_000
+const PROBE_TIMEOUT_MS = 5_000
+
+/**
+ * How long a daemon that was EXPECTED here gets to answer before the block says it could not be
+ * determined. One short retry, not a readiness wait: the honest verdict for a daemon still coming
+ * up is `unknown`, which the rendered line turns into "try it if you need it", so there is nothing
+ * to buy by blocking the agent's first turn any longer than this.
+ */
+const DAEMON_RETRY_DELAY_MS = 1_500
 
 /**
  * The real runner: spawn the tool, bounded, and report what the spawn did.
@@ -128,6 +153,12 @@ const PROBE_TIMEOUT_MS = 10_000
  * would be stated to the agent as NOT INSTALLED. `where` is the platform's own presence oracle and
  * answers that without running the shim, at the cost of the version, which is the honest trade: the
  * rendered line then names the tool with no number rather than claiming one or denying the tool.
+ *
+ * It answers PRESENCE and nothing else, which is why it returns `found` and why it ignores `args`
+ * without pretending otherwise: `where <command>` locates a binary, so it can say nothing about
+ * what that binary would have printed or exited with. The version is not the only thing lost. A
+ * probe whose ANSWER is its exit code (`docker info`) gets no answer at all from this branch, and
+ * {@link daemonPresence} is where that is turned into an unknown rather than a reachable daemon.
  */
 export function spawnProbeRunner(signal?: AbortSignal): ProbeRunner {
   const attempt = async (command: string, args: string[]): Promise<ProbeResult> => {
@@ -146,13 +177,35 @@ export function spawnProbeRunner(signal?: AbortSignal): ProbeRunner {
   return async (command, args) => {
     const first = await attempt(command, args)
     if (first.outcome !== 'missing' || process.platform !== 'win32') return first
-    const found = await attempt('where', [command])
-    // `where` exiting non-zero IS the absence; `where` itself failing to run is an unknown, and
-    // passing that through unchanged is what keeps the two apart.
-    if (found.outcome !== 'ran') return found
-    return found.exitCode === 0
-      ? { outcome: 'ran', exitCode: 0, output: '' }
-      : { outcome: 'missing' }
+    return readOracle(await attempt('where', [command]))
+  }
+}
+
+/**
+ * What the `where` oracle's own result says about the TOOL. Pure, and separate from the spawn, so
+ * every branch is asserted on any platform: reproducing the failing one for real needs a process
+ * whose PATH cannot reach `where`, and mutating the live `PATH` to get one leaks into whatever test
+ * runs next (on Windows `PATH` and `Path` are one variable, so restoring them is not symmetric).
+ *
+ * The distinction the branches exist for: `where` exiting non-zero IS the tool's absence, but
+ * `where` not answering at all says nothing about the tool, so that becomes a FAILED probe. Passing
+ * the oracle's result straight back reported the ORACLE's own `missing` as the tool's, which put a
+ * fully installed npm on the "Not installed" line on any host where `where` cannot be spawned.
+ *
+ * A located tool is `found`, never a synthesised `ran` with `exitCode: 0`: the oracle located a
+ * binary and executed nothing, so it cannot answer for a probe whose answer IS its exit code.
+ */
+export function readOracle(located: ProbeResult): ProbeResult {
+  if (located.outcome === 'ran') {
+    return located.exitCode === 0 ? { outcome: 'found' } : { outcome: 'missing' }
+  }
+  if (located.outcome === 'found') return located
+  return {
+    outcome: 'failed',
+    reason:
+      located.outcome === 'failed'
+        ? located.reason
+        : 'the tool could not be spawned, and `where` could not be run to locate it',
   }
 }
 
@@ -163,6 +216,12 @@ export function spawnProbeRunner(signal?: AbortSignal): ProbeRunner {
  * and exited non-zero, which is a different fact and belongs to whoever asked. Everything else
  * (a timeout, where the child is killed and there is no exit code; `EACCES`; an aborted job) is a
  * failure OF THE PROBE, which is what keeps it out of the absent list.
+ *
+ * Every reason is WRITTEN HERE, in words, and the raw `code` is never one of them. The reason is
+ * rendered verbatim into the agent's system prompt, so passing `String(e.code)` through published
+ * `ABORT_ERR` (a cancelled job, on all thirteen entries at once), `EACCES` and
+ * `ERR_CHILD_PROCESS_STDIO_MAXBUFFER` to a model as prose. A code nobody has mapped yet says only
+ * that the probe did not run, which is the whole of what the block needs from it.
  */
 function spawnFailure(err: unknown): ProbeResult {
   const e = err as NodeJS.ErrnoException & { killed?: boolean; stdout?: string; stderr?: string }
@@ -170,8 +229,16 @@ function spawnFailure(err: unknown): ProbeResult {
   if (typeof e.code === 'number') {
     return { outcome: 'ran', exitCode: e.code, output: `${e.stdout ?? ''}\n${e.stderr ?? ''}` }
   }
+  // Abort before the timeout check: `execFile`'s `AbortError` carries no `killed`, so an aborted
+  // job would otherwise fall through to the catch-all and read as a machine that answered nothing.
+  if (e.code === 'ABORT_ERR' || (e as Error).name === 'AbortError') {
+    return { outcome: 'failed', reason: 'the job was cancelled before the probe finished' }
+  }
   if (e.killed) return { outcome: 'failed', reason: 'the probe timed out' }
-  return { outcome: 'failed', reason: e.code ? String(e.code) : 'the probe could not be run' }
+  if (e.code === 'EACCES' || e.code === 'EPERM') {
+    return { outcome: 'failed', reason: 'the probe was not permitted to run here' }
+  }
+  return { outcome: 'failed', reason: 'the probe could not be run' }
 }
 
 /**
@@ -194,47 +261,126 @@ function firstVersion(output: string): string | undefined {
 export function toolPresence(result: ProbeResult): ToolPresence {
   if (result.outcome === 'missing') return { status: 'absent' }
   if (result.outcome === 'failed') return { status: 'unknown', reason: result.reason }
+  if (result.outcome === 'found') return { status: 'present' }
   const version = firstVersion(result.output)
   return version ? { status: 'present', version } : { status: 'present' }
 }
 
 /**
- * The daemon's presence, which reads the SAME result differently: `docker info` exiting non-zero
- * is "cannot connect to the Docker daemon", so it is an absence rather than the proof-of-install a
- * non-zero exit is everywhere else.
+ * The daemon's presence, which reads the SAME result differently in exactly TWO places, and
+ * delegates the rest: duplicating the other three branches to add these two is how a change to
+ * how a version is read, or how a failure reason is carried, gets made in one classifier only.
+ *
+ *   - A non-zero exit is "cannot connect to the Docker daemon", so it is an absence rather than the
+ *     proof-of-install a non-zero exit is everywhere else.
+ *   - `found` means the Windows oracle located the CLI and ran NOTHING, so the daemon was never
+ *     asked. That is an unknown. Reading it as `toolPresence` would is what made `where docker`
+ *     enough to tell an agent `docker build` works here.
  */
 export function daemonPresence(result: ProbeResult): ToolPresence {
-  if (result.outcome === 'missing') return { status: 'absent' }
-  if (result.outcome === 'failed') return { status: 'unknown', reason: result.reason }
-  if (result.exitCode !== 0) return { status: 'absent' }
-  const version = firstVersion(result.output)
-  return version ? { status: 'present', version } : { status: 'present' }
+  if (result.outcome === 'found') {
+    return {
+      status: 'unknown',
+      reason: 'only the docker CLI was located; the daemon was not asked',
+    }
+  }
+  if (result.outcome === 'ran' && result.exitCode !== 0) return { status: 'absent' }
+  return toolPresence(result)
+}
+
+/** What one probe pass may be told, so the suite drives the daemon's retry without waiting on it. */
+export interface ProbeEnvironmentOptions {
+  /** Injected so tests exercise the retry without paying {@link DAEMON_RETRY_DELAY_MS}. */
+  sleep?: (ms: number) => Promise<void>
+  /**
+   * Whether a daemon is CONFIGURED to serve this machine, defaulting to {@link daemonIsConfigured}.
+   * Stated as the fact rather than as the `DOCKER_HOST` string it is read from, so a test can drive
+   * both sides of the branch without an ambient environment variable deciding the outcome for it.
+   */
+  daemonExpected?: boolean
 }
 
 /**
- * Probe the machine. The tools run concurrently (independent `--version` calls), and the Docker
- * daemon is probed after its CLI: with no CLI there is nothing to ask, and "the CLI is missing so
- * the daemon could not be checked" would be an unknown where an absence is the honest answer.
+ * Whether anything is supposed to serve a Docker daemon here, which `entrypoint.sh` makes knowable:
+ * it EXPORTS `DOCKER_HOST` both when a pool hands us an external daemon and when it starts the
+ * rootless one, and leaves it unset in the one branch where no daemon is coming. Reading the
+ * machine's own configuration, not per-job state, so `process.env` is the right source here.
  */
-export async function probeEnvironment(run: ProbeRunner): Promise<EnvironmentInventory> {
-  const tools = await Promise.all(
-    PROBES.map(async (probe) => ({
-      name: probe.name,
-      showVersion: probe.showVersion,
-      presence: toolPresence(await run(probe.command, probe.args)),
-    })),
-  )
-  const cli = tools.find((t) => t.name === 'docker')?.presence ?? { status: 'absent' as const }
-  return { tools, dockerDaemon: await probeDockerDaemon(cli, run) }
+function daemonIsConfigured(): boolean {
+  return (process.env.DOCKER_HOST ?? '').trim() !== ''
 }
 
-/** Ask the daemon itself, but only once its CLI has answered for it. */
-async function probeDockerDaemon(cli: ToolPresence, run: ProbeRunner): Promise<ToolPresence> {
-  if (cli.status === 'absent') return { status: 'absent' }
-  if (cli.status === 'unknown') {
-    return { status: 'unknown', reason: 'the docker CLI probe failed, so nothing was asked of it' }
+/**
+ * Probe the machine. EVERYTHING runs concurrently, the daemon included.
+ *
+ * The daemon probe used to be sequenced after the tool pass, so that a missing CLI could
+ * short-circuit it. That bought a cleaner `absent` and charged the whole job for it: two ceilings
+ * back to back on the critical path, ahead of the clone, on every dispatch. It is unnecessary,
+ * because `docker info` answers the CLI question too: with no CLI on PATH the spawn comes back
+ * `missing`, which {@link daemonPresence} already reads as the same absence the short-circuit
+ * produced. Asking directly also removes a second defect the sequencing needed: reading the CLI's
+ * presence back out of `tools` defaulted a MISSING list entry to `absent`, so trimming the curated
+ * list would have had the block assert "NO Docker daemon is reachable" with nothing ever asked.
+ */
+export async function probeEnvironment(
+  run: ProbeRunner,
+  opts: ProbeEnvironmentOptions = {},
+): Promise<EnvironmentInventory> {
+  const [tools, dockerDaemon] = await Promise.all([
+    Promise.all(
+      PROBES.map(async (probe) => ({
+        name: probe.name,
+        showVersion: probe.showVersion,
+        presence: toolPresence(await run(probe.command, probe.args)),
+      })),
+    ),
+    probeDockerDaemon(run, opts),
+  ])
+  return { tools, dockerDaemon }
+}
+
+/**
+ * Ask the daemon itself, and do not mistake a daemon that is STARTING for one that is not there.
+ *
+ * `entrypoint.sh` launches `dockerd-rootless.sh` detached and `exec`s the server without waiting,
+ * so `/health` answers (and the backend POSTs `/run`) seconds before the rootless daemon has
+ * finished its userns and fuse-overlayfs setup. Until then there is no socket, so `docker info`
+ * is refused AT ONCE. Read as a plain absence that produced the block's most consequential line,
+ * "NO Docker daemon is reachable ... will fail here whatever the CLI reports", on a machine whose
+ * daemon was up moments later, which authoritatively told a tester step not to try.
+ *
+ * Whether a daemon is CONFIGURED here is what separates the two (see {@link daemonIsConfigured}):
+ *
+ *   - refused with no `DOCKER_HOST` ⇒ ABSENT. Nothing was coming. This is also the developer's
+ *     laptop with Docker Desktop shut down, where absent is exactly right.
+ *   - refused with `DOCKER_HOST` set ⇒ one short retry, then UNKNOWN. A daemon was expected and
+ *     has not answered yet, which is neither of the other two answers, and the rendered line turns
+ *     it into "try it if you need it" rather than into a prohibition.
+ */
+async function probeDockerDaemon(
+  run: ProbeRunner,
+  opts: ProbeEnvironmentOptions,
+): Promise<ToolPresence> {
+  const expected = opts.daemonExpected ?? daemonIsConfigured()
+  const ask = async (): Promise<ToolPresence> =>
+    daemonPresence(await run(DOCKER_INFO.command, DOCKER_INFO.args))
+  const first = await ask()
+  if (first.status !== 'absent' || !expected) return first
+  await (opts.sleep ?? defaultSleep)(DAEMON_RETRY_DELAY_MS)
+  const second = await ask()
+  if (second.status !== 'absent') return second
+  return {
+    status: 'unknown',
+    reason:
+      'a daemon is configured for this machine but had not answered when the job started; it may ' +
+      'still be coming up',
   }
-  return daemonPresence(await run(DOCKER_INFO.command, DOCKER_INFO.args))
+}
+
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
 }
 
 /** Render one tool for the `Installed:` line: `node 26.7.0`, or just `jq`. */
@@ -270,8 +416,11 @@ export function renderEnvironmentInventory(inventory: EnvironmentInventory): str
   }
   if (absent.length > 0) {
     lines.push(
-      `Not installed: ${absent.map((t) => t.name).join(', ')}. Do not try to install one of ` +
-        'these; a tool the platform did not provide is not a defect in the work.',
+      `Not installed: ${absent.map((t) => t.name).join(', ')}. You are unprivileged here, so a ` +
+        'SYSTEM install of one of these will fail, and a tool the platform did not provide is not ' +
+        "a defect in the work. Where one of them is the project's own package manager, reaching " +
+        'it for that project alone (`npx <manager>`, a repo-local install) is fine and is the one ' +
+        'thing worth trying.',
     )
   }
   if (unknown.length > 0) {
@@ -281,9 +430,15 @@ export function renderEnvironmentInventory(inventory: EnvironmentInventory): str
     )
   }
   lines.push(dockerDaemonLine(inventory.dockerDaemon))
+  // Stated as a FACT and not as an errand. This block is appended to the system prompt after the
+  // effort-report directive, whose closing sentences are the prompt's ordering rule (write the
+  // sentinel, then reply, and no tool call after the reply). "Check for that one yourself before
+  // relying on it" sat after that rule and invited exactly the trailing tool call it forbids, which
+  // is the displacement that once cost an architect run its design. The agent needs to know the
+  // list is bounded; when to go looking is the sandbox directive's business, and it is not last.
   lines.push(
     'Nothing else was probed. A tool named on none of these lines is unknown to the platform ' +
-      'rather than missing, so check for that one yourself before relying on it.',
+      'rather than missing.',
   )
   return lines.join('\n')
 }
@@ -326,17 +481,26 @@ function dockerDaemonLine(daemon: ToolPresence): string {
  */
 export async function appendEnvironmentInventory(
   systemPrompt: string,
-  opts: { signal?: AbortSignal; log?: Logger; run?: ProbeRunner } = {},
+  opts: { signal?: AbortSignal; log?: Logger; run?: ProbeRunner } & ProbeEnvironmentOptions = {},
 ): Promise<string> {
   const logger = opts.log ?? log
   try {
-    const inventory = await probeEnvironment(opts.run ?? spawnProbeRunner(opts.signal))
+    const inventory = await probeEnvironment(opts.run ?? spawnProbeRunner(opts.signal), {
+      ...(opts.sleep ? { sleep: opts.sleep } : {}),
+      ...(opts.daemonExpected === undefined ? {} : { daemonExpected: opts.daemonExpected }),
+    })
     logger.info('agent: probed the environment', {
       installed: inventory.tools
         .filter((t) => t.presence.status === 'present')
         .map((t) => t.name)
         .join(','),
       dockerDaemon: inventory.dockerDaemon.status,
+      // The unknowns, by NAME: the block tells the agent a probe failed, and this is the only place
+      // an operator can see WHICH, since the reason the agent reads is deliberately wordy prose.
+      unknown: inventory.tools
+        .filter((t) => t.presence.status === 'unknown')
+        .map((t) => t.name)
+        .join(','),
     })
     return `${systemPrompt}\n\n${renderEnvironmentInventory(inventory)}`
   } catch (err) {

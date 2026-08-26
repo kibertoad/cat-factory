@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { carryClaudeSystemPrompt } from '../src/agent-runner.js'
+import { renderEnvironmentInventory } from '../src/environment-inventory.js'
 
 // EVERY container-running mode gets the environment inventory EXACTLY ONCE, and it gets it by
 // inheritance rather than by remembering to fold it.
@@ -37,14 +38,25 @@ async function read(relative: string): Promise<string> {
 /**
  * Top-level function bodies, keyed by name. Crude on purpose, and the same crude split
  * `dependency-install.coverage.test.ts` uses: the markers only ever appear at statement level.
+ *
+ * It matches an arrow-assigned function as well as a `function` declaration, because a guard whose
+ * TOTALITY is the point cannot be blind to a way of writing the thing it is total over: with only
+ * `function` matched, `export const runNewMode = async (job) => { ... }` was invisible to both
+ * assertions below, so the new flow neither counted as a caller nor had its forwarding checked, and
+ * the exact double-fold this file exists to prevent would have landed green.
  */
 function topLevelFunctions(source: string): Map<string, string> {
+  // Either shape a top-level function is written in here: a `function` declaration, or a `const`
+  // bound to an arrow or function expression. Group 1 names the first, group 2 the second.
+  const declaration =
+    /^(?:export )?(?:async )?function (\w+)|^(?:export )?(?:const|let) (\w+)(?::[^=\n]+)? = (?:async )?(?:\(|function\b)/gm
+  const starts = [...source.matchAll(declaration)].map((match) => ({
+    index: match.index,
+    name: match[1] ?? match[2]!,
+  }))
   const bodies = new Map<string, string>()
-  const starts = [...source.matchAll(/^(?:export )?(?:async )?function (\w+)/gm)]
-  starts.forEach((match, index) => {
-    const from = match.index
-    const to = starts[index + 1]?.index ?? source.length
-    bodies.set(match[1]!, source.slice(from, to))
+  starts.forEach((start, index) => {
+    bodies.set(start.name, source.slice(start.index, starts[index + 1]?.index ?? source.length))
   })
   return bodies
 }
@@ -93,13 +105,51 @@ describe('the environment inventory is composed exactly once', () => {
     expect(funnel).toContain('writeAgentsContext(spec.systemPrompt')
   })
 
+  it('sees a flow written as an arrow function, not only as a `function`', () => {
+    // The guard above is only worth its assertions if it is TOTAL over the ways a flow can be
+    // written. Matching `function` alone made an arrow-assigned mode invisible to both halves: it
+    // was not counted as a caller and its forwarding was never checked, so the double-fold this
+    // file exists to catch would have landed green. Asserted against the matcher directly, because
+    // no source in the tree currently takes that shape, which is exactly why it went unnoticed.
+    const fixture = [
+      'export async function runOldMode(job) {',
+      '  return appendEnvironmentInventory(job.systemPrompt)',
+      '}',
+      'export const runNewMode = async (job: AgentJob): Promise<void> => {',
+      '  await appendEnvironmentInventory(job.systemPrompt)',
+      '}',
+      'const NOT_A_FUNCTION = [1, 2, 3]',
+    ].join('\n')
+    const found = topLevelFunctions(fixture)
+    expect([...found.keys()]).toEqual(['runOldMode', 'runNewMode'])
+    expect(found.get('runNewMode')).toContain(COMPOSER)
+  })
+
   it('reaches the agent whichever way the claude runner has to carry the prompt', () => {
     // The one branch that could drop it. A system prompt small enough for argv rides
     // `--append-system-prompt`; one too large for a single argv string is folded into the stdin
     // task prompt instead. The block is appended to the SYSTEM prompt, so both carry it whole,
     // and the oversized branch is the live one for a coder with best-practice fragments folded
     // in, which is exactly where the inventory would otherwise have gone missing.
-    const block = 'ENVIRONMENT INVENTORY: probed at job start.'
+    //
+    // The REAL block, not a one-line stand-in for it: what the fold has to survive is this text's
+    // actual shape (several lines, embedded backticks around `docker build` and `npx <manager>`),
+    // and a sentinel string proved only that an arbitrary line survives.
+    const block = renderEnvironmentInventory({
+      tools: [
+        { name: 'node', showVersion: true, presence: { status: 'present', version: '26.7.0' } },
+        { name: 'pnpm', showVersion: true, presence: { status: 'absent' } },
+        {
+          name: 'make',
+          showVersion: false,
+          presence: { status: 'unknown', reason: 'the probe timed out' },
+        },
+      ],
+      dockerDaemon: { status: 'absent' },
+    })
+    expect(block).toContain('\n')
+    expect(block).toContain('`')
+
     const small = carryClaudeSystemPrompt(`ROLE\n\n${block}`, 'TASK')
     expect(small.folded).toBe(false)
     expect(small.appendArgs.join('\n')).toContain(block)
