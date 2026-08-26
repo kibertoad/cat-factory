@@ -7,12 +7,14 @@ import type {
 } from '@cat-factory/kernel'
 import type { AgentRouting } from '@cat-factory/agents'
 import {
+  CONTAINER_DISPATCH_DIRECTIVES,
   EFFORT_REPORT_FILE,
   EFFORT_REPORT_GUIDANCE,
   EXECUTION_SANDBOX_GUIDANCE,
   FINAL_ANSWER_IN_REPLY,
   PR_DESCRIPTION_GUIDANCE,
   READ_ONLY_GUARDRAIL,
+  TOOL_PREFERENCE_GUIDANCE,
 } from '@cat-factory/agents'
 import { describe, expect, it } from 'vitest'
 import {
@@ -21,9 +23,9 @@ import {
 } from '../src/agents/ContainerAgentExecutor.js'
 import type { ContainerSessionService } from '../src/containers/ContainerSessionService.js'
 
-// The DIRECTIVES a dispatch appends around a kind's own prompt: the read-only guardrail, the two
-// unconditional `CONTAINER_DISPATCH_DIRECTIVES` (execution sandbox, effort report) and the
-// PR-description sentinel a PR-opening coding kind gets on top. Split out of
+// The DIRECTIVES a dispatch appends around a kind's own prompt: the read-only guardrail, the three
+// unconditional `CONTAINER_DISPATCH_DIRECTIVES` (execution sandbox, tool preference, effort report)
+// and the PR-description sentinel a PR-opening coding kind gets on top. Split out of
 // `containerAgentJobBody.spec` (which pins the per-kind body SHAPES) when that file hit its size
 // budget, the same way `containerAgentMultiRepo.spec` was: these texts are composed from three
 // different places and only meet at this chokepoint, so what they assert is the COMPOSITION, not
@@ -202,11 +204,10 @@ describe('ContainerAgentExecutor dispatch directives', () => {
   })
 
   it('states the execution sandbox contract to every container kind, not just one', async () => {
-    // Platform facts no agent can derive from the checkout (every tool probed rather than assumed,
-    // no cluster or registry credentials, toolchain versions that are the environment's), plus the
-    // rule that an artifact this environment cannot execute is not incomplete for that reason.
-    // Absent, a coder and its reviewer each rediscovered that the Dockerfile they were asked for
-    // could not be built here.
+    // Platform facts no agent can derive from the checkout (no cluster or registry credentials,
+    // toolchain versions that are the environment's), plus the rule that an artifact this
+    // environment cannot execute is not incomplete for that reason. Absent, a coder and its
+    // reviewer each rediscovered that the Dockerfile they were asked for could not be built here.
     for (const kind of ['coder', 'architect', 'reviewer', 'tester-api', 'merger']) {
       expect(await promptFor(kind)).toContain(EXECUTION_SANDBOX_GUIDANCE)
     }
@@ -220,5 +221,77 @@ describe('ContainerAgentExecutor dispatch directives', () => {
     // and, under `LOCAL_NATIVE_AGENTS`, the developer's own machine as a host process, where
     // "an ephemeral Linux container" and "there is no Kubernetes tooling" are both false.
     expect(EXECUTION_SANDBOX_GUIDANCE).toMatch(/a disposable working environment/)
+  })
+
+  it('says nothing about what the environment CONTAINS, in either direction', () => {
+    // The property, not the absence of the old phrasing (per the note this file gained in #2062).
+    // The dispatch cannot know the image's contents: it is composed before a transport is chosen,
+    // and the same body reaches a deployment's own image variant and the developer's laptop under
+    // `LOCAL_NATIVE_AGENTS`. So the paragraph may neither name a tool as present nor send the
+    // agent to look for one, which is what the harness's probed inventory now answers instead.
+    // A word here is only a violation as a claim ABOUT THE MACHINE, which is why each is anchored.
+    expect(EXECUTION_SANDBOX_GUIDANCE).not.toMatch(/\bdocker\b/i)
+    expect(EXECUTION_SANDBOX_GUIDANCE).not.toMatch(/\bkubectl\b/i)
+    expect(EXECUTION_SANDBOX_GUIDANCE).not.toMatch(/\bNode toolchain\b/i)
+    expect(EXECUTION_SANDBOX_GUIDANCE).not.toMatch(/probe/i)
+    // And it does not promise the inventory either. An image older than the backend appends none,
+    // so a sentence pointing at one would be the platform asserting what the dispatch may not have
+    // delivered: exactly the defect class dropping the probe instruction is on the other side of.
+    expect(EXECUTION_SANDBOX_GUIDANCE).not.toMatch(/inventory/i)
+    // What survives is the DISPOSITION, which is policy and holds whatever the machine contains.
+    expect(EXECUTION_SANDBOX_GUIDANCE).toMatch(/not a defect in the work/)
+    expect(EXECUTION_SANDBOX_GUIDANCE).toMatch(/no cluster or container-registry credentials/)
+  })
+
+  it('names a tool preference once, to every container kind', async () => {
+    // The models stopped reaching for their file tools on their own (four runs of one task in a
+    // three-day window used the write tool zero times, against 26 to 34 per dispatch a fortnight
+    // earlier) and rewrote whole files through shell heredocs instead. One line, at the chokepoint
+    // rather than per track prompt, so every container kind gets the same advice exactly once.
+    for (const kind of ['coder', 'architect', 'reviewer', 'merger']) {
+      const prompt = await promptFor(kind)
+      expect(prompt).toContain(TOOL_PREFERENCE_GUIDANCE)
+      expect(prompt.split(TOOL_PREFERENCE_GUIDANCE).length - 1).toBe(1)
+    }
+    // A NUDGE, deliberately not a rule: which tool a model picks moves under us with no diff on
+    // our side, so the text may not be worded as something the platform can rely on, and nothing
+    // whose correctness depends on the answer may be built on it.
+    expect(TOOL_PREFERENCE_GUIDANCE).not.toMatch(/\b(never|must|always) use\b/i)
+    expect(TOOL_PREFERENCE_GUIDANCE).toMatch(/use your file tools/i)
+  })
+
+  it('keeps the effort report LAST of the unconditional directives', () => {
+    // Its closing sentences are the prompt's ordering statement (the sentinel file before the
+    // final reply, and no tool call after it). A directive appended after it would be the last
+    // thing the agent reads about ordering, which is the displacement that cost an architect run
+    // its 18k-character design.
+    //
+    // This pins the ARRAY's order only, and the array is not the whole prompt: `buildKindBody`
+    // appends the follow-up, bug-fix, skill and tool-server sections after it, and the HARNESS
+    // appends its `ENVIRONMENT INVENTORY` block after all of them. So what has to hold downstream
+    // of here is the property, not the position, and each of those texts owns its own half of it.
+    // The inventory block's half is pinned in the harness suite, next to the text it governs
+    // (`environment-inventory.test.ts`, "closes on a FACT, and asks for no tool call after it").
+    expect(CONTAINER_DISPATCH_DIRECTIVES.at(-1)).toBe(EFFORT_REPORT_GUIDANCE)
+  })
+
+  it('appends nothing after the effort report that CONTRADICTS its ordering', async () => {
+    // The invariant the assertion above cannot reach, asserted over the delivered tail rather than
+    // over the directive array, which is where the ordering rule is actually competed with.
+    //
+    // Restating the ordering there is fine and `PR_DESCRIPTION_GUIDANCE` deliberately does it
+    // ("BEFORE you compose your final reply, never after it"), because a later section that stays
+    // SILENT on ordering while asking for a write is how a faithful agent ends up writing after
+    // answering. What may not appear is the opposite instruction: work placed after the reply, or
+    // an errand deferred to the end.
+    for (const kind of ['coder', 'architect', 'reviewer']) {
+      const prompt = await promptFor(kind)
+      const tail = prompt.slice(
+        prompt.indexOf(EFFORT_REPORT_GUIDANCE) + EFFORT_REPORT_GUIDANCE.length,
+      )
+      expect(tail).not.toMatch(/as the last thing you do/i)
+      expect(tail).not.toMatch(/after (your|the) (final )?(reply|answer|response)/i)
+      expect(tail).not.toMatch(/(finally|lastly),/i)
+    }
   })
 })

@@ -37,6 +37,7 @@ import { runMultiRepoCoding } from './multi-repo-coding.js'
 import { validationFailureMessage } from './validation-checks.js'
 import { prepopulateDependencies, withDependencyNote } from './dependency-install.js'
 import { agentCapabilities, mergeEffort } from './agent-shared.js'
+import { appendEnvironmentInventory } from './environment-inventory.js'
 import { runBootstrap } from './bootstrap-mode.js'
 import {
   acquireRepoCheckout,
@@ -176,9 +177,28 @@ export async function handleAgent(job: AgentJob, opts: RunOptions = {}): Promise
       ...artifactUploadEnv(job.artifactUpload),
     })
     if (job.mode === 'preview') return await runPreviewMode(job, scoped)
-    return job.mode === 'coding'
-      ? await runCodingMode(job, scoped)
-      : await runExploreMode(job, scoped)
+    // THE composition point for the environment inventory (see `environment-inventory.ts`): the
+    // machine is probed ONCE here, before any mode branches, and the result is folded onto the
+    // job's own system prompt. Every mode, every repair round and all three agent CLIs read that
+    // one field, so none of them can end up without the block and none can carry it twice.
+    // `preview` returns above because it runs no agent at all, so there is no prompt to fold onto.
+    //
+    // This sits on the critical path AHEAD of the clone, which is the cost of having one
+    // composition point instead of one per mode (each mode owns its own clone, so there is no
+    // single post-clone place to put this). The pass is sized for that: everything in it runs
+    // concurrently, every probe is a call that answers in milliseconds or is wedged, and the one
+    // deliberate wait is a single short retry for a daemon that is still starting.
+
+    const staged: AgentJob = {
+      ...job,
+      systemPrompt: await appendEnvironmentInventory(job.systemPrompt, {
+        ...(opts.signal ? { signal: opts.signal } : {}),
+        ...(opts.log ? { log: opts.log } : {}),
+      }),
+    }
+    return staged.mode === 'coding'
+      ? await runCodingMode(staged, scoped)
+      : await runExploreMode(staged, scoped)
   } finally {
     if (scopeDir) await rm(scopeDir, { recursive: true, force: true }).catch(() => {})
   }

@@ -239,8 +239,7 @@ export const EFFORT_REPORT_GUIDANCE =
 
 /**
  * Appended to EVERY container-agent system prompt at the same chokepoint as
- * {@link EFFORT_REPORT_GUIDANCE} (`buildKindBody`): what the execution environment can and cannot
- * do.
+ * {@link EFFORT_REPORT_GUIDANCE} (`buildKindBody`): the POLICY of the execution environment.
  *
  * These are PLATFORM facts no agent can derive from the repository, and the graders kept catching
  * the same waste with them absent. A coder and its reviewer independently discovered that the
@@ -249,18 +248,35 @@ export const EFFORT_REPORT_GUIDANCE =
  * `EBADENGINE` warning the reviewer filed as a defect in the change. None of that is resolvable by
  * the agent, and all of it is one paragraph of context.
  *
- * EVERY tool is stated as a PROBE rather than as a presence or an absence, and the environment
- * itself is never named, because the honest answer varies by runtime and this text is composed
- * BEFORE the transport is chosen. The usual case is the harness image (a rootless Docker daemon
- * `entrypoint.sh` starts BEST-EFFORT, which Cloudflare Containers and most managed runners forbid,
- * while a self-hosted pool may point `DOCKER_HOST` at a sidecar instead). But the same job body
- * also serves the local NATIVE transport (`LOCAL_NATIVE_AGENTS`), which runs the developer's own
- * CLI as a process on their machine, where `kubectl` may well be installed, Docker Desktop may be
- * running and the toolchain is theirs. So "an ephemeral Linux container", "no Kubernetes tooling"
- * and "a Docker CLI IS installed" are each false on one of those two paths, while "check, and do
- * not read a failure as your bug" is true on both. Toolchain VERSIONS take the same shape for a
- * second reason as well: naming the image's Node major here would duplicate the Dockerfile's pin
- * into a constant nothing keeps in step with it.
+ * WHAT THE ENVIRONMENT CONTAINS IS NOT SAID HERE, and that split is the point. This text is
+ * composed BEFORE the transport is chosen. The usual case is the harness image (a rootless Docker
+ * daemon `entrypoint.sh` starts BEST-EFFORT, which Cloudflare Containers and most managed runners
+ * forbid, while a self-hosted pool may point `DOCKER_HOST` at a sidecar instead). But the same job
+ * body also serves a deployment's own image variant, and the local NATIVE transport
+ * (`LOCAL_NATIVE_AGENTS`), which runs the developer's own CLI as a process on their machine, where
+ * `kubectl` may well be installed, Docker Desktop may be running and the toolchain is theirs. So
+ * "an ephemeral Linux container", "no Kubernetes tooling" and "a Docker CLI IS installed" are each
+ * false on one of those paths, and naming the image's Node major here would duplicate the
+ * Dockerfile's pin into a constant nothing keeps in step with it.
+ *
+ * The HARNESS states the facts instead, because it is the layer actually running there: it probes
+ * the machine once per job and appends an inventory to this prompt (executor-harness's
+ * `environment-inventory.ts`), three-valued so a failed probe never renders as an absence.
+ *
+ * That is why the old instruction to "probe for a tool (`docker info`, `kubectl version`) before
+ * relying on it" is GONE rather than reworded. Every agent obeyed it, and in one measured run four
+ * of a forty-call budget went on rediscovering the same two answers, once in the architect and
+ * again in the coder it handed off to. What stays is the DISPOSITION those answers feed into,
+ * which is policy and holds whatever the machine turns out to contain. The text also does not
+ * promise an inventory: an older image paired with a newer backend appends none, and asserting
+ * what the dispatch did not deliver is the defect class this is on the other side of.
+ *
+ * Which is why the probe clause is CONDITIONAL rather than dropped. Deleting it outright (this
+ * text used to say "probe for a tool before relying on it") read correctly only against an image
+ * new enough to append the inventory: one version behind is the normal state of running a
+ * deployment, and there the agent got neither the facts nor leave to go and find them, which is
+ * strictly worse than what it had before. "Where the platform has stated it, take it as given;
+ * where it has not, check" is true in both worlds and needs to know about neither.
  *
  * The closing rule is the part that pays for the paragraph, and it stops one step short of the
  * claim it would be convenient to make: unverifiable is not the same as correct. An artifact this
@@ -271,31 +287,70 @@ export const EFFORT_REPORT_GUIDANCE =
  * grounds that it could not be built here.
  *
  * Unconditional, for every container kind rather than only those whose deliverable can BE an
- * executable artifact: a reviewer reviews such artifacts, and any kind can be asked to probe for a
- * tool. Gating it per kind would reintroduce the rediscovery it exists to prevent, one
- * misclassification at a time, so the paragraph is kept short instead and names no tooling except
- * as a probe example.
+ * executable artifact: a reviewer reviews such artifacts, and any kind can be handed work this
+ * environment cannot run. Gating it per kind would reintroduce the rediscovery it exists to
+ * prevent, one misclassification at a time, so the paragraph is kept short instead and names no
+ * tooling at all.
  */
 export const EXECUTION_SANDBOX_GUIDANCE =
-  'EXECUTION SANDBOX — you run in a disposable working environment the platform provisions for ' +
-  'this step: a fresh clone of the repository, git and a Node toolchain. Treat nothing else as ' +
-  'guaranteed: probe for a tool (`docker info`, `kubectl version`, a language runtime) before ' +
-  'relying on it, and never report a missing tool or a failed probe as a defect in the work. The ' +
-  'platform hands you no cluster or container-registry credentials, so applying a manifest, ' +
-  'reaching a cluster and pulling or pushing an image are out of scope for this step unless this ' +
-  "run handed you a credential for them. Toolchain versions here are the ENVIRONMENT's, not " +
-  "necessarily your target's — compare `node --version` against the project's declared engines " +
-  'before concluding that a version warning or failure is a bug in the code. Above all: a ' +
-  'deliverable this environment cannot EXECUTE (a Dockerfile you cannot build, a manifest you ' +
-  'cannot apply, a deploy you cannot run) is not incomplete or incorrect for that reason. Produce ' +
-  'it, then name in ONE line of your report which artifacts you could not verify here and why. Do ' +
-  'not hedge the artifact, do not spend turns rediscovering the limit, and do not raise the limit ' +
-  'itself as a finding against the work or another agent: a defect you can actually see in the ' +
-  'artifact still is one.'
+  'EXECUTION SANDBOX: you run in a disposable working environment the platform provisions for ' +
+  'this step, holding a fresh clone of the repository. What that environment does and does not ' +
+  "contain is the platform's business, and a tool it does not provide is not a defect in the " +
+  'work. Where the platform has stated what this machine holds, take that as given rather than ' +
+  'spending a turn re-checking it; where it has not, check for a tool before relying on it. ' +
+  'The platform hands you no cluster or container-registry credentials, so applying a ' +
+  'manifest, reaching a cluster and pulling or pushing an image are out of scope for this step ' +
+  'unless this run handed you a credential for them. Toolchain versions here are the ' +
+  "ENVIRONMENT's, not necessarily your target's, so a version warning or failure against the " +
+  "project's declared engines is not by itself a bug in the code. Above all: a deliverable this " +
+  'environment cannot EXECUTE (a Dockerfile you cannot build, a manifest you cannot apply, a ' +
+  'deploy you cannot run) is not incomplete or incorrect for that reason. Produce it, then name ' +
+  'in ONE line of your report which artifacts you could not verify here and why. Do not hedge ' +
+  'the artifact, do not spend turns rediscovering the limit, and do not raise the limit itself ' +
+  'as a finding against the work or another agent: a defect you can actually see in the artifact ' +
+  'still is one.'
+
+/**
+ * Appended beside {@link EXECUTION_SANDBOX_GUIDANCE} at the same chokepoint: which TOOL to reach
+ * for, for the two kinds of work an agent CLI does.
+ *
+ * Nothing the platform sent mentioned tools at all (zero occurrences of "bash", "shell" or
+ * "heredoc" in either prompt of the run this came from), which was fine while the models reached
+ * for their file tools unprompted. They stopped: four runs of one task in a three-day window used
+ * the write tool zero times, against 26 to 34 times per dispatch a fortnight earlier, rewriting
+ * whole files through shell heredocs instead. That is worse work for the same tokens.
+ *
+ * A NUDGE, and nothing may be built on top of it. Which tool a model picks is the model's call and
+ * moves under us with no diff on our side, which is how this regression arrived, so anything whose
+ * CORRECTNESS depends on the answer has to hold whichever tool was used. Kept short and kept HERE
+ * rather than in a track prompt: it is the same advice for every container kind, and a per-kind
+ * copy is a per-kind chance to drift.
+ *
+ * The read-only clause is the same reconciliation {@link EFFORT_REPORT_GUIDANCE} carries and for
+ * the same reason: the chokepoint appends this to the read-only kinds too, whose guardrail forbids
+ * modifying files, so "use your file tools to edit files" arrives as the later half of a
+ * contradictory pair. An agent handed one either disobeys a half or spends a turn asking which
+ * wins. The clause resolves it in the direction that is never wrong (the guardrail wins) and keeps
+ * the nudge for the READ, which is what a reviewer spends its tools on anyway.
+ */
+export const TOOL_PREFERENCE_GUIDANCE =
+  'TOOLS: use your file tools to read files, and to edit them wherever your instructions have you ' +
+  'changing files at all; use the shell for running things (builds, tests, git, package ' +
+  'managers). Rewriting a file through a shell heredoc or an in-place `sed` ' +
+  'is easy to get subtly wrong, truncates silently on a quoting slip, and leaves you no diff of ' +
+  'what you changed, where an edit tool fails loudly instead. A bulk mechanical rewrite across ' +
+  'many files is the exception where a script is the right answer: read back what it wrote. Where ' +
+  'this step is read-only, all of this is about which tool you READ with, and nothing here ' +
+  'loosens the instruction not to change the repository.'
 
 /**
  * The directives the container-dispatch chokepoint appends to EVERY container job, in the order it
- * appends them: what the environment can and cannot do, then the effort self-assessment.
+ * appends them: the environment's policy, which tool to reach for, then the effort
+ * self-assessment.
+ *
+ * The effort report stays LAST because its closing sentences are the prompt's ordering statement
+ * (the sentinel file before the final reply, and no tool call after it); a directive appended
+ * after it would be the last thing the agent reads about ordering.
  *
  * Declared here rather than inlined at the chokepoint because two callers have to agree on the
  * exact text. The dispatch (`buildKindBody`) SENDS it, and `appendedDirectivesFor` MEASURES what a
@@ -303,12 +358,13 @@ export const EXECUTION_SANDBOX_GUIDANCE =
  * prose that drifts. With the pair inlined in `@cat-factory/server` the measurement could not see
  * it and the editor promised a shorter contract than the wire carried.
  *
- * Only the UNCONDITIONAL pair belongs here. The chokepoint also appends per-STEP text (the
+ * Only the UNCONDITIONAL set belongs here. The chokepoint also appends per-STEP text (the
  * follow-up companion, bug-fix guidance, a skill directive, the wired tool servers), which depends
  * on the run rather than on the kind and so cannot be measured for a kind at all.
  */
 export const CONTAINER_DISPATCH_DIRECTIVES = [
   EXECUTION_SANDBOX_GUIDANCE,
+  TOOL_PREFERENCE_GUIDANCE,
   EFFORT_REPORT_GUIDANCE,
 ] as const
 

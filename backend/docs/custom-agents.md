@@ -304,6 +304,22 @@ not claim). Anything else is a DEPLOYMENT's variant, mapped to an image by its r
 | Cloudflare            | a `[[containers]]` class (subclass the exported `RunContainer`) plus a durable-object binding named `RUNNER_CONTAINER_PIXEL_TOOLS`, because a Container's image is pinned per CLASS |
 | manifest-driven pool  | forwarded verbatim as `{{input.image}}`; the pool maps it                                                                                                                           |
 
+**A variant is never described by a dispatch-time prompt, and does not need to be.** The harness
+probes the machine at job start and appends an `ENVIRONMENT INVENTORY` block to the agent's system
+prompt, so what the block states is measured on the variant rather than declared about it, and no
+dispatch-time prompt claims a tool the variant does not carry. That is also why the shipped
+`EXECUTION_SANDBOX_GUIDANCE` names no tooling at all: it is composed before a transport is chosen
+and cannot know which image (or, under `LOCAL_NATIVE_AGENTS`, whose laptop) will serve the job.
+
+**What the block does NOT do is discover a variant's headline tool.** The probe list is a curated
+constant in the harness (the toolchain every agent assumes, plus what runs were seen rediscovering)
+with no per-deployment seam, so a `pixel-tools` image whose whole point is ImageMagick gets a block
+that never mentions it. What the design guarantees there is honesty, not coverage: the block's
+closing line says nothing else was probed, so an unprobed tool reads as unknown to the platform
+rather than as absent, and an agent that needs `magick` will find it. If a variant's tooling has to
+be STATED, that belongs in the kind's own prompt, where a deployment owns the words. See
+[the harness README](https://github.com/kibertoad/cat-factory/blob/main/backend/internal/executor-harness/README.md#the-environment-is-probed-once-not-by-the-agent).
+
 Two rules make this safe, and both were learned the hard way.
 
 **A variant is part of the CONTAINER's identity, not a dispatch-time hint.** The container is per

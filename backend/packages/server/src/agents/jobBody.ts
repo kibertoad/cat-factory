@@ -142,15 +142,15 @@ export function buildKindBody(
     // kinds get the full bodies. See `standardsVerbosityFor` / the `brief-standards` trait.
     standardsVerbosityFor(context.agentKind, registry),
   )
-  // The two directives EVERY container job carries, whatever the kind: what the execution
-  // environment can and cannot do (platform facts no agent can derive from the repository, absent
-  // which a coder and its reviewer each rediscovered that the Dockerfile they were asked for could
-  // not be built here) and the effort self-assessment the harness lifts onto the result. Appended
-  // here — the single container-dispatch chokepoint — so they reach every container kind, built-in
-  // and registered alike, exactly like the read-only/final-answer directives reach every kind via
-  // `applySurfaceDirectives`. The pair is declared in `@cat-factory/agents`
+  // The directives EVERY container job carries, whatever the kind: what the execution environment
+  // can and cannot do (platform facts no agent can derive from the repository, absent which a coder
+  // and its reviewer each rediscovered that the Dockerfile they were asked for could not be built
+  // here), which tool to reach for, and the effort self-assessment the harness lifts onto the
+  // result. Appended here, the single container-dispatch chokepoint, so they reach every container
+  // kind, built-in and registered alike, exactly like the read-only/final-answer directives reach
+  // every kind via `applySurfaceDirectives`. The set is declared in `@cat-factory/agents`
   // (`CONTAINER_DISPATCH_DIRECTIVES`) because `appendedDirectivesFor` has to MEASURE it: the prompt
-  // editor shows a workspace the rules its override cannot delete, and these are two of them.
+  // editor shows a workspace the rules its override cannot delete, and these are among them.
   const withEffort = appendContainerDispatchDirectives(baseRoleSystemPrompt)
   // When the future-looking Follow-up companion is enabled for this (coder) step, append
   // the guidance that tells the Coder to stream loose-ends / side-tasks / questions to the
