@@ -236,6 +236,24 @@ cacheWrite }`), so the inline path reads it straight off rather than re-deriving
   folds only the CACHE shares off the calls and derives fresh from the harness total, so the
   classes sum to exactly the count the ledger stores. Shrinking the total to match the calls would
   under-charge a budget, the one direction a spend gate may not be wrong in.
+- **When the cache shares OVERSHOOT the total, the clamp lands on the CHEAPEST class.** The two
+  channels have contradicted each other and the total is authoritative, so something has to give;
+  which class gives decides which way the contradiction is settled. `partitionInputTokens` honours
+  the cache WRITE share whole (~1.25x fresh) and lets the READ share (~0.1x) take what is left,
+  because that is the same over-state-never-under-state direction the unclaimed remainder is
+  priced in. Clamping in argument order instead kept the CHEAP class whole: a total of 1000 with
+  a reported read of 900 and write of 400 then prices at 215 rate-units of input against 560, an
+  under-charge reachable on the Claude Code container path, whose harness documents its own
+  per-turn rows disagreeing with the terminal cumulative.
+- **An aggregate applies the all-fresh fallback PER PART, not to the whole.** `sumAgentTokenUsage`
+  used to drop the split entirely once any part lacked one, reasoning that both parts of a real
+  aggregate come from the same producer. A CONSENSUS PANEL is the counter-example: it is
+  multi-model by design, and one participant on a provider that reports no cache details at all
+  (`workers-ai-provider`) re-priced every OTHER participant's cache reads at the fresh rate,
+  reintroducing the several-fold over-charge on the shape that is most nearly all cache reads. So
+  each part keeps its own split and an unsplit part folds in as fresh, which is byte-for-byte what
+  it would have been charged alone. `undefined` survives at the only grain that can still carry
+  it: NO part could see its split.
 - **The ledger's per-dispatch cost will not equal the rollup's, and that is not a defect.** The
   ledger books one aggregate row per dispatch under the model that was DISPATCHED;
   `llm_call_metrics` prices each row at the model that actually served that turn

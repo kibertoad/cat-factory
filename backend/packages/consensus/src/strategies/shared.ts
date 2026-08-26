@@ -33,8 +33,15 @@ export const defaultGenerate: GenerateFn = async (args: GenerateArgs): Promise<G
 
 /**
  * The strategy's total across its calls. Kernel's fold, so the rule for an aggregate's input
- * CLASS split (known only when every part reported one) is stated once for the companion
- * repair retry and the consensus rounds alike.
+ * CLASS split is stated once for the companion repair retry and the consensus rounds alike:
+ * each part keeps its own split, and a part whose provider reported none folds in as fresh.
+ *
+ * A panel is the aggregate that rule was written for. Its parts are DIFFERENT MODELS behind
+ * different providers, and not all of them report cache details (`workers-ai-provider` reports
+ * none), so an all-or-nothing split would let one such participant re-price the whole panel's
+ * input at the fresh rate: the several-fold over-charge classed pricing exists to remove, on
+ * the shape that re-sends one goal prompt to every participant and is therefore mostly cache
+ * reads. Nothing here may re-state that rule locally; a strategy folds through kernel.
  *
  * The identity is `undefined` rather than a zeroed usage: a strategy that made no priced call
  * has nothing to say about its classes, and a zero split would assert it cached nothing. Only

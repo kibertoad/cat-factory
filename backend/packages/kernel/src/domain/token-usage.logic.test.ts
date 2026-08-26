@@ -18,16 +18,24 @@ describe('partitionInputTokens', () => {
   })
 
   it('clamps cache shares that overshoot the total instead of minting negative fresh input', () => {
-    // The two channels disagreed. Read comes off first, and write takes only what is left.
+    // The two channels disagreed, so the clamp lands on the CHEAPEST class: the write share
+    // (~1.25x fresh) is honoured whole and the read share (~0.1x) takes only what is left.
+    // Clamping the other way round would settle the disagreement at a tenth of the rate.
     expect(partitionInputTokens(1000, { cacheReadTokens: 900, cacheWriteTokens: 400 })).toEqual({
       promptTokens: 0,
-      cacheReadTokens: 900,
-      cacheWriteTokens: 100,
+      cacheReadTokens: 600,
+      cacheWriteTokens: 400,
     })
     expect(partitionInputTokens(100, { cacheReadTokens: 500, cacheWriteTokens: 0 })).toEqual({
       promptTokens: 0,
       cacheReadTokens: 100,
       cacheWriteTokens: 0,
+    })
+    // A write share that overshoots on its own still cannot mint a negative read or fresh count.
+    expect(partitionInputTokens(100, { cacheReadTokens: 0, cacheWriteTokens: 500 })).toEqual({
+      promptTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 100,
     })
   })
 
@@ -67,15 +75,38 @@ describe('sumAgentTokenUsage', () => {
     })
   })
 
-  it('drops the split when either part reported none', () => {
-    // Absent is not zero: the aggregate must not claim the unsplit part cached nothing, so it
-    // falls back to lump pricing, which over-states rather than under-states.
+  it('folds an unsplit part in as FRESH rather than dropping the split the other part has', () => {
+    // A consensus panel is multi-model by design, so one participant on a provider that reports
+    // no cache details must not re-price the whole panel at the fresh rate. The unsplit part is
+    // charged exactly what the lump fallback would charge it alone; the split part keeps its
+    // classes.
     const summed = sumAgentTokenUsage(
       {
         inputTokens: 100,
         outputTokens: 10,
         inputClasses: { promptTokens: 40, cacheReadTokens: 50, cacheWriteTokens: 10 },
       },
+      { inputTokens: 200, outputTokens: 20 },
+    )
+    expect(summed).toEqual({
+      inputTokens: 300,
+      outputTokens: 30,
+      inputClasses: { promptTokens: 240, cacheReadTokens: 50, cacheWriteTokens: 10 },
+    })
+    // The invariant the meter depends on survives the mixed fold.
+    const classes = summed?.inputClasses
+    expect(
+      (classes?.promptTokens ?? 0) +
+        (classes?.cacheReadTokens ?? 0) +
+        (classes?.cacheWriteTokens ?? 0),
+    ).toBe(300)
+  })
+
+  it('reports NO split only when NEITHER part reported one', () => {
+    // Absent is not zero, and at this grain it still says what it always said: nothing in this
+    // aggregate could see its split, so the lump is priced entirely as fresh.
+    const summed = sumAgentTokenUsage(
+      { inputTokens: 100, outputTokens: 10 },
       { inputTokens: 200, outputTokens: 20 },
     )
     expect(summed).toEqual({ inputTokens: 300, outputTokens: 30 })
