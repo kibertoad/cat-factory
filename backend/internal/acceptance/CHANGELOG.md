@@ -1,5 +1,16 @@
 # @cat-factory/acceptance
 
+## 0.4.38
+
+### Patch Changes
+
+- Updated dependencies [dc12c82]
+  - @cat-factory/contracts@0.330.0
+  - @cat-factory/kernel@0.321.0
+  - @cat-factory/acceptance-kit@0.5.3
+  - @cat-factory/cli@0.13.3
+  - @cat-factory/sdk@0.47.0
+
 ## 0.4.37
 
 ### Patch Changes

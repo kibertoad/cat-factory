@@ -1,5 +1,14 @@
 # @cat-factory/eks
 
+## 0.1.350
+
+### Patch Changes
+
+- Updated dependencies [dc12c82]
+  - @cat-factory/contracts@0.330.0
+  - @cat-factory/kernel@0.321.0
+  - @cat-factory/integrations@0.166.12
+
 ## 0.1.349
 
 ### Patch Changes
