@@ -7,9 +7,9 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "image:publish": "wrangler containers build ../../backend/internal/executor-harness -t cat-factory-executor:1.132.2 --push",
+    "image:publish": "wrangler containers build ../../backend/internal/executor-harness -t cat-factory-executor:1.132.3 --push",
     "image:publish:deploy": "wrangler containers build ../../backend/internal/deploy-harness -t cat-factory-deploy:0.2.16 --push",
-    "image:publish:ui": "docker build -f ../../backend/internal/executor-harness/Dockerfile.ui --build-arg BASE_IMAGE=ghcr.io/kibertoad/cat-factory-executor:1.132.2 -t cat-factory-executor-ui:1.132.2 ../../backend/internal/executor-harness && wrangler containers push cat-factory-executor-ui:1.132.2",
+    "image:publish:ui": "docker build -f ../../backend/internal/executor-harness/Dockerfile.ui --build-arg BASE_IMAGE=ghcr.io/kibertoad/cat-factory-executor:1.132.3 -t cat-factory-executor-ui:1.132.3 ../../backend/internal/executor-harness && wrangler containers push cat-factory-executor-ui:1.132.3",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:migrate:local": "wrangler d1 migrations apply cat_factory --local && wrangler d1 migrations apply cat_factory_telemetry --local && wrangler d1 migrations apply cat_factory_audit --local",
     "db:migrate:remote": "wrangler d1 migrations apply cat_factory --remote && wrangler d1 migrations apply cat_factory_telemetry --remote && wrangler d1 migrations apply cat_factory_audit --remote"
