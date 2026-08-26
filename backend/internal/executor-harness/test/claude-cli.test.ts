@@ -2,10 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   assertClaudeToolsCurrent,
   claudeCliArgs,
-  claudeRequestedTools,
   CLAUDE_TOOL_CAPABILITIES,
   CLAUDE_TOOL_SET,
-  CLAUDE_WEB_TOOLS,
 } from '../src/claude-cli.js'
 import { claudeAllowedToolPatterns } from '../src/agent-capabilities.js'
 import type { Logger } from '../src/logger.js'
@@ -39,8 +37,8 @@ describe('claudeCliArgs', () => {
   const args = (tools: readonly string[]) =>
     claudeCliArgs({ model: 'sonnet', tools, mcpArgs: [], appendArgs: [] })
 
-  it('declares the run’s tool set rather than taking the CLI’s headless default', () => {
-    const argv = args(claudeRequestedTools(true))
+  it('declares the tool set rather than taking the CLI’s headless default', () => {
+    const argv = args(CLAUDE_TOOL_SET)
     const at = argv.indexOf('--tools')
     expect(at).toBeGreaterThan(-1)
     expect(argv[at + 1]).toBe(CLAUDE_TOOL_SET.join(','))
@@ -52,7 +50,7 @@ describe('claudeCliArgs', () => {
     // nothing in the argv itself sits bare after one of them.
     const argv = claudeCliArgs({
       model: 'sonnet',
-      tools: claudeRequestedTools(true),
+      tools: CLAUDE_TOOL_SET,
       mcpArgs: ['--mcp-config', '/tmp/mcp.json', '--strict-mcp-config', '--allowedTools', 'a,b'],
       appendArgs: ['--append-system-prompt', 'be brief'],
     })
@@ -65,34 +63,22 @@ describe('claudeCliArgs', () => {
   })
 
   it('carries the checked-in invocation contract the stream reader depends on', () => {
-    const argv = args(claudeRequestedTools(false))
+    const argv = args(CLAUDE_TOOL_SET)
     expect(argv.slice(0, 4)).toEqual(['-p', '--output-format', 'stream-json', '--verbose'])
     expect(argv).toContain('bypassPermissions')
   })
 })
 
-describe('claudeRequestedTools', () => {
-  it('declares the web tools only when the deployment serves web research', () => {
-    const withWeb = claudeRequestedTools(true)
-    const withoutWeb = claudeRequestedTools(false)
-    for (const tool of CLAUDE_WEB_TOOLS) {
-      expect(withWeb).toContain(tool)
-      expect(withoutWeb).not.toContain(tool)
-    }
-    // Nothing ELSE moves with that switch: the two lists differ by the web tools alone.
-    expect(withWeb.filter((t) => !CLAUDE_WEB_TOOLS.includes(t))).toEqual([...withoutWeb])
-  })
-
+describe('CLAUDE_TOOL_SET', () => {
   it('is the ONE list the allow-list re-grant is built from, so the two cannot drift', () => {
     // Derived from the same source the code reads rather than restated: the allow-list is
     // ADDITIVE, so a second, independently-written list would silently unlock what `--tools`
     // withheld on exactly the runs that wire a narrowing tool server.
-    const tools = claudeRequestedTools(false)
     const patterns = claudeAllowedToolPatterns(
       [{ id: 'issues', transport: 'stdio', command: 'npx', allowedTools: ['search'] }],
-      tools,
+      CLAUDE_TOOL_SET,
     )
-    expect(patterns).toEqual(['mcp__issues__search', ...tools])
+    expect(patterns).toEqual(['mcp__issues__search', ...CLAUDE_TOOL_SET])
   })
 
   it('asks for every spelling the capability floor accepts', () => {
@@ -104,6 +90,63 @@ describe('claudeRequestedTools', () => {
       }
     }
   })
+
+  it('asks for everything the CLI’s headless default carries that a container can use', () => {
+    // A declaration is measured against the DEFAULT it replaces, not only against what the issue
+    // asked for: a name the default carried, this container can act on, and the list omits is a
+    // capability the declaration silently took away. Measured off CLI 2.1.246's own `init` event;
+    // the rest of that default (`CronCreate`, `DesignSync`, `SendMessage`, `Workflow`, …) is
+    // deliberately absent because a per-run container can act on none of it.
+    for (const fromDefault of ['Bash', 'Edit', 'Monitor', 'Read', 'Skill', 'Write']) {
+      expect(CLAUDE_TOOL_SET).toContain(fromDefault)
+    }
+  })
+
+  it('keeps a retired spelling beside the successor it aliases onto', () => {
+    // Measured against 2.1.246, each probed ALONE so the grant is attributable: `--tools
+    // BashOutput` grants `TaskOutput`, `KillBash` and `KillShell` both grant `TaskStop`, and
+    // `Agent` grants `Task`. A retired name in this category is not a hole, it is how an OLDER
+    // pinned CLI is asked for the same capability, so dropping it would cost that capability
+    // there while looking like tidying here.
+    for (const [retired, successor] of [
+      ['BashOutput', 'TaskOutput'],
+      ['KillBash', 'TaskStop'],
+      ['KillShell', 'TaskStop'],
+      ['Agent', 'Task'],
+    ]) {
+      expect(CLAUDE_TOOL_SET).toContain(retired)
+      expect(CLAUDE_TOOL_SET).toContain(successor)
+    }
+  })
+
+  it('carries the CURRENT spelling of a name the CLI dropped without aliasing', () => {
+    // The other category, and the one that actually cost a capability. Measured alone against
+    // 2.1.246, `ListMcpResources` and `ReadMcpResource` are dropped rather than aliased onto the
+    // `*Tool` spellings the CLI now serves, so a list carrying only the old pair reached its
+    // tool servers' resources through nothing at all. An old spelling may be kept for an older
+    // pinned CLI, but never INSTEAD of the current one.
+    for (const [dropped, current] of [
+      ['ListMcpResources', 'ListMcpResourcesTool'],
+      ['ReadMcpResource', 'ReadMcpResourceTool'],
+    ]) {
+      expect(CLAUDE_TOOL_SET).toContain(dropped)
+      expect(CLAUDE_TOOL_SET).toContain(current)
+    }
+  })
+
+  it('declares the vendor-served web tools unconditionally', () => {
+    // They are served by the vendor the leased subscription already pays, not by our web-search
+    // proxy, so no deployment wiring decides whether they work. Gating them on the proxy's
+    // availability withheld a WORKING capability on the strength of an unrelated fact; the flag
+    // that would legitimately withhold them is a per-run web-access policy this platform does not
+    // have. If one is ever added, this assertion is the one that should fail first.
+    expect(CLAUDE_TOOL_SET).toContain('WebSearch')
+    expect(CLAUDE_TOOL_SET).toContain('WebFetch')
+  })
+
+  it('names each tool exactly once', () => {
+    expect(new Set(CLAUDE_TOOL_SET).size).toBe(CLAUDE_TOOL_SET.length)
+  })
 })
 
 describe('assertClaudeToolsCurrent', () => {
@@ -111,7 +154,7 @@ describe('assertClaudeToolsCurrent', () => {
     const { log, warns, infos } = recordingLogger()
     // A CLI that renamed `Grep` away: everything else the floor needs is present.
     const granted = satisfyingGrant().filter((t) => t !== 'Grep')
-    assertClaudeToolsCurrent(initEvent(granted, '2.1.245'), claudeRequestedTools(true), log)
+    assertClaudeToolsCurrent(initEvent(granted, '2.1.245'), CLAUDE_TOOL_SET, log)
     expect(infos).toHaveLength(0)
     expect(warns).toHaveLength(1)
     const fields = warns[0]![1] as Record<string, unknown>
@@ -122,7 +165,7 @@ describe('assertClaudeToolsCurrent', () => {
 
   it('does not warn for a fully satisfied request', () => {
     const { log, warns, infos } = recordingLogger()
-    assertClaudeToolsCurrent(initEvent(satisfyingGrant()), claudeRequestedTools(true), log)
+    assertClaudeToolsCurrent(initEvent(satisfyingGrant()), CLAUDE_TOOL_SET, log)
     expect(warns).toHaveLength(0)
     expect(infos).toHaveLength(1)
   })
@@ -131,7 +174,7 @@ describe('assertClaudeToolsCurrent', () => {
     // The request is over-inclusive ON PURPOSE so one image faces several CLI versions. Warning
     // on every alternate spelling would fire on every run, which is a warning nobody reads.
     const { log, warns } = recordingLogger()
-    assertClaudeToolsCurrent(initEvent(satisfyingGrant()), claudeRequestedTools(true), log)
+    assertClaudeToolsCurrent(initEvent(satisfyingGrant()), CLAUDE_TOOL_SET, log)
     expect(warns).toHaveLength(0)
   })
 
@@ -139,7 +182,7 @@ describe('assertClaudeToolsCurrent', () => {
     // `Task` and `Agent` are the same capability under two CLI vocabularies; either satisfies it.
     const { log, warns } = recordingLogger()
     const granted = satisfyingGrant().map((t) => (t === 'Task' ? 'Agent' : t))
-    assertClaudeToolsCurrent(initEvent(granted), claudeRequestedTools(true), log)
+    assertClaudeToolsCurrent(initEvent(granted), CLAUDE_TOOL_SET, log)
     expect(warns).toHaveLength(0)
   })
 
@@ -147,7 +190,7 @@ describe('assertClaudeToolsCurrent', () => {
     // Absent and empty are different facts: a CLI that named no tools tells us nothing about what
     // it granted, and silence there would read exactly like a satisfied request.
     const { log, warns, infos } = recordingLogger()
-    assertClaudeToolsCurrent(initEvent(undefined), claudeRequestedTools(true), log)
+    assertClaudeToolsCurrent(initEvent(undefined), CLAUDE_TOOL_SET, log)
     expect(infos).toHaveLength(0)
     expect(warns).toHaveLength(1)
     expect(String(warns[0]![0])).toContain('unverified')
@@ -155,7 +198,7 @@ describe('assertClaudeToolsCurrent', () => {
 
   it('ignores every event that is not the CLI’s startup report', () => {
     const { log, warns, infos } = recordingLogger()
-    assertClaudeToolsCurrent({ type: 'assistant' }, claudeRequestedTools(true), log)
+    assertClaudeToolsCurrent({ type: 'assistant' }, CLAUDE_TOOL_SET, log)
     assertClaudeToolsCurrent({ type: 'system', subtype: 'commands_changed' }, [], log)
     expect(warns).toHaveLength(0)
     expect(infos).toHaveLength(0)

@@ -23,6 +23,7 @@ import { runAgentInWorkspace, withWorkspace } from './pi-workspace.js'
 import type { RunOptions } from './runner.js'
 import { log, type Logger } from './logger.js'
 import { prepopulateDependencies, withDependencyNote } from './dependency-install.js'
+import { agentCapabilities } from './agent-shared.js'
 import {
   resolvePrTemplateNote,
   withPrTemplateNote,
@@ -201,16 +202,13 @@ export async function runMultiRepoCoding(
           proxyBaseUrl: job.proxyBaseUrl,
           proxyPhasePath: job.proxyPhasePath,
           sessionToken: job.sessionToken,
-          webToolsGuidance: job.webToolsGuidance,
-          webSearchProxy: job.webSearch,
           guardLimits: job.guardLimits,
           ...(job.contextFiles ? { contextFiles: job.contextFiles } : {}),
-          // Skills + tool servers apply to a multi-repo run exactly as to a single-repo one: they
-          // are properties of the AGENT KIND, not of the checkout layout.
-          ...(job.skills?.length ? { skills: job.skills } : {}),
-          ...(job.mcpServers?.length ? { mcpServers: job.mcpServers } : {}),
-          ...(job.referenceScreenshots ? { referenceScreenshots: job.referenceScreenshots } : {}),
-          ...(job.designImages ? { designImages: job.designImages } : {}),
+          // Skills, tool servers and web research apply to a multi-repo run exactly as to a
+          // single-repo one: they are properties of the AGENT KIND, not of the checkout layout.
+          // Through the shared helper rather than re-spread here, which is what let this flow
+          // drift from the single-repo one in the first place.
+          ...agentCapabilities(job),
           multiRepo: true,
         },
         opts,

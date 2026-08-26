@@ -326,12 +326,13 @@ async function runSubscriptionInWorkspace(
     // (unlike an MCP server) there is nothing to report as unservable — the backend never
     // resolves a codex-served generator onto a claude-code step, because admission refuses it.
     ...(spec.generateImages ? { generateImages: true } : {}),
-    // Whether the deployment serves web research at all. It reaches the claude-code CLI as a
-    // `--tools` declaration rather than as provider config (the CLI's web tools are served by
-    // the vendor the leased subscription already pays, not by our proxy), but the DECISION is
-    // the same one `webSearchProxy` carries for Pi: the backend states what it serves and
-    // the harness points. Codex ignores it: its tool surface is per-tool config, not a list.
-    ...(spec.webSearchProxy ? { webSearch: true } : {}),
+    // `spec.webSearchProxy` is deliberately NOT forwarded. It states whether OUR PROXY serves web
+    // research for this run's account, which is what Pi's tools ride and what they would fail
+    // without; neither subscription CLI touches that proxy. Claude Code's `WebSearch`/`WebFetch`
+    // are served by the vendor the leased subscription already pays and are declared
+    // unconditionally (see `CLAUDE_TOOL_SET`), and Codex's surface is per-tool config rather than
+    // a list. Passing the proxy's availability here would withhold working tools on the strength
+    // of an unrelated deployment's wiring.
     ...(opts.agentEnv ? { extraEnv: opts.agentEnv } : {}),
     signal: opts.signal,
     // Run the SAME no-progress guard Pi gets (previously claude-code/codex had none): env

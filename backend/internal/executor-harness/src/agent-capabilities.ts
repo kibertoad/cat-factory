@@ -522,7 +522,7 @@ export function claudeMcpConfig(servers: McpServerSpec[]): {
 /**
  * The tool-name list for `--allowedTools`: every declared server's tools in the CLI's
  * `mcp__<server>__<tool>` convention, PLUS the built-in tools this run declared with `--tools`
- * (`claudeRequestedTools`). A server with no restriction contributes the whole-server pattern, so
+ * (`CLAUDE_TOOL_SET`). A server with no restriction contributes the whole-server pattern, so
  * an allow-list stays one entry per server.
  *
  * Returns undefined when NO server restricts its tools — there is then nothing to narrow, and the
@@ -538,8 +538,8 @@ export function claudeMcpConfig(servers: McpServerSpec[]): {
  * list yields the default set plus `Glob`, `Grep` and the four `Task*` tools. A name here UNLOCKS
  * a tool. That is why `builtIns` is the run's OWN declared set passed by reference rather than a
  * constant re-read here: a separately-derived list would silently re-grant exactly what the
- * `--tools` declaration withheld (the web tools, on a deployment that serves no web research),
- * and only on the runs that happen to wire a narrowing tool server.
+ * `--tools` declaration withheld, and only on the runs that happen to wire a narrowing tool
+ * server.
  *
  * Whether the CLI ENFORCES this list is permission-mode dependent and not a contract we control:
  * the run uses `--permission-mode bypassPermissions` (the container is the sandbox and no human is

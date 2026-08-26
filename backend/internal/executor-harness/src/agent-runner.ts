@@ -45,7 +45,7 @@ import {
   toProgress,
   todosToProgress,
 } from './progress.js'
-import { assertClaudeToolsCurrent, claudeCliArgs, claudeRequestedTools } from './claude-cli.js'
+import { assertClaudeToolsCurrent, claudeCliArgs, CLAUDE_TOOL_SET } from './claude-cli.js'
 
 // The alternate (subscription) harness runners. The Pi harness reaches models
 // through the LLM proxy with a model-locked session token; the Claude Code and
@@ -122,16 +122,6 @@ export interface SubscriptionRunOptions {
    * backend states the capability as unavailable there rather than half-enabling it.
    */
   generateImages?: boolean
-  /**
-   * CLAUDE-CODE ONLY: whether this deployment serves web research for the job, so the CLI's
-   * `WebSearch`/`WebFetch` are declared in the run's `--tools` set (see `claudeRequestedTools`).
-   *
-   * The backend states what IT serves and the harness points, the same shape `AgentJob.webSearch`
-   * already has on the Pi path: a deployment with no search provider wired gets an agent that is
-   * not offered the tools, rather than one that discovers them by failing. Absent ⇒ the run is
-   * declared without them.
-   */
-  webSearch?: boolean
   /**
    * Extra environment for the CLI child, scoped to this job (the tester's secrets, a
    * private-registry npmrc pointer). Merged over the inherited `process.env` at spawn, so the
@@ -729,9 +719,9 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     })
   }
 
-  // The built-in tools this run declares, resolved ONCE: the same list rides `--tools` and the
+  // The built-in tools this run declares, named ONCE: the same list rides `--tools` and the
   // `--allowedTools` re-grant, which is additive rather than inert (see `claudeAllowedToolPatterns`).
-  const tools = claudeRequestedTools(opts.webSearch === true)
+  const tools = CLAUDE_TOOL_SET
 
   const secrets = opts.subscriptionToken ? secretsToRedact(opts.subscriptionToken) : []
   const capture = openClaudeCallCapture(opts, { prompt, folded, secrets })

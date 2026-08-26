@@ -646,8 +646,6 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
             // Read-only: it inspects and reports, making no edits — so the no-progress
             // guard's no-edit bound must not fire on its legitimately edit-free run.
             expectsEdits: false,
-            webToolsGuidance: job.webToolsGuidance,
-            webSearchProxy: job.webSearch,
             contextFiles: job.contextFiles,
             guardLimits: job.guardLimits,
             ...agentCapabilities(job),
@@ -897,8 +895,6 @@ async function runMultiRepoExplore(job: AgentJob, opts: RunOptions): Promise<Age
         sessionToken: job.sessionToken,
         // Read-only: no edits expected, so the no-progress guard's no-edit bound must not fire.
         expectsEdits: false,
-        webToolsGuidance: job.webToolsGuidance,
-        webSearchProxy: job.webSearch,
         ...(job.contextFiles ? { contextFiles: job.contextFiles } : {}),
         guardLimits: job.guardLimits,
         ...agentCapabilities(job),
@@ -1019,8 +1015,6 @@ export function buildSingleRepoCodingSpec(
     proxyPhasePath: job.proxyPhasePath,
     sessionToken: job.sessionToken,
     commitMessage: job.commitMessage ?? job.pr?.title ?? 'Agent changes',
-    webToolsGuidance: job.webToolsGuidance,
-    webSearchProxy: job.webSearch,
     guardLimits: job.guardLimits,
     ...(job.persistentCheckout ? { persistentCheckout: true } : {}),
     ...(job.streamFollowUps ? { streamFollowUps: true } : {}),

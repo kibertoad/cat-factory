@@ -12,28 +12,53 @@ import type { Logger } from './logger.js'
 // no-edit budget), no plan tools (so `step.progress` had no signal to lift), and a dozen tools
 // (`CronCreate`, `DesignSync`, `EnterWorktree`, `ScheduleWakeup`, `SendMessage`, `Workflow`,
 // `ReportFindings`, …) an agent in a per-run container can act on none of.
+//
+// Declaring a set therefore has to be measured against the default it replaces, not just against
+// the issue that asked for it: everything the default carried and a container CAN use has to be
+// asked for by name, or the declaration is itself a capability loss. That is what `Monitor` and
+// the web tools are doing in the list below.
 // ---------------------------------------------------------------------------
 
 /**
- * The web tools, split out because they are the one part of the set a RUN decides rather than the
- * image: the backend states per job whether this deployment serves web research at all, and a
- * harness that advertised the tools anyway would be offering a capability the deployment withheld.
- * Same rule the Pi side already follows, where the web-tools extension is configured only when a
- * provider is actually wired.
- */
-export const CLAUDE_WEB_TOOLS: readonly string[] = ['WebSearch', 'WebFetch']
-
-/**
- * Every non-web built-in tool a run asks the CLI for.
+ * Every built-in tool a run asks the CLI for, and the ONE value that rides both `--tools` and the
+ * `--allowedTools` re-grant.
  *
- * Deliberately OVER-inclusive, and safe to be: the CLI drops a name it does not have without
- * error (measured: `MultiEdit` and `TodoWrite` are ignored by 2.1.245), while a name it HAS and
- * this list lacks is a capability silently removed from every run. The harness image is pinned
- * per workspace, so one image faces several CLI versions; historical and renamed spellings
- * (`Task` ⇄ `Agent`, `MultiEdit`, `TodoWrite`, `KillBash` ⇄ `KillShell`) are kept for that reason
- * alone. When the CLI gains a tool a container agent can use, add it here.
+ * One value rather than two derived ones, because the allow-list turned out to be ADDITIVE rather
+ * than inert: a name in it is UNLOCKED, not merely re-permitted (measured: `--allowedTools
+ * "Bash,Grep"` yields the default set PLUS `Glob` and `Grep`). Two independently-computed lists
+ * would therefore not merely disagree, they would silently re-grant what the other withheld.
+ *
+ * Deliberately OVER-inclusive, and safe to be, because a name the build does not have is dropped
+ * silently rather than refused. The cost is one-directional: a name the CLI HAS and this list
+ * LACKS is a capability silently removed from every run. So the list is measured against the
+ * headless default it replaces, not only against what was wanted, and when the CLI gains a tool a
+ * container agent can use, it is added here.
+ *
+ * A name 2.1.246 does not serve is kept for one of two measured reasons, and they are different
+ * facts worth keeping apart (each probed alone, reading the `init` event's own `tools` array):
+ *
+ *  - ALIASED onto a successor, so the old spelling still buys the capability: `BashOutput` grants
+ *    `TaskOutput`, `KillBash` and `KillShell` both grant `TaskStop`, `Agent` grants `Task`.
+ *  - DROPPED outright (`ListMcpResources`, `ReadMcpResource`, `MultiEdit`, `NotebookRead`,
+ *    `TodoWrite`), and kept only because the harness image is pinned per workspace, so one build
+ *    of this source faces several CLI versions and an older one still serves them.
+ *
+ * The second category is why the CURRENT spelling has to be listed beside the old one rather than
+ * instead of it: `ListMcpResources`/`ReadMcpResource` were carried alone, and since neither is an
+ * alias, every tool-server run reached its resources through nothing at all.
+ *
+ * `WebSearch`/`WebFetch` are unconditional, which is a deliberate reversal of the first cut of this
+ * module. They were gated on the job's `webSearch` flag, which states whether OUR PROXY can serve
+ * web research for the run's account (see `resolveWebSearchAvailability`, whose whole rationale is
+ * that Pi's proxy-backed tools "would just fail/return nothing" without a key). The CLI's web tools
+ * are not proxy-backed: the vendor the leased subscription already pays serves them, and they work
+ * on a deployment with no search provider wired at all. Gating them on that flag therefore withheld
+ * a WORKING capability on the strength of an unrelated fact, which is the opposite of the
+ * pass-through an unwired capability owes. The flag that would legitimately withhold them is a
+ * per-run "may this run reach the web" POLICY, which this platform does not have today; when it
+ * gains one, it gates here and on the Pi path together.
  */
-const CLAUDE_CORE_TOOLS: readonly string[] = [
+export const CLAUDE_TOOL_SET: readonly string[] = [
   'Agent',
   'Bash',
   'BashOutput',
@@ -43,11 +68,17 @@ const CLAUDE_CORE_TOOLS: readonly string[] = [
   'KillBash',
   'KillShell',
   'ListMcpResources',
+  'ListMcpResourcesTool',
+  // Waits on the background shells `Bash(run_in_background)` starts. A tool in its own right
+  // (measured: `Monitor` grants `Monitor`), not an alias of the retired kill/output pair, and it
+  // is in the headless default, so omitting it was this declaration's own capability loss.
+  'Monitor',
   'MultiEdit',
   'NotebookEdit',
   'NotebookRead',
   'Read',
   'ReadMcpResource',
+  'ReadMcpResourceTool',
   'Skill',
   'Task',
   'TaskCreate',
@@ -57,34 +88,20 @@ const CLAUDE_CORE_TOOLS: readonly string[] = [
   'TaskStop',
   'TaskUpdate',
   'TodoWrite',
+  // Loads the schemas of tools a build defers rather than declaring up front. Dropped by 2.1.246
+  // (measured, with and without a tool server wired), and asked for anyway under the
+  // over-inclusive rule: a run wiring several tool servers is exactly the shape a build that
+  // defers tool schemas would hand one to.
+  'ToolSearch',
+  'WebFetch',
+  'WebSearch',
   'Write',
 ]
 
 /**
- * The whole declarable set: {@link CLAUDE_CORE_TOOLS} plus {@link CLAUDE_WEB_TOOLS}. Exported as
- * the vocabulary the run's request is drawn from; what a given run actually asks for is
- * {@link claudeRequestedTools}.
- */
-export const CLAUDE_TOOL_SET: readonly string[] = [...CLAUDE_CORE_TOOLS, ...CLAUDE_WEB_TOOLS]
-
-/**
- * The built-in tools THIS run asks for: the whole set, minus the web tools when the backend did
- * not declare web research available for the job.
- *
- * The same value feeds `--tools` AND the `--allowedTools` re-grant, and it is threaded rather than
- * re-derived at each site because the allow-list turned out to be ADDITIVE rather than inert: a
- * name in it is UNLOCKED, not merely re-permitted (measured: `--allowedTools "Bash,Grep"` yields
- * the default set PLUS `Glob` and `Grep`). Two independently-computed lists would therefore not
- * merely disagree, they would silently re-grant what the other withheld.
- */
-export function claudeRequestedTools(webTools: boolean): readonly string[] {
-  return webTools ? CLAUDE_TOOL_SET : CLAUDE_CORE_TOOLS
-}
-
-/**
  * One capability the run genuinely cannot do without, and every CLI spelling that satisfies it.
  *
- * The floor is expressed as CAPABILITIES rather than as names because {@link CLAUDE_CORE_TOOLS}
+ * The floor is expressed as CAPABILITIES rather than as names because {@link CLAUDE_TOOL_SET}
  * is over-inclusive on purpose: a literal "warn on anything requested but absent" would fire on
  * every single run for the alternate spellings this image carries for other CLI versions, and a
  * warning that is always on is one nobody reads. A capability with no granted spelling is the
@@ -122,7 +139,7 @@ export const CLAUDE_TOOL_CAPABILITIES: readonly ClaudeToolCapability[] = CLAUDE_
  */
 export function claudeCliArgs(opts: {
   model: string
-  /** The built-in tools this run asks for; see {@link claudeRequestedTools}. */
+  /** The built-in tools this run asks for; see {@link CLAUDE_TOOL_SET}. */
   tools: readonly string[]
   /** `--mcp-config` + `--strict-mcp-config` + any `--allowedTools`; empty when no server is wired. */
   mcpArgs: readonly string[]

@@ -11,10 +11,10 @@ import {
   writeClaudeMcpConfig,
   type McpServerSpec,
 } from '../src/agent-capabilities.js'
-import { claudeRequestedTools } from '../src/claude-cli.js'
+import { CLAUDE_TOOL_SET } from '../src/claude-cli.js'
 
-/** The built-ins a run with web research declares, which the allow-list has to carry with it. */
-const BUILT_INS = claudeRequestedTools(true)
+/** The built-ins every run declares, which the allow-list has to carry with it. */
+const BUILT_INS = CLAUDE_TOOL_SET
 
 // The tool-server (MCP) config writers. Each CLI reads a different format, so these pin the two
 // shapes plus the two rules that are easy to get subtly wrong: when an allow-list may be sent at
@@ -84,18 +84,16 @@ describe('claudeAllowedToolPatterns', () => {
     }
   })
 
-  it('carries exactly the run’s OWN declared set, so it can never re-grant what --tools withheld', () => {
-    // The list is ADDITIVE, not a re-grant: a name in it UNLOCKS the tool. So a run declared
-    // without the web tools must not get them back through the one entry an unrelated tool-server
-    // registration happens to send.
-    const withoutWeb = claudeRequestedTools(false)
+  it('carries exactly the declared set, so it can never re-grant what --tools withheld', () => {
+    // The list is ADDITIVE, not a re-grant: a name in it UNLOCKS the tool. So whatever the
+    // declaration leaves out must not come back through the one entry an unrelated tool-server
+    // registration happens to send. Derived from the same constant the runner passes rather than
+    // restated, which is the property that makes the two unable to drift.
     const patterns = claudeAllowedToolPatterns(
       [{ ...STDIO, allowedTools: ['search_issues'] }],
-      withoutWeb,
+      [...BUILT_INS],
     )
-    expect(patterns).not.toContain('WebSearch')
-    expect(patterns).not.toContain('WebFetch')
-    expect(patterns).toContain('Grep')
+    expect(patterns).toEqual(['mcp__issues__search_issues', ...BUILT_INS])
   })
 })
 
