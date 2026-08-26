@@ -12,6 +12,7 @@ import type {
   TestSecretSpec,
 } from './job.js'
 import { standUpFrontend, tearDownFrontend } from './frontend-infra.js'
+import { dockerUnavailableReason, readDockerStatus } from './docker-status.js'
 import { artifactUploadEnv } from './artifact-upload.js'
 import { configurePackageRegistries } from './package-registries.js'
 import { captureRedactedOutput, redactSecrets, registerKnownSecrets } from './redact.js'
@@ -75,17 +76,30 @@ const exec = promisify(execFile)
 
 /**
  * Bring the service's docker-compose dependencies up (local infra only). Best-effort:
- * runs `docker compose -f <path> up -d --wait` in the checkout. A missing Docker daemon
- * or a compose failure is logged and surfaced to the agent (as a prompt note) rather
- * than failing the job — the agent can still run unit-level tests and report what it
- * could. A no-op for ephemeral / no-infra / no-compose-path runs.
+ * runs `docker compose -f <path> up -d --wait` in the checkout. A compose failure is logged
+ * and surfaced to the agent (as a prompt note) rather than failing the job — the agent can
+ * still run unit-level tests and report what it could. A no-op for ephemeral / no-infra /
+ * no-compose-path runs.
+ *
+ * A DECIDED absence of a Docker daemon short-circuits it: the container's own probe
+ * ({@link readDockerStatus}, recorded by `entrypoint.sh`) already knows there is nothing to
+ * talk to, so running compose against it would only turn a fact this container holds into a
+ * connection error the agent has to interpret. The record then carries `dockerAvailable: false`
+ * and the stated cause, which is what makes the Tester step say why it ran no infra instead of
+ * looking like a Tester that simply chose not to. Anything OTHER than a decided absence
+ * attempts as before (`DockerStatus.available` in docker-status.ts states why "undecided" is its
+ * own value).
  *
  * Whether it succeeds or fails, the (redacted, bounded) command output is captured into a
  * {@link InfraSetupRecord} returned alongside the prompt `note`, so the backend can surface
  * the in-container dependency stand-up logs on the Tester step — the failure-class artifact
  * the orchestrator-side provisioning logs can't see.
+ *
+ * Exported for the unit suite (like {@link buildInfraNotes}): the refusal branch is a decision
+ * this container makes about itself, and the acceptance suite can only exercise it on a machine
+ * where the daemon genuinely fails.
  */
-async function standUpInfra(
+export async function standUpInfra(
   dir: string,
   infra: ServiceInfraSpec,
   signal: AbortSignal | undefined,
@@ -95,6 +109,28 @@ async function standUpInfra(
     return { started: false }
   }
   const startedAt = Date.now()
+  const docker = await readDockerStatus()
+  const unavailable = dockerUnavailableReason(docker)
+  if (unavailable) {
+    const note = `the dependencies could not be started: ${unavailable}`
+    logger.warn('agent(explore): infra stand-up refused, no docker daemon', {
+      composePath: infra.composePath,
+      dockerSource: docker.source,
+      dockerReason: docker.reason,
+    })
+    return {
+      started: false,
+      note,
+      record: {
+        started: false,
+        dockerAvailable: false,
+        composePath: infra.composePath,
+        at: Date.now(),
+        durationMs: Date.now() - startedAt,
+        error: redactSecrets(note),
+      },
+    }
+  }
   try {
     logger.info('agent(explore): standing up infra', { composePath: infra.composePath })
     // Raise maxBuffer well above the 1MB default so a chatty compose stand-up can't fail the
@@ -109,6 +145,7 @@ async function standUpInfra(
       started: true,
       record: {
         started: true,
+        dockerAvailable: true,
         composePath: infra.composePath,
         at: Date.now(),
         durationMs: Date.now() - startedAt,
@@ -128,6 +165,10 @@ async function standUpInfra(
       note,
       record: {
         started: false,
+        // A compose failure with a REACHABLE daemon: the two `false`s above and here are
+        // different diagnoses (nothing to talk to vs the stack itself did not come up), and
+        // only stating both keeps the second from being read as the first.
+        ...(docker.available === true ? { dockerAvailable: true } : {}),
         composePath: infra.composePath,
         at: Date.now(),
         durationMs: Date.now() - startedAt,
@@ -337,9 +378,9 @@ export async function handleAgent(job: AgentJob, opts: RunOptions = {}): Promise
 
 /**
  * Layer extra child-process env onto a job's {@link RunOptions}. The agent CLI is spawned with
- * `{...process.env, ...agentEnv}`, so this is how per-job values reach the agent (and the shell
- * tools it spawns) WITHOUT mutating the harness's own `process.env` — which is shared by every
- * concurrent job when the harness runs as a native host process. Empty `env` ⇒ `opts` unchanged.
+ * `agentChildEnv(agentEnv)`, so this is how per-job values reach the agent (and the shell tools it
+ * spawns) WITHOUT mutating the harness's own `process.env` — which is shared by every concurrent
+ * job when the harness runs as a native host process. Empty `env` ⇒ `opts` unchanged.
  */
 function withAgentEnv(opts: RunOptions, env: Record<string, string>): RunOptions {
   if (Object.keys(env).length === 0) return opts

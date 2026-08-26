@@ -945,6 +945,16 @@ export interface GuardLimitsSpec {
 export interface InfraSetupRecord {
   /** Whether `docker compose up --wait` succeeded (the dependencies are up). */
   started: boolean
+  /**
+   * Whether this container had a Docker daemon to talk to at all, when it knows.
+   *
+   * The distinction `started` alone cannot make: a stack that failed to come up and a container
+   * with no daemon are the same `started: false` and opposite problems (one is the service's
+   * compose file, the other is the executor image or the sandbox it runs in). ABSENT means this
+   * container's probe reached no verdict — never assume `false` from absence, which is the exact
+   * mistake that let a daemon-less image read as an ordinary infra failure for months.
+   */
+  dockerAvailable?: boolean
   /** The repo-relative compose file that was stood up. */
   composePath?: string
   /** Epoch ms the stand-up attempt finished. */

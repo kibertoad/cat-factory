@@ -5,6 +5,7 @@ import { parseAgentJob, parseInlineJob } from './job.js'
 import { handleAgent } from './agent.js'
 import { handleInline } from './inline.js'
 import { redactSecrets } from './git.js'
+import { readDockerStatus } from './docker-status.js'
 import { JobRegistry, loadRunnerLimits, type JobResultBase, type RunOptions } from './runner.js'
 import { log } from './logger.js'
 import { HARNESS_VERSION } from './version.js'
@@ -128,10 +129,17 @@ const server = createServer((req, res) => {
       // fail loudly early (see version.ts). Unauthenticated like the rest of /health — the
       // version is not a secret. An old image predating this field simply omits it, which the
       // backend treats as a stale signal.
+      //
+      // `docker` is this container's own verdict on its daemon (see docker-status.ts). It rides
+      // /health because that is where an operator and a boot-time probe already look, and because
+      // the alternative was every agent discovering an absent daemon for itself, one failed
+      // compose command at a time. Reported, never enforced here: what REFUSES on it is the
+      // stand-up in agent.ts, which is the only place that knows a job wanted a daemon.
       return send(res, 200, {
         status: 'ok',
         ...(HARNESS_VERSION ? { version: HARNESS_VERSION } : {}),
         capabilities: HARNESS_BODY_CAPABILITIES,
+        docker: await readDockerStatus(),
       })
     }
     // All non-health endpoints are gated by the optional shared secret.
