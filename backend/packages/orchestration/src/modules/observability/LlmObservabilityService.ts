@@ -154,6 +154,12 @@ export interface RecordLlmCallInput {
    * one (the harness's job-scoped `seq`). Absent/undefined ⇒ null.
    */
   turnIndex?: number | null
+  /**
+   * TRUE when the row carries only tokens and stands for no model call, so `calls` excludes it
+   * while every token sum keeps it. See {@link LlmCallMetric.spendOnly}. Absent ⇒ false: a
+   * producer with no shortfall concept files calls.
+   */
+  spendOnly?: boolean
   messageCount: number
   toolCount: number
   requestMaxTokens: number | null
@@ -294,6 +300,7 @@ export class LlmObservabilityService {
       overheadMs,
       phase: normalizeCallPhase(input.phase),
       turnIndex: input.turnIndex ?? null,
+      spendOnly: input.spendOnly === true,
       promptText: clampBody(stored.promptText),
       promptPrefixCount: stored.promptPrefixCount,
       promptHash: stored.promptHash,
@@ -514,6 +521,10 @@ export function makeHarnessCallRecorder(
         // unattributed slice rather than being guessed at from the agent kind.
         ...(call.phase !== undefined ? { phase: call.phase } : {}),
         turnIndex: call.standsForJob ? null : turnIndex,
+        // The same fact `standsForJob` already states, persisted so a rollup can act on it. A NULL
+        // `turnIndex` cannot carry it: a plain inline call has one too, so a reader could not tell
+        // "no turn to report" from "no call happened".
+        spendOnly: call.standsForJob === true,
         messageCount: call.messageCount,
         toolCount: 0,
         requestMaxTokens: null,
@@ -594,6 +605,7 @@ export function makeInlineCallRecorder(
       model: call.model,
       streaming: false,
       turnIndex: call.turnIndex ?? null,
+      spendOnly: call.spendOnly === true,
       messageCount: call.messageCount,
       toolCount: call.toolCount,
       requestMaxTokens: call.requestMaxTokens,

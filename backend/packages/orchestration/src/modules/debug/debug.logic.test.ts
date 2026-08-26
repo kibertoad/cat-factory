@@ -264,6 +264,7 @@ describe('toDebugLlmCall', () => {
     streaming: true,
     phase: 'agent',
     turnIndex: null,
+    spendOnly: false,
     messageCount: 12,
     toolCount: 3,
     requestMaxTokens: 1_000,

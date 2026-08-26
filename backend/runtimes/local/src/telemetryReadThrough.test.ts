@@ -31,6 +31,7 @@ function metric(id: string, executionId: string, createdAt: number): LlmCallMetr
     streaming: false,
     phase: 'agent',
     turnIndex: null,
+  spendOnly: false,
     messageCount: 1,
     toolCount: 0,
     requestMaxTokens: null,

@@ -4,7 +4,11 @@ import { defaultAgentKindRegistry, type AgentKindRegistry } from '../kinds/regis
 import { userPromptFor } from '../catalog.js'
 import { JUDGE_SYSTEM_PROMPT } from './judge.js'
 import { companionSystemPrompt } from './companion.js'
-import { anchoredQualityScale, renderPriorReviewRounds } from './review-rounds.js'
+import {
+  anchoredQualityScale,
+  renderOpenFindings,
+  renderPriorReviewRounds,
+} from './review-rounds.js'
 
 // The prompt half of the companion loop's memory. `userPromptFor` is the ONE assembly both
 // companion surfaces and the producer pass through, so these assert at that seam rather than at a
@@ -692,5 +696,128 @@ describe('prompt assembly order', () => {
     )
     expect(prompt.indexOf('THE-STABLE-BRIEF')).toBeGreaterThan(-1)
     expect(prompt.indexOf('THE-STABLE-BRIEF')).toBeLessThan(prompt.indexOf('THE-VOLATILE-FEEDBACK'))
+  })
+})
+
+describe('renderOpenFindings', () => {
+  // What a CONSUMER of a reviewed artifact is told. The wording is the whole feature: the same
+  // points rendered without "these were never answered" read as history a previous step already
+  // dealt with, and a reader who believes that ignores them exactly as if they were never carried.
+
+  const finding = (body: string, severity?: 'blocker' | 'major' | 'minor', anchorId?: string) => ({
+    body,
+    ...(severity ? { severity } : {}),
+    ...(anchorId ? { anchorId } : {}),
+  })
+
+  it('names the producer and says plainly that the points are unfixed', () => {
+    const text = renderOpenFindings('architect', [
+      finding('rootDir src pulls the tests into the build', 'major', 'steps/2'),
+    ]).join('\n')
+
+    expect(text).toContain('`architect`')
+    expect(text).toContain('They are not fixed.')
+    expect(text).toContain('the run advanced regardless')
+    expect(text).toContain('item `steps/2`')
+    expect(text).toContain('[major]')
+    expect(text).toContain('rootDir src pulls the tests into the build')
+  })
+
+  it('asks the reader not to build the defect in, never to go and revise the predecessor', () => {
+    // A coder told to fix the design comes back with a design edit and no code.
+    const text = renderOpenFindings('architect', [
+      finding('the ingress class is wrong', 'major'),
+    ]).join('\n')
+    expect(text).toContain('do not build them in')
+    expect(text).toMatch(/say so in your report/)
+  })
+
+  it('orders worst first and renders a point that anchors nothing against the output as a whole', () => {
+    const text = renderOpenFindings('spec-writer', [
+      finding('a general concern'),
+      finding('must not ship', 'blocker'),
+    ]).join('\n')
+
+    expect(text.indexOf('must not ship')).toBeLessThan(text.indexOf('a general concern'))
+    expect(text).toContain('On that output overall:')
+  })
+
+  it('states a trim rather than silently shortening a point', () => {
+    const text = renderOpenFindings('architect', [finding('x'.repeat(5_000), 'major')]).join('\n')
+    expect(text).toContain('… [trimmed]')
+  })
+
+  it('renders nothing at all for an empty list', () => {
+    // An empty section would read as "reviewed, defects: none", which is a claim nobody made.
+    expect(renderOpenFindings('architect', [])).toEqual([])
+  })
+})
+
+describe('open findings reach the next producer through the prompt', () => {
+  // The end-to-end half: `userPromptFor` is the one assembly every dispatch goes through, so a
+  // finding attached to a prior output has to come out of it attributed to that output. This is the
+  // assertion that would have failed on the run that motivated the slice, where a `major` naming a
+  // build-breaking tsconfig passed with the verdict and never reached the coder that implemented it.
+
+  it('renders the section under the output it qualifies', () => {
+    const prompt = userPromptFor(
+      context({
+        agentKind: 'coder',
+        priorOutputs: [
+          {
+            agentKind: 'architect',
+            output: 'Step 2: one tsconfig.json with rootDir src.',
+            openFindings: [
+              { body: 'rootDir src makes npm run build fail on the tests', severity: 'major' },
+            ],
+          },
+        ],
+      }),
+      registry(),
+    )
+
+    expect(prompt).toContain('### architect')
+    expect(prompt).toContain('Review findings still OPEN against the `architect` output')
+    expect(prompt).toContain('rootDir src makes npm run build fail on the tests')
+    // Under the artifact, not appended at the end of the prompt, so a run with two reviewed
+    // producers cannot render a finding against the wrong one.
+    expect(prompt.indexOf('### architect')).toBeLessThan(prompt.indexOf('still OPEN'))
+  })
+
+  it('reaches the BESPOKE prompt path too, not only the standard phase templates', () => {
+    // Two assemblies render `priorOutputs`: the precompiled Handlebars partial every standard
+    // phase shares, and `buildBaseUserPrompt` for a kind that is neither. A fold wired into one of
+    // them is invisible for exactly the kinds a deployment adds itself, which is the half nobody
+    // would notice was missing.
+    const reg = registry()
+    reg.register({ kind: 'auditor', systemPrompt: 'You audit.' })
+    const prompt = userPromptFor(
+      context({
+        agentKind: 'auditor',
+        priorOutputs: [
+          {
+            agentKind: 'architect',
+            output: 'the design',
+            openFindings: [{ body: 'the ingress is unclaimed', severity: 'major' }],
+          },
+        ],
+      }),
+      reg,
+    )
+
+    expect(prompt).toContain('Review findings still OPEN against the `architect` output')
+    expect(prompt).toContain('the ingress is unclaimed')
+  })
+
+  it('leaves a prior output with nothing open completely unannotated', () => {
+    const prompt = userPromptFor(
+      context({
+        agentKind: 'coder',
+        priorOutputs: [{ agentKind: 'architect', output: 'a clean design' }],
+      }),
+      registry(),
+    )
+    expect(prompt).toContain('a clean design')
+    expect(prompt).not.toContain('still OPEN')
   })
 })

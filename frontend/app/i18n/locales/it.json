@@ -3844,7 +3844,9 @@
       "prompt": "Prompt",
       "promptPrefixOmitted": "(solo nuovi messaggi: {count} precedenti omessi)",
       "response": "Risposta",
-      "reasoning": "Ragionamento"
+      "reasoning": "Ragionamento",
+      "spendOnly": "non e una chiamata",
+      "spendOnlyTitle": "Consumo di token che l'harness ha riportato senza attribuirlo a un turno. Conta nei totali di token di questa esecuzione e in nessun conteggio di chiamate."
     },
     "context": {
       "injectedFiles": "File di contesto iniettati",

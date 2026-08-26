@@ -58,6 +58,31 @@ export interface LlmCallMetric {
    * Deliberately not faked from a message count — an envelope is not a turn.
    */
   turnIndex: number | null
+  /**
+   * TRUE when this row carries only tokens, standing for NO model call of its own.
+   *
+   * A harness CLI reports usage two ways at once, and one of them under-reports: Claude Code costs
+   * every turn's INPUT while leaving its output at the message-start snapshot, so the per-turn rows
+   * sum to less than the terminal cumulative figure. The producer files the shortfall as its own
+   * row rather than growing a measured turn by tokens it did not produce, which would make a
+   * derived number indistinguishable from a reported one (`cli-inline.ts`'s `fileUnaccounted`, and
+   * the container harness's `unaccountedUsageCall`).
+   *
+   * That row is real spend and belongs in every token sum. It is NOT a call, and counting it as one
+   * inflated `calls` by exactly one per dispatch on every subscription-harness step: a 4-turn
+   * architect read as 5. So the two facts are separated here rather than inferred downstream, where
+   * they cannot be: a `null` {@link turnIndex} is equally the shape of a genuine inline call, so
+   * there is nothing for a reader to tell them apart by.
+   *
+   * FALSE for the shortfall row of a CLI that narrates no turns at all (`codex exec`). Nothing else
+   * recorded that call, so there the aggregate IS the call record, down to its bodies and duration.
+   *
+   * REQUIRED, like {@link turnIndex} and unlike the port INPUT that feeds it: a stored row is a
+   * call or it is not, and a producer that never thought about the question would otherwise be
+   * silently defaulted into the answer that inflates the count. Callers with no shortfall concept
+   * write `false`, which is them saying so.
+   */
+  spendOnly: boolean
   /** Number of chat messages in the request. */
   messageCount: number
   /** Number of tools offered in the request (0 = the agent can't edit anything). */
@@ -433,6 +458,13 @@ export interface InlineLlmCall {
    * stream gave them. Never faked from a message count — an envelope is not a turn.
    */
   turnIndex?: number
+  /**
+   * TRUE when this row is a SPEND CORRECTION rather than a model call: the shortfall a harness CLI
+   * leaves behind when it costs some of what it spent and not the rest. Filed as its own row so a
+   * measured turn is never grown by tokens it did not produce, counted in every token sum, and
+   * counted in no `calls` figure. See {@link LlmCallMetric.spendOnly} for the whole rule.
+   */
+  spendOnly?: boolean
   /** FRESH (uncached) input tokens — exclusive of both cache classes. */
   promptTokens: number
   cacheReadTokens: number

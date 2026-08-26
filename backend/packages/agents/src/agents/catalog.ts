@@ -26,6 +26,7 @@ import {
   ACCOUNTING_REVIEW_DIRECTIVE,
   FEEDBACK_ACCOUNTING_DIRECTIVE,
   PRIOR_ROUNDS_DIRECTIVE,
+  renderOpenFindings,
   renderPriorReviewRounds,
   renderRevisionComments,
 } from './prompts/review-rounds.js'
@@ -716,6 +717,10 @@ function buildBaseUserPrompt(
     lines.push('', 'Work from earlier agents in this pipeline:')
     for (const p of priorOutputs) {
       lines.push(`### ${p.agentKind}`, p.output)
+      // Immediately under the output they qualify, never collected into one list at the end: the
+      // reader has to be able to tell WHICH artifact a finding is against, and a run with two
+      // reviewed producers renders two of these.
+      if (p.openFindings?.length) lines.push(...renderOpenFindings(p.agentKind, p.openFindings))
     }
   }
   lines.push('', 'Produce your contribution. Be concise and concrete.')

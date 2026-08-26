@@ -1791,7 +1791,9 @@
       "prompt": "פרומפט",
       "promptPrefixOmitted": "(הודעות חדשות בלבד: {count} מוקדמות יותר הושמטו)",
       "response": "תגובה",
-      "reasoning": "חשיבה"
+      "reasoning": "חשיבה",
+      "spendOnly": "לא קריאה",
+      "spendOnlyTitle": "צריכת טוקנים שה-harness דיווח עליה בלי לשייך אותה לתור כלשהו. נספרת בסכומי הטוקנים של ריצה זו ולא בשום ספירת קריאות."
     },
     "context": {
       "injectedFiles": "קבצי הקשר שהוזרקו",

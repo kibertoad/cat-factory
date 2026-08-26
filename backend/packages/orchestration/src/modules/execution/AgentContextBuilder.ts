@@ -521,7 +521,11 @@ export class AgentContextBuilder {
     const agentConfig = block.agentConfig
     const customTaskType = this.customTaskTypeFor(block)
     const reproduction = reproductionFor(agentKind, agentConfig, instance, validationChecks)
-    const priorOutputs = priorOutputsFor(instance, architectureDirection)
+    const priorOutputs = priorOutputsFor(
+      instance,
+      architectureDirection,
+      this.deps.agentKindRegistry,
+    )
     return {
       agentKind,
       pipelineName: instance.pipelineName,

@@ -873,7 +873,16 @@ function exportJson() {
                       <span :title="t('observability.call.transportVsExecution')">
                         {{ formatMs(c.overheadMs) }} / {{ formatMs(c.upstreamMs) }}
                       </span>
-                      <UBadge v-if="!c.ok" color="error" variant="subtle" size="sm">
+                      <UBadge
+                        v-if="c.spendOnly"
+                        color="neutral"
+                        variant="subtle"
+                        size="sm"
+                        :title="t('observability.call.spendOnlyTitle')"
+                      >
+                        {{ t('observability.call.spendOnly') }}
+                      </UBadge>
+                      <UBadge v-else-if="!c.ok" color="error" variant="subtle" size="sm">
                         {{ c.httpStatus ?? t('observability.call.error') }}
                       </UBadge>
                       <UBadge

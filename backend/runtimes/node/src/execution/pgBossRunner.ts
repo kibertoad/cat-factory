@@ -49,9 +49,9 @@ interface AdvanceJob {
  * and let a second driver start. `heartbeatSeconds` is the separate, fast crash-recovery
  * lever: a live worker auto-heartbeats its active job, so a crashed worker is detected
  * (and its job retried) within `heartbeatSeconds` rather than waiting out the large
- * `expireInSeconds` cap. `retryLimit`/`retryBackoff` make pg-boss itself re-drive a job
- * that throws, expires, or misses its heartbeat (a crashed worker) — the durable backstop.
- * See `executionRuntime` for how both are sized.
+ * `expireInSeconds` cap. `retryLimit` makes pg-boss itself re-drive a job that throws, expires, or
+ * misses its heartbeat (a crashed worker), the durable backstop. See `executionRuntime` for how
+ * both are sized, and {@link driveJobOptions} for why the retry delay is FLAT.
  */
 export interface AdvanceQueueOptions {
   expireInSeconds: number
@@ -61,24 +61,44 @@ export interface AdvanceQueueOptions {
 }
 
 /**
- * The single source of truth for an advance job's options, shared by `send` (one job) and
- * `insert` (a batch) so a batched re-drive carries EXACTLY the same singletonKey/retry/
- * expiry/heartbeat semantics as an individual `send` — the dedup linchpin can't drift
- * between the two enqueue paths.
+ * The single source of truth for a DRIVE job's options, across all four drive queues (execution,
+ * bootstrap, env-test, env-config-repair) and across both enqueue paths, `send` (one job) and
+ * `insert` (a batch), so a batched re-drive carries EXACTLY the same singletonKey/retry/expiry/
+ * heartbeat semantics as an individual `send`. The dedup linchpin cannot drift between the two
+ * enqueue paths, and the retry policy below cannot drift between the four queues, which is what it
+ * did as four identical literals.
+ *
+ * `retryBackoff` is OFF, and that is a claim about what these jobs actually fail from. Exponential
+ * backoff is sized for a job whose INPUT is bad, where retrying sooner only fails sooner. A drive
+ * job's dominant failure is neither: the worker holding it went away (a deploy, a crash, a rebuild
+ * under `node --watch` on a developer's laptop), pg-boss reports that as `job heartbeat timeout`,
+ * and the very next attempt would have succeeded. Backing off there turns a five-second process
+ * restart into minutes of a run sitting still, growing with every restart, and NOTHING else can
+ * shorten it: the stale-run sweeper classifies a `retry`-state job as `live` (`classifyAdvanceJob`,
+ * correctly, since it is queued and will be picked up) and the `exclusive` policy makes a fresh `send` a
+ * no-op while it exists, so this delay alone decides when the run moves again.
+ *
+ * A flat delay holds the worst case at roughly `heartbeatSeconds` plus `retryDelaySeconds`. The two
+ * mechanisms that genuinely do want patience are untouched: `retryLimit` still bounds a job that
+ * keeps throwing, and once it is spent the job leaves the created/active/retry set, which is
+ * exactly when `classifyAdvanceJob` starts answering `missing` and the stale-run sweeper takes over
+ * on its own interval with the hard-stall backstop behind it. The one queue deliberately left on
+ * backoff is `githubSyncRunner`: it fails from a rate-limited vendor, which is the case backoff is
+ * for.
  */
-function advanceJobOptions(executionId: string, opts: AdvanceQueueOptions) {
+export function driveJobOptions(singletonKey: string, opts: AdvanceQueueOptions) {
   return {
-    singletonKey: executionId,
+    singletonKey,
     expireInSeconds: opts.expireInSeconds,
     heartbeatSeconds: opts.heartbeatSeconds,
     retryLimit: opts.retryLimit,
     retryDelay: opts.retryDelaySeconds,
-    retryBackoff: true,
+    retryBackoff: false,
   }
 }
 
 function sendOptions(executionId: string, opts: AdvanceQueueOptions): SendOptions {
-  return advanceJobOptions(executionId, opts)
+  return driveJobOptions(executionId, opts)
 }
 
 /**
@@ -91,7 +111,7 @@ function sendOptions(executionId: string, opts: AdvanceQueueOptions): SendOption
  * no-double-drive guarantee while collapsing N round-trips into one.
  */
 function advanceInsert(data: AdvanceJob, opts: AdvanceQueueOptions): JobInsert<AdvanceJob> {
-  return { data, ...advanceJobOptions(data.executionId, opts) }
+  return { data, ...driveJobOptions(data.executionId, opts) }
 }
 
 /**

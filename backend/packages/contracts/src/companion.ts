@@ -29,8 +29,21 @@ import { fragmentAdherenceSchema } from './fragment-adherence.js'
 /** The default quality bar a companion's rating must reach for the run to proceed. */
 export const DEFAULT_COMPANION_THRESHOLD = 0.8
 
-/** The default number of automatic rework attempts before a companion parks for a human. */
-export const DEFAULT_COMPANION_MAX_ATTEMPTS = 3
+/**
+ * The default number of automatic rework attempts before a companion parks for a human.
+ *
+ * Raised from the 3 the engine hard-coded before any of this was policy. A rework round is not
+ * priced like the other budgets around it: a judge bounce or a reviewer pass buys another
+ * JUDGEMENT, while a companion round buys WORK, because the producer re-runs against the findings
+ * and whatever it last wrote is what the cap accepts. The round that gets cut is therefore the one
+ * that would have improved the artifact, and it is cut at the point the loop is still finding real
+ * defects. Every shipped preset inherits this, the unattended one deliberately included (see
+ * kernel's `RISK_POLICY_SEEDS`), so there is ONE number to move rather than a policy per posture.
+ *
+ * It is a floor, not a ceiling: a workspace that wants fewer sets `companionMaxReworks` (0 means
+ * "do not spend model calls looping", and is still not permission to accept an open `blocker`).
+ */
+export const DEFAULT_COMPANION_MAX_ATTEMPTS = 4
 
 /**
  * A companion agent's structured assessment of the producer step's output. `rating`

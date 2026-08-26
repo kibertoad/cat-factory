@@ -337,3 +337,44 @@ function clip(text: string, generous: boolean): string {
   const limit = generous ? LATEST_ROUND_CHARS : EARLIER_ROUND_CHARS
   return text.length > limit ? `${text.slice(0, limit)}… [trimmed]` : text
 }
+
+/**
+ * The points a reviewer raised against an EARLIER step's output that were never answered, rendered
+ * for whoever is about to build on that output.
+ *
+ * The third rendering of one loop's findings and the only one addressed to a stranger, which is
+ * what its wording has to carry. {@link renderRevisionComments} says "fix these" to the producer
+ * that wrote the thing; {@link renderPriorReviewRounds} says "here is what you already asked for"
+ * to the grader. This one says something neither does: the review happened, these points stood, and
+ * the run moved on anyway. A consumer told only "here are some findings" reasonably reads them as
+ * already handled, which is the exact misreading that makes carrying them forward worthless.
+ *
+ * It states no obligation to go and fix the earlier artifact, deliberately. The reader is a
+ * different step with a different deliverable, and an instruction to revise a predecessor's
+ * document is how a coder comes back with a design edit and no code. What it asks for is the thing
+ * only this reader can do: not build the defect in, and say so when the point turns out to be wrong
+ * or already handled.
+ *
+ * Each body is clipped by the same rule as an earlier round's ({@link clip}), which states the trim
+ * rather than silently shortening a point into something the reader would act on differently.
+ */
+export function renderOpenFindings(
+  agentKind: string,
+  findings: readonly ReviewedPoint[],
+): string[] {
+  if (!findings.length) return []
+  const lines = [
+    '',
+    `Review findings still OPEN against the \`${agentKind}\` output above. An automated reviewer ` +
+      'raised these, the work was never revised to answer them, and the run advanced regardless. ' +
+      'They are not fixed. Treat them as known defects in what you were handed: do not build them ' +
+      'in, and where a point is wrong or no longer applies, say so in your report rather than ' +
+      'silently ignoring it.',
+  ]
+  for (const finding of worstFirst(findings)) {
+    const grade = finding.severity ? ` [${finding.severity}]` : ''
+    const target = reviewedPointTarget(finding)
+    lines.push('', `On ${target ?? 'that output overall'}:${grade}`, clip(finding.body, false))
+  }
+  return lines
+}

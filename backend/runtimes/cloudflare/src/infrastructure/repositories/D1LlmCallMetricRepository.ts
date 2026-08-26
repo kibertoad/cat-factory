@@ -44,6 +44,7 @@ const CARRY_COST_SUBQUERY_SQL = `SELECT
        upstream_ms,
        overhead_ms,
        ok,
+       spend_only,
        (prompt_tokens + cache_read_tokens + cache_write_tokens) AS input_tokens,
        COUNT(*) OVER (PARTITION BY agent_kind)
          - ROW_NUMBER() OVER (PARTITION BY agent_kind ORDER BY created_at, message_count, id)
@@ -110,6 +111,7 @@ interface MetricRow {
   streaming: number
   phase: string
   turn_index: number | null
+  spend_only: number
   message_count: number
   tool_count: number
   request_max_tokens: number | null
@@ -144,6 +146,7 @@ function rowToMetric(row: MetricRow): LlmCallMetric {
     streaming: row.streaming === 1,
     phase: row.phase,
     turnIndex: row.turn_index,
+    spendOnly: row.spend_only === 1,
     messageCount: row.message_count,
     toolCount: row.tool_count,
     requestMaxTokens: row.request_max_tokens,
@@ -172,7 +175,7 @@ function rowToMetric(row: MetricRow): LlmCallMetric {
  * themselves are added by {@link bodyColumns} so the SLICE can be bound to the caller's budget.
  */
 const PAGE_METADATA_COLUMNS = `id, workspace_id, execution_id, agent_kind, provider, model,
-  created_at, streaming, phase, turn_index, message_count, tool_count, request_max_tokens,
+  created_at, streaming, phase, turn_index, spend_only, message_count, tool_count, request_max_tokens,
   prompt_tokens,
   cache_read_tokens, cache_write_tokens, completion_tokens, total_tokens, finish_reason, upstream_ms,
   overhead_ms, total_ms, ok, http_status, error_message, prompt_prefix_count,
@@ -288,6 +291,7 @@ function rowToPage(row: PageRow): LlmCallMetricPage {
     streaming: row.streaming === 1,
     phase: row.phase,
     turnIndex: row.turn_index,
+    spendOnly: row.spend_only === 1,
     messageCount: row.message_count,
     toolCount: row.tool_count,
     requestMaxTokens: row.request_max_tokens,
@@ -367,8 +371,9 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
             prompt_tokens, cache_read_tokens, cache_write_tokens, completion_tokens,
             total_tokens, finish_reason,
             upstream_ms, overhead_ms, total_ms, ok, http_status, error_message,
-            prompt_text, prompt_prefix_count, prompt_hash, response_text, reasoning_text)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            prompt_text, prompt_prefix_count, prompt_hash, response_text, reasoning_text,
+            spend_only)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO NOTHING`,
       )
       .bind(
@@ -402,6 +407,7 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
         metric.promptHash,
         metric.responseText,
         metric.reasoningText,
+        metric.spendOnly ? 1 : 0,
       )
   }
 
@@ -562,7 +568,7 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
            phase                                                        AS phase,
            provider                                                     AS provider,
            model                                                        AS model,
-           COUNT(*)                                                     AS calls,
+           COALESCE(SUM(CASE WHEN spend_only = 0 THEN 1 ELSE 0 END), 0)  AS calls,
            COALESCE(SUM(prompt_tokens), 0)                              AS prompt_tokens,
            COALESCE(SUM(cache_read_tokens), 0)                          AS cache_read_tokens,
            COALESCE(SUM(cache_write_tokens), 0)                         AS cache_write_tokens,

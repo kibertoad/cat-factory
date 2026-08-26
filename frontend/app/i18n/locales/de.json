@@ -3844,7 +3844,9 @@
       "prompt": "Prompt",
       "promptPrefixOmitted": "(nur neue Nachrichten: {count} frühere ausgelassen)",
       "response": "Antwort",
-      "reasoning": "Reasoning"
+      "reasoning": "Reasoning",
+      "spendOnly": "kein Aufruf",
+      "spendOnlyTitle": "Tokenverbrauch, den der Harness gemeldet hat, ohne ihn einer Runde zuzuordnen. Zaehlt in den Token-Summen dieses Laufs und in keiner Aufrufzahl."
     },
     "context": {
       "injectedFiles": "Injizierte Kontextdateien",

@@ -1791,7 +1791,9 @@
       "prompt": "Prompt",
       "promptPrefixOmitted": "(nouveaux messages uniquement : {count} antérieurs omis)",
       "response": "Réponse",
-      "reasoning": "Raisonnement"
+      "reasoning": "Raisonnement",
+      "spendOnly": "pas un appel",
+      "spendOnlyTitle": "Consommation de jetons signalee par le harness sans etre attribuee a un tour. Comptee dans les totaux de jetons de cette execution et dans aucun nombre d'appels."
     },
     "context": {
       "injectedFiles": "Fichiers de contexte injectés",

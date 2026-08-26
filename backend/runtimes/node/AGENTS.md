@@ -48,7 +48,15 @@ transport, and Node model provisioning.
   notification channel + consensus wrap), and `container-content-library-deps.ts`.
 - `execution/`: pg-boss durable execution (`PgBossWorkRunner` enqueues `execution.advance`;
   `driveExecution` runs the same advance/poll loop with plain sleeps; `signalDecision` re-enqueues
-  a parked run).
+  a parked run). All four drive queues (execution, bootstrap, env-test, env-config-repair) enqueue
+  through the ONE `driveJobOptions`, and it sets **`retryBackoff: false` deliberately**: a drive
+  job's dominant failure is the worker going away, which pg-boss reports as `job heartbeat timeout`
+  and which the very next attempt succeeds at, so exponential backoff compounds a seconds-long
+  restart into minutes of a stalled run. Nothing else can shorten that window (`classifyAdvanceJob`
+  reads a `retry`-state job as `live`, and the `exclusive` policy no-ops a fresh `send`), so
+  `retryLimit` plus the stale-run sweeper are the patience, and the delay is flat. **`pnpm dev` is
+  `node --watch dist/main.js`, so a rebuild restarts the server mid-run and costs the live run one
+  re-drive**: expected, and now bounded at roughly `heartbeatSeconds` plus the flat delay.
 - `gateways.ts`, `modelProvider.ts`, `realtime.ts`, `config.ts`, `retention.ts`: Node gateway
   - model + transport wiring and the retention sweep.
 - `platformMetrics.ts` + `logExport.ts`: the opt-in OTLP pushes. Both are the FETCH exporter on

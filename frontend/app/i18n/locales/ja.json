@@ -1791,7 +1791,9 @@
       "prompt": "プロンプト",
       "promptPrefixOmitted": "(新規メッセージのみ: 以前の {count} 件を省略)",
       "response": "レスポンス",
-      "reasoning": "推論"
+      "reasoning": "推論",
+      "spendOnly": "呼び出しではありません",
+      "spendOnlyTitle": "ハーネスがターンに紐付けずに報告したトークン消費です。この実行のトークン合計には含まれ、呼び出し数には含まれません。"
     },
     "context": {
       "injectedFiles": "注入されたコンテキストファイル",

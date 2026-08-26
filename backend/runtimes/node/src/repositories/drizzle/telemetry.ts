@@ -81,6 +81,7 @@ function rowToLlmMetric(row: typeof llmCallMetrics.$inferSelect): LlmCallMetric 
     streaming: row.streaming === 1,
     phase: row.phase,
     turnIndex: row.turn_index,
+    spendOnly: row.spend_only === 1,
     messageCount: row.message_count,
     toolCount: row.tool_count,
     requestMaxTokens: row.request_max_tokens,
@@ -182,6 +183,7 @@ function llmPageColumns(bodyChars: number | undefined, offsetChars = 0, contains
     streaming: llmCallMetrics.streaming,
     phase: llmCallMetrics.phase,
     turn_index: llmCallMetrics.turn_index,
+    spend_only: llmCallMetrics.spend_only,
     message_count: llmCallMetrics.message_count,
     tool_count: llmCallMetrics.tool_count,
     request_max_tokens: llmCallMetrics.request_max_tokens,
@@ -224,6 +226,7 @@ function rowToLlmCallPage(row: LlmPageRow, searched = false): LlmCallMetricPage 
     streaming: number
     phase: string
     turn_index: number | null
+    spend_only: number
     message_count: number
     tool_count: number
     request_max_tokens: number | null
@@ -258,6 +261,7 @@ function rowToLlmCallPage(row: LlmPageRow, searched = false): LlmCallMetricPage 
     streaming: r.streaming === 1,
     phase: r.phase,
     turnIndex: r.turn_index,
+    spendOnly: r.spend_only === 1,
     messageCount: r.message_count,
     toolCount: r.tool_count,
     requestMaxTokens: r.request_max_tokens,
@@ -324,6 +328,7 @@ function metricValues(metric: LlmCallMetric) {
     streaming: metric.streaming ? 1 : 0,
     phase: metric.phase,
     turn_index: metric.turnIndex,
+    spend_only: metric.spendOnly ? 1 : 0,
     message_count: metric.messageCount,
     tool_count: metric.toolCount,
     request_max_tokens: metric.requestMaxTokens,
@@ -552,6 +557,7 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
         upstreamMs: llmCallMetrics.upstream_ms,
         overheadMs: llmCallMetrics.overhead_ms,
         ok: llmCallMetrics.ok,
+        spendOnly: llmCallMetrics.spend_only,
         inputTokens:
           sql<number>`(${llmCallMetrics.prompt_tokens} + ${llmCallMetrics.cache_read_tokens} + ${llmCallMetrics.cache_write_tokens})`.as(
             'input_tokens',
@@ -575,7 +581,10 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
         phase: ranked.phase,
         provider: ranked.provider,
         model: ranked.model,
-        calls: sql<number>`count(*)::int`,
+        // Counts rows that stand for a model CALL, so a harness CLI's spend-correction row is in
+        // every token sum below and in none of the call counts. `count(*)` reported one phantom
+        // call per dispatch on every subscription-harness step. Mirrors the D1 repo.
+        calls: sql<number>`coalesce(sum(case when ${ranked.spendOnly} = 0 then 1 else 0 end), 0)::int`,
         promptTokens: sql<number>`coalesce(sum(${ranked.promptTokens}), 0)::int`,
         cacheReadTokens: sql<number>`coalesce(sum(${ranked.cacheReadTokens}), 0)::int`,
         cacheWriteTokens: sql<number>`coalesce(sum(${ranked.cacheWriteTokens}), 0)::int`,

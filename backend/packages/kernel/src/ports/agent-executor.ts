@@ -524,8 +524,24 @@ export interface AgentRunContext {
      */
     docInterviewBrief?: string
   }
-  /** Outputs produced by earlier steps in the same run, in order. */
-  priorOutputs: { agentKind: AgentKind; output: string }[]
+  /**
+   * Outputs produced by earlier steps in the same run, in order.
+   *
+   * `openFindings` are the points a companion raised against THAT output and that nobody ever
+   * answered: its last verdict's non-nit comments, present only once the run has moved past the
+   * companion step. A companion can end a loop with points still open (a `major` stops holding
+   * the run after the first forced round, and a human may approve over a `blocker`), and until
+   * this existed the verdict was the only place they were ever written down, so the next agent
+   * was handed a design the platform already knew was defective with nothing saying so.
+   *
+   * It rides the OUTPUT rather than the run because that is what the findings are about: the
+   * caveat reaches exactly the steps that are shown the artifact, attributed to the producer whose
+   * artifact it is, and a pipeline that puts three steps between the two cannot drift apart from
+   * it. Absent when the companion left nothing open, when there is no companion, and on every
+   * dispatch that is still inside the loop (the grader has its own verdicts via
+   * {@link priorReview}, and the producer under rework has them via {@link revision}).
+   */
+  priorOutputs: { agentKind: AgentKind; output: string; openFindings?: ReviewedPoint[] }[]
   /** Decisions resolved earlier in this run, for context. */
   decisions: { question: string; chosen: string }[]
   /**

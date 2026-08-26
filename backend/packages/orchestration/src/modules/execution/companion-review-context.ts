@@ -1,5 +1,6 @@
 import type { AgentRunContext, PipelineStep, ReviewedPoint } from '@cat-factory/kernel'
 import type { ReviewCommentSeverity } from '@cat-factory/contracts'
+import { bySeverityWorstFirst, reviewCommentsBeyondNits } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { companionTargets, isCompanionKind } from '@cat-factory/agents'
 
@@ -18,6 +19,10 @@ import { companionTargets, isCompanionKind } from '@cat-factory/agents'
 // It resolves for BOTH sides from the same place, because they are the same fact seen twice: the
 // grader needs its own asks to check them off, and the producer needs the ones from rounds before
 // the current feedback so a fix from round 1 is not quietly undone in round 3.
+//
+// The same state answers a THIRD reader, outside the loop entirely: what the loop left OPEN when it
+// ended ({@link openFindingsFor}). A companion can pass work with points still standing, so the
+// verdict list is also the only record of what the run knowingly advanced past.
 // ---------------------------------------------------------------------------
 
 /** One cycle as the prompt renders it, numbered from the order the verdicts were appended. */
@@ -217,4 +222,49 @@ export function buildReworkContext(
     ...(priorReview ? { priorReview } : {}),
     ...(gradingBar ? { gradingBar } : {}),
   }
+}
+
+/**
+ * The findings a companion raised against the step at `producerIndex` and that NOBODY ever
+ * answered, worst severity first. `undefined` when the loop left nothing standing.
+ *
+ * A companion loop does not always end because the work is clean. Past its first forced round a
+ * `major` stops holding the run (kernel's `disposeCompanionVerdict` holds only on a `blocker`), and
+ * a person may approve over a `blocker` on the companion's own gate. Either way the last verdict's
+ * points were never sent back to anyone, and the verdict list was the only place they existed: the
+ * next producer was handed the artifact with none of what the platform already knew was wrong with
+ * it, and re-derived it turn by turn or shipped it.
+ *
+ * The LAST verdict is the whole answer, and deliberately not a union over the rounds: every earlier
+ * round WAS answered (that is what a rework round is), and its points were either fixed or argued
+ * down. Folding them back in would re-raise settled work against a producer with no standing to
+ * settle it.
+ *
+ * Nits are dropped ({@link reviewCommentsBeyondNits}): a `minor` is stated to the reviewer as never
+ * worth holding anything for, so carrying one into a downstream agent's context would spend its
+ * attention on the one severity the platform promises not to.
+ *
+ * `producerIndex + 1` is where the companion is, which {@link priorReviewFor} relies on for the
+ * same reason: `assertValidCompanionPlacement` guarantees a companion runs immediately after a step
+ * whose kind it targets. Requiring that companion to sit BEFORE `currentStep` is what keeps this off
+ * both sides of a live loop: a grader reads its own verdicts through `priorReview` and a producer
+ * under rework reads them through `revision`, and a third rendering of the same points is the
+ * duplication this module already exists to have removed.
+ */
+export function openFindingsFor(
+  instance: { steps: readonly PipelineStep[]; currentStep: number },
+  producerIndex: number,
+  registry?: AgentKindRegistry,
+): ReviewedPoint[] | undefined {
+  const producer = instance.steps[producerIndex]
+  const companionIndex = producerIndex + 1
+  if (!producer || companionIndex >= instance.currentStep) return undefined
+  const companion = instance.steps[companionIndex]
+  if (!companion || !companionTargets(companion.agentKind, registry).includes(producer.agentKind)) {
+    return undefined
+  }
+  const last = companion.companion?.verdicts.at(-1)
+  const open = reviewCommentsBeyondNits(last?.comments)
+  if (!open.length) return undefined
+  return bySeverityWorstFirst(open).map(toReviewedPoint)
 }

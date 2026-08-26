@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PipelineStep } from '@cat-factory/kernel'
 import { defaultAgentKindRegistry, type AgentKindRegistry } from '@cat-factory/agents'
-import { buildReworkContext, priorReviewFor } from './companion-review-context.js'
+import { buildReworkContext, openFindingsFor, priorReviewFor } from './companion-review-context.js'
 
 // The companion loop's memory, resolved from `step.companion.verdicts` for whichever side of the
 // loop is about to run. The behaviour worth pinning is that BOTH sides get it and that they get
@@ -176,5 +176,123 @@ describe('gradingBarFor (through buildReworkContext)', () => {
       steps: [{ agentKind: 'coder', state: 'working' }] as unknown as PipelineStep[],
     }
     expect(buildReworkContext(inst, inst.steps[0]!, registry()).gradingBar).toBeUndefined()
+  })
+})
+
+describe('openFindingsFor', () => {
+  // A companion loop does not only end clean. Past its first forced round a `major` stops holding
+  // the run, so the last verdict's points can be real, unanswered and on the record while the run
+  // walks straight past them. These pin that they reach the next producer, and that they reach
+  // nobody who is still inside the loop.
+
+  /** The run once the companion has PASSED and the engine has moved on to the next step. */
+  function settled(verdicts: ReturnType<typeof verdict>[]) {
+    const inst = instance(verdicts)
+    inst.currentStep = 2
+    ;(inst.steps[1] as { state: string }).state = 'done'
+    return inst
+  }
+
+  it('carries the last verdict points the loop never sent back', () => {
+    const open = openFindingsFor(
+      settled([
+        verdict(0.75, 'round one', [{ body: 'runAsNonRoot will not start', severity: 'major' }]),
+        verdict(0.83, 'round two', [
+          { body: 'rootDir src breaks the build', anchorId: 'steps/2', severity: 'major' },
+        ]),
+      ]),
+      0,
+      registry(),
+    )
+
+    expect(open?.map((f) => f.body)).toEqual(['rootDir src breaks the build'])
+    expect(open?.[0]?.anchorId).toBe('steps/2')
+    expect(open?.[0]?.severity).toBe('major')
+  })
+
+  it('does NOT re-raise the earlier rounds, which were answered', () => {
+    // Every round before the last one drove a rework: its points were fixed or argued down. Folding
+    // them back in would re-open settled work against a producer with no standing to settle it.
+    const open = openFindingsFor(
+      settled([
+        verdict(0.75, 'round one', [{ body: 'the ingress class is undecided', severity: 'major' }]),
+        verdict(0.83, 'round two', [{ body: 'the lint plugin is missing', severity: 'major' }]),
+      ]),
+      0,
+      registry(),
+    )
+    expect(open?.map((f) => f.body)).toEqual(['the lint plugin is missing'])
+  })
+
+  it('drops nits, which the reviewer is told never hold anything', () => {
+    const open = openFindingsFor(
+      settled([
+        verdict(0.83, 'clean enough', [
+          { body: 'a wording nit', severity: 'minor' },
+          { body: 'the build config will not compile', severity: 'major' },
+        ]),
+      ]),
+      0,
+      registry(),
+    )
+    expect(open?.map((f) => f.body)).toEqual(['the build config will not compile'])
+  })
+
+  it('orders worst severity first', () => {
+    const open = openFindingsFor(
+      settled([
+        verdict(0.6, 'held', [
+          { body: 'ungraded point' },
+          { body: 'a real gap', severity: 'major' },
+          { body: 'must not ship', severity: 'blocker' },
+        ]),
+      ]),
+      0,
+      registry(),
+    )
+    expect(open?.map((f) => f.body)).toEqual(['must not ship', 'a real gap', 'ungraded point'])
+  })
+
+  it('carries a blocker a HUMAN approved over, not only a passing verdict', () => {
+    // The park path: the companion refused, a person accepted the work anyway. The point is every
+    // bit as open as one a rating walked past, and reading `passed` would have dropped exactly the
+    // most serious case.
+    const held = settled([
+      verdict(0.4, 'refused', [{ body: 'no auth on the write path', severity: 'blocker' }]),
+    ])
+    expect(openFindingsFor(held, 0, registry())?.map((f) => f.body)).toEqual([
+      'no auth on the write path',
+    ])
+  })
+
+  it('is absent while the loop is still running, for both sides of it', () => {
+    // The grader reads its own verdicts through `priorReview` and the producer under rework reads
+    // them through `revision`. A third rendering of the same points is the duplication this module
+    // exists to have removed.
+    const mid = instance([verdict(0.75, 'round one', [{ body: 'a gap', severity: 'major' }])])
+    mid.currentStep = 1 // the companion is the step about to be dispatched
+    expect(openFindingsFor(mid, 0, registry())).toBeUndefined()
+
+    mid.currentStep = 0 // the producer is being reworked
+    expect(openFindingsFor(mid, 0, registry())).toBeUndefined()
+  })
+
+  it('is absent when the loop left nothing open, so a clean review renders no section', () => {
+    // An empty list would read downstream as "reviewed, and here are its defects: none", which is a
+    // different claim from the one a nit-only verdict supports.
+    expect(openFindingsFor(settled([verdict(0.9, 'clean')]), 0, registry())).toBeUndefined()
+    expect(
+      openFindingsFor(
+        settled([verdict(0.9, 'clean', [{ body: 'nit', severity: 'minor' }])]),
+        0,
+        registry(),
+      ),
+    ).toBeUndefined()
+  })
+
+  it('is absent for a step no companion targets', () => {
+    const inst = settled([verdict(0.83, 'ok', [{ body: 'a gap', severity: 'major' }])])
+    // Index 1 is the companion itself; nothing grades IT.
+    expect(openFindingsFor(inst, 1, registry())).toBeUndefined()
   })
 })

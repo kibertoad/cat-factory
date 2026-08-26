@@ -91,6 +91,18 @@ PART-narrated one gets the remainder rather than silently under-reporting, which
 "aggregate only when nothing was costed" rule did. An uncosted turn is never filed as a zero row,
 and that rule lives with the model, so it holds for both transports.
 
+**That shortfall row is REAL SPEND and is NOT A CALL, and `spend_only` is what says so.** It has
+to be persisted rather than derived, because there is nothing downstream to derive it from: a
+NULL `turn_index` is equally the shape of a plain inline call, so a reader cannot tell "no turn to
+report" from "no call happened". Left unmarked it was counted by `COUNT(*) AS calls`, which is one
+phantom call per dispatch on every subscription-harness step (a 4-turn architect reporting 5, a
+2-review companion reporting 4), while the tokens were right the whole time. Every token sum keeps
+the row; every call count drops it. The producer is the only layer that can decide which it built:
+the inline model files `spendOnly: reported > 0`, so a CLI that narrated NOTHING keeps its one
+aggregate as the call it genuinely is, bodies and duration included, while a part-narrated step's
+remainder is a correction; the container path files the flag straight off `standsForJob`, whose
+row has no bodies at all because there was no request to capture.
+
 Only Claude Code's `stream-json` is parsed per call, through the container harness's
 `createClaudeRunTelemetry` (`@cat-factory/executor-harness/claude-call-aggregator`): the ONE
 fold, imported rather than re-implemented, because folding per ENVELOPE instead of per

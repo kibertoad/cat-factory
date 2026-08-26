@@ -50,6 +50,14 @@ export const llmCallMetrics = telemetry.table(
     // 0004_llm_call_phase_turn. See docs/initiatives/token-burn-instrumentation.md.
     phase: text('phase').notNull().default(''),
     turn_index: integer('turn_index'),
+    // 1 when the row carries only TOKENS and stands for no model call: the shortfall a harness CLI
+    // leaves when it costs each turn's input but not its output, filed as its own row so a measured
+    // turn is never grown by tokens it did not produce. Real spend, so it stays in every token sum;
+    // not a call, so `calls` excludes it. 0 for every other producer AND for the shortfall row of a
+    // CLI that narrates no turns, where nothing else recorded the call. A NULL `turn_index` cannot
+    // stand in for this: a genuine inline call has one too. Mirrors D1 telemetry migration
+    // 0006_llm_call_spend_only.
+    spend_only: integer('spend_only').notNull().default(0),
     message_count: integer('message_count').notNull().default(0),
     tool_count: integer('tool_count').notNull().default(0),
     request_max_tokens: integer('request_max_tokens'),

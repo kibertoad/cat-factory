@@ -1,0 +1,1 @@
+ALTER TABLE "telemetry"."llm_call_metrics" ADD COLUMN "spend_only" integer DEFAULT 0 NOT NULL;

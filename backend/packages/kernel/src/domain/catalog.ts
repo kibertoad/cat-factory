@@ -99,9 +99,9 @@ export const DEFAULT_RISK_POLICY = {
   // complete report before letting the run proceed to the greenlight / fixer decision.
   maxTesterQualityIterations: 3,
   // Companion rework loop: how many times a companion (reviewer / architect-companion /
-  // spec-companion) may send its producer back with findings before it parks for a person. The
-  // shipped value is the one the engine hard-coded before this was policy, so a workspace that
-  // never opens the field keeps exactly the behaviour it had.
+  // spec-companion) may send its producer back with findings before it parks for a person. See
+  // `DEFAULT_COMPANION_MAX_ATTEMPTS` for why this budget is sized above the judgement-only ones:
+  // a round here re-runs the producer, so the round not taken is an artifact not improved.
   companionMaxReworks: DEFAULT_COMPANION_MAX_ATTEMPTS,
   // Post-release-health gate: how long (minutes) the gate watches the deployed
   // release's monitors/SLOs before declaring it healthy, and how many on-call

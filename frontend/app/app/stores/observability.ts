@@ -149,6 +149,10 @@ export const useObservabilityStore = defineStore('observability', () => {
       // the harness's job-scoped counter, which a proxied call has no equivalent of. Null is
       // what the stored row will say too, so the live row and the loaded one agree.
       turnIndex: null,
+      // A live event is always a PROXIED call, and the proxy has no shortfall concept: it sees one
+      // HTTP call at a time and files it. Only a harness CLI's step-level remainder is spend-only,
+      // and that arrives through the stored row, never here.
+      spendOnly: false,
       promptText: '',
       promptPrefixCount: 0,
       promptHash: '',

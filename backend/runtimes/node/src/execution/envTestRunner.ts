@@ -8,6 +8,7 @@ import type { Logger, ServerContainer, SweepHealthTracker } from '@cat-factory/s
 import { createQueueWithDeadLetter } from './deadLetter.js'
 import type { Job, PgBoss, SendOptions } from 'pg-boss'
 import type { AdvanceQueueOptions } from './pgBossRunner.js'
+import { driveJobOptions } from './pgBossRunner.js'
 import type { DriveConfig } from './drive.js'
 
 // Durable ephemeral-environment self-test driving on pg-boss: the analogue of the Worker's
@@ -29,14 +30,10 @@ interface EnvTestJob {
 }
 
 function sendOptions(id: string, opts: AdvanceQueueOptions): SendOptions {
-  return {
-    singletonKey: id,
-    expireInSeconds: opts.expireInSeconds,
-    heartbeatSeconds: opts.heartbeatSeconds,
-    retryLimit: opts.retryLimit,
-    retryDelay: opts.retryDelaySeconds,
-    retryBackoff: true,
-  }
+  // Shared with the execution advance queue rather than restated: the singleton/expiry/heartbeat
+  // semantics and the flat (non-exponential) retry delay are one policy for every drive queue, and
+  // this file used to hold its own copy of it. See {@link driveJobOptions}.
+  return driveJobOptions(id, opts)
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))

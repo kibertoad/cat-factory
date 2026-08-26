@@ -192,6 +192,28 @@ export function hasReviewCommentsBeyondNits(
   return (comments ?? []).some((comment) => comment.severity !== 'minor')
 }
 
+/**
+ * The comments a review raised that it did NOT call a nit: the array behind
+ * {@link hasReviewCommentsBeyondNits}, paired with it exactly as
+ * {@link blockingReviewComments} is paired with {@link hasBlockingReviewComments}.
+ *
+ * Its reader is the one that carries findings PAST the round that raised them: a companion may
+ * pass the work with points still open, and the producer downstream is handed those points beside
+ * the output they qualify. Nits are dropped there for the reason the disposition rule drops them.
+ * The reviewer is told a `minor` is "never worth holding anything for", so spending a downstream
+ * agent's attention on one would make that instruction false.
+ *
+ * Same membership rule as the predicate, which is why they sit together: everything that is not
+ * the nit level counts, so an UNGRADED comment and a level this build has retired both travel. The
+ * urgency there is unknown rather than known to be low, and a point silently dropped is the
+ * expensive error.
+ */
+export function reviewCommentsBeyondNits(
+  comments: readonly StepReviewComment[] | undefined,
+): StepReviewComment[] {
+  return (comments ?? []).filter((comment) => comment.severity !== 'minor')
+}
+
 /** `comments` ordered worst severity first; an ungraded comment sorts last. Stable within a level. */
 export function bySeverityWorstFirst(comments: readonly StepReviewComment[]): StepReviewComment[] {
   return [...comments].sort(
