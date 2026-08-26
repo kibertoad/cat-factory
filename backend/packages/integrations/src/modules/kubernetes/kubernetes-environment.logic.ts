@@ -208,6 +208,19 @@ export function resourceUrl(
   return `${root}${nsSeg}/${meta.plural}${nameSeg}`
 }
 
+/**
+ * The cluster-scoped `IngressClass` collection URL.
+ *
+ * Built here rather than through {@link resourceUrl}, and that is the point rather than a
+ * convenience: `resourceUrl` reads `RESOURCE_KINDS`, which is the ALLOW-LIST of kinds a
+ * repository's own manifests may have applied on its behalf. Adding `IngressClass` to it to reach
+ * this one read would also let a checkout apply a cluster-scoped object, which is a privilege
+ * widening with nothing to do with reading a catalog.
+ */
+export function ingressClassesUrl(config: KubernetesEnvironmentConfig): string {
+  return `${apiBase(config)}/apis/networking.k8s.io/v1/ingressclasses`
+}
+
 /** Whether a repo entry path is a manifest file we should read (yaml/yml/json). */
 export function isManifestFile(path: string): boolean {
   return /\.(ya?ml|json)$/i.test(path)
@@ -258,6 +271,178 @@ export function extractLoadBalancerAddress(obj: unknown): string | null {
   if (!Array.isArray(ingress) || ingress.length === 0) return null
   const first = ingress[0] as { ip?: string; hostname?: string }
   return first.hostname || first.ip || null
+}
+
+/**
+ * The deprecated pre-1.18 spelling of {@link IngressAdmissionFacts.requestedClass}. Read beside
+ * `spec.ingressClassName` because controllers still honour it, so an Ingress carrying only this
+ * one IS claimable and must not be graded as classless.
+ */
+const LEGACY_INGRESS_CLASS_ANNOTATION = 'kubernetes.io/ingress.class'
+
+/** The annotation marking an `IngressClass` as the one that claims a classless Ingress. */
+const DEFAULT_INGRESS_CLASS_ANNOTATION = 'ingressclass.kubernetes.io/is-default-class'
+
+/** One Ingress reduced to the two facts that decide whether anything can route it. */
+export type IngressAdmissionFacts = {
+  /** The class it asks for (`spec.ingressClassName`, else the legacy annotation), or null. */
+  requestedClass: string | null
+  /** Whether some controller has written an address onto `status.loadBalancer`. */
+  hasAddress: boolean
+}
+
+/**
+ * The cluster's `IngressClass` list, or the fact that it could not be read.
+ *
+ * `read: false` is its own member rather than an empty list, and the distinction is the whole
+ * point: the ServiceAccount's ClusterRole may not cover the cluster-scoped `ingressclasses`
+ * resource, and a 403 read as "this cluster has no ingress controller" would fail every
+ * environment on a working cluster. Same three-state rule as `k3s-ingress.ts`' probe verdict.
+ */
+export type IngressClassCatalog =
+  | { read: true; names: readonly string[]; defaultName: string | null }
+  | { read: false; detail: string }
+
+/**
+ * Whether anything in the cluster will serve the host an `ingressTemplate` URL names.
+ *
+ * `unrouted` carries prose because the three causes need three different fixes and only one of
+ * them is in anybody's checkout; `pending` and `unknown` are deliberately NOT failures (see
+ * {@link classifyIngressAdmission}).
+ */
+export type IngressAdmission =
+  | { status: 'admitted' }
+  | { status: 'pending' }
+  | { status: 'unknown'; detail: string }
+  | { status: 'unrouted'; problem: string }
+
+/** The two facts above, off a live Ingress object. */
+export function readIngressAdmissionFacts(obj: unknown): IngressAdmissionFacts {
+  const ingress = obj as {
+    spec?: { ingressClassName?: unknown }
+    metadata?: { annotations?: Record<string, unknown> }
+  } | null
+  const fromSpec = ingress?.spec?.ingressClassName
+  const fromAnnotation = ingress?.metadata?.annotations?.[LEGACY_INGRESS_CLASS_ANNOTATION]
+  return {
+    requestedClass: firstNonEmptyString(fromSpec, fromAnnotation),
+    hasAddress: extractLoadBalancerAddress(obj) !== null,
+  }
+}
+
+/** The first of `values` that is a non-blank string, trimmed, or null. */
+function firstNonEmptyString(...values: readonly unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return null
+}
+
+/**
+ * The `IngressClass` names in a `kubectl get ingressclass`-shaped payload, plus which one is
+ * marked default. A payload that is not a list reads as UNREADABLE rather than as an empty
+ * cluster, for the reason {@link IngressClassCatalog} gives.
+ */
+export function readIngressClassCatalog(obj: unknown): IngressClassCatalog {
+  const items = (obj as { items?: unknown } | null)?.items
+  if (!Array.isArray(items)) {
+    return { read: false, detail: 'the apiserver returned no IngressClass list' }
+  }
+  const names: string[] = []
+  let defaultName: string | null = null
+  for (const item of items) {
+    const entry = item as {
+      metadata?: { name?: unknown; annotations?: Record<string, unknown> }
+    } | null
+    const name = entry?.metadata?.name
+    if (typeof name !== 'string' || !name) continue
+    names.push(name)
+    if (entry?.metadata?.annotations?.[DEFAULT_INGRESS_CLASS_ANNOTATION] === 'true') {
+      defaultName ??= name
+    }
+  }
+  return { read: true, names, defaultName }
+}
+
+/**
+ * Grade whether the cluster can actually serve an `ingressTemplate` environment URL.
+ *
+ * **Why this exists.** Environment readiness was the Deployments' rollout and nothing else, so a
+ * namespace whose pods were all `1/1 Running` reported `ready` and published a URL derived purely
+ * from CONFIG TEXT: a claim no part of the cluster had agreed to. The run that motivated it wrote
+ * an Ingress naming ingress class 'nginx' onto a k3d cluster that runs Traefik. The apiserver
+ * accepted the object, the pod was healthy, the URL was published, and the Ingress sat with an
+ * empty `status.loadBalancer` because nothing was watching that class. The tester then spent
+ * fourteen minutes on curl code 000 and reported the ENVIRONMENT as unreachable, which reads as a
+ * broken cluster or an unpullable image; the deployer, which had said `done` in one second, was
+ * never suspected. ADR-worthy sibling: PR #2075 fixed the case where the host NAME resolves to a
+ * stranger's network and left this one open.
+ *
+ * **What it will and will not fail on, which is the load-bearing part.** It fails only on POSITIVE
+ * evidence that no controller can ever claim the Ingress: the cluster publishes no `IngressClass`
+ * at all, or the Ingress asks for one that is not among those it does publish, or it asks for none
+ * and the cluster marks none default. Each is a fact about the cluster's own catalog, and none of
+ * them can become true later without someone changing the cluster.
+ *
+ * The ABSENCE of an address is deliberately NOT evidence. Writing `status.loadBalancer` back is a
+ * controller's choice rather than a guarantee, so failing on an empty status would refuse
+ * deployments whose routing works: the same trap PR #2075 avoided by pinning its rule to real
+ * resolutions rather than to what a spec implies. So an address SHORT-CIRCUITS to `admitted`, and
+ * its absence is at most `pending`, which keeps the environment provisioning until the provision's
+ * own deadline reports `timeout`. That leaves no new way to hang and no new way to refuse a
+ * working cluster.
+ *
+ * An empty `ingresses` list yields `pending` rather than a refusal: an `ingressTemplate` URL says
+ * where the URL comes FROM and not what routes it, so manifests may legitimately serve that host
+ * through a Gateway or an HTTPRoute. Claiming otherwise would fail a working shape on the strength
+ * of an assumption about how it was built.
+ */
+export function classifyIngressAdmission(
+  ingresses: readonly IngressAdmissionFacts[],
+  catalog: IngressClassCatalog,
+): IngressAdmission {
+  if (ingresses.some((ingress) => ingress.hasAddress)) return { status: 'admitted' }
+  if (!catalog.read) return { status: 'unknown', detail: catalog.detail }
+  if (ingresses.length === 0) return { status: 'pending' }
+  const available = catalog.names.length
+    ? `the cluster publishes ${catalog.names.map((name) => `'${name}'`).join(', ')}`
+    : 'the cluster publishes none'
+  if (catalog.names.length === 0) {
+    return {
+      status: 'unrouted',
+      problem:
+        'this cluster runs no ingress controller: it publishes no IngressClass at all, so the ' +
+        'Ingress applied for this environment has nothing watching it and the environment URL ' +
+        'will never answer, however healthy the workload is. Install an ingress controller (a ' +
+        'default k3d/k3s cluster bundles Traefik; kind ships none), or point this connection ' +
+        'at an environment URL source the cluster does serve.',
+    }
+  }
+  const unsatisfiable = ingresses
+    .map((ingress) => ingress.requestedClass)
+    .find((requested) => requested !== null && !catalog.names.includes(requested))
+  if (unsatisfiable) {
+    return {
+      status: 'unrouted',
+      problem:
+        `the Ingress for this environment asks for ingress class '${unsatisfiable}', which this ` +
+        `cluster does not have (${available}). Nothing claims it, so the apiserver accepts the ` +
+        'object, every workload reports healthy, and the environment URL never answers. Remove ' +
+        'the ingressClassName field from the manifests so the cluster default class claims the ' +
+        'Ingress, or set it to one of the classes above.',
+    }
+  }
+  if (catalog.defaultName === null) {
+    return {
+      status: 'unrouted',
+      problem:
+        'the Ingress for this environment names no ingress class and this cluster marks none as ' +
+        `default (${available}), so nothing claims it and the environment URL never answers. ` +
+        'Annotate one class with ingressclass.kubernetes.io/is-default-class: "true", or set ' +
+        'ingressClassName in the manifests to one of the classes above.',
+    }
+  }
+  return { status: 'pending' }
 }
 
 /** A concrete, resolvable host — a wildcard listener/route hostname (`*.example.com`) is not. */

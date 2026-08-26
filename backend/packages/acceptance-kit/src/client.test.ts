@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createClient, createPassClient } from './client.js'
+import { createClient, createPassClient, describeStepTransitions } from './client.js'
+import type { StepObservation } from './client.js'
 
 const TARGET = { baseUrl: 'https://deployment.invalid', apiKey: 'cfk_test' }
 
@@ -87,5 +88,64 @@ describe('the header seam', () => {
     held = { 'x-unlock': 'held' }
     await client.models.list()
     expect(sent).toEqual([undefined, 'held'])
+  })
+})
+
+describe('describeStepTransitions', () => {
+  const chain = (...states: string[]): StepObservation[] =>
+    states.map((state, index) => ({ agentKind: `k${index}`, state }))
+
+  it('announces nothing on the first look, so a fresh chain is a baseline and not eleven events', () => {
+    expect(describeStepTransitions(undefined, chain('working', 'pending'))).toEqual([])
+  })
+
+  it('names a step that started AND finished between two polls', () => {
+    // The regression this function exists for. A `deployer` finished in one second against a
+    // ten-second poll, so `describeRun` printed step 3 and then step 5 and nothing ever said the
+    // deployer ran, which is exactly how the failure that followed got attributed to the wrong
+    // layer. Sampling `currentStep` cannot catch this at any cadence; diffing the chain always does.
+    const before: StepObservation[] = [
+      { agentKind: 'reviewer', state: 'working' },
+      { agentKind: 'deployer', state: 'pending' },
+      { agentKind: 'tester-api', state: 'pending' },
+    ]
+    const after: StepObservation[] = [
+      { agentKind: 'reviewer', state: 'done' },
+      { agentKind: 'deployer', state: 'done' },
+      { agentKind: 'tester-api', state: 'working' },
+    ]
+    expect(describeStepTransitions(before, after)).toEqual([
+      "step 0 'reviewer': working -> done",
+      "step 1 'deployer': pending -> done",
+      "step 2 'tester-api': pending -> working",
+    ])
+  })
+
+  it('says SKIPPED rather than done, which is the one thing a done state cannot tell a reader', () => {
+    const before: StepObservation[] = [{ agentKind: 'tester-ui', state: 'pending' }]
+    const after: StepObservation[] = [{ agentKind: 'tester-ui', state: 'done', skipped: true }]
+    expect(describeStepTransitions(before, after)).toEqual([
+      "step 0 'tester-ui': pending -> skipped",
+    ])
+  })
+
+  it('reports a step that moved BACKWARDS, which a high-water mark would hide', () => {
+    // A companion bouncing its producer is a real transition and the one a reader most needs
+    // named: without it the run looks stalled on a step it already passed.
+    const before: StepObservation[] = [{ agentKind: 'architect', state: 'done' }]
+    const after: StepObservation[] = [{ agentKind: 'architect', state: 'working' }]
+    expect(describeStepTransitions(before, after)).toEqual(["step 0 'architect': done -> working"])
+  })
+
+  it('stays quiet when nothing moved, so a long working step does not repeat itself every poll', () => {
+    const steps = chain('done', 'working')
+    expect(describeStepTransitions(steps, chain('done', 'working'))).toEqual([])
+    expect(steps).toHaveLength(2)
+  })
+
+  it('treats a step the chain GREW as having no baseline rather than as a change', () => {
+    // A companion or an auto-inserted gate lengthens the chain mid-run. The new tail has no prior
+    // state, and announcing `undefined -> pending` for it would be noise, not an event.
+    expect(describeStepTransitions(chain('working'), chain('working', 'pending'))).toEqual([])
   })
 })

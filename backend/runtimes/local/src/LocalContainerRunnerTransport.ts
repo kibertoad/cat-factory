@@ -24,6 +24,7 @@ import {
   unservablePlatformImageVariant,
 } from '@cat-factory/kernel'
 import { resolveDockerResources } from '@cat-factory/contracts'
+import { environmentHostNeedingBridge } from './environmentBridge.js'
 import type { LocalSettings } from '@cat-factory/contracts'
 import { logger } from '@cat-factory/server'
 import {
@@ -230,6 +231,19 @@ export interface InlineContainerRequest {
 }
 
 /** A warm-pool container the transport leases to runs (lease state is in-process). */
+/**
+ * A resolved per-run container: where to reach it, plus the host bridges it was CREATED with.
+ *
+ * `bridgedHosts` is on the handle rather than re-read from the runtime because `--add-host` is not
+ * readable back off a container in any portable way, and it is optional because a handle rebuilt
+ * from the runtime after a process restart genuinely does not know (see `containerMissingBridges`,
+ * which treats not-knowing as none).
+ */
+interface ResolvedContainer extends ContainerEndpoint {
+  containerId: string
+  bridgedHosts?: readonly string[]
+}
+
 interface PoolMember extends ContainerEndpoint {
   /** Internal member id (used only for the container name; never a run-id label). */
   id: string
@@ -275,7 +289,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   private poolIdleTtlMs: number
 
   /** runId → resolved container handle, to spare a CLI lookup on the hot poll path. */
-  private readonly cache = new Map<string, { containerId: string } & ContainerEndpoint>()
+  private readonly cache = new Map<string, ResolvedContainer>()
 
   /** Warm-pool members (only used when pooling is enabled). Leased in-process by run id. */
   private readonly members: PoolMember[] = []
@@ -459,6 +473,47 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     }
   }
 
+  /**
+   * The host bridges this job needs inside its container, from the job body the engine dispatched.
+   *
+   * Read off the SPEC rather than resolved here, because the environment URL is not knowable when
+   * a run's container is created: `dispatchPerRun` starts one container for the whole run at its
+   * FIRST step, and the environment does not exist until the `deployer` step several steps later.
+   * That ordering is the whole reason {@link containerMissingBridges} exists.
+   *
+   * Only a host whose own answer is this machine is bridged; kernel's
+   * `environmentHostNeedingBridge` owns that rule and returns null for everything else, so a real
+   * remote environment is never re-pointed at the host gateway.
+   */
+  private bridgesFor(spec: Record<string, unknown>): readonly string[] {
+    const url = typeof spec.environmentUrl === 'string' ? spec.environmentUrl : null
+    const host = environmentHostNeedingBridge(url)
+    return host ? [host] : []
+  }
+
+  /**
+   * The bridges `resolved` was NOT built with, out of the ones this job needs.
+   *
+   * Non-empty means the existing container cannot reach the environment however healthy it is: an
+   * /etc/hosts entry is fixed at create time, so the container has to be replaced. That is a cost
+   * (the job re-clones) paid against a step that otherwise fails every single time, which is what
+   * makes it worth paying: before this, a containerized `tester-api` on a local deployment spent
+   * fourteen minutes on connection failures and then failed the run.
+   *
+   * An UNKNOWN bridge set counts as none. That is the state after a process restart, where the
+   * container outlived the in-process cache: re-creating once more is wasteful and correct, where
+   * assuming the entry is there would leave the run wedged on the same unreachable URL with no way
+   * to notice. The cost is bounded to one extra recreate, on a path that already treats replacing a
+   * container as the ordinary recovery.
+   */
+  private containerMissingBridges(
+    resolved: ResolvedContainer,
+    needed: readonly string[],
+  ): readonly string[] {
+    const present = new Set(resolved.bridgedHosts ?? [])
+    return needed.filter((host) => !present.has(host))
+  }
+
   async dispatch(
     ref: RunnerJobRef,
     spec: Record<string, unknown>,
@@ -470,6 +525,17 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     // for a job that asked for a different one. Checked BEFORE the lease/cache lookups, which
     // key off the run and would otherwise hand a `tester-ui` job the run's ordinary container.
     if (!isDefaultImage(ref)) return this.dispatchPerRun(ref, spec, kind, options)
+    // A job needing a HOST BRIDGE is never served from the warm pool, and the reason is stronger
+    // than "a member cannot be given one". A member is started before any job exists, so it could
+    // not carry a per-job name even in principle; and a member is RE-LEASED across runs, so an
+    // /etc/hosts entry for one run's per-PR environment would outlive that run and sit in the
+    // container the next one leases. Per-run containers have neither problem, and the run hands
+    // its member back so the pool is not left holding a lease nothing will release.
+    const bridges = this.bridgesFor(spec)
+    if (bridges.length > 0) {
+      if (this.hasLeasedMember(ref.runId)) await this.releasePooled(ref)
+      return this.dispatchPerRun(ref, spec, kind, options)
+    }
     // Route a run to the backend it ALREADY holds, regardless of the CURRENT pool mode
     // (settings can flip pooling on/off live): a leased pool member re-attaches to the
     // pool; an existing per-run container stays per-run. Only a BRAND-NEW run picks its
@@ -497,7 +563,15 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     // Resolved BEFORE any container work so an unconfigured variant refuses without first
     // removing a container or starting one.
     const image = this.imageFor(ref)
+    const bridges = this.bridgesFor(spec)
     let resolved = await this.resolve(containerKey)
+    // A container that predates this job's environment cannot reach it: /etc/hosts is written at
+    // create time. Drop it so the branch below builds one that can. Deliberately AFTER `resolve`,
+    // whose cache entry is the only record of what the running container was built with.
+    if (resolved && this.containerMissingBridges(resolved, bridges).length > 0) {
+      this.cache.delete(containerKey)
+      resolved = undefined
+    }
     if (!resolved) {
       // A prior attempt may have left an exited/dead container under this key (resolve()
       // returns undefined for one whose endpoint is gone). Remove any such container
@@ -515,13 +589,14 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         // refuses a local-infra Tester run there (the `localDind` capability gate).
         privileged: this.privilegedTestJobs,
         network: this.network,
+        extraHosts: bridges,
         env: this.containerEnv(),
         instanceSize: options?.instanceSize
           ? resolveDockerResources(options.instanceSize)
           : undefined,
       })
       const endpoint = await this.waitForEndpoint(containerId)
-      resolved = { containerId, ...endpoint }
+      resolved = { containerId, ...endpoint, bridgedHosts: bridges }
       this.cache.set(containerKey, resolved)
       await this.waitForHealth(endpoint, containerId)
     }
@@ -988,16 +1063,16 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   // --- internals ----------------------------------------------------------
 
   /** The container handle for a run from the cache, else rediscovered via the runtime. */
-  private async resolve(
-    runId: string,
-  ): Promise<({ containerId: string } & ContainerEndpoint) | undefined> {
+  private async resolve(runId: string): Promise<ResolvedContainer | undefined> {
     const cached = this.cache.get(runId)
     if (cached) return cached
     const containerId = await this.adapter.find(this.exec, runId)
     if (!containerId) return undefined
     const endpoint = await this.adapter.endpoint(this.exec, containerId)
     if (!endpoint) return undefined
-    const resolved = { containerId, ...endpoint }
+    // No `bridgedHosts`: this container outlived the cache that recorded them, and absent means
+    // UNKNOWN rather than none. `containerMissingBridges` owns what to do about that.
+    const resolved: ResolvedContainer = { containerId, ...endpoint }
     this.cache.set(runId, resolved)
     return resolved
   }

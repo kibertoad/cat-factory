@@ -126,6 +126,14 @@ rules:
   - apiGroups: ['networking.k8s.io']
     resources: ['ingresses']
     verbs: ['create', 'get', 'list', 'watch', 'patch', 'update', 'delete']
+  # READ-ONLY, and cluster-scoped because IngressClass is. The environment provider grades a
+  # just-applied Ingress against this catalog before it will call a template-derived URL ready:
+  # an Ingress naming a class the cluster does not run is accepted by the apiserver, watched by
+  # nothing, and its URL never answers. Without this grant the read is refused and the check
+  # stands down to the prior behaviour, so the grant is what makes it able to answer at all.
+  - apiGroups: ['networking.k8s.io']
+    resources: ['ingressclasses']
+    verbs: ['get', 'list', 'watch']
   - apiGroups: ['gateway.networking.k8s.io']
     resources: ['gateways', 'httproutes']
     verbs: ['create', 'get', 'list', 'watch', 'patch', 'update', 'delete']

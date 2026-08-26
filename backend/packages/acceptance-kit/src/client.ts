@@ -160,6 +160,63 @@ export function describeRun(run: PublicRun): string {
 }
 
 /**
+ * One step of a run's chain, reduced to the fields a transition is decided from.
+ *
+ * A structural type rather than the SDK's `PublicRun['steps'][number]` so the reducer can be
+ * driven from a literal in its own test without standing up a whole run.
+ */
+export type StepObservation = {
+  agentKind: string
+  state: string
+  skipped?: boolean | undefined
+}
+
+/**
+ * Every step whose state changed between two observations of the same chain, as lines to announce.
+ *
+ * **This exists because `describeRun` SAMPLES.** It names `steps[currentStep]` at the instant it
+ * was called, so a step that starts and finishes inside one poll interval is never printed by
+ * anything: the run's account jumps straight from the step before it to the step after, and a
+ * reader's only honest conclusion is that the missing step never ran. That is not a hypothetical.
+ * A `deployer` finished in ONE SECOND against a ten-second poll, the pass reported `step 3
+ * 'reviewer'` and then `step 5 'tester-api'`, and the fourteen minutes of connection failures that
+ * followed were read as "nothing ever stood the environment up", when it had, and the URL it
+ * published was the thing at fault. A whole investigation went to the wrong layer.
+ *
+ * Diffing the CHAIN rather than tracking a high-water mark of `currentStep` is what makes that
+ * impossible rather than unlikely: a step is named because its own state moved, so no poll cadence,
+ * no engine that advances two steps at once, and no step fast enough to fall between two reads can
+ * drop one. It also gets the two non-linear cases for free, and both are ones a reader would
+ * otherwise mis-read the same way: an estimate-gated step that was SKIPPED rather than run (which
+ * `describeRun` shows as a `done` step with nothing to say), and a step that moved BACKWARDS
+ * because a companion bounced its producer.
+ *
+ * Returns lines, not a formatted paragraph: the caller decides which channel they belong on, and
+ * they are milestones rather than observations because each one is a discrete event that happened,
+ * where an observation is only what was true when someone looked.
+ */
+export function describeStepTransitions(
+  before: readonly StepObservation[] | undefined,
+  after: readonly StepObservation[],
+): string[] {
+  // No baseline means this is the FIRST look at the chain, and every step would read as having
+  // just changed. Announcing eleven of them says nothing a reader can use, so the first
+  // observation establishes the baseline and announces nothing.
+  if (!before) return []
+  const lines: string[] = []
+  for (const [index, step] of after.entries()) {
+    const prior = before[index]
+    // A chain that GREW (a companion inserted, a gate auto-inserted) has no prior state for the
+    // new tail. Treated as no baseline for that step alone, for the same reason as above.
+    if (!prior) continue
+    if (prior.state === step.state && prior.skipped === step.skipped) continue
+    const what = step.skipped && !prior.skipped ? 'skipped' : step.state
+    lines.push(`step ${index} '${step.agentKind}': ${prior.state} -> ${what}`)
+  }
+  return lines
+}
+
+/**
  * Describe what a run is asking for, for the same audience as `describeRun`.
  *
  * The listed kinds are split by whether a suite may act on one NOW, because that is the distinction
@@ -219,6 +276,11 @@ export function waitForDecisionOrSettled(options: {
   epilogue: string
 }): Promise<{ run: PublicRun; decisions: PublicDecisionList }> {
   const { client, journal, taskId, runId, budgetMs, epilogue } = options
+  // The previous look at the chain, so a step that starts and finishes between two polls is still
+  // named. Held here rather than inside the probe because it must survive across probe calls, and
+  // updated on EVERY poll including the terminal one: the steps that moved as a run settled are the
+  // ones a failure is read against. See {@link describeStepTransitions}.
+  let seenSteps: readonly StepObservation[] | undefined
   return waitFor({
     label: `task ${taskId} to park on an answerable decision or settle`,
     budgetMs,
@@ -230,6 +292,13 @@ export function waitForDecisionOrSettled(options: {
       // is answerable while the run is still working, so gating this read on `status === blocked`
       // would wait out a decision that was already there.
       const decisions = await client.decisions.list(runId)
+      // Announced as milestones, before the readiness branch below returns: a transition is a
+      // discrete event that HAPPENED, where the sampled `state` line is only what was true when
+      // someone looked, and the two belong on different channels for that reason.
+      for (const line of describeStepTransitions(seenSteps, run.steps)) {
+        journal.say('milestone', line)
+      }
+      seenSteps = run.steps
       const ready = isTerminal(run.status) || decisions.decisions.some(isActionable)
       return ready
         ? { done: true, value: { run, decisions } }

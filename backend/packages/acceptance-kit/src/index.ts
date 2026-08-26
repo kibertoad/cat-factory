@@ -20,8 +20,10 @@ export {
   type DeploymentTarget,
   describeDecisions,
   describeRun,
+  describeStepTransitions,
   isTerminal,
   passThroughCredentialRetry,
+  type StepObservation,
   waitForDecisionOrSettled,
 } from './client.js'
 export {

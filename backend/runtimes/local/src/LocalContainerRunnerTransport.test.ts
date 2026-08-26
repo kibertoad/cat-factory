@@ -853,3 +853,111 @@ describe('LocalContainerRunnerTransport — image variants', () => {
     expect(restarted[0]).toContain('harness-ui:test')
   })
 })
+
+describe('LocalContainerRunnerTransport: ephemeral-environment host bridge', () => {
+  // A containerized tester reading a loopback environment URL resolves it to its OWN empty network
+  // namespace, so the request never leaves the container. Measured, not assumed: curl in a plain
+  // container returns code 000 against `cf-acc-pr8.127.0.0.1.nip.io`, and 404 from the ingress
+  // controller with `--add-host=cf-acc-pr8.127.0.0.1.nip.io:host-gateway`. The run that motivated
+  // this spent fourteen minutes on the former and reported the environment as dead.
+  const ENV_URL = 'http://cf-acc-pr8.127.0.0.1.nip.io'
+  const BRIDGE = '--add-host=cf-acc-pr8.127.0.0.1.nip.io:host-gateway'
+
+  function harnessFetch() {
+    return vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+      if (url.endsWith('/jobs')) return jsonResponse({ jobId: 'j', state: 'running' }, 202)
+      throw new Error(`unexpected fetch ${url}`)
+    })
+  }
+
+  const runArgs = (calls: string[][]) => calls.filter((args) => args[0] === 'run')
+
+  it('adds the bridge for a loopback environment URL', async () => {
+    const { exec, calls } = fakeDocker()
+    const transport = mkTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: harnessFetch() as unknown as typeof fetch,
+    })
+    await transport.dispatch({ runId: 'r1', jobId: 'j1' }, { environmentUrl: ENV_URL }, 'agent')
+    expect(runArgs(calls)[0]).toContain(BRIDGE)
+  })
+
+  it('adds NO bridge for a remote environment URL', async () => {
+    // The harmful direction, pinned: re-pointing a real host at the host gateway would break an
+    // environment the container could already reach.
+    const { exec, calls } = fakeDocker()
+    const transport = mkTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: harnessFetch() as unknown as typeof fetch,
+    })
+    await transport.dispatch(
+      { runId: 'r2', jobId: 'j1' },
+      { environmentUrl: 'https://pr8.staging.example.com' },
+      'agent',
+    )
+    expect(runArgs(calls)[0]?.some((arg) => arg.startsWith('--add-host=pr8.staging'))).toBe(false)
+  })
+
+  it('REPLACES a run container that predates the environment, so the tester can reach it', async () => {
+    // The ordering this exists for, and it is not an edge case: `dispatchPerRun` starts ONE
+    // container for the whole run at its first step, and the environment does not exist until the
+    // `deployer` step. So the container every tester re-attaches to was necessarily built before
+    // there was a host to bridge, and /etc/hosts is fixed at create time. Without the replacement
+    // the bridge would be computed correctly and never applied to the container that needs it.
+    const { exec, calls } = fakeDocker()
+    const transport = mkTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: harnessFetch() as unknown as typeof fetch,
+    })
+    const ref = { runId: 'r3', jobId: 'j1' }
+    // Step one: no environment yet, so no bridge.
+    await transport.dispatch(ref, {}, 'agent')
+    expect(runArgs(calls)).toHaveLength(1)
+    expect(runArgs(calls)[0]).not.toContain(BRIDGE)
+
+    // The tester step, now carrying the provisioned URL.
+    await transport.dispatch({ ...ref, jobId: 'j2' }, { environmentUrl: ENV_URL }, 'agent')
+    const runs = runArgs(calls)
+    expect(runs).toHaveLength(2)
+    expect(runs[1]).toContain(BRIDGE)
+    // Removing whatever the old key still points at is `dispatchPerRun`'s pre-existing recreate
+    // path (the same one that clears a dead container), so it is not re-asserted here: the scripted
+    // CLI reports no container for the label, which is what a lookup would find rather than
+    // anything this test established.
+  })
+
+  it('does NOT replace the container again once it carries the bridge', async () => {
+    // Re-polls and later steps on the same URL must re-attach. A replacement per dispatch would
+    // re-clone the checkout on every step, which is a worse bug than the one being fixed.
+    const { exec, calls } = fakeDocker()
+    const transport = mkTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: harnessFetch() as unknown as typeof fetch,
+    })
+    const ref = { runId: 'r4', jobId: 'j1' }
+    await transport.dispatch(ref, { environmentUrl: ENV_URL }, 'agent')
+    await transport.dispatch({ ...ref, jobId: 'j2' }, { environmentUrl: ENV_URL }, 'agent')
+    expect(runArgs(calls)).toHaveLength(1)
+  })
+
+  it('leaves a bridged container alone for a later step that needs no bridge', async () => {
+    // A superset is fine: the entry is inert for a job that never resolves that name, so there is
+    // nothing to gain by tearing the container down to remove it.
+    const { exec, calls } = fakeDocker()
+    const transport = mkTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: harnessFetch() as unknown as typeof fetch,
+    })
+    const ref = { runId: 'r5', jobId: 'j1' }
+    await transport.dispatch(ref, { environmentUrl: ENV_URL }, 'agent')
+    await transport.dispatch({ ...ref, jobId: 'j2' }, {}, 'agent')
+    expect(runArgs(calls)).toHaveLength(1)
+  })
+})
