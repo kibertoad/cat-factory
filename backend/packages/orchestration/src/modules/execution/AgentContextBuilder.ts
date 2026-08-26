@@ -406,29 +406,10 @@ export class AgentContextBuilder {
     // carries it for attribution), so it is named once here.
     const initiatedBy = instance.initiatedBy
     const observations = stepObservations(step, options)
-    // When a block's requirements have been reworked, that standardized document is
-    // the single source of truth for every agent step: it already folds in the
-    // description plus the linked docs / tracker issues, so it REPLACES the
-    // description and the (now-redundant) doc/task context. Reviews are only ever run
-    // on task blocks, so skip the lookup entirely for frames/modules — that keeps the
-    // extra read off every container/frame step rather than on the whole hot path.
-    // A converged clarity (bug-report triage) report substitutes downstream exactly like a
-    // reworked requirements doc. When both exist on one task the requirements doc — which
-    // runs after clarity and is the more refined artifact — takes precedence.
-    // The (possibly reworked/clarified) description is the single substitution every step
-    // reads, and the owning service frame is walked to by four of the resolvers below. Resolve
-    // BOTH first (independently, so in one wave): the description feeds linked-context + the
-    // block payload, and threading the pre-resolved `serviceFrame` into the frame resolvers
-    // collapses their four separate frame→module→task walks into ONE (reuse-not-cache).
-    const [reworked, serviceFrame] = await Promise.all([
-      this.resolveSubstituteDescription(workspaceId, block),
-      this.serviceFrameFor(workspaceId, block),
-    ])
-    const description = reworked ?? block.description
-    // One promise, two consumers: the wave's first entry below, and the fragment fold, which needs to
-    // know whether this run carries a DESIGN document without re-resolving the corpus to find out.
-    const linked = linkedContextWithDesignFlag(!reworked, (opts) =>
-      this.resolveLinkedContext(workspaceId, block.id, description, opts, observations),
+    const { description, serviceFrame, linked } = await this.resolveBlockSubstitutions(
+      workspaceId,
+      block,
+      observations,
     )
     // The remaining context resolutions are mutually independent — the frame resolvers all read
     // from the shared `serviceFrame`, and the rest read disjoint sources — so fan them out in one
@@ -776,6 +757,52 @@ export class AgentContextBuilder {
   /** The service-frame id for a block (walks up frame → module → task; cycle-guarded). */
   async resolveServiceFrameId(workspaceId: string, blockId: string): Promise<string | null> {
     return (await this.resolveServiceFrame(workspaceId, blockId))?.id ?? null
+  }
+
+  /**
+   * The block-level substitutions every resolver below reads: the EFFECTIVE description, the
+   * owning service frame, and the linked-context promise keyed off both.
+   *
+   * When a block's requirements have been reworked, that standardized document is the single
+   * source of truth for every agent step: it already folds in the description plus the linked
+   * docs / tracker issues, so it REPLACES the description and the (now-redundant) doc/task
+   * context. Reviews are only ever run on task blocks, so the lookup is skipped entirely for
+   * frames/modules, which keeps the extra read off every container/frame step rather than on the
+   * whole hot path. A converged clarity (bug-report triage) report substitutes downstream exactly
+   * like a reworked requirements doc; when both exist on one task the requirements doc (which runs
+   * after clarity and is the more refined artifact) takes precedence.
+   *
+   * The description and the frame resolve in ONE wave because they are independent: the
+   * description feeds linked-context + the block payload, and threading the pre-resolved
+   * `serviceFrame` into the frame resolvers collapses their four separate frame/module/task walks
+   * into one (reuse-not-cache).
+   *
+   * `linked` is ONE promise with two consumers: the caller's read wave and the fragment fold,
+   * which needs to know whether this run carries a DESIGN document without re-resolving the
+   * corpus to find out. It is deliberately NOT awaited here, so it joins that wave rather than
+   * costing a round-trip of its own ahead of it.
+   */
+  private async resolveBlockSubstitutions(
+    workspaceId: string,
+    block: Block,
+    observations: StepObservations,
+  ): Promise<{
+    description: string
+    serviceFrame: Block | null
+    linked: ReturnType<typeof linkedContextWithDesignFlag>
+  }> {
+    const [reworked, serviceFrame] = await Promise.all([
+      this.resolveSubstituteDescription(workspaceId, block),
+      this.serviceFrameFor(workspaceId, block),
+    ])
+    const description = reworked ?? block.description
+    return {
+      description,
+      serviceFrame,
+      linked: linkedContextWithDesignFlag(!reworked, (opts) =>
+        this.resolveLinkedContext(workspaceId, block.id, description, opts, observations),
+      ),
+    }
   }
 
   /**

@@ -139,6 +139,20 @@ export interface HarnessCallMetric {
    * re-records rather than duplicating. Absent on every real turn.
    */
   standsForJob?: boolean
+  /**
+   * This row carries only TOKENS and stands for no model call of its own — the fact
+   * {@link LlmCallMetric.spendOnly} persists, decided by the producer that built the row.
+   *
+   * Distinct from {@link standsForJob}, which is only about the TURN ordinal, and the two answers
+   * genuinely differ: the shortfall row never occupies a turn, but it IS the job's call record
+   * when the CLI narrated no turns at all — nothing else recorded that call, so a `calls` figure
+   * excluding it would report a step that spent tokens on zero calls. Only the producer can tell
+   * the two apart, because a downstream reader sees one BATCH of a job's calls (the live drain
+   * splits them across polls) and cannot ask whether any turn was narrated.
+   *
+   * Absent on every real turn, where it is false either way.
+   */
+  spendOnly?: boolean
 }
 
 /** The structured work product a finished job records. */

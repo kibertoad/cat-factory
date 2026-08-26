@@ -97,11 +97,18 @@ NULL `turn_index` is equally the shape of a plain inline call, so a reader canno
 report" from "no call happened". Left unmarked it was counted by `COUNT(*) AS calls`, which is one
 phantom call per dispatch on every subscription-harness step (a 4-turn architect reporting 5, a
 2-review companion reporting 4), while the tokens were right the whole time. Every token sum keeps
-the row; every call count drops it. The producer is the only layer that can decide which it built:
-the inline model files `spendOnly: reported > 0`, so a CLI that narrated NOTHING keeps its one
-aggregate as the call it genuinely is, bodies and duration included, while a part-narrated step's
-remainder is a correction; the container path files the flag straight off `standsForJob`, whose
-row has no bodies at all because there was no request to capture.
+the row; every call count drops it, INCLUDING the `turns_after` windows behind the carry cost: it
+re-sent nothing and nothing re-sent it, and counting it in the partition total charged every real
+turn one carry too many.
+
+**The producer is the only layer that can decide which of the two it built**, and both do it the
+same way: is there another row for this job? The inline model files `spendOnly: reported > 0`, and
+the container harness's `unaccountedUsageCall` files `parentCalls.length > 0`, so a CLI that
+narrated NOTHING keeps its one aggregate as the call it genuinely is while a part-narrated step's
+remainder is a correction. It is a SEPARATE fact from `standsForJob`, which only says the row
+occupies no turn: reading the flag off that one reported every un-narrated container run as zero
+calls with real spend. Nor can the backend re-derive it from the batch it is handed, since the live
+drain splits a job's calls across polls and the terminal batch is routinely this row alone.
 
 Only Claude Code's `stream-json` is parsed per call, through the container harness's
 `createClaudeRunTelemetry` (`@cat-factory/executor-harness/claude-call-aggregator`): the ONE

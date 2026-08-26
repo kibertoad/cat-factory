@@ -500,6 +500,13 @@ export interface HarnessCallsRecordInput {
  * calls by turn must not be handed a position it never occupied. Its ID still comes from `seq`,
  * so idempotency is unaffected — the same split `CliInlineLanguageModel` makes between its
  * per-call rows and its one step-level row.
+ *
+ * Whether that row is also a SPEND CORRECTION rather than a call is a SECOND question, and it is
+ * read off {@link HarnessCallMetric.spendOnly} rather than re-derived from `standsForJob`: a
+ * shortfall row filed by a CLI that narrated no turns at all is the job's only record and IS its
+ * call. Deriving it here from the batch (`calls.some(c => !c.standsForJob)`) would get that wrong
+ * in the routine case, since a job's calls arrive in the BATCHES the live drain delivers them in
+ * and the terminal batch is regularly this row alone.
  */
 export function makeHarnessCallRecorder(
   service: LlmObservabilityService,
@@ -521,10 +528,10 @@ export function makeHarnessCallRecorder(
         // unattributed slice rather than being guessed at from the agent kind.
         ...(call.phase !== undefined ? { phase: call.phase } : {}),
         turnIndex: call.standsForJob ? null : turnIndex,
-        // The same fact `standsForJob` already states, persisted so a rollup can act on it. A NULL
-        // `turnIndex` cannot carry it: a plain inline call has one too, so a reader could not tell
-        // "no turn to report" from "no call happened".
-        spendOnly: call.standsForJob === true,
+        // The producer's own answer, persisted so a rollup can act on it. A NULL `turnIndex`
+        // cannot carry it: a plain inline call has one too, so a reader could not tell "no turn to
+        // report" from "no call happened". Nor can `standsForJob` stand in — see above.
+        spendOnly: call.spendOnly === true,
         messageCount: call.messageCount,
         toolCount: 0,
         requestMaxTokens: null,

@@ -541,7 +541,7 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
     // two factors of the carry-cost proxy. `partition by agent_kind` is the conversation
     // boundary (the prompt delta chain is keyed by `(workspace, execution, agent_kind)`), and
     // the ordering avoids `turn_index` because a proxied row's is NULL by design; mirrors the
-    // D1/node:sqlite subquery exactly.
+    // D1/node:sqlite subquery exactly, spend-correction rows excluded and all.
     const ranked = this.db
       .select({
         agentKind: llmCallMetrics.agent_kind,
@@ -562,8 +562,14 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
           sql<number>`(${llmCallMetrics.prompt_tokens} + ${llmCallMetrics.cache_read_tokens} + ${llmCallMetrics.cache_write_tokens})`.as(
             'input_tokens',
           ),
+        // A `spend_only` row counts on NEITHER side, which is why both windows are conditional
+        // sums rather than `count(*)`/`row_number()`. It is a spend CORRECTION, not a turn: it
+        // re-sends nothing (the outer `case`), and no later turn re-sent it, so counting it in the
+        // partition total inflated every real turn's `turns_after` by one — a whole extra
+        // `sum(input_tokens)` of carry cost per agent kind. The shortfall row is filed last, so a
+        // plain `count(*)` was wrong for every row before it, which is all of them. Mirrors D1.
         turnsAfter:
-          sql<number>`(count(*) over (partition by ${llmCallMetrics.agent_kind}) - row_number() over (partition by ${llmCallMetrics.agent_kind} order by ${llmCallMetrics.created_at}, ${llmCallMetrics.message_count}, ${llmCallMetrics.id}))`.as(
+          sql<number>`(case when ${llmCallMetrics.spend_only} = 1 then 0 else sum(case when ${llmCallMetrics.spend_only} = 0 then 1 else 0 end) over (partition by ${llmCallMetrics.agent_kind}) - sum(case when ${llmCallMetrics.spend_only} = 0 then 1 else 0 end) over (partition by ${llmCallMetrics.agent_kind} order by ${llmCallMetrics.created_at}, ${llmCallMetrics.message_count}, ${llmCallMetrics.id} rows between unbounded preceding and current row) end)`.as(
             'turns_after',
           ),
       })

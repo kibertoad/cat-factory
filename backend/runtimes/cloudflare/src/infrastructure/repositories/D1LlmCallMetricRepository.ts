@@ -29,6 +29,14 @@ const WARNING_REASONS_SQL = LLM_WARNING_FINISH_REASONS.map((r) => `'${r}'`).join
  * index is deliberately NULL (the proxy has no job-scoped counter), so ordering by it would
  * heap every Pi call at one end of its conversation. `message_count` breaks the same-millisecond
  * ties a burst produces, and `id` makes the result deterministic.
+ *
+ * A `spend_only` row counts on NEITHER side, which is why both windows are conditional sums rather
+ * than `count(*)`/`row_number()`. It is a spend CORRECTION, not a turn: it re-sends nothing (so its
+ * own input carries nothing, hence the outer `CASE`), and no later turn re-sent IT (so counting it
+ * in the partition total inflated every real turn's `turns_after` by one, which is a whole extra
+ * `SUM(input_tokens)` of carry cost per agent kind on every subscription-harness step). The
+ * shortfall row is filed last, so the plain `count(*)` was wrong for every row that preceded it,
+ * which is all of them.
  */
 const CARRY_COST_SUBQUERY_SQL = `SELECT
        agent_kind,
@@ -46,9 +54,12 @@ const CARRY_COST_SUBQUERY_SQL = `SELECT
        ok,
        spend_only,
        (prompt_tokens + cache_read_tokens + cache_write_tokens) AS input_tokens,
-       COUNT(*) OVER (PARTITION BY agent_kind)
-         - ROW_NUMBER() OVER (PARTITION BY agent_kind ORDER BY created_at, message_count, id)
-         AS turns_after
+       CASE WHEN spend_only = 1 THEN 0 ELSE
+         SUM(CASE WHEN spend_only = 0 THEN 1 ELSE 0 END) OVER (PARTITION BY agent_kind)
+           - SUM(CASE WHEN spend_only = 0 THEN 1 ELSE 0 END)
+               OVER (PARTITION BY agent_kind ORDER BY created_at, message_count, id
+                     ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+       END AS turns_after
      FROM llm_call_metrics
      WHERE workspace_id = ? AND execution_id = ?`
 

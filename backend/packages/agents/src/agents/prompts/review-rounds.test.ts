@@ -747,6 +747,29 @@ describe('renderOpenFindings', () => {
     expect(text).toContain('… [trimmed]')
   })
 
+  it('bounds the QUOTED locator too, keeping the heading one line that closes its quote', () => {
+    // `quotedSource` is model- or human-authored prose of any length: spliced raw it carries a
+    // body's worth of tokens into every downstream dispatch, and its own newlines end the heading
+    // so the tail reads as the finding. The trim is stated, and the closing quote survives it.
+    const lines = renderOpenFindings('architect', [
+      { body: 'unhandled', severity: 'major', quotedSource: `y${'z'.repeat(5_000)}` },
+    ])
+    const heading = lines.find((l) => l.startsWith('On '))!
+
+    expect(heading.split('\n')).toHaveLength(1)
+    expect(heading.length).toBeLessThan(2_000)
+    expect(heading).toContain('… [trimmed]"')
+    expect(heading).toContain('[major]')
+  })
+
+  it('flattens a MULTI-LINE quoted locator instead of letting it end the heading', () => {
+    const lines = renderOpenFindings('architect', [
+      { body: 'name the owner', quotedSource: '## Rollout\n\nflip   the flag  ' },
+    ])
+
+    expect(lines).toContain('On "## Rollout flip the flag":')
+  })
+
   it('renders nothing at all for an empty list', () => {
     // An empty section would read as "reviewed, defects: none", which is a claim nobody made.
     expect(renderOpenFindings('architect', [])).toEqual([])

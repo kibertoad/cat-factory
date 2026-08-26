@@ -99,6 +99,13 @@ transport + the GitHub token/client seams differ.
   each call site; run the query through these instead. The `SqliteRow<Row>` bound checks the row
   shape is one SQLite could actually return, so a `boolean`, a nested object or a domain union
   fails the build rather than being asserted into existence (decode it from the raw column).
+  **Opening RECONCILES the file's columns against the schema it was handed**, additively: a
+  `CREATE TABLE IF NOT EXISTS` is a no-op against a table the file already has, so a column added
+  to a shipped schema would otherwise reach a fresh database and no other and every read naming it
+  would fail with `no such column`. So ADD a column to the store's `SCHEMA` and nothing else; a
+  column that SQLite cannot add (`NOT NULL` with no default, `UNIQUE`, a key) refuses the open
+  rather than failing one query at a time, and a column the schema drops is left in place, because
+  removing one means rebuilding the table.
 - `sqlite/*.conformance.test.ts`: this store runs the SAME conformance suites D1 and Postgres do,
   for every one of its six telemetry repositories. It is the store a developer's own runs are
   recorded in, so a property all three must agree about belongs in the shared suite rather than in

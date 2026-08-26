@@ -213,7 +213,7 @@ export function renderPriorReviewRounds(
       const grade = comment.severity ? `[${comment.severity}] ` : ''
       lines.push(
         target
-          ? `- ${grade}On ${clip(target, false)}: ${clip(comment.body, isLatest)}`
+          ? `- ${grade}On ${target}: ${clip(comment.body, isLatest)}`
           : `- ${grade}${clip(comment.body, isLatest)}`,
       )
     }
@@ -305,12 +305,33 @@ export function renderRevisionComments(comments: readonly ReviewedPoint[]): stri
  * id, which is a locator the producer looks up. A point with neither is rendered as the standalone
  * note it is, rather than against an empty target — the failure mode a `(empty)` placeholder
  * produced, where a producer was told to fix a specific part and shown nothing.
+ *
+ * A locator is ONE bounded LINE, and both halves of that are enforced here rather than at the call
+ * sites. `quotedSource` is model- or human-authored prose of any length and shape: an unflattened
+ * one breaks the line it was spliced into (its tail then reads as the finding's body, or as
+ * instructions), and an unbounded one costs a body's worth of tokens on every dispatch that carries
+ * the point. Both callers splice this string INTO a line they compose, so the rule lives here and
+ * they cannot state it differently — the drift it replaced left {@link renderOpenFindings}' heading
+ * unbounded while its sibling bullet clipped. ({@link renderRevisionComments} is deliberately not
+ * one of them: it gives a quoted block its OWN line precisely because it is verbatim source of
+ * arbitrary length, so it has no line to break and nothing to bound.)
+ *
+ * The trim is {@link clip}'s, so a shortened locator SAYS it was shortened: a silent cut reads as
+ * the whole of what the reviewer quoted, and a producer would go looking for prose the document
+ * does not contain. It is applied BEFORE the quoting, so the closing delimiter always survives —
+ * clipping the finished `"…"` (as the bullet renderer used to) cut it off and left the rest of the
+ * line reading as part of the quotation.
  */
 function reviewedPointTarget(comment: ReviewedPoint): string | undefined {
-  const quoted = comment.quotedSource?.trim()
-  if (quoted) return `"${quoted}"`
-  const anchor = comment.anchorId?.trim()
-  return anchor ? `item \`${anchor}\`` : undefined
+  const quoted = oneLine(comment.quotedSource)
+  if (quoted) return `"${clip(quoted, false)}"`
+  const anchor = oneLine(comment.anchorId)
+  return anchor ? `item \`${clip(anchor, false)}\`` : undefined
+}
+
+/** Collapse a locator onto one line, so splicing it into a composed line cannot break that line. */
+function oneLine(text: string | undefined): string {
+  return text?.replace(/\s+/g, ' ').trim() ?? ''
 }
 
 /**

@@ -91,7 +91,9 @@ const WARNING_REASONS_SQL = LLM_WARNING_FINISH_REASONS.map((r) => `'${r}'`).join
  * The run's calls with each one's total input and the turns left in ITS conversation after it —
  * the two factors of the carry-cost proxy. Mirrors the D1 store's subquery exactly (same
  * `PARTITION BY agent_kind` conversation boundary, same `(created_at, message_count, id)`
- * ordering, chosen because a proxied row's `turn_index` is NULL by design).
+ * ordering, chosen because a proxied row's `turn_index` is NULL by design, and the same exclusion
+ * of a `spend_only` row from BOTH window sides — see that file for why a plain `count(*)` there
+ * overstated every real turn's carry).
  */
 const CARRY_COST_SUBQUERY_SQL = `SELECT
        agent_kind,
@@ -109,9 +111,12 @@ const CARRY_COST_SUBQUERY_SQL = `SELECT
        ok,
        spend_only,
        (prompt_tokens + cache_read_tokens + cache_write_tokens) AS input_tokens,
-       COUNT(*) OVER (PARTITION BY agent_kind)
-         - ROW_NUMBER() OVER (PARTITION BY agent_kind ORDER BY created_at, message_count, id)
-         AS turns_after
+       CASE WHEN spend_only = 1 THEN 0 ELSE
+         SUM(CASE WHEN spend_only = 0 THEN 1 ELSE 0 END) OVER (PARTITION BY agent_kind)
+           - SUM(CASE WHEN spend_only = 0 THEN 1 ELSE 0 END)
+               OVER (PARTITION BY agent_kind ORDER BY created_at, message_count, id
+                     ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+       END AS turns_after
      FROM llm_call_metrics
      WHERE workspace_id = ? AND execution_id = ?`
 

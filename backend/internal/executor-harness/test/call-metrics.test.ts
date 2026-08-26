@@ -68,16 +68,25 @@ describe('unaccountedUsageCall', () => {
       outputTokens: 16_656,
       finishReason: null,
       standsForJob: true,
+      // Four measured turns were filed beside it, so this row corrects THEIR under-reporting and
+      // is not itself a call.
+      spendOnly: true,
     })
     // The whole point: turns plus remainder reproduce the CLI's own total.
     expect(calls.reduce((n, c) => n + c.outputTokens, 0) + remainder!.outputTokens).toBe(16_673)
   })
 
   it('carries the WHOLE total when a CLI costed nothing at all', () => {
-    // The case the previous rule was written for: a shortfall equal to the total. It is still one
-    // row, which for this CLI is the only row the run gets.
+    // The case the previous rule was written for: a shortfall equal to the total.
     const remainder = unaccountedUsageCall([call('only')], { inputTokens: 300, outputTokens: 50 })
-    expect(remainder).toMatchObject({ inputTokens: 300, outputTokens: 50, standsForJob: true })
+    // A NARRATED turn was filed, even though the CLI costed it at nothing, so this row is still a
+    // correction rather than a second call: the turn is what the reader counts.
+    expect(remainder).toMatchObject({
+      inputTokens: 300,
+      outputTokens: 50,
+      standsForJob: true,
+      spendOnly: true,
+    })
   })
 
   it('files NOTHING when the turns already account for the terminal total', () => {
@@ -114,12 +123,15 @@ describe('unaccountedUsageCall', () => {
     expect(unaccountedUsageCall([], undefined)).toBeUndefined()
   })
 
-  it('is the whole total for a run that captured no turns', () => {
-    // A CLI that narrated nothing but reported a cumulative: the row is the only record there is.
+  it('is the whole total, and a CALL, for a run that captured no turns', () => {
+    // A CLI that narrated nothing but reported a cumulative: the row is the only record there is,
+    // so it is NOT spend-only. Marking it so would report a step that burned tokens across zero
+    // calls — the same reading `CliInlineLanguageModel` refuses with its own `reported > 0`.
     expect(unaccountedUsageCall([], { inputTokens: 1, outputTokens: 2 })).toMatchObject({
       inputTokens: 1,
       outputTokens: 2,
       standsForJob: true,
+      spendOnly: false,
     })
   })
 })

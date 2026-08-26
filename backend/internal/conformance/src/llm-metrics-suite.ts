@@ -281,6 +281,42 @@ function registerMetricRollupTests(
     expect(s.completionTokens).toBe(912)
   })
 
+  it('charges no carry cost for a spend-correction row, nor for the turns before it', async () => {
+    // Carry cost is `input x turns that re-sent it`, and a spend correction is on NEITHER side of
+    // that: it re-sends nothing, and nothing re-sent IT. Counting it in the partition total gave
+    // every real turn one turn too many — a whole extra `SUM(input_tokens)` per agent kind, on
+    // every subscription-harness step, since the shortfall row is filed after all of them.
+    //
+    // Ordered by explicit `createdAt` rather than by the id tiebreak, because the position of the
+    // correction row is exactly what the arithmetic turns on.
+    const repo = makeRepo()
+    const { ws, e1 } = ids()
+    await repo.record(
+      metric({ id: `${ws}-t1`, workspaceId: ws, executionId: e1, createdAt: 1, promptTokens: 100 }),
+    )
+    await repo.record(
+      metric({ id: `${ws}-t2`, workspaceId: ws, executionId: e1, createdAt: 2, promptTokens: 200 }),
+    )
+    await repo.record(
+      metric({
+        id: `${ws}-short`,
+        workspaceId: ws,
+        executionId: e1,
+        createdAt: 3,
+        promptTokens: 500,
+        spendOnly: true,
+      }),
+    )
+
+    const s = (await repo.summarizeByExecution(ws, e1))[0]!
+    // One real turn re-sent t1's input and none re-sent t2's; the correction carries nothing.
+    // Counting the correction as a turn would report 400.
+    expect(s.carryCostTokens).toBe(100)
+    expect(s.calls).toBe(2)
+    // ...while its tokens stay in the sums, which is the whole reason the row exists.
+    expect(s.promptTokens).toBe(800)
+  })
+
   it('reads the spend-only flag back on the stored row, both ways', async () => {
     // Absent on the type and 0 in both schemas, so a producer with no shortfall concept keeps
     // filing calls. The flag has to survive the round trip or the rollup above is deciding on a
