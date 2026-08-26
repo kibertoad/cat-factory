@@ -12,11 +12,11 @@ import {
   excludeFromGit,
   fetchReferenceBranches,
   headCommit,
-  listUntrackedFiles,
   pushBranch,
   refreshFromBaseIfClean,
   remoteBranchExists,
 } from './git.js'
+import { salvageOnlyNotice, salvageUntrackedWork } from './salvage.js'
 import { openPullRequest } from './vcs-api.js'
 import { applyPrDescription, PR_DESCRIPTION_FILE, readPrDescription } from './pr-description.js'
 import { runAgentInWorkspace, withWorkspace } from './pi-workspace.js'
@@ -212,6 +212,8 @@ export async function runMultiRepoCoding(
           ...(job.referenceScreenshots ? { referenceScreenshots: job.referenceScreenshots } : {}),
           ...(job.designImages ? { designImages: job.designImages } : {}),
           multiRepo: true,
+          // What the no-progress guard's working-tree bound decides on: see {@link probeDirsForLegs}.
+          repoDirs: probeDirsForLegs(legs),
         },
         opts,
       )
@@ -387,6 +389,37 @@ async function prepareMultiRepoCheckouts(
 }
 
 /**
+ * The checkouts the no-progress guard's working-tree bound may judge this run on.
+ *
+ * A multi-repo run's cwd is the workspace ROOT, which is no git repository, so the guard's default
+ * (probe the cwd) asks git a question with no answer: every probe throws, the driver re-arms
+ * forever, and the bound is permanently unenforceable — strictly worse than the tool-name reading
+ * it replaced. The writable legs are the repositories this run may change, so they are what it
+ * has to show progress in.
+ *
+ * A READ-ONLY reference leg is excluded, and not merely as an optimisation: the run is forbidden
+ * to write to it, so a change appearing there is not this run making progress and must never be
+ * what saves it from the bound.
+ */
+export function probeDirsForLegs(legs: readonly { dir: string; readOnly?: boolean }[]): string[] {
+  return legs.filter((leg) => !leg.readOnly).map((leg) => leg.dir)
+}
+
+/**
+ * Put {@link salvageOnlyNotice} at the top of a pull request that is nothing but a salvage.
+ *
+ * Only the BODY is marked. A title carrying it would follow the PR into every list and
+ * notification a maintainer sees, which is a lot of noise for a caveat that belongs beside the
+ * diff, and the salvage commit's own message elaborates on it there.
+ */
+function withSalvageOnlyNote(
+  pr: { title: string; body: string },
+  salvageOnly: boolean,
+): { title: string; body: string } {
+  return salvageOnly ? { ...pr, body: `${salvageOnlyNotice()}\n\n${pr.body}` } : pr
+}
+
+/**
  * Push phase for {@link runMultiRepoCoding}: commit forgotten tracked edits, then push + open a PR
  * for each repo the run actually changed (a repo the agent left untouched is skipped — no branch,
  * no PR; a read-only reference leg is never committed or pushed). Extracted so the multi-repo body
@@ -430,18 +463,36 @@ async function pushMultiRepoLegs(
       (await readPrDescription(leg.dir, readOptions)) ??
       (leg.primary ? await readPrDescription(root, readOptions) : undefined)
     await commitTrackedEdits(leg.dir, job.commitMessage ?? leg.pr?.title ?? 'Agent changes', signal)
-    const advanced = await branchHasCommitsSince(leg.dir, leg.baseSha, signal)
+    // Whether the leg carried COMMITTED work before the salvage, read here and not after it.
+    // Afterwards the salvage's own commit makes every leg it touched look advanced, and the two
+    // are not the same claim: work the agent committed to this repo is a change it chose to make,
+    // where a salvage-only leg is a branch built entirely out of files it left lying in that
+    // checkout. Both are worth keeping; only one is worth presenting as a proposed change without
+    // saying where it came from.
+    const committedOwnWork = await branchHasCommitsSince(leg.dir, leg.baseSha, signal)
+    // Recover this leg's new files, exactly as the single-repo settle path does and for the same
+    // reason: `commitTrackedEdits` captures edits to files git ALREADY tracks, so a new file the
+    // agent created and never added used to be listed, warned about and dropped. Runs BEFORE the
+    // advanced/no-op judgement below, so a leg whose only work is those files is pushed rather
+    // than read as untouched.
+    const salvage = await salvageUntrackedWork({
+      dir: leg.dir,
+      occasion: { kind: 'settled' },
+      logger: logger.child({ repo: leg.dirName }),
+      ...(signal ? { signal } : {}),
+    })
+    const salvageOnly = !committedOwnWork && salvage.status === 'committed'
+    const advanced = committedOwnWork || salvage.status === 'committed'
     let hasWork = advanced || leg.resumed
     if (leg.resumed && !advanced) {
       const ahead = await branchAheadOfBase(leg.dir, leg.repo.baseBranch, leg.ghToken, signal)
       if (ahead === false) hasWork = false
     }
-    const leftover = await listUntrackedFiles(leg.dir, signal)
-    if (leftover.length > 0) {
-      logger.warn('multi-repo: uncommitted new files left behind (not pushed)', {
+    if (salvage.status === 'refused' || salvage.status === 'failed') {
+      logger.warn('multi-repo: new files were left behind and are NOT in the push', {
         repo: leg.dirName,
-        count: leftover.length,
-        files: leftover.slice(0, 20),
+        count: salvage.fileCount,
+        reason: salvage.reason,
       })
     }
     if (!hasWork) {
@@ -457,7 +508,7 @@ async function pushMultiRepoLegs(
         ghToken: leg.ghToken,
         head: leg.workBranch,
         base: leg.repo.baseBranch,
-        pr: applyPrDescription(leg.pr, agentPrDescription),
+        pr: withSalvageOnlyNote(applyPrDescription(leg.pr, agentPrDescription), salvageOnly),
         // See the single-repo call site: refresh a resumed leg's already-open PR, but only
         // when the text is the agent's own briefing rather than the dispatch-time fallback.
         ...(agentPrDescription ? { refreshExisting: true } : {}),

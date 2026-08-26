@@ -34,7 +34,9 @@ import {
   type SkillSpec,
 } from './agent-capabilities.js'
 import { codexImageGapNote, createCodexHome, disposeCodexHome } from './codex-home.js'
-import { ProgressGuard, type ProgressGuardLimits } from './progress-guard.js'
+import type { ProgressGuardLimits } from './progress-guard.js'
+import { createClaudeProgressGuard } from './guard-driver.js'
+import type { WorkspaceProbe } from './workspace-probe.js'
 import { BoundedTail, JsonlLineReader } from './jsonl-stream.js'
 import { killChildProcess, spawnDetached } from './process.js'
 import { agentChildEnv } from './agent-env.js'
@@ -149,6 +151,14 @@ export interface SubscriptionRunOptions {
   guardLimits?: ProgressGuardLimits
   /** Whether this run is expected to edit files (false for assess-only runs); gates the no-edit bound. */
   expectsEdits?: boolean
+  /**
+   * Probes the working tree for evidence the agent changed the repository. The guard's no-edit
+   * bound asks that question and can only see TOOL NAMES, so an agent writing files through
+   * `bash` reads as making no edits at all; this is what settles it before anything is killed.
+   * Injected so the guard stays pure, and consulted at most once per run (only when the bound is
+   * about to abort). Omitted ⇒ the bound falls back to its tool-name-only judgement.
+   */
+  workspaceProbe?: WorkspaceProbe
   /** Called on every chunk of CLI output, so the watchdog sees the agent is alive. */
   onActivity?: () => void
   /** Called with the latest subtask counts each time the CLI updates its todo/plan list. */
@@ -606,56 +616,6 @@ function reportToolServerStartup(
   if (!onToolServers) return
   const observed = observeClaudeMcpInit(event)
   if (observed) onToolServers(observed)
-}
-
-/**
- * No-progress guard on the CLI's own tool stream — the claude-code analogue of runPi's guard,
- * which cannot see the CLI's internal turns. The caller remembers each `tool_use` id's name off
- * the assistant turn (`rememberTool`) and hands the following user turn's content to `feedGuard`,
- * which pairs each `tool_result`'s `is_error` with that name. The FIRST reason trips it: the
- * diagnostic is recorded (readable via `reason()`, which the catch surfaces over the generic abort
- * message) and `guardAbort` fires — folded into streamCli's signal so a tripped guard kills the CLI
- * the same way the external watchdog does. Disabled when the caller supplies no limits (only the
- * external watchdog then bounds the run).
- *
- * Split out of {@link runClaudeCode} for the per-function line budget.
- */
-function createClaudeProgressGuard(opts: SubscriptionRunOptions): {
-  rememberTool: (id: string, name: string) => void
-  feedGuard: (content: unknown[]) => void
-  guardAbort: AbortController
-  reason: () => string | undefined
-} {
-  const guard = opts.guardLimits
-    ? new ProgressGuard(opts.guardLimits, opts.expectsEdits ?? true)
-    : undefined
-  const toolNames = new Map<string, string>()
-  const guardAbort = new AbortController()
-  let guardReason: string | undefined
-
-  const feedGuard = (content: unknown[]): void => {
-    if (!guard || guardReason) return
-    for (const block of content) {
-      if (!isObject(block) || block.type !== 'tool_result') continue
-      const id = typeof block.tool_use_id === 'string' ? block.tool_use_id : undefined
-      const name = id ? toolNames.get(id) : undefined
-      if (id) toolNames.delete(id)
-      if (!name) continue
-      const reason = guard.observeSignal({ name, isError: block.is_error === true })
-      if (reason) {
-        guardReason = reason
-        guardAbort.abort()
-        return
-      }
-    }
-  }
-
-  return {
-    rememberTool: (id, name) => toolNames.set(id, name),
-    feedGuard,
-    guardAbort,
-    reason: () => guardReason,
-  }
 }
 
 /**

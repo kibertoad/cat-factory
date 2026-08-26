@@ -15,6 +15,8 @@ import {
   toolCallSignal,
   type ProgressGuardLimits,
 } from './progress-guard.js'
+import { createGuardDriver } from './guard-driver.js'
+import type { WorkspaceProbe } from './workspace-probe.js'
 import {
   ToolCallTracker,
   readToolCallId,
@@ -883,6 +885,13 @@ export function runPi(opts: {
   /** Whether this run is expected to edit files (false for assess-only runs like the merger). */
   expectsEdits?: boolean
   /**
+   * Probes the working tree for evidence the agent changed the repository — what the guard's
+   * no-edit bound is actually asking, as opposed to the tool names it can see. Injected (the
+   * guard stays pure) and consulted at most once per run, only when that bound is about to abort.
+   * Omitted ⇒ the bound falls back to its tool-name-only judgement.
+   */
+  workspaceProbe?: WorkspaceProbe
+  /**
    * Extra environment for Pi's child process, merged over `process.env` (but under the
    * proxy token). Used to hand the rpiv-web-tools extension its proxy-backed SearXNG
    * config (`SEARXNG_URL` / `SEARXNG_API_KEY`) without mutating the harness's own env.
@@ -935,10 +944,6 @@ export function runPi(opts: {
     // spam): `{`-leading lines that failed to JSON.parse, and observer-callback throws.
     let malformedLines = 0
     let observerErrors = 0
-    const guard = new ProgressGuard(
-      opts.guardLimits ?? progressGuardLimitsFromEnv(),
-      opts.expectsEdits ?? true,
-    )
     // Pairs each tool call's start with its result, numbers the pairs and captures the two
     // bodies (scrubbed + capped). A call whose start Pi never emitted still gets an entry,
     // timed from the previous call's end — see `ToolCallTracker`.
@@ -954,6 +959,21 @@ export function runPi(opts: {
     // SIGTERM first, then SIGKILL if Pi ignores it. Shared by the watchdog abort
     // and the no-progress guard; the `close` handler turns it into a rejection.
     const killChild = (): void => killChildProcess(child)
+
+    // The guard, plus the driver that settles its one bound needing evidence from outside this
+    // stream (see `guard-driver.ts`). `processLine` is a synchronous reader, so the driver owns
+    // the probe's lifetime rather than this handler awaiting inside it.
+    const guardDriver = createGuardDriver({
+      guard: new ProgressGuard(
+        opts.guardLimits ?? progressGuardLimitsFromEnv(),
+        opts.expectsEdits ?? true,
+      ),
+      probe: opts.workspaceProbe,
+      onAbort: (reason) => {
+        guardReason = reason
+        killChild()
+      },
+    })
 
     // Parse each complete JSONL record once, retaining it for the close-of-run reductions and
     // feeding the todo-progress emitter and the no-progress guard. A tripped guard kills Pi
@@ -1009,13 +1029,7 @@ export function runPi(opts: {
           }
         }
       }
-      if (!final && !guardReason && !aborted) {
-        const reason = guard.observe(event)
-        if (reason) {
-          guardReason = reason
-          killChild()
-        }
-      }
+      if (!final && !guardReason && !aborted) guardDriver.observeEvent(event)
     }
 
     // Pi's json mode is strict LF-framed JSONL; the reader buffers partial records across
