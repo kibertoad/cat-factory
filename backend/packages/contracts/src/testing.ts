@@ -192,6 +192,15 @@ export function parseTestReport(value: unknown): TestReport {
 export const testerInfraSetupSchema = v.object({
   /** Whether `docker compose up --wait` succeeded (the dependencies are up). */
   started: v.boolean(),
+  /**
+   * Whether the executor container had a Docker daemon to talk to, when it knows. The
+   * distinction `started` alone cannot make: a compose stack that failed to come up and an
+   * executor with no daemon are the same `started: false` and opposite fixes (the service's
+   * compose file, versus the image or the sandbox running it). Absent/null means the container
+   * reached no verdict — an image predating the probe, or the native host transport, which runs
+   * the harness with no entrypoint to probe. Never read absence as `false`.
+   */
+  dockerAvailable: v.optional(v.nullable(v.boolean())),
   /** The repo-relative compose file that was stood up, when known. */
   composePath: v.optional(v.nullable(v.string())),
   /** Epoch ms the stand-up attempt finished. */

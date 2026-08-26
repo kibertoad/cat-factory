@@ -6053,6 +6053,7 @@
     "standup": {
       "up": "Dependencias iniciadas",
       "failed": "No se pudieron iniciar las dependencias",
+      "noDocker": "No hay demonio de Docker en el ejecutor",
       "took": "Tardó {seconds}s",
       "showLogs": "Mostrar registros de arranque",
       "hideLogs": "Ocultar registros de arranque"

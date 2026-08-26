@@ -51,7 +51,12 @@ RUN node -p "require('./package.json').version" > harness-version.txt
 # ---- runtime: git + the Pi CLI + the compiled wrapper --------------------
 # Pinned to the SAME digest as the build stage above (see that note to bump).
 FROM node:26-trixie-slim@sha256:4ebb5ace66f15a24c14c492e01a8beeed4fddf970a856109f5126e703e5fe503 AS runtime
-ENV NODE_ENV=production
+# NODE_ENV is deliberately NOT set image-wide. It is the harness PROCESS's setting, and
+# `entrypoint.sh` gives it to that process alone (`exec env NODE_ENV=production node …`),
+# with `agentChildEnv` dropping it again from every child the harness spawns into the
+# agent's checkout. Baked in here it reached the agent instead: npm reads it as
+# `omit=dev`, so `npm install` in a checkout silently skipped devDependencies and a
+# measured coder run spent six of its forty tool calls discovering and undoing that.
 
 # Defense-in-depth: run as an unprivileged user, not root. Created up front so the
 # extension installs below run as it and the config lands in a home it owns and can
@@ -91,6 +96,13 @@ RUN echo 'harness:100000:65536' > /etc/subuid \
 # `/proc/*/cmdline` sweep, `kill -TERM -1`), which is how a coder run once killed the
 # harness itself. The narrow tool is the safe one, and it is ~1.5 MB.
 #
+# `python3`, `jq` and `ripgrep` are on that line for the SAME reason, and it is the reason
+# the comment above gives rather than a general "handy to have": a model reaches for
+# `python3 - <<PY`, `jq`, and `rg` by reflex, and each `command not found` costs a tool
+# call and pushes the run toward a worse substitute. ~41 MB for the three. Deliberately
+# NOT here: `python3-pip` / `python3-venv` (which invite building a Python environment
+# inside a Node repo) and `fd-find` (whose binary is `fdfind`, so the reflex still misses).
+#
 # Pi is pure JS, so it installs with `--ignore-scripts` (no untrusted install
 # hooks). Claude Code and Codex, however, rely on their install scripts to place
 # the right platform binary (Codex in particular ships a native binary), so they
@@ -106,7 +118,7 @@ ARG PI_VERSION=0.84.3
 ARG CLAUDE_CODE_VERSION=2.1.245
 ARG CODEX_VERSION=0.149.1
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
-    sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl procps psmisc && rm -rf /var/lib/apt/lists/*; \
+    sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl procps psmisc python3 jq ripgrep && rm -rf /var/lib/apt/lists/*; \
     if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
     npm install -g --ignore-scripts "@earendil-works/pi-coding-agent@${PI_VERSION}"; \
     npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" "@openai/codex@${CODEX_VERSION}"; \
@@ -122,19 +134,33 @@ ENV CLAUDE_CLI_VERSION=${CLAUDE_CODE_VERSION}
 # Rootless Docker + the compose plugin, for the Tester's local-mode infra stand-up.
 # Cloudflare Containers (and most managed runners) run unprivileged, so we install
 # the rootless extras and run the daemon as the `harness` user at runtime (see
-# entrypoint.sh) — no privileged mode, no host docker socket. uidmap provides the
-# newuidmap/newgidmap helpers user namespaces need; fuse-overlayfs is the rootless
-# storage driver. Best-effort at runtime: if the sandbox forbids user namespaces the
-# daemon simply won't start and the Tester degrades to no-infra (it never blocks the
-# container from booting). Installed from Docker's official apt repo, pinned to the
-# Debian release the base image uses (trixie).
+# entrypoint.sh) — no privileged mode, no host docker socket. Installed from Docker's
+# official apt repo, pinned to the Debian release the base image uses (trixie).
+#
+# EVERY package on this line is load-bearing, which the list did not use to show:
+#   - `docker-ce` is the DAEMON. `docker-ce-rootless-extras` ships only the wrappers
+#     (`dockerd-rootless.sh`, `rootlesskit`) that START a daemon, so without it the
+#     entrypoint died on `exec: dockerd: not found` and this whole block bought the image
+#     a CLI it could never reach a daemon with. `containerd.io` is the runtime it drives.
+#   - `iproute2` gives rootlesskit the `ip` binary it builds the daemon's network with;
+#     without it the parent failed at `nsenter: failed to execute ip` before the daemon
+#     was even reached. `slirp4netns` is the userspace networking it then uses.
+#   - `uidmap` provides the newuidmap/newgidmap helpers user namespaces need;
+#     `fuse-overlayfs` is the rootless storage driver.
+# Runtime is still best-effort (a sandbox that forbids user namespaces has no daemon and
+# never blocks the container from booting), but it is no longer SILENT: entrypoint.sh waits
+# for the daemon on a bounded window and records the verdict, and the harness refuses a
+# local-compose stand-up that verdict says cannot work instead of degrading to no-infra
+# without saying so.
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; export CURL_CA_BUNDLE=/tmp/extra_ca.crt; fi; \
     install -m 0755 -d /etc/apt/keyrings; \
     curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc; \
     chmod a+r /etc/apt/keyrings/docker.asc; \
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable" > /etc/apt/sources.list.d/docker.list; \
-    apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin docker-ce-rootless-extras uidmap fuse-overlayfs && rm -rf /var/lib/apt/lists/*'
+    apt-get update && apt-get install -y --no-install-recommends docker-ce containerd.io docker-ce-cli \
+    docker-compose-plugin docker-ce-rootless-extras uidmap fuse-overlayfs iproute2 slirp4netns \
+    && rm -rf /var/lib/apt/lists/*'
 
 WORKDIR /app
 # Copy the compiled wrapper owned by the unprivileged user (no recursive chown
@@ -170,6 +196,13 @@ RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     pi install "npm:@juicesharp/rpiv-web-tools@${PI_WEB_TOOLS_EXTENSION_VERSION}"'
 
 # Rootless Docker runtime config for the harness user (consumed by entrypoint.sh).
+# DOCKER_HOST is EMPTY on purpose: it is the "no external daemon was wired into this
+# container" signal the entrypoint branches on, which is how a self-hosted pool points the
+# harness at a sidecar daemon instead (it sets a real value). The entrypoint then exports
+# the rootless socket into the process it execs, so the harness and every agent descended
+# from it read the right value — but a later `docker exec` into the running container starts
+# from the IMAGE env and sees this empty one. That is a debugging artefact, not the value
+# any job runs with; read /tmp/harness-docker-status.json (or GET /health) for the truth.
 ENV XDG_RUNTIME_DIR=/home/harness/.docker/run \
     DOCKER_HOST=
 EXPOSE 8080

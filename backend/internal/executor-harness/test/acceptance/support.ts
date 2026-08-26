@@ -129,6 +129,17 @@ export function startContainer(name: string, hostPort: number, bare: string): vo
   )
 }
 
+/**
+ * Start a detached container with nothing mounted and no job-specific env: just the image, as it
+ * boots in production. What the image-inventory suite asserts is the BOOT itself (the docker probe,
+ * the harness's own environment), so a bind-mounted repo would only be noise it has to clean up.
+ */
+export function startBareContainer(name: string, hostPort: number): void {
+  execFileSync('docker', ['run', '-d', '--name', name, '-p', `${hostPort}:8080`, IMAGE], {
+    stdio: 'ignore',
+  })
+}
+
 export function removeContainer(name: string): void {
   try {
     execFileSync('docker', ['rm', '-f', name], { stdio: 'ignore' })

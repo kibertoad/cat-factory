@@ -52,9 +52,15 @@ transport + the GitHub token/client seams differ.
   runtime that cannot read an exit code leaves it ABSENT rather than defaulting it. Both readings
   come from ONE `exitState()` per poll, and the verdict is asked on the 404 branch too: on a backend
   that outlives a run the 404 is often the REPLACEMENT harness, so what decides is the one the job
-  was dispatched to. Each adapter also exposes a `localDind` capability threaded
-  into `ExecutionService` as `localTestInfraSupported`, so a runtime that can't nest containers
-  refuses a local-infra Tester run at start.
+  was dispatched to. Each adapter also exposes a `localDind` capability, which
+  `applyLocalInfrastructureCapabilities` turns into the `testEnv` half of
+  `config.infrastructure`, so a runtime that cannot nest containers (Apple `container`) never
+  offers `local-compose` as a test environment at all. That capability is about the HOST runtime.
+  Whether the job CONTAINER actually got a Docker daemon is a second and independent fact, and only
+  the container can know it: the harness records its own verdict at boot and REFUSES a compose
+  stand-up that verdict says cannot work, reporting `infraSetup.dockerAvailable: false` with the
+  cause rather than degrading to a no-infra run in silence (executor-harness README, "Local infra:
+  the container's Docker daemon").
 - `github.ts`, `link-repo.ts` / `linkRepo.ts`, `installations.ts`: the PAT-backed GitHub
   client (`createLocalGitHubClient`) + the repo-projection seeding (`linkRepo`).
 - `vcsCredential.ts` + `sqlite/vcsCredentialStore.ts` + `vcsClientRouter.ts`: the deployment's
