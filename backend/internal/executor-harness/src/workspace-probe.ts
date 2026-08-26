@@ -66,6 +66,15 @@ export function agentChangedPaths(status: string): string[] {
  * written through `bash` and left in the tree, and files written and then committed. Gitignored
  * paths are excluded by git itself, so an `npm install` still reads as nothing.
  *
+ * ORDER MATTERS, and carries the "is this a repository at all" question. The status runs FIRST and
+ * is never caught: a `dir` that is no git repository fails there, and the driver treats a throw as
+ * inconclusive (re-arm and warn, never abort). HEAD is read second and a failure to read it is
+ * NOT a failed probe: a scaffold-from-scratch checkout has no commit yet, so `rev-parse HEAD`
+ * errors in exactly the case the dirty-tree half was written for. It reads as the empty sha, which
+ * is what the pass baselined against too, so the two agree that HEAD has not moved and the tree
+ * decides. Catching it around the status instead would turn "not a repository" into "no evidence
+ * of change" and hand the guard a clean verdict it has no business acting on.
+ *
  * INJECTED, never imported by the guard: the guard stays pure and synchronous so it can be driven
  * over a fixed event sequence in a unit test, and the git access lives out here where a test
  * substitutes a stub.
@@ -79,13 +88,68 @@ export function createWorkspaceProbe(deps: {
   return async () => {
     const status = await workingTreeStatus(deps.dir, deps.signal)
     const dirty = agentChangedPaths(status)
-    const headSha = await headCommit(deps.dir, deps.signal)
+    const headSha = await readHeadOrEmpty(deps.dir, deps.signal)
     const headMoved = headSha !== deps.baseSha
     return {
       mutated: dirty.length > 0 || headMoved,
       headSha,
       headMoved,
       dirtyPathCount: dirty.length,
+    }
+  }
+}
+
+/**
+ * HEAD at `dir`, or the empty sha where there is no commit to read.
+ *
+ * The one shared reader for both the pass BASELINE and the probe, so the two can never disagree
+ * about what a commit-less checkout is worth: if the baseline tolerates a missing HEAD and the
+ * probe throws on it, a from-scratch build has no working bound at all.
+ */
+export async function readHeadOrEmpty(dir: string, signal?: AbortSignal): Promise<string> {
+  return headCommit(dir, signal).catch(() => '')
+}
+
+/**
+ * One probe over SEVERAL checkouts, for a run whose cwd is not itself a repository.
+ *
+ * A multi-repo run works at a WORKSPACE ROOT holding sibling checkouts, so probing the cwd asks
+ * git about a directory that is no repository: every probe throws, the driver re-arms forever and
+ * the no-edit bound is permanently unenforceable. The honest question there is "did the run change
+ * ANY of the repositories it was given", which is this.
+ *
+ * Mutation is a disjunction and inconclusiveness WINS OVER cleanliness. A leg that answers
+ * `mutated` settles it, since one changed repository is the run making progress. But a leg that
+ * THREW might have been the changed one, so `mutated: false` is only reported when every leg
+ * actually answered; otherwise this throws and the driver re-arms, which is the same fail-open
+ * disposition a single failing probe already gets. Killing a productive run is the expensive error.
+ *
+ * `headSha` joins the answering legs' shas, because a workspace has no single HEAD and quoting one
+ * leg's would put a sha in the abort diagnostic that says nothing about where the run actually was.
+ */
+export function composeWorkspaceProbes(probes: readonly WorkspaceProbe[]): WorkspaceProbe {
+  if (probes.length === 1) return probes[0] as WorkspaceProbe
+  return async () => {
+    const settled = await Promise.allSettled(probes.map((probe) => probe()))
+    const answered = settled.filter(
+      (result): result is PromiseFulfilledResult<WorkspaceEvidence> =>
+        result.status === 'fulfilled',
+    )
+    const evidence = answered.map((result) => result.value)
+    const mutated = evidence.some((one) => one.mutated)
+    if (!mutated && answered.length < probes.length) {
+      const first = settled.find((result) => result.status === 'rejected')
+      throw new Error(
+        `${probes.length - answered.length} of ${probes.length} checkouts could not be probed and ` +
+          `none of the rest had changed, so whether this run changed anything is unknown`,
+        { cause: first?.status === 'rejected' ? first.reason : undefined },
+      )
+    }
+    return {
+      mutated,
+      headSha: evidence.map((one) => one.headSha).join(', '),
+      headMoved: evidence.some((one) => one.headMoved),
+      dirtyPathCount: evidence.reduce((total, one) => total + one.dirtyPathCount, 0),
     }
   }
 }

@@ -66,7 +66,12 @@ import {
   withPrTemplateNote,
   type PrTemplateResolution,
 } from './pr-template.js'
-import { describeSalvage, salvageUntrackedWork, type SalvageReport } from './salvage.js'
+import {
+  describeSalvage,
+  salvageUntrackedWork,
+  type SalvageDelivery,
+  type SalvageReport,
+} from './salvage.js'
 
 // The shared skeleton for the container coding agents that clone a repo, run Pi
 // against it and push the result on a branch. The implementation (`/run`) and
@@ -343,7 +348,7 @@ function createWorkBranchPusher(args: {
   logger: Logger
   signal: AbortSignal | undefined
 }): {
-  pushWorkOnce: () => Promise<void>
+  pushWorkOnce: (override?: AbortSignal) => Promise<void>
   inFlightPush: () => Promise<void> | null
   checkpoint: ReturnType<typeof setInterval>
 } {
@@ -353,10 +358,16 @@ function createWorkBranchPusher(args: {
   // force push against. Starts unset even on a RESUMED branch: the tip we merely cloned is an
   // earlier run's work, so a rewrite of it is refused (and re-driven) rather than forced away.
   let publishedSha: string | undefined
-  const pushWorkOnce = (): Promise<void> => {
+  // `override` replaces the RUN's signal for this one push. Every ordinary push rides the run's
+  // signal, so a watchdog kill stops it. The rescue push cannot: the run's signal is ABORTED on
+  // exactly the paths that need a rescue, and an aborted signal makes `execFile` reject before it
+  // spawns, so a rescue on it is a guaranteed no-op. See {@link withSalvagedWork}.
+  const pushWorkOnce = (override?: AbortSignal): Promise<void> => {
     if (pushInFlight) return pushInFlight
+    const pushSignal = override ?? signal
     pushInFlight = (async () => {
-      if (!(await unpublishedWorkBranchTip({ dir, baseSha, publishedSha, signal }))) return
+      if (!(await unpublishedWorkBranchTip({ dir, baseSha, publishedSha, signal: pushSignal })))
+        return
       // The rule the lease is entitled to lives beside the push ({@link workBranchLease}); the
       // warn is here, because a withheld lease is how a rewrite this pass cannot claim fails the
       // push it is about to make, and the run's log is where that is read.
@@ -365,7 +376,7 @@ function createWorkBranchPusher(args: {
         branch: spec.pushBranch,
         baseSha,
         publishedSha,
-        signal,
+        signal: pushSignal,
         onWithheld: (probe) =>
           logger.warn('coding-agent: push lease withheld, the branch dropped its pre-run tip', {
             baseSha,
@@ -373,7 +384,7 @@ function createWorkBranchPusher(args: {
             probe,
           }),
       })
-      publishedSha = await pushBranch(dir, spec.pushBranch, spec.ghToken, signal, lease)
+      publishedSha = await pushBranch(dir, spec.pushBranch, spec.ghToken, pushSignal, lease)
     })().finally(() => {
       pushInFlight = null
     })
@@ -684,7 +695,13 @@ export async function runCodingAgent(
         // that itself fails may not replace it. What the salvage found is joined onto that
         // failure's message instead, because "the run was aborted" and "its work is on the branch,
         // reviewed by nobody" are one fact a person needs together.
-        throw await withSalvagedWork(error, { dir, logger, pushWorkOnce, signal })
+        //
+        // The checkpoint is stopped HERE rather than only in the `finally` below: it fires
+        // `pushWorkOnce`, which coalesces, so a checkpoint starting behind the rescue would be
+        // handed the rescue's push and a rescue starting behind a checkpoint would be handed a
+        // push made BEFORE the salvage commit existed — reporting as pushed a commit that is not.
+        clearInterval(checkpoint)
+        throw await withSalvagedWork(error, { dir, logger, pushWorkOnce, inFlightPush })
       } finally {
         // Safety net for the throw path (the happy path already cleared these above).
         clearInterval(checkpoint)
@@ -698,13 +715,45 @@ export async function runCodingAgent(
 /**
  * Prefix a run's summary with the salvage note, when there is one worth a human's attention.
  *
- * Only a refused or failed salvage earns one: those are the states where the agent produced work
- * that the push does NOT carry, and nothing else on a passing run would say so.
+ * The test is the same in all three cases: did the agent produce something the push does NOT
+ * carry, which nothing else on a passing run would say. A refused or failed salvage is that, and
+ * so is a withheld secret-bearing file — the run looks clean and the file is not on the branch.
+ * A salvage that simply worked needs no note here: its files ARE in the push, and the commit
+ * message on the branch says where they came from.
  */
 function withSalvageNote(summary: string, salvage: SalvageReport): string {
-  if (salvage.status !== 'refused' && salvage.status !== 'failed') return summary
+  const missedWork = salvage.status === 'refused' || salvage.status === 'failed'
+  if (!missedWork && (salvage.withheld?.length ?? 0) === 0) return summary
   const note = describeSalvage(salvage)
   return note ? `${note}\n\n${summary}` : summary
+}
+
+/**
+ * How long the rescue of an aborted run's work gets, on its own clock.
+ *
+ * Bounded because the run's own bounds no longer apply: the rescue deliberately runs OFF the run's
+ * signal (see {@link rescueSignal}), so without this a wedged git command would hold the container
+ * open until the platform reclaims it. Generous enough for a status, an add, a commit and a push
+ * over a slow network, and each git command inside it still carries its own tighter ceiling.
+ * Overridable via env for tests.
+ */
+function salvageRescueMs(): number {
+  const n = Number(process.env.JOB_SALVAGE_RESCUE_MS)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 120_000
+}
+
+/**
+ * The signal the rescue runs on: a FRESH one, never the run's.
+ *
+ * The rescue exists for the runs whose lifetime is already over — a watchdog fired, the guard
+ * tripped, the container is being evicted — and on those paths `opts.signal` is ABORTED. Node's
+ * `execFile` rejects on an already-aborted signal before it spawns anything, so passing it here
+ * makes every git call in the salvage and its push fail instantly: the rescue would be a
+ * guaranteed no-op in precisely the cases it was written for. Its own timeout is what bounds it
+ * instead.
+ */
+function rescueSignal(): AbortSignal {
+  return AbortSignal.timeout(salvageRescueMs())
 }
 
 /**
@@ -716,28 +765,39 @@ function withSalvageNote(summary: string, salvage: SalvageReport): string {
  * reason the run died is strictly more useful than the reason its rescue did.
  *
  * The push is what makes the salvage worth anything — the commit lives in a container that is
- * about to be reclaimed — and it is the same coalesced push the periodic checkpoint uses, so it
- * cannot race one still in flight.
+ * about to be reclaimed — and it is reported HONESTLY: a commit that could not be pushed is lost
+ * exactly as the uncommitted files would have been, so the note says so rather than naming a sha
+ * nobody will ever be able to fetch.
+ *
+ * Two things have to happen before the salvage, and the caller has already stopped the checkpoint
+ * interval for the first. The second is here: any push the checkpoint had IN FLIGHT is drained,
+ * because `pushWorkOnce` coalesces onto it and would otherwise hand the rescue a push that was
+ * made before the salvage commit existed.
+ *
+ * Exported for its test: every collaborator it needs is a parameter, so the ordering and the
+ * signal it pushes on can be asserted against a real repository without a container.
  */
-async function withSalvagedWork(
+export async function withSalvagedWork(
   error: unknown,
   args: {
     dir: string
     logger: Logger
-    pushWorkOnce: () => Promise<void>
-    signal?: AbortSignal
+    pushWorkOnce: (override?: AbortSignal) => Promise<void>
+    inFlightPush: () => Promise<void> | null
   },
 ): Promise<unknown> {
   const cause = error instanceof Error ? error.message : String(error)
+  const signal = rescueSignal()
+  await drainInFlightPush(args.inFlightPush, args.logger)
   const note = await salvageUntrackedWork({
     dir: args.dir,
     occasion: { kind: 'aborted', cause },
     logger: args.logger,
-    ...(args.signal ? { signal: args.signal } : {}),
+    signal,
   })
     .then(async (report) => {
-      if (report.status === 'committed') await args.pushWorkOnce()
-      return describeSalvage(report)
+      if (report.status !== 'committed') return describeSalvage(report)
+      return describeSalvage(report, await deliverSalvage(args, signal))
     })
     .catch((salvageError: unknown) => {
       args.logger.error('coding-agent: salvage of an aborted run failed', {
@@ -751,6 +811,40 @@ async function withSalvagedWork(
     return error
   }
   return new Error(`${cause} ${note}`)
+}
+
+/**
+ * Wait out the checkpoint push already running, so the rescue's own push is not coalesced onto it.
+ *
+ * Its outcome is irrelevant and never propagates: it was a best-effort checkpoint of work that
+ * predates the salvage, and the rescue is about to push again anyway.
+ */
+async function drainInFlightPush(
+  inFlightPush: () => Promise<void> | null,
+  logger: Logger,
+): Promise<void> {
+  const pending = inFlightPush()
+  if (!pending) return
+  await pending.catch((error: unknown) => {
+    logger.warn('coding-agent: the checkpoint push in flight at the abort did not land', {
+      reason: error instanceof Error ? error.message : String(error),
+    })
+  })
+}
+
+/** Push the salvage commit, reporting whether it actually landed rather than assuming it did. */
+async function deliverSalvage(
+  args: { logger: Logger; pushWorkOnce: (override?: AbortSignal) => Promise<void> },
+  signal: AbortSignal,
+): Promise<SalvageDelivery> {
+  try {
+    await args.pushWorkOnce(signal)
+    return { pushed: true }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    args.logger.error('coding-agent: the salvage commit could not be pushed', { reason })
+    return { pushed: false, reason }
+  }
 }
 
 /**

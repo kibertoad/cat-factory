@@ -42,12 +42,12 @@ dispatch. The proxy did not break; the model's habits moved.
 
 ## Slices
 
-| #   | Slice                                                       | Issue                                                         | PR      | Image tag |
-| --- | ----------------------------------------------------------- | ------------------------------------------------------------- | ------- | --------- |
+| #   | Slice                                                       | Issue                                                         | PR                                                          | Image tag |
+| --- | ----------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------- | --------- |
 | 1   | Evidence-based progress bound + salvage of uncommitted work | [#2096](https://github.com/kibertoad/cat-factory/issues/2096) | [#2101](https://github.com/kibertoad/cat-factory/pull/2101) | `1.133.0` |
-| 2   | Tool surface (`--tools`)                                    | [#2097](https://github.com/kibertoad/cat-factory/issues/2097) |         |           |
-| 3   | Runner image (docker daemon, `NODE_ENV`, missing binaries)  | [#2098](https://github.com/kibertoad/cat-factory/issues/2098) |         |           |
-| 4   | Sandbox inventory and prompt fixes                          | [#2099](https://github.com/kibertoad/cat-factory/issues/2099) |         |           |
+| 2   | Tool surface (`--tools`)                                    | [#2097](https://github.com/kibertoad/cat-factory/issues/2097) |                                                             |           |
+| 3   | Runner image (docker daemon, `NODE_ENV`, missing binaries)  | [#2098](https://github.com/kibertoad/cat-factory/issues/2098) |                                                             |           |
+| 4   | Sandbox inventory and prompt fixes                          | [#2099](https://github.com/kibertoad/cat-factory/issues/2099) |                                                             |           |
 
 Landing order is the table order: slice 1 first because it is the one losing work.
 
@@ -121,6 +121,19 @@ it was killed, and git only excludes what it is told to. It is deliberately shor
 A `dist/` that genuinely belonged in a commit is a far cheaper miss than a
 `node_modules/` that did not.
 
+**For a CREDENTIAL that trade inverts, so a secret-bearing name is a third
+disposition rather than another junk entry.** The same un-gitignored greenfield
+checkout is one where the harness is the only thing between an agent-authored `.env`
+or private key and the pull request, and a leaked key outlives the run, survives
+deleting the commit and forces a rotation, where a missed file is re-created. So
+`.env` (and `*.env`, and every `.env.<something>` outside a short allow-list of the
+sample files that ARE the deliverable), private keys and key stores, `.npmrc` /
+`.netrc`, and the `.ssh` / `.aws` / `.gnupg` / `.terraform` stores are withheld. And
+unlike a dependency tree, they are NAMED on the outcome: the file was real work that
+did not land, and whoever reads the run has to decide whether to re-create it or
+rotate what it held. A junk skip stays silent, because saying it on every run is
+noise.
+
 The commit message states its own provenance. A commit arriving on a branch with no
 explanation is indistinguishable from work the agent chose to make and someone chose
 to keep, and this work was chosen by nobody: the run was killed with it on the floor.
@@ -128,6 +141,25 @@ to keep, and this work was chosen by nobody: the run was killed with it on the f
 Coding modes only, enforced structurally: `salvage.ts` is importable only from
 `coding-agent.ts` and `multi-repo-coding.ts`, and a test asserts that set. A
 read-only kind has no work branch to carry a commit and must never be given one.
+
+**The rescue of an ABORTED run gets its own clock, and its own signal.** The run's
+signal is by definition already aborted on the watchdog and eviction paths the
+rescue exists for, and Node's `execFile` rejects on an aborted signal before it
+spawns anything: a rescue carrying it cannot run one git command, so it is a
+guaranteed no-op in exactly the cases it was written for. It mints a fresh
+timeout-bounded signal instead. Two more mechanics belong to that path: the
+checkpoint interval is stopped and any push already IN FLIGHT is drained before the
+salvage, because `pushWorkOnce` coalesces and would otherwise hand the rescue a push
+made before the salvage commit existed; and a push that fails is reported as such,
+since a commit that never left the container is lost exactly as the uncommitted
+files would have been.
+
+**In a multi-repo run, a leg whose branch is nothing BUT a salvage says so in its
+pull request.** Salvaging before the no-op judgement (below) is what keeps a
+peer's work from being dropped, and it also means a branch can exist that nobody
+proposed. Opening it is still right; presenting it as a considered contribution is
+not, since the agent may equally have left scratch work there while working in a
+sibling checkout, and nothing in the diff distinguishes the two.
 
 ### D5: The diagnostic states the evidence it acted on
 
@@ -152,4 +184,23 @@ count and failure detail rather than asserting a history.
   read as untouched if the salvage lands after it.
 - **A scaffold-from-scratch checkout has no `HEAD`.** `rev-parse` errors there, which
   is not a reason to leave the bound blind: the dirty-tree half is exactly what
-  answers a from-scratch build, so the pass baselines against the empty sha.
+  answers a from-scratch build, so the pass baselines against the empty sha. The
+  PROBE has to read HEAD through the same tolerance, or the baseline shrugs at a
+  missing HEAD and the probe throws on it every time. What must NOT be caught is the
+  status: that is where "this is not a repository" surfaces, and turning it into
+  "no evidence of change" would hand the guard a clean verdict on nothing.
+- **A multi-repo run's cwd is no repository.** It works at a workspace root holding
+  sibling checkouts, so the default probe target asks git a question with no answer
+  and the bound goes permanently unenforceable, which is worse than the tool-name
+  reading it replaced. It names its WRITABLE legs instead (a read-only reference
+  checkout is excluded: the run may not write there, so a change appearing in it is
+  not this run's progress) and one probe answers over all of them. A leg that could
+  not be probed makes the answer INCONCLUSIVE, never clean: it might have been the
+  changed one.
+- **Git quotes paths, and everything after `--` is a pathspec.** `ls-files` and
+  `status --porcelain` render a path holding a non-ASCII byte, a quote or a newline
+  as a C-quoted literal (`"caf\303\251.ts"`), which is not a filename: `stat` misses
+  it and `git add` exits 128. And a name beginning with `:` is read as pathspec
+  magic, which exits 128 too. Either one discarded the WHOLE all-or-nothing salvage,
+  from one file. Every path listing is read with `-z` and every staged path goes in
+  as `:(literal)<path>`.

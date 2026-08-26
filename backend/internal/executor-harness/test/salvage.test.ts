@@ -5,8 +5,9 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
-  isSalvageablePath,
+  classifySalvagePath,
   salvageCommitMessage,
+  salvageOnlyNotice,
   salvageUntrackedWork,
   describeSalvage,
 } from '../src/salvage.js'
@@ -23,7 +24,7 @@ const silentLogger: Logger = {
   child: () => silentLogger,
 }
 
-describe('isSalvageablePath (the deny-list)', () => {
+describe('classifySalvagePath (the deny-list)', () => {
   it('keeps the agent’s own source, at any depth', () => {
     for (const path of [
       'src/app.ts',
@@ -32,7 +33,7 @@ describe('isSalvageablePath (the deny-list)', () => {
       'eslint.config.js',
       'scripts/check-manifests.ts',
     ]) {
-      expect(isSalvageablePath(path)).toBe(true)
+      expect(classifySalvagePath(path)).toBe('salvage')
     }
   })
 
@@ -51,7 +52,36 @@ describe('isSalvageablePath (the deny-list)', () => {
       '.cat-effort.json',
       'services/api/.cat-pr-description.md',
     ]) {
-      expect(isSalvageablePath(path)).toBe(false)
+      expect(classifySalvagePath(path)).toBe('skip')
+    }
+  })
+
+  it('withholds credential-bearing files as SECRETS, not as junk', () => {
+    // The distinction is the point: a `skip` is expected and silent, a `secret` is reported so a
+    // live credential can be rotated. Both stay out of the commit.
+    for (const path of [
+      '.env',
+      '.env.local',
+      'services/api/.env.production',
+      'id_rsa',
+      'deploy/tls.key',
+      'certs/server.pem',
+      'keystore.p12',
+      '.npmrc',
+      '.netrc',
+      'config/secrets.yaml',
+      '.ssh/config',
+      '.aws/credentials',
+      'infra/.terraform/terraform.tfstate',
+      'prod.env',
+    ]) {
+      expect(classifySalvagePath(path)).toBe('secret')
+    }
+  })
+
+  it('keeps the .env SAMPLE files, which are the deliverable rather than a credential', () => {
+    for (const path of ['.env.example', '.env.sample', 'services/api/.env.template']) {
+      expect(classifySalvagePath(path)).toBe('salvage')
     }
   })
 })
@@ -71,6 +101,18 @@ describe('salvageCommitMessage', () => {
     const message = salvageCommitMessage(1, { kind: 'settled' })
     expect(message).toMatch(/^chore: commit 1 new file the agent left untracked/)
     expect(message).not.toMatch(/abort/i)
+  })
+})
+
+describe('salvageOnlyNotice', () => {
+  it('tells a reviewer, before the diff, that nobody proposed this branch', () => {
+    const notice = salvageOnlyNotice()
+    // A blockquote, so it renders as a banner above the briefing rather than as its first
+    // paragraph. The three facts a reviewer of such a PR is otherwise missing entirely.
+    expect(notice.startsWith('> ')).toBe(true)
+    expect(notice).toMatch(/committed nothing to this repository/)
+    expect(notice).toMatch(/Nothing has reviewed them/)
+    expect(notice).toMatch(/sibling repository/)
   })
 })
 
@@ -128,10 +170,12 @@ describe('salvageUntrackedWork (against a real repository)', () => {
   })
 
   it('never salvages a gitignored path, whatever the deny-list says', async () => {
-    await writeFile(join(dir, '.gitignore'), 'secrets.env\n', 'utf8')
+    // `scratch.txt` is a name every deny-list here ALLOWS, so git's own exclusion is the only
+    // thing keeping it out — which is exactly the rule under test.
+    await writeFile(join(dir, '.gitignore'), 'scratch.txt\n', 'utf8')
     await git('add', '-A')
-    await git('commit', '-m', 'ignore secrets')
-    await writeFile(join(dir, 'secrets.env'), 'TOKEN=xyz\n', 'utf8')
+    await git('commit', '-m', 'ignore scratch')
+    await writeFile(join(dir, 'scratch.txt'), 'notes\n', 'utf8')
     await writeFile(join(dir, 'src.ts'), 'export const x = 1\n', 'utf8')
 
     const report = await salvageUntrackedWork({
@@ -140,12 +184,13 @@ describe('salvageUntrackedWork (against a real repository)', () => {
       logger: silentLogger,
     })
     expect(report.files).toEqual(['src.ts'])
+    expect(report.withheld).toBeUndefined()
     const tracked = String(
       await exec('git', ['ls-tree', '-r', '--name-only', 'HEAD'], { cwd: dir }).then(
         (r) => r.stdout,
       ),
     )
-    expect(tracked).not.toContain('secrets.env')
+    expect(tracked).not.toContain('scratch.txt')
   })
 
   it('refuses an over-bound salvage entirely rather than truncating it', async () => {
@@ -180,6 +225,110 @@ describe('salvageUntrackedWork (against a real repository)', () => {
     })
     expect(report.status).toBe('refused')
     expect(report.totalBytes).toBeGreaterThan(1024)
+  })
+
+  it('salvages a file whose name git would C-QUOTE, and sizes it honestly', async () => {
+    // `git ls-files` renders a non-ASCII path as the literal `"caf\303\251.ts"`, quotes and octal
+    // escapes included. That string is not a filename: `git add` exits 128 on it, which discarded
+    // the WHOLE all-or-nothing salvage, and `stat` on it failed, so it also weighed zero against
+    // the byte bound. The listing is `-z` now, so the path is the real one.
+    await writeFile(join(dir, 'café.ts'), 'export const x = 1\n', 'utf8')
+    await writeFile(join(dir, 'plain.ts'), 'export const y = 2\n', 'utf8')
+
+    const report = await salvageUntrackedWork({
+      dir,
+      occasion: { kind: 'settled' },
+      logger: silentLogger,
+    })
+
+    expect(report.status).toBe('committed')
+    expect(report.files.sort()).toEqual(['café.ts', 'plain.ts'])
+    expect(report.totalBytes).toBeGreaterThan(0)
+    const tracked = String(
+      await exec('git', ['ls-tree', '-r', '--name-only', '-z', 'HEAD'], { cwd: dir }).then(
+        (r) => r.stdout,
+      ),
+    )
+    expect(tracked.split('\0')).toContain('café.ts')
+    expect(await status()).toBe('')
+  })
+
+  it('salvages a file whose name is pathspec MAGIC, rather than failing the whole salvage', async () => {
+    // Everything after `--` is a pathspec, so a leading `:` is magic and `git add -- :notes.txt`
+    // exits 128 with "did not match any files". One such name would take the other files with it.
+    await writeFile(join(dir, ':notes.txt'), 'jotting\n', 'utf8')
+    await writeFile(join(dir, 'src.ts'), 'export const x = 1\n', 'utf8')
+
+    const report = await salvageUntrackedWork({
+      dir,
+      occasion: { kind: 'settled' },
+      logger: silentLogger,
+    })
+
+    expect(report.status).toBe('committed')
+    expect(report.files.sort()).toEqual([':notes.txt', 'src.ts'])
+    expect(await status()).toBe('')
+  })
+
+  it('withholds a credential-bearing file, keeps the rest, and NAMES what it withheld', async () => {
+    // The greenfield case this exists for: the agent was killed before it wrote a `.gitignore`,
+    // so git excludes nothing and the harness is all that stands between a key and the PR.
+    await writeFile(join(dir, '.env'), 'API_KEY=live-secret\n', 'utf8')
+    await writeFile(join(dir, '.env.example'), 'API_KEY=\n', 'utf8')
+    await writeFile(join(dir, 'id_rsa'), 'PRIVATE KEY\n', 'utf8')
+    await writeFile(join(dir, 'src.ts'), 'export const x = 1\n', 'utf8')
+
+    const report = await salvageUntrackedWork({
+      dir,
+      occasion: { kind: 'settled' },
+      logger: silentLogger,
+    })
+
+    expect(report.status).toBe('committed')
+    expect(report.files.sort()).toEqual(['.env.example', 'src.ts'])
+    expect(report.withheld?.sort()).toEqual(['.env', 'id_rsa'])
+    const tracked = String(
+      await exec('git', ['ls-tree', '-r', '--name-only', 'HEAD'], { cwd: dir }).then(
+        (r) => r.stdout,
+      ),
+    )
+    expect(tracked).not.toContain('id_rsa')
+    expect(tracked.split('\n')).not.toContain('.env')
+    // Withholding is a decision someone has to know about, so it is stated and the paths named.
+    const note = describeSalvage(report)
+    expect(note).toMatch(/withheld from the salvage/)
+    expect(note).toContain('.env')
+    expect(note).toContain('id_rsa')
+    expect(note).toMatch(/rotate/)
+  })
+
+  it('reports a withheld secret even when there was nothing else to salvage', async () => {
+    // `none` is the status a clean run reports, so a withheld credential must not vanish with it.
+    await writeFile(join(dir, '.env'), 'API_KEY=live-secret\n', 'utf8')
+    const report = await salvageUntrackedWork({
+      dir,
+      occasion: { kind: 'settled' },
+      logger: silentLogger,
+    })
+    expect(report.status).toBe('none')
+    expect(report.withheld).toEqual(['.env'])
+    expect(describeSalvage(report)).toMatch(/withheld from the salvage/)
+  })
+
+  it('says a salvage commit that was not pushed is LOST, never names it as delivered', async () => {
+    await writeFile(join(dir, 'src.ts'), 'export const x = 1\n', 'utf8')
+    const report = await salvageUntrackedWork({
+      dir,
+      occasion: { kind: 'aborted', cause: 'no progress' },
+      logger: silentLogger,
+    })
+    expect(report.status).toBe('committed')
+
+    expect(describeSalvage(report, { pushed: true })).not.toMatch(/lost with the container/)
+    const failed = describeSalvage(report, { pushed: false, reason: 'remote hung up' })
+    expect(failed).toMatch(/could NOT be pushed/)
+    expect(failed).toMatch(/remote hung up/)
+    expect(failed).toMatch(/lost with the container/)
   })
 
   it('reports nothing to do when the agent committed everything', async () => {

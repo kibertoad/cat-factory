@@ -8,8 +8,10 @@ import { ProgressGuard, type ProgressGuardLimits } from '../src/progress-guard.j
 import { createGuardDriver } from '../src/guard-driver.js'
 import {
   agentChangedPaths,
+  composeWorkspaceProbes,
   createWorkspaceProbe,
   type WorkspaceEvidence,
+  type WorkspaceProbe,
 } from '../src/workspace-probe.js'
 import { headCommit } from '../src/git.js'
 import type { Logger } from '../src/logger.js'
@@ -191,19 +193,22 @@ describe('guard driver (the no-edit bound decides on the working tree)', () => {
 })
 
 describe('agentChangedPaths (the harness excludes its own sentinels)', () => {
+  /** `git status --porcelain -z`: NUL after every field, nothing quoted. */
+  const porcelainZ = (...fields: string[]): string => `${fields.join('\0')}\0`
+
   it('drops the sentinels at the root and in a monorepo service directory', () => {
-    const status = [
+    const status = porcelainZ(
       '?? .cat-effort.json',
       '?? services/api/.cat-follow-ups.jsonl',
       '?? .cat-pr-description.md',
       ' M src/app.ts',
       '?? src/routes/health.ts',
-    ].join('\n')
+    )
     expect(agentChangedPaths(status)).toEqual(['src/app.ts', 'src/routes/health.ts'])
   })
 
   it('reads a run that wrote nothing but its effort report as unchanged', () => {
-    expect(agentChangedPaths('?? .cat-effort.json\n')).toEqual([])
+    expect(agentChangedPaths(porcelainZ('?? .cat-effort.json'))).toEqual([])
   })
 })
 
@@ -262,6 +267,15 @@ describe('createWorkspaceProbe (against a real repository)', () => {
     expect((await probe()).mutated).toBe(false)
   })
 
+  it('sees a file whose name git would C-QUOTE', async () => {
+    const baseSha = await headCommit(dir)
+    const probe = createWorkspaceProbe({ dir, baseSha })
+    await writeFile(join(dir, 'café.ts'), 'export const x = 1\n', 'utf8')
+    const evidence = await probe()
+    expect(evidence.mutated).toBe(true)
+    expect(evidence.dirtyPathCount).toBe(1)
+  })
+
   it('throws (inconclusive, never a pass) where there is no repository', async () => {
     const bare = await mkdtemp(join(tmpdir(), 'probe-norepo-'))
     try {
@@ -269,5 +283,73 @@ describe('createWorkspaceProbe (against a real repository)', () => {
     } finally {
       await rm(bare, { recursive: true, force: true })
     }
+  })
+
+  it('decides on the DIRTY TREE where the checkout has no commit yet', async () => {
+    // A scaffold-from-scratch bootstrap: `rev-parse HEAD` errors, which is the exact case the
+    // dirty-tree half was written for. Reading HEAD unconditionally turned it into a throw, so the
+    // bound went inconclusive forever on the one shape the whole change exists to serve.
+    const fresh = await mkdtemp(join(tmpdir(), 'probe-nocommit-'))
+    try {
+      await exec('git', ['init', '-b', 'main'], { cwd: fresh })
+      const probe = createWorkspaceProbe({ dir: fresh, baseSha: '' })
+      expect(await probe()).toMatchObject({ mutated: false, headSha: '', headMoved: false })
+
+      await writeFile(join(fresh, 'src.ts'), 'export const x = 1\n', 'utf8')
+      const evidence = await probe()
+      expect(evidence.mutated).toBe(true)
+      expect(evidence.dirtyPathCount).toBe(1)
+    } finally {
+      await rm(fresh, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('composeWorkspaceProbes (a workspace of sibling checkouts)', () => {
+  // A multi-repo run's cwd is the workspace ROOT, which is no repository: probing it throws every
+  // time, so the bound never enforced anything. The honest question is whether the run changed ANY
+  // of the checkouts it was given.
+  const answering =
+    (evidence: WorkspaceEvidence): WorkspaceProbe =>
+    () =>
+      Promise.resolve(evidence)
+  const throwing =
+    (message: string): WorkspaceProbe =>
+    () =>
+      Promise.reject(new Error(message))
+
+  it('reads a change in ANY checkout as the run making progress', async () => {
+    const evidence = await composeWorkspaceProbes([
+      answering(clean('aaa')),
+      answering({ mutated: true, headSha: 'bbb', headMoved: true, dirtyPathCount: 2 }),
+    ])()
+    expect(evidence.mutated).toBe(true)
+    expect(evidence.headMoved).toBe(true)
+    expect(evidence.dirtyPathCount).toBe(2)
+  })
+
+  it('names every answering checkout’s HEAD, since a workspace has no single one', async () => {
+    const evidence = await composeWorkspaceProbes([
+      answering(clean('aaa')),
+      answering(clean('bbb')),
+    ])()
+    expect(evidence.mutated).toBe(false)
+    expect(evidence.headSha).toBe('aaa, bbb')
+  })
+
+  it('is INCONCLUSIVE rather than clean when a checkout could not be probed', async () => {
+    // The leg that threw might have been the changed one, so reporting the rest as clean would
+    // kill a productive run on evidence nobody has.
+    await expect(
+      composeWorkspaceProbes([answering(clean('aaa')), throwing('not a git repository')])(),
+    ).rejects.toThrow(/could not be probed/)
+  })
+
+  it('still settles when a checkout that DID answer had changed', async () => {
+    const evidence = await composeWorkspaceProbes([
+      answering(mutated('aaa')),
+      throwing('not a git repository'),
+    ])()
+    expect(evidence.mutated).toBe(true)
   })
 })

@@ -276,13 +276,18 @@ describe('classifyLlmUpstreamError (F3: LLM-proxy auth/quota/rate-limit remedies
 })
 
 describe('changedPathsFromPorcelain', () => {
-  it('extracts paths, follows renames to the new name, and unquotes', () => {
-    const status = [
+  // `git status --porcelain -z`: NUL after every field, and a rename spends a SECOND field on
+  // its original path. Nothing is quoted or escaped, which is the whole reason for `-z`.
+  const porcelainZ = (...fields: string[]): string => `${fields.join('\0')}\0`
+
+  it('extracts paths and follows a rename to the new name', () => {
+    const status = porcelainZ(
       'A  README.md',
       ' M src/index.ts',
-      'R  old.ts -> new.ts',
-      '?? "with space.ts"',
-    ].join('\n')
+      'R  new.ts',
+      'old.ts',
+      '?? with space.ts',
+    )
     expect(changedPathsFromPorcelain(status)).toEqual([
       'README.md',
       'src/index.ts',
@@ -291,9 +296,24 @@ describe('changedPathsFromPorcelain', () => {
     ])
   })
 
+  it('keeps a path git would have C-quoted exactly as it is on disk', () => {
+    // The default output renders these as `"caf\303\251.ts"` and `"a\tb.ts"` — seven and six
+    // characters of escape that name no file. Under `-z` there is nothing to unescape, so a
+    // consumer that stats or stages the path finds it.
+    const status = porcelainZ('?? café.ts', '?? a\tb.ts', '?? "quoted".ts')
+    expect(changedPathsFromPorcelain(status)).toEqual(['café.ts', 'a\tb.ts', '"quoted".ts'])
+  })
+
+  it('does not mistake a rename ORIGINAL for a changed path', () => {
+    // The original is a bare path, not an entry: read as one, its first three characters would be
+    // eaten as a status and `src/old.ts` would be reported as the nonexistent `old.ts`.
+    const status = porcelainZ('R  renamed.ts', 'src/old.ts', 'A  after.ts')
+    expect(changedPathsFromPorcelain(status)).toEqual(['renamed.ts', 'after.ts'])
+  })
+
   it('returns nothing for empty output', () => {
     expect(changedPathsFromPorcelain('')).toEqual([])
-    expect(changedPathsFromPorcelain('\n  \n')).toEqual([])
+    expect(changedPathsFromPorcelain('\0\0')).toEqual([])
   })
 })
 
