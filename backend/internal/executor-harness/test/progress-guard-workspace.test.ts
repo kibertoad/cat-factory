@@ -1,4 +1,5 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -351,5 +352,45 @@ describe('composeWorkspaceProbes (a workspace of sibling checkouts)', () => {
       throwing('not a git repository'),
     ])()
     expect(evidence.mutated).toBe(true)
+  })
+})
+
+describe('the probe reaches BOTH harness paths', () => {
+  // A wiring guard, because an unwired probe is SILENT: `createGuardDriver` falls back to the
+  // tool-name judgement (see the case above), which is the very bound this file exists to
+  // replace. So a path that stops forwarding it does not fail a test, it just quietly goes back
+  // to killing bash-only runs.
+  //
+  // Source-level for the same reason `pr-template.coverage.test.ts` is: the forwarding happens in
+  // a spec literal handed to a runner, and the two paths build their own. This nearly regressed
+  // once already, when the subscription branch moved into its own function while this probe was
+  // being added on the other side of a merge.
+  /**
+   * One top-level function's body, bounded by the NEXT top-level declaration. Both spellings the
+   * file uses have to end a body (`export async function` as well as a bare `async function`), or
+   * the slice runs to end of file and the assertion passes on a neighbour's code.
+   */
+  const DECLARATION = /^(?:export )?(?:async )?function (\w+)\(/gm
+  const bodyOf = (source: string, name: string): string => {
+    const starts = [...source.matchAll(DECLARATION)]
+    const at = starts.findIndex((match) => match[1] === name)
+    expect(at, `${name} not found`).toBeGreaterThan(-1)
+    return source.slice(starts[at]!.index, starts[at + 1]?.index ?? source.length)
+  }
+
+  it('is built once in the shared middle, and each path forwards it to its runner', async () => {
+    const source = await readFile(
+      fileURLToPath(new URL('../src/pi-workspace.ts', import.meta.url)),
+      'utf8',
+    )
+    // Built ONCE. A second builder would give the two paths different baselines, and a repair
+    // round judged against the wrong one is the bug the baseline comment warns about.
+    expect(source.match(/await buildWorkspaceProbe\(/g)).toHaveLength(1)
+    // The shared middle builds it and hands it to the subscription path, which is a separate
+    // function; the Pi path stays inline in the same body.
+    expect(bodyOf(source, 'runAgentInWorkspace')).toContain('workspaceProbe')
+    // Each path then forwards it into the spec its runner actually reads. The subscription one
+    // is the half a refactor can silently drop, since it crosses a function boundary.
+    expect(bodyOf(source, 'runSubscriptionInWorkspace')).toContain('workspaceProbe,')
   })
 })

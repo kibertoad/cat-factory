@@ -124,6 +124,12 @@ RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" "@openai/codex@${CODEX_VERSION}"; \
     claude --version; codex --version; \
     git config --system --add safe.directory "*"'
+# The installed claude-code version, readable at RUNTIME. `assertOnboardingKeysCurrent` pairs the
+# pre-seeded onboarding keys with it so a new first-run gate is diffable (ADR 0026 D4), and read it
+# from here: an unset variable left every one of those lines with no version at all. The tool-set
+# read-back takes its version off the CLI's own startup event instead, which is authoritative
+# whatever built the image; this stays for the assertion that runs BEFORE the CLI does.
+ENV CLAUDE_CLI_VERSION=${CLAUDE_CODE_VERSION}
 
 # Rootless Docker + the compose plugin, for the Tester's local-mode infra stand-up.
 # Cloudflare Containers (and most managed runners) run unprivileged, so we install

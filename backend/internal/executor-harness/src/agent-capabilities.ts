@@ -520,69 +520,43 @@ export function claudeMcpConfig(servers: McpServerSpec[]): {
 }
 
 /**
- * The claude-code CLI's own tools, named so an `--allowedTools` list can never take them away.
- *
- * An allow-list is whole-session: it does not scope itself to MCP just because every entry we
- * generate happens to be an `mcp__*` pattern. So the moment one tool server narrows its tools, the
- * list has to re-grant the agent's built-in file/bash/search tools or the run is handed a narrowed
- * MCP surface AND no way to read, edit or build anything.
- *
- * Bias this list toward OVER-inclusion. A name the CLI does not have is inert; a name it has and
- * this list lacks is a tool silently removed from a run — which surfaces as an agent that cannot
- * do its work, far from the registration that caused it. Historical/renamed spellings are kept for
- * the same reason: the harness image is pinned per workspace, so one image faces several CLI
- * versions. When the CLI gains a tool, add it here.
- */
-export const CLAUDE_BUILT_IN_TOOLS: readonly string[] = [
-  'Agent',
-  'Bash',
-  'BashOutput',
-  'Edit',
-  'ExitPlanMode',
-  'Glob',
-  'Grep',
-  'KillBash',
-  'KillShell',
-  'ListMcpResources',
-  'MultiEdit',
-  'NotebookEdit',
-  'NotebookRead',
-  'Read',
-  'ReadMcpResource',
-  'SlashCommand',
-  'Skill',
-  'Task',
-  'TaskCreate',
-  'TaskUpdate',
-  'TodoWrite',
-  'WebFetch',
-  'WebSearch',
-  'Write',
-]
-
-/**
  * The tool-name list for `--allowedTools`: every declared server's tools in the CLI's
- * `mcp__<server>__<tool>` convention, PLUS {@link CLAUDE_BUILT_IN_TOOLS}. A server with no
- * restriction contributes the whole-server pattern, so an allow-list stays one entry per server.
+ * `mcp__<server>__<tool>` convention, PLUS the built-in tools this run declared with `--tools`
+ * (`CLAUDE_TOOL_SET`). A server with no restriction contributes the whole-server pattern, so
+ * an allow-list stays one entry per server.
  *
  * Returns undefined when NO server restricts its tools — there is then nothing to narrow, and the
  * safest list is the one we never send.
  *
+ * An allow-list is whole-session, not MCP-scoped: it does not confine itself to MCP just because
+ * every entry we generate happens to be an `mcp__*` pattern. So the moment one tool server narrows
+ * its tools, the list has to carry the built-in file/bash/search tools too or the run is handed a
+ * narrowed MCP surface AND no way to read, edit or build anything.
+ *
+ * And carrying them is not merely a re-grant. MEASURED against CLI 2.1.245, the list is ADDITIVE:
+ * `--allowedTools "Bash,Grep"` yields the CLI's default set PLUS `Glob` and `Grep`, and an EMPTY
+ * list yields the default set plus `Glob`, `Grep` and the four `Task*` tools. A name here UNLOCKS
+ * a tool. That is why `builtIns` is the run's OWN declared set passed by reference rather than a
+ * constant re-read here: a separately-derived list would silently re-grant exactly what the
+ * `--tools` declaration withheld, and only on the runs that happen to wire a narrowing tool
+ * server.
+ *
  * Whether the CLI ENFORCES this list is permission-mode dependent and not a contract we control:
  * the run uses `--permission-mode bypassPermissions` (the container is the sandbox and no human is
- * there to approve a call), under which an allow-list grants rather than gates. So this is written
- * to be correct under BOTH readings — if the list gates, the narrowing is real and the built-ins
- * survive it; if it is inert, sending it costs nothing. The always-present channel is the PROMPT,
- * which states each server's permitted tool names on every harness. Treat `allowedTools` as
- * scoping, not as a security boundary: a server the agent must not reach fully should not be
- * wired for that kind at all.
+ * there to approve a call), under which an allow-list grants rather than gates. The always-present
+ * channel is the PROMPT, which states each server's permitted tool names on every harness. Treat
+ * `allowedTools` as scoping, not as a security boundary: a server the agent must not reach fully
+ * should not be wired for that kind at all.
  */
-export function claudeAllowedToolPatterns(servers: McpServerSpec[]): string[] | undefined {
+export function claudeAllowedToolPatterns(
+  servers: McpServerSpec[],
+  builtIns: readonly string[],
+): string[] | undefined {
   if (!servers.some((s) => s.allowedTools?.length)) return undefined
   const mcp = servers.flatMap((s) =>
     s.allowedTools?.length ? s.allowedTools.map((t) => `mcp__${s.id}__${t}`) : [`mcp__${s.id}`],
   )
-  return [...mcp, ...CLAUDE_BUILT_IN_TOOLS]
+  return [...mcp, ...builtIns]
 }
 
 /** Escape a string as a TOML basic string (Codex config is TOML, not JSON). */

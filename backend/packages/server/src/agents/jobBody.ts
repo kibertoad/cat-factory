@@ -30,13 +30,27 @@ import type { RepoCheckout } from './resolveRepoTarget.js'
  * can't drift on which shared fields they forward:
  *   - `common` — the fields EVERY harness job body carries (jobId/model/auth/repo/proxy/…).
  *   - `webTools` — the proxy-backed web-tools nudge + switch, shared by the kinds that
- *     allow web access.
+ *     allow web access. See the field below for what its switch does NOT state.
  *   - `repo` — the resolved repo target (owner/name/baseBranch + optional serviceDirectory).
  *   - `workBranch` / `workBranchReady` — the deterministic per-task work branch and whether
  *     it exists on the remote yet (a read-only agent falls back to base when it doesn't).
  */
 export interface KindBodyParts {
   common: Record<string, unknown>
+  /**
+   * The web-research nudge plus its switch. The switch (`webSearch`) states one thing only: that
+   * OUR PROXY can serve web research for this run's account. It is what Pi's `web_search` /
+   * `web_fetch` are pointed at and what they would fail without, which makes it a CAPABILITY
+   * probe (see `resolveWebSearchAvailability`) and never a policy about whether a run may reach
+   * the web.
+   *
+   * The subscription CLIs deliberately do not read it. Claude Code's `WebSearch`/`WebFetch` are
+   * served by the vendor the leased subscription already pays, so they work on a deployment with
+   * no search provider wired at all and the harness declares them unconditionally (its
+   * `CLAUDE_TOOL_SET`). Gating them on this switch would withhold a working capability on the
+   * strength of wiring that has no bearing on it. A genuine "may this run reach the web" policy,
+   * if one is ever added, is a SECOND fact and belongs beside this one rather than folded into it.
+   */
   webTools: Record<string, unknown>
   repo: RepoTarget
   workBranch: string
