@@ -1,5 +1,21 @@
 # @cat-factory/spend
 
+## 0.16.15
+
+### Patch Changes
+
+- 4f59cc0: Re-validate the built-in spend pricing table against vendor list prices. Corrects several
+  entries that under-metered runs (both GPT-5.6 mid tiers, Moonshot's own Kimi K2.6 rate,
+  DeepSeek V4 Pro on Workers AI, GLM-5.2 through OpenRouter), drops Claude Sonnet 5 to the
+  $2/$10 Anthropic has since made permanent, and names the cache-read tiers vendors have
+  begun publishing instead of deriving them.
+- c030a23: Add Qwen3.8 Max to the model catalog: Alibaba's flagship 2.4T-param multimodal MoE with a 1M
+  context, reachable direct on a DashScope key or through OpenRouter, with both routes priced in
+  the built-in spend table. No Cloudflare flavour is declared, because Workers AI serves the
+  open-weights Qwen3.8-27B rather than Max.
+- Updated dependencies [c030a23]
+  - @cat-factory/kernel@0.319.1
+
 ## 0.16.14
 
 ### Patch Changes
