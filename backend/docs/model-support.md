@@ -144,8 +144,11 @@ Several shapes of entry fall out of this:
   window** usually differs: the Cloudflare variant runs a cut context (e.g. DeepSeek V4
   Pro 131K) while the direct/subscription variant gets the full window (1M).
   `contextTokens` on the `ModelRef` surfaces this in the picker.
-- **Gateway-only**: `gemini`, `gemini-flash`, `kimi-k3`. No Cloudflare/direct base;
-  reached through OpenRouter once a key is connected.
+- **No Cloudflare floor**: `gemini`, `gemini-flash`, `kimi-k3`, `qwen3.8-max`. Nothing serves
+  these on the binding, so each stays unavailable until a key is pooled: the two Gemini entries
+  through OpenRouter alone, `kimi-k3` and `qwen3.8-max` direct (Moonshot / DashScope) or through
+  OpenRouter. A vendor's newest flagship lands here first, because Workers AI serves the open
+  weights and a closed flagship has none to serve.
 - **Operator-hosted-gateway entries**: `bifrost-default`, `litellm-default`. One generic entry
   each for the two self-hosted gateways (Bifrost, LiteLLM), because what such a gateway serves
   is its operator's configuration and no catalog here can enumerate it. Both are `direct`-flavour

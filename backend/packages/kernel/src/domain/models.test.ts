@@ -150,6 +150,17 @@ describe('isModelUsable', () => {
     expect(isModelUsable('kimi-k3', caps({ directProviders: new Set(['moonshot']) }))).toBe(true)
   })
 
+  it('leaves an entry with no Cloudflare flavour unusable on the binding alone', () => {
+    // `qwen3.8-max` declares direct + openrouter and no cloudflare route: Workers AI serves the
+    // open-weights Qwen3.8-27B, not Max, so the binding is not a floor under this entry and
+    // either key is what makes it usable.
+    expect(isModelUsable('qwen3.8-max', caps({ cloudflareEnabled: true }))).toBe(false)
+    expect(isModelUsable('qwen3.8-max', caps({ directProviders: new Set(['qwen']) }))).toBe(true)
+    expect(isModelUsable('qwen3.8-max', caps({ directProviders: new Set(['openrouter']) }))).toBe(
+      true,
+    )
+  })
+
   it('gates an openrouter flavour on the openrouter key alone, not on the enabled-slug set', () => {
     expect(isModelUsable('claude-fable', caps())).toBe(false)
     expect(isModelUsable('claude-fable', caps({ directProviders: new Set(['openrouter']) }))).toBe(

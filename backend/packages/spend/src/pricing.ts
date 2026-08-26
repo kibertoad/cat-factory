@@ -253,6 +253,10 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   deepseek: { inputPerMillion: 1.21, outputPerMillion: 3.64 },
   // Alibaba DashScope (approximate qwen3.7-max list prices, USD→EUR ~0.92).
   'qwen:qwen3.7-max': { inputPerMillion: 2.3, outputPerMillion: 6.9 },
+  // Qwen3.8 Max is $2 in / $0.25 implicitly cached / $6 out per 1M across its whole 1M window.
+  // Its cached tier is named because $0.25 sits above the 0.1x floor its input implies ($0.20),
+  // so deriving it would under-meter a run riding a warm prefix.
+  'qwen:qwen3.8-max': { inputPerMillion: 1.84, outputPerMillion: 5.52, cacheReadPerMillion: 0.23 },
   // Qwen3-Max is the superseded flagship, kept so historical spend rows keep costing; Alibaba
   // has since cut it to $0.78 in / $3.90 out per 1M, from the $1.20 / $6.00 this held.
   'qwen:qwen3-max': { inputPerMillion: 0.72, outputPerMillion: 3.59 },
@@ -364,6 +368,12 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   },
   'openrouter:x-ai/grok-4.6': { inputPerMillion: 1.84, outputPerMillion: 5.52 },
   'openrouter:qwen/qwen3.7-max': { inputPerMillion: 1.36, outputPerMillion: 4.07 },
+  // OpenRouter passes Alibaba's own Qwen3.8 Max rates through, cached tier included.
+  'openrouter:qwen/qwen3.8-max': {
+    inputPerMillion: 1.84,
+    outputPerMillion: 5.52,
+    cacheReadPerMillion: 0.23,
+  },
   openrouter: { inputPerMillion: 1.84, outputPerMillion: 11.04 },
   // Bifrost / LiteLLM: operator-hosted gateways whose cost is the backend model each routes to.
   //
