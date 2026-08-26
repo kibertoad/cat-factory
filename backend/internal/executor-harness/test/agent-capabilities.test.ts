@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
-  CLAUDE_BUILT_IN_TOOLS,
   claudeAllowedToolPatterns,
   claudeMcpConfig,
   codexMcpConfigToml,
@@ -12,6 +11,10 @@ import {
   writeClaudeMcpConfig,
   type McpServerSpec,
 } from '../src/agent-capabilities.js'
+import { CLAUDE_TOOL_SET } from '../src/claude-cli.js'
+
+/** The built-ins every run declares, which the allow-list has to carry with it. */
+const BUILT_INS = CLAUDE_TOOL_SET
 
 // The tool-server (MCP) config writers. Each CLI reads a different format, so these pin the two
 // shapes plus the two rules that are easy to get subtly wrong: when an allow-list may be sent at
@@ -55,29 +58,42 @@ describe('claudeMcpConfig', () => {
 describe('claudeAllowedToolPatterns', () => {
   it('returns nothing when NO server restricts its tools', () => {
     // Nothing to narrow ⇒ the safest allow-list is the one we never send.
-    expect(claudeAllowedToolPatterns([STDIO, HTTP])).toBeUndefined()
+    expect(claudeAllowedToolPatterns([STDIO, HTTP], BUILT_INS)).toBeUndefined()
   })
 
   it('narrows only where asked, keeping unrestricted servers whole', () => {
     expect(
-      claudeAllowedToolPatterns([{ ...STDIO, allowedTools: ['search_issues', 'get_issue'] }, HTTP]),
-    ).toEqual([
-      'mcp__issues__search_issues',
-      'mcp__issues__get_issue',
-      'mcp__docs',
-      ...CLAUDE_BUILT_IN_TOOLS,
-    ])
+      claudeAllowedToolPatterns(
+        [{ ...STDIO, allowedTools: ['search_issues', 'get_issue'] }, HTTP],
+        BUILT_INS,
+      ),
+    ).toEqual(['mcp__issues__search_issues', 'mcp__issues__get_issue', 'mcp__docs', ...BUILT_INS])
   })
 
-  it('always re-grants the CLI’s built-in tools alongside the MCP patterns', () => {
+  it('always carries the CLI’s built-in tools alongside the MCP patterns', () => {
     // An allow-list is WHOLE-SESSION, not MCP-scoped: it does not confine itself to `mcp__*` just
     // because every entry we generate looks like one. Omitting the built-ins would hand the run a
     // narrowed MCP surface and no way to read, edit or build anything — the agent would be unable
     // to do the work, far from the registration that narrowed a tool.
-    const patterns = claudeAllowedToolPatterns([{ ...STDIO, allowedTools: ['search_issues'] }])
+    const patterns = claudeAllowedToolPatterns(
+      [{ ...STDIO, allowedTools: ['search_issues'] }],
+      BUILT_INS,
+    )
     for (const builtIn of ['Bash', 'Read', 'Edit', 'Write', 'Glob', 'Grep']) {
       expect(patterns).toContain(builtIn)
     }
+  })
+
+  it('carries exactly the declared set, so it can never re-grant what --tools withheld', () => {
+    // The list is ADDITIVE, not a re-grant: a name in it UNLOCKS the tool. So whatever the
+    // declaration leaves out must not come back through the one entry an unrelated tool-server
+    // registration happens to send. Derived from the same constant the runner passes rather than
+    // restated, which is the property that makes the two unable to drift.
+    const patterns = claudeAllowedToolPatterns(
+      [{ ...STDIO, allowedTools: ['search_issues'] }],
+      [...BUILT_INS],
+    )
+    expect(patterns).toEqual(['mcp__issues__search_issues', ...BUILT_INS])
   })
 })
 

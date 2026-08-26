@@ -1,7 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { claudeAssistantContent, isObject, numberOf, redactBody } from './claude-stream.js'
 import { claudeUsage, unaccountedUsageCall } from './usage-attribution.js'
 import {
@@ -25,21 +23,22 @@ import {
 } from './pi.js'
 import type { PiRunStats } from './pi-reduction.js'
 import {
-  claudeAllowedToolPatterns,
-  mcpServerSecretValues,
   observeClaudeMcpInit,
-  writeClaudeMcpConfig,
   type McpServerSpec,
   type ObservedMcpServer,
   type SkillSpec,
 } from './agent-capabilities.js'
+import { openClaudeRunHome } from './claude-home.js'
 import { codexImageGapNote, createCodexHome, disposeCodexHome } from './codex-home.js'
-import { ProgressGuard, type ProgressGuardLimits } from './progress-guard.js'
+import type { ProgressGuardLimits } from './progress-guard.js'
+import { createClaudeProgressGuard } from './guard-driver.js'
+import type { WorkspaceProbe } from './workspace-probe.js'
 import { BoundedTail, JsonlLineReader } from './jsonl-stream.js'
 import { killChildProcess, spawnDetached } from './process.js'
+import { agentChildEnv } from './agent-env.js'
 import { abortReasonOf } from './failure.js'
 import { describeProcessExit } from './process-exit.js'
-import { redact, registerKnownSecrets, secretsToRedact } from './redact.js'
+import { redact, secretsToRedact } from './redact.js'
 import { createSliceTracker, startSubagentWatcher, type SliceReview } from './subagents.js'
 import {
   createTaskPlanTracker,
@@ -49,8 +48,7 @@ import {
   toProgress,
   todosToProgress,
 } from './progress.js'
-import { assertOnboardingKeysCurrent, writeOnboardingPreseed } from './onboarding-preseed.js'
-import { retainSessionTranscripts } from './transcript-retention.js'
+import { assertClaudeToolsCurrent, claudeCliArgs, CLAUDE_TOOL_SET } from './claude-cli.js'
 
 // The alternate (subscription) harness runners. The Pi harness reaches models
 // through the LLM proxy with a model-locked session token; the Claude Code and
@@ -129,7 +127,7 @@ export interface SubscriptionRunOptions {
   generateImages?: boolean
   /**
    * Extra environment for the CLI child, scoped to this job (the tester's secrets, a
-   * private-registry npmrc pointer). Merged over the inherited `process.env` at spawn, so the
+   * private-registry npmrc pointer). Merged over the inherited env at spawn (`agentChildEnv`), so the
    * agent and its shell tools see them without the harness mutating its OWN environment — which
    * is shared by every concurrent job under the native host-process transport. See
    * `RunOptions.agentEnv`.
@@ -148,6 +146,14 @@ export interface SubscriptionRunOptions {
   guardLimits?: ProgressGuardLimits
   /** Whether this run is expected to edit files (false for assess-only runs); gates the no-edit bound. */
   expectsEdits?: boolean
+  /**
+   * Probes the working tree for evidence the agent changed the repository. The guard's no-edit
+   * bound asks that question and can only see TOOL NAMES, so an agent writing files through
+   * `bash` reads as making no edits at all; this is what settles it before anything is killed.
+   * Injected so the guard stays pure, and consulted at most once per run (only when the bound is
+   * about to abort). Omitted ⇒ the bound falls back to its tool-name-only judgement.
+   */
+  workspaceProbe?: WorkspaceProbe
   /** Called on every chunk of CLI output, so the watchdog sees the agent is alive. */
   onActivity?: () => void
   /** Called with the latest subtask counts each time the CLI updates its todo/plan list. */
@@ -234,7 +240,7 @@ function streamCli(
     }
     const child = spawn(command, args, {
       cwd: opts.cwd,
-      env: { ...process.env, ...env },
+      env: agentChildEnv(env),
       stdio: ['pipe', 'pipe', 'pipe'],
       // Own process group (POSIX) so killChildProcess reaps the CLI's grandchildren too.
       detached: spawnDetached,
@@ -471,82 +477,6 @@ export function carryClaudeSystemPrompt(
 // ---------------------------------------------------------------------------
 
 /**
- * Run the Claude Code CLI headlessly against `opts.cwd`, authenticated with the
- * leased subscription OAuth token (CLAUDE_CODE_OAUTH_TOKEN), talking direct to
- * api.anthropic.com. Streams `--output-format stream-json`, mapping the
- * `TodoWrite` tool calls onto subtask progress and the terminal `result` event
- * onto the summary + usage.
- */
-/**
- * Write a repo-sourced skill as a NATIVE Claude Code skill under `<skillsRoot>/<name>/`: a
- * `SKILL.md` (YAML frontmatter `name`/`description` + the instructions body, the format the CLI
- * expects) plus every resource file at its path within the skill directory. Resource sub-paths
- * were sanitized at the job boundary (no traversal), so nested dirs are created as needed.
- *
- * The frontmatter `name`/`description` values are emitted as JSON-encoded (double-quoted) YAML
- * scalars, not bare plain scalars: an author's description routinely contains `: ` (colon-space)
- * or a leading YAML indicator (`#`, `-`, `[`, `{`, `"`, …), which is invalid as a plain scalar and
- * would make the CLI fail to parse the frontmatter and silently skip the skill. A JSON string is a
- * valid YAML double-quoted scalar, so quoting makes the manifest robust to arbitrary text.
- */
-async function writeNativeSkill(skillsRoot: string, skill: SkillSpec): Promise<void> {
-  const dir = join(skillsRoot, skill.name)
-  await mkdir(dir, { recursive: true })
-  const name = JSON.stringify(skill.name)
-  const description = JSON.stringify(skill.description.replace(/\r?\n/g, ' '))
-  const frontmatter = `---\nname: ${name}\ndescription: ${description}\n---\n`
-  await writeFile(join(dir, 'SKILL.md'), `${frontmatter}\n${skill.instructions}\n`, 'utf8')
-  for (const resource of skill.resources) {
-    const dest = join(dir, resource.relPath)
-    await mkdir(dirname(dest), { recursive: true })
-    await writeFile(dest, resource.content, 'utf8')
-  }
-}
-
-/**
- * Prepare the Claude Code CLI's MCP wiring for one run: write the servers to a PER-RUN config and
- * return the argv that points the CLI at it, plus the cleanup for a directory we had to mint.
- *
- * Two decisions live here. `--strict-mcp-config` makes that file the ONLY source of servers, so an
- * ambient run on a developer's own machine can never silently hand the agent their personal ones.
- * And `--allowedTools` is passed ONLY when a server actually narrows its tools — an allow-list is
- * whole-session, not MCP-scoped, so `claudeAllowedToolPatterns` re-grants the CLI's built-in
- * file/bash tools in the same list; see it for why that holds whichever way the run's permission
- * mode treats an allow-list.
- *
- * The config carries this job's resolved credentials, so it goes in the isolated config home when
- * we own one and a throwaway per-JOB directory otherwise — never the checkout (it would land in a
- * commit) and never a shared HOME path (a concurrent job would clobber it).
- */
-async function setUpClaudeMcp(
-  servers: McpServerSpec[] | undefined,
-  configHome: string | undefined,
-): Promise<{ args: string[]; cleanup: () => Promise<void> }> {
-  const noop = { args: [], cleanup: async () => {} }
-  if (!servers?.length) return noop
-  // Before anything can spawn: a failing MCP server echoes its own argv/headers into stderr, and
-  // that tail is carried onto the step's diagnostics.
-  registerKnownSecrets(mcpServerSecretValues(servers))
-  const home = configHome ?? (await mkdtemp(join(tmpdir(), 'cf-claude-mcp-')))
-  const owned = home === configHome ? undefined : home
-  const cleanup = async (): Promise<void> => {
-    if (owned) await rm(owned, { recursive: true, force: true }).catch(() => {})
-  }
-  const configPath = await writeClaudeMcpConfig(home, servers)
-  if (!configPath) return { args: [], cleanup }
-  const allowedTools = claudeAllowedToolPatterns(servers)
-  return {
-    args: [
-      '--mcp-config',
-      configPath,
-      '--strict-mcp-config',
-      ...(allowedTools?.length ? ['--allowedTools', allowedTools.join(',')] : []),
-    ],
-    cleanup,
-  }
-}
-
-/**
  * The LIVE publishers of a claude-code run: everything the stream has revealed so far that the
  * backend should see before the run ends, rather than only in its terminal result.
  *
@@ -605,56 +535,6 @@ function reportToolServerStartup(
   if (!onToolServers) return
   const observed = observeClaudeMcpInit(event)
   if (observed) onToolServers(observed)
-}
-
-/**
- * No-progress guard on the CLI's own tool stream — the claude-code analogue of runPi's guard,
- * which cannot see the CLI's internal turns. The caller remembers each `tool_use` id's name off
- * the assistant turn (`rememberTool`) and hands the following user turn's content to `feedGuard`,
- * which pairs each `tool_result`'s `is_error` with that name. The FIRST reason trips it: the
- * diagnostic is recorded (readable via `reason()`, which the catch surfaces over the generic abort
- * message) and `guardAbort` fires — folded into streamCli's signal so a tripped guard kills the CLI
- * the same way the external watchdog does. Disabled when the caller supplies no limits (only the
- * external watchdog then bounds the run).
- *
- * Split out of {@link runClaudeCode} for the per-function line budget.
- */
-function createClaudeProgressGuard(opts: SubscriptionRunOptions): {
-  rememberTool: (id: string, name: string) => void
-  feedGuard: (content: unknown[]) => void
-  guardAbort: AbortController
-  reason: () => string | undefined
-} {
-  const guard = opts.guardLimits
-    ? new ProgressGuard(opts.guardLimits, opts.expectsEdits ?? true)
-    : undefined
-  const toolNames = new Map<string, string>()
-  const guardAbort = new AbortController()
-  let guardReason: string | undefined
-
-  const feedGuard = (content: unknown[]): void => {
-    if (!guard || guardReason) return
-    for (const block of content) {
-      if (!isObject(block) || block.type !== 'tool_result') continue
-      const id = typeof block.tool_use_id === 'string' ? block.tool_use_id : undefined
-      const name = id ? toolNames.get(id) : undefined
-      if (id) toolNames.delete(id)
-      if (!name) continue
-      const reason = guard.observeSignal({ name, isError: block.is_error === true })
-      if (reason) {
-        guardReason = reason
-        guardAbort.abort()
-        return
-      }
-    }
-  }
-
-  return {
-    rememberTool: (id, name) => toolNames.set(id, name),
-    feedGuard,
-    guardAbort,
-    reason: () => guardReason,
-  }
 }
 
 /**
@@ -775,6 +655,13 @@ function openClaudeCallCapture(
   }
 }
 
+/**
+ * Run the Claude Code CLI headlessly against `opts.cwd`, authenticated with the
+ * leased subscription OAuth token (CLAUDE_CODE_OAUTH_TOKEN), talking direct to
+ * api.anthropic.com. Streams `--output-format stream-json`, mapping the
+ * `TodoWrite` tool calls onto subtask progress and the terminal `result` event
+ * onto the summary + usage.
+ */
 export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRunOutcome> {
   const stats: PiRunStats = { toolCalls: 0, assistantChars: 0 }
   let summary = ''
@@ -792,6 +679,10 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       bytes: Buffer.byteLength(opts.systemPrompt, 'utf8'),
     })
   }
+
+  // The built-in tools this run declares, named ONCE: the same list rides `--tools` and the
+  // `--allowedTools` re-grant, which is additive rather than inert (see `claudeAllowedToolPatterns`).
+  const tools = CLAUDE_TOOL_SET
 
   const secrets = opts.subscriptionToken ? secretsToRedact(opts.subscriptionToken) : []
   const capture = openClaudeCallCapture(opts, { prompt, folded, secrets })
@@ -837,6 +728,9 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   const onEvent = (event: Record<string, unknown>, meta?: { final?: boolean }): void => {
     const type = event.type
     reportToolServerStartup(event, opts.onToolServers)
+    // The same startup event answers what the CLI granted of what we asked for; a capability it
+    // named no tool for is a silent capability loss otherwise (see `assertClaudeToolsCurrent`).
+    assertClaudeToolsCurrent(event, tools, opts.log)
     // A subagent's turns ride the parent's stdout tagged with the dispatch that spawned them;
     // `telemetry` routes them off the parent's chain (and decides who bills them). Progress, slice
     // tracking, the guard and `stats` below deliberately see EVERY event: a subagent grinding on
@@ -892,7 +786,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     }
   }
 
-  const home = await openClaudeRunHome(opts)
+  const home = await openClaudeRunHome(opts, tools)
   const { configHome } = home
 
   // ADR 0026 D3 (path corrected by ADR 0027 Defect A): while the run is live, tail the CLI's
@@ -926,22 +820,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     const { stderrTail } = await streamCli(
       {
         command: 'claude',
-        args: [
-          '-p',
-          '--output-format',
-          'stream-json',
-          '--verbose',
-          // The per-run container IS the sandbox, and the run is fully headless (no one
-          // to approve a tool call) — so bypass permissions entirely. `acceptEdits`
-          // would auto-accept file edits but still gate Bash, which in `-p` mode is then
-          // denied, leaving the agent unable to run builds/tests/git to verify its work.
-          '--permission-mode',
-          'bypassPermissions',
-          '--model',
-          opts.model,
-          ...home.mcpArgs,
-          ...appendArgs,
-        ],
+        args: claudeCliArgs({ model: opts.model, tools, mcpArgs: home.mcpArgs, appendArgs }),
       },
       prompt,
       { ...opts, signal: runSignal },
@@ -995,118 +874,6 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     toolWindow.close()
     await subagents?.stop()
     await home.dispose()
-  }
-}
-
-/**
- * The isolated, per-run home the `claude` CLI runs against: a temp config dir OUTSIDE the cloned
- * checkout, pre-seeded past the first-launch prompts, carrying the run's native skills and MCP
- * config, plus the child env pointing the CLI at it. {@link ClaudeRunHome.dispose} is the other
- * half of the same concern — the leased credential must never outlive the run — so acquisition
- * and teardown are defined together rather than split across a `finally` forty lines away.
- *
- * Ambient (native) mode has NO home: the developer's installed CLI uses its own `~/.claude`
- * login, so nothing is created, nothing is pre-seeded, and `dispose` only clears the MCP config.
- */
-interface ClaudeRunHome {
-  /** The per-run config dir; `undefined` in ambient mode (the developer's own login is used). */
-  configHome: string | undefined
-  /** The CLI argv selecting the run's tool servers; empty when it has none. */
-  mcpArgs: string[]
-  /** The child-process env (see {@link buildClaudeEnv}). */
-  env: Record<string, string>
-  dispose: () => Promise<void>
-}
-
-async function openClaudeRunHome(opts: SubscriptionRunOptions): Promise<ClaudeRunHome> {
-  // Native (ambient) mode: run the developer's installed `claude` with its OWN login —
-  // no isolated config home, no injected credential, no onboarding pre-seed. Otherwise,
-  // Claude Code persists user config/credentials under its config dir; point that at an
-  // isolated, per-run temp dir OUTSIDE the cloned checkout (`opts.cwd`). Otherwise the
-  // agents that finish with `git add -A` (blueprint/requirements/bootstrap) could stage a
-  // stray `.claude/` directory — and any cached credential in it — into the pushed branch.
-  // Mirrors the Codex CODEX_HOME isolation below; removed by `dispose`.
-  if (!opts.ambientAuth && !opts.subscriptionToken) {
-    throw new Error('claude-code harness requires a subscription token (or ambientAuth)')
-  }
-  const configHome = opts.ambientAuth ? undefined : await mkdtemp(join(tmpdir(), 'cf-claude-'))
-
-  // The config dir is brand-new every run, so Claude Code would otherwise treat this
-  // as a first launch and BLOCK on the interactive onboarding / "trust this folder" /
-  // bypass-permissions acknowledgement prompts — which never get answered headlessly,
-  // hanging the job until the watchdog kills it. Pre-seed the config that marks those
-  // as already accepted so `-p` starts straight into the run. Best-effort: written
-  // before the CLI starts; unknown keys are harmless if a CLI version ignores them.
-  // (Ambient mode skips this — the developer's own config is already onboarded.)
-  // ADR 0026 D4: assert the pinned onboarding keys landed and log them with the CLI
-  // version, so a future first-run gate this set doesn't cover (which looks identical to
-  // a healthy-but-quiet subagent start) is diffable when the cold-start watchdog fires.
-  if (configHome) {
-    await writeOnboardingPreseed(configHome)
-    await assertOnboardingKeysCurrent(configHome, process.env.CLAUDE_CLI_VERSION, opts.log)
-  }
-
-  // Skills: install each as a native skill under the config dir's `skills/<name>/` so the CLI
-  // discovers and can invoke it. ONLY into the isolated per-run config home — never the
-  // developer's own `~/.claude` (ambient/native mode), where it would persist in their personal
-  // setup after the run and two concurrent jobs carrying same-named skills would clobber each
-  // other. An ambient run reads the skills from the checkout instead (`.cat-context/skill/<name>/`,
-  // materialised by the caller). Best-effort: a write failure must not wedge the run — the prompt
-  // still names the skills.
-  if (configHome) {
-    for (const skill of opts.skills ?? []) {
-      await writeNativeSkill(join(configHome, 'skills'), skill).catch(() => {})
-    }
-  }
-
-  // Tool servers (MCP): the CLI is pointed at a per-run config rather than discovering an ambient
-  // one. See `setUpClaudeMcp` for why that matters and what has to be cleaned up afterwards.
-  const mcp = await setUpClaudeMcp(opts.mcpServers, configHome)
-
-  return {
-    configHome,
-    mcpArgs: mcp.args,
-    env: buildClaudeEnv(opts, configHome),
-    dispose: async () => {
-      // The ambient-mode MCP config dir (credential-bearing) never outlives the run.
-      await mcp.cleanup()
-      if (!configHome) return
-      // Lift the CLI session transcripts (`projects/`) out for short-lived retention BEFORE the
-      // home is deleted — the credential lives at the home root, never in `projects/`, so this
-      // keeps the debugging artifact without leaking the token. Best-effort; never throws.
-      await retainSessionTranscripts(configHome, ['projects'], {
-        label: 'claude-code',
-        ...(opts.log ? { log: opts.log } : {}),
-      })
-      // Never leave the config dir (and any cached credential) on disk past the run.
-      await rm(configHome, { recursive: true, force: true }).catch(() => {})
-    },
-  }
-}
-
-/**
- * Build the child-process env for the `claude` CLI: an isolated config home plus subscription
- * auth (Anthropic OAuth token, or an Anthropic-compatible base URL + auth token for a
- * non-Anthropic Claude-Code vendor like GLM/Kimi/DeepSeek), or an empty env in ambient mode
- * (the developer's own logged-in `~/.claude` is used). Extracted from {@link runClaudeCode} to
- * keep its cyclomatic complexity down; behaviour is a straight move of the original expression.
- */
-function buildClaudeEnv(
-  opts: SubscriptionRunOptions,
-  configHome: string | undefined,
-): Record<string, string> {
-  // The job-scoped env rides along in BOTH modes; the credential/config vars below are what
-  // ambient mode drops (the developer's own logged-in `~/.claude` is used instead).
-  if (opts.ambientAuth) return { ...opts.extraEnv }
-  return {
-    ...opts.extraEnv,
-    CLAUDE_CONFIG_DIR: configHome!,
-    ...(opts.subscriptionBaseUrl
-      ? {
-          ANTHROPIC_BASE_URL: opts.subscriptionBaseUrl,
-          ANTHROPIC_AUTH_TOKEN: opts.subscriptionToken!,
-        }
-      : { CLAUDE_CODE_OAUTH_TOKEN: opts.subscriptionToken! }),
   }
 }
 
@@ -1296,6 +1063,12 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
           'exec',
           '--json',
           '--skip-git-repo-check',
+          // No `--tools` analogue here, and its absence is a FINDING rather than an oversight:
+          // codex has no flag that declares a built-in tool set, because it has no set to choose
+          // from. Its surface is shell + apply_patch + the plan tool, and the optional extras are
+          // individual `CODEX_HOME/config.toml` switches the harness already sets deliberately
+          // (`[features] image_generation`, see `codex-home.ts`). So there is nothing here that
+          // silently drifts with a CLI version the way claude-code's headless default did.
           // The per-run container IS the sandbox; let Codex write files and reach the
           // vendor unrestricted, with no approval prompts (the run is headless).
           '--dangerously-bypass-approvals-and-sandbox',

@@ -80,6 +80,21 @@ const showProvisioning = ref(false)
 // drawer above (the orchestrator-side container/env spin-up), this is the stand-up that runs
 // INSIDE the container — the highest-signal artifact when local infra fails to come up.
 const infraSetup = computed(() => testState.value?.infraSetup ?? null)
+
+// A stand-up that never ran because the executor container had no Docker daemon is a different
+// failure from a compose stack that failed to come up, and the two have opposite fixes (the image
+// or the sandbox running it, versus the service's own compose file). `dockerAvailable` is
+// three-valued for the same reason it is on the wire: absent means the container reached no
+// verdict (an older image, or the native host transport), which is not the same as a daemon that
+// was decidedly missing, so only an explicit `false` changes what this says.
+const standupHeadline = computed(() => {
+  const infra = infraSetup.value
+  if (!infra) return ''
+  if (infra.started) return t('testing.standup.up')
+  return infra.dockerAvailable === false
+    ? t('testing.standup.noDocker')
+    : t('testing.standup.failed')
+})
 // The captured stand-up logs are shown on demand (they can be long).
 const showInfraSetupLogs = ref(false)
 
@@ -382,7 +397,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                 :class="infraSetup.started ? 'text-emerald-400' : 'text-rose-400'"
               />
               <span class="text-[13px] font-medium text-slate-200">
-                {{ infraSetup.started ? t('testing.standup.up') : t('testing.standup.failed') }}
+                {{ standupHeadline }}
               </span>
               <span v-if="infraSetup.durationMs != null" class="ms-auto text-[11px] text-slate-500">
                 {{

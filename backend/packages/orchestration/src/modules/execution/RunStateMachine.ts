@@ -64,7 +64,7 @@ const EXECUTION_FAILURE_HINTS: Record<AgentFailureKind, string> = {
   preflight:
     'A precondition failed before the agent’s container was started, so the run never began — most often the workspace has no connected GitHub repository, the selected model or provider isn’t configured, or a required credential is missing. The specific cause is shown above. Fix it (connect GitHub and link a repository, or pick a configured model in the workspace settings), then retry.',
   agent:
-    'An agent step failed after its automatic retries. Review the run, then retry to re-run the pipeline.',
+    'An agent step failed and stopped the run. Whether it had automatic retries left to spend is on the step itself: its attempt count says how many it made, and its failure detail carries what the container reported. Review those, then retry to re-run the pipeline.',
   job_failed:
     'The implementation container reported a failure. Inspect its logs (Cloudflare Workers Observability, filtered by the run id), then retry to spin a fresh container.',
   evicted:

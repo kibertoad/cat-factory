@@ -93,16 +93,29 @@ describe('the environment inventory is composed exactly once', () => {
     expect(forwarding.length).toBeGreaterThan(0)
   })
 
-  it('is carried into all three CLIs by the one funnel, not re-derived per CLI', async () => {
-    // `runAgentInWorkspace` is where the harness picks a CLI, and it is the last place the system
+  it('is carried into all three CLIs from the spec, not re-derived per CLI', async () => {
+    // `pi-workspace.ts` is where the harness picks a CLI, and it holds the last place the system
     // prompt could be dropped: the subscription branch hands it to claude-code/codex, the Pi
     // branch writes it to `~/.pi/agent/AGENTS.md`. Both must start from the spec's own field,
     // which is the field `handleAgent` folded the inventory onto.
-    const funnel = topLevelFunctions(await read('../src/pi-workspace.ts')).get(
-      'runAgentInWorkspace',
-    )!
-    expect(funnel).toContain('subscriptionSystemPrompt(spec.systemPrompt')
-    expect(funnel).toContain('writeAgentsContext(spec.systemPrompt')
+    //
+    // Asserted over the MODULE, not inside `runAgentInWorkspace`: WHICH function holds a sink is
+    // refactoring detail, and the subscription branch has already moved out into
+    // `runSubscriptionInWorkspace` once. What may not change is the argument each sink is handed,
+    // so every call is checked and a sink that stops being called fails rather than passing
+    // vacuously.
+    const source = await read('../src/pi-workspace.ts')
+    for (const sink of ['subscriptionSystemPrompt', 'writeAgentsContext']) {
+      // `(?<!function )` skips `subscriptionSystemPrompt`'s own definition in this module; a
+      // parameter list is not a call site.
+      const calls = [...source.matchAll(new RegExp(`(?<!function )\\b${sink}\\(([^,)]*)`, 'g'))]
+      expect(calls.length, `${sink} must still be called`).toBeGreaterThan(0)
+      for (const call of calls) {
+        expect(call[1]?.trim(), `${sink} must be handed the spec's own prompt`).toBe(
+          'spec.systemPrompt',
+        )
+      }
+    }
   })
 
   it('sees a flow written as an arrow function, not only as a `function`', () => {

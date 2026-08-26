@@ -26,6 +26,12 @@ import {
   mergeGuardLimits,
   progressGuardLimitsFromEnv,
 } from './progress-guard.js'
+import {
+  composeWorkspaceProbes,
+  createWorkspaceProbe,
+  readHeadOrEmpty,
+  type WorkspaceProbe,
+} from './workspace-probe.js'
 import type { RunOptions } from './runner.js'
 import { type SubscriptionHarness, runSubscriptionHarness } from './agent-runner.js'
 
@@ -151,6 +157,17 @@ export async function acquireRepoCheckout<T>(
 export interface AgentRunSpec {
   /** The prepared working directory (cloned/scaffolded by the caller). */
   dir: string
+  /**
+   * The git checkouts this pass may change, for the no-progress guard's working-tree bound.
+   * Absent ⇒ `[dir]`, which is right whenever the agent's cwd is (or is inside) the one repo.
+   *
+   * A MULTI-REPO run is the exception the default cannot serve: its cwd is a workspace ROOT
+   * holding sibling checkouts and is no repository itself, so probing it asks git a question with
+   * no answer, every probe throws, and the bound goes permanently unenforced. Such a caller names
+   * its writable legs here instead. A read-only reference checkout is deliberately NOT named: the
+   * run is forbidden to write to it, so a change there is not this run making progress.
+   */
+  repoDirs?: readonly string[]
   /** Composed role + best-practice fragments; written to Pi's global AGENTS.md context. */
   systemPrompt: string
   /** The concrete task prompt handed to Pi. */
@@ -292,6 +309,90 @@ export async function checkoutHasBlueprints(dir: string, multiRepo: boolean): Pr
 }
 
 /**
+ * Run one pass on a SUBSCRIPTION harness (Claude Code / Codex): the leased-credential path, which
+ * shares only the checkout preparation with the Pi one.
+ *
+ * Split out of {@link runAgentInWorkspace} for its cyclomatic budget. It is also the honest seam:
+ * everything here is a decision about what the vendor's own CLI is handed, while everything left
+ * behind is about the proxy-backed Pi run.
+ */
+async function runSubscriptionInWorkspace(
+  harness: 'claude-code' | 'codex',
+  spec: AgentRunSpec,
+  opts: RunOptions,
+  prepared: {
+    contextFiles: ContextFileInfo[]
+    imageGuidance: string
+    workspaceProbe: WorkspaceProbe
+  },
+): Promise<PiRunOutcome> {
+  const { contextFiles, imageGuidance, workspaceProbe } = prepared
+  // Ambient (native) mode authenticates with the developer's own CLI login, so no
+  // leased token is required; otherwise the leased subscription token is mandatory.
+  if (!spec.ambientAuth && !spec.subscriptionToken) {
+    throw new Error(`The ${harness} harness requires a subscription token`)
+  }
+  const subOutcome = await runSubscriptionHarness(harness, {
+    cwd: spec.dir,
+    model: spec.model,
+    systemPrompt: `${subscriptionSystemPrompt(spec.systemPrompt, contextFiles)}${imageGuidance}`,
+    userPrompt: spec.userPrompt,
+    ...(spec.subscriptionToken ? { subscriptionToken: spec.subscriptionToken } : {}),
+    subscriptionBaseUrl: spec.subscriptionBaseUrl,
+    ...(spec.ambientAuth ? { ambientAuth: true } : {}),
+    ...(spec.skills?.length ? { skills: spec.skills } : {}),
+    ...(spec.mcpServers?.length ? { mcpServers: spec.mcpServers } : {}),
+    // Codex's own image tool. Passed for both subscription harnesses because the option lives on
+    // the shared run options; `runClaudeCode` ignores it, since claude-code has no such tool and
+    // (unlike an MCP server) there is nothing to report as unservable — the backend never
+    // resolves a codex-served generator onto a claude-code step, because admission refuses it.
+    ...(spec.generateImages ? { generateImages: true } : {}),
+    // `spec.webSearchProxy` is deliberately NOT forwarded. It states whether OUR PROXY serves web
+    // research for this run's account, which is what Pi's tools ride and what they would fail
+    // without; neither subscription CLI touches that proxy. Claude Code's `WebSearch`/`WebFetch`
+    // are served by the vendor the leased subscription already pays and are declared
+    // unconditionally (see `CLAUDE_TOOL_SET`), and Codex's surface is per-tool config rather than
+    // a list. Passing the proxy's availability here would withhold working tools on the strength
+    // of an unrelated deployment's wiring.
+    ...(opts.agentEnv ? { extraEnv: opts.agentEnv } : {}),
+    signal: opts.signal,
+    // Run the SAME no-progress guard Pi gets (previously claude-code/codex had none): env
+    // defaults merged loosen-only with the kind's tuning + the backend's complexity-scaled
+    // no-edit allowance, so a claude-code run that stops making progress is killed early
+    // instead of burning the full wall-clock budget. The claude runner consumes it; codex
+    // ignores it for now (its stream isn't wired to the guard).
+    guardLimits: mergeGuardLimits(progressGuardLimitsFromEnv(), spec.guardLimits),
+    expectsEdits: spec.expectsEdits ?? true,
+    // What the guard's no-edit bound actually decides on (see `buildWorkspaceProbe`).
+    workspaceProbe,
+    onActivity: opts.onActivity,
+    onProgress: opts.onProgress,
+    // The run's tool-call trajectory, the same hook the Pi path feeds — so a subscription run
+    // and a proxied one produce the same evidence rather than one of them producing none.
+    onSpan: opts.onSpan,
+    // The tool-silence window (stuck-run audit F13), opened by whichever CLI actually runs.
+    // Wired for BOTH subscription harnesses: each reports tool activity on its own stream, so
+    // each can beat the window it opens.
+    beginToolWindow: opts.beginToolWindow,
+    // Per-slice review capture, so a parallel review's finished slices are persisted as they
+    // land rather than only in the terminal output. Only the subscription runners fan work out
+    // across subagents, so this is the only path that can produce it.
+    onSliceReviews: opts.onSliceReviews,
+    // What the CLI reported about the tool servers it loaded. Wired for BOTH subscription
+    // harnesses even though only claude-code's stream carries the report today: the hook is a
+    // pass-through, and a codex run that never calls it leaves the backend's record honestly
+    // absent rather than claiming every server it wired failed to start.
+    onToolServers: opts.onToolServers,
+    // Stream this run's per-call telemetry to the job's live drain. The subscription
+    // harnesses are the only producers of `callMetrics` (Pi's calls are metered by the LLM
+    // proxy as they happen), so this is the only path that needs the hook.
+    onCallMetric: opts.onCallMetric,
+    ...(opts.log ? { log: opts.log } : {}),
+  })
+  return withEffortReport(spec.dir, subOutcome)
+}
+
+/**
  * Write Pi's global agent context (`~/.pi/agent/AGENTS.md`) + provider config,
  * then run Pi once in `spec.dir` and return its summary/stats/stderr. The context
  * lives outside the checkout so it never lands in a commit; the shared middle of
@@ -331,65 +432,29 @@ export async function runAgentInWorkspace(
     await materializeSkillResources(spec.dir, spec.skills)
   }
 
-  // Subscription harnesses (Claude Code / Codex) authenticate with the leased
-  // token and talk direct to the vendor — no proxy config, no AGENTS.md. The
-  // system prompt is passed straight to the CLI; everything around this (clone,
-  // push, watchdogs) is unchanged.
+  // The no-progress guard's no-edit bound asks "has this run changed the repository", and the
+  // tool names it can see are only a proxy for that: an agent writing every file through `bash`
+  // reads as making no edits at all, and the guard killed exactly such a run after it had built,
+  // tested and verified a whole service. The working tree is the honest answer, so wire the probe
+  // that reads it. Built HERE because this is the shared middle of both harness paths and the one
+  // place that knows the checkout: the guard itself stays pure and takes it injected.
+  //
+  // The baseline is HEAD as this PASS begins, not the clone's — a repair round is a fresh agent
+  // that must show its OWN progress, and judging it against the clone would let the previous
+  // round's commits satisfy its bound. A checkout with no commit yet (a scaffold-from-scratch
+  // bootstrap) has no HEAD to read; the probe then rides on the dirty-tree half alone, which is
+  // the half that matters there anyway.
+  const workspaceProbe = await buildWorkspaceProbe(spec, opts.signal)
+
+  // Subscription harnesses (Claude Code / Codex) authenticate with the leased token and talk
+  // direct to the vendor: no proxy config, no AGENTS.md. The system prompt is passed straight to
+  // the CLI; everything around this (clone, push, watchdogs) is unchanged.
   if (spec.harness === 'claude-code' || spec.harness === 'codex') {
-    // Ambient (native) mode authenticates with the developer's own CLI login, so no
-    // leased token is required; otherwise the leased subscription token is mandatory.
-    if (!spec.ambientAuth && !spec.subscriptionToken) {
-      throw new Error(`The ${spec.harness} harness requires a subscription token`)
-    }
-    const subOutcome = await runSubscriptionHarness(spec.harness, {
-      cwd: spec.dir,
-      model: spec.model,
-      systemPrompt: `${subscriptionSystemPrompt(spec.systemPrompt, contextFiles)}${imageGuidance}`,
-      userPrompt: spec.userPrompt,
-      ...(spec.subscriptionToken ? { subscriptionToken: spec.subscriptionToken } : {}),
-      subscriptionBaseUrl: spec.subscriptionBaseUrl,
-      ...(spec.ambientAuth ? { ambientAuth: true } : {}),
-      ...(spec.skills?.length ? { skills: spec.skills } : {}),
-      ...(spec.mcpServers?.length ? { mcpServers: spec.mcpServers } : {}),
-      // Codex's own image tool. Passed for both subscription harnesses because the option lives on
-      // the shared run options; `runClaudeCode` ignores it, since claude-code has no such tool and
-      // (unlike an MCP server) there is nothing to report as unservable — the backend never
-      // resolves a codex-served generator onto a claude-code step, because admission refuses it.
-      ...(spec.generateImages ? { generateImages: true } : {}),
-      ...(opts.agentEnv ? { extraEnv: opts.agentEnv } : {}),
-      signal: opts.signal,
-      // Run the SAME no-progress guard Pi gets (previously claude-code/codex had none): env
-      // defaults merged loosen-only with the kind's tuning + the backend's complexity-scaled
-      // no-edit allowance, so a claude-code run that stops making progress is killed early
-      // instead of burning the full wall-clock budget. The claude runner consumes it; codex
-      // ignores it for now (its stream isn't wired to the guard).
-      guardLimits: mergeGuardLimits(progressGuardLimitsFromEnv(), spec.guardLimits),
-      expectsEdits: spec.expectsEdits ?? true,
-      onActivity: opts.onActivity,
-      onProgress: opts.onProgress,
-      // The run's tool-call trajectory, the same hook the Pi path feeds — so a subscription run
-      // and a proxied one produce the same evidence rather than one of them producing none.
-      onSpan: opts.onSpan,
-      // The tool-silence window (stuck-run audit F13), opened by whichever CLI actually runs.
-      // Wired for BOTH subscription harnesses: each reports tool activity on its own stream, so
-      // each can beat the window it opens.
-      beginToolWindow: opts.beginToolWindow,
-      // Per-slice review capture, so a parallel review's finished slices are persisted as they
-      // land rather than only in the terminal output. Only the subscription runners fan work out
-      // across subagents, so this is the only path that can produce it.
-      onSliceReviews: opts.onSliceReviews,
-      // What the CLI reported about the tool servers it loaded. Wired for BOTH subscription
-      // harnesses even though only claude-code's stream carries the report today: the hook is a
-      // pass-through, and a codex run that never calls it leaves the backend's record honestly
-      // absent rather than claiming every server it wired failed to start.
-      onToolServers: opts.onToolServers,
-      // Stream this run's per-call telemetry to the job's live drain. The subscription
-      // harnesses are the only producers of `callMetrics` (Pi's calls are metered by the LLM
-      // proxy as they happen), so this is the only path that needs the hook.
-      onCallMetric: opts.onCallMetric,
-      ...(opts.log ? { log: opts.log } : {}),
+    return await runSubscriptionInWorkspace(spec.harness, spec, opts, {
+      contextFiles,
+      imageGuidance,
+      workspaceProbe,
     })
-    return withEffortReport(spec.dir, subOutcome)
   }
   if (!spec.proxyBaseUrl || !spec.sessionToken) {
     throw new Error('The Pi harness requires proxyBaseUrl and sessionToken')
@@ -446,9 +511,48 @@ export async function runAgentInWorkspace(
     // Start from the env/built-in defaults and apply only the per-knob overrides the
     // backend set for this kind (loosen-only), so an unspecified knob keeps its default.
     guardLimits: mergeGuardLimits(progressGuardLimitsFromEnv(), spec.guardLimits),
+    // What the guard's no-edit bound actually decides on (see `buildWorkspaceProbe`).
+    workspaceProbe,
     extraEnv,
   })
   return withEffortReport(spec.dir, piOutcome)
+}
+
+/**
+ * The workspace probe for one agent pass: each of the pass's working trees, baselined against its
+ * own HEAD as this pass begins.
+ *
+ * Reading HEAD is the one part that can fail benignly: a scaffold-from-scratch checkout has no
+ * commit yet, so `rev-parse HEAD` errors. That is no reason to leave the bound blind, since the
+ * dirty-tree half is exactly what answers a from-scratch build — so the pass baselines against
+ * the empty sha (`readHeadOrEmpty`, which the probe itself reads HEAD through for the same
+ * reason), and any commit the agent makes reads as HEAD having moved off it.
+ *
+ * A directory that is no git repository at all makes every probe THROW, which the driver treats
+ * as inconclusive: the bound re-arms and the run is neither killed nor left to the streak bounds
+ * alone. Deliberate, and the same disposition a transient git failure gets.
+ *
+ * WHICH trees is `spec.repoDirs`, defaulted HERE rather than at the call site so the rule that a
+ * pass with no declared checkouts is judged on its own directory lives with the builder that acts
+ * on it. Several of them compose into one probe over the whole workspace (see
+ * {@link composeWorkspaceProbes}); an empty list would silently disarm the bound, so it falls back
+ * to `dir` too.
+ */
+async function buildWorkspaceProbe(
+  spec: Pick<AgentRunSpec, 'dir' | 'repoDirs'>,
+  signal: AbortSignal | undefined,
+): Promise<WorkspaceProbe> {
+  const dirs = spec.repoDirs?.length ? spec.repoDirs : [spec.dir]
+  const probes = await Promise.all(
+    dirs.map(async (dir) =>
+      createWorkspaceProbe({
+        dir,
+        baseSha: await readHeadOrEmpty(dir, signal),
+        ...(signal ? { signal } : {}),
+      }),
+    ),
+  )
+  return composeWorkspaceProbes(probes)
 }
 
 /**

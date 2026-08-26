@@ -116,7 +116,7 @@ export interface RunOptions {
   log?: Logger
   /**
    * Extra environment for the agent's child process, scoped to THIS job. The CLI is spawned with
-   * `{...process.env, ...agentEnv}`, so these reach the agent and every shell tool it spawns.
+   * `agentChildEnv(agentEnv)`, so these reach the agent and every shell tool it spawns.
    *
    * This is the seam for anything per-job that would otherwise be written to a process- or
    * HOME-global (the tester's secrets, a private-registry npmrc pointer). Those globals are only

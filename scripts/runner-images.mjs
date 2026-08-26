@@ -34,6 +34,11 @@ export const IMAGES = [
     sourcePrefixes: ['backend/internal/executor-harness/src/'],
     sourceFiles: [
       'backend/internal/executor-harness/Dockerfile',
+      // COPY'd into the image and run as its ENTRYPOINT, so it is image content exactly like the
+      // Dockerfile: it was missing from this list, which meant a change to how the container boots
+      // (the docker daemon start, the harness's own env) could republish over a live tag without
+      // minting a version, and a deployment mirroring that tag would never roll it out.
+      'backend/internal/executor-harness/entrypoint.sh',
       'backend/internal/executor-harness/tsconfig.json',
       'backend/internal/executor-harness/package.json',
     ],
@@ -53,6 +58,7 @@ export const IMAGES = [
     sourceFiles: [
       'backend/internal/executor-harness/Dockerfile',
       'backend/internal/executor-harness/Dockerfile.ui',
+      'backend/internal/executor-harness/entrypoint.sh',
       'backend/internal/executor-harness/tsconfig.json',
       'backend/internal/executor-harness/package.json',
     ],

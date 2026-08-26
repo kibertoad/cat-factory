@@ -1,8 +1,6 @@
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
 import type {
   AgentInfraSpec,
   AgentJob,
@@ -11,10 +9,13 @@ import type {
   ServiceInfraSpec,
   TestSecretSpec,
 } from './job.js'
+// The preview mode drives the frontend stand-up directly rather than through `manageInfra`:
+// its serve/WireMock children outlive the job on purpose, so it wants no cleanup handle.
 import { standUpFrontend, tearDownFrontend } from './frontend-infra.js'
+import { buildInfraNotes, manageInfra } from './infra-standup.js'
 import { artifactUploadEnv } from './artifact-upload.js'
 import { configurePackageRegistries } from './package-registries.js'
-import { captureRedactedOutput, redactSecrets, registerKnownSecrets } from './redact.js'
+import { registerKnownSecrets } from './redact.js'
 import {
   cloneRepo,
   commitAll,
@@ -71,158 +72,6 @@ import { log, type Logger } from './logger.js'
 // target repo. These are the deliberate, documented exceptions — do NOT grow this into a
 // general `if (job.someFlag)` dispatch; anything that doesn't need a checkout belongs in
 // backend pre/post-ops. See backend/docs/custom-agents.md.
-
-const exec = promisify(execFile)
-
-/**
- * Bring the service's docker-compose dependencies up (local infra only). Best-effort:
- * runs `docker compose -f <path> up -d --wait` in the checkout. A missing Docker daemon
- * or a compose failure is logged and surfaced to the agent (as a prompt note) rather
- * than failing the job — the agent can still run unit-level tests and report what it
- * could. A no-op for ephemeral / no-infra / no-compose-path runs.
- *
- * Whether it succeeds or fails, the (redacted, bounded) command output is captured into a
- * {@link InfraSetupRecord} returned alongside the prompt `note`, so the backend can surface
- * the in-container dependency stand-up logs on the Tester step — the failure-class artifact
- * the orchestrator-side provisioning logs can't see.
- */
-async function standUpInfra(
-  dir: string,
-  infra: ServiceInfraSpec,
-  signal: AbortSignal | undefined,
-  logger: Logger,
-): Promise<{ started: boolean; note?: string; record?: InfraSetupRecord }> {
-  if (infra.environment !== 'local' || infra.noInfraDependencies || !infra.composePath) {
-    return { started: false }
-  }
-  const startedAt = Date.now()
-  try {
-    logger.info('agent(explore): standing up infra', { composePath: infra.composePath })
-    // Raise maxBuffer well above the 1MB default so a chatty compose stand-up can't fail the
-    // (best-effort) infra step with ENOBUFS; the captured output is tail-bounded on storage.
-    const { stdout, stderr } = await exec(
-      'docker',
-      ['compose', '-f', infra.composePath, 'up', '-d', '--wait'],
-      { cwd: dir, signal, timeout: 5 * 60_000, maxBuffer: 16 * 1024 * 1024 },
-    )
-    const logs = captureRedactedOutput(stdout, stderr)
-    return {
-      started: true,
-      record: {
-        started: true,
-        composePath: infra.composePath,
-        at: Date.now(),
-        durationMs: Date.now() - startedAt,
-        ...(logs ? { logs } : {}),
-      },
-    }
-  } catch (err) {
-    const note = err instanceof Error ? err.message : String(err)
-    logger.warn('agent(explore): infra stand-up failed', { error: note })
-    // `execFile` rejections carry the partial stdout/stderr on the error object — capture them
-    // so the stored logs explain the failure (a port clash, a pull-auth error, an exited
-    // dependency), not just the one-line exit message.
-    const e = err as { stdout?: unknown; stderr?: unknown }
-    const logs = captureRedactedOutput(e.stdout, e.stderr)
-    return {
-      started: false,
-      note,
-      record: {
-        started: false,
-        composePath: infra.composePath,
-        at: Date.now(),
-        durationMs: Date.now() - startedAt,
-        error: redactSecrets(note),
-        ...(logs ? { logs } : {}),
-      },
-    }
-  }
-}
-
-/**
- * Stand the run's infra up and return a single cleanup handle, dispatching on the spec's
- * `kind`: the frontend UI-test flow (`kind: 'frontend'`) builds/serves the app + WireMock as
- * processes (torn down by killing them); the default backend-service flow stands the
- * docker-compose stack up (torn down with `docker compose down`). Unifying the two here keeps
- * `runExploreMode` free of the branch and guarantees the matching teardown runs in its finally.
- *
- * `dir` is the clone ROOT; `workDir` is the service subtree (equal to `dir` when the run is not
- * monorepo-scoped). The docker-compose stand-up runs at the root (its `composePath` is
- * repo-relative), but the FRONTEND stand-up runs in `workDir`: a monorepo frontend's
- * `package.json` / `outputDir` / `mocks/` all live under the service subtree, so installing,
- * building, serving and seeding WireMock from the root would target the wrong directory.
- */
-async function manageInfra(
-  dir: string,
-  workDir: string,
-  infra: AgentInfraSpec,
-  opts: RunOptions,
-  logger: Logger,
-): Promise<{
-  note?: string
-  serveUrl?: string
-  record?: InfraSetupRecord
-  cleanup: () => Promise<void>
-}> {
-  if (infra.kind === 'frontend') {
-    // `onActivity` feeds the inactivity watchdog through the frontend build/serve stand-up,
-    // which (unlike docker-compose's 5-min-capped `up`) can run past the inactivity window.
-    // Runs in `workDir` so a monorepo frontend builds/serves from its own package subtree.
-    const fe = await standUpFrontend(workDir, infra, opts, logger)
-    return {
-      ...(fe.note ? { note: fe.note } : {}),
-      ...(fe.serveUrl ? { serveUrl: fe.serveUrl } : {}),
-      record: fe.record,
-      cleanup: () => tearDownFrontend(fe.processes, logger),
-    }
-  }
-  const standUp = await standUpInfra(dir, infra, opts.signal, logger)
-  return {
-    ...(standUp.note ? { note: standUp.note } : {}),
-    ...(standUp.record ? { record: standUp.record } : {}),
-    cleanup: () => tearDownInfra(dir, infra),
-  }
-}
-
-/**
- * Build the dynamic infra notes appended to the agent's user prompt from a stand-up outcome.
- * A stand-up problem (a failed build / compose) is flagged as a concern to test around; a
- * frontend serve URL points the UI tester at the app that was just built + served and pre-empts
- * a live-backend CORS failure being mis-reported as an app defect. Pure (no IO) so the exact
- * wording + ordering is unit-tested; returns the notes in order (problem first, serve URL next).
- */
-export function buildInfraNotes(managed: { note?: string; serveUrl?: string }): string[] {
-  const notes: string[] = []
-  if (managed.note) {
-    notes.push(
-      `standing the infra up reported a problem (${managed.note}). Test what you can and ` +
-        `flag any dependency-related gaps as concerns.`,
-    )
-  }
-  if (managed.serveUrl) {
-    notes.push(
-      `The frontend under test is built and served at ${managed.serveUrl}, with its other ` +
-        `backend upstreams handled by WireMock. Drive your UI tests against ${managed.serveUrl}. ` +
-        `If a call to a live backend fails with a CORS / cross-origin error, that is an infra ` +
-        `gap (the backend must allow the ${managed.serveUrl} origin), not an app defect — flag ` +
-        `it as a concern rather than a failing test.`,
-    )
-  }
-  return notes
-}
-
-/** Tear the docker-compose dependencies down (best-effort; a no-op when none were started). */
-async function tearDownInfra(dir: string, infra: ServiceInfraSpec): Promise<void> {
-  if (infra.environment !== 'local' || infra.noInfraDependencies || !infra.composePath) return
-  try {
-    await exec('docker', ['compose', '-f', infra.composePath, 'down', '-v'], {
-      cwd: dir,
-      timeout: 2 * 60_000,
-    })
-  } catch {
-    // The container is ephemeral and torn down with the run anyway — ignore.
-  }
-}
 
 /**
  * Parse an agent's final reply into the structured JSON `custom`, shared by the explore and
@@ -357,9 +206,9 @@ export async function handleAgent(job: AgentJob, opts: RunOptions = {}): Promise
 
 /**
  * Layer extra child-process env onto a job's {@link RunOptions}. The agent CLI is spawned with
- * `{...process.env, ...agentEnv}`, so this is how per-job values reach the agent (and the shell
- * tools it spawns) WITHOUT mutating the harness's own `process.env` — which is shared by every
- * concurrent job when the harness runs as a native host process. Empty `env` ⇒ `opts` unchanged.
+ * `agentChildEnv(agentEnv)`, so this is how per-job values reach the agent (and the shell tools it
+ * spawns) WITHOUT mutating the harness's own `process.env` — which is shared by every concurrent
+ * job when the harness runs as a native host process. Empty `env` ⇒ `opts` unchanged.
  */
 function withAgentEnv(opts: RunOptions, env: Record<string, string>): RunOptions {
   if (Object.keys(env).length === 0) return opts
@@ -666,8 +515,6 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
             // Read-only: it inspects and reports, making no edits — so the no-progress
             // guard's no-edit bound must not fire on its legitimately edit-free run.
             expectsEdits: false,
-            webToolsGuidance: job.webToolsGuidance,
-            webSearchProxy: job.webSearch,
             contextFiles: job.contextFiles,
             guardLimits: job.guardLimits,
             ...agentCapabilities(job),
@@ -917,8 +764,6 @@ async function runMultiRepoExplore(job: AgentJob, opts: RunOptions): Promise<Age
         sessionToken: job.sessionToken,
         // Read-only: no edits expected, so the no-progress guard's no-edit bound must not fire.
         expectsEdits: false,
-        webToolsGuidance: job.webToolsGuidance,
-        webSearchProxy: job.webSearch,
         ...(job.contextFiles ? { contextFiles: job.contextFiles } : {}),
         guardLimits: job.guardLimits,
         ...agentCapabilities(job),
@@ -1039,8 +884,6 @@ export function buildSingleRepoCodingSpec(
     proxyPhasePath: job.proxyPhasePath,
     sessionToken: job.sessionToken,
     commitMessage: job.commitMessage ?? job.pr?.title ?? 'Agent changes',
-    webToolsGuidance: job.webToolsGuidance,
-    webSearchProxy: job.webSearch,
     guardLimits: job.guardLimits,
     ...(job.persistentCheckout ? { persistentCheckout: true } : {}),
     ...(job.streamFollowUps ? { streamFollowUps: true } : {}),

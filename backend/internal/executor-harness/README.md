@@ -14,6 +14,7 @@ accepts the job and returns immediately with a `jobId`; the driver then polls
 - [Job protocol](#job-protocol)
 - [What a job does](#what-a-job-does)
 - [No secrets in the image](#no-secrets-in-the-image)
+- [Local infra: the container's Docker daemon](#local-infra-the-containers-docker-daemon)
 - [Layout](#layout)
 - [Runner lifecycle knobs](#runner-lifecycle-knobs)
 - [Build / test](#build--test)
@@ -361,6 +362,44 @@ signed, model-locked LLM-proxy **session token** in the request body. Pi reaches
 models only through the Worker proxy, which injects the real provider key (qwen /
 Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 
+## Local infra: the container's Docker daemon
+
+The Tester's local-mode infra stand-up runs `docker compose up --wait` INSIDE this container, so
+the container needs a daemon of its own. It runs rootless, as the unprivileged `harness` user:
+Cloudflare Containers (and most managed runners) give no root and no privileged mode, and a host
+Docker socket would hand the container root on the host.
+
+`entrypoint.sh` starts it, waits for it in the background, and RECORDS the verdict
+(`src/docker-status.ts`). Two things consume that record and nothing else does:
+
+- `GET /health` reports it, so an operator (and a boot-time probe) can see what the container
+  concluded about itself.
+- The compose stand-up REFUSES on a decided absence and says why, instead of running compose
+  against nothing and handing the agent a connection error to interpret. The refusal rides back on
+  the Tester step as `infraSetup.dockerAvailable: false` with the cause.
+
+The verdict is three-valued, and that is the point. `false` is a decided absence. `undefined` is
+"nothing decided" — the probe is still in flight, or nothing recorded anything at all, which is the
+normal state under the native host transport (`LOCAL_NATIVE_AGENTS`) where the harness runs on a
+developer's machine with no entrypoint. Undecided attempts the stand-up; only a decided absence
+refuses it.
+
+What is recorded describes BOOT, and a container outlives its boot: a warm pool serves many jobs
+from one, and a sidecar daemon that took longer to come up than the entrypoint's bounded wait
+allows is serving perfectly well by the second job. So a recorded absence is a hypothesis, not the
+refusal: `resolveDockerVerdict` re-checks it against a live daemon at the moment a stand-up is
+about to run, and the record supplies what only the record holds, the cause and the daemon's own
+log tail. `GET /health` deliberately keeps reporting the boot record rather than probing per poll,
+since it is not the surface that acts on the answer.
+
+Why it is written down at all: the image shipped for months with `docker-ce-rootless-extras` (the
+wrappers that START a daemon) and no `docker-ce` (the daemon itself), and no `iproute2` for the
+network rootlesskit builds. The entrypoint backgrounded the start in a subshell where its exit
+status could not be observed, so every local-infra Tester run degraded silently to a no-infra run
+whose only trace was a compose error in a prompt note. A capability that reports itself present and
+then degrades in silence is worse than one that is absent, so the daemon is installed AND the
+verdict is stated.
+
 ## Layout
 
 | File               | Responsibility                                                                                          |
@@ -374,11 +413,17 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 | `src/pi-reduction.ts` | Reducing a Pi event stream to what the run PRODUCED (summary, stats, diagnostics, terminal failure), FOLDED as records stream rather than over a retained array — memory is O(largest record), not O(records). The array-taking entry points offline tooling uses are defined in terms of the same reducer. |
 | `src/tool-silence.ts` | The tool-silence watchdog (F13) and the `ToolProgressWindow` an agent stream opens, beats and closes. Separate from the phase marker on purpose: a window is only meaningful while something able to reset it is running. |
 | `src/git.ts`       | clone / branch / commit / push (lease-guarded: [The work-branch push is CHECKPOINTED, so it is lease-guarded](#the-work-branch-push-is-checkpointed-so-it-is-lease-guarded)) + GitHub PR creation; bootstrap history reset + force-push. |
+| `src/progress-guard.ts` | The live anti-rabbithole bounds every agent run is held to, plus the tool-name vocabulary they classify calls with. PURE and SYNCHRONOUS: it spawns nothing and reads nothing off disk, so it can be driven over a fixed event sequence in a unit test. Shared by both runners, because two copies of a bound are two bounds. |
+| `src/workspace-probe.ts` | The working-tree answer to "has this run actually changed the repository": a dirty tree, or HEAD moved off the sha the pass began at. What the no-edit bound decides on, since the tool names it can see are a fact about which tool the model picked and not about the repo (an agent writing everything through `bash` heredocs read as making no edits at all). Gitignored paths are excluded by git, which is what keeps a dependency install from reading as progress. Order carries the "is this a repository at all" question: the status runs first and is never caught, while a missing HEAD is the from-scratch case rather than a failure. A run whose cwd is a workspace of sibling checkouts composes one probe over them, where a checkout that could not be probed makes the answer inconclusive rather than clean. |
+| `src/guard-driver.ts` | The bridge between the synchronous guard and the async evidence one of its bounds needs. Both runners feed the guard from a sync stream handler, so the driver owns the probe's lifetime: at most one probe per run, a positive answer satisfying the bound permanently, a negative one aborting with the evidence quoted, and a THROWN one inconclusive (re-arm and warn, never kill). Also hosts the claude-code stream's tool_use/tool_result pairing. |
+| `src/salvage.ts` | Committing the new, untracked files an agent left behind, under a dependency/build deny-list and file-count + byte bounds that refuse ALL-or-nothing rather than truncating. Coding modes only. A credential-bearing name (`.env`, a private key, `.npmrc`) is a THIRD disposition, not a fourth junk entry: it is withheld like the rest but NAMED on the outcome, because for a secret the deny-list's usual trade inverts (a missed file is recoverable, a leaked key is not) and someone has to decide whether to rotate it. Every message here states the salvage's own provenance: a commit arriving with no explanation is indistinguishable from work someone chose to keep, and nobody chose this. |
 | `src/bootstrap.ts` | The `/bootstrap` handler (clone-or-empty → adapt → reinit + force-push).                                |
 | `src/blueprint.ts` | The `/blueprint` handler (decompose → render `blueprints/` → commit on branch).                         |
 | `src/embed.ts`     | Bundled assets/templates written into the workspace.                                                    |
 | `src/package-registries.ts` | Private-registry (npm) auth: renders the job's allowlisted entries into an npmrc; the user `~/.npmrc` in a container, a per-job file pointed at by `npm_config_userconfig` for a native job. |
 | `src/agent-runner.ts` | The subscription-harness runners (`runClaudeCode` / `runCodex`): talk direct to the vendor with a leased OAuth token, lift per-turn usage/telemetry off the CLI event stream. |
+| `src/claude-cli.ts` | The claude-code CLI's INVOCATION surface: the built-in tools a run DECLARES with `--tools` (the CLI's headless default has no `Grep`/`Glob` and no plan tools, and does carry a dozen an ephemeral container can act on none of), the argv that declares them, and the read-back of the CLI's `init` event that warns when a required capability was granted no tool. The list is over-inclusive on purpose, which `--tools` makes safe: an unknown name is dropped silently and a RETIRED one is an alias onto its successor, so one pinned image can face several CLI versions. The web tools are unconditional, being served by the vendor the leased subscription pays rather than by this deployment's search proxy. The same list also rides the `--allowedTools` re-grant, which is ADDITIVE rather than inert, so the two are one value threaded rather than two lists. |
+| `src/claude-home.ts` | The PER-RUN claude-code config home (`codex-home.ts`'s sibling): the isolated `CLAUDE_CONFIG_DIR` outside the checkout, its onboarding pre-seed, the run's natively-installed skills, its `--mcp-config`, the child env carrying the leased credential, and the teardown that lifts the session transcripts out before deleting it. |
 | `src/claude-call-aggregator.ts` | Folds Claude Code's per-CONTENT-BLOCK `stream-json` envelopes back into the model calls they belong to (by `message.id`), reconstructs each call's request transcript, and routes subagent turns off the parent's chain. **Exported as the `./claude-call-aggregator` subpath and driven by the BACKEND too** (`runtimes/local`, for an inline step running on the developer's host `claude`), so it stays the ONE implementation: the per-envelope over-count it fixes inflated a measured 1.47M tokens to 5.53M, and both drivers have to learn that only once. That second driver is why the transcript is retained only to `MAX_TRANSCRIPT_CHARS` (stating what it stopped retaining) and why assembling bodies at all is a `bodies` switch: in a container the reconstruction is one job's memory in a box sized for it, in the backend it is per concurrent inline step in the orchestrator process. Unlike the compile-only `./embed`, this subpath is a `dist` import, which is why the package emits declarations, and why a consumer's typecheck depends on Turbo's `^build` edge having built this package first (see `tsconfig.json`'s `comment:buildOrder`). |
 | `src/usage-attribution.ts` | Reconciles a subscription CLI's TWO token channels: the per-turn usage its stream narrates and the cumulative total its terminal event reports. They disagree routinely and in one direction (Claude Code's per-turn `output_tokens` is the message-START snapshot, single digits), so whatever the turns did not account for becomes ONE extra metric standing for the job (`standsForJob`, filed with a null turn index) rather than tokens grafted onto a real turn, which would make a derived number read as a measured one. Reconciled against the PARENT loop's calls alone, since the terminal cumulative covers only that conversation. |
 | `src/transcript-retention.ts` | Lifts the CLI session transcripts (`projects/` / `sessions/`) out of the isolated, credential-bearing config home before it is deleted, and prunes them on a TTL (debugging artifact retention). |
@@ -396,6 +441,8 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 | `src/environment-inventory.ts` | What the MACHINE holds, probed once per job and appended to the agent's system prompt as an ENVIRONMENT INVENTORY block. The only layer that can state it: the backend composes its prompt before a transport is chosen, and the same body serves this image, a deployment's own variant and the developer's laptop under `LOCAL_NATIVE_AGENTS`. Three-valued on purpose, so a probe that failed renders as unknown rather than as an absence, and the Docker DAEMON is answered by running `docker info` rather than by finding the CLI, which is installed here either way. See [The environment is probed once, not by the agent](#the-environment-is-probed-once-not-by-the-agent). |
 | `src/agent-shared.ts` | The few helpers every agent MODE shares (effort-report folding, the capability fields forwarded to `runAgentInWorkspace`). |
 | `src/logger.ts`    | Structured logging.                                                                                     |
+| `src/docker-status.ts` | This container's own verdict about its Docker daemon, as recorded by `entrypoint.sh`. Three-valued on purpose: a daemon that FAILED and a daemon nobody asked about are different facts, and only a DECIDED absence refuses a stand-up. See [Local infra: the container's Docker daemon](#local-infra-the-containers-docker-daemon). |
+| `src/agent-env.ts` | The env for anything the harness spawns into the agent's CHECKOUT: its own environment minus the variables that are facts about the HARNESS. Today that is `NODE_ENV` — the harness runs in production mode, and an inherited `NODE_ENV=production` makes npm omit devDependencies in a checkout that never asked for it. |
 
 ## Runner lifecycle knobs
 
@@ -419,6 +466,8 @@ runner):
 | `REPRODUCTION_TOTAL_BUDGET_MS` | `2700000` (45m) | Wall-clock ceiling on the WHOLE proof phase (every attempt, both trees, setup included). Attempts multiply two full tree runs each and the heartbeat above deliberately stops the inactivity watchdog from firing, so this is what bounds the phase. Checked at phase boundaries; exceeding it settles `inconclusive`, never a run failure. |
 | `HARNESS_TRANSCRIPT_TTL_MS` | `259200000` (3d) | How long lifted subscription-CLI session transcripts are kept before the retention sweep prunes them. |
 | `HARNESS_TRANSCRIPT_ROOT`   | `<tmpdir>/cf-agent-transcripts` | Where retained session transcripts are moved to (one dir per run). Meaningful only on a reused (warm-pool) container; a per-run container is torn down with the job. The TTL sweep deletes only dirs it created (each carries a `.cf-retained` marker), so pointing this at a shared directory never touches unrelated content, though a dedicated dir is still recommended. An override on a different filesystem than the config home falls back to copy-then-remove. |
+| `HARNESS_DOCKER_READY_TIMEOUT_SECONDS` | `60` | How long `entrypoint.sh` waits for the container's Docker daemon before recording it unavailable. Only a HUNG daemon pays this in full: the wait ends early both when the socket answers and when the daemon process is gone. It runs in the BACKGROUND, so it never delays the container's boot. |
+| `HARNESS_DOCKER_STATUS_FILE` | `/tmp/harness-docker-status.json` | Where that verdict is recorded. `entrypoint.sh` writes it and the harness reads it, so an override must be set for BOTH (they share one process env). |
 
 ## Build / test
 

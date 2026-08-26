@@ -267,6 +267,12 @@ export interface RunnerJobResult {
 interface RunnerInfraSetup {
   /** Whether `docker compose up --wait` succeeded (the dependencies are up). */
   started: boolean
+  /**
+   * Whether the executor container had a Docker daemon at all, when it knows. Absent on an image
+   * that predates the probe — never read as `false`, which would report a stack that failed to
+   * come up as an executor with no daemon.
+   */
+  dockerAvailable?: boolean
   /** The repo-relative compose file that was stood up. */
   composePath?: string
   /** Epoch ms the stand-up attempt finished. */

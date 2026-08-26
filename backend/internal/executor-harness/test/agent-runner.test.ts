@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { carryClaudeSystemPrompt, runClaudeCode, runCodex } from '../src/agent-runner.js'
+import { CLAUDE_TOOL_SET } from '../src/claude-cli.js'
 import type { HarnessCallMetric } from '../src/pi.js'
 
 // These drive the REAL `runClaudeCode` / `runCodex` against a FAKE `claude` / `codex`
@@ -145,6 +146,35 @@ describe.skipIf(!unix)('runClaudeCode system-prompt carriage', () => {
     const stdin = readFileSync(join(cwd, 'stdin.txt'), 'utf8')
     expect(stdin.startsWith(big)).toBe(true)
     expect(stdin).toContain('TASK')
+  })
+})
+
+describe.skipIf(!unix)('runClaudeCode declared tool surface', () => {
+  const runWith = async (): Promise<string[]> => {
+    recordingCli('claude')
+    const outcome = await runClaudeCode({
+      cwd,
+      model: 'claude-opus-4-8',
+      systemPrompt: 'ROLE',
+      userPrompt: 'TASK',
+      ambientAuth: true,
+    })
+    expect(outcome.summary).toBe('ok')
+    return JSON.parse(readFileSync(join(cwd, 'argv.json'), 'utf8')) as string[]
+  }
+
+  it('hands the CLI the declared set instead of taking its headless default', async () => {
+    const argv = await runWith()
+    expect(argv[argv.indexOf('--tools') + 1]).toBe(CLAUDE_TOOL_SET.join(','))
+  })
+
+  it('declares the vendor-served web tools on a run the proxy serves no search for', async () => {
+    // The CLI's web tools are served by the vendor the leased subscription pays, not by our
+    // web-search proxy, so a deployment with no search provider wired must still get them. This
+    // runner is handed no availability signal to gate them on in the first place.
+    const argv = await runWith()
+    const declared = argv[argv.indexOf('--tools') + 1]!.split(',')
+    expect(declared).toEqual(expect.arrayContaining(['WebSearch', 'WebFetch', 'Grep']))
   })
 })
 

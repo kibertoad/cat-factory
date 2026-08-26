@@ -897,6 +897,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // The proxy-backed web-tools nudge + switch, shared by the kinds that allow web access
     // (coder/mocker/ci-fixer/fixer/tester/read-only). `search` was resolved in the wave above;
     // the per-kind hint (coder/mocker/analysis/… and any custom container kind) is applied here.
+    // What `webSearch` does and does NOT state is on `KindBodyParts.webTools`.
     const webTools = {
       webToolsGuidance: webResearchGuidanceFor(context.agentKind, this.agentKindRegistry, {
         fetch: true,

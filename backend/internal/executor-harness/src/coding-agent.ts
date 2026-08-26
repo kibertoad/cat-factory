@@ -66,6 +66,12 @@ import {
   withPrTemplateNote,
   type PrTemplateResolution,
 } from './pr-template.js'
+import {
+  describeSalvage,
+  salvageUntrackedWork,
+  type SalvageDelivery,
+  type SalvageReport,
+} from './salvage.js'
 
 // The shared skeleton for the container coding agents that clone a repo, run Pi
 // against it and push the result on a branch. The implementation (`/run`) and
@@ -254,6 +260,13 @@ export interface CodingAgentOutcome {
    * attached to a perfectly successful run and the PR still opens.
    */
   reproductionReport?: ReproductionReport
+  /**
+   * What became of the new files the agent created and never committed. Absent means there were
+   * none to consider; `status: 'refused'` or `'failed'` means work was left behind and is NOT in
+   * the push, which the backend must be able to tell a human rather than presenting the run as a
+   * clean pass.
+   */
+  salvage?: SalvageReport
 }
 
 /**
@@ -335,7 +348,7 @@ function createWorkBranchPusher(args: {
   logger: Logger
   signal: AbortSignal | undefined
 }): {
-  pushWorkOnce: () => Promise<void>
+  pushWorkOnce: (override?: AbortSignal) => Promise<void>
   inFlightPush: () => Promise<void> | null
   checkpoint: ReturnType<typeof setInterval>
 } {
@@ -345,10 +358,16 @@ function createWorkBranchPusher(args: {
   // force push against. Starts unset even on a RESUMED branch: the tip we merely cloned is an
   // earlier run's work, so a rewrite of it is refused (and re-driven) rather than forced away.
   let publishedSha: string | undefined
-  const pushWorkOnce = (): Promise<void> => {
+  // `override` replaces the RUN's signal for this one push. Every ordinary push rides the run's
+  // signal, so a watchdog kill stops it. The rescue push cannot: the run's signal is ABORTED on
+  // exactly the paths that need a rescue, and an aborted signal makes `execFile` reject before it
+  // spawns, so a rescue on it is a guaranteed no-op. See {@link withSalvagedWork}.
+  const pushWorkOnce = (override?: AbortSignal): Promise<void> => {
     if (pushInFlight) return pushInFlight
+    const pushSignal = override ?? signal
     pushInFlight = (async () => {
-      if (!(await unpublishedWorkBranchTip({ dir, baseSha, publishedSha, signal }))) return
+      if (!(await unpublishedWorkBranchTip({ dir, baseSha, publishedSha, signal: pushSignal })))
+        return
       // The rule the lease is entitled to lives beside the push ({@link workBranchLease}); the
       // warn is here, because a withheld lease is how a rewrite this pass cannot claim fails the
       // push it is about to make, and the run's log is where that is read.
@@ -357,7 +376,7 @@ function createWorkBranchPusher(args: {
         branch: spec.pushBranch,
         baseSha,
         publishedSha,
-        signal,
+        signal: pushSignal,
         onWithheld: (probe) =>
           logger.warn('coding-agent: push lease withheld, the branch dropped its pre-run tip', {
             baseSha,
@@ -365,7 +384,7 @@ function createWorkBranchPusher(args: {
             probe,
           }),
       })
-      publishedSha = await pushBranch(dir, spec.pushBranch, spec.ghToken, signal, lease)
+      publishedSha = await pushBranch(dir, spec.pushBranch, spec.ghToken, pushSignal, lease)
     })().finally(() => {
       pushInFlight = null
     })
@@ -397,6 +416,50 @@ function createWorkBranchPusher(args: {
   checkpoint.unref?.()
 
   return { pushWorkOnce, inFlightPush, checkpoint }
+}
+
+/**
+ * Exclude the harness's own sentinel files from this checkout's git, and start tailing the
+ * follow-up one when the run streams follow-ups.
+ *
+ * Each sentinel is a file the PLATFORM writes into the agent's cwd (its effort self-assessment,
+ * its PR briefing, its follow-up items), so a `git add -A` by the agent would commit the
+ * platform's own bookkeeping into a customer's pull request. The exclude goes in
+ * `.git/info/exclude`, which is per-clone and never lands in the repo. `readEffortReport` also
+ * removes its file after the run, but that cannot un-stage a mid-run commit; only the exclude
+ * prevents one. A bare filename pattern matches at any depth, so a monorepo `workDir` is covered.
+ *
+ * The caller owns the returned interval's lifetime (it clears `followUpTick`). Extracted from
+ * {@link runCodingAgent} for the per-function line budget.
+ */
+async function armCheckoutSentinels(args: {
+  dir: string
+  workDir: string
+  spec: CodingAgentSpec
+  logger: Logger
+  opts: RunOptions
+}): Promise<{
+  followUpTailer: FollowUpTailer | undefined
+  followUpTick: ReturnType<typeof setInterval> | undefined
+}> {
+  const { dir, workDir, spec, logger, opts } = args
+  const { signal } = opts
+  await excludeFromGit(dir, EFFORT_REPORT_FILE, signal)
+  await excludeFromGit(dir, PR_DESCRIPTION_FILE, signal)
+
+  // The follow-up sentinel lives in the agent's working directory (its cwd), where the prompt
+  // tells it to write; the other two are read from both the checkout root and the cwd.
+  const followUpTailer =
+    spec.streamFollowUps && opts.onFollowUp
+      ? new FollowUpTailer(join(workDir, FOLLOW_UPS_FILENAME), opts.onFollowUp, logger)
+      : undefined
+  if (!followUpTailer) return { followUpTailer: undefined, followUpTick: undefined }
+  await excludeFromGit(dir, FOLLOW_UPS_FILENAME, signal)
+  const followUpTick = setInterval(() => {
+    void followUpTailer.poll()
+  }, followUpPollIntervalMs())
+  followUpTick.unref?.()
+  return { followUpTailer, followUpTick }
 }
 
 export async function runCodingAgent(
@@ -435,33 +498,16 @@ export async function runCodingAgent(
       const workDir = serviceDirectory ? join(dir, serviceDirectory) : dir
       if (serviceDirectory) await mkdir(workDir, { recursive: true })
 
-      // Every container agent is asked to write its effort self-assessment to `.cat-effort.json`
-      // in its cwd (the backend appends EFFORT_REPORT_GUIDANCE to every container prompt). Locally
-      // exclude it from git — exactly like the follow-ups sentinel below — so the agent's own
-      // `git add` can never stage it into the PR. `readEffortReport` also removes it after the run,
-      // but that cannot un-stage a mid-run commit; the per-clone exclude is what prevents it. A bare
-      // filename pattern matches the file in any subdirectory, so it covers a monorepo `workDir` too.
-      await excludeFromGit(dir, EFFORT_REPORT_FILE, signal)
-      // Same treatment for the agent-authored PR-description sentinel: excluded locally so the
-      // agent's own `git add` can never stage the briefing into the PR it describes.
-      await excludeFromGit(dir, PR_DESCRIPTION_FILE, signal)
-
-      // Follow-up companion: tail the Coder's sentinel file and stream new items out on the
-      // job view. Locally exclude it from git first so the agent's own `git add` can never
-      // stage it and it never surfaces as an untracked leftover or in the PR. The sentinel
-      // lives in the agent's working directory (its cwd), where the prompt tells it to write.
-      const followUpTailer =
-        spec.streamFollowUps && opts.onFollowUp
-          ? new FollowUpTailer(join(workDir, FOLLOW_UPS_FILENAME), opts.onFollowUp, logger)
-          : undefined
-      let followUpTick: ReturnType<typeof setInterval> | undefined
-      if (followUpTailer) {
-        await excludeFromGit(dir, FOLLOW_UPS_FILENAME, signal)
-        followUpTick = setInterval(() => {
-          void followUpTailer.poll()
-        }, followUpPollIntervalMs())
-        followUpTick.unref?.()
-      }
+      // The harness's own side-channel files in this checkout: excluded from git so the agent's
+      // `git add` can never stage one into the PR, and the follow-up one tailed while the agent
+      // works. See {@link armCheckoutSentinels}.
+      const { followUpTailer, followUpTick } = await armCheckoutSentinels({
+        dir,
+        workDir,
+        spec,
+        logger,
+        opts,
+      })
 
       // DEPENDENCY PREPOPULATION: install the service's dependencies into the checkout BEFORE the
       // agent's first turn, so it reads real packages instead of inferring capabilities from a
@@ -639,6 +685,23 @@ export async function runCodingAgent(
           agentRun,
           prTemplate,
         })
+      } catch (error) {
+        // The run was killed mid-flight: the progress guard tripped, a watchdog fired, or the
+        // container is going away. Everything the agent had not committed dies with the checkout,
+        // and on a greenfield task that is all of it. Salvage it onto the work branch and push,
+        // so a retry resumes on top of the work instead of starting over.
+        //
+        // Best-effort and non-masking: the ORIGINAL failure is what the run reports, so a salvage
+        // that itself fails may not replace it. What the salvage found is joined onto that
+        // failure's message instead, because "the run was aborted" and "its work is on the branch,
+        // reviewed by nobody" are one fact a person needs together.
+        //
+        // The checkpoint is stopped HERE rather than only in the `finally` below: it fires
+        // `pushWorkOnce`, which coalesces, so a checkpoint starting behind the rescue would be
+        // handed the rescue's push and a rescue starting behind a checkpoint would be handed a
+        // push made BEFORE the salvage commit existed — reporting as pushed a commit that is not.
+        clearInterval(checkpoint)
+        throw await withSalvagedWork(error, { dir, logger, pushWorkOnce, inFlightPush })
       } finally {
         // Safety net for the throw path (the happy path already cleared these above).
         clearInterval(checkpoint)
@@ -647,6 +710,141 @@ export async function runCodingAgent(
       return outcome
     },
   )
+}
+
+/**
+ * Prefix a run's summary with the salvage note, when there is one worth a human's attention.
+ *
+ * The test is the same in all three cases: did the agent produce something the push does NOT
+ * carry, which nothing else on a passing run would say. A refused or failed salvage is that, and
+ * so is a withheld secret-bearing file — the run looks clean and the file is not on the branch.
+ * A salvage that simply worked needs no note here: its files ARE in the push, and the commit
+ * message on the branch says where they came from.
+ */
+function withSalvageNote(summary: string, salvage: SalvageReport): string {
+  const missedWork = salvage.status === 'refused' || salvage.status === 'failed'
+  if (!missedWork && (salvage.withheld?.length ?? 0) === 0) return summary
+  const note = describeSalvage(salvage)
+  return note ? `${note}\n\n${summary}` : summary
+}
+
+/**
+ * How long the rescue of an aborted run's work gets, on its own clock.
+ *
+ * Bounded because the run's own bounds no longer apply: the rescue deliberately runs OFF the run's
+ * signal (see {@link rescueSignal}), so without this a wedged git command would hold the container
+ * open until the platform reclaims it. Generous enough for a status, an add, a commit and a push
+ * over a slow network, and each git command inside it still carries its own tighter ceiling.
+ * Overridable via env for tests.
+ */
+function salvageRescueMs(): number {
+  const n = Number(process.env.JOB_SALVAGE_RESCUE_MS)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 120_000
+}
+
+/**
+ * The signal the rescue runs on: a FRESH one, never the run's.
+ *
+ * The rescue exists for the runs whose lifetime is already over — a watchdog fired, the guard
+ * tripped, the container is being evicted — and on those paths `opts.signal` is ABORTED. Node's
+ * `execFile` rejects on an already-aborted signal before it spawns anything, so passing it here
+ * makes every git call in the salvage and its push fail instantly: the rescue would be a
+ * guaranteed no-op in precisely the cases it was written for. Its own timeout is what bounds it
+ * instead.
+ */
+function rescueSignal(): AbortSignal {
+  return AbortSignal.timeout(salvageRescueMs())
+}
+
+/**
+ * Salvage what an aborted run left uncommitted, push it, and return the error to rethrow with the
+ * salvage stated on it.
+ *
+ * Returns rather than throws so the caller's `throw` stays visible at the call site, and so this
+ * can never REPLACE the failure being reported: a salvage that throws is swallowed, because the
+ * reason the run died is strictly more useful than the reason its rescue did.
+ *
+ * The push is what makes the salvage worth anything — the commit lives in a container that is
+ * about to be reclaimed — and it is reported HONESTLY: a commit that could not be pushed is lost
+ * exactly as the uncommitted files would have been, so the note says so rather than naming a sha
+ * nobody will ever be able to fetch.
+ *
+ * Two things have to happen before the salvage, and the caller has already stopped the checkpoint
+ * interval for the first. The second is here: any push the checkpoint had IN FLIGHT is drained,
+ * because `pushWorkOnce` coalesces onto it and would otherwise hand the rescue a push that was
+ * made before the salvage commit existed.
+ *
+ * Exported for its test: every collaborator it needs is a parameter, so the ordering and the
+ * signal it pushes on can be asserted against a real repository without a container.
+ */
+export async function withSalvagedWork(
+  error: unknown,
+  args: {
+    dir: string
+    logger: Logger
+    pushWorkOnce: (override?: AbortSignal) => Promise<void>
+    inFlightPush: () => Promise<void> | null
+  },
+): Promise<unknown> {
+  const cause = error instanceof Error ? error.message : String(error)
+  const signal = rescueSignal()
+  await drainInFlightPush(args.inFlightPush, args.logger)
+  const note = await salvageUntrackedWork({
+    dir: args.dir,
+    occasion: { kind: 'aborted', cause },
+    logger: args.logger,
+    signal,
+  })
+    .then(async (report) => {
+      if (report.status !== 'committed') return describeSalvage(report)
+      return describeSalvage(report, await deliverSalvage(args, signal))
+    })
+    .catch((salvageError: unknown) => {
+      args.logger.error('coding-agent: salvage of an aborted run failed', {
+        reason: salvageError instanceof Error ? salvageError.message : String(salvageError),
+      })
+      return undefined
+    })
+  if (!note) return error
+  if (error instanceof Error) {
+    error.message = `${error.message} ${note}`
+    return error
+  }
+  return new Error(`${cause} ${note}`)
+}
+
+/**
+ * Wait out the checkpoint push already running, so the rescue's own push is not coalesced onto it.
+ *
+ * Its outcome is irrelevant and never propagates: it was a best-effort checkpoint of work that
+ * predates the salvage, and the rescue is about to push again anyway.
+ */
+async function drainInFlightPush(
+  inFlightPush: () => Promise<void> | null,
+  logger: Logger,
+): Promise<void> {
+  const pending = inFlightPush()
+  if (!pending) return
+  await pending.catch((error: unknown) => {
+    logger.warn('coding-agent: the checkpoint push in flight at the abort did not land', {
+      reason: error instanceof Error ? error.message : String(error),
+    })
+  })
+}
+
+/** Push the salvage commit, reporting whether it actually landed rather than assuming it did. */
+async function deliverSalvage(
+  args: { logger: Logger; pushWorkOnce: (override?: AbortSignal) => Promise<void> },
+  signal: AbortSignal,
+): Promise<SalvageDelivery> {
+  try {
+    await args.pushWorkOnce(signal)
+    return { pushed: true }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    args.logger.error('coding-agent: the salvage commit could not be pushed', { reason })
+    return { pushed: false, reason }
+  }
 }
 
 /**
@@ -812,7 +1010,7 @@ async function finalizeCodingRun(args: {
     prTemplate,
   } = args
   const { signal } = opts
-  const { summary, stats, stderrTail, usage, callMetrics, effortReport } = agentRun
+  const { stats, stderrTail, usage, callMetrics, effortReport } = agentRun
   let outcome: CodingAgentOutcome
 
   // Stop tailing the follow-up sentinel and flush any items written after the last
@@ -845,17 +1043,25 @@ async function finalizeCodingRun(args: {
   const inflight = inFlightPush()
   if (inflight) await inflight.catch(() => {})
 
-  // Surface (don't fail on) untracked, non-ignored files the agent left behind:
-  // `commitTrackedEdits` only captures edits to ALREADY tracked files, so a NEW
-  // file the agent created but forgot to commit is silently dropped. Logging it
-  // makes that loss observable when a PR turns out to be missing a file.
-  const leftover = await listUntrackedFiles(dir, signal)
-  if (leftover.length > 0) {
-    logger.warn('coding-agent: uncommitted new files left behind (not pushed)', {
-      count: leftover.length,
-      files: leftover.slice(0, 20),
-    })
-  }
+  // Recover the untracked, non-ignored files the agent left behind. `commitTrackedEdits` above
+  // only captures edits to ALREADY tracked files, so a NEW file the agent created and forgot to
+  // commit used to be listed, warned about and dropped — and on a greenfield task EVERY file is
+  // new, which made that warning the whole deliverable going in the bin. Observable is not
+  // recovered, so commit them. Guardrails (a dependency/build deny-list, a file-count and byte
+  // bound, an all-or-nothing refusal over it) live in `salvage.ts`; this path is coding mode by
+  // construction, which is the other rule it must obey.
+  const salvage = await salvageUntrackedWork({
+    dir,
+    occasion: { kind: 'settled' },
+    logger,
+    ...(signal ? { signal } : {}),
+  })
+  // A salvage that COMMITTED needs no announcement: its files are in the push and its commit
+  // message says where they came from. A refused or failed one means work the agent produced is
+  // NOT in the pull request, on a run that otherwise reads as a clean pass — so say it in the
+  // summary, which is the harness's own account of the run and already reaches the step a human
+  // reads. The agent's text follows it, unchanged.
+  const summary = withSalvageNote(agentRun.summary, salvage)
 
   // A fresh run produced work iff the branch advanced past its pre-run tip. A RESUMED
   // run already carries prior work — UNLESS that branch turns out to have nothing ahead
@@ -886,6 +1092,7 @@ async function finalizeCodingRun(args: {
       ...(usage ? { usage } : {}),
       ...(callMetrics ? { callMetrics } : {}),
       ...(effortReport ? { effortReport } : {}),
+      ...(salvage.status === 'none' ? {} : { salvage }),
     }
   } else {
     opts.onPhase?.('push')
@@ -901,6 +1108,7 @@ async function finalizeCodingRun(args: {
       ...(callMetrics ? { callMetrics } : {}),
       ...(effortReport ? { effortReport } : {}),
       ...(prDescription ? { prDescription } : {}),
+      ...(salvage.status === 'none' ? {} : { salvage }),
     }
   }
 
