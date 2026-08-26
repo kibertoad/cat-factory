@@ -23,10 +23,8 @@ import {
   spendAlertState,
 } from './forecast.logic.js'
 import {
-  type InputTokenClassUsage,
   type SpendPricing,
   effectiveTierLimit,
-  estimateClassedCost,
   estimateCost,
   mergeSpendPricing,
   startOfMonthUtc,
@@ -93,22 +91,13 @@ export interface RecordUsageInput {
   /** Model identifier as `provider:model` (as produced by AgentRunResult.model). */
   model: string
   /**
-   * The call's token counts, with `inputTokens` the TOTAL input across every billed class.
-   * It stays the volume figure the ledger stores and the rollups report; {@link
-   * RecordUsageInput.inputClasses} is what PRICES it when the producer knows the split.
+   * The call's token counts, with `inputTokens` the TOTAL input across every billed class —
+   * the volume figure the ledger stores and the rollups report. Its optional
+   * {@link AgentTokenUsage.inputClasses} is what PRICES it when the producer knows the split,
+   * and it rides the usage object rather than sitting beside it so a producer cannot report
+   * the two inconsistently, nor thread the count through a layer that drops the split.
    */
   usage: AgentTokenUsage
-  /**
-   * The three orthogonal input classes behind `usage.inputTokens`, from a producer that can
-   * report them (the LLM proxy, which reconciles the provider shapes through
-   * `readInputTokenClasses`). Present ⇒ the row is priced per class, so a cache read costs
-   * ~0.1x fresh input instead of 1x.
-   *
-   * ABSENT is a real state, not a zeroed one: it says the producer reported a single lumped
-   * count, and the row is then priced entirely at the fresh rate. That OVER-states a cached
-   * call and never under-states one, which is the only safe direction for a budget gate.
-   */
-  inputClasses?: InputTokenClassUsage
   /**
    * Metered (a real per-token cost the budget gate sums) or subscription (a flat-rate
    * quota harness call, recorded for the usage report but excluded from spend). Absent ⇒
@@ -331,16 +320,11 @@ export class SpendService {
     // equivalent metered-API cost), never summed into a budget — the metered filter on
     // the totals rollups is what keeps subscription usage out of the spend gate.
     //
-    // Per CLASS wherever the producer reported the split, because the classes are priced
-    // more than an order of magnitude apart: pricing a cache-read-dominated run's whole
-    // input at the fresh rate metered it at roughly ten times its real cost and exhausted
-    // budgets that were nowhere near spent.
-    const costEstimate = input.inputClasses
-      ? estimateClassedCost(pricing, ref, {
-          ...input.inputClasses,
-          outputTokens: input.usage.outputTokens,
-        })
-      : estimateCost(pricing, ref, input.usage)
+    // `estimateCost` prices per CLASS wherever the producer reported the split, because the
+    // classes are priced more than an order of magnitude apart: pricing a cache-read-dominated
+    // run's whole input at the fresh rate metered it at roughly ten times its real cost and
+    // exhausted budgets that were nowhere near spent.
+    const costEstimate = estimateCost(pricing, ref, input.usage)
     await this.tokenUsageRepository.record({
       id: this.idGenerator.next('tok'),
       workspaceId: input.workspaceId,

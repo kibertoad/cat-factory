@@ -211,12 +211,36 @@ cacheWrite }`), so the inline path reads it straight off rather than re-deriving
   overrides where a vendor departs from it. The write multiplier is the 5-minute-TTL rate the
   harnesses actually request, not the 1-hour 2x worst case.
 - **An absent input SPLIT is priced as all-fresh, which over-states rather than under-states.**
-  `RecordUsageInput.inputClasses` is optional because not every producer can report the split,
-  and the fallback deliberately errs high: a budget safeguard that undercounts stops
-  safeguarding. Only the proxy supplies the split today, through the SAME `readInputTokenClasses`
-  the metric path uses — the ledger previously metered off `prompt_tokens`, which is the whole
-  prompt on the inclusive shapes and fresh-only on the exclusive ones, so it managed to
-  over-price an OpenAI-style cached call AND lose Anthropic's cache reads from its volume figure.
+  `AgentTokenUsage.inputClasses` is optional because not every producer can report the split, and
+  the fallback deliberately errs high: a budget safeguard that undercounts stops safeguarding. The
+  ledger previously metered off `prompt_tokens`, which is the whole prompt on the inclusive shapes
+  and fresh-only on the exclusive ones, so it managed to over-price an OpenAI-style cached call
+  AND lose Anthropic's cache reads from its volume figure.
+- **The split rides the USAGE OBJECT, because a port that cannot carry it is a silent lump.** It
+  sat beside `usage` on `RecordUsageInput` at first, and the only producer that could fill it in
+  was the proxy — the two paths recording from an agent RESULT (`job-facts`, the inline companion)
+  had nothing to pass, since `AgentTokenUsage` was two totals. Nothing failed: every cache-heavy
+  agent step was simply metered at up to ten times its cost, exactly the failure the classed
+  pricing exists to prevent. Carrying it on the usage object is what makes a producer that knows
+  its split unable to lose it on the way to the meter. Same rule for a NEW producer:
+  `AgentTokenUsage` is the shape to widen, never a second channel beside it.
+- **`estimateCost` is the ONE entry point for pricing a usage, and it branches internally.**
+  Leaving the caller to choose between it and `estimateClassedCost` made the wrong choice
+  invisible: the lump function accepts a classed usage happily and silently prices it at the fresh
+  rate. Only a caller holding classes with no `AgentTokenUsage` around them calls the classed
+  function directly.
+- **A producer whose channels disagree keeps its TOTAL and moves the split.** The container path
+  has two: the harness's coarse `usage` (every billed bucket, folded for key rotation) and its
+  per-call `callMetrics` (the only channel that kept the classes apart), and on some CLIs the
+  per-turn rows do not add up to the terminal cumulative. `agentUsageFromHarnessCalls` therefore
+  folds only the CACHE shares off the calls and derives fresh from the harness total, so the
+  classes sum to exactly the count the ledger stores. Shrinking the total to match the calls would
+  under-charge a budget, the one direction a spend gate may not be wrong in.
+- **The ledger's per-dispatch cost will not equal the rollup's, and that is not a defect.** The
+  ledger books one aggregate row per dispatch under the model that was DISPATCHED;
+  `llm_call_metrics` prices each row at the model that actually served that turn
+  (`call.model ?? model`), and a subscription CLI serves some turns on a cheaper model. Reconcile
+  a ledger row against the rollup by class, not by expecting the two totals to match.
 - **Both rollup consumers read ONE priced fold.** The board rollup
   (`RunStateMachine.attachStepMetrics`) and the debug overview (`RunDebugService`) used to reach
   the repository independently; the debug service now takes the observability service's bound

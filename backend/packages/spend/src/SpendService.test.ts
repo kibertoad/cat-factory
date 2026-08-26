@@ -217,8 +217,11 @@ describe('SpendService.record — per-class pricing', () => {
       executionId: 'exec',
       agentKind: 'coder',
       model: 'anthropic:claude-opus-5',
-      usage: { inputTokens: 1_000_000, outputTokens: 0 },
-      inputClasses: { promptTokens: 0, cacheReadTokens: 1_000_000, cacheWriteTokens: 0 },
+      usage: {
+        inputTokens: 1_000_000,
+        outputTokens: 0,
+        inputClasses: { promptTokens: 0, cacheReadTokens: 1_000_000, cacheWriteTokens: 0 },
+      },
     })
     // 1M cache reads at 0.1x the 4.6/Mtok input rate.
     expect(cost).toBeCloseTo(0.46, 6)
@@ -234,8 +237,11 @@ describe('SpendService.record — per-class pricing', () => {
       executionId: 'exec',
       agentKind: 'coder',
       model: 'anthropic:claude-opus-5',
-      usage: { inputTokens: 1_000_000, outputTokens: 0 },
-      inputClasses: { promptTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 1_000_000 },
+      usage: {
+        inputTokens: 1_000_000,
+        outputTokens: 0,
+        inputClasses: { promptTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 1_000_000 },
+      },
     })
     // 1.25x 4.6. Lumping writes in with reads would have said 0.46 — a 12x under-count on
     // the DEAREST class, which is exactly why the two are kept apart.

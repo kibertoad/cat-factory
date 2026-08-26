@@ -599,6 +599,7 @@ export {
   XAI_BASE_URL,
   type CachePolicy,
   type InputTokenClasses,
+  agentUsageFromModelUsage,
   readInputTokenClasses,
   inlineCacheProviderOptions,
   promptCacheParams,

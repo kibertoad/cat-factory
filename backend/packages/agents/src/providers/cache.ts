@@ -11,6 +11,8 @@
 // per-model `cachesPrompts` capability the UI surfaces); it is re-exported here so the
 // existing `@cat-factory/agents` import sites keep working.
 import { type CachePolicy, providerCachePolicy } from '@cat-factory/kernel'
+import type { AgentTokenUsage } from '@cat-factory/kernel'
+import { partitionInputTokens } from '@cat-factory/kernel'
 
 export { type CachePolicy, providerCachePolicy }
 
@@ -123,5 +125,38 @@ export function readInputTokenClasses(usage: unknown): InputTokenClasses {
     fresh: promptCount,
     cacheRead: firstNumber(u.cache_read_input_tokens, u.cacheReadInputTokens),
     cacheWrite,
+  }
+}
+
+/**
+ * The AI SDK's own normalized usage read into an {@link AgentTokenUsage}: the total input it
+ * reports, plus the class split from `inputTokenDetails` where the provider filled one in.
+ *
+ * The two CACHE members are what decides whether a split is reported at all. `noCacheTokens` is
+ * filled in by providers that cache nothing, so keying on it would claim a split for every
+ * provider and assert "nothing was cached" where the truth is "the provider said nothing about
+ * caching" — the distinction the optional split exists to keep. Once a cache class IS reported
+ * the fresh share is derived from the authoritative total rather than read off `noCacheTokens`,
+ * so the three classes sum to exactly the input count the ledger stores.
+ *
+ * Typed structurally rather than against the SDK's `LanguageModelUsage` so a fake `generate` in
+ * a test can hand over the same shape without constructing every member the SDK declares.
+ */
+export function agentUsageFromModelUsage(usage: {
+  inputTokens?: number
+  outputTokens?: number
+  inputTokenDetails?: { cacheReadTokens?: number; cacheWriteTokens?: number }
+}): AgentTokenUsage {
+  const inputTokens = usage.inputTokens ?? 0
+  const outputTokens = usage.outputTokens ?? 0
+  const { cacheReadTokens, cacheWriteTokens } = usage.inputTokenDetails ?? {}
+  if (cacheReadTokens == null && cacheWriteTokens == null) return { inputTokens, outputTokens }
+  return {
+    inputTokens,
+    outputTokens,
+    inputClasses: partitionInputTokens(inputTokens, {
+      cacheReadTokens: cacheReadTokens ?? 0,
+      cacheWriteTokens: cacheWriteTokens ?? 0,
+    }),
   }
 }

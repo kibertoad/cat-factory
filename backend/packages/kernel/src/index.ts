@@ -85,6 +85,7 @@ export {
 } from './domain/validation-detectors.js'
 export { UNATTRIBUTED_CALL_PHASE, normalizeCallPhase } from './domain/llm-phase.js'
 export type {
+  InputTokenClassCounts,
   LlmKindRollup,
   LlmPhaseRollup,
   LlmRateResolver,
@@ -99,6 +100,11 @@ export {
   priceRollupCells,
   rollupInputTokens,
 } from './domain/llm-rollup.js'
+export {
+  agentUsageFromHarnessCalls,
+  partitionInputTokens,
+  sumAgentTokenUsage,
+} from './domain/token-usage.logic.js'
 export type {
   ToolCallKindRollup,
   ToolCallRollupTotals,

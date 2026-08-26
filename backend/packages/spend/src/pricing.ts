@@ -1,4 +1,4 @@
-import type { LlmTokenRates, ModelRef } from '@cat-factory/kernel'
+import type { InputTokenClassCounts, LlmTokenRates, ModelRef } from '@cat-factory/kernel'
 import type { AgentTokenUsage } from '@cat-factory/kernel'
 import { costOfTokenClasses } from '@cat-factory/kernel'
 import type { OpenRouterModelMeta, WorkspaceSettings } from '@cat-factory/contracts'
@@ -72,13 +72,12 @@ export type ResolvedModelPrice = LlmTokenRates
  * total input is their sum. Priced apart because their rates differ by more than an order of
  * magnitude — summing them first and applying the fresh rate is what made a 31M-token,
  * 99.998%-cache-read run meter at roughly ten times what it cost.
+ *
+ * Kernel's type rather than a second copy of the same three fields, because it is what an
+ * {@link AgentTokenUsage} producer fills in: a structural twin here would let the meter's shape
+ * drift from the shape every producer reports, with every call site still compiling.
  */
-export interface InputTokenClassUsage {
-  /** FRESH (uncached) input tokens, exclusive of both cache classes. */
-  promptTokens: number
-  cacheReadTokens: number
-  cacheWriteTokens: number
-}
+export type InputTokenClassUsage = InputTokenClassCounts
 
 export interface SpendPricing {
   /** ISO 4217 currency all prices and budgets are expressed in. */
@@ -529,13 +528,27 @@ export function modelCostResolver(
 }
 
 /**
- * Cost of a single call's token usage, in the pricing currency, from a LUMPED input count.
+ * Cost of a single call's token usage, in the pricing currency — the ONE entry point for
+ * pricing an {@link AgentTokenUsage}, whether or not its producer knew the class split.
  *
- * Prices the whole input at the fresh rate because that is all this shape says: an
- * {@link AgentTokenUsage} whose producer could not report the class split. Where the split IS
- * available, {@link estimateClassedCost} is the accurate function and this one over-states.
+ * A usage carrying {@link AgentTokenUsage.inputClasses} is priced per class. One without is
+ * priced with its whole input at the FRESH rate, because that is all that shape says: the
+ * producer reported a single lumped count. That over-states a cached call and never
+ * under-states one, the only safe direction for a budget gate.
+ *
+ * It branches HERE rather than leaving each caller to pick between this and
+ * {@link estimateClassedCost}, because picking wrong is invisible: the lump function accepts a
+ * classed usage happily and silently prices a cache-read-dominated run at up to ten times what
+ * it cost. Only a caller holding classes with no `AgentTokenUsage` around them reaches for the
+ * classed function directly.
  */
 export function estimateCost(pricing: SpendPricing, ref: ModelRef, usage: AgentTokenUsage): number {
+  if (usage.inputClasses) {
+    return estimateClassedCost(pricing, ref, {
+      ...usage.inputClasses,
+      outputTokens: usage.outputTokens,
+    })
+  }
   const price = priceFor(pricing, ref)
   return (
     (usage.inputTokens / 1_000_000) * price.inputPerMillion +

@@ -52,6 +52,7 @@ export {
 export {
   type CachePolicy,
   type InputTokenClasses,
+  agentUsageFromModelUsage,
   readInputTokenClasses,
   inlineCacheProviderOptions,
   promptCacheParams,

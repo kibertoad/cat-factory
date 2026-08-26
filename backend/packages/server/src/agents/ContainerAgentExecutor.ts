@@ -29,6 +29,7 @@ import {
   CredentialRequiredError,
   VCS_DOC_URLS,
   SUBSCRIPTION_VENDORS,
+  agentUsageFromHarnessCalls,
   isIndividualVendor,
 } from '@cat-factory/kernel'
 import { resolveAprioriWorkingBranch, resolveInstanceTypeId } from '@cat-factory/contracts'
@@ -555,7 +556,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // quota plan costs nothing per token). Pi (proxy-metered) has no `callMetrics`, so its
     // usage stays off the result and the proxy remains its sole meter (no double-count).
     if (result.callMetrics && result.callMetrics.length > 0 && result.usage) {
-      runResult.usage = result.usage
+      // Split by input CLASS off the same per-call telemetry, the only channel that kept the
+      // classes apart: a long agent run is overwhelmingly cache reads, and pricing its whole
+      // input at the fresh rate over-stated its cost on every operator usage report severalfold.
+      runResult.usage = agentUsageFromHarnessCalls(result.usage, result.callMetrics)
       runResult.usageBilling = 'subscription'
       runResult.usageVendor = handle.provider ?? providerOf(handle.model)
     }

@@ -111,12 +111,22 @@ export interface LlmTokenRates {
  */
 export type LlmRateResolver = (provider: string, model: string) => LlmTokenRates | null
 
-/** The four token counts a cost is a function of, however they were aggregated. */
-export interface LlmTokenClassCounts {
+/**
+ * The three orthogonal INPUT classes of one call (or of any aggregate of calls). Additive by
+ * construction: the total input is their sum. They stay apart because they are priced more than
+ * an order of magnitude apart and in OPPOSITE directions — a cache read is ~0.1x fresh input, a
+ * cache write ~1.25x — so a lumped input count priced at the fresh rate over-states a
+ * cache-read-heavy call several-fold.
+ */
+export interface InputTokenClassCounts {
   /** FRESH (uncached) input tokens, exclusive of both cache classes. */
   promptTokens: number
   cacheReadTokens: number
   cacheWriteTokens: number
+}
+
+/** The four token counts a cost is a function of, however they were aggregated. */
+export interface LlmTokenClassCounts extends InputTokenClassCounts {
   completionTokens: number
 }
 
