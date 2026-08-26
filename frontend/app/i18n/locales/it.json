@@ -6628,6 +6628,7 @@
     "standup": {
       "up": "Dipendenze avviate",
       "failed": "Avvio delle dipendenze non riuscito",
+      "noDocker": "Nessun demone Docker nell’executor",
       "took": "Ha richiesto {seconds}s",
       "showLogs": "Mostra i log di avvio",
       "hideLogs": "Nascondi i log di avvio"

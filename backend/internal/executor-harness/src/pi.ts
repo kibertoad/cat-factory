@@ -3,6 +3,7 @@ import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { killChildProcess, spawnDetached } from './process.js'
+import { agentChildEnv } from './agent-env.js'
 import { pathExists } from './fs-utils.js'
 import { redactSecrets, secretsToRedact } from './redact.js'
 import { HarnessFailure } from './failure.js'
@@ -898,7 +899,7 @@ export function runPi(opts: {
       ['-p', '--mode', 'json', '--model', `proxy/${opts.model}`, '--approve'],
       {
         cwd: opts.cwd,
-        env: { ...process.env, ...opts.extraEnv, PI_PROXY_TOKEN: opts.sessionToken },
+        env: agentChildEnv(opts.extraEnv, { PI_PROXY_TOKEN: opts.sessionToken }),
         // stdin is piped (not 'ignore') so the prompt is delivered out-of-band
         // rather than on argv — see the function doc for the injection rationale.
         stdio: ['pipe', 'pipe', 'pipe'],

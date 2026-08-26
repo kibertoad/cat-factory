@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { killChildProcess, spawnDetached } from './process.js'
+import { agentChildEnv } from './agent-env.js'
 import { MAX_CAPTURED_OUTPUT_CHARS, redactSecrets } from './redact.js'
 import type { RunOptions } from './runner.js'
 import type { Logger } from './logger.js'
@@ -54,7 +55,7 @@ export interface CapturedCommandResult {
  * tree on timeout and an aborted run resolves non-zero, so a phase is never what blocks a job
  * from settling.
  *
- * The child inherits the JOB's environment (`RunOptions.agentEnv` layered over the process env),
+ * The child inherits the JOB's environment (`RunOptions.agentEnv` layered over `agentChildEnv`),
  * not a mutated global: the harness spawns this itself rather than through the agent, so without
  * the explicit merge a native-mode job would run without the private-registry npmrc pointer (and,
  * had this been staged in `process.env`, against a sibling job's state).
@@ -84,7 +85,7 @@ export async function runCapturedCommand(args: {
       cwd,
       detached: spawnDetached,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, ...opts.agentEnv },
+      env: agentChildEnv(opts.agentEnv),
     })
     // Keep only the tail (plus the scrub margin); guard against unbounded buffering on a chatty
     // command.

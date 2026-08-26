@@ -14,6 +14,7 @@ accepts the job and returns immediately with a `jobId`; the driver then polls
 - [Job protocol](#job-protocol)
 - [What a job does](#what-a-job-does)
 - [No secrets in the image](#no-secrets-in-the-image)
+- [Local infra: the container's Docker daemon](#local-infra-the-containers-docker-daemon)
 - [Layout](#layout)
 - [Runner lifecycle knobs](#runner-lifecycle-knobs)
 - [Build / test](#build--test)
@@ -316,6 +317,44 @@ signed, model-locked LLM-proxy **session token** in the request body. Pi reaches
 models only through the Worker proxy, which injects the real provider key (qwen /
 Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 
+## Local infra: the container's Docker daemon
+
+The Tester's local-mode infra stand-up runs `docker compose up --wait` INSIDE this container, so
+the container needs a daemon of its own. It runs rootless, as the unprivileged `harness` user:
+Cloudflare Containers (and most managed runners) give no root and no privileged mode, and a host
+Docker socket would hand the container root on the host.
+
+`entrypoint.sh` starts it, waits for it in the background, and RECORDS the verdict
+(`src/docker-status.ts`). Two things consume that record and nothing else does:
+
+- `GET /health` reports it, so an operator (and a boot-time probe) can see what the container
+  concluded about itself.
+- The compose stand-up REFUSES on a decided absence and says why, instead of running compose
+  against nothing and handing the agent a connection error to interpret. The refusal rides back on
+  the Tester step as `infraSetup.dockerAvailable: false` with the cause.
+
+The verdict is three-valued, and that is the point. `false` is a decided absence. `undefined` is
+"nothing decided" — the probe is still in flight, or nothing recorded anything at all, which is the
+normal state under the native host transport (`LOCAL_NATIVE_AGENTS`) where the harness runs on a
+developer's machine with no entrypoint. Undecided attempts the stand-up; only a decided absence
+refuses it.
+
+What is recorded describes BOOT, and a container outlives its boot: a warm pool serves many jobs
+from one, and a sidecar daemon that took longer to come up than the entrypoint's bounded wait
+allows is serving perfectly well by the second job. So a recorded absence is a hypothesis, not the
+refusal: `resolveDockerVerdict` re-checks it against a live daemon at the moment a stand-up is
+about to run, and the record supplies what only the record holds, the cause and the daemon's own
+log tail. `GET /health` deliberately keeps reporting the boot record rather than probing per poll,
+since it is not the surface that acts on the answer.
+
+Why it is written down at all: the image shipped for months with `docker-ce-rootless-extras` (the
+wrappers that START a daemon) and no `docker-ce` (the daemon itself), and no `iproute2` for the
+network rootlesskit builds. The entrypoint backgrounded the start in a subshell where its exit
+status could not be observed, so every local-infra Tester run degraded silently to a no-infra run
+whose only trace was a compose error in a prompt note. A capability that reports itself present and
+then degrades in silence is worse than one that is absent, so the daemon is installed AND the
+verdict is stated.
+
 ## Layout
 
 | File               | Responsibility                                                                                          |
@@ -350,6 +389,8 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 | `src/codex-images.ts` | Codex's own `image_gen` output, staged where the agent can reach it: creates `$CODEX_HOME/generated_images` as a symlink into `.cat-context/binary-output/generated/` before the CLI starts, sweeps anything a failed redirect left behind, and unlinks (never follows) the redirect at teardown — a failed unlink is REPORTED, because that unlink is what stops the recursive delete reaching the checkout. Exists because codex exposes no path for what it generated AND `$CODEX_HOME` holds the run's decrypted credential, so neither asking the agent nor sending it there is available. |
 | `src/agent-shared.ts` | The few helpers every agent MODE shares (effort-report folding, the capability fields forwarded to `runAgentInWorkspace`). |
 | `src/logger.ts`    | Structured logging.                                                                                     |
+| `src/docker-status.ts` | This container's own verdict about its Docker daemon, as recorded by `entrypoint.sh`. Three-valued on purpose: a daemon that FAILED and a daemon nobody asked about are different facts, and only a DECIDED absence refuses a stand-up. See [Local infra: the container's Docker daemon](#local-infra-the-containers-docker-daemon). |
+| `src/agent-env.ts` | The env for anything the harness spawns into the agent's CHECKOUT: its own environment minus the variables that are facts about the HARNESS. Today that is `NODE_ENV` — the harness runs in production mode, and an inherited `NODE_ENV=production` makes npm omit devDependencies in a checkout that never asked for it. |
 
 ## Runner lifecycle knobs
 
@@ -373,6 +414,8 @@ runner):
 | `REPRODUCTION_TOTAL_BUDGET_MS` | `2700000` (45m) | Wall-clock ceiling on the WHOLE proof phase (every attempt, both trees, setup included). Attempts multiply two full tree runs each and the heartbeat above deliberately stops the inactivity watchdog from firing, so this is what bounds the phase. Checked at phase boundaries; exceeding it settles `inconclusive`, never a run failure. |
 | `HARNESS_TRANSCRIPT_TTL_MS` | `259200000` (3d) | How long lifted subscription-CLI session transcripts are kept before the retention sweep prunes them. |
 | `HARNESS_TRANSCRIPT_ROOT`   | `<tmpdir>/cf-agent-transcripts` | Where retained session transcripts are moved to (one dir per run). Meaningful only on a reused (warm-pool) container; a per-run container is torn down with the job. The TTL sweep deletes only dirs it created (each carries a `.cf-retained` marker), so pointing this at a shared directory never touches unrelated content, though a dedicated dir is still recommended. An override on a different filesystem than the config home falls back to copy-then-remove. |
+| `HARNESS_DOCKER_READY_TIMEOUT_SECONDS` | `60` | How long `entrypoint.sh` waits for the container's Docker daemon before recording it unavailable. Only a HUNG daemon pays this in full: the wait ends early both when the socket answers and when the daemon process is gone. It runs in the BACKGROUND, so it never delays the container's boot. |
+| `HARNESS_DOCKER_STATUS_FILE` | `/tmp/harness-docker-status.json` | Where that verdict is recorded. `entrypoint.sh` writes it and the harness reads it, so an override must be set for BOTH (they share one process env). |
 
 ## Build / test
 

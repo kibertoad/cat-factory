@@ -26,6 +26,7 @@ on:
       - 'backend/internal/executor-harness/src/**'
       - 'backend/internal/executor-harness/Dockerfile'
       - 'backend/internal/executor-harness/Dockerfile.ui'
+      - 'backend/internal/executor-harness/entrypoint.sh'
       - 'backend/internal/executor-harness/tsconfig.json'
       - 'backend/internal/executor-harness/package.json'
       - 'backend/internal/deploy-harness/src/**'
@@ -72,6 +73,7 @@ jobs:
             executor:
               - 'backend/internal/executor-harness/src/**'
               - 'backend/internal/executor-harness/Dockerfile'
+              - 'backend/internal/executor-harness/entrypoint.sh'
               - 'backend/internal/executor-harness/tsconfig.json'
               - 'backend/internal/executor-harness/package.json'
               - '.github/workflows/docker-publish.yml'
@@ -84,6 +86,7 @@ jobs:
               - 'backend/internal/executor-harness/src/**'
               - 'backend/internal/executor-harness/Dockerfile'
               - 'backend/internal/executor-harness/Dockerfile.ui'
+              - 'backend/internal/executor-harness/entrypoint.sh'
               - 'backend/internal/executor-harness/tsconfig.json'
               - 'backend/internal/executor-harness/package.json'
               - '.github/workflows/docker-publish.yml'

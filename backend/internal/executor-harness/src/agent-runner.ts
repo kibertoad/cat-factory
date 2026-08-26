@@ -37,6 +37,7 @@ import { codexImageGapNote, createCodexHome, disposeCodexHome } from './codex-ho
 import { ProgressGuard, type ProgressGuardLimits } from './progress-guard.js'
 import { BoundedTail, JsonlLineReader } from './jsonl-stream.js'
 import { killChildProcess, spawnDetached } from './process.js'
+import { agentChildEnv } from './agent-env.js'
 import { abortReasonOf } from './failure.js'
 import { describeProcessExit } from './process-exit.js'
 import { redact, registerKnownSecrets, secretsToRedact } from './redact.js'
@@ -129,7 +130,7 @@ export interface SubscriptionRunOptions {
   generateImages?: boolean
   /**
    * Extra environment for the CLI child, scoped to this job (the tester's secrets, a
-   * private-registry npmrc pointer). Merged over the inherited `process.env` at spawn, so the
+   * private-registry npmrc pointer). Merged over the inherited env at spawn (`agentChildEnv`), so the
    * agent and its shell tools see them without the harness mutating its OWN environment — which
    * is shared by every concurrent job under the native host-process transport. See
    * `RunOptions.agentEnv`.
@@ -234,7 +235,7 @@ function streamCli(
     }
     const child = spawn(command, args, {
       cwd: opts.cwd,
-      env: { ...process.env, ...env },
+      env: agentChildEnv(env),
       stdio: ['pipe', 'pipe', 'pipe'],
       // Own process group (POSIX) so killChildProcess reaps the CLI's grandchildren too.
       detached: spawnDetached,

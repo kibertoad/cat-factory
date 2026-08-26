@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import type { FrontendInfraSpec, InfraSetupRecord } from './job.js'
 import type { RunOptions } from './runner.js'
 import { killChildProcess } from './process.js'
+import { agentChildEnv } from './agent-env.js'
 import { pathExists } from './fs-utils.js'
 import { captureRedactedOutput, redactSecrets } from './redact.js'
 import { log, type Logger } from './logger.js'
@@ -134,7 +135,7 @@ export async function standUpFrontend(
       signal,
       timeout: 8 * 60_000,
       maxBuffer: 16 * 1024 * 1024,
-      env: { ...process.env, ...jobEnv },
+      env: agentChildEnv(jobEnv),
     })
     pushOutput(installed.stdout, installed.stderr)
 
@@ -147,7 +148,7 @@ export async function standUpFrontend(
       signal,
       timeout: 12 * 60_000,
       maxBuffer: 16 * 1024 * 1024,
-      env: { ...process.env, ...jobEnv, ...buildEnv },
+      env: agentChildEnv(jobEnv, buildEnv),
     })
     pushOutput(built.stdout, built.stderr)
 
@@ -305,7 +306,7 @@ function startServe(
         // Reserved names were already filtered from `infra.env` at parse; PORT wins last so
         // the health-check's port is authoritative even if a binding tried to set it.
         // (Spreading an undefined `infra.env` is a no-op, so no `?? {}` fallback is needed.)
-        env: { ...process.env, ...infra.env, PORT: String(servePort) },
+        env: agentChildEnv(infra.env, { PORT: String(servePort) }),
       }),
       'serve',
       logger,
