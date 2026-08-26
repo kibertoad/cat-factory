@@ -1,0 +1,21 @@
+-- Separate a SPEND CORRECTION from a model CALL on per-call LLM telemetry.
+--
+-- A harness CLI reports usage twice over, and one of the two under-reports: Claude Code costs each
+-- turn's INPUT but leaves its output at the message-start snapshot, so the per-turn rows sum to
+-- less than the terminal cumulative figure. The producer files that shortfall as its own row rather
+-- than inflating a measured turn with tokens it did not produce (which would make a derived number
+-- indistinguishable from a reported one). The row is real spend and belongs in every token sum.
+--
+-- It is not a call, and `COUNT(*) AS calls` counted it as one: exactly one phantom call per
+-- dispatch on every subscription-harness step, so a 4-turn architect reported 5 and a 2-review
+-- companion reported 4. Nothing downstream could correct for it, because a NULL `turn_index` is
+-- equally the shape of a genuine inline call.
+--
+-- Defaults to 0 because that is the true answer for every other producer (the proxy, the inline
+-- recorder) and for the shortfall row of a CLI that narrates no turns at all, where nothing else
+-- recorded the call and the aggregate IS its record. So pre-column rows read correctly rather than
+-- merely reading as unset.
+--
+-- No backfill and no index: the table is pruned to LLM_CALL_METRICS_RETENTION_DAYS, so the
+-- mis-counted rows churn out within the window, and the rollup rides idx_llm_call_metrics_execution.
+ALTER TABLE llm_call_metrics ADD COLUMN spend_only INTEGER NOT NULL DEFAULT 0;

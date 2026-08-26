@@ -45,6 +45,7 @@ function metric(overrides: Partial<LlmCallMetric> & Pick<LlmCallMetric, 'id'>): 
     streaming: false,
     phase: 'agent',
     turnIndex: null,
+    spendOnly: false,
     messageCount: 2,
     toolCount: 1,
     requestMaxTokens: 1000,

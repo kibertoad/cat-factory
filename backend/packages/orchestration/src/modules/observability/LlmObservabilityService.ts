@@ -154,6 +154,12 @@ export interface RecordLlmCallInput {
    * one (the harness's job-scoped `seq`). Absent/undefined ⇒ null.
    */
   turnIndex?: number | null
+  /**
+   * TRUE when the row carries only tokens and stands for no model call, so `calls` excludes it
+   * while every token sum keeps it. See {@link LlmCallMetric.spendOnly}. Absent ⇒ false: a
+   * producer with no shortfall concept files calls.
+   */
+  spendOnly?: boolean
   messageCount: number
   toolCount: number
   requestMaxTokens: number | null
@@ -294,6 +300,7 @@ export class LlmObservabilityService {
       overheadMs,
       phase: normalizeCallPhase(input.phase),
       turnIndex: input.turnIndex ?? null,
+      spendOnly: input.spendOnly === true,
       promptText: clampBody(stored.promptText),
       promptPrefixCount: stored.promptPrefixCount,
       promptHash: stored.promptHash,
@@ -493,6 +500,13 @@ export interface HarnessCallsRecordInput {
  * calls by turn must not be handed a position it never occupied. Its ID still comes from `seq`,
  * so idempotency is unaffected — the same split `CliInlineLanguageModel` makes between its
  * per-call rows and its one step-level row.
+ *
+ * Whether that row is also a SPEND CORRECTION rather than a call is a SECOND question, and it is
+ * read off {@link HarnessCallMetric.spendOnly} rather than re-derived from `standsForJob`: a
+ * shortfall row filed by a CLI that narrated no turns at all is the job's only record and IS its
+ * call. Deriving it here from the batch (`calls.some(c => !c.standsForJob)`) would get that wrong
+ * in the routine case, since a job's calls arrive in the BATCHES the live drain delivers them in
+ * and the terminal batch is regularly this row alone.
  */
 export function makeHarnessCallRecorder(
   service: LlmObservabilityService,
@@ -514,6 +528,10 @@ export function makeHarnessCallRecorder(
         // unattributed slice rather than being guessed at from the agent kind.
         ...(call.phase !== undefined ? { phase: call.phase } : {}),
         turnIndex: call.standsForJob ? null : turnIndex,
+        // The producer's own answer, persisted so a rollup can act on it. A NULL `turnIndex`
+        // cannot carry it: a plain inline call has one too, so a reader could not tell "no turn to
+        // report" from "no call happened". Nor can `standsForJob` stand in — see above.
+        spendOnly: call.spendOnly === true,
         messageCount: call.messageCount,
         toolCount: 0,
         requestMaxTokens: null,
@@ -594,6 +612,7 @@ export function makeInlineCallRecorder(
       model: call.model,
       streaming: false,
       turnIndex: call.turnIndex ?? null,
+      spendOnly: call.spendOnly === true,
       messageCount: call.messageCount,
       toolCount: call.toolCount,
       requestMaxTokens: call.requestMaxTokens,

@@ -15,6 +15,7 @@ import {
   renderTaskContext,
 } from '@cat-factory/kernel'
 import { PLATFORM_DELIVERY_CONTRACT } from './delivery-contract.js'
+import { renderOpenFindings } from './review-rounds.js'
 import { FINAL_ANSWER_IN_REPLY } from './shared.js'
 import * as templateSpecs from './standard-templates.generated.js'
 
@@ -169,7 +170,16 @@ interface UserPromptView {
   pipelineName: string
   block: { title: string; type: string; description: string }
   decisions: { question: string; chosen: string }[]
-  priorOutputs: { agentKind: string; output: string }[]
+  /**
+   * `openFindingsText` is the unanswered review findings against that output, ALREADY RENDERED.
+   *
+   * Rendered here rather than in the template because the rules that shape it (worst severity
+   * first, how a point names its anchor, the trim that states itself) are the same rules the
+   * bespoke-kind path applies through {@link renderOpenFindings}, and Handlebars would need its
+   * own copy of every one of them. A second copy is how the two prompt paths come to grade the
+   * same finding differently. The template places the string; it does not decide anything about it.
+   */
+  priorOutputs: { agentKind: string; output: string; openFindingsText?: string }[]
 }
 
 function toView(context: AgentRunContext): UserPromptView {
@@ -185,7 +195,17 @@ function toView(context: AgentRunContext): UserPromptView {
       description: context.block.description,
     },
     decisions,
-    priorOutputs: context.priorOutputs,
+    priorOutputs: context.priorOutputs.map((prior) => {
+      const findings = renderOpenFindings(prior.agentKind, prior.openFindings ?? []).join('\n')
+      return {
+        agentKind: prior.agentKind,
+        output: prior.output,
+        // Absent rather than empty when the reviewer left nothing standing: the template
+        // interpolates it straight after the output, and an empty string is what "renders to
+        // nothing" has to be, while a missing KEY is what "there was no review" has to be.
+        ...(findings ? { openFindingsText: findings } : {}),
+      }
+    }),
   }
 }
 

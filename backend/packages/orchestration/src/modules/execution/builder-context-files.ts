@@ -5,7 +5,9 @@ import {
   PR_REVIEWER_KIND,
   renderPriorReviewContext,
 } from '@cat-factory/agents'
-import type { InjectedContextFile } from '@cat-factory/kernel'
+import type { AgentKindRegistry } from '@cat-factory/agents'
+import type { InjectedContextFile, ReviewedPoint } from '@cat-factory/kernel'
+import { openFindingsFor } from './companion-review-context.js'
 import type { LinkedContext, LinkedContextOptions } from './linked-context.js'
 
 // ---------------------------------------------------------------------------
@@ -66,19 +68,36 @@ export function linkedContextWithDesignFlag(
  * direction leads the list as a synthetic entry: it is a decision the run already took, so the
  * agents downstream of it must read it as prior work rather than re-open it, and it has no step
  * output of its own to be carried by.
+ *
+ * An output whose companion ended its loop with points still open carries them
+ * ({@link openFindingsFor}). They ride the ENTRY rather than the context root because they are a
+ * fact about ONE artifact: attached here they reach exactly the steps that are shown it, named
+ * against the producer they belong to, and a pipeline with three steps between producer and
+ * consumer cannot separate the caveat from the thing it qualifies. The synthetic entry never has
+ * any. No companion graded it, and inventing an empty list would read as a reviewed-and-clean
+ * artifact, which is the distinction this whole slice exists to keep.
  */
 export function priorOutputsFor(
   instance: { steps: readonly PipelineStep[]; currentStep: number },
   architectureDirection: string | null,
-): { agentKind: string; output: string }[] {
+  registry?: AgentKindRegistry,
+): { agentKind: string; output: string; openFindings?: ReviewedPoint[] }[] {
   return [
     ...(architectureDirection
       ? [{ agentKind: 'architecture-brainstorm', output: architectureDirection }]
       : []),
     ...instance.steps
       .slice(0, instance.currentStep)
-      .filter((step) => step.output)
-      .map((step) => ({ agentKind: step.agentKind, output: step.output! })),
+      .map((step, index) => ({ step, index }))
+      .filter(({ step }) => step.output)
+      .map(({ step, index }) => {
+        const openFindings = openFindingsFor(instance, index, registry)
+        return {
+          agentKind: step.agentKind,
+          output: step.output!,
+          ...(openFindings ? { openFindings } : {}),
+        }
+      }),
   ]
 }
 

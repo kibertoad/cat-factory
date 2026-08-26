@@ -41,6 +41,7 @@ function call(id: string, createdAt: number): LlmCallMetricPage {
     streaming: false,
     phase: 'agent',
     turnIndex: null,
+    spendOnly: false,
     messageCount: 1,
     toolCount: 0,
     requestMaxTokens: null,

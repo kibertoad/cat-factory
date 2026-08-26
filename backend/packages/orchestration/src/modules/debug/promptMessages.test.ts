@@ -92,6 +92,7 @@ describe('toDebugLlmCallMessagesView', () => {
     streaming: true,
     phase: 'agent',
     turnIndex: null,
+    spendOnly: false,
     messageCount: 3,
     toolCount: 3,
     requestMaxTokens: 1_000,

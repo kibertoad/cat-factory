@@ -91,7 +91,9 @@ const WARNING_REASONS_SQL = LLM_WARNING_FINISH_REASONS.map((r) => `'${r}'`).join
  * The run's calls with each one's total input and the turns left in ITS conversation after it —
  * the two factors of the carry-cost proxy. Mirrors the D1 store's subquery exactly (same
  * `PARTITION BY agent_kind` conversation boundary, same `(created_at, message_count, id)`
- * ordering, chosen because a proxied row's `turn_index` is NULL by design).
+ * ordering, chosen because a proxied row's `turn_index` is NULL by design, and the same exclusion
+ * of a `spend_only` row from BOTH window sides — see that file for why a plain `count(*)` there
+ * overstated every real turn's carry).
  */
 const CARRY_COST_SUBQUERY_SQL = `SELECT
        agent_kind,
@@ -107,10 +109,14 @@ const CARRY_COST_SUBQUERY_SQL = `SELECT
        upstream_ms,
        overhead_ms,
        ok,
+       spend_only,
        (prompt_tokens + cache_read_tokens + cache_write_tokens) AS input_tokens,
-       COUNT(*) OVER (PARTITION BY agent_kind)
-         - ROW_NUMBER() OVER (PARTITION BY agent_kind ORDER BY created_at, message_count, id)
-         AS turns_after
+       CASE WHEN spend_only = 1 THEN 0 ELSE
+         SUM(CASE WHEN spend_only = 0 THEN 1 ELSE 0 END) OVER (PARTITION BY agent_kind)
+           - SUM(CASE WHEN spend_only = 0 THEN 1 ELSE 0 END)
+               OVER (PARTITION BY agent_kind ORDER BY created_at, message_count, id
+                     ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+       END AS turns_after
      FROM llm_call_metrics
      WHERE workspace_id = ? AND execution_id = ?`
 
@@ -120,7 +126,7 @@ const CARRY_COST_SUBQUERY_SQL = `SELECT
 
 /** The metadata columns a bounded page selects, plus each body's full `length()`. */
 const PAGE_METADATA_COLUMNS = `id, workspace_id, execution_id, agent_kind, provider, model,
-  created_at, streaming, phase, turn_index, message_count, tool_count, request_max_tokens,
+  created_at, streaming, phase, turn_index, spend_only, message_count, tool_count, request_max_tokens,
   prompt_tokens,
   cache_read_tokens, cache_write_tokens, completion_tokens, total_tokens, finish_reason, upstream_ms,
   overhead_ms, total_ms, ok, http_status, error_message, prompt_prefix_count,
@@ -215,6 +221,7 @@ function rowToPage(row: PageRow): LlmCallMetricPage {
     streaming: row.streaming === 1,
     phase: row.phase,
     turnIndex: row.turn_index,
+    spendOnly: row.spend_only === 1,
     messageCount: row.message_count,
     toolCount: row.tool_count,
     requestMaxTokens: row.request_max_tokens,
@@ -281,7 +288,12 @@ CREATE TABLE IF NOT EXISTS llm_call_metrics (
   -- and turn_index stays NULLABLE because the proxy path has no job-scoped counter -- a 0 there
   -- would read as "the first turn" and sort every proxied call to the front of its phase.
   phase TEXT NOT NULL DEFAULT '',
-  turn_index INTEGER
+  turn_index INTEGER,
+  -- 1 when the row carries only TOKENS and stands for no model call: the shortfall a harness CLI
+  -- leaves when it costs each turn's input but not its output. Real spend, so every token sum keeps
+  -- it; not a call, so the call count excludes it. Mirrors D1 telemetry migration 0006. Defaults to
+  -- 0 because that is true of every other producer, so a pre-column row reads right, not unset.
+  spend_only INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_llm_call_metrics_execution
   ON llm_call_metrics (workspace_id, execution_id, created_at);
@@ -429,8 +441,8 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
             total_tokens, finish_reason,
             upstream_ms, overhead_ms, total_ms, ok, http_status, error_message,
             prompt_text, prompt_prefix_count, prompt_hash, response_text, reasoning_text,
-            phase, turn_index)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            phase, turn_index, spend_only)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO NOTHING`,
       )
       .run(
@@ -464,6 +476,7 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
         metric.reasoningText,
         metric.phase,
         metric.turnIndex,
+        metric.spendOnly ? 1 : 0,
       )
   }
 
@@ -661,7 +674,7 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
            phase                                                AS phase,
            provider                                             AS provider,
            model                                                AS model,
-           COUNT(*)                                             AS calls,
+           COALESCE(SUM(CASE WHEN spend_only = 0 THEN 1 ELSE 0 END), 0) AS calls,
            COALESCE(SUM(prompt_tokens), 0)                      AS prompt_tokens,
            COALESCE(SUM(cache_read_tokens), 0)                  AS cache_read_tokens,
            COALESCE(SUM(cache_write_tokens), 0)                 AS cache_write_tokens,

@@ -213,7 +213,7 @@ export function renderPriorReviewRounds(
       const grade = comment.severity ? `[${comment.severity}] ` : ''
       lines.push(
         target
-          ? `- ${grade}On ${clip(target, false)}: ${clip(comment.body, isLatest)}`
+          ? `- ${grade}On ${target}: ${clip(comment.body, isLatest)}`
           : `- ${grade}${clip(comment.body, isLatest)}`,
       )
     }
@@ -305,12 +305,33 @@ export function renderRevisionComments(comments: readonly ReviewedPoint[]): stri
  * id, which is a locator the producer looks up. A point with neither is rendered as the standalone
  * note it is, rather than against an empty target — the failure mode a `(empty)` placeholder
  * produced, where a producer was told to fix a specific part and shown nothing.
+ *
+ * A locator is ONE bounded LINE, and both halves of that are enforced here rather than at the call
+ * sites. `quotedSource` is model- or human-authored prose of any length and shape: an unflattened
+ * one breaks the line it was spliced into (its tail then reads as the finding's body, or as
+ * instructions), and an unbounded one costs a body's worth of tokens on every dispatch that carries
+ * the point. Both callers splice this string INTO a line they compose, so the rule lives here and
+ * they cannot state it differently — the drift it replaced left {@link renderOpenFindings}' heading
+ * unbounded while its sibling bullet clipped. ({@link renderRevisionComments} is deliberately not
+ * one of them: it gives a quoted block its OWN line precisely because it is verbatim source of
+ * arbitrary length, so it has no line to break and nothing to bound.)
+ *
+ * The trim is {@link clip}'s, so a shortened locator SAYS it was shortened: a silent cut reads as
+ * the whole of what the reviewer quoted, and a producer would go looking for prose the document
+ * does not contain. It is applied BEFORE the quoting, so the closing delimiter always survives —
+ * clipping the finished `"…"` (as the bullet renderer used to) cut it off and left the rest of the
+ * line reading as part of the quotation.
  */
 function reviewedPointTarget(comment: ReviewedPoint): string | undefined {
-  const quoted = comment.quotedSource?.trim()
-  if (quoted) return `"${quoted}"`
-  const anchor = comment.anchorId?.trim()
-  return anchor ? `item \`${anchor}\`` : undefined
+  const quoted = oneLine(comment.quotedSource)
+  if (quoted) return `"${clip(quoted, false)}"`
+  const anchor = oneLine(comment.anchorId)
+  return anchor ? `item \`${clip(anchor, false)}\`` : undefined
+}
+
+/** Collapse a locator onto one line, so splicing it into a composed line cannot break that line. */
+function oneLine(text: string | undefined): string {
+  return text?.replace(/\s+/g, ' ').trim() ?? ''
 }
 
 /**
@@ -336,4 +357,45 @@ function worstFirst<T extends { severity?: string }>(comments: readonly T[] | un
 function clip(text: string, generous: boolean): string {
   const limit = generous ? LATEST_ROUND_CHARS : EARLIER_ROUND_CHARS
   return text.length > limit ? `${text.slice(0, limit)}… [trimmed]` : text
+}
+
+/**
+ * The points a reviewer raised against an EARLIER step's output that were never answered, rendered
+ * for whoever is about to build on that output.
+ *
+ * The third rendering of one loop's findings and the only one addressed to a stranger, which is
+ * what its wording has to carry. {@link renderRevisionComments} says "fix these" to the producer
+ * that wrote the thing; {@link renderPriorReviewRounds} says "here is what you already asked for"
+ * to the grader. This one says something neither does: the review happened, these points stood, and
+ * the run moved on anyway. A consumer told only "here are some findings" reasonably reads them as
+ * already handled, which is the exact misreading that makes carrying them forward worthless.
+ *
+ * It states no obligation to go and fix the earlier artifact, deliberately. The reader is a
+ * different step with a different deliverable, and an instruction to revise a predecessor's
+ * document is how a coder comes back with a design edit and no code. What it asks for is the thing
+ * only this reader can do: not build the defect in, and say so when the point turns out to be wrong
+ * or already handled.
+ *
+ * Each body is clipped by the same rule as an earlier round's ({@link clip}), which states the trim
+ * rather than silently shortening a point into something the reader would act on differently.
+ */
+export function renderOpenFindings(
+  agentKind: string,
+  findings: readonly ReviewedPoint[],
+): string[] {
+  if (!findings.length) return []
+  const lines = [
+    '',
+    `Review findings still OPEN against the \`${agentKind}\` output above. An automated reviewer ` +
+      'raised these, the work was never revised to answer them, and the run advanced regardless. ' +
+      'They are not fixed. Treat them as known defects in what you were handed: do not build them ' +
+      'in, and where a point is wrong or no longer applies, say so in your report rather than ' +
+      'silently ignoring it.',
+  ]
+  for (const finding of worstFirst(findings)) {
+    const grade = finding.severity ? ` [${finding.severity}]` : ''
+    const target = reviewedPointTarget(finding)
+    lines.push('', `On ${target ?? 'that output overall'}:${grade}`, clip(finding.body, false))
+  }
+  return lines
 }

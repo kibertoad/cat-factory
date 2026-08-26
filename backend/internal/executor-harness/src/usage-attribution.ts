@@ -67,6 +67,14 @@ export function claudeUsage(
  *
  * Clamped at 0 per side: a CLI whose terminal figure is LOWER than its own per-turn sum has
  * reported the two inconsistently, and negative spend is not a thing to record.
+ *
+ * {@link HarnessCallMetric.spendOnly} is decided HERE, and it is not the same question as
+ * `standsForJob`. The row never occupies a turn, but whether it is a CALL depends on whether any
+ * turn was narrated beside it: with costed turns present this only corrects THEIR under-reporting
+ * (counting it would report one phantom call per dispatch), while with none it is the job's ONLY
+ * record and excluding it would report a step that spent tokens across zero calls. Only this
+ * function can answer that — the backend records a job's calls in BATCHES as the live drain
+ * delivers them, so a batch holding just this row cannot tell the two cases apart.
  */
 export function unaccountedUsageCall(
   parentCalls: readonly HarnessCallMetric[],
@@ -98,5 +106,6 @@ export function unaccountedUsageCall(
     outputTokens,
     finishReason: null,
     standsForJob: true,
+    spendOnly: parentCalls.length > 0,
   }
 }

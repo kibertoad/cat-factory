@@ -31,6 +31,7 @@ function metric(overrides: Partial<LlmCallMetric> & Pick<LlmCallMetric, 'id'>): 
     streaming: false,
     phase: 'agent',
     turnIndex: null,
+    spendOnly: false,
     messageCount: 2,
     toolCount: 1,
     requestMaxTokens: 1000,
@@ -251,6 +252,85 @@ function registerMetricRollupTests(
     // Carry cost = SUM(this call's total input x turns left after it), in call order:
     // (100+40+15)x2 + (100+60+25)x1 + 100x0.
     expect(s.carryCostTokens).toBe(495)
+  })
+
+  it('counts a spend-correction row in the tokens and in NO call count', async () => {
+    // A harness CLI costs each turn's input but leaves its output at the message-start snapshot,
+    // so the producer files the shortfall as its own row rather than growing a measured turn by
+    // tokens it did not produce. The row is real spend and is not a call. Counting it as one
+    // reported a phantom call per dispatch on every subscription-harness step (a 4-turn architect
+    // read as 5), and no reader could correct for it: a null `turnIndex` is equally the shape of a
+    // genuine inline call, which is why the fact is persisted rather than inferred.
+    const repo = makeRepo()
+    const { ws, e1 } = ids()
+    await repo.record(
+      metric({ id: `${ws}-turn`, workspaceId: ws, executionId: e1, completionTokens: 12 }),
+    )
+    await repo.record(
+      metric({
+        id: `${ws}-short`,
+        workspaceId: ws,
+        executionId: e1,
+        completionTokens: 900,
+        spendOnly: true,
+      }),
+    )
+
+    const s = (await repo.summarizeByExecution(ws, e1))[0]!
+    expect(s.calls).toBe(1)
+    expect(s.completionTokens).toBe(912)
+  })
+
+  it('charges no carry cost for a spend-correction row, nor for the turns before it', async () => {
+    // Carry cost is `input x turns that re-sent it`, and a spend correction is on NEITHER side of
+    // that: it re-sends nothing, and nothing re-sent IT. Counting it in the partition total gave
+    // every real turn one turn too many — a whole extra `SUM(input_tokens)` per agent kind, on
+    // every subscription-harness step, since the shortfall row is filed after all of them.
+    //
+    // Ordered by explicit `createdAt` rather than by the id tiebreak, because the position of the
+    // correction row is exactly what the arithmetic turns on.
+    const repo = makeRepo()
+    const { ws, e1 } = ids()
+    await repo.record(
+      metric({ id: `${ws}-t1`, workspaceId: ws, executionId: e1, createdAt: 1, promptTokens: 100 }),
+    )
+    await repo.record(
+      metric({ id: `${ws}-t2`, workspaceId: ws, executionId: e1, createdAt: 2, promptTokens: 200 }),
+    )
+    await repo.record(
+      metric({
+        id: `${ws}-short`,
+        workspaceId: ws,
+        executionId: e1,
+        createdAt: 3,
+        promptTokens: 500,
+        spendOnly: true,
+      }),
+    )
+
+    const s = (await repo.summarizeByExecution(ws, e1))[0]!
+    // One real turn re-sent t1's input and none re-sent t2's; the correction carries nothing.
+    // Counting the correction as a turn would report 400.
+    expect(s.carryCostTokens).toBe(100)
+    expect(s.calls).toBe(2)
+    // ...while its tokens stay in the sums, which is the whole reason the row exists.
+    expect(s.promptTokens).toBe(800)
+  })
+
+  it('reads the spend-only flag back on the stored row, both ways', async () => {
+    // Absent on the type and 0 in both schemas, so a producer with no shortfall concept keeps
+    // filing calls. The flag has to survive the round trip or the rollup above is deciding on a
+    // default rather than on what the producer said.
+    const repo = makeRepo()
+    const { ws, e1 } = ids()
+    await repo.record(metric({ id: `${ws}-plain`, workspaceId: ws, executionId: e1 }))
+    await repo.record(
+      metric({ id: `${ws}-short`, workspaceId: ws, executionId: e1, spendOnly: true }),
+    )
+
+    const byId = new Map((await repo.listByExecution(ws, e1)).map((c) => [c.id, c]))
+    expect(byId.get(`${ws}-short`)?.spendOnly).toBe(true)
+    expect(byId.get(`${ws}-plain`)?.spendOnly).toBe(false)
   })
 
   it('groups summaries by agent kind', async () => {

@@ -412,6 +412,12 @@ export class CliInlineLanguageModel implements LanguageModelV3, SelfReportingLan
       // step was measured fine.
       finishReason: result.finishReason ?? null,
       durationMs,
+      // A CALL when the CLI narrated no turns (`reported === 0`): nothing else recorded it, so this
+      // row IS its record, bodies and duration included, and `calls` must count it. A SPEND
+      // CORRECTION otherwise: the turns are already counted and this only carries what their own
+      // costing missed, so counting it again reported one phantom call per dispatch on every
+      // Claude Code step. The producer is the only layer that knows which of the two it just built.
+      spendOnly: reported > 0,
       ok: true,
       errorMessage: null,
       promptText: () => safeJson(options.prompt),

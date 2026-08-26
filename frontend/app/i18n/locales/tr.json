@@ -1791,7 +1791,9 @@
       "prompt": "İstem",
       "promptPrefixOmitted": "(yalnızca yeni mesajlar: {count} öncekisi atlandı)",
       "response": "Yanıt",
-      "reasoning": "Akıl yürütme"
+      "reasoning": "Akıl yürütme",
+      "spendOnly": "cagri degil",
+      "spendOnlyTitle": "Harness'in bir tura atfetmeden bildirdigi token harcamasi. Bu calismanin token toplamlarina dahildir, cagri sayisina dahil degildir."
     },
     "context": {
       "injectedFiles": "Eklenen bağlam dosyaları",

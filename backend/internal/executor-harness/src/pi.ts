@@ -652,6 +652,21 @@ export interface HarnessCallMetric {
    * turn. `CliInlineLanguageModel`'s step-level row is the same idea on the inline path.
    */
   standsForJob?: boolean
+  /**
+   * This row carries only TOKENS and stands for no model call of its own, so the backend counts it
+   * in every token sum and in no `calls` figure.
+   *
+   * Separate from {@link standsForJob}, which is only about the missing TURN ordinal. The
+   * shortfall row occupies no turn either way, but when the CLI narrated NO turns at all it is the
+   * job's only record and IS the call — nothing else recorded it, and a count excluding it would
+   * report a step that burned tokens across zero calls. The producer is the only layer that can
+   * tell the two apart: the backend sees one BATCH of a job's calls at a time (the live drain
+   * splits them across polls), so it cannot ask whether any turn was narrated.
+   *
+   * Absent on every real turn. `CliInlineLanguageModel.fileUnaccounted` makes the same split on
+   * the inline path, off its own `reported > 0`.
+   */
+  spendOnly?: boolean
 }
 
 /**

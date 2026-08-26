@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_COMPANION_MAX_ATTEMPTS } from '@cat-factory/contracts'
 import type {
   ExecutionInstance,
   Pipeline,
@@ -325,11 +326,19 @@ function registerCompanionCapTests(harness: ConformanceHarness): void {
 
   it('grants one more round at the companion cap, then completes when it passes', async () => {
     // `extra-round` raises the budget by one and loops the producer back through the
-    // companion to re-grade. Four low grades drive to the cap; the post-extra-round
-    // grade passes, so the run completes — proving the human can rescue a stuck run.
+    // companion to re-grade. Enough low grades to drive the loop to its cap, then a passing
+    // one for the granted round, so the run completes — proving the human can rescue a stuck run.
+    //
+    // The failing run is `DEFAULT_COMPANION_MAX_ATTEMPTS + 1` grades long (the first grading plus
+    // one per automatic rework round) and is DERIVED from that constant rather than written out:
+    // a literal sequence sized against today's default silently stops testing the cap the moment
+    // the default moves, passing the run before it ever parks.
     const app = harness.makeApp({
       confidence: 1,
-      companionRatings: [0.4, 0.4, 0.4, 0.4, 1],
+      companionRatings: [
+        ...Array.from({ length: DEFAULT_COMPANION_MAX_ATTEMPTS + 1 }, () => 0.4),
+        1,
+      ],
     })
     const { workspace } = await app.createWorkspace()
     const wsId = workspace.id

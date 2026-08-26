@@ -1791,7 +1791,9 @@
       "prompt": "Prompt",
       "promptPrefixOmitted": "(solo mensajes nuevos: {count} anteriores omitidos)",
       "response": "Respuesta",
-      "reasoning": "Razonamiento"
+      "reasoning": "Razonamiento",
+      "spendOnly": "no es una llamada",
+      "spendOnlyTitle": "Consumo de tokens que el harness informo sin atribuirlo a ningun turno. Cuenta en los totales de tokens de esta ejecucion y en ningun recuento de llamadas."
     },
     "context": {
       "injectedFiles": "Archivos de contexto inyectados",

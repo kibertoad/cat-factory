@@ -50,6 +50,7 @@ export interface MetricRow {
   reasoning_text: string
   phase: string
   turn_index: number | null
+  spend_only: number
 }
 
 export function rowToMetric(row: MetricRow): LlmCallMetric {
@@ -84,6 +85,7 @@ export function rowToMetric(row: MetricRow): LlmCallMetric {
     reasoningText: row.reasoning_text,
     phase: row.phase,
     turnIndex: row.turn_index,
+    spendOnly: row.spend_only === 1,
   }
 }
 

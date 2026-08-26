@@ -87,6 +87,7 @@ function llmMetric(id: string, createdAt: number, ws: string) {
     streaming: false,
     phase: 'agent',
     turnIndex: 0,
+    spendOnly: false,
     messageCount: 1,
     toolCount: 0,
     requestMaxTokens: 1000,

@@ -771,12 +771,90 @@ describe('makeHarnessCallRecorder', () => {
       jobId: 'exec-coder',
       calls: [
         metric({ seq: 0, responseText: 'a' }),
-        metric({ seq: 1, standsForJob: true, promptText: '', messageCount: 0, responseText: '' }),
+        metric({
+          seq: 1,
+          standsForJob: true,
+          spendOnly: true,
+          promptText: '',
+          messageCount: 0,
+          responseText: '',
+        }),
       ],
     })
 
     expect(repo.recorded.map((m) => m.turnIndex)).toEqual([0, null])
     expect(repo.recorded.map((m) => m.id)).toEqual(['exec-coder-hc-0', 'exec-coder-hc-1'])
+    expect(repo.recorded.map((m) => m.spendOnly)).toEqual([false, true])
+  })
+
+  it('records a remainder row the producer did NOT flag spend-only as a call', async () => {
+    // The batch is exactly what the terminal write of a CLI that narrated no turns delivers: one
+    // remainder row and nothing else. `standsForJob` is true (it occupies no turn), but the
+    // producer says it is the job's only record, so it counts as the call it is — deriving the
+    // answer from the batch instead would read every such job as zero calls with real spend.
+    const repo = new MemoryRepo()
+    const record = makeHarnessCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+    await record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      provider: 'claude',
+      model: 'claude:claude-opus-4-8',
+      jobId: 'exec-coder',
+      calls: [
+        metric({
+          seq: 0,
+          standsForJob: true,
+          spendOnly: false,
+          promptText: '',
+          messageCount: 0,
+          responseText: '',
+        }),
+      ],
+    })
+
+    expect(repo.recorded.map((m) => [m.turnIndex, m.spendOnly])).toEqual([[null, false]])
+  })
+
+  it('does not read the spend-only answer off the BATCH it was handed', async () => {
+    // The live drain splits a job's calls across polls, so the terminal batch routinely holds the
+    // remainder row alone even on a run whose turns were all narrated and recorded earlier. A
+    // reader deriving "were there measured turns?" from this batch would flip that row to a call
+    // and report one phantom call per dispatch. It follows the producer instead.
+    const repo = new MemoryRepo()
+    const record = makeHarnessCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+    await record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      provider: 'claude',
+      model: 'claude:claude-opus-4-8',
+      jobId: 'exec-coder',
+      calls: [
+        metric({
+          seq: 7,
+          standsForJob: true,
+          spendOnly: true,
+          promptText: '',
+          messageCount: 0,
+          responseText: '',
+        }),
+      ],
+    })
+
+    expect(repo.recorded.map((m) => m.spendOnly)).toEqual([true])
   })
 })
 

@@ -128,8 +128,9 @@ of its own. Several things bite:
   container-backed producer re-attached to its FIRST completed job every round: the harness replays a
   job id it already holds, and a companion then re-graded a byte-identical artifact until the budget
   ran out. Anything new that re-runs a step inherits the fix; nothing needs a counter of its own.
-- **The BUDGET is the task's risk policy, never the registration**: `companionMaxReworks` (3 on
-  every built-in, which is the ceiling the engine used to hard-code). A step is seeded with the
+- **The BUDGET is the task's risk policy, never the registration**: `companionMaxReworks` (4 on
+  every built-in, and on the unattended preset too: a round here re-runs the producer, so unlike
+  the judgement-only budgets beside it the round not taken is an artifact not improved). A step is seeded with the
   catalog default at run start, where no policy is resolved yet, so the resolved value is adopted
   onto `step.companion.maxAttempts` on the grading that records the step's FIRST verdict, the same
   way the Tester's quality budget is adopted on its first report. Read ONCE, and keyed on the
@@ -147,6 +148,15 @@ of its own. Several things bite:
   none to buy the rating decides alone. Read the other way round, a `0` policy parked every
   companion step (a review with nothing at all to say is the rare one) and, unattended, stamped
   `capSettledByPolicy` on producers that had met their bar.
+- **A loop that ENDS with points still open hands them to the next producer.** A companion can pass
+  work it still has findings against: past the first forced round a `major` no longer holds the run
+  (only a `blocker` does), and a human may approve over a `blocker` on the companion's own gate.
+  Those points were never sent back to anyone, so `openFindingsFor` reads the LAST verdict's
+  non-nit comments onto the reviewed step's `priorOutputs` entry, and every later step is shown them
+  under the artifact they are about, worded so they cannot read as already handled. Earlier rounds
+  are deliberately excluded: each of those WAS answered, and re-raising it would re-open settled work
+  against a producer with no standing to settle it. The consumer is asked not to build the defect in,
+  never to go and revise a predecessor's document.
 - **The producer answers in its REPLY.** `FEEDBACK_ACCOUNTING_DIRECTIVE` makes it account for every
   point (changed, or argued down with a reason) as a "Response to review" section in the reply, never
   in a committed artifact, because that reply is what the next round folds in as prior work — for a

@@ -1791,7 +1791,9 @@
       "prompt": "Prompt",
       "promptPrefixOmitted": "(tylko nowe wiadomości: {count} wcześniejszych pominięto)",
       "response": "Odpowiedź",
-      "reasoning": "Rozumowanie"
+      "reasoning": "Rozumowanie",
+      "spendOnly": "to nie wywolanie",
+      "spendOnlyTitle": "Zuzycie tokenow zgloszone przez harness bez przypisania do tury. Liczone w sumach tokenow tego przebiegu i w zadnej liczbie wywolan."
     },
     "context": {
       "injectedFiles": "Wstrzyknięte pliki kontekstu",

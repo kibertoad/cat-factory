@@ -30,6 +30,18 @@ export const llmCallMetricSchema = v.object({
    * producing channel has no turn concept (the proxy, which orders by `createdAt`).
    */
   turnIndex: v.optional(v.nullable(v.number()), null),
+  /**
+   * TRUE when the row carries only TOKENS and stands for no model call: the shortfall a harness CLI
+   * leaves when it costs each turn's input but not its output, filed as its own row so a measured
+   * turn is never inflated by tokens it did not produce.
+   *
+   * The SPA has to agree with the engine about this or the two disagree in public: the step rollup
+   * counts calls without these rows, so a panel that lists them unmarked shows one more call than
+   * the card beside it and nothing accounts for the difference. `turnIndex` cannot stand in: a
+   * plain inline call is null there too. Optional/defaulted so an export predating the flag parses,
+   * and false is the right default for every other producer.
+   */
+  spendOnly: v.optional(v.boolean(), false),
   messageCount: v.number(),
   /** Tools offered to the model (0 = the agent could not edit anything). */
   toolCount: v.number(),

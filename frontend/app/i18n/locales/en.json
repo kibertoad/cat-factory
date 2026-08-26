@@ -1895,7 +1895,9 @@
       "prompt": "Prompt",
       "promptPrefixOmitted": "(new messages only: {count} earlier omitted)",
       "response": "Response",
-      "reasoning": "Reasoning"
+      "reasoning": "Reasoning",
+      "spendOnly": "not a call",
+      "spendOnlyTitle": "Token spend the harness reported without attributing it to a turn. Counted in this run's token totals and in no call count."
     },
     "context": {
       "injectedFiles": "Injected context files",
