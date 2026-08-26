@@ -604,14 +604,86 @@ export async function commitTrackedEdits(
  * --exclude-standard`). The harness deliberately never blanket-stages new files (the
  * agent owns commit selection), so this is exactly what {@link commitTrackedEdits}
  * does NOT capture — a NEW file the agent created but forgot to commit. The caller
- * surfaces it as a warning so that silent loss is at least observable in the logs.
+ * surfaces it as a warning, and the salvage commits it, so that loss is at least observable.
+ *
+ * `-z` for the reason given on {@link splitNulPaths}: the default output C-QUOTES any path git
+ * considers unusual, and a quoted path is not the name of a file. The salvage stages exactly
+ * what this returns, so a single accented filename would make its one `git add` exit 128 and
+ * discard the whole all-or-nothing salvage.
  */
 export async function listUntrackedFiles(dir: string, signal?: AbortSignal): Promise<string[]> {
-  const out = await git(['ls-files', '--others', '--exclude-standard'], { cwd: dir, signal })
-  return out
-    .split('\n')
-    .map((line) => line.replace(/\r$/, '').trim())
-    .filter((path) => path !== '')
+  return splitNulPaths(
+    await git(['ls-files', '--others', '--exclude-standard', '-z'], { cwd: dir, signal }),
+  )
+}
+
+/**
+ * Split git's NUL-delimited path output into real, unescaped paths.
+ *
+ * Every path-listing git command here passes `-z`, and this is why: without it git renders a
+ * path containing a non-ASCII byte, a quote, a backslash or a newline as a C-QUOTED STRING
+ * (`"caf\303\251.ts"`), quotes and octal escapes included. That string is not a filename — feed
+ * it back to `git add` and the command exits 128 with `pathspec ... did not match any files`, and
+ * `stat` on it reports nothing. `-z` turns the quoting off entirely (a NUL cannot occur in a path,
+ * so no escaping is needed) and is the ONLY setting that is correct for every path: `core.quotePath
+ * =false` covers the non-ASCII case alone and still quotes the other three.
+ *
+ * A trailing NUL leaves an empty final field, which is dropped along with any other blank.
+ */
+function splitNulPaths(out: string): string[] {
+  return out.split('\0').filter((path) => path !== '')
+}
+
+/**
+ * The raw `git status --porcelain -z --untracked-files=all` output for `dir` — every path git
+ * considers changed, with untracked files enumerated INDIVIDUALLY rather than collapsed to their
+ * directory.
+ *
+ * The raw string, not a parsed list, because its two consumers want different things from it and
+ * the parse ({@link changedPathsFromPorcelain}) is pure and shared: the workspace probe wants "is
+ * anything here at all", the salvage wants the paths themselves. Gitignored paths are absent by
+ * construction, which is what keeps a dependency install from reading as agent progress.
+ *
+ * NOTHING IS STAGED, unlike {@link hasAgentChanges}: this runs mid-flight, while the agent is
+ * still working, so a `git add -A` here would silently stage files the agent had not chosen and
+ * change what a later `commitTrackedEdits` captures.
+ */
+export async function workingTreeStatus(dir: string, signal?: AbortSignal): Promise<string> {
+  return git(['status', '--porcelain', '-z', '--untracked-files=all'], { cwd: dir, signal })
+}
+
+/**
+ * Stage exactly `paths` and commit them with `message`, returning the new commit's sha (or null
+ * when git found nothing to commit — a path that vanished between listing and staging).
+ *
+ * Three separate things stop a path being read as something other than a path. `--` terminates
+ * the options, so one beginning with `-` cannot be read as a flag. Each path is a separate argv
+ * entry, so no shell ever sees them. And each is prefixed `:(literal)`, which is what `--` does
+ * NOT cover: everything after `--` is a PATHSPEC, not a filename, so its leading `:` is read as
+ * pathspec magic and its wildcards are matched as a glob. An agent-authored `:notes.txt` makes a
+ * bare `git add -- :notes.txt` exit 128 on `did not match any files` — and since this stages every
+ * path in ONE command, that one name discards the whole all-or-nothing salvage, exactly as an
+ * unquoted accented name did. `:(literal)` matches the entry as itself and nothing else.
+ *
+ * The caller has already decided WHICH paths belong; this only commits them.
+ */
+export async function commitPaths(
+  dir: string,
+  paths: string[],
+  message: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  if (paths.length === 0) return null
+  await git(['add', '--', ...paths.map(literalPathspec)], { cwd: dir, signal })
+  const staged = await git(['diff', '--cached', '--name-only'], { cwd: dir, signal })
+  if (staged.trim() === '') return null
+  await git(['commit', '-m', message], { cwd: dir, signal })
+  return headCommit(dir, signal)
+}
+
+/** One path as a pathspec that matches only itself — see {@link commitPaths} for why. */
+function literalPathspec(path: string): string {
+  return `:(literal)${path}`
 }
 
 /**
@@ -624,14 +696,12 @@ export async function listUntrackedFiles(dir: string, signal?: AbortSignal): Pro
  * and enumerating them would cost a multi-megabyte listing to learn a single name.
  */
 export async function listUntrackedPaths(dir: string, signal?: AbortSignal): Promise<string[]> {
-  const out = await git(
-    ['ls-files', '--others', '--exclude-standard', '--directory', '--no-empty-directory'],
-    { cwd: dir, signal },
+  return splitNulPaths(
+    await git(
+      ['ls-files', '--others', '--exclude-standard', '--directory', '--no-empty-directory', '-z'],
+      { cwd: dir, signal },
+    ),
   )
-  return out
-    .split('\n')
-    .map((line) => line.replace(/\r$/, '').trim())
-    .filter((path) => path !== '')
 }
 
 /**
@@ -796,21 +866,29 @@ export async function hasDiffAgainstBase(
 }
 
 /**
- * Parse the paths out of `git status --porcelain` (v1) output. Each line is
- * `XY <path>`, or `XY <old> -> <new>` for a rename/copy (we keep the new path);
- * git quotes paths with special characters, which we unquote. Blank lines are
- * skipped. Pure so the no-op detection can be tested without spawning git.
+ * Parse the paths out of `git status --porcelain -z` (v1) output.
+ *
+ * `-z` rather than the default, for the reason given on {@link splitNulPaths}: the default
+ * C-QUOTES any path git considers unusual, so `caf\u00e9.ts` arrives as the seven-character
+ * literal `"caf\303\251.ts"` and every consumer that then touches the file misses it. In `-z`
+ * every field is a real path and nothing is escaped.
+ *
+ * Each NUL-terminated field is `XY <path>`. A rename or copy (`R`/`C` in either status column)
+ * spends a SECOND field on its original path, which is consumed and dropped: we keep the new
+ * path, the one that now exists in the tree. Pure so the no-op detection and the workspace
+ * probe's sentinel rule can be tested without spawning git.
  */
 export function changedPathsFromPorcelain(status: string): string[] {
+  const fields = status.split('\0')
   const paths: string[] = []
-  for (const raw of status.split('\n')) {
-    const line = raw.replace(/\r$/, '')
-    if (line.trim() === '') continue
-    let path = line.slice(3)
-    const arrow = path.indexOf(' -> ')
-    if (arrow !== -1) path = path.slice(arrow + 4)
-    path = path.trim().replace(/^"(.*)"$/, '$1')
-    if (path) paths.push(path)
+  for (let index = 0; index < fields.length; index++) {
+    const entry = fields[index] ?? ''
+    if (entry === '') continue
+    // `XY ` then the path. A field too short to hold both is not a status entry (a stray
+    // trailing fragment), so there is no path in it to keep.
+    if (entry.length <= 3) continue
+    if (entry[0] === 'R' || entry[0] === 'C' || entry[1] === 'R' || entry[1] === 'C') index++
+    paths.push(entry.slice(3))
   }
   return paths
 }
@@ -824,7 +902,7 @@ export function changedPathsFromPorcelain(status: string): string[] {
  */
 export async function hasAgentChanges(dir: string, signal?: AbortSignal): Promise<boolean> {
   await git(['add', '-A'], { cwd: dir, signal })
-  const status = await git(['status', '--porcelain'], { cwd: dir, signal })
+  const status = await git(['status', '--porcelain', '-z'], { cwd: dir, signal })
   return changedPathsFromPorcelain(status).length > 0
 }
 

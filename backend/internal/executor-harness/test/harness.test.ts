@@ -23,6 +23,7 @@ import {
   DEFAULT_PROGRESS_GUARD_LIMITS,
   ProgressGuard,
   type ProgressGuardLimits,
+  type ProgressVerdict,
   mergeGuardLimits,
   progressGuardLimitsFromEnv,
 } from '../src/progress-guard.js'
@@ -275,13 +276,18 @@ describe('classifyLlmUpstreamError (F3: LLM-proxy auth/quota/rate-limit remedies
 })
 
 describe('changedPathsFromPorcelain', () => {
-  it('extracts paths, follows renames to the new name, and unquotes', () => {
-    const status = [
+  // `git status --porcelain -z`: NUL after every field, and a rename spends a SECOND field on
+  // its original path. Nothing is quoted or escaped, which is the whole reason for `-z`.
+  const porcelainZ = (...fields: string[]): string => `${fields.join('\0')}\0`
+
+  it('extracts paths and follows a rename to the new name', () => {
+    const status = porcelainZ(
       'A  README.md',
       ' M src/index.ts',
-      'R  old.ts -> new.ts',
-      '?? "with space.ts"',
-    ].join('\n')
+      'R  new.ts',
+      'old.ts',
+      '?? with space.ts',
+    )
     expect(changedPathsFromPorcelain(status)).toEqual([
       'README.md',
       'src/index.ts',
@@ -290,9 +296,24 @@ describe('changedPathsFromPorcelain', () => {
     ])
   })
 
+  it('keeps a path git would have C-quoted exactly as it is on disk', () => {
+    // The default output renders these as `"caf\303\251.ts"` and `"a\tb.ts"` — seven and six
+    // characters of escape that name no file. Under `-z` there is nothing to unescape, so a
+    // consumer that stats or stages the path finds it.
+    const status = porcelainZ('?? café.ts', '?? a\tb.ts', '?? "quoted".ts')
+    expect(changedPathsFromPorcelain(status)).toEqual(['café.ts', 'a\tb.ts', '"quoted".ts'])
+  })
+
+  it('does not mistake a rename ORIGINAL for a changed path', () => {
+    // The original is a bare path, not an entry: read as one, its first three characters would be
+    // eaten as a status and `src/old.ts` would be reported as the nonexistent `old.ts`.
+    const status = porcelainZ('R  renamed.ts', 'src/old.ts', 'A  after.ts')
+    expect(changedPathsFromPorcelain(status)).toEqual(['renamed.ts', 'after.ts'])
+  })
+
   it('returns nothing for empty output', () => {
     expect(changedPathsFromPorcelain('')).toEqual([])
-    expect(changedPathsFromPorcelain('\n  \n')).toEqual([])
+    expect(changedPathsFromPorcelain('\0\0')).toEqual([])
   })
 })
 
@@ -672,13 +693,19 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     isError,
   })
 
+  // Every bound answers with a VERDICT now, because the no-edit one is provisional: it names the
+  // suspicion and leaves the decision to a workspace probe. These cases exercise the stream logic
+  // alone, so they read the diagnostic off whichever verdict came back; the provisional/settled
+  // distinction has its own describe below.
+  const reasonOf = (verdict: ProgressVerdict | null): string | null => verdict?.reason ?? null
+
   it('aborts a run that makes many tool calls without ever editing a file', () => {
     const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 5, maxConsecutiveErrors: 99 }
     const guard = new ProgressGuard(limits)
     let reason: string | null = null
-    for (let i = 0; i < 5; i++) reason = guard.observe(toolCall('bash'))
+    for (let i = 0; i < 5; i++) reason = reasonOf(guard.observe(toolCall('bash')))
     expect(reason).toMatch(/no progress/i)
-    expect(reason).toMatch(/not one file edit/i)
+    expect(reason).toMatch(/no recognised file edit/i)
   })
 
   it('does not abort when the agent edits files (resets the no-edit risk)', () => {
@@ -686,7 +713,7 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     const guard = new ProgressGuard(limits)
     const seq = ['bash', 'read', 'edit', 'bash', 'read', 'bash', 'write', 'bash']
     let reason: string | null = null
-    for (const t of seq) reason = guard.observe(toolCall(t))
+    for (const t of seq) reason = reasonOf(guard.observe(toolCall(t)))
     expect(reason).toBeNull()
   })
 
@@ -697,7 +724,7 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     // no-edit bound never trips even past its threshold.
     const seq = ['bash', 'read', 'Apply_Patch', 'bash', 'read', 'bash']
     let reason: string | null = null
-    for (const t of seq) reason = guard.observe(toolCall(t))
+    for (const t of seq) reason = reasonOf(guard.observe(toolCall(t)))
     expect(reason).toBeNull()
   })
 
@@ -707,10 +734,10 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     let reason: string | null = null
     // Ten todo updates are pure planning, not edits or probing — they must not trip
     // the no-edit guard even well past its threshold.
-    for (let i = 0; i < 10; i++) reason = guard.observe(toolCall('todo'))
+    for (let i = 0; i < 10; i++) reason = reasonOf(guard.observe(toolCall('todo')))
     expect(reason).toBeNull()
     // But real (non-planning) tool calls past the threshold still trip it.
-    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('bash'))
+    for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall('bash')))
     expect(reason).toMatch(/no progress/i)
   })
 
@@ -722,11 +749,11 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     // the environment-probing the no-edit bound targets — it must not trip even far
     // past the threshold.
     for (const t of ['read', 'grep', 'glob', 'ls', 'search', 'find', 'view']) {
-      for (let i = 0; i < 3; i++) reason = guard.observe(toolCall(t))
+      for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall(t)))
     }
     expect(reason).toBeNull()
     // But "action" calls (bash) without an edit past the threshold still trip it.
-    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('bash'))
+    for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall('bash')))
     expect(reason).toMatch(/no progress/i)
   })
 
@@ -737,11 +764,11 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     // rpiv-web-tools research calls are read-only, like read/grep — they must not
     // trip the no-edit guard even far past its threshold.
     for (const t of ['web_search', 'web_fetch']) {
-      for (let i = 0; i < 5; i++) reason = guard.observe(toolCall(t))
+      for (let i = 0; i < 5; i++) reason = reasonOf(guard.observe(toolCall(t)))
     }
     expect(reason).toBeNull()
     // But "action" calls (bash) without an edit past the threshold still trip it.
-    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('bash'))
+    for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall('bash')))
     expect(reason).toMatch(/no progress/i)
   })
 
@@ -755,14 +782,14 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     }
     const guard = new ProgressGuard(limits)
     let reason: string | null = null
-    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('web_search'))
+    for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall('web_search')))
     expect(reason).toBeNull()
     // A non-web call resets the streak, so we don't trip on the next web call.
     guard.observe(toolCall('read'))
-    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('web_fetch'))
+    for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall('web_fetch')))
     expect(reason).toBeNull()
     // The 4th consecutive web call now trips the cap.
-    reason = guard.observe(toolCall('web_search'))
+    reason = reasonOf(guard.observe(toolCall('web_search')))
     expect(reason).toMatch(/researching/i)
   })
 
@@ -775,11 +802,11 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     const guard = new ProgressGuard(limits)
     let reason: string | null = null
     for (const t of ['mcp__issues__search_issues', 'mcp__docs__lookup', 'MCP__Issues__Get']) {
-      for (let i = 0; i < 3; i++) reason = guard.observe(toolCall(t))
+      for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall(t)))
     }
     expect(reason).toBeNull()
     // But "action" calls (bash) without an edit past the threshold still trip it.
-    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('bash'))
+    for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall('bash')))
     expect(reason).toMatch(/no progress/i)
   })
 
@@ -790,8 +817,8 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     const guard = new ProgressGuard(limits)
     let reason: string | null = null
     const seq = ['mcp__issues__search', 'bash', 'mcp__issues__get', 'bash', 'bash']
-    for (const t of seq) reason = guard.observe(toolCall(t))
-    expect(reason).toMatch(/not one file edit/i)
+    for (const t of seq) reason = reasonOf(guard.observe(toolCall(t)))
+    expect(reason).toMatch(/no recognised file edit/i)
   })
 
   it('trips on an uninterrupted run of tool-server calls (lookup rabbit-hole)', () => {
@@ -804,13 +831,13 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     }
     const guard = new ProgressGuard(limits)
     let reason: string | null = null
-    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('mcp__issues__search'))
+    for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall('mcp__issues__search')))
     expect(reason).toBeNull()
     // A non-MCP call resets the streak.
     guard.observe(toolCall('read'))
-    for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('mcp__docs__lookup'))
+    for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall('mcp__docs__lookup')))
     expect(reason).toBeNull()
-    reason = guard.observe(toolCall('mcp__issues__search'))
+    reason = reasonOf(guard.observe(toolCall('mcp__issues__search')))
     expect(reason).toMatch(/tool-server/i)
   })
 
@@ -828,7 +855,7 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     const guard = new ProgressGuard(limits)
     let reason: string | null = null
     for (let i = 0; i < 6; i++) {
-      reason = guard.observe(toolCall(i % 2 === 0 ? 'web_search' : 'mcp__issues__search'))
+      reason = reasonOf(guard.observe(toolCall(i % 2 === 0 ? 'web_search' : 'mcp__issues__search')))
     }
     expect(reason).toBeNull()
   })
@@ -848,10 +875,10 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     const guard = new ProgressGuard(limits)
     let reason: string | null = null
     for (let i = 0; i < 5; i++) {
-      reason = guard.observe(toolCall(i % 2 === 0 ? 'web_search' : 'mcp__issues__search'))
+      reason = reasonOf(guard.observe(toolCall(i % 2 === 0 ? 'web_search' : 'mcp__issues__search')))
     }
     expect(reason).toBeNull()
-    reason = guard.observe(toolCall('read'))
+    reason = reasonOf(guard.observe(toolCall('read')))
     expect(reason).toMatch(/consecutive read-only calls/i)
   })
 
@@ -866,8 +893,8 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     const guard = new ProgressGuard(limits)
     let reason: string | null = null
     for (let round = 0; round < 5; round++) {
-      for (let i = 0; i < 3; i++) reason = guard.observe(toolCall('read'))
-      reason = guard.observe(toolCall('bash'))
+      for (let i = 0; i < 3; i++) reason = reasonOf(guard.observe(toolCall('read')))
+      reason = reasonOf(guard.observe(toolCall('bash')))
     }
     expect(reason).toBeNull()
   })
@@ -876,7 +903,7 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     const limits: ProgressGuardLimits = { maxToolCallsWithoutEdit: 3, maxConsecutiveErrors: 99 }
     const guard = new ProgressGuard(limits, false)
     let reason: string | null = null
-    for (let i = 0; i < 10; i++) reason = guard.observe(toolCall('bash'))
+    for (let i = 0; i < 10; i++) reason = reasonOf(guard.observe(toolCall('bash')))
     expect(reason).toBeNull()
   })
 
@@ -887,7 +914,9 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     expect(guard.observe(toolCall('bash', false))).toBeNull() // resets the streak
     expect(guard.observe(toolCall('bash', true))).toBeNull()
     expect(guard.observe(toolCall('bash', true))).toBeNull()
-    expect(guard.observe(toolCall('bash', true))).toMatch(/consecutive failing tool calls/i)
+    expect(reasonOf(guard.observe(toolCall('bash', true)))).toMatch(
+      /consecutive failing tool calls/i,
+    )
   })
 
   it('ignores non-tool events', () => {
@@ -905,17 +934,18 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     const exempt = new ProgressGuard(limits)
     let reason: string | null = null
     for (const name of ['Read', 'Grep', 'Glob', 'TodoWrite', 'WebSearch', 'WebFetch']) {
-      for (let i = 0; i < 3; i++) reason = exempt.observeSignal({ name, isError: false })
+      for (let i = 0; i < 3; i++) reason = reasonOf(exempt.observeSignal({ name, isError: false }))
     }
     expect(reason).toBeNull()
     // Bash (an action) without an edit past the threshold still trips the no-edit bound.
-    for (let i = 0; i < 3; i++) reason = exempt.observeSignal({ name: 'Bash', isError: false })
+    for (let i = 0; i < 3; i++)
+      reason = reasonOf(exempt.observeSignal({ name: 'Bash', isError: false }))
     expect(reason).toMatch(/no progress/i)
 
     // A NotebookEdit counts as a file edit, so the no-edit bound never trips.
     const edits = new ProgressGuard(limits)
     for (const name of ['Bash', 'Read', 'NotebookEdit', 'Bash', 'Bash', 'Bash', 'Bash']) {
-      reason = edits.observeSignal({ name, isError: false })
+      reason = reasonOf(edits.observeSignal({ name, isError: false }))
     }
     expect(reason).toBeNull()
   })
@@ -930,7 +960,7 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     for (const name of ['Agent', 'Task']) {
       const guard = new ProgressGuard(limits)
       let reason: string | null = null
-      for (let i = 0; i < 10; i++) reason = guard.observeSignal({ name, isError: false })
+      for (let i = 0; i < 10; i++) reason = reasonOf(guard.observeSignal({ name, isError: false }))
       expect(reason, `${name} dispatches must not trip the no-edit bound`).toBeNull()
     }
 
@@ -940,7 +970,7 @@ describe('ProgressGuard (anti-rabbithole)', () => {
     const guard = new ProgressGuard(limits)
     let reason: string | null = null
     for (const name of ['Agent', 'Bash', 'Bash', 'Bash']) {
-      reason = guard.observeSignal({ name, isError: false })
+      reason = reasonOf(guard.observeSignal({ name, isError: false }))
     }
     expect(reason).toMatch(/no progress/i)
   })
