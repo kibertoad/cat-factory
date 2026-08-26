@@ -1,5 +1,14 @@
 # @cat-factory/conformance
 
+## 0.47.9
+
+### Patch Changes
+
+- Updated dependencies [82a3b94]
+  - @cat-factory/agents@0.145.0
+  - @cat-factory/orchestration@0.288.3
+  - @cat-factory/server@0.306.7
+
 ## 0.47.8
 
 ### Patch Changes
