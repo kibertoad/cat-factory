@@ -70,6 +70,39 @@ export const MODEL_CATALOG: SelectableModel[] = [
     },
   },
   {
+    id: 'qwen3.8-max',
+    family: 'qwen',
+    label: 'Qwen3.8 Max',
+    description:
+      "Alibaba's flagship Qwen3.8 model: a 2.4T-param multimodal MoE with a 1M context, " +
+      'direct via a DashScope key or pay-as-you-go through OpenRouter. Not served on Workers AI.',
+    // Qwen3.8 Max reached general availability on 2026-08-03, on DashScope and OpenRouter
+    // alike. Workers AI carries the open-weights sibling (Qwen3.8-27B, 262K) rather than Max,
+    // and folding this entry onto it would run a different model than the picker names, so no
+    // Cloudflare flavour is declared: the entry stays unavailable until one of its two keys is
+    // pooled, which is the same shape `kimi-k3` takes.
+    direct: {
+      ref: {
+        provider: 'qwen',
+        model: 'qwen3.8-max',
+        contextTokens: 1_000_000,
+        acceptsImages: true,
+      },
+      keyEnv: 'QWEN_API_KEY',
+      providerLabel: 'DashScope',
+    },
+    openrouter: {
+      ref: {
+        provider: 'openrouter',
+        model: 'qwen/qwen3.8-max',
+        contextTokens: 1_000_000,
+        acceptsImages: true,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+  },
+  {
     id: 'gpt-oss-120b',
     family: 'openai',
     label: 'GPT-OSS 120B',
