@@ -292,6 +292,83 @@ export async function checkoutHasBlueprints(dir: string, multiRepo: boolean): Pr
 }
 
 /**
+ * Run one pass on a SUBSCRIPTION harness (Claude Code / Codex): the leased-credential path, which
+ * shares only the checkout preparation with the Pi one.
+ *
+ * Split out of {@link runAgentInWorkspace} for its cyclomatic budget. It is also the honest seam:
+ * everything here is a decision about what the vendor's own CLI is handed, while everything left
+ * behind is about the proxy-backed Pi run.
+ */
+async function runSubscriptionInWorkspace(
+  harness: 'claude-code' | 'codex',
+  spec: AgentRunSpec,
+  opts: RunOptions,
+  prepared: { contextFiles: ContextFileInfo[]; imageGuidance: string },
+): Promise<PiRunOutcome> {
+  const { contextFiles, imageGuidance } = prepared
+  // Ambient (native) mode authenticates with the developer's own CLI login, so no
+  // leased token is required; otherwise the leased subscription token is mandatory.
+  if (!spec.ambientAuth && !spec.subscriptionToken) {
+    throw new Error(`The ${harness} harness requires a subscription token`)
+  }
+  const subOutcome = await runSubscriptionHarness(harness, {
+    cwd: spec.dir,
+    model: spec.model,
+    systemPrompt: `${subscriptionSystemPrompt(spec.systemPrompt, contextFiles)}${imageGuidance}`,
+    userPrompt: spec.userPrompt,
+    ...(spec.subscriptionToken ? { subscriptionToken: spec.subscriptionToken } : {}),
+    subscriptionBaseUrl: spec.subscriptionBaseUrl,
+    ...(spec.ambientAuth ? { ambientAuth: true } : {}),
+    ...(spec.skills?.length ? { skills: spec.skills } : {}),
+    ...(spec.mcpServers?.length ? { mcpServers: spec.mcpServers } : {}),
+    // Codex's own image tool. Passed for both subscription harnesses because the option lives on
+    // the shared run options; `runClaudeCode` ignores it, since claude-code has no such tool and
+    // (unlike an MCP server) there is nothing to report as unservable — the backend never
+    // resolves a codex-served generator onto a claude-code step, because admission refuses it.
+    ...(spec.generateImages ? { generateImages: true } : {}),
+    // Whether the deployment serves web research at all. It reaches the claude-code CLI as a
+    // `--tools` declaration rather than as provider config (the CLI's web tools are served by
+    // the vendor the leased subscription already pays, not by our proxy), but the DECISION is
+    // the same one `webSearchProxy` carries for Pi: the backend states what it serves and
+    // the harness points. Codex ignores it: its tool surface is per-tool config, not a list.
+    ...(spec.webSearchProxy ? { webSearch: true } : {}),
+    ...(opts.agentEnv ? { extraEnv: opts.agentEnv } : {}),
+    signal: opts.signal,
+    // Run the SAME no-progress guard Pi gets (previously claude-code/codex had none): env
+    // defaults merged loosen-only with the kind's tuning + the backend's complexity-scaled
+    // no-edit allowance, so a claude-code run that stops making progress is killed early
+    // instead of burning the full wall-clock budget. The claude runner consumes it; codex
+    // ignores it for now (its stream isn't wired to the guard).
+    guardLimits: mergeGuardLimits(progressGuardLimitsFromEnv(), spec.guardLimits),
+    expectsEdits: spec.expectsEdits ?? true,
+    onActivity: opts.onActivity,
+    onProgress: opts.onProgress,
+    // The run's tool-call trajectory, the same hook the Pi path feeds — so a subscription run
+    // and a proxied one produce the same evidence rather than one of them producing none.
+    onSpan: opts.onSpan,
+    // The tool-silence window (stuck-run audit F13), opened by whichever CLI actually runs.
+    // Wired for BOTH subscription harnesses: each reports tool activity on its own stream, so
+    // each can beat the window it opens.
+    beginToolWindow: opts.beginToolWindow,
+    // Per-slice review capture, so a parallel review's finished slices are persisted as they
+    // land rather than only in the terminal output. Only the subscription runners fan work out
+    // across subagents, so this is the only path that can produce it.
+    onSliceReviews: opts.onSliceReviews,
+    // What the CLI reported about the tool servers it loaded. Wired for BOTH subscription
+    // harnesses even though only claude-code's stream carries the report today: the hook is a
+    // pass-through, and a codex run that never calls it leaves the backend's record honestly
+    // absent rather than claiming every server it wired failed to start.
+    onToolServers: opts.onToolServers,
+    // Stream this run's per-call telemetry to the job's live drain. The subscription
+    // harnesses are the only producers of `callMetrics` (Pi's calls are metered by the LLM
+    // proxy as they happen), so this is the only path that needs the hook.
+    onCallMetric: opts.onCallMetric,
+    ...(opts.log ? { log: opts.log } : {}),
+  })
+  return withEffortReport(spec.dir, subOutcome)
+}
+
+/**
  * Write Pi's global agent context (`~/.pi/agent/AGENTS.md`) + provider config,
  * then run Pi once in `spec.dir` and return its summary/stats/stderr. The context
  * lives outside the checkout so it never lands in a commit; the shared middle of
@@ -331,65 +408,14 @@ export async function runAgentInWorkspace(
     await materializeSkillResources(spec.dir, spec.skills)
   }
 
-  // Subscription harnesses (Claude Code / Codex) authenticate with the leased
-  // token and talk direct to the vendor — no proxy config, no AGENTS.md. The
-  // system prompt is passed straight to the CLI; everything around this (clone,
-  // push, watchdogs) is unchanged.
+  // Subscription harnesses (Claude Code / Codex) authenticate with the leased token and talk
+  // direct to the vendor: no proxy config, no AGENTS.md. The system prompt is passed straight to
+  // the CLI; everything around this (clone, push, watchdogs) is unchanged.
   if (spec.harness === 'claude-code' || spec.harness === 'codex') {
-    // Ambient (native) mode authenticates with the developer's own CLI login, so no
-    // leased token is required; otherwise the leased subscription token is mandatory.
-    if (!spec.ambientAuth && !spec.subscriptionToken) {
-      throw new Error(`The ${spec.harness} harness requires a subscription token`)
-    }
-    const subOutcome = await runSubscriptionHarness(spec.harness, {
-      cwd: spec.dir,
-      model: spec.model,
-      systemPrompt: `${subscriptionSystemPrompt(spec.systemPrompt, contextFiles)}${imageGuidance}`,
-      userPrompt: spec.userPrompt,
-      ...(spec.subscriptionToken ? { subscriptionToken: spec.subscriptionToken } : {}),
-      subscriptionBaseUrl: spec.subscriptionBaseUrl,
-      ...(spec.ambientAuth ? { ambientAuth: true } : {}),
-      ...(spec.skills?.length ? { skills: spec.skills } : {}),
-      ...(spec.mcpServers?.length ? { mcpServers: spec.mcpServers } : {}),
-      // Codex's own image tool. Passed for both subscription harnesses because the option lives on
-      // the shared run options; `runClaudeCode` ignores it, since claude-code has no such tool and
-      // (unlike an MCP server) there is nothing to report as unservable — the backend never
-      // resolves a codex-served generator onto a claude-code step, because admission refuses it.
-      ...(spec.generateImages ? { generateImages: true } : {}),
-      ...(opts.agentEnv ? { extraEnv: opts.agentEnv } : {}),
-      signal: opts.signal,
-      // Run the SAME no-progress guard Pi gets (previously claude-code/codex had none): env
-      // defaults merged loosen-only with the kind's tuning + the backend's complexity-scaled
-      // no-edit allowance, so a claude-code run that stops making progress is killed early
-      // instead of burning the full wall-clock budget. The claude runner consumes it; codex
-      // ignores it for now (its stream isn't wired to the guard).
-      guardLimits: mergeGuardLimits(progressGuardLimitsFromEnv(), spec.guardLimits),
-      expectsEdits: spec.expectsEdits ?? true,
-      onActivity: opts.onActivity,
-      onProgress: opts.onProgress,
-      // The run's tool-call trajectory, the same hook the Pi path feeds — so a subscription run
-      // and a proxied one produce the same evidence rather than one of them producing none.
-      onSpan: opts.onSpan,
-      // The tool-silence window (stuck-run audit F13), opened by whichever CLI actually runs.
-      // Wired for BOTH subscription harnesses: each reports tool activity on its own stream, so
-      // each can beat the window it opens.
-      beginToolWindow: opts.beginToolWindow,
-      // Per-slice review capture, so a parallel review's finished slices are persisted as they
-      // land rather than only in the terminal output. Only the subscription runners fan work out
-      // across subagents, so this is the only path that can produce it.
-      onSliceReviews: opts.onSliceReviews,
-      // What the CLI reported about the tool servers it loaded. Wired for BOTH subscription
-      // harnesses even though only claude-code's stream carries the report today: the hook is a
-      // pass-through, and a codex run that never calls it leaves the backend's record honestly
-      // absent rather than claiming every server it wired failed to start.
-      onToolServers: opts.onToolServers,
-      // Stream this run's per-call telemetry to the job's live drain. The subscription
-      // harnesses are the only producers of `callMetrics` (Pi's calls are metered by the LLM
-      // proxy as they happen), so this is the only path that needs the hook.
-      onCallMetric: opts.onCallMetric,
-      ...(opts.log ? { log: opts.log } : {}),
+    return await runSubscriptionInWorkspace(spec.harness, spec, opts, {
+      contextFiles,
+      imageGuidance,
     })
-    return withEffortReport(spec.dir, subOutcome)
   }
   if (!spec.proxyBaseUrl || !spec.sessionToken) {
     throw new Error('The Pi harness requires proxyBaseUrl and sessionToken')

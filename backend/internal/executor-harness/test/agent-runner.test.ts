@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { carryClaudeSystemPrompt, runClaudeCode, runCodex } from '../src/agent-runner.js'
+import { claudeRequestedTools } from '../src/claude-cli.js'
 import type { HarnessCallMetric } from '../src/pi.js'
 
 // These drive the REAL `runClaudeCode` / `runCodex` against a FAKE `claude` / `codex`
@@ -145,6 +146,34 @@ describe.skipIf(!unix)('runClaudeCode system-prompt carriage', () => {
     const stdin = readFileSync(join(cwd, 'stdin.txt'), 'utf8')
     expect(stdin.startsWith(big)).toBe(true)
     expect(stdin).toContain('TASK')
+  })
+})
+
+describe.skipIf(!unix)('runClaudeCode declared tool surface', () => {
+  const runWith = async (webSearch: boolean): Promise<string[]> => {
+    recordingCli('claude')
+    const outcome = await runClaudeCode({
+      cwd,
+      model: 'claude-opus-4-8',
+      systemPrompt: 'ROLE',
+      userPrompt: 'TASK',
+      ambientAuth: true,
+      ...(webSearch ? { webSearch: true } : {}),
+    })
+    expect(outcome.summary).toBe('ok')
+    return JSON.parse(readFileSync(join(cwd, 'argv.json'), 'utf8')) as string[]
+  }
+
+  it('hands the CLI the run’s declared set instead of taking its headless default', async () => {
+    const argv = await runWith(true)
+    expect(argv[argv.indexOf('--tools') + 1]).toBe(claudeRequestedTools(true).join(','))
+  })
+
+  it('withholds the web tools when the deployment serves no web research', async () => {
+    const argv = await runWith(false)
+    const declared = argv[argv.indexOf('--tools') + 1]!.split(',')
+    expect(declared).not.toContain('WebSearch')
+    expect(declared).toContain('Grep')
   })
 })
 
