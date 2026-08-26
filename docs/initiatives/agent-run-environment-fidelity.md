@@ -45,11 +45,13 @@ dispatch. The proxy did not break; the model's habits moved.
 | #   | Slice                                                       | Issue                                                         | PR                                                          | Image tag |
 | --- | ----------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------- | --------- |
 | 1   | Evidence-based progress bound + salvage of uncommitted work | [#2096](https://github.com/kibertoad/cat-factory/issues/2096) | [#2101](https://github.com/kibertoad/cat-factory/pull/2101) | `1.133.0` |
-| 2   | Tool surface (`--tools`)                                    | [#2097](https://github.com/kibertoad/cat-factory/issues/2097) |                                                             |           |
-| 3   | Runner image (docker daemon, `NODE_ENV`, missing binaries)  | [#2098](https://github.com/kibertoad/cat-factory/issues/2098) |                                                             |           |
+| 2   | Tool surface (`--tools`)                                    | [#2097](https://github.com/kibertoad/cat-factory/issues/2097) | [#2103](https://github.com/kibertoad/cat-factory/pull/2103) | `1.135.0` |
+| 3   | Runner image (docker daemon, `NODE_ENV`, missing binaries)  | [#2098](https://github.com/kibertoad/cat-factory/issues/2098) | [#2102](https://github.com/kibertoad/cat-factory/pull/2102) | `1.134.0` |
 | 4   | Sandbox inventory and prompt fixes                          | [#2099](https://github.com/kibertoad/cat-factory/issues/2099) | [#2104](https://github.com/kibertoad/cat-factory/pull/2104) | `1.136.0` |
 
-Landing order is the table order: slice 1 first because it is the one losing work.
+Slice 1 landed first because it is the one losing work. The rest went 3, 2, 4: the
+runner image jumped ahead of the tool surface because the sandbox inventory in slice 4
+has nothing to report until the binaries it probes for are actually in the image.
 
 ## Decisions
 
