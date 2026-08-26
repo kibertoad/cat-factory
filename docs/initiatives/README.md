@@ -42,6 +42,7 @@ a tracker document](../../CLAUDE.md).
 ### Agents, pipelines and task types
 
 - [Agent dependency prepopulation](./agent-dependency-prepopulation.md)
+- [Agent-run environment fidelity](./agent-run-environment-fidelity.md)
 - [Auto-generated condensed briefs for best-practice standards](./auto-generated-fragment-briefs.md)
 - [Binary outputs stored through foundational services](./binary-output-foundational-storage.md)
 - [Bug-triage pipeline](./bug-triage-pipeline.md)

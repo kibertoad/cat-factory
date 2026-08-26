@@ -26,6 +26,8 @@ import {
   mergeGuardLimits,
   progressGuardLimitsFromEnv,
 } from './progress-guard.js'
+import { createWorkspaceProbe, type WorkspaceProbe } from './workspace-probe.js'
+import { headCommit } from './git.js'
 import type { RunOptions } from './runner.js'
 import { type SubscriptionHarness, runSubscriptionHarness } from './agent-runner.js'
 
@@ -331,6 +333,20 @@ export async function runAgentInWorkspace(
     await materializeSkillResources(spec.dir, spec.skills)
   }
 
+  // The no-progress guard's no-edit bound asks "has this run changed the repository", and the
+  // tool names it can see are only a proxy for that: an agent writing every file through `bash`
+  // reads as making no edits at all, and the guard killed exactly such a run after it had built,
+  // tested and verified a whole service. The working tree is the honest answer, so wire the probe
+  // that reads it. Built HERE because this is the shared middle of both harness paths and the one
+  // place that knows the checkout: the guard itself stays pure and takes it injected.
+  //
+  // The baseline is HEAD as this PASS begins, not the clone's — a repair round is a fresh agent
+  // that must show its OWN progress, and judging it against the clone would let the previous
+  // round's commits satisfy its bound. A checkout with no commit yet (a scaffold-from-scratch
+  // bootstrap) has no HEAD to read; the probe then rides on the dirty-tree half alone, which is
+  // the half that matters there anyway.
+  const workspaceProbe = await buildWorkspaceProbe(spec.dir, opts.signal)
+
   // Subscription harnesses (Claude Code / Codex) authenticate with the leased
   // token and talk direct to the vendor — no proxy config, no AGENTS.md. The
   // system prompt is passed straight to the CLI; everything around this (clone,
@@ -365,6 +381,8 @@ export async function runAgentInWorkspace(
       // ignores it for now (its stream isn't wired to the guard).
       guardLimits: mergeGuardLimits(progressGuardLimitsFromEnv(), spec.guardLimits),
       expectsEdits: spec.expectsEdits ?? true,
+      // What the guard's no-edit bound actually decides on (see `buildWorkspaceProbe`).
+      workspaceProbe,
       onActivity: opts.onActivity,
       onProgress: opts.onProgress,
       // The run's tool-call trajectory, the same hook the Pi path feeds — so a subscription run
@@ -446,9 +464,32 @@ export async function runAgentInWorkspace(
     // Start from the env/built-in defaults and apply only the per-knob overrides the
     // backend set for this kind (loosen-only), so an unspecified knob keeps its default.
     guardLimits: mergeGuardLimits(progressGuardLimitsFromEnv(), spec.guardLimits),
+    // What the guard's no-edit bound actually decides on (see `buildWorkspaceProbe`).
+    workspaceProbe,
     extraEnv,
   })
   return withEffortReport(spec.dir, piOutcome)
+}
+
+/**
+ * The workspace probe for one agent pass: the working tree at `dir`, baselined against HEAD as
+ * this pass begins.
+ *
+ * Reading HEAD is the one part that can fail benignly: a scaffold-from-scratch checkout has no
+ * commit yet, so `rev-parse HEAD` errors. That is no reason to leave the bound blind, since the
+ * dirty-tree half is exactly what answers a from-scratch build — so the pass baselines against
+ * the empty sha, and any commit the agent makes reads as HEAD having moved off it.
+ *
+ * A directory that is no git repository at all makes every probe THROW, which the driver treats
+ * as inconclusive: the bound re-arms and the run is neither killed nor left to the streak bounds
+ * alone. Deliberate, and the same disposition a transient git failure gets.
+ */
+async function buildWorkspaceProbe(
+  dir: string,
+  signal: AbortSignal | undefined,
+): Promise<WorkspaceProbe> {
+  const baseSha = await headCommit(dir, signal).catch(() => '')
+  return createWorkspaceProbe({ dir, baseSha, ...(signal ? { signal } : {}) })
 }
 
 /**

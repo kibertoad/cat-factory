@@ -615,6 +615,46 @@ export async function listUntrackedFiles(dir: string, signal?: AbortSignal): Pro
 }
 
 /**
+ * The raw `git status --porcelain --untracked-files=all` output for `dir` — every path git
+ * considers changed, with untracked files enumerated INDIVIDUALLY rather than collapsed to their
+ * directory.
+ *
+ * The raw string, not a parsed list, because its two consumers want different things from it and
+ * the parse ({@link changedPathsFromPorcelain}) is pure and shared: the workspace probe wants "is
+ * anything here at all", the salvage wants the paths themselves. Gitignored paths are absent by
+ * construction, which is what keeps a dependency install from reading as agent progress.
+ *
+ * NOTHING IS STAGED, unlike {@link hasAgentChanges}: this runs mid-flight, while the agent is
+ * still working, so a `git add -A` here would silently stage files the agent had not chosen and
+ * change what a later `commitTrackedEdits` captures.
+ */
+export async function workingTreeStatus(dir: string, signal?: AbortSignal): Promise<string> {
+  return git(['status', '--porcelain', '--untracked-files=all'], { cwd: dir, signal })
+}
+
+/**
+ * Stage exactly `paths` and commit them with `message`, returning the new commit's sha (or null
+ * when git found nothing to commit — a path that vanished between listing and staging).
+ *
+ * `--` terminates the options so a path beginning with `-` cannot be read as a flag, and the
+ * paths are passed as separate argv entries so no shell ever sees them. The caller has already
+ * decided WHICH paths belong; this only commits them.
+ */
+export async function commitPaths(
+  dir: string,
+  paths: string[],
+  message: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  if (paths.length === 0) return null
+  await git(['add', '--', ...paths], { cwd: dir, signal })
+  const staged = await git(['diff', '--cached', '--name-only'], { cwd: dir, signal })
+  if (staged.trim() === '') return null
+  await git(['commit', '-m', message], { cwd: dir, signal })
+  return headCommit(dir, signal)
+}
+
+/**
  * The untracked, non-ignored paths in the working tree with whole untracked DIRECTORIES
  * collapsed to a single `dir/` entry (`--directory`), rather than every file beneath them.
  *

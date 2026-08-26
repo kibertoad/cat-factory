@@ -104,8 +104,14 @@ export const DEFAULT_PROGRESS_GUARD_LIMITS = {
 // broad on purpose: different models/extensions name the same capability differently
 // (`edit`/`write`, but also `apply_patch`/`patch`/`str_replace`/`multiedit`/`create`),
 // and a false "no edits" reading would kill a run that IS making changes. Matched
-// case-insensitively. NOTE: a file written purely via `bash` (e.g. a heredoc) is not
-// recognised here — broaden or move to a working-tree signal if that becomes common.
+// case-insensitively.
+//
+// A file written purely through `bash` (a heredoc, `sed -i`, `node -e`) is NOT recognised here,
+// and deliberately so: this set answers "did the model call a tool we already know edits files",
+// which is a cheap SUFFICIENT condition and never a necessary one. The necessary one is the
+// working tree itself, which is what the no-edit bound now actually decides on: see the
+// `needs-workspace-evidence` verdict and {@link ProgressGuard.noteWorkspaceMutation}. A hit here
+// still satisfies the bound outright, so the common case never pays for a probe.
 const FILE_EDIT_TOOLS = new Set([
   'edit',
   'write',
@@ -274,11 +280,32 @@ export function mergeGuardLimits(
 }
 
 /**
- * Live anti-rabbithole guard: fed each streamed Pi event, it returns a diagnostic
- * reason the moment a run has plainly stopped making progress, so the harness can
- * kill Pi early instead of letting it burn the whole budget (and then surface a
- * useful failure instead of a generic "no file changes"). Pure and incremental so
- * it can be unit-tested over a fixed event sequence.
+ * What the guard concluded from one tool-call signal.
+ *
+ * `abort` is a settled judgement the caller acts on immediately: every STREAK bound
+ * (consecutive errors / web calls / MCP calls / non-action calls) reads only the stream, so the
+ * stream is all the evidence there is.
+ *
+ * `needs-workspace-evidence` is the no-edit bound, and it is deliberately NOT settled. That bound
+ * asks "has this run changed the repository yet", and the tool names are only a proxy for it: an
+ * agent writing files through `bash` reads as forty calls and no edits however much work it did.
+ * So the guard hands the question back with the diagnostic it would abort on, and the caller
+ * answers it from the working tree (see `workspace-probe.ts`) before anything is killed.
+ */
+export type ProgressVerdict =
+  | { kind: 'abort'; reason: string }
+  | { kind: 'needs-workspace-evidence'; reason: string }
+
+/**
+ * Live anti-rabbithole guard: fed each streamed tool-call signal, it returns a {@link
+ * ProgressVerdict} the moment a run has plainly stopped making progress, so the harness can kill
+ * the CLI early instead of letting it burn the whole budget (and then surface a useful failure
+ * instead of a generic "no file changes").
+ *
+ * PURE, SYNCHRONOUS and INCREMENTAL, so it can be unit-tested over a fixed event sequence: it
+ * spawns nothing and reads nothing off disk. The one bound that needs evidence from outside the
+ * stream says so in its verdict and lets the caller fetch it, then reports the answer back
+ * through {@link noteWorkspaceMutation} / {@link rearmNoEditBound}.
  */
 export class ProgressGuard {
   private toolCalls = 0
@@ -287,6 +314,11 @@ export class ProgressGuard {
   private consecutiveWebCalls = 0
   private consecutiveMcpCalls = 0
   private consecutiveNonActionCalls = 0
+  // Set when the no-edit bound has been reported as `needs-workspace-evidence` and the caller's
+  // probe has not answered yet. It suppresses a second report: the bound is a threshold, so every
+  // action call past it would otherwise re-raise the same unanswered question and the caller would
+  // probe git once per tool call. Cleared by whichever answer comes back.
+  private awaitingWorkspaceEvidence = false
 
   constructor(
     private readonly limits: ProgressGuardLimits,
@@ -294,30 +326,61 @@ export class ProgressGuard {
     private readonly expectsEdits: boolean = true,
   ) {}
 
-  /** Feed one parsed Pi event; returns a diagnostic reason when the run should abort, else null. */
-  observe(event: Record<string, unknown>): string | null {
+  /** Feed one parsed Pi event; returns a {@link ProgressVerdict} when the run is in trouble, else null. */
+  observe(event: Record<string, unknown>): ProgressVerdict | null {
     const tool = toolCallSignal(event)
     if (!tool) return null
     return this.observeSignal(tool)
   }
 
   /**
-   * Feed one already-parsed tool-call signal (name + error flag), returning a diagnostic reason
-   * when the run should abort, else null. Split out of {@link observe} so a caller whose stream
+   * Record that the run HAS changed the repository, however it did it. Satisfies the no-edit
+   * bound permanently, exactly as a recognised edit-tool call does, matching that bound's
+   * existing semantics: it guards a run only UNTIL its first edit, because an agent that has
+   * changed the tree has demonstrably started the work.
+   *
+   * Called by the driver when a workspace probe answers a `needs-workspace-evidence` verdict
+   * positively. Idempotent, and cheap enough that a caller who probes for other reasons may also
+   * report through it.
+   */
+  noteWorkspaceMutation(): void {
+    this.edits++
+    this.awaitingWorkspaceEvidence = false
+  }
+
+  /**
+   * Re-arm the no-edit bound after a probe that could answer NEITHER way (it threw). The bound
+   * becomes trippable again once another `maxToolCallsWithoutEdit` action calls have gone by,
+   * rather than the run being killed on a git failure or left permanently unguarded by one.
+   *
+   * Failing open here is the deliberate half: killing a productive run is the expensive error,
+   * and the streak bounds, the inactivity watchdog and the job's wall-clock cap all still hold
+   * the run in the meantime.
+   */
+  rearmNoEditBound(): void {
+    this.toolCalls = 0
+    this.awaitingWorkspaceEvidence = false
+  }
+
+  /**
+   * Feed one already-parsed tool-call signal (name + error flag), returning a {@link
+   * ProgressVerdict} when a bound is reached, else null. Split out of {@link observe} so a caller whose stream
    * is NOT Pi's `tool_execution_end` envelope — the claude-code runner, which correlates a
    * `tool_use` block's name with its `tool_result`'s `is_error` — can drive the SAME guard logic
    * without synthesising a fake Pi event.
    */
-  observeSignal(tool: { name: string; isError: boolean }): string | null {
+  observeSignal(tool: { name: string; isError: boolean }): ProgressVerdict | null {
     const name = tool.name.toLowerCase()
     // The error streak tracks ANY tool call (a planning call still proves the agent
     // isn't wedged in a failing-op loop), so it's updated before the planning skip.
     this.consecutiveErrors = tool.isError ? this.consecutiveErrors + 1 : 0
     if (this.consecutiveErrors >= this.limits.maxConsecutiveErrors) {
-      return (
-        `no progress: ${this.consecutiveErrors} consecutive failing tool calls — the agent is stuck ` +
-        `retrying a failing operation rather than making progress. Aborting.`
-      )
+      return {
+        kind: 'abort',
+        reason:
+          `no progress: ${this.consecutiveErrors} consecutive failing tool calls — the agent is stuck ` +
+          `retrying a failing operation rather than making progress. Aborting.`,
+      }
     }
 
     // Web search/fetch loop: web tools are read-only (they don't count toward the
@@ -328,10 +391,12 @@ export class ProgressGuard {
       const webCap =
         this.limits.maxConsecutiveWebCalls ?? DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveWebCalls
       if (this.consecutiveWebCalls >= webCap) {
-        return (
-          `no progress: ${this.consecutiveWebCalls} consecutive web search/fetch calls without ` +
-          `any other action — the agent is stuck researching instead of doing the work. Aborting.`
-        )
+        return {
+          kind: 'abort',
+          reason:
+            `no progress: ${this.consecutiveWebCalls} consecutive web search/fetch calls without ` +
+            `any other action — the agent is stuck researching instead of doing the work. Aborting.`,
+        }
       }
     } else {
       this.consecutiveWebCalls = 0
@@ -345,11 +410,13 @@ export class ProgressGuard {
       const mcpCap =
         this.limits.maxConsecutiveMcpCalls ?? DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveMcpCalls
       if (this.consecutiveMcpCalls >= mcpCap) {
-        return (
-          `no progress: ${this.consecutiveMcpCalls} consecutive tool-server (MCP) calls without ` +
-          `any other action. The agent is stuck querying its tools instead of doing the work. ` +
-          `Aborting.`
-        )
+        return {
+          kind: 'abort',
+          reason:
+            `no progress: ${this.consecutiveMcpCalls} consecutive tool-server (MCP) calls without ` +
+            `any other action. The agent is stuck querying its tools instead of doing the work. ` +
+            `Aborting.`,
+        }
       }
     } else {
       this.consecutiveMcpCalls = 0
@@ -377,11 +444,13 @@ export class ProgressGuard {
         this.limits.maxConsecutiveNonActionCalls ??
         DEFAULT_PROGRESS_GUARD_LIMITS.maxConsecutiveNonActionCalls
       if (this.consecutiveNonActionCalls >= nonActionCap) {
-        return (
-          `no progress: ${this.consecutiveNonActionCalls} consecutive read-only calls (searching, ` +
-          `reading, tool-server lookups, subagent dispatches) with no action call between them. ` +
-          `The agent is cycling through research instead of doing the work. Aborting.`
-        )
+        return {
+          kind: 'abort',
+          reason:
+            `no progress: ${this.consecutiveNonActionCalls} consecutive read-only calls (searching, ` +
+            `reading, tool-server lookups, subagent dispatches) with no action call between them. ` +
+            `The agent is cycling through research instead of doing the work. Aborting.`,
+        }
       }
       return null
     }
@@ -389,15 +458,22 @@ export class ProgressGuard {
     this.toolCalls++
     if (FILE_EDIT_TOOLS.has(name)) this.edits++
 
+    // PROVISIONAL, not settled: the tool names say no recognised edit tool was called, which is
+    // not the same fact as "the repository is unchanged". The caller answers that from the
+    // working tree and reports back; until it does, the question is not re-raised.
     if (
       this.expectsEdits &&
       this.edits === 0 &&
+      !this.awaitingWorkspaceEvidence &&
       this.toolCalls >= this.limits.maxToolCallsWithoutEdit
     ) {
-      return (
-        `no progress: ${this.toolCalls} tool calls and not one file edit — the agent is exploring or ` +
-        `probing the environment without implementing anything. Aborting before it burns the whole run.`
-      )
+      this.awaitingWorkspaceEvidence = true
+      return {
+        kind: 'needs-workspace-evidence',
+        reason:
+          `no progress: ${this.toolCalls} tool calls and no recognised file edit — the agent may be ` +
+          `exploring or probing the environment without implementing anything.`,
+      }
     }
     return null
   }

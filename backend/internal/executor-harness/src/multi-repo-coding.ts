@@ -12,11 +12,11 @@ import {
   excludeFromGit,
   fetchReferenceBranches,
   headCommit,
-  listUntrackedFiles,
   pushBranch,
   refreshFromBaseIfClean,
   remoteBranchExists,
 } from './git.js'
+import { salvageUntrackedWork } from './salvage.js'
 import { openPullRequest } from './vcs-api.js'
 import { applyPrDescription, PR_DESCRIPTION_FILE, readPrDescription } from './pr-description.js'
 import { runAgentInWorkspace, withWorkspace } from './pi-workspace.js'
@@ -430,18 +430,28 @@ async function pushMultiRepoLegs(
       (await readPrDescription(leg.dir, readOptions)) ??
       (leg.primary ? await readPrDescription(root, readOptions) : undefined)
     await commitTrackedEdits(leg.dir, job.commitMessage ?? leg.pr?.title ?? 'Agent changes', signal)
+    // Recover this leg's new files, exactly as the single-repo settle path does and for the same
+    // reason: `commitTrackedEdits` captures edits to files git ALREADY tracks, so a new file the
+    // agent created and never added used to be listed, warned about and dropped. Runs BEFORE the
+    // advanced/no-op judgement below, so a leg whose only work is those files is pushed rather
+    // than read as untouched.
+    const salvage = await salvageUntrackedWork({
+      dir: leg.dir,
+      occasion: { kind: 'settled' },
+      logger: logger.child({ repo: leg.dirName }),
+      ...(signal ? { signal } : {}),
+    })
     const advanced = await branchHasCommitsSince(leg.dir, leg.baseSha, signal)
     let hasWork = advanced || leg.resumed
     if (leg.resumed && !advanced) {
       const ahead = await branchAheadOfBase(leg.dir, leg.repo.baseBranch, leg.ghToken, signal)
       if (ahead === false) hasWork = false
     }
-    const leftover = await listUntrackedFiles(leg.dir, signal)
-    if (leftover.length > 0) {
-      logger.warn('multi-repo: uncommitted new files left behind (not pushed)', {
+    if (salvage.status === 'refused' || salvage.status === 'failed') {
+      logger.warn('multi-repo: new files were left behind and are NOT in the push', {
         repo: leg.dirName,
-        count: leftover.length,
-        files: leftover.slice(0, 20),
+        count: salvage.fileCount,
+        reason: salvage.reason,
       })
     }
     if (!hasWork) {
