@@ -44,7 +44,7 @@ dispatch. The proxy did not break; the model's habits moved.
 
 | #   | Slice                                                       | Issue                                                         | PR      | Image tag |
 | --- | ----------------------------------------------------------- | ------------------------------------------------------------- | ------- | --------- |
-| 1   | Evidence-based progress bound + salvage of uncommitted work | [#2096](https://github.com/kibertoad/cat-factory/issues/2096) | this PR | `1.133.0` |
+| 1   | Evidence-based progress bound + salvage of uncommitted work | [#2096](https://github.com/kibertoad/cat-factory/issues/2096) | [#2101](https://github.com/kibertoad/cat-factory/pull/2101) | `1.133.0` |
 | 2   | Tool surface (`--tools`)                                    | [#2097](https://github.com/kibertoad/cat-factory/issues/2097) |         |           |
 | 3   | Runner image (docker daemon, `NODE_ENV`, missing binaries)  | [#2098](https://github.com/kibertoad/cat-factory/issues/2098) |         |           |
 | 4   | Sandbox inventory and prompt fixes                          | [#2099](https://github.com/kibertoad/cat-factory/issues/2099) |         |           |
