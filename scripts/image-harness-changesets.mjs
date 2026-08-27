@@ -44,8 +44,17 @@ export function parseChangesetPackages(text) {
 /**
  * Find changesets that version an image harness without changing that image.
  *
+ * Only a changeset THIS BRANCH added or edited is judged, which is what the violation message
+ * has always claimed ("nothing that goes into that image changed on this branch"). An unreleased
+ * changeset inherited from the base sits in `.changeset/` on every branch cut afterwards, and the
+ * image change that justified it is behind the merge base, so judging it here asks whether one
+ * branch justifies another branch's bump: the answer is no for every PR open at the time, and the
+ * guard reddens all of them until the release consumes the changeset. The filter is inside the
+ * rule rather than left to the caller because a caller that forgets it fails CLOSED, blocking work
+ * that is not its own.
+ *
  * @param {object} input
- * @param {Array<{path: string, packages: string[]}>} input.changesets
+ * @param {Array<{path: string, packages: string[]}>} input.changesets  every changeset present
  * @param {Array<{label: string, harnessName: string, image: string, isSource: (path: string) => boolean}>} input.images
  *   one entry per DISTINCT harness package (the executor and executor-ui images share one, so
  *   collapse them before calling: two entries would report the same violation twice)
@@ -53,13 +62,15 @@ export function parseChangesetPackages(text) {
  * @returns {Array<{changeset: string, harnessName: string, message: string}>}
  */
 export function findUnjustifiedBumps({ changesets, images, changedPaths }) {
+  const changed = new Set(changedPaths)
+  const ownChangesets = changesets.filter((entry) => changed.has(entry.path))
   const violations = []
   for (const image of images) {
     // Computed once per image rather than per changeset: the answer cannot differ between two
     // changesets in the same branch, and the diff is the same list either way.
     const touched = changedPaths.some((path) => image.isSource(path))
     if (touched) continue
-    for (const { path, packages } of changesets) {
+    for (const { path, packages } of ownChangesets) {
       if (!packages.includes(image.harnessName)) continue
       violations.push({
         changeset: path,

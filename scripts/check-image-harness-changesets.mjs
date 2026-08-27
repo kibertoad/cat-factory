@@ -88,6 +88,7 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `check-image-harness-changesets: ${changesets.length} changeset(s) checked against ` +
-    `${images.length} image harness package(s); none versions an unchanged image.`,
+  `check-image-harness-changesets: ${changesets.length} changeset(s) present, those this branch ` +
+    `introduced judged against ${images.length} image harness package(s); ` +
+    `none versions an unchanged image.`,
 )

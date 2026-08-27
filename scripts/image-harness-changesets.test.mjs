@@ -32,7 +32,11 @@ test('replays #2076: versions the deploy harness with no deploy-image change', (
       },
     ],
     images: IMAGES,
-    changedPaths: ['pnpm-workspace.yaml', 'backend/packages/kernel/src/domain/gate-logic.ts'],
+    changedPaths: [
+      '.changeset/refresh.md',
+      'pnpm-workspace.yaml',
+      'backend/packages/kernel/src/domain/gate-logic.ts',
+    ],
   })
   assert.equal(violations.length, 1)
   assert.equal(violations[0].harnessName, '@cat-factory/deploy-harness')
@@ -44,7 +48,7 @@ test('allows the bump when that image actually changed', () => {
     findUnjustifiedBumps({
       changesets: [{ path: '.changeset/fix.md', packages: ['@cat-factory/deploy-harness'] }],
       images: IMAGES,
-      changedPaths: ['backend/internal/deploy-harness/src/server.ts'],
+      changedPaths: ['.changeset/fix.md', 'backend/internal/deploy-harness/src/server.ts'],
     }),
     [],
   )
@@ -61,7 +65,7 @@ test('judges each image independently rather than lumping the harnesses together
       },
     ],
     images: IMAGES,
-    changedPaths: ['backend/internal/executor-harness/Dockerfile'],
+    changedPaths: ['.changeset/both.md', 'backend/internal/executor-harness/Dockerfile'],
   })
   assert.equal(violations.length, 1)
   assert.equal(violations[0].harnessName, '@cat-factory/deploy-harness')
@@ -74,7 +78,7 @@ test("a changeset naming no harness package is not this guard's business", () =>
         { path: '.changeset/a.md', packages: ['@cat-factory/kernel', '@cat-factory/worker'] },
       ],
       images: IMAGES,
-      changedPaths: ['backend/packages/kernel/src/domain/seed.ts'],
+      changedPaths: ['.changeset/a.md', 'backend/packages/kernel/src/domain/seed.ts'],
     }),
     [],
   )
@@ -87,11 +91,48 @@ test('reports every offending changeset, not just the first', () => {
       { path: '.changeset/b.md', packages: ['@cat-factory/deploy-harness'] },
     ],
     images: [DEPLOY],
-    changedPaths: ['README.md'],
+    changedPaths: ['.changeset/a.md', '.changeset/b.md', 'README.md'],
   })
   assert.deepEqual(
     violations.map((v) => v.changeset),
     ['.changeset/a.md', '.changeset/b.md'],
+  )
+})
+
+test('ignores a changeset the branch inherited from its base', () => {
+  // The 2026-08-27 breakage: #2113 landed an executor-harness changeset on main together with the
+  // Dockerfile change justifying it. Every branch cut afterwards carried that changeset in its
+  // tree and none of them carried the Dockerfile change, which is behind the merge base, so the
+  // guard reddened every open PR at once over a bump none of them made. A changeset outside this
+  // branch's own diff is another branch's statement, already judged when it landed.
+  assert.deepEqual(
+    findUnjustifiedBumps({
+      changesets: [
+        {
+          path: '.changeset/agent-cli-pins-refresh.md',
+          packages: ['@cat-factory/executor-harness'],
+        },
+      ],
+      images: IMAGES,
+      changedPaths: ['.changeset/my-work.md', 'backend/packages/kernel/src/domain/seed.ts'],
+    }),
+    [],
+  )
+})
+
+test('still catches the unjustified bump when the branch is what added the changeset', () => {
+  // The other half of the same rule: inheriting a changeset is a pass, authoring one is not.
+  const violations = findUnjustifiedBumps({
+    changesets: [
+      { path: '.changeset/inherited.md', packages: ['@cat-factory/executor-harness'] },
+      { path: '.changeset/mine.md', packages: ['@cat-factory/executor-harness'] },
+    ],
+    images: IMAGES,
+    changedPaths: ['.changeset/mine.md', 'README.md'],
+  })
+  assert.deepEqual(
+    violations.map((v) => v.changeset),
+    ['.changeset/mine.md'],
   )
 })
 
