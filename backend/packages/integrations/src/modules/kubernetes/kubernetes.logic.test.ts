@@ -3,6 +3,7 @@ import { containerKeyForRef } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   apiServerConnectionFailureMessage,
+  DEFAULT_HARNESS_PORT,
   assertApiServerUrlSafe,
   buildPodManifest,
   classifyPodReadiness,
@@ -48,7 +49,7 @@ describe('podName', () => {
 describe('proxyUrl', () => {
   it('targets the apiserver pod-proxy subresource with a LITERAL name:port colon', () => {
     expect(proxyUrl(config, 'cf-run-1', '/jobs/abc')).toBe(
-      'https://k8s.example:6443/api/v1/namespaces/cat-factory/pods/cf-run-1:8080/proxy/jobs/abc',
+      `https://k8s.example:6443/api/v1/namespaces/cat-factory/pods/cf-run-1:${DEFAULT_HARNESS_PORT}/proxy/jobs/abc`,
     )
   })
   it('honours a custom harness port', () => {
@@ -378,10 +379,10 @@ describe('buildPodManifest', () => {
     expect(pod.metadata.labels['cat-factory.runId']).toBe('run-1')
     expect(pod.spec.restartPolicy).toBe('Never')
     expect(pod.spec.containers[0]!.image).toBe(config.image)
-    expect(pod.spec.containers[0]!.ports).toEqual([{ containerPort: 8080 }])
+    expect(pod.spec.containers[0]!.ports).toEqual([{ containerPort: DEFAULT_HARNESS_PORT }])
     // The readiness probe gates the pod's `Ready` condition on the harness actually serving.
     expect(pod.spec.containers[0]!.readinessProbe).toMatchObject({
-      httpGet: { path: '/health', port: 8080 },
+      httpGet: { path: '/health', port: DEFAULT_HARNESS_PORT },
     })
   })
 })

@@ -205,5 +205,9 @@ RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
 # any job runs with; read /tmp/harness-docker-status.json (or GET /health) for the truth.
 ENV XDG_RUNTIME_DIR=/home/harness/.docker/run \
     DOCKER_HOST=
-EXPOSE 8080
+# The harness's own job server. Deliberately not 8080: it shares this container's network
+# namespace with everything the agent starts, and on 8080 it both took the port a
+# containerised service defaults to and answered that service's health check (see
+# src/harness-port.ts).
+EXPOSE 27182
 ENTRYPOINT ["./entrypoint.sh"]

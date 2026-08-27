@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { MAX_POST_MORTEM_CHARS } from '@cat-factory/kernel'
 import type { ContainerExec } from './containerRuntime.js'
-import { formatContainerLogs, MAX_CONTAINER_LOG_CHARS } from './containerRuntime.js'
+import { formatContainerLogs, HARNESS_PORT, MAX_CONTAINER_LOG_CHARS } from './containerRuntime.js'
 import {
   createRuntimeAdapter,
   resolveHostAlias,
@@ -109,7 +109,7 @@ describe('DockerRuntimeAdapter', () => {
     })
     expect(id).toBe('cid')
     const run = calls[0]!
-    expect(run.join(' ')).toContain('-p 127.0.0.1:0:8080')
+    expect(run.join(' ')).toContain(`-p 127.0.0.1:0:${HARNESS_PORT}`)
     expect(run).toContain('--privileged')
     expect(run).toContain('--add-host=host.docker.internal:host-gateway')
   })
@@ -149,7 +149,7 @@ describe('DockerRuntimeAdapter', () => {
     expect(await adapter.endpoint(exec, 'cid')).toEqual({ host: '127.0.0.1', port: 49170 })
   })
 
-  it('pins a preview serve port to a deterministic host port alongside the harness :8080', async () => {
+  it('pins a preview serve port to a deterministic host port alongside the harness port', async () => {
     const adapter = new DockerRuntimeAdapter({
       id: 'docker',
       binary: 'docker',
@@ -169,7 +169,7 @@ describe('DockerRuntimeAdapter', () => {
       publishPorts: [{ container: 4173, host: 4173 }],
     })
     const run = calls[0]!.join(' ')
-    expect(run).toContain('-p 127.0.0.1:0:8080')
+    expect(run).toContain(`-p 127.0.0.1:0:${HARNESS_PORT}`)
     // A pinned `host` gives a deterministic, pre-knowable host port (the preview origin).
     expect(run).toContain('-p 127.0.0.1:4173:4173')
     expect(adapter.publishesToLocalhost).toBe(true)
@@ -209,7 +209,7 @@ describe('DockerRuntimeAdapter', () => {
     })
     const { exec, calls } = fakeExec({ port: '127.0.0.1:51999\n' })
     expect(await adapter.endpoint(exec, 'cid', 4173)).toEqual({ host: '127.0.0.1', port: 51999 })
-    // The `docker port` query targets the requested in-container port, not the default 8080.
+    // The `docker port` query targets the requested in-container port, not the harness default.
     expect(calls[0]).toEqual(['port', 'cid', '4173/tcp'])
   })
 
@@ -230,7 +230,7 @@ describe('DockerRuntimeAdapter', () => {
     })
     const exec: ContainerExec = (args) => {
       if (args[0] === 'port') {
-        return Promise.reject(new Error("no public port '8080/tcp' published for cid"))
+        return Promise.reject(new Error(`no public port '${HARNESS_PORT}/tcp' published for cid`))
       }
       return Promise.resolve({ stdout: 'false\n', stderr: '' })
     }
@@ -373,7 +373,10 @@ describe('AppleContainerRuntimeAdapter', () => {
     ])
     const { exec } = fakeExec({ inspect })
     // Must pick the container address, not the gateway.
-    expect(await adapter.endpoint(exec, n('run_42'))).toEqual({ host: '192.168.64.5', port: 8080 })
+    expect(await adapter.endpoint(exec, n('run_42'))).toEqual({
+      host: '192.168.64.5',
+      port: HARNESS_PORT,
+    })
   })
 
   it('reaches an extra in-container port at the container IP (no published-port model)', async () => {

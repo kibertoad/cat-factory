@@ -36,7 +36,7 @@ const execFileAsync = promisify(execFile)
  * {@link LocalContainerRunnerTransport} for a LONG-LIVED serve. Unlike a per-run agent container
  * (reclaimed when the run finishes), a preview container:
  *   - publishes the served app's port to an ephemeral HOST port (a SECOND `-p` alongside the
- *     harness `:8080`, read back with `docker port` — the browsable URL is formed from it), and
+ *     harness port, read back with `docker port` — the browsable URL is formed from it), and
  *   - is NOT stopped until an explicit {@link stop} (the served processes outlive the build job,
  *     exactly as the harness `preview` mode leaves them running).
  *
@@ -248,7 +248,7 @@ export class LocalPreviewTransport implements PreviewTransport {
     await this.adapter.removeRun(this.exec, previewRunId(ref.frameId))
   }
 
-  /** Wait for the harness `:8080` to be reachable (the published host port to appear). */
+  /** Wait for the harness port to be reachable (the published host port to appear). */
   private async waitForEndpoint(containerId: string): Promise<HarnessEndpoint> {
     const deadline = Date.now() + this.readyTimeoutMs
     for (;;) {

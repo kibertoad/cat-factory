@@ -12,7 +12,7 @@ import {
 // The Docker-CLI adapter — covers Docker, Podman, OrbStack and Colima, which all speak
 // the same `run/ps/port/inspect/rm` surface. It is the behaviour the transport had
 // inline before the seam was extracted, parameterised by binary + networking. A container
-// is labelled with its container key and a managed marker; the harness `:8080` is published
+// is labelled with its container key and a managed marker; the harness port is published
 // to an ephemeral host port read back with `docker port`.
 
 /**
@@ -91,7 +91,7 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
       `HARNESS_SHARED_SECRET=${spec.sharedSecret}`,
     ]
     // Extra published ports (the preview transport's served-app port) alongside the harness
-    // :8080. A pinned `host` gives a deterministic, pre-knowable host port (the preview origin);
+    // port. A pinned `host` gives a deterministic, pre-knowable host port (the preview origin);
     // an absent one takes an ephemeral port read back via `endpoint(id, port)`.
     for (const p of spec.publishPorts ?? [])
       args.push('-p', `127.0.0.1:${p.host ?? 0}:${p.container}`)
@@ -133,7 +133,7 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
     inContainerPort: number = HARNESS_PORT,
   ): Promise<ContainerEndpoint | undefined> {
     // `docker port` EXITS NON-ZERO for a container that isn't running ("no public port
-    // '8080/tcp' published for <id>"), and `find()` hands us exited containers by design. A
+    // '<port>/tcp' published for <id>"), and `find()` hands us exited containers by design. A
     // dead container is "not ready" per the port contract, so it must resolve to undefined:
     // a throw escapes `dispatchPerRun`'s `resolve()` and skips the remove-and-recreate
     // recovery an exited container exists to trigger, surfacing the CLI's message as the

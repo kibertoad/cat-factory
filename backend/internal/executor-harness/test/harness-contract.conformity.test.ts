@@ -1,3 +1,4 @@
+import { HARNESS_JOB_PORT } from '@cat-factory/contracts'
 import {
   HARNESS_SENTINEL_PATHS,
   checkoutDirDigest as backendCheckoutDirDigest,
@@ -13,6 +14,7 @@ import { PR_DESCRIPTION_FILE } from '../src/pr-description.js'
 import { REFERENCE_SCREENSHOT_DIR } from '../src/reference-screenshots.js'
 import { DESIGN_RENDER_DIR } from '../src/design-images.js'
 import { GENERATED_BINARY_DIR } from '../src/codex-images.js'
+import { DEFAULT_HARNESS_PORT } from '../src/harness-port.js'
 
 // The harness image builds from `src/` plus typescript alone, so it can carry no runtime
 // dependency on a workspace package: every path both halves must agree about is computed
@@ -201,6 +203,28 @@ describe('harness ⇄ backend sentinel paths', () => {
     // fails here until it is paired, and neither side can quietly grow an unpinned path.
     expect(PAIRS.map(([, , backend]) => backend).sort()).toEqual(
       Object.values(HARNESS_SENTINEL_PATHS).slice().sort(),
+    )
+  })
+})
+
+describe('harness ⇄ backend job port', () => {
+  it('binds the port every transport dispatches to', () => {
+    // The harness CHOOSES the port and every transport ADDRESSES it: the Cloudflare container
+    // class's `defaultPort`, the local runtime's `-p 127.0.0.1:0:<port>` publish, and a runner
+    // pool's pod-proxy URL all read the contract's copy. Drift is a total outage of container
+    // dispatch (nothing answers), so the two literals are pinned rather than commented.
+    expect(DEFAULT_HARNESS_PORT).toBe(HARNESS_JOB_PORT)
+  })
+
+  it('stays out of the range a service under test would pick', () => {
+    // The defect this replaced: on 8080 the harness held the port a containerised service
+    // defaults to AND answered its health check, so a tester could grade the platform green in
+    // place of the product. Unprivileged, clear of the habitual low ports, and below the
+    // ephemeral floor an outbound connection could already be holding.
+    expect(DEFAULT_HARNESS_PORT).toBeGreaterThan(1023)
+    expect(DEFAULT_HARNESS_PORT).toBeLessThan(32768)
+    expect([3000, 4173, 5000, 5173, 8000, 8080, 8081, 8443, 8888, 9000]).not.toContain(
+      DEFAULT_HARNESS_PORT,
     )
   })
 })

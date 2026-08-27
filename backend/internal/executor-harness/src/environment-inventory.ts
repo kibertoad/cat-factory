@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { log, type Logger } from './logger.js'
+import { harnessListenPort } from './harness-port.js'
 
 // ---------------------------------------------------------------------------
 // What this machine actually has, probed ONCE per job and stated to the agent.
@@ -85,6 +86,12 @@ export interface EnvironmentInventory {
    * "has not answered yet" is one of its answers (see {@link probeDockerDaemon}).
    */
   dockerDaemon: ToolPresence
+  /**
+   * The port the harness's own job server holds in this network namespace. Not probed: the
+   * process reads its own {@link harnessListenPort}, which is the only honest answer when a
+   * deployment overrides `PORT` and the only one available before anything is listening.
+   */
+  harnessPort: number
 }
 
 /**
@@ -298,6 +305,11 @@ export interface ProbeEnvironmentOptions {
    * both sides of the branch without an ambient environment variable deciding the outcome for it.
    */
   daemonExpected?: boolean
+  /**
+   * The port the harness holds, defaulting to what this process is actually listening on. Injected
+   * only so the suite can assert the rendered line without an ambient `PORT` deciding its text.
+   */
+  harnessPort?: number
 }
 
 /**
@@ -336,7 +348,7 @@ export async function probeEnvironment(
     ),
     probeDockerDaemon(run, opts),
   ])
-  return { tools, dockerDaemon }
+  return { tools, dockerDaemon, harnessPort: opts.harnessPort ?? harnessListenPort() }
 }
 
 /**
@@ -430,6 +442,7 @@ export function renderEnvironmentInventory(inventory: EnvironmentInventory): str
     )
   }
   lines.push(dockerDaemonLine(inventory.dockerDaemon))
+  lines.push(harnessPortLine(inventory.harnessPort))
   // Stated as a FACT and not as an errand. This block is appended to the system prompt after the
   // effort-report directive, whose closing sentences are the prompt's ordering rule (write the
   // sentinel, then reply, and no tool call after the reply). "Check for that one yourself before
@@ -441,6 +454,32 @@ export function renderEnvironmentInventory(inventory: EnvironmentInventory): str
       'rather than missing.',
   )
   return lines.join('\n')
+}
+
+/**
+ * The one port line: what the platform already holds, and why a request to it is not evidence.
+ *
+ * Stated because the harness shares this network namespace with everything the agent starts, so a
+ * port it holds is a port the agent cannot have, and because the failure that follows is not a
+ * refusal but a WRONG ANSWER. The harness answers `/health` with a 200 whose body begins
+ * `{"status":"ok"}`, so a tester that probes the port its service was supposed to be on grades the
+ * platform green and says nothing. A run hit exactly that: the service under test was specified to
+ * listen on 8080, the harness held it, the app died with `EADDRINUSE`, and only a second route with
+ * a distinctive body gave the trap away.
+ *
+ * The default port has since moved out of the range anything reaches for by habit, which is the
+ * real fix. This line is what remains true whatever a deployment sets `PORT` to, and it names the
+ * NUMBER rather than the danger so an agent can pick another port up front instead of diagnosing a
+ * bind failure it did not cause.
+ */
+function harnessPortLine(port: number): string {
+  return (
+    `Port ${port} is already bound here, by the platform's harness process itself. Do not start ` +
+    'anything on it, and do not read what it serves as your own service: it answers requests, ' +
+    `including a 200 on \`/health\` with a JSON body that begins \`{"status":"ok"}\`, so a health ` +
+    'check aimed at it passes without your service ever having run. Bind anything you start ' +
+    'somewhere else.'
+  )
 }
 
 /** The Docker line, which says something different in each of the three cases. */
@@ -488,6 +527,7 @@ export async function appendEnvironmentInventory(
     const inventory = await probeEnvironment(opts.run ?? spawnProbeRunner(opts.signal), {
       ...(opts.sleep ? { sleep: opts.sleep } : {}),
       ...(opts.daemonExpected === undefined ? {} : { daemonExpected: opts.daemonExpected }),
+      ...(opts.harnessPort === undefined ? {} : { harnessPort: opts.harnessPort }),
     })
     logger.info('agent: probed the environment', {
       installed: inventory.tools

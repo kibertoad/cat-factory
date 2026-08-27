@@ -1,5 +1,6 @@
 import { Container } from '@cloudflare/containers'
 import type { StopParams } from '@cloudflare/containers'
+import { HARNESS_JOB_PORT } from '@cat-factory/contracts'
 import { runBestEffort } from '@cat-factory/kernel'
 import { harnessGitLabHost } from '@cat-factory/server'
 import type { Env } from '../env'
@@ -17,7 +18,7 @@ import {
 
 /**
  * The behaviour every per-run Cloudflare Container shares: one Durable Object instance per run
- * id hosts that run's sequence of jobs, the harness listens on 8080, and the base
+ * id hosts that run's sequence of jobs, the harness listens on {@link HARNESS_JOB_PORT}, and the base
  * `Container.fetch` proxies inbound requests there once it has booted.
  *
  * The two concrete classes ({@link import('./ExecutionContainer').ExecutionContainer} and
@@ -33,7 +34,7 @@ import {
  */
 export abstract class RunContainer extends Container<Env> {
   /** The harness HTTP server port (matches each image's Dockerfile ENTRYPOINT/EXPOSE). */
-  override defaultPort = 8080
+  override defaultPort = HARNESS_JOB_PORT
 
   // Two env values, both omitted when unset so the harness keeps its own defaults:
   //

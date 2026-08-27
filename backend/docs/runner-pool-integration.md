@@ -32,7 +32,7 @@ A workspace's runner connection is a **discriminated "agent runner backend"**
   You give cat-factory your **kube-apiserver URL, namespace, a ServiceAccount token,
   and the executor image**; it creates **one bare Pod per run** and talks to the
   per-pod harness through the apiserver **pod-proxy subresource**
-  (`…/pods/<name>:8080/proxy/…`). Only HTTPS to the apiserver is required, no
+  (`…/pods/<name>:27182/proxy/…`). Only HTTPS to the apiserver is required, no
   in-cluster networking, no per-run Service/Ingress, and full job-progress/result
   fidelity (the harness is unchanged). Target **Kubernetes 1.35+**.
 
@@ -68,7 +68,7 @@ A workspace's runner connection is a **discriminated "agent runner backend"**
   pod network, though, and the dispatch body carries short-lived credentials (a
   per-job GitHub token + the LLM-proxy session token). In a namespace without a
   default-deny `NetworkPolicy`, any other pod could reach the harness on
-  `<podIP>:8080` directly. Apply a default-deny ingress `NetworkPolicy` in the runner
+  `<podIP>:27182` directly. Apply a default-deny ingress `NetworkPolicy` in the runner
   namespace (allow only the apiserver/kubelet) so the harness is reachable solely via
   the proxy.
 
@@ -227,7 +227,9 @@ package's README.)
 
 The image **carries no secrets**. It bundles git + the pinned Pi coding-agent CLI
 (and the Claude Code / Codex CLIs for subscription harnesses) and runs an HTTP
-server on port `8080`. All per-job secrets arrive in the dispatch body and live
+server on port `27182` (deliberately not a port a service under test would pick: the harness
+shares the container's network namespace with the agent's own processes, and on `8080` it
+answered their health checks). All per-job secrets arrive in the dispatch body and live
 only for the job. (Behind a TLS-inspecting corporate proxy, pass the proxy CA as a
 build secret: see the comment block at the top of the Dockerfile.)
 
@@ -306,7 +308,7 @@ reach the same runner/job.
 
 | Env var               | Default                    | Effect                                                                                                                                                                                                                                       |
 | --------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PORT`                | `8080`                     | HTTP port the harness listens on.                                                                                                                                                                                                            |
+| `PORT`                | `27182`                    | HTTP port the harness listens on.                                                                                                                                                                                                            |
 | `JOB_MAX_DURATION_MS` | `3600000` (60m)            | Hard ceiling on a job's wall-clock time; force-fails after.                                                                                                                                                                                  |
 | `JOB_INACTIVITY_MS`   | `600000` (10m)             | Kills a hung agent that produces no output for this long.                                                                                                                                                                                    |
 | `JOB_TOOL_SILENCE_MS` | half `JOB_MAX_DURATION_MS` | Kills an agent that keeps producing output but completes no tool call for this long. Armed only while an agent CLI that reports completed tool calls is running, so clone/install/push and validation commands are outside it. `0` disables. |

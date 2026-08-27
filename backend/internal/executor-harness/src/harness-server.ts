@@ -6,6 +6,7 @@ import { handleAgent } from './agent.js'
 import { handleInline } from './inline.js'
 import { redactSecrets } from './git.js'
 import { readDockerStatus } from './docker-status.js'
+import { harnessListenPort } from './harness-port.js'
 import { JobRegistry, loadRunnerLimits, type JobResultBase, type RunOptions } from './runner.js'
 import { log } from './logger.js'
 import { HARNESS_VERSION } from './version.js'
@@ -26,7 +27,7 @@ import { HARNESS_VERSION } from './version.js'
 // and shut the harness down mid-job. The engine could only see a container that
 // vanished, so it reported an eviction and re-dispatched into the same trap.
 
-const PORT = Number(process.env.PORT ?? 8080)
+const PORT = harnessListenPort()
 
 // Optional bind address. Default (unset) binds all interfaces — a container needs that for
 // its published port. The native local transport runs the harness UNSANDBOXED on the

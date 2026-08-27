@@ -4,7 +4,7 @@ The payload that runs **inside** a per-run Cloudflare Container (or a
 [self-hosted runner](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/runner-pool-integration.md)) to perform real
 repo work with the [Pi coding agent](https://github.com/earendil-works/pi).
 
-It is a thin TypeScript wrapper (a `node:http` server on `:8080`) that the
+It is a thin TypeScript wrapper (a `node:http` server on `:27182`) that the
 Worker drives over a small **job protocol**. Jobs run **asynchronously**: a `POST`
 accepts the job and returns immediately with a `jobId`; the driver then polls
 `GET /jobs/{id}` for live progress and the terminal result.
@@ -451,7 +451,7 @@ runner):
 
 | Env var               | Default         | Effect                                                      |
 | --------------------- | --------------- | ----------------------------------------------------------- |
-| `PORT`                | `8080`          | HTTP port the harness listens on.                           |
+| `PORT`                | `27182`         | HTTP port the harness listens on. Deliberately not a port a service under test would pick: the harness shares the container's network namespace with the agent's own processes, and on `8080` it answered their health checks (see `src/harness-port.ts`). |
 | `JOB_MAX_DURATION_MS` | `3600000` (60m) | Hard ceiling on a job's wall-clock time; force-fails after. |
 | `JOB_INACTIVITY_MS`   | `600000` (10m)  | Kills a hung agent that produces no output for this long.   |
 | `JOB_TOOL_SILENCE_MS` | half `JOB_MAX_DURATION_MS` (30m at its default) | Kills an agent that keeps producing output but completes no tool call for this long: the "chatty hang" neither watchdog above can see, since streamed output resets the inactivity timer on every chunk while nothing gets done (stuck-run audit F13). Armed ONLY while an agent CLI that reports completed tool calls is running (each runner opens its own window and closes it on exit), so clone / dependency install / push / a validation loop's check commands sit outside it — they are activity-silent by nature and bounded by their own per-command timeouts — and each repair pass opens a fresh window. Derived from the job ceiling rather than fixed. It fires only when output arrived during the window that elapsed, which is what leaves a genuinely quiet run to `JOB_INACTIVITY_MS` and its clearer diagnostic. `0` disables it. |

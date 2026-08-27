@@ -16,7 +16,7 @@ import {
 //   2. Identity: `--name` IS the container id, so a container is addressed by a deterministic
 //      name (`cf-<installId>-<containerKey>`); a managed label marks ours for reaping.
 //   3. Networking: each container runs in its own VM with its own IP — there is no
-//      published-port-on-loopback, so the orchestrator connects to `<containerIP>:8080`
+//      published-port-on-loopback, so the orchestrator connects to `<containerIP>:<harness port>`
 //      directly (read from `container inspect`). There is no Docker-in-Docker, so
 //      `capabilities.localDind` is false (the engine refuses the Tester's local infra
 //      mode on this runtime — see ExecutionService limited-mode gating).
@@ -249,7 +249,7 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
     inContainerPort: number = HARNESS_PORT,
   ): Promise<ContainerEndpoint | undefined> {
     // One VM per container with its own IP and no published-port model, so ANY in-container
-    // port (the harness :8080 or the preview's served-app port) is reached directly on that IP.
+    // port (the harness's own or the preview's served-app port) is reached directly on that IP.
     // `inspect` faults for a container that was reaped out from under us; an exited one still
     // inspects but has no IP. Both are "not ready" per the port contract — never a throw, which
     // would escape the transport's `resolve()` and skip the fresh-container recovery.

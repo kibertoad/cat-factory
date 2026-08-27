@@ -12,6 +12,7 @@ import {
   type ProbeRunner,
 } from '../src/environment-inventory.js'
 import type { Logger } from '../src/logger.js'
+import { DEFAULT_HARNESS_PORT } from '../src/harness-port.js'
 
 // The block the harness appends to every agent's system prompt: what this machine HAS, so no
 // agent pays to find out. The property the whole thing turns on is that its three answers stay
@@ -211,7 +212,11 @@ describe('a daemon that is still coming up', () => {
     const asked = run.mock.calls.filter((call) => call[1].includes('info'))
     expect(asked).toHaveLength(2)
     // And the agent is told to try it rather than told not to.
-    const text = renderEnvironmentInventory({ tools: [], dockerDaemon: inventory.dockerDaemon })
+    const text = renderEnvironmentInventory({
+      tools: [],
+      dockerDaemon: inventory.dockerDaemon,
+      harnessPort: DEFAULT_HARNESS_PORT,
+    })
     expect(text).not.toContain('NO Docker daemon')
     expect(text).toContain('try it if you need it')
   })
@@ -245,7 +250,8 @@ describe('rendering the inventory', () => {
   const inventory = (
     tools: EnvironmentInventory['tools'],
     dockerDaemon: EnvironmentInventory['dockerDaemon'],
-  ): EnvironmentInventory => ({ tools, dockerDaemon })
+    harnessPort = DEFAULT_HARNESS_PORT,
+  ): EnvironmentInventory => ({ tools, dockerDaemon, harnessPort })
 
   it('renders a failed probe as neither present nor absent', () => {
     const text = renderEnvironmentInventory(
@@ -439,5 +445,26 @@ describe('a shell-script binary on a Windows host', () => {
     const located = await spawnProbeRunner()('npm', ['--version'])
     expect(located.outcome).toBe('found')
     expect(daemonPresence(located).status).toBe('unknown')
+  })
+})
+
+describe('the reserved-port line', () => {
+  const bare = (harnessPort: number): string =>
+    renderEnvironmentInventory({ tools: [], dockerDaemon: { status: 'absent' }, harnessPort })
+
+  it('names the port the harness holds, and why a reply from it proves nothing', () => {
+    // The whole point: an agent that reads this picks another port up front, and a tester that
+    // probes this one knows the 200 it gets back is the platform answering, not the product.
+    const text = bare(27182)
+    expect(text).toContain('Port 27182 is already bound here')
+    expect(text).toContain('{"status":"ok"}')
+  })
+
+  it('states the port this process ACTUALLY holds, not the default', () => {
+    // A deployment (and the native local transport, which picks an ephemeral port per harness
+    // process) overrides `PORT`, and a line naming the default there would send the agent around
+    // the collision it is meant to prevent.
+    expect(bare(41234)).toContain('Port 41234 is already bound here')
+    expect(bare(41234)).not.toContain(String(DEFAULT_HARNESS_PORT))
   })
 })

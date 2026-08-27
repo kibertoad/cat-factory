@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { FRONTEND_WIREMOCK_PORT, HARNESS_JOB_PORT } from '@cat-factory/contracts'
 import type { Block, Pipeline } from '@cat-factory/contracts'
 import {
   frameAllowsVisualPipeline,
@@ -175,15 +176,14 @@ describe('frontendOriginsForService', () => {
   })
 
   it('sanitizes a reserved servePort to the default so the origin matches the actual served port', () => {
-    // A reserved in-container port (8080 harness job server / 8089 WireMock) is bumped to 4173 by
-    // `resolveFrontendServePort` when the app is actually served, so the CORS origin must too — a
-    // raw `servePort` would inject `localhost:8080` while the app serves on 4173 (CORS fails).
-    expect(frontendOriginsForService('blk_svc', [fe('blk_svc', { servePort: 8080 })])).toEqual([
-      'http://localhost:4173',
-    ])
-    expect(frontendOriginsForService('blk_svc', [fe('blk_svc', { servePort: 8089 })])).toEqual([
-      'http://localhost:4173',
-    ])
+    // A reserved in-container port (the harness's own job server, WireMock) is bumped to 4173 by
+    // `resolveFrontendServePort` when the app is actually served, so the CORS origin must too: a
+    // raw `servePort` would inject the reserved port while the app serves on 4173 (CORS fails).
+    for (const reserved of [HARNESS_JOB_PORT, FRONTEND_WIREMOCK_PORT]) {
+      expect(
+        frontendOriginsForService('blk_svc', [fe('blk_svc', { servePort: reserved })]),
+      ).toEqual(['http://localhost:4173'])
+    }
   })
 
   it('dedupes + sorts origins across multiple binding frontends', () => {

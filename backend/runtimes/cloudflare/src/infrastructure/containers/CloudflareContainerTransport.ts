@@ -147,7 +147,7 @@ export class CloudflareContainerTransport implements RunnerTransport {
 
   constructor(
     // Which per-run container class serves a given image variant. Every class (executor, UI
-    // tester, deploy harness) exposes the same `/jobs` HTTP contract on 8080 plus
+    // tester, deploy harness) exposes the same `/jobs` HTTP contract on the harness port plus
     // `recentStopObservation`/`shutdown`, so this transport drives any of them unchanged: a
     // deploy-dedicated instance is simply built over a resolver pinned to that one namespace.
     private readonly resolveNamespace: ResolveRunContainerNamespace,
