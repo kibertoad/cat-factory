@@ -21,6 +21,32 @@
 // predecessor. A review caught it, one PR too late to stop it.
 
 /**
+ * Narrow a changeset list to the ones this branch authored.
+ *
+ * A changeset lives in `.changeset/` from the PR that writes it until a release consumes it, so
+ * the working tree of every LATER branch carries it too. Reading the directory therefore answers
+ * "what is pending across the repo", while the diff answers "what did this branch do", and mixing
+ * the two makes the guard accuse a branch of a bump it never wrote: #2113 landed a justified
+ * `@cat-factory/executor-harness` changeset alongside its Dockerfile change, and from that moment
+ * every open PR failed the guard on it, because none of them touched the image. A branch with an
+ * EMPTY diff failed, which is the shape of the bug: nothing changed, so nothing can be unjustified.
+ *
+ * Scoping to the diff loses no coverage. The authoring PR is the only place a bad bump is both
+ * detectable (its diff is what justifies it) and fixable (the changeset is its own), and a release
+ * branch deletes the changesets rather than carrying them, so re-accusing bystanders was never a
+ * second line of defence.
+ *
+ * @param {object} input
+ * @param {string[]} input.changesetPaths  repo-relative paths of the changesets on disk
+ * @param {string[]} input.changedPaths  repo-relative paths changed against the base ref
+ * @returns {string[]} the subset this branch added or edited, in the order given
+ */
+export function selectAuthoredChangesets({ changesetPaths, changedPaths }) {
+  const authored = new Set(changedPaths)
+  return changesetPaths.filter((path) => authored.has(path))
+}
+
+/**
  * Package names in a changeset's YAML front matter.
  *
  * The front matter is a `---` fenced block of `'name': bump` lines, so it is read directly rather
@@ -45,7 +71,9 @@ export function parseChangesetPackages(text) {
  * Find changesets that version an image harness without changing that image.
  *
  * @param {object} input
- * @param {Array<{path: string, packages: string[]}>} input.changesets
+ * @param {Array<{path: string, packages: string[]}>} input.changesets  the changesets this
+ *   branch authored, per `selectAuthoredChangesets`: one already on the base ref is not
+ *   this branch's to justify
  * @param {Array<{label: string, harnessName: string, image: string, isSource: (path: string) => boolean}>} input.images
  *   one entry per DISTINCT harness package (the executor and executor-ui images share one, so
  *   collapse them before calling: two entries would report the same violation twice)

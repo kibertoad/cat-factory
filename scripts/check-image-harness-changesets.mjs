@@ -19,7 +19,11 @@
 import { execFileSync } from 'node:child_process'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { findUnjustifiedBumps, parseChangesetPackages } from './image-harness-changesets.mjs'
+import {
+  findUnjustifiedBumps,
+  parseChangesetPackages,
+  selectAuthoredChangesets,
+} from './image-harness-changesets.mjs'
 import { IMAGES, readRepoFile, repoRoot } from './runner-images.mjs'
 
 const sinceIdx = process.argv.indexOf('--since')
@@ -61,14 +65,6 @@ const images = [...byHarness.values()].map((entry) => ({
     entry.sourceFiles.has(path) || entry.sourcePrefixes.some((prefix) => path.startsWith(prefix)),
 }))
 
-const changesetDir = resolve(repoRoot, '.changeset')
-const changesets = readdirSync(changesetDir)
-  .filter((name) => name.endsWith('.md') && name !== 'README.md')
-  .map((name) => ({
-    path: `.changeset/${name}`,
-    packages: parseChangesetPackages(readFileSync(join(changesetDir, name), 'utf8')),
-  }))
-
 const changedPaths = execFileSync('git', ['diff', '--name-only', `${since}...HEAD`], {
   cwd: repoRoot,
   encoding: 'utf8',
@@ -76,6 +72,23 @@ const changedPaths = execFileSync('git', ['diff', '--name-only', `${since}...HEA
   .split('\n')
   .map((line) => line.trim())
   .filter(Boolean)
+
+// The directory holds every changeset pending across the repo, including ones an earlier PR
+// landed and no release has consumed yet. Only the ones in the diff are this branch's to answer
+// for; see `selectAuthoredChangesets` for why scoping here loses no coverage.
+const changesetDir = resolve(repoRoot, '.changeset')
+const pending = readdirSync(changesetDir)
+  .filter((name) => name.endsWith('.md') && name !== 'README.md')
+  .map((name) => ({ name, path: `.changeset/${name}` }))
+const authored = new Set(
+  selectAuthoredChangesets({ changesetPaths: pending.map((entry) => entry.path), changedPaths }),
+)
+const changesets = pending
+  .filter((entry) => authored.has(entry.path))
+  .map((entry) => ({
+    path: entry.path,
+    packages: parseChangesetPackages(readFileSync(join(changesetDir, entry.name), 'utf8')),
+  }))
 
 const violations = findUnjustifiedBumps({ changesets, images, changedPaths })
 
@@ -88,6 +101,7 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `check-image-harness-changesets: ${changesets.length} changeset(s) checked against ` +
-    `${images.length} image harness package(s); none versions an unchanged image.`,
+  `check-image-harness-changesets: ${changesets.length} changeset(s) authored on this branch ` +
+    `(${pending.length} pending in .changeset/) checked against ${images.length} image harness ` +
+    `package(s); none versions an unchanged image.`,
 )

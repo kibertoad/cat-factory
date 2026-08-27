@@ -3,11 +3,16 @@
 // The case this guard exists for actually shipped (#2076's changeset versioned
 // @cat-factory/deploy-harness with nothing in that image changed, and #2077 released it), so the
 // first fixture below is that incident replayed. The rest are the ways a guard like this goes
-// wrong: refusing a legitimate bump, or passing one because the front matter was parsed loosely.
+// wrong: refusing a legitimate bump, passing one because the front matter was parsed loosely, or
+// reporting on a changeset the branch under test never wrote.
 
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { findUnjustifiedBumps, parseChangesetPackages } from './image-harness-changesets.mjs'
+import {
+  findUnjustifiedBumps,
+  parseChangesetPackages,
+  selectAuthoredChangesets,
+} from './image-harness-changesets.mjs'
 
 const DEPLOY = {
   label: 'deploy',
@@ -120,4 +125,43 @@ test('does not mistake body prose for a front-matter entry', () => {
     `---\n'@cat-factory/kernel': patch\n---\n\n- '@cat-factory/deploy-harness': untouched here\nhono: 4.13.3\n`,
   )
   assert.deepEqual(packages, ['@cat-factory/kernel'])
+})
+
+test("replays #2113's fallout: a pending changeset from the base ref is not this branch's", () => {
+  // #2113 landed a justified executor-harness changeset with its Dockerfile change. Until the
+  // release consumed it, it sat in `.changeset/` on main, so every branch cut afterwards carried
+  // it on disk while touching nothing in the image. Reading the directory instead of the diff
+  // failed all of them, #2111 among them, on a bump none of them wrote.
+  const onDisk = ['.changeset/agent-cli-pins-refresh.md', '.changeset/unrouted-environment-url.md']
+  const changedPaths = [
+    '.changeset/unrouted-environment-url.md',
+    'backend/packages/kernel/src/domain/environment-url.ts',
+  ]
+  assert.deepEqual(selectAuthoredChangesets({ changesetPaths: onDisk, changedPaths }), [
+    '.changeset/unrouted-environment-url.md',
+  ])
+})
+
+test('an empty diff authors nothing, so it can never be unjustified', () => {
+  // The shape of the bug at its clearest: a branch level with its base changed no image and wrote
+  // no changeset, and a guard that accuses it is reporting on the base, not on the branch.
+  assert.deepEqual(
+    selectAuthoredChangesets({
+      changesetPaths: ['.changeset/agent-cli-pins-refresh.md'],
+      changedPaths: [],
+    }),
+    [],
+  )
+})
+
+test('a changeset the branch EDITS is authored by it, however it got there', () => {
+  // Adding a harness package to a changeset that came from the base ref is the same statement as
+  // writing a fresh one, and the edit puts it in the diff, so it stays in scope.
+  assert.deepEqual(
+    selectAuthoredChangesets({
+      changesetPaths: ['.changeset/refresh.md'],
+      changedPaths: ['.changeset/refresh.md'],
+    }),
+    ['.changeset/refresh.md'],
+  )
 })
