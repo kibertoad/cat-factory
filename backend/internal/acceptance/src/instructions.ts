@@ -116,6 +116,11 @@ Rules that are NOT negotiable, because the platform renders them:
 - Use the literal placeholder \`{{namespace}}\` wherever the namespace appears, and do not set a
   hard-coded \`namespace:\` on any resource.
 - The Ingress host must be exactly \`${ingressHostTemplate}\`, placeholders included and unresolved.
+- Do NOT set \`ingressClassName\` on the Ingress, and do not set the deprecated
+  \`kubernetes.io/ingress.class\` annotation either. Leave the class unset so the cluster's own
+  DEFAULT IngressClass claims the Ingress. Naming a controller this cluster does not run leaves the
+  Ingress with nothing watching it: the apiserver accepts it, every object reports healthy, and the
+  host simply never answers.
 - The Service must expose port ${servicePort} and the container must listen on ${servicePort}.
 - Give the Deployment a readiness probe on \`/health\`, and keep replicas at 1.
 

@@ -1,7 +1,17 @@
-import type { RunnerJobResult, RunnerJobView, RunnerReproductionReport } from '@cat-factory/kernel'
+import type {
+  AgentJobHandle,
+  RunnerJobResult,
+  RunnerJobView,
+  RunnerReproductionReport,
+} from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
-import { buildFailureMeta, buildRunningUpdate, toRunResult } from './containerAgentResult.js'
+import {
+  buildFailureMeta,
+  buildRunningUpdate,
+  settledRunResult,
+  toRunResult,
+} from './containerAgentResult.js'
 
 /** The registry every facade builds; the kind is irrelevant to the orthogonal channels below. */
 const registry = defaultAgentKindRegistry()
@@ -119,5 +129,70 @@ describe('buildFailureMeta — a verdict that outlives the job', () => {
 
   it('sets nothing when no proof ran', () => {
     expect(buildFailureMeta({ state: 'failed' }).reproductionReport).toBeUndefined()
+  })
+})
+
+// What only the dispatch HANDLE knows, folded onto a settled result. Both channels fail SILENTLY
+// when dropped: the ledger books provider "unknown" / model "" for the model, and a cache-heavy
+// subscription run is priced entirely at the fresh rate for the class split.
+
+const handle = (over: Partial<AgentJobHandle> = {}): AgentJobHandle => ({
+  jobId: 'job_1',
+  model: 'claude:claude-opus-5',
+  ...over,
+})
+
+describe('settledRunResult - the dispatch handle folded onto a settled job', () => {
+  it('prices a subscription run by input CLASS off the same per-call rows that mark it as one', () => {
+    const result: RunnerJobResult = {
+      pushed: true,
+      usage: { inputTokens: 10_000, outputTokens: 500 },
+      callMetrics: [
+        { cacheReadTokens: 8_000, cacheWriteTokens: 500 },
+        { cacheReadTokens: 1_000, cacheWriteTokens: 0 },
+      ],
+    } as RunnerJobResult
+    const mapped = settledRunResult(result, handle({ provider: 'claude' }), registry)
+    expect(mapped.usage).toEqual({
+      inputTokens: 10_000,
+      outputTokens: 500,
+      // The harness total stays authoritative and the classes sum to exactly it; only the cache
+      // shares come off the calls, so the turn they narrated nothing for is priced as fresh.
+      inputClasses: { promptTokens: 500, cacheReadTokens: 9_000, cacheWriteTokens: 500 },
+    })
+    expect(mapped.usageBilling).toBe('subscription')
+    expect(mapped.usageVendor).toBe('claude')
+    expect(mapped.model).toBe('claude:claude-opus-5')
+  })
+
+  it('leaves usage off a proxy-metered run, which the proxy alone meters', () => {
+    // Pi emits no `callMetrics`. Stamping its usage here too would double-count every token it
+    // spent, since the proxy already recorded them.
+    const result = {
+      pushed: true,
+      usage: { inputTokens: 10_000, outputTokens: 500 },
+    } as RunnerJobResult
+    const mapped = settledRunResult(result, handle(), registry)
+    expect(mapped.usage).toBeUndefined()
+    expect(mapped.usageBilling).toBeUndefined()
+    expect(mapped.model).toBe('claude:claude-opus-5')
+  })
+
+  it('falls back to the provider parsed from the model label when the handle carries none', () => {
+    const result = {
+      pushed: true,
+      usage: { inputTokens: 100, outputTokens: 10 },
+      callMetrics: [{ cacheReadTokens: 0, cacheWriteTokens: 0 }],
+    } as RunnerJobResult
+    expect(settledRunResult(result, handle(), registry).usageVendor).toBe('claude')
+  })
+
+  it('leaves the mapping to decide the model when the dispatch captured no label', () => {
+    const mapped = settledRunResult(
+      { pushed: true } as RunnerJobResult,
+      handle({ model: undefined }),
+      registry,
+    )
+    expect(mapped.model).toBeUndefined()
   })
 })

@@ -14,6 +14,7 @@ import org.jspecify.annotations.Nullable;
  * @param data Always present; {@code null} when the server has no value for it.
  * @param output Always present; {@code null} when the server has no value for it.
  * @param progress the {@code progress} field.
+ * @param skipped May be absent entirely.
  * @param state the {@code state} field.
  * @param subtasks Always present; {@code null} when the server has no value for it.
  * @param truncated May be absent entirely.
@@ -29,6 +30,9 @@ public record PublicRunStep(
     @JsonProperty("output") @Nullable String output,
 
     @JsonProperty("progress") Double progress,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("skipped") @Nullable Boolean skipped,
 
     @JsonProperty("state") StepState state,
 
@@ -55,6 +59,7 @@ public record PublicRunStep(
         private @Nullable Object data;
         private @Nullable String output;
         private @Nullable Double progress;
+        private @Nullable Boolean skipped;
         private @Nullable StepState state;
         private @Nullable RunSubtaskCounts subtasks;
         private @Nullable Boolean truncated;
@@ -83,6 +88,12 @@ public record PublicRunStep(
             return this;
         }
 
+        /** Set {@code skipped}. */
+        public Builder skipped(@Nullable Boolean skipped) {
+            this.skipped = skipped;
+            return this;
+        }
+
         /** Set {@code state}. */
         public Builder state(@Nullable StepState state) {
             this.state = state;
@@ -103,7 +114,7 @@ public record PublicRunStep(
 
         /** Build the {@link PublicRunStep}. */
         public PublicRunStep build() {
-            return new PublicRunStep(agentKind, data, output, progress, state, subtasks, truncated);
+            return new PublicRunStep(agentKind, data, output, progress, skipped, state, subtasks, truncated);
         }
     }
 }

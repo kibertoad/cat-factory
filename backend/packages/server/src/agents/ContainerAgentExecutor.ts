@@ -13,7 +13,6 @@ import {
   type McpOAuthTokenSource,
   type OperationalMetrics,
   type RunnerDispatchKind,
-  type RunnerDispatchOptions,
   type RunnerJobRef,
   type RunnerJobView,
   type RunReclaimTarget,
@@ -29,10 +28,9 @@ import {
   CredentialRequiredError,
   VCS_DOC_URLS,
   SUBSCRIPTION_VENDORS,
-  agentUsageFromHarnessCalls,
   isIndividualVendor,
 } from '@cat-factory/kernel'
-import { resolveAprioriWorkingBranch, resolveInstanceTypeId } from '@cat-factory/contracts'
+import { resolveAprioriWorkingBranch } from '@cat-factory/contracts'
 import {
   type AgentKindRegistry,
   type AgentRouting,
@@ -55,9 +53,10 @@ import {
   buildDoneUpdate,
   buildFailureMeta,
   buildRunningUpdate,
-  toRunResult,
+  settledRunResult,
 } from './containerAgentResult.js'
 import { buildKindBody } from './jobBody.js'
+import { buildDispatchOptions } from './dispatchOptions.js'
 import { containerJobLog, settleFailureFields } from './containerAgentLogging.js'
 import { acceptContainerJob } from './containerAgentDispatch.js'
 import { recordAgentContextSnapshot } from './agentContextRecord.js'
@@ -67,7 +66,6 @@ import type { ContainerSessionService } from '../containers/ContainerSessionServ
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
 import {
   imageVariantFor,
-  providerOf,
   refForHandle,
   runImageVariants,
   stepJobId,
@@ -432,7 +430,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     )
     // Dispatch, log the transition, and refuse a run whose body carries a capability this runner
     // image told us it cannot serve. See `containerAgentDispatch.ts`.
-    const options = this.dispatchOptions(context)
+    const options = buildDispatchOptions(context, this.agentKindRegistry)
     const fields = { model, provider, kind }
     await acceptContainerJob(this.jobs, { workspaceId, ref, body, kind, options, jobLog, fields })
     // The one projection of what this dispatch decided about its tool servers. It lands on the
@@ -541,28 +539,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // modeled quota-cycle counters. Both are idempotent (once per job id) and behaviour-neutral.
     await this.accounting.recordPooledUsageOnce(handle, result)
     await this.accounting.recordQuotaUsageOnce(handle, result)
-    const runResult = toRunResult(result, handle.agentKind, this.agentKindRegistry)
-    // The poll site can't resolve the model ref, but the dispatch captured its label
-    // (`handle.model`, already used for `recordHarnessCalls`). Fold it onto the result so the
-    // durable poll path's `recordStepResult` → `spend.record` records the REAL model instead of
-    // 'unknown' (which `SpendService.parseModel` split into provider "unknown" / model ""). The
-    // inline `run()` path folded this in itself; doing it here fixes both paths at the source.
-    if (handle.model) runResult.model = handle.model
-    // A subscription harness (Claude Code / Codex / GLM / pooled Kimi & DeepSeek) bypasses
-    // the LLM proxy, so its tokens aren't metered there. It's the ONLY container path that
-    // emits per-call `callMetrics`, so their presence unambiguously marks a subscription
-    // run: stamp its usage onto the result tagged `'subscription'` so the engine records it
-    // in the durable usage ledger for the report — while the budget gate excludes it (a
-    // quota plan costs nothing per token). Pi (proxy-metered) has no `callMetrics`, so its
-    // usage stays off the result and the proxy remains its sole meter (no double-count).
-    if (result.callMetrics && result.callMetrics.length > 0 && result.usage) {
-      // Split by input CLASS off the same per-call telemetry, the only channel that kept the
-      // classes apart: a long agent run is overwhelmingly cache reads, and pricing its whole
-      // input at the fresh rate over-stated its cost on every operator usage report severalfold.
-      runResult.usage = agentUsageFromHarnessCalls(result.usage, result.callMetrics)
-      runResult.usageBilling = 'subscription'
-      runResult.usageVendor = handle.provider ?? providerOf(handle.model)
-    }
+    // Model label and subscription usage both come off the dispatch HANDLE, which the poll site
+    // has and the mapping does not; `settledRunResult` owns that fold for this path and `run()`.
+    const runResult = settledRunResult(result, handle, this.agentKindRegistry)
     jobLog.settled('done', { model: handle.model })
     return buildDoneUpdate(view, runResult, followUps)
   }
@@ -625,28 +604,6 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     if (!context.workspaceId) return false
     const { ref } = await this.modelRouter.resolveEffectiveRef(context, context.workspaceId)
     return ref.harness === 'claude-code' || ref.harness === 'codex'
-  }
-
-  /**
-   * Per-service provisioning hints for the dispatch: the cloud provider the service
-   * runs on and the abstract instance size resolved to the target's concrete
-   * instance-type id. Cloudflare maps the id to a Container instance type; a
-   * self-hosted pool forwards it (with the provider) and provisions itself. Undefined
-   * when the service pins no provider/size (the transport keeps its default).
-   */
-  private dispatchOptions(context: AgentRunContext): RunnerDispatchOptions | undefined {
-    const provider = context.service?.cloudProvider
-    const size = context.service?.instanceSize
-    const image = imageVariantFor(context.agentKind, this.agentKindRegistry)
-    if (!provider && !size && !image) return undefined
-    return {
-      ...(provider || size ? { instanceTypeId: resolveInstanceTypeId(provider, size) } : {}),
-      ...(provider ? { provider } : {}),
-      // Forward the abstract size too, so the local Docker/Podman backend can size
-      // the per-job container (`--memory`/`--cpus`) without decoding the cloud id.
-      ...(size ? { instanceSize: size } : {}),
-      ...(image ? { image } : {}),
-    }
   }
 
   /** Validate the ids every container job needs, narrowing them to non-empty strings. */

@@ -1496,8 +1496,16 @@ exits (ADR 0037), so no role-scoped bar narrows what it may select today.
 
 Run `status` distinguishes the states a caller reacts to: `running`, `blocked` (parked on a human;
 go read `/runs/:runId/decisions`), `paused` (spend-gated), `done`, `failed`. Each step reports
-`{ agentKind, state, progress, subtasks, output, data, truncated? }`, with live subtask counts while
-a container step works.
+`{ agentKind, state, progress, subtasks, output, data, skipped?, truncated? }`, with live subtask
+counts while a container step works.
+
+**`skipped: true` marks a step the pipeline never ran** (an estimate gate decided it was
+unnecessary), and it is the only thing that distinguishes one. A skipped step's `state` is `done`
+with no output, which is byte-for-byte a step that RAN and produced nothing, so a caller walking the
+chain reads "the engine decided this was unnecessary" and "this happened and had nothing to report"
+identically without it. Present only when true. Which axis skipped a step is deliberately not
+published: that vocabulary grows with the engine's gating, and the board renders the reason in
+translated copy.
 
 **`output` is the step's deliverable** (the agent's final reply), and `data` its structured result
 when its kind produces one; both are `null` for a step that produced none. This is what a board task

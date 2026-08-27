@@ -958,3 +958,139 @@ describe('KubernetesEnvironmentProvider registry auth', () => {
     expect(steps[0]!.error).toContain('403')
   })
 })
+
+describe('KubernetesEnvironmentProvider.status: ingress admission', () => {
+  // The failure this covers cost a 43-minute acceptance pass. The pod was `1/1 Running`, the
+  // Ingress named `ingressClassName: nginx`, the k3d cluster ran Traefik, and the provider called
+  // the environment ready and published a URL nothing on the cluster would ever route. The tester
+  // then spent fourteen minutes on curl code 000 and blamed the environment.
+  const ROLLED_OUT = { items: [{ spec: { replicas: 1 }, status: { availableReplicas: 1 } }] }
+
+  /** A cluster whose Deployments are up, with the given Ingress list and IngressClass catalog. */
+  function clusterServing(options: { ingresses?: unknown[]; classes?: unknown[] | null }) {
+    return stubFetch((c) => {
+      if (c.method !== 'GET') return { status: 200 }
+      if (c.url.includes('/deployments')) return { body: ROLLED_OUT }
+      if (c.url.includes('/ingressclasses')) {
+        return options.classes === null
+          ? { status: 403, body: { message: 'forbidden' } }
+          : { body: { items: options.classes ?? [] } }
+      }
+      if (c.url.includes('/ingresses')) return { body: { items: options.ingresses ?? [] } }
+      return { status: 200 }
+    })
+  }
+
+  const namedClass = (name: string, isDefault = false) => ({
+    metadata: {
+      name,
+      ...(isDefault
+        ? { annotations: { 'ingressclass.kubernetes.io/is-default-class': 'true' } }
+        : {}),
+    },
+  })
+
+  const statusOf = () =>
+    new KubernetesEnvironmentProvider().status({
+      manifest,
+      externalId: 'cf-env-42',
+      provisionFields: { namespace: 'cf-env-42', branch: 'feat' },
+      resolveSecret,
+    })
+
+  it('FAILS a healthy workload whose Ingress names a class the cluster does not run', async () => {
+    clusterServing({
+      ingresses: [{ metadata: { name: 'api' }, spec: { ingressClassName: 'nginx' } }],
+      classes: [namedClass('traefik', true)],
+    })
+    const result = await statusOf()
+    expect(result.status).toBe('failed')
+    // `config_incomplete`, the same class PR #2075 gave the sibling refusal: not repo-fixable, so
+    // no fixer container is spent inviting an agent to guess a class off a catalog it cannot see.
+    expect(result.reason).toBe('config_incomplete')
+    expect(result.error).toContain("'nginx'")
+    expect(result.error).toContain("'traefik'")
+  })
+
+  it('FAILS when the cluster publishes no IngressClass at all', async () => {
+    clusterServing({
+      ingresses: [{ metadata: { name: 'api' }, spec: {} }],
+      classes: [],
+    })
+    const result = await statusOf()
+    expect(result.status).toBe('failed')
+    expect(result.error).toContain('no ingress controller')
+  })
+
+  it('reports READY once a controller has written an address back', async () => {
+    clusterServing({
+      ingresses: [
+        {
+          metadata: { name: 'api' },
+          spec: { ingressClassName: 'traefik' },
+          status: { loadBalancer: { ingress: [{ ip: '172.20.0.2' }] } },
+        },
+      ],
+      classes: [namedClass('traefik', true)],
+    })
+    const result = await statusOf()
+    expect(result.status).toBe('ready')
+    expect(result.url).toBe('https://feat.preview.example.com')
+  })
+
+  it('holds at provisioning, NOT failed, while a satisfiable class waits to be programmed', async () => {
+    clusterServing({
+      ingresses: [{ metadata: { name: 'api' }, spec: { ingressClassName: 'traefik' } }],
+      classes: [namedClass('traefik', true)],
+    })
+    expect((await statusOf()).status).toBe('provisioning')
+  })
+
+  it('publishes exactly as before when the catalog read is REFUSED', async () => {
+    // The pass-through that keeps this check from breaking any cluster whose ServiceAccount holds
+    // no cluster-scoped `ingressclasses` grant. A 403 establishes nothing, so it may not refuse.
+    clusterServing({
+      ingresses: [{ metadata: { name: 'api' }, spec: { ingressClassName: 'nginx' } }],
+      classes: null,
+    })
+    const result = await statusOf()
+    expect(result.status).toBe('ready')
+    expect(result.error).toBeUndefined()
+  })
+
+  it('never asks the cluster about ingress admission for a status-backed URL source', async () => {
+    // A status-backed source already waits on the live address, so it cannot publish a host the
+    // cluster never assigned. Grading it too would be two reads and one extra way to be wrong.
+    const cfg: KubernetesEnvironmentConfig = {
+      ...config,
+      url: { source: 'serviceStatus', serviceName: 'web', scheme: 'https' },
+    }
+    const calls = stubFetch((c) => {
+      if (c.method !== 'GET') return { status: 200 }
+      if (c.url.includes('/deployments')) return { body: ROLLED_OUT }
+      if (c.url.includes('/services'))
+        return { body: { status: { loadBalancer: { ingress: [{ hostname: 'lb.example.com' }] } } } }
+      return { status: 200 }
+    })
+    const result = await new KubernetesEnvironmentProvider().status({
+      manifest: kubernetesConfigToManifest(cfg),
+      externalId: 'cf-env-42',
+      provisionFields: { namespace: 'cf-env-42' },
+      resolveSecret,
+    })
+    expect(result.status).toBe('ready')
+    expect(calls.some((c) => c.url.includes('/ingressclasses'))).toBe(false)
+  })
+
+  it('does not grade admission while the workload is still rolling out', async () => {
+    // Ordering, asserted rather than assumed: grading a just-applied Ingress before the workload
+    // is up would race the controller and could only produce a false refusal.
+    const calls = stubFetch((c) =>
+      c.method === 'GET' && c.url.includes('/deployments')
+        ? { body: { items: [{ spec: { replicas: 2 }, status: { availableReplicas: 1 } }] } }
+        : { status: 200 },
+    )
+    expect((await statusOf()).status).toBe('provisioning')
+    expect(calls.some((c) => c.url.includes('/ingressclasses'))).toBe(false)
+  })
+})

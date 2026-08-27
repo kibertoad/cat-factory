@@ -695,6 +695,19 @@ export const publicRunStepSchema = v.object({
    */
   data: v.nullable(v.unknown()),
   /**
+   * True when the pipeline SKIPPED this step rather than running it. Absent/false ⇒ it ran.
+   *
+   * Distinct from {@link state}, which reads `done` for both, with no output either way. A caller
+   * following a run's chain therefore cannot tell "this step produced nothing" from "this step
+   * never happened" without it, and the two mean opposite things about the run: an estimate-gated
+   * step the engine decided was unnecessary, versus a step that ran and had nothing to report.
+   *
+   * A boolean and not the internal `skipReason`. Which axis skipped a step is a vocabulary the
+   * engine adds members to as it grows new gating, and a public enum is a promise not to; the
+   * board is where a human reads the reason, in translated copy.
+   */
+  skipped: v.optional(v.boolean()),
+  /**
    * True when THIS PROJECTION reduced the step's deliverable for size: {@link output} is clipped
    * to a leading preview and {@link data} is withheld as null. Absent/false ⇒ both are whole.
    *

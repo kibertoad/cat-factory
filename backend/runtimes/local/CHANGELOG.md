@@ -1,5 +1,82 @@
 # @cat-factory/local-server
 
+## 0.141.5
+
+### Patch Changes
+
+- 2ea756f: Take the bundled agent CLIs at their newest releases: Claude Code `2.1.245 → 2.1.246` and Codex
+  `0.149.1 → 0.150.0`. Pi stays at `0.84.3`, which is still its newest release, as do the two Pi
+  extensions at `2.7.1`.
+  
+  Codex `0.150.0` is inside the 24h `minimumReleaseAge` window (published ~4h before this was cut),
+  so it is taken under the standing exemption the Dockerfile's note carries for exactly these three
+  CLIs, re-made here as an explicit call. Claude Code `2.1.246` needs no exemption: it has aged past
+  the window. Claude Code `2.1.247` is published but sits on the `next` dist-tag rather than
+  `latest`, so it is deliberately not taken; the pins follow the stable line.
+  
+  The executor image tag rolls to `1.139.0` (base + UI) because republishing over a live tag does not
+  roll a deployment out.
+- 7d899c4: Stop publishing an ephemeral-environment URL nothing can serve, and make a containerized tester
+  able to reach one that can.
+  
+  An acceptance pass deployed a healthy pod, published `http://cf-acc-pr8.127.0.0.1.nip.io`, reported
+  the environment `ready`, and then spent fourteen minutes in the tester on curl code 000 before
+  failing the run at forty-three minutes. Two independent faults, both of which PR #2075 named and
+  left open:
+  
+  - **The Ingress was claimed by nothing.** It declared `ingressClassName: nginx` on a cluster
+    running Traefik. The apiserver accepts that, no controller watches it, `status.loadBalancer`
+    stays empty, and readiness (which was the Deployments' rollout and nothing else) still said
+    `ready`. The Kubernetes provider now grades a template-derived URL against the cluster's own
+    `IngressClass` catalog and reports `failed` / `config_incomplete` naming both the requested class
+    and the available ones. It fails only on POSITIVE evidence that no controller can claim the
+    Ingress; a missing address is `pending`, never a refusal, and a cluster that will not answer the
+    cluster-scoped read passes through byte-for-byte as before. `cat-factory k3s` grants the
+    `ingressclasses` read so a cluster it provisions can answer.
+  - **A loopback URL is unreachable from an agent container**, whose `127.0.0.1` is its own network
+    namespace. The local facade now maps the environment's host to the container's host gateway, so
+    one URL means the right thing to the operator's browser and to the agent alike. A container that
+    predates its environment is replaced, and a bridged job never takes a warm-pool member (a member
+    is re-leased across runs, so one run's per-PR entry would leak into the next). It covers every
+    environment a job is handed, not just the frame's own: a live peer service's environment for a
+    cross-service test and a frontend flow's resolved backend binding fail identically without it.
+    The URLs ride the dispatch OPTIONS as a declared, typed list rather than being dug back out of
+    the job body, where they sit three levels down under a wire shape the harness owns.
+  
+    A URL naming this machine that NO bridge can re-point is reported rather than bridged: a hosts
+    entry cannot displace the `127.0.0.1 localhost` line an image ships with, and it is never
+    consulted for a bare IP literal. A compose environment publishes `http://localhost:<port>`, so
+    bridging it bought nothing while costing every such run its warm-pool member and a container
+    replacement. Those runs are pooled again, and the log now says the environment is out of the
+    agent's reach instead of leaving it to be discovered as a dead cluster.
+  
+  Also: the acceptance suite refuses a pass up front when the cluster runs no ingress controller or
+  publishes no host port into it, reusing `cat-factory k3s`' probe; its scaffold briefs tell agents to
+  leave `ingressClassName` unset so the cluster's default class claims the Ingress; and the run driver
+  reports step TRANSITIONS instead of only sampling `currentStep`, so a step that starts and finishes
+  between two polls is still named. That last one is why this failure was misread: the `deployer`
+  finished in one second against a ten-second poll, so the pass jumped from `reviewer` to
+  `tester-api` and the step that published the bad URL never appeared in the log at all.
+  
+  Alongside them, `/api/v1` serves `skipped` on a run's steps (an additive optional field, OpenAPI
+  `1.62.0`). A skipped step's `state` is `done` with no output, which is byte-for-byte a step that
+  ran and produced nothing, so following a run's chain could not tell the engine deciding a step was
+  unnecessary from the step happening and having nothing to say. The acceptance kit's transition
+  reducer already knew how to announce the difference and could not observe it.
+- Updated dependencies [2ea756f]
+- Updated dependencies [7d899c4]
+  - @cat-factory/executor-harness@1.139.1
+  - @cat-factory/contracts@0.331.0
+  - @cat-factory/server@0.307.0
+  - @cat-factory/integrations@0.166.13
+  - @cat-factory/kernel@0.321.1
+  - @cat-factory/agents@0.145.1
+  - @cat-factory/binary-generators@0.3.13
+  - @cat-factory/gitlab@0.22.13
+  - @cat-factory/orchestration@0.288.4
+  - @cat-factory/prompt-fragments@1.1.9
+  - @cat-factory/node-server@0.215.4
+
 ## 0.141.4
 
 ### Patch Changes

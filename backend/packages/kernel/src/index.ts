@@ -920,6 +920,11 @@ export {
   isLocalMachineHost,
 } from './shared/ip-host.logic.js'
 export {
+  classifyLocalMachineHostBridge,
+  resolvesToLocalMachine,
+} from './shared/environment-host-bridge.logic.js'
+export type { LocalMachineHostBridge } from './shared/environment-host-bridge.logic.js'
+export {
   isSecretShapedFilename,
   redactSecrets,
   redactSecretsDeep,

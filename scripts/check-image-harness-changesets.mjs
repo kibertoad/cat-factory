@@ -19,7 +19,11 @@
 import { execFileSync } from 'node:child_process'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { findUnjustifiedBumps, parseChangesetPackages } from './image-harness-changesets.mjs'
+import {
+  findUnjustifiedBumps,
+  parseChangesetPackages,
+  selectAuthoredBumps,
+} from './image-harness-changesets.mjs'
 import { IMAGES, readRepoFile, repoRoot } from './runner-images.mjs'
 
 const sinceIdx = process.argv.indexOf('--since')
@@ -61,21 +65,55 @@ const images = [...byHarness.values()].map((entry) => ({
     entry.sourceFiles.has(path) || entry.sourcePrefixes.some((prefix) => path.startsWith(prefix)),
 }))
 
+const git = (args) => execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' })
+const lines = (text) =>
+  text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+// The one base both halves are judged against: the point this branch was cut from, not the base
+// ref's tip. `git diff <since>...HEAD` already meant this, and reading the pending changesets off
+// the tip instead would call the branch the author of every changeset a release consumed on the
+// base after the fork, which is the same bystander accusation from the other side.
+const base = git(['merge-base', since, 'HEAD']).trim()
+
+// Three reads, unioned, because the guard runs in two places that see different trees. CI runs it
+// on `pull/N/merge`, where the working tree is clean and the committed diff IS the branch's work.
+// A contributor runs it before committing, as the repo asks, and there the committed diff is empty
+// or stale: judging on it alone reports a clean tree while the change sitting in front of them is
+// the violation.
+const changedPaths = [
+  ...new Set([
+    ...lines(git(['diff', '--name-only', base, 'HEAD'])),
+    ...lines(git(['diff', '--name-only', 'HEAD'])),
+    ...lines(git(['ls-files', '--others', '--exclude-standard'])),
+  ]),
+]
+
+// What the branch inherited rather than wrote. A changeset stays in `.changeset/` from the PR that
+// writes it until a release consumes it, so every package named here was already going to be
+// released without this branch; see `selectAuthoredBumps` for why authorship is read off these
+// package names and not off the diff.
+const inheritedPackages = new Set()
+for (const path of lines(git(['ls-tree', '-r', '--name-only', base, '--', '.changeset']))) {
+  if (!path.endsWith('.md') || path.endsWith('/README.md')) continue
+  for (const name of parseChangesetPackages(git(['show', `${base}:${path}`]))) {
+    inheritedPackages.add(name)
+  }
+}
+
 const changesetDir = resolve(repoRoot, '.changeset')
-const changesets = readdirSync(changesetDir)
+const pending = readdirSync(changesetDir)
   .filter((name) => name.endsWith('.md') && name !== 'README.md')
   .map((name) => ({
     path: `.changeset/${name}`,
     packages: parseChangesetPackages(readFileSync(join(changesetDir, name), 'utf8')),
   }))
-
-const changedPaths = execFileSync('git', ['diff', '--name-only', `${since}...HEAD`], {
-  cwd: repoRoot,
-  encoding: 'utf8',
+const changesets = selectAuthoredBumps({
+  changesets: pending,
+  inheritedPackages: [...inheritedPackages],
 })
-  .split('\n')
-  .map((line) => line.trim())
-  .filter(Boolean)
 
 const violations = findUnjustifiedBumps({ changesets, images, changedPaths })
 
@@ -88,7 +126,7 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `check-image-harness-changesets: ${changesets.length} changeset(s) present, those this branch ` +
-    `introduced judged against ${images.length} image harness package(s); ` +
-    `none versions an unchanged image.`,
+  `check-image-harness-changesets: ${changesets.length} changeset(s) with a bump authored on ` +
+    `this branch (${pending.length} pending in .changeset/) checked against ${images.length} ` +
+    `image harness package(s); none versions an unchanged image.`,
 )

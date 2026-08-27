@@ -1,4 +1,5 @@
 import type {
+  AgentJobHandle,
   AgentJobUpdate,
   AgentRunResult,
   ContainerEvictionKind,
@@ -7,7 +8,9 @@ import type {
   RunnerJobView,
   StreamedFollowUp,
 } from '@cat-factory/kernel'
+import { agentUsageFromHarnessCalls } from '@cat-factory/kernel'
 import { type AgentKindRegistry, summaryOr } from '@cat-factory/agents'
+import { providerOf } from './containerJobAddressing.js'
 
 /**
  * Runner-output → engine-result normalisation for {@link ContainerAgentExecutor}.
@@ -19,6 +22,39 @@ import { type AgentKindRegistry, summaryOr } from '@cat-factory/agents'
  * `mapStructuredResult` beside its dispatch shape. The output boundary of the executor, kept as a
  * self-contained, independently-testable unit.
  */
+
+/**
+ * The engine result for a SETTLED job: {@link toRunResult}'s mapping plus the two things only
+ * the dispatch HANDLE knows, folded on here rather than at the poll site.
+ *
+ * The poll site cannot resolve a model ref, so without the handle both of these land wrong and
+ * silently: the ledger records provider "unknown" / model "", and a subscription run's tokens
+ * are filed against nobody. The inline `run()` path used to fold the model in itself, which is
+ * why this lives with the other result normalisation instead: one place, both paths.
+ *
+ * `callMetrics` is what marks a SUBSCRIPTION run. Those harnesses (Claude Code / Codex / GLM /
+ * pooled Kimi & DeepSeek) bypass the LLM proxy, so nothing else meters their tokens, and they
+ * are the only container path that emits per-call rows. Pi is proxy-metered and emits none, so
+ * its usage stays off the result and the proxy remains its sole meter with no double-count.
+ *
+ * Those same per-call rows are the only channel that kept the input CLASSES apart, so the usage
+ * is split by them: a long agent run is overwhelmingly cache reads, and pricing its whole input
+ * at the fresh rate over-stated its cost several-fold on every operator usage report.
+ */
+export function settledRunResult(
+  result: RunnerJobResult,
+  handle: AgentJobHandle,
+  registry: AgentKindRegistry,
+): AgentRunResult {
+  const runResult = toRunResult(result, handle.agentKind, registry)
+  if (handle.model) runResult.model = handle.model
+  if (result.callMetrics && result.callMetrics.length > 0 && result.usage) {
+    runResult.usage = agentUsageFromHarnessCalls(result.usage, result.callMetrics)
+    runResult.usageBilling = 'subscription'
+    runResult.usageVendor = handle.provider ?? providerOf(handle.model)
+  }
+  return runResult
+}
 
 /**
  * Map a finished runner {@link RunnerJobResult} into the engine's {@link AgentRunResult}.

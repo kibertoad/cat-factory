@@ -59,6 +59,7 @@ import {
 import type { AcceptanceConfig } from './config.ts'
 import { K3S_DOC } from './config.ts'
 import { buildK3sConnection, buildK3sSecrets } from './k3s.ts'
+import { CLUSTER_INGRESS_PREREQUISITES } from './clusterIngress.ts'
 import { MANIFEST_TEMPLATE_PREREQUISITES } from './manifestTemplates.ts'
 import {
   ACCEPTANCE_IDENTITY,
@@ -1371,6 +1372,12 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
           )
     },
   },
+  // Whether that cluster can SERVE the URL those templates render: an ingress controller, and a
+  // host port published into it. Its own module for the same reason the template gates are
+  // (`clusterIngress.ts`), and spread HERE because the order of this list is causal: it reads the
+  // cluster `cluster-connection` just proved answers, and it is only worth asking once the URL the
+  // templates compose is known to be well-formed.
+  ...CLUSTER_INGRESS_PREREQUISITES,
   // The two template gates, which read the CONFIG and nothing else, so they live beside each
   // other in `manifestTemplates.ts` rather than here. Spread at this position because the order of
   // this list is causal (see the header): they belong after the cluster the templates describe.

@@ -59,6 +59,7 @@ import {
   withPullSecretOnServiceAccounts,
 } from './kubernetes-registry-auth.logic.js'
 import {
+  classifyIngressAdmission,
   deriveUrl,
   describeUnreachableIngressHost,
   extractGatewayAddress,
@@ -67,7 +68,11 @@ import {
   extractLoadBalancerAddress,
   firstListItem,
   httpRouteParentRef,
+  type IngressAdmission,
+  ingressClassesUrl,
   isManifestFile,
+  readIngressAdmissionFacts,
+  readIngressClassCatalog,
   type KubernetesResource,
   namespaceUrl,
   parseKubernetesEnvConfig,
@@ -244,6 +249,48 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     const client = this.makeClient(config, req.resolveSecret)
     const status = await this.deploymentStatus(client, config, namespace)
     const url = await this.resolveLiveUrl(client, config, namespace, req.provisionFields)
+    // Only once the WORKLOAD is otherwise ready, and only for a URL derived from a host template.
+    // Both narrowings matter. Grading earlier would race a controller that has not looked at a
+    // just-applied Ingress yet, and a status-backed source already waits on the live address, so
+    // it cannot publish a host the cluster never assigned. A template source can: it is config
+    // text, and this is the one check that asks the cluster whether it agrees.
+    if (status === 'ready' && config.url.source === 'ingressTemplate') {
+      const admission = await this.ingressAdmission(client, config, namespace)
+      if (admission.status === 'unrouted') {
+        return {
+          externalId: namespace,
+          url,
+          status: 'failed',
+          expiresAt: null,
+          access: null,
+          fields: req.provisionFields,
+          // Reported rather than thrown, which is what `ProvisionedEnvironment.error` is for: this
+          // is a deterministic rejection the provider is not surprised by. `config_incomplete` is
+          // the same class PR #2075 gave the sibling refusal (an environment URL that cannot reach
+          // this cluster), and it is the right disposition twice over: the manifests are not
+          // fixable evidence here, and `manifest_invalid` would spend a container inviting an agent
+          // to guess a class name off a cluster catalog it cannot see.
+          error: `The environment URL cannot be served: ${admission.problem}`,
+          reason: 'config_incomplete',
+        }
+      }
+      // `pending` withholds `ready` rather than failing: nothing has claimed the Ingress YET, and
+      // the provision's own deadline is what turns a route that never arrives into a `timeout`.
+      if (admission.status === 'pending') {
+        return {
+          externalId: namespace,
+          url,
+          status: 'provisioning',
+          expiresAt: null,
+          access: null,
+          fields: req.provisionFields,
+        }
+      }
+      // `unknown` falls through to publish exactly as before. That is the deliberate disposition
+      // for a check this cluster will not answer (the ServiceAccount may hold no cluster-scoped
+      // `ingressclasses` grant): a capability that cannot run is a PASS-THROUGH, byte-for-byte the
+      // prior behaviour, never a refusal built on an answer nobody gave.
+    }
     return {
       externalId: namespace,
       url,
@@ -742,6 +789,36 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
       if (readiness !== 'ready') anyPending = true
     }
     return anyPending ? 'provisioning' : 'ready'
+  }
+
+  /**
+   * Whether anything in the cluster will serve the host an `ingressTemplate` URL names: the
+   * namespace's Ingresses graded against the cluster's own `IngressClass` catalog. The reduction
+   * is {@link classifyIngressAdmission}, which owns what this may and may not fail on.
+   *
+   * The catalog read is cluster-scoped, and the ServiceAccount's ClusterRole may not cover it. A
+   * refusal or an unreadable payload therefore becomes `read: false`, which grades to `unknown` and
+   * changes nothing: a 403 mistaken for an empty catalog would fail every environment on a working
+   * cluster. `cat-factory k3s` grants `ingressclasses` so a cluster it provisions can answer.
+   */
+  private async ingressAdmission(
+    client: KubernetesApiClient,
+    config: KubernetesEnvironmentConfig,
+    namespace: string,
+  ): Promise<IngressAdmission> {
+    const ingressList = await this.getJson(
+      client,
+      resourceUrl(config, 'networking.k8s.io/v1', 'Ingress', namespace),
+    )
+    const items = (ingressList as { items?: unknown } | null)?.items
+    if (!Array.isArray(items)) {
+      return { status: 'unknown', detail: `could not list Ingresses in namespace ${namespace}` }
+    }
+    const catalogBody = await this.getJson(client, ingressClassesUrl(config))
+    return classifyIngressAdmission(
+      items.map(readIngressAdmissionFacts),
+      readIngressClassCatalog(catalogBody),
+    )
   }
 
   /** Resolve the live URL, reading the status host/address for status-backed sources. */
