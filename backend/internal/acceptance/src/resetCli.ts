@@ -29,10 +29,18 @@
 import { rmSync } from 'node:fs'
 import type { PrReportRunProvider } from '@cat-factory/sdk'
 import {
+  applyReset,
   describeThrown,
+  formatResetPlan,
+  formatResetReport,
   latestPointerPath,
   listPasses,
+  parseResetArgs,
+  planReset,
   readLatestPointer,
+  type ResetPassOnDisk,
+  type ResetPlan,
+  resetSucceeded,
   scrubbed,
 } from '@cat-factory/acceptance-kit'
 import { type BoardConfig, resolveBoardConfig, resolveReporterConfig } from './config.ts'
@@ -52,27 +60,31 @@ import type { LedgerIssue } from './issuePurge.ts'
 import { createClient } from './publicApi.ts'
 import { REPO_CONTENT_APIS } from './repoContentApi.ts'
 import { ISSUE_APIS, UNSUPPORTED_PROVIDER_REASON } from './vcsIssues.ts'
-import {
-  applyReset,
-  formatResetPlan,
-  formatResetReport,
-  parseResetArgs,
-  planReset,
-  type ResetClient,
-  type ResetPassOnDisk,
-  type ResetPlan,
-  resetSucceeded,
-} from './reset.ts'
+import { type AcceptanceResetClient, acceptanceResetInput } from './reset.ts'
+import type { World } from './world.ts'
 import { readWorld } from './world.ts'
+
+/**
+ * `--purge-repos`, declared to the kit's parser rather than acted on by it.
+ *
+ * Its own flag rather than part of `--all`, which is about how much of the BOARD to clear. This is a
+ * different axis (the provider side), it needs a credential the board half does not, and bundling
+ * the two would make a whole-board clear silently start rewriting repositories.
+ */
+const PURGE_REPOS = '--purge-repos'
 
 process.exitCode = await run()
 
 async function run(): Promise<number> {
-  const parsed = parseResetArgs(process.argv.slice(2))
+  const parsed = parseResetArgs(process.argv.slice(2), {
+    usage: `${resetInvocation()} [runId|latest] [--all] [--purge-repos] [--yes]`,
+    flags: [PURGE_REPOS],
+  })
   if (!parsed.ok) {
     console.log(parsed.problem)
     return 2
   }
+  const purgeRepos = parsed.flags.has(PURGE_REPOS)
 
   // The same `.env` the pass itself runs from, with the shell winning over the file (`envFile.ts`
   // owns that rule). Read here rather than left to `process.env` because that file IS where an
@@ -114,14 +126,14 @@ async function run(): Promise<number> {
   }
   const namedRunId = parsed.runId === 'latest' ? (latest?.runId ?? null) : parsed.runId
 
-  const passes: readonly ResetPassOnDisk[] = listPasses(stateDir).map((pass) => ({
+  const passes: readonly ResetPassOnDisk<World>[] = listPasses(stateDir).map((pass) => ({
     runId: pass.runId,
     ledgerPath: pass.ledgerPath,
     journalPath: pass.journalPath,
     // A ledger whose stated id disagrees with its FILE NAME is read as naming nothing, exactly as
     // `findPassesNaming` does: a copied or renamed file is not evidence about which frames belong to
     // which pass, and deleting a frame on the strength of it would act on a guess.
-    world: ownWorld(pass.ledgerPath, pass.runId),
+    facts: ownWorld(pass.ledgerPath, pass.runId),
   }))
 
   if (namedRunId !== null && !passes.some((pass) => pass.runId === namedRunId)) {
@@ -140,7 +152,7 @@ async function run(): Promise<number> {
   // Resolved BEFORE anything is deleted, so a `--purge-repos` this deployment's provider cannot be
   // addressed with refuses having changed nothing, rather than clearing the board and then
   // discovering it cannot finish the job.
-  const provider = parsed.purgeRepos ? await providerClients(env, sdk) : null
+  const provider = purgeRepos ? await providerClients(env, sdk) : null
   if (provider !== null && !provider.ok) {
     console.log(provider.problem)
     return 2
@@ -160,19 +172,22 @@ async function run(): Promise<number> {
       // what it was pointed at: the preview is a separate invocation, and this line is the only thing
       // in a captured log that separates a whole-board clear from a configured one.
       (parsed.all ? `  scope:        --all (EVERY service frame this board lists)\n` : '') +
-      (parsed.purgeRepos
+      (purgeRepos
         ? `  scope:        --purge-repos (also close this suite's issues and EMPTY both repositories)\n`
         : ''),
   )
 
-  const plan = await planReset(client, {
-    config,
-    namedRunId,
-    all: parsed.all,
-    passes,
-    latest,
-    purgeProvider: parsed.purgeRepos,
-  })
+  const plan = await planReset(
+    client,
+    await acceptanceResetInput(client, {
+      config,
+      namedRunId,
+      all: parsed.all,
+      passes,
+      latest,
+      purgeProvider: purgeRepos,
+    }),
+  )
 
   const providerPlan =
     providerApis === null ? null : await planPurge(providerApis, config, plan, passes)
@@ -187,7 +202,7 @@ async function run(): Promise<number> {
         `  ${resetInvocation({
           ...(namedRunId ? { runId: namedRunId } : {}),
           ...(parsed.all ? { all: true } : {}),
-          ...(parsed.purgeRepos ? { purgeRepos: true } : {}),
+          ...(purgeRepos ? { purgeRepos: true } : {}),
           apply: true,
         })}`,
     )
@@ -214,8 +229,8 @@ async function run(): Promise<number> {
 async function planPurge(
   apis: ProviderPurgeClients,
   config: BoardConfig,
-  plan: ResetPlan,
-  passes: readonly ResetPassOnDisk[],
+  plan: ResetPlan<World>,
+  passes: readonly ResetPassOnDisk<World>[],
 ): Promise<ProviderPurgePlan> {
   const removing = new Set(plan.passes.map((pass) => pass.runId))
   const kept = passes.filter((pass) => !removing.has(pass.runId))
@@ -253,8 +268,8 @@ async function planPurge(
  * repositories a second time.
  */
 async function applyBoth(
-  client: ResetClient,
-  plan: ResetPlan,
+  client: AcceptanceResetClient,
+  plan: ResetPlan<World>,
   provider: { apis: ProviderPurgeClients; plan: ProviderPurgePlan } | null,
 ): Promise<number> {
   const report = await applyReset(client, { remove: removeFile }, plan)
@@ -357,11 +372,11 @@ async function providerClients(
  * disagree about what a ledger's issue is.
  */
 function ledgerIssuesOf(
-  passes: readonly ResetPassOnDisk[],
+  passes: readonly ResetPassOnDisk<World>[],
   runIds: ReadonlySet<string>,
 ): readonly LedgerIssue[] {
   return passes.flatMap((pass) => {
-    const issue = pass.world?.intakeIssue
+    const issue = pass.facts?.intakeIssue
     if (!issue || !runIds.has(pass.runId)) return []
     return [
       {
@@ -386,7 +401,7 @@ function backupStamp(): string {
 }
 
 /** The SDK, narrowed to the five calls the reset makes. */
-function resetClient(sdk: ReturnType<typeof createClient>): ResetClient {
+function resetClient(sdk: ReturnType<typeof createClient>): AcceptanceResetClient {
   return {
     repos: async () => (await sdk.repos.list()).repos,
     services: async () => (await sdk.services.list()).services,
@@ -433,7 +448,7 @@ function removeFile(path: string): boolean {
 }
 
 /** A pass's ledger, or null when the file is absent, malformed, or belongs to a different pass. */
-function ownWorld(ledgerPath: string, runId: string): ResetPassOnDisk['world'] {
+function ownWorld(ledgerPath: string, runId: string): World | null {
   const world = readWorld(ledgerPath)
   return world && world.runId === runId ? world : null
 }
