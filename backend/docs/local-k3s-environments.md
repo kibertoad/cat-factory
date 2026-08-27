@@ -85,7 +85,7 @@ If you'd rather wire it by hand (or the guided flow can't run on your host), do 
      `serviceStatus` LoadBalancer with k3s ServiceLB) + the `namespaceTemplate`. These two are
      configured separately and are only correct **together**: see the third requirement below.
 
-     An ingress-template host needs **three** things, and none is implied by the others. First an
+     An ingress-template host needs **four** things, and none is implied by the others. First an
      **ingress controller** in the cluster: a default k3d/k3s cluster bundles Traefik, but a
      cluster created with `--disable=traefik` has none, and kind ships none at all. Second a
      **host port published into it**: every local distribution runs the cluster inside Docker and
@@ -100,7 +100,21 @@ If you'd rather wire it by hand (or the guided flow can't run on your host), do 
      Also set the URL **scheme** to `http`: a local ingress controller serves TLS with a
      self-signed certificate, so an `https` environment URL fails on the certificate instead.
 
-     Third, and the one that reads as a cluster fault when it is a naming one: with a wildcard-DNS
+     Third, your manifests' Ingress must name a class that controller actually publishes, and this
+     is the one with no observable symptom of its own. An Ingress naming
+     `ingressClassName: nginx` on a cluster running Traefik is ACCEPTED by the apiserver, watched
+     by nothing, and left with an empty `status.loadBalancer`; the pods roll out, the environment
+     reports `ready`, and the URL answers nothing. **Leave `ingressClassName` unset** so the
+     cluster's default class claims it (k3s annotates its `traefik` class
+     `ingressclass.kubernetes.io/is-default-class: "true"`), which is also the portable choice: a
+     pinned class is wrong on every cluster running something else. The platform now grades this
+     rather than assuming it, so a Traefik cluster and an `nginx`-pinned manifest fail at the
+     `deployer` step with both names in the message (`config_incomplete`) instead of at the tester
+     a quarter of an hour later. The grade needs a cluster-scoped **`ingressclasses` get/list/watch**
+     grant on the ServiceAccount, which `cat-factory k3s` now includes; without it the read is
+     refused and the check stands down to the previous behaviour rather than failing anything.
+
+     Fourth, and the one that reads as a cluster fault when it is a naming one: with a wildcard-DNS
      host the rendered name must carry **exactly one address**, which constrains the
      `namespaceTemplate` it is composed with. `nip.io` and `sslip.io` answer from the leftmost
      four-octet run in a name and treat `-` and `.` as the same separator, so a namespace ending
@@ -138,6 +152,16 @@ If you'd rather wire it by hand (or the guided flow can't run on your host), do 
      block's `provisioning` (colocated path or a separate repo), and merged with this engine config
      at provision time. In local mode you can additionally set a per-user "this-machine" override of
      the handler.
+
+A loopback environment URL is reachable from your browser and from a NATIVE agent
+(`LOCAL_NATIVE_AGENTS`) because loopback is the machine the ingress port is published on. It is not
+reachable from an agent CONTAINER, whose `127.0.0.1` is its own network namespace, and the symptom
+is a total connection failure that reads as a dead environment. The local facade handles this for
+you: it maps the environment's host to the container's host gateway (`--add-host`), so the same URL
+means the right thing in both places and the `Host` header ingress routes on stays correct. Nothing
+to configure, and nothing is mapped for an environment that is genuinely remote. The one visible
+consequence is that the tester's container is REPLACED rather than reused, because an `/etc/hosts`
+entry is fixed when a container is created and the run's container predates its environment.
 
 Local mode widens the environment URL-safety policy by default (`ENVIRONMENTS_ALLOW_HTTP_URLS`
 plus a loopback/LAN `ENVIRONMENTS_ALLOW_URL_HOSTS` allow-list: `localhost`, `127.0.0.1`,

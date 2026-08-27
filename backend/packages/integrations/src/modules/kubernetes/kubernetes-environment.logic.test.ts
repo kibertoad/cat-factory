@@ -12,6 +12,9 @@ import {
   resolveNamespace,
   resourceUrl,
   templateVars,
+  classifyIngressAdmission,
+  readIngressAdmissionFacts,
+  readIngressClassCatalog,
 } from './kubernetes-environment.logic.js'
 
 const baseConfig: KubernetesEnvironmentConfig = {
@@ -317,5 +320,206 @@ describe('describeUnreachableIngressHost', () => {
 
   it('says nothing when the template renders empty, which is a hole this rule does not own', () => {
     expect(describeUnreachableIngressHost(ingress('{{namespace}}'), {})).toBeNull()
+  })
+})
+
+describe('ingress admission', () => {
+  const traefik = {
+    read: true as const,
+    names: ['traefik'],
+    defaultName: 'traefik',
+  }
+
+  const ingress = (spec: Record<string, unknown>, status?: Record<string, unknown>) => ({
+    metadata: { name: 'catalog-api' },
+    spec,
+    ...(status ? { status } : {}),
+  })
+
+  describe('readIngressAdmissionFacts', () => {
+    it('reads the class off spec.ingressClassName', () => {
+      expect(readIngressAdmissionFacts(ingress({ ingressClassName: 'nginx' }))).toEqual({
+        requestedClass: 'nginx',
+        hasAddress: false,
+      })
+    })
+
+    it('falls back to the deprecated annotation, so an Ingress using it is not graded classless', () => {
+      // Controllers still honour `kubernetes.io/ingress.class`. Reading only the spec field would
+      // call this Ingress classless and then refuse it on a cluster with no default class, which
+      // is a working deployment turned red.
+      const obj = {
+        metadata: { name: 'x', annotations: { 'kubernetes.io/ingress.class': 'traefik' } },
+        spec: {},
+      }
+      expect(readIngressAdmissionFacts(obj).requestedClass).toBe('traefik')
+    })
+
+    it('prefers the spec field over the annotation and ignores a blank one', () => {
+      const obj = {
+        metadata: { name: 'x', annotations: { 'kubernetes.io/ingress.class': 'nginx' } },
+        spec: { ingressClassName: '  traefik ' },
+      }
+      expect(readIngressAdmissionFacts(obj).requestedClass).toBe('traefik')
+      expect(
+        readIngressAdmissionFacts(ingress({ ingressClassName: '   ' })).requestedClass,
+      ).toBeNull()
+    })
+
+    it('reports an address once a controller has written one back', () => {
+      const admitted = ingress(
+        { ingressClassName: 'traefik' },
+        {
+          loadBalancer: { ingress: [{ ip: '172.20.0.2' }] },
+        },
+      )
+      expect(readIngressAdmissionFacts(admitted).hasAddress).toBe(true)
+    })
+  })
+
+  describe('readIngressClassCatalog', () => {
+    it('reads the names and which one is default', () => {
+      const payload = {
+        items: [
+          {
+            metadata: {
+              name: 'traefik',
+              annotations: { 'ingressclass.kubernetes.io/is-default-class': 'true' },
+            },
+          },
+          { metadata: { name: 'nginx' } },
+        ],
+      }
+      expect(readIngressClassCatalog(payload)).toEqual({
+        read: true,
+        names: ['traefik', 'nginx'],
+        defaultName: 'traefik',
+      })
+    })
+
+    it('reads an EMPTY list as a read cluster with no classes, not as unreadable', () => {
+      // The distinction decides everything downstream: this is the k3d-with-traefik-disabled
+      // cluster, and it is a real, actionable finding.
+      expect(readIngressClassCatalog({ items: [] })).toEqual({
+        read: true,
+        names: [],
+        defaultName: null,
+      })
+    })
+
+    it('reads a non-list payload as UNREADABLE, never as an empty cluster', () => {
+      // A 403 on the cluster-scoped resource arrives here as a null body. Grading that as "no
+      // ingress controller" would fail every environment on a perfectly working cluster.
+      for (const payload of [null, undefined, {}, { items: 'nope' }]) {
+        expect(readIngressClassCatalog(payload).read).toBe(false)
+      }
+    })
+  })
+
+  describe('classifyIngressAdmission', () => {
+    it('is ADMITTED once any Ingress carries an address', () => {
+      const facts = [{ requestedClass: 'traefik', hasAddress: true }]
+      expect(classifyIngressAdmission(facts, traefik)).toEqual({ status: 'admitted' })
+    })
+
+    it('short-circuits on an address even when the catalog could not be read', () => {
+      // An address is proof a controller claimed it, which is strictly stronger than anything the
+      // catalog could say. Asking for the catalog first would strand this on `unknown`.
+      const facts = [{ requestedClass: 'whatever', hasAddress: true }]
+      expect(classifyIngressAdmission(facts, { read: false, detail: 'forbidden' })).toEqual({
+        status: 'admitted',
+      })
+    })
+
+    it('refuses a class the cluster does not have, and names both sides', () => {
+      // THE motivating failure: an agent wrote `ingressClassName: nginx` onto a Traefik k3d
+      // cluster. Healthy pod, accepted object, URL published, nothing routing it.
+      const facts = [{ requestedClass: 'nginx', hasAddress: false }]
+      const verdict = classifyIngressAdmission(facts, traefik)
+      expect(verdict.status).toBe('unrouted')
+      if (verdict.status !== 'unrouted') throw new Error('expected unrouted')
+      expect(verdict.problem).toContain("'nginx'")
+      expect(verdict.problem).toContain("'traefik'")
+    })
+
+    it('refuses a cluster that publishes no IngressClass at all', () => {
+      const facts = [{ requestedClass: null, hasAddress: false }]
+      const verdict = classifyIngressAdmission(facts, {
+        read: true,
+        names: [],
+        defaultName: null,
+      })
+      expect(verdict.status).toBe('unrouted')
+      if (verdict.status !== 'unrouted') throw new Error('expected unrouted')
+      expect(verdict.problem).toContain('no ingress controller')
+    })
+
+    it('refuses a classless Ingress on a cluster that marks no default', () => {
+      const facts = [{ requestedClass: null, hasAddress: false }]
+      const verdict = classifyIngressAdmission(facts, {
+        read: true,
+        names: ['nginx'],
+        defaultName: null,
+      })
+      expect(verdict.status).toBe('unrouted')
+      if (verdict.status !== 'unrouted') throw new Error('expected unrouted')
+      expect(verdict.problem).toContain('is-default-class')
+    })
+
+    it('is PENDING when the requested class exists but nothing is marked default', () => {
+      // ingress-nginx installed on its own: the controller publishes and claims 'nginx', and
+      // nobody annotated it default because no Ingress here is classless. Refusing this failed a
+      // working deployment, and said the Ingress named no class while it plainly named one. The
+      // default class governs classless Ingresses only, so it may not be read as a cluster-wide
+      // requirement.
+      const facts = [{ requestedClass: 'nginx', hasAddress: false }]
+      expect(
+        classifyIngressAdmission(facts, { read: true, names: ['nginx'], defaultName: null }),
+      ).toEqual({ status: 'pending' })
+    })
+
+    it('still refuses the CLASSLESS Ingress in a chain whose sibling names a real class', () => {
+      // The precondition is per-chain, not per-Ingress: one Ingress being satisfiable says nothing
+      // about the one beside it that asked for nothing and has no default to claim it.
+      const facts = [
+        { requestedClass: 'nginx', hasAddress: false },
+        { requestedClass: null, hasAddress: false },
+      ]
+      const verdict = classifyIngressAdmission(facts, {
+        read: true,
+        names: ['nginx'],
+        defaultName: null,
+      })
+      expect(verdict.status).toBe('unrouted')
+      if (verdict.status !== 'unrouted') throw new Error('expected unrouted')
+      expect(verdict.problem).toContain('is-default-class')
+    })
+
+    it('is PENDING, never a refusal, when the class resolves but no address has arrived', () => {
+      // The safety property. A controller writing `status.loadBalancer` back is a choice, not a
+      // guarantee, so an absent address may never be evidence of a broken route: it only
+      // withholds `ready` until the provision's own deadline reports a timeout.
+      const facts = [{ requestedClass: 'traefik', hasAddress: false }]
+      expect(classifyIngressAdmission(facts, traefik)).toEqual({ status: 'pending' })
+    })
+
+    it('is PENDING for a classless Ingress the default class will claim', () => {
+      const facts = [{ requestedClass: null, hasAddress: false }]
+      expect(classifyIngressAdmission(facts, traefik)).toEqual({ status: 'pending' })
+    })
+
+    it('is PENDING when the namespace declares no Ingress, since a Gateway may serve the host', () => {
+      // An `ingressTemplate` URL says where the URL comes FROM, not what routes it. Refusing here
+      // would fail a Gateway/HTTPRoute deployment on an assumption about how it was built.
+      expect(classifyIngressAdmission([], traefik)).toEqual({ status: 'pending' })
+    })
+
+    it('is UNKNOWN when the catalog could not be read, so the check stands down', () => {
+      const facts = [{ requestedClass: 'nginx', hasAddress: false }]
+      expect(classifyIngressAdmission(facts, { read: false, detail: 'forbidden' })).toEqual({
+        status: 'unknown',
+        detail: 'forbidden',
+      })
+    })
   })
 })

@@ -13,7 +13,6 @@ import {
   type McpOAuthTokenSource,
   type OperationalMetrics,
   type RunnerDispatchKind,
-  type RunnerDispatchOptions,
   type RunnerJobRef,
   type RunnerJobView,
   type RunReclaimTarget,
@@ -31,7 +30,7 @@ import {
   SUBSCRIPTION_VENDORS,
   isIndividualVendor,
 } from '@cat-factory/kernel'
-import { resolveAprioriWorkingBranch, resolveInstanceTypeId } from '@cat-factory/contracts'
+import { resolveAprioriWorkingBranch } from '@cat-factory/contracts'
 import {
   type AgentKindRegistry,
   type AgentRouting,
@@ -57,6 +56,7 @@ import {
   toRunResult,
 } from './containerAgentResult.js'
 import { buildKindBody } from './jobBody.js'
+import { buildDispatchOptions } from './dispatchOptions.js'
 import { containerJobLog, settleFailureFields } from './containerAgentLogging.js'
 import { acceptContainerJob } from './containerAgentDispatch.js'
 import { recordAgentContextSnapshot } from './agentContextRecord.js'
@@ -431,7 +431,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     )
     // Dispatch, log the transition, and refuse a run whose body carries a capability this runner
     // image told us it cannot serve. See `containerAgentDispatch.ts`.
-    const options = this.dispatchOptions(context)
+    const options = buildDispatchOptions(context, this.agentKindRegistry)
     const fields = { model, provider, kind }
     await acceptContainerJob(this.jobs, { workspaceId, ref, body, kind, options, jobLog, fields })
     // The one projection of what this dispatch decided about its tool servers. It lands on the
@@ -621,28 +621,6 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     if (!context.workspaceId) return false
     const { ref } = await this.modelRouter.resolveEffectiveRef(context, context.workspaceId)
     return ref.harness === 'claude-code' || ref.harness === 'codex'
-  }
-
-  /**
-   * Per-service provisioning hints for the dispatch: the cloud provider the service
-   * runs on and the abstract instance size resolved to the target's concrete
-   * instance-type id. Cloudflare maps the id to a Container instance type; a
-   * self-hosted pool forwards it (with the provider) and provisions itself. Undefined
-   * when the service pins no provider/size (the transport keeps its default).
-   */
-  private dispatchOptions(context: AgentRunContext): RunnerDispatchOptions | undefined {
-    const provider = context.service?.cloudProvider
-    const size = context.service?.instanceSize
-    const image = imageVariantFor(context.agentKind, this.agentKindRegistry)
-    if (!provider && !size && !image) return undefined
-    return {
-      ...(provider || size ? { instanceTypeId: resolveInstanceTypeId(provider, size) } : {}),
-      ...(provider ? { provider } : {}),
-      // Forward the abstract size too, so the local Docker/Podman backend can size
-      // the per-job container (`--memory`/`--cpus`) without decoding the cloud id.
-      ...(size ? { instanceSize: size } : {}),
-      ...(image ? { image } : {}),
-    }
   }
 
   /** Validate the ids every container job needs, narrowing them to non-empty strings. */

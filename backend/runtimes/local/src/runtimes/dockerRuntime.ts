@@ -99,6 +99,11 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
       args.push('--memory', spec.instanceSize.memory, '--cpus', spec.instanceSize.cpus)
     if (spec.privileged) args.push('--privileged')
     if (this.addHostGateway) args.push(`--add-host=${this.hostAlias}:host-gateway`)
+    // Per-job host bridges (the ephemeral-environment host). Emitted whether or not the standing
+    // `hostAlias` add-host is: `addHostGateway` is false where a runtime resolves its OWN alias
+    // natively (Colima's `host.lima.internal`), which says nothing about a name the runtime has
+    // never heard of. `host-gateway` is a Docker-family token and this is the Docker-family adapter.
+    for (const host of spec.extraHosts ?? []) args.push(`--add-host=${host}:host-gateway`)
     if (spec.network) args.push('--network', spec.network)
     for (const [k, v] of Object.entries(spec.env)) args.push('-e', `${k}=${v}`)
     args.push(spec.image)

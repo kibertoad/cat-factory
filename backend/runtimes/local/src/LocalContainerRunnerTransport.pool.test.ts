@@ -563,3 +563,93 @@ describe('post-mortem on a pooled member', () => {
     expect(adapter.logs).not.toHaveBeenCalled()
   })
 })
+
+describe('warm pool and the ephemeral-environment host bridge', () => {
+  const ENV_URL = 'http://cf-acc-pr8.127.0.0.1.nip.io'
+  const BRIDGE = '--add-host=cf-acc-pr8.127.0.0.1.nip.io:host-gateway'
+  // The environments ride the dispatch OPTIONS, never the job body. See the sibling suite in
+  // `LocalContainerRunnerTransport.test.ts` for why reading them off the body could not work.
+  const withEnvs = (...urls: string[]) => ({ environmentUrls: urls })
+
+  it('serves a bridged job PER RUN and hands the leased member back', async () => {
+    // Two independent reasons a pool member cannot serve this job, and the second is the one that
+    // would corrupt a neighbour: a member is started before any job exists so it cannot carry a
+    // per-job name, AND it is re-leased across runs, so an /etc/hosts entry for one run's per-PR
+    // environment would sit in the container the NEXT run leases.
+    const { exec, calls } = fakeDockerPool()
+    const transport = mkTransport({
+      image: 'harness:test',
+      poolSize: 2,
+      exec,
+      fetchImpl: okFetch() as unknown as typeof fetch,
+    })
+    const ref = { runId: 'r1', jobId: 'j1' }
+
+    // Step one has no environment, so it leases from the pool as usual.
+    await transport.dispatch(ref, repoSpec('o', 'r'), 'agent')
+    const afterLease = calls.filter((c) => c[0] === 'run')
+    expect(afterLease).toHaveLength(1)
+    expect(afterLease[0]).not.toContain(BRIDGE)
+
+    // The tester step carries the provisioned URL: a fresh per-run container, carrying the bridge.
+    await transport.dispatch(
+      { ...ref, jobId: 'j2' },
+      repoSpec('o', 'r'),
+      'agent',
+      withEnvs(ENV_URL),
+    )
+    const runs = calls.filter((c) => c[0] === 'run')
+    expect(runs).toHaveLength(2)
+    expect(runs[1]).toContain(BRIDGE)
+    // The member went BACK to the pool rather than staying leased to a run that has moved off it:
+    // a lease nothing will ever release is a pool slot lost for the process's lifetime. Asserted
+    // through the pool's own behaviour rather than a test-only accessor: a fresh run leases the
+    // released member, so no third container is started.
+    await transport.dispatch({ runId: 'r-next', jobId: 'j1' }, repoSpec('o', 'r'), 'agent')
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(2)
+  })
+
+  it('still pools a job whose environment URL is remote', async () => {
+    // The bridge guard must key off whether a bridge is NEEDED, not off the presence of a URL,
+    // or every deployment with a real environment loses the warm pool.
+    const { exec, calls } = fakeDockerPool()
+    const transport = mkTransport({
+      image: 'harness:test',
+      poolSize: 2,
+      exec,
+      fetchImpl: okFetch() as unknown as typeof fetch,
+    })
+    const ref = { runId: 'r2', jobId: 'j1' }
+    await transport.dispatch(ref, repoSpec('o', 'r'), 'agent')
+    await transport.dispatch(
+      { ...ref, jobId: 'j2' },
+      repoSpec('o', 'r'),
+      'agent',
+      withEnvs('https://pr8.staging.example.com'),
+    )
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(1)
+  })
+
+  it('still pools a job whose environment URL is localhost, which no bridge would fix', async () => {
+    // A compose environment publishes `http://localhost:<port>`. Grading that as needing a bridge
+    // cost every such run its warm-pool member AND a container replacement, buying an /etc/hosts
+    // entry the container would not honour. The environment is unreachable either way; paying for
+    // it is the part that was wrong.
+    const { exec, calls } = fakeDockerPool()
+    const transport = mkTransport({
+      image: 'harness:test',
+      poolSize: 2,
+      exec,
+      fetchImpl: okFetch() as unknown as typeof fetch,
+    })
+    const ref = { runId: 'r3', jobId: 'j1' }
+    await transport.dispatch(ref, repoSpec('o', 'r'), 'agent')
+    await transport.dispatch(
+      { ...ref, jobId: 'j2' },
+      repoSpec('o', 'r'),
+      'agent',
+      withEnvs('http://localhost:32768'),
+    )
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(1)
+  })
+})

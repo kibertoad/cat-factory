@@ -111,6 +111,21 @@ export interface RunContainerSpec {
   privileged: boolean
   /** Optional `--network` (docker family only). */
   network?: string
+  /**
+   * Hostnames to map to the runtime's HOST GATEWAY inside the container, over and above the
+   * standing {@link ContainerRuntimeAdapter.hostAlias}.
+   *
+   * This carries the ephemeral-environment host on a local deployment, and it is the only way a
+   * containerized tester can reach one. Such a URL resolves to loopback, which is correct for the
+   * operator's browser and is the container's own empty network namespace: the failure is a total
+   * connection refusal that reads as a dead environment (see kernel's
+   * `environment-host-bridge.logic.ts` for why a rewritten URL cannot serve both audiences).
+   *
+   * An /etc/hosts entry rather than anything cleverer because it wins over DNS and leaves the
+   * `Host` header alone, which is what name-based ingress routing needs. Empty/absent adds nothing,
+   * and a runtime with a per-container IP and no gateway alias ignores it.
+   */
+  extraHosts?: readonly string[]
   /** Extra `-e KEY=VALUE` env passed into the container. */
   env: Record<string, string>
   /** Host resource limits derived from the service's abstract instance size. */

@@ -407,6 +407,25 @@ export interface RunnerDispatchOptions {
    * {@link RunnerJobRef.image} so the poll/release site addresses the container it started.
    */
   image?: RunnerImageVariant
+  /**
+   * Every ephemeral-environment URL this job is being handed: the frame's own provisioned
+   * environment, a live peer service's environment for a cross-service test, and a frontend
+   * flow's resolved backend bindings. Empty/absent for a job handed none.
+   *
+   * Declared HERE rather than read back out of the job body, and that is the load-bearing part.
+   * The body is a `Record<string, unknown>` whose environment URLs sit at three different depths
+   * under a wire shape the harness owns, so a transport reaching into it is one silent typo or one
+   * renamed field away from bridging nothing at all and saying nothing about it. That is not
+   * hypothetical: the first cut of the local host bridge read `spec.environmentUrl`, which the
+   * engine has never emitted (it emits `body.infra.environmentUrl`), so the bridge could not fire
+   * in production while its tests passed against a hand-written spec.
+   *
+   * Only the LOCAL container transport acts on it, because the bridge it feeds is a container-
+   * runtime `--add-host`; every other transport ignores it. It is a list of URLs rather than
+   * hostnames because deciding which host needs what is the reader's rule, not the dispatcher's,
+   * and a URL keeps the scheme and port a diagnostic needs to quote.
+   */
+  environmentUrls?: readonly string[]
 }
 
 /**

@@ -47,13 +47,29 @@ export {
   readApiServerCommand,
   readTokenCommand,
 } from './k3s-provision.js'
+// The PROBE as well as its constants, because `cat-factory k3s` is no longer the only caller that
+// has to know whether a cluster can serve an ingress-derived URL: the acceptance suite's preflight
+// asks the same two questions (`clusterIngress.ts`), and a second implementation of them is how one
+// of the two would come to disagree with the setup command that provisions the cluster.
 export {
+  classifyIngress,
+  createNodeTcpProbe,
   DEFAULT_INGRESS_PORT,
   INGRESS_HOST_TEMPLATE,
+  type IngressFacts,
+  type IngressGap,
+  type IngressProbeCluster,
   type IngressReadiness,
   ingressHostTemplate,
+  ingressRemedies,
   ingressUrlPort,
+  probeIngress,
+  type TcpProbe,
 } from './k3s-ingress.js'
+// `isLocalMachineHost` travels with them: the acceptance preflight reads the current kubectl
+// context, which nothing ties to the apiserver URL it was configured with, so it must decide
+// whether that URL names THIS machine before it may grade the answer as being about that cluster.
+export { isLocalMachineHost } from './localHost.js'
 export {
   classifyHost,
   hasServerVersion,

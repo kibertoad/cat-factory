@@ -24,6 +24,38 @@ transport + the GitHub token/client seams differ.
   image. `deploy` is refused here too: the agent runner path does not serve it, which is a mistake
   in a kind's registration rather than a missing pin, so it is a distinct refusal, matching the
   Worker's `agentContainerNamespace`.
+- `environmentBridge.ts`: which hosts an agent container needs mapped to its host gateway to reach
+  the environments the run handed it. A local environment URL resolves to LOOPBACK, which is right
+  for the operator's browser and for a native agent and is a dead end in a container, whose
+  `127.0.0.1` is its own empty namespace: measured, a plain container gets curl code 000 against
+  `cf-acc-pr8.127.0.0.1.nip.io` and 404 from the ingress controller with the bridge. So the
+  transport passes `RunContainerSpec.extraHosts` and the docker adapter emits
+  `--add-host=<host>:host-gateway`, which wins over DNS and leaves the `Host` header that
+  name-based ingress routes on intact. Publishing a gateway-encoded URL instead was rejected on
+  evidence: `…192.168.65.254.nip.io` reaches the ingress from a container and NOT from the host,
+  where the same URL is read by the operator and the human-test gate. Four consequences that are
+  easy to miss:
+  - **It is plural.** A job is routinely handed several environments (its own, a live peer's for a
+    cross-service test, a frontend flow's resolved backend binding), and every one of them fails
+    the same way and reads as the same "the environment is down".
+  - **The URLs are DECLARED, on `RunnerDispatchOptions.environmentUrls`**, never dug back out of
+    the job body: they sit three levels down in an untyped bag under a wire shape the harness owns,
+    and the first cut of this read `spec.environmentUrl`, a path the engine has never emitted.
+    `@cat-factory/server`'s `dispatchEnvironmentUrls` is the one producer, and `prompts.spec.ts`
+    pins that it covers every URL the rendered infra spec carries.
+  - **The bridge is only knowable at the TESTER**, because one container serves the whole run from
+    its first step and the environment does not exist until the `deployer`, so a container lacking
+    a needed bridge is REPLACED (`containerMissingBridges`). And a bridged job never takes a
+    warm-pool member: a member predates every job, and it is re-leased across runs, so one run's
+    per-PR entry would sit in the next run's container.
+  - **`localhost` and a bare IP literal are NOT bridgeable**, and are reported instead. A hosts
+    entry cannot displace the `127.0.0.1 localhost` line the image ships, and is never consulted
+    for a literal; were it not inert it would break the frontend flow's own in-container WireMock
+    and served app. A compose environment publishes `http://localhost:<port>`, so grading that as
+    needing a bridge cost every such run its pool member and a container replacement for nothing.
+    The RULE (does this name answer this machine, wildcard-DNS labels included, and can a hosts entry
+    re-point it) is kernel's `classifyLocalMachineHostBridge`; only the URL half is here, because
+    kernel compiles with no `URL`.
 - `LocalProcessRunnerTransport.ts`: the NATIVE backend (`LOCAL_NATIVE_AGENTS`), one long-lived
   host process serving every concurrent job. Its stderr is PIPED and kept as a bounded tail
   (nothing is forwarded to the developer's console), because that is where the harness routes its

@@ -203,6 +203,9 @@ function toPublicRun(
       // own `state` is what distinguishes them.
       output: (s.output ?? '') === '' ? null : (s.output ?? null),
       data: s.custom ?? null,
+      // Only when true: a step that RAN carries no flag at all, so the field never has to be read
+      // as "false, and also this run is old enough to predate the projection".
+      ...(s.skipped ? { skipped: true } : {}),
     })),
     // Who the run was started for, as pinned at admission; null for a run the app, a schedule or
     // an identity-less key started, and withheld (flagged, not blanked) from a key that acts for
