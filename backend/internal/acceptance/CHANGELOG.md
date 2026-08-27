@@ -1,5 +1,12 @@
 # @cat-factory/acceptance
 
+## 0.4.41
+
+### Patch Changes
+
+- Updated dependencies [e8be41b]
+  - @cat-factory/acceptance-kit@0.6.0
+
 ## 0.4.40
 
 ### Patch Changes
