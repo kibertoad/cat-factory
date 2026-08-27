@@ -4,14 +4,14 @@
 // @cat-factory/deploy-harness with nothing in that image changed, and #2077 released it), so the
 // first fixture below is that incident replayed. The rest are the ways a guard like this goes
 // wrong: refusing a legitimate bump, passing one because the front matter was parsed loosely, or
-// reporting on a changeset the branch under test never wrote.
+// reporting on a bump the branch under test inherited rather than wrote.
 
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import {
   findUnjustifiedBumps,
   parseChangesetPackages,
-  selectAuthoredChangesets,
+  selectAuthoredBumps,
 } from './image-harness-changesets.mjs'
 
 const DEPLOY = {
@@ -127,41 +127,86 @@ test('does not mistake body prose for a front-matter entry', () => {
   assert.deepEqual(packages, ['@cat-factory/kernel'])
 })
 
-test("replays #2113's fallout: a pending changeset from the base ref is not this branch's", () => {
+test("replays #2113's fallout: a bump pending on the base is not this branch's", () => {
   // #2113 landed a justified executor-harness changeset with its Dockerfile change. Until the
   // release consumed it, it sat in `.changeset/` on main, so every branch cut afterwards carried
-  // it on disk while touching nothing in the image. Reading the directory instead of the diff
-  // failed all of them, #2111 among them, on a bump none of them wrote.
-  const onDisk = ['.changeset/agent-cli-pins-refresh.md', '.changeset/unrouted-environment-url.md']
-  const changedPaths = [
-    '.changeset/unrouted-environment-url.md',
-    'backend/packages/kernel/src/domain/environment-url.ts',
-  ]
-  assert.deepEqual(selectAuthoredChangesets({ changesetPaths: onDisk, changedPaths }), [
-    '.changeset/unrouted-environment-url.md',
-  ])
+  // it on disk while touching nothing in the image. Judging the directory instead of what the
+  // branch added failed all of them, #2111 among them, on a bump none of them wrote.
+  assert.deepEqual(
+    selectAuthoredBumps({
+      changesets: [
+        {
+          path: '.changeset/agent-cli-pins-refresh.md',
+          packages: ['@cat-factory/executor-harness'],
+        },
+        { path: '.changeset/unrouted-environment-url.md', packages: ['@cat-factory/kernel'] },
+      ],
+      inheritedPackages: ['@cat-factory/executor-harness'],
+    }),
+    [{ path: '.changeset/unrouted-environment-url.md', packages: ['@cat-factory/kernel'] }],
+  )
 })
 
-test('an empty diff authors nothing, so it can never be unjustified', () => {
-  // The shape of the bug at its clearest: a branch level with its base changed no image and wrote
-  // no changeset, and a guard that accuses it is reporting on the base, not on the branch.
+test('a branch level with its base authors nothing, so it can never be unjustified', () => {
+  // The shape of the bug at its clearest: such a branch changed no image and wrote no changeset,
+  // and a guard that accuses it is reporting on the base, not on the branch.
   assert.deepEqual(
-    selectAuthoredChangesets({
-      changesetPaths: ['.changeset/agent-cli-pins-refresh.md'],
-      changedPaths: [],
+    selectAuthoredBumps({
+      changesets: [
+        {
+          path: '.changeset/agent-cli-pins-refresh.md',
+          packages: ['@cat-factory/executor-harness'],
+        },
+      ],
+      inheritedPackages: ['@cat-factory/executor-harness'],
     }),
     [],
   )
 })
 
-test('a changeset the branch EDITS is authored by it, however it got there', () => {
-  // Adding a harness package to a changeset that came from the base ref is the same statement as
-  // writing a fresh one, and the edit puts it in the diff, so it stays in scope.
+test('adding a harness package to an inherited changeset authors that bump', () => {
+  // Naming a harness package a changeset did not name before is the same statement as writing a
+  // fresh changeset for it, whoever created the file. Only the added name is this branch's: the
+  // one it inherited is still the authoring PR's to justify.
   assert.deepEqual(
-    selectAuthoredChangesets({
-      changesetPaths: ['.changeset/refresh.md'],
-      changedPaths: ['.changeset/refresh.md'],
+    selectAuthoredBumps({
+      changesets: [
+        {
+          path: '.changeset/refresh.md',
+          packages: ['@cat-factory/kernel', '@cat-factory/deploy-harness'],
+        },
+      ],
+      inheritedPackages: ['@cat-factory/kernel'],
     }),
-    ['.changeset/refresh.md'],
+    [{ path: '.changeset/refresh.md', packages: ['@cat-factory/deploy-harness'] }],
+  )
+})
+
+test('rewording or renaming an inherited changeset does not re-author its bump', () => {
+  // The case a path rule gets wrong. Fixing a typo in a pending changeset, or `git mv`-ing it,
+  // puts its path in the branch's diff while naming nothing the base was not already going to
+  // release, so keying on the path would tell this branch to remove an entry another PR wrote and
+  // justified. Authorship of a bump lives in the front matter, which did not move.
+  assert.deepEqual(
+    selectAuthoredBumps({
+      changesets: [
+        { path: '.changeset/renamed-and-reworded.md', packages: ['@cat-factory/executor-harness'] },
+      ],
+      inheritedPackages: ['@cat-factory/executor-harness'],
+    }),
+    [],
+  )
+})
+
+test('a fresh changeset on a branch that inherited nothing is wholly authored', () => {
+  // The local pre-commit case, and why enumeration reads the working tree rather than the diff:
+  // an uncommitted changeset is on disk and named by nothing git has recorded yet, so a rule that
+  // asked the committed diff would pass the guard on the very file being checked.
+  assert.deepEqual(
+    selectAuthoredBumps({
+      changesets: [{ path: '.changeset/new.md', packages: ['@cat-factory/deploy-harness'] }],
+      inheritedPackages: [],
+    }),
+    [{ path: '.changeset/new.md', packages: ['@cat-factory/deploy-harness'] }],
   )
 })
