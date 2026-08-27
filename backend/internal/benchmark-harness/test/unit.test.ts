@@ -238,7 +238,15 @@ describe('runBenchmark', () => {
     expect(rr.usage).toEqual({ inputTokens: 11, outputTokens: 22, cachedInputTokens: 0 })
     const cr = results.find((r) => r.cell.task === 'code-review')!
     expect(cr.cell.prompt).toMatch(/^review@v\d+$/)
-    expect(cr.usage).toEqual({ inputTokens: 11, outputTokens: 22 })
+    // Code-review goes through the real `reviewer` agent, which reports the input CLASS split
+    // whenever the provider states one. The fake states a fully uncached call (`cacheRead: 0`,
+    // `cacheWrite: 0`), which is a REPORTED split, not an absent one, so the whole input lands
+    // on the fresh class and the cost below is priced per class rather than off the lump.
+    expect(cr.usage).toEqual({
+      inputTokens: 11,
+      outputTokens: 22,
+      inputClasses: { promptTokens: 11, cacheReadTokens: 0, cacheWriteTokens: 0 },
+    })
     expect(cr.output).toContain(reviewJson)
     // Cost is metered from the usage via core pricing.
     expect(cr.costEur).toBeGreaterThan(0)
