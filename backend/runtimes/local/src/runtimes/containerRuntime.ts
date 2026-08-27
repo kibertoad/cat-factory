@@ -10,10 +10,14 @@
 // `container` gets its own (`AppleContainerRuntimeAdapter`).
 
 import { createHash } from 'node:crypto'
+import { HARNESS_JOB_PORT } from '@cat-factory/contracts'
 import { tailPostMortemMaterial } from '@cat-factory/kernel'
 
-/** The in-container port the executor-harness listens on. */
-export const HARNESS_PORT = 8080
+/**
+ * The in-container port the executor-harness listens on, re-exported from the wire contract so
+ * the adapters, the transports and the image itself all address one number.
+ */
+export const HARNESS_PORT = HARNESS_JOB_PORT
 
 /** Injectable CLI runner (docker/podman/container) — overridable in tests. */
 export type ContainerExec = (args: string[]) => Promise<{ stdout: string; stderr: string }>
@@ -137,7 +141,7 @@ export interface RunContainerSpec {
    */
   pool?: boolean
   /**
-   * Extra in-container ports to publish to a HOST port ALONGSIDE the harness `:8080` (read back
+   * Extra in-container ports to publish to a HOST port ALONGSIDE the harness's own (read back
    * via {@link ContainerRuntimeAdapter.endpoint} with the port argument). Used by the
    * browsable-preview transport to reach the served app's port (e.g. 4173). Each entry names the
    * in-`container` port and, optionally, the `host` port to pin it to: an explicit `host` gives a
@@ -187,7 +191,7 @@ export interface ContainerRuntimeAdapter {
    * than throwing whatever its CLI printed. Callers rely on that — the transport's `resolve()`
    * treats an endpoint-less container as absent and re-creates a fresh one, so an adapter that
    * throws here instead breaks the fresh-container recovery and surfaces a CLI message ("no
-   * public port '8080/tcp' published for …") as the run's cause of death, masking the real one.
+   * public port '<port>/tcp' published for …") as the run's cause of death, masking the real one.
    *
    * A fault against a container that is still RUNNING is a different thing (a daemon blip, a
    * misconfigured publish) and SHOULD throw: the spin-up path folds it into its fail-fast

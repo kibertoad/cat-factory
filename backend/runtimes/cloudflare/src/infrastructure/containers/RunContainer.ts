@@ -1,5 +1,6 @@
 import { Container } from '@cloudflare/containers'
 import type { StopParams } from '@cloudflare/containers'
+import { HARNESS_JOB_PORT } from '@cat-factory/contracts'
 import { runBestEffort } from '@cat-factory/kernel'
 import { harnessGitLabHost } from '@cat-factory/server'
 import type { Env } from '../env'
@@ -17,7 +18,7 @@ import {
 
 /**
  * The behaviour every per-run Cloudflare Container shares: one Durable Object instance per run
- * id hosts that run's sequence of jobs, the harness listens on 8080, and the base
+ * id hosts that run's sequence of jobs, the harness listens on {@link HARNESS_JOB_PORT}, and the base
  * `Container.fetch` proxies inbound requests there once it has booted.
  *
  * The two concrete classes ({@link import('./ExecutionContainer').ExecutionContainer} and
@@ -33,24 +34,9 @@ import {
  */
 export abstract class RunContainer extends Container<Env> {
   /** The harness HTTP server port (matches each image's Dockerfile ENTRYPOINT/EXPOSE). */
-  override defaultPort = 8080
+  override defaultPort = HARNESS_JOB_PORT
 
-  // Two env values, both omitted when unset so the harness keeps its own defaults:
-  //
-  //  - `HARNESS_SHARED_SECRET`: inbound auth, so the harness rejects any /jobs call that does
-  //    not present the matching `x-harness-secret` header (which the transport sends).
-  //  - `GITHUB_ALLOWED_HOSTS`: the harness will only send a clone/push credential to a host on
-  //    its allow-list, which defaults to github.com. A GitLab deployment's clone URL is
-  //    therefore refused at checkout unless its instance is named here. It is the sibling of
-  //    `deploymentRepoOrigin`, derived from the same `GITLAB_API_BASE` inversion so the host
-  //    dispatched to and the host allowed cannot disagree. (Local mode's `harnessAllowedHosts`
-  //    is the same widening on the transport it owns.)
-  override envVars: Record<string, string> = {
-    ...(this.env.HARNESS_SHARED_SECRET
-      ? { HARNESS_SHARED_SECRET: this.env.HARNESS_SHARED_SECRET }
-      : {}),
-    ...harnessHostEnv(this.env),
-  }
+  override envVars: Record<string, string> = runContainerEnv(this.env)
 
   // A job is dispatched, then polled every ~15s while it runs, so the instance stays warm for
   // the job's duration without holding a single request open. Polling is the ONLY thing that
@@ -271,4 +257,38 @@ function isJobDispatch(request: Request): boolean {
 function harnessHostEnv(env: Env): Record<string, string> {
   const host = harnessGitLabHost(loadGitLabConfig(env))
   return host ? { GITHUB_ALLOWED_HOSTS: host } : {}
+}
+
+/**
+ * The container env every per-run Cloudflare Container is started with.
+ *
+ * A free function rather than an inline initializer because it is the only place the Worker states
+ * what the job container's environment IS, and an initializer reading `this.env` can only be
+ * evaluated by standing up a Durable Object.
+ *
+ * Two values are omitted when unset, so the harness keeps its own defaults:
+ *
+ *  - `HARNESS_SHARED_SECRET`: inbound auth, so the harness rejects any /jobs call that does not
+ *    present the matching `x-harness-secret` header (which the transport sends).
+ *  - `GITHUB_ALLOWED_HOSTS`: the harness will only send a clone/push credential to a host on its
+ *    allow-list, which defaults to github.com. A GitLab deployment's clone URL is therefore
+ *    refused at checkout unless its instance is named here. It is the sibling of
+ *    `deploymentRepoOrigin`, derived from the same `GITLAB_API_BASE` inversion so the host
+ *    dispatched to and the host allowed cannot disagree. (Local mode's `harnessAllowedHosts` is
+ *    the same widening on the transport it owns.)
+ *
+ * `PORT` is the exception: always stated, and last, so nothing above can disagree with the
+ * {@link RunContainer.defaultPort} the class addresses. Left unset, the two are joined only by the
+ * image happening to default to the same number, and a deployment pins its OWN mirrored image tag
+ * in the wrangler `[[containers]]` block. One left on a tag from before the harness port moved
+ * would bind its own default, answer nothing on `defaultPort`, and surface as a container that
+ * never became ready. The Kubernetes pod spec and the local container adapters state it the same
+ * way, so no facade leaves the served port to the image.
+ */
+export function runContainerEnv(env: Env): Record<string, string> {
+  return {
+    ...(env.HARNESS_SHARED_SECRET ? { HARNESS_SHARED_SECRET: env.HARNESS_SHARED_SECRET } : {}),
+    ...harnessHostEnv(env),
+    PORT: String(HARNESS_JOB_PORT),
+  }
 }

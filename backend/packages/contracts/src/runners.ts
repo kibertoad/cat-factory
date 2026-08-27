@@ -318,7 +318,16 @@ export const kubernetesRunnerConfigSchema = v.object({
       ),
     ),
   ),
-  /** Container port the harness HTTP server listens on (default 8080). */
+  /**
+   * Container port the harness HTTP server listens on, defaulting to `HARNESS_JOB_PORT`.
+   * The pod spec states it BOTH ways (`containerPort` plus a `PORT` env var), so the harness binds
+   * whatever a pool sets here and the proxy addresses the same number.
+   *
+   * A pool carrying a value from before the default moved off 8080 keeps dispatching, and that is
+   * the trap rather than the relief: the harness then holds 8080 inside every job container, which
+   * is the most common default for a containerised service, so an app under test cannot bind it
+   * and a health check aimed at it is answered by the harness. Prefer leaving this unset.
+   */
   harnessPort: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65535))),
   /** Name of an `imagePullSecrets` entry for a private registry. */
   imagePullSecretName: v.optional(v.string()),

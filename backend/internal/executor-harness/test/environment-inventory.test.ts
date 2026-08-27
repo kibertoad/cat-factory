@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   appendEnvironmentInventory,
   daemonPresence,
@@ -12,6 +12,7 @@ import {
   type ProbeRunner,
 } from '../src/environment-inventory.js'
 import type { Logger } from '../src/logger.js'
+import { DEFAULT_HARNESS_PORT, harnessListenPort } from '../src/harness-port.js'
 
 // The block the harness appends to every agent's system prompt: what this machine HAS, so no
 // agent pays to find out. The property the whole thing turns on is that its three answers stay
@@ -211,7 +212,11 @@ describe('a daemon that is still coming up', () => {
     const asked = run.mock.calls.filter((call) => call[1].includes('info'))
     expect(asked).toHaveLength(2)
     // And the agent is told to try it rather than told not to.
-    const text = renderEnvironmentInventory({ tools: [], dockerDaemon: inventory.dockerDaemon })
+    const text = renderEnvironmentInventory({
+      tools: [],
+      dockerDaemon: inventory.dockerDaemon,
+      harnessPort: DEFAULT_HARNESS_PORT,
+    })
     expect(text).not.toContain('NO Docker daemon')
     expect(text).toContain('try it if you need it')
   })
@@ -245,7 +250,8 @@ describe('rendering the inventory', () => {
   const inventory = (
     tools: EnvironmentInventory['tools'],
     dockerDaemon: EnvironmentInventory['dockerDaemon'],
-  ): EnvironmentInventory => ({ tools, dockerDaemon })
+    harnessPort = DEFAULT_HARNESS_PORT,
+  ): EnvironmentInventory => ({ tools, dockerDaemon, harnessPort })
 
   it('renders a failed probe as neither present nor absent', () => {
     const text = renderEnvironmentInventory(
@@ -439,5 +445,64 @@ describe('a shell-script binary on a Windows host', () => {
     const located = await spawnProbeRunner()('npm', ['--version'])
     expect(located.outcome).toBe('found')
     expect(daemonPresence(located).status).toBe('unknown')
+  })
+})
+
+describe('the reserved-port line', () => {
+  const bare = (harnessPort: number): string =>
+    renderEnvironmentInventory({ tools: [], dockerDaemon: { status: 'absent' }, harnessPort })
+
+  it('names the port the harness holds, and why a reply from it proves nothing', () => {
+    // The whole point: an agent that reads this picks another port up front, and a tester that
+    // probes this one knows the 200 it gets back is the platform answering, not the product.
+    const text = bare(27182)
+    expect(text).toContain('Port 27182 is already bound here')
+    expect(text).toContain('{"status":"ok"}')
+  })
+
+  it('renders the port it is handed, never the default it was built with', () => {
+    expect(bare(41234)).toContain('Port 41234 is already bound here')
+    expect(bare(41234)).not.toContain(String(DEFAULT_HARNESS_PORT))
+  })
+})
+
+// The renderer above is handed a number, so on its own it says nothing about WHICH number the
+// inventory reports. That answer is resolved twice over, and both halves need their own assertion:
+// `harnessListenPort` reads `PORT`, and `probeEnvironment` calls it when no port is injected. A
+// regression collapsing either onto the default would leave every rendering test above green while
+// the block named a port the harness does not hold, which is the one thing the line exists to say.
+describe('the port the inventory reports', () => {
+  const restore = { ...process.env }
+  afterEach(() => {
+    process.env = { ...restore }
+  })
+
+  it('is `PORT` when the deployment sets one', () => {
+    // A deployment sets it per pod, and the native local transport picks an ephemeral port per
+    // harness process and passes it this way.
+    expect(harnessListenPort({ PORT: '41234' })).toBe(41234)
+  })
+
+  it('falls back to the default when nothing sets `PORT`', () => {
+    expect(harnessListenPort({})).toBe(DEFAULT_HARNESS_PORT)
+  })
+
+  it('is what a probe with no injected port picks up from the environment', async () => {
+    process.env.PORT = '41234'
+    const inventory = await probeEnvironment(fakeRunner({}), {
+      daemonExpected: false,
+      sleep: async () => {},
+    })
+    expect(inventory.harnessPort).toBe(41234)
+    expect(renderEnvironmentInventory(inventory)).toContain('Port 41234 is already bound here')
+  })
+
+  it('is the default for a probe on a deployment that sets no `PORT`', async () => {
+    delete process.env.PORT
+    const inventory = await probeEnvironment(fakeRunner({}), {
+      daemonExpected: false,
+      sleep: async () => {},
+    })
+    expect(inventory.harnessPort).toBe(DEFAULT_HARNESS_PORT)
   })
 })

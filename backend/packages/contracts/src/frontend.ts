@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { HARNESS_JOB_PORT } from './harness.js'
 
 // ---------------------------------------------------------------------------
 // Frontend board block config.
@@ -25,7 +26,7 @@ export const DEFAULT_FRONTEND_MOCK_MAPPINGS_PATH = 'mocks/'
 
 /**
  * The default in-container port the built frontend is served on for a UI test / preview.
- * Deliberately NOT 8080 (the harness's own job HTTP server) nor the WireMock port. Used via
+ * Deliberately NOT the harness's own job HTTP server port nor the WireMock port. Used via
  * {@link resolveFrontendServePort} — the single source of truth for the served port, shared by
  * the server's `resolveServePort` and the reverse-origin derivation (`frontendOriginsForService`)
  * so the tester origin a backend must allow (CORS) can't drift from the port the app is actually
@@ -33,15 +34,12 @@ export const DEFAULT_FRONTEND_MOCK_MAPPINGS_PATH = 'mocks/'
  */
 export const DEFAULT_FRONTEND_SERVE_PORT = 4173
 
-/** The in-container port the harness's own job HTTP server binds — a frontend must never serve on it. */
-export const FRONTEND_HARNESS_JOB_PORT = 8080
-
 /** The in-container port WireMock binds for a frontend UI test (backend-chosen, not user config). */
 export const FRONTEND_WIREMOCK_PORT = 8089
 
 /**
  * The port a `frontend` frame's app is ACTUALLY served on: the user's `servePort` unless it
- * collides with a reserved in-container port ({@link FRONTEND_HARNESS_JOB_PORT} 8080, or
+ * collides with a reserved in-container port ({@link HARNESS_JOB_PORT}, or
  * {@link FRONTEND_WIREMOCK_PORT} 8089), in which case it would fail to bind (or steal WireMock's
  * port), so we fall back to {@link DEFAULT_FRONTEND_SERVE_PORT}. The inspector steers users to
  * 4173, but nothing stops them typing a reserved port, so guard here. Shared by the harness infra
@@ -50,7 +48,7 @@ export const FRONTEND_WIREMOCK_PORT = 8089
  */
 export function resolveFrontendServePort(requested: number | undefined): number {
   if (requested === undefined) return DEFAULT_FRONTEND_SERVE_PORT
-  if (requested === FRONTEND_HARNESS_JOB_PORT || requested === FRONTEND_WIREMOCK_PORT) {
+  if (requested === HARNESS_JOB_PORT || requested === FRONTEND_WIREMOCK_PORT) {
     return DEFAULT_FRONTEND_SERVE_PORT
   }
   return requested
@@ -179,8 +177,9 @@ export const frontendConfigSchema = v.object({
   /** package.json script to run when `serveMode: 'command'` (e.g. `preview`). */
   serveScript: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
   /**
-   * The port the served app listens on inside the container. Default 4173 (deliberately NOT
-   * 8080: the harness's own job HTTP server owns 8080 in the same container). Avoid 8080.
+   * The port the served app listens on inside the container. Default 4173. The harness's own job
+   * HTTP server ({@link HARNESS_JOB_PORT}) and WireMock ({@link FRONTEND_WIREMOCK_PORT}) already
+   * hold ports in that same container; naming either here falls back to the default.
    */
   servePort: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65535))),
   /** Build-time env vars vs a runtime `window.env` shim. Default `build`. */

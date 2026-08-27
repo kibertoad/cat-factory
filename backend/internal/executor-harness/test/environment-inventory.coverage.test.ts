@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { carryClaudeSystemPrompt } from '../src/agent-runner.js'
 import { renderEnvironmentInventory } from '../src/environment-inventory.js'
+import { DEFAULT_HARNESS_PORT } from '../src/harness-port.js'
 
 // EVERY container-running mode gets the environment inventory EXACTLY ONCE, and it gets it by
 // inheritance rather than by remembering to fold it.
@@ -159,6 +160,7 @@ describe('the environment inventory is composed exactly once', () => {
         },
       ],
       dockerDaemon: { status: 'absent' },
+      harnessPort: DEFAULT_HARNESS_PORT,
     })
     expect(block).toContain('\n')
     expect(block).toContain('`')

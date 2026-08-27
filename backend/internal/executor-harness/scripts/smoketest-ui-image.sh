@@ -31,6 +31,10 @@ UI_IMAGE="${UI_IMAGE:-cat-factory-executor-ui:smoketest}"
 KEEP="${KEEP:-false}"
 CONTAINER="cat-factory-ui-smoketest-$$"
 
+# The port the harness binds, read from its own source for the same reason as the versions below.
+HARNESS_PORT="$(sed -n 's/.*DEFAULT_HARNESS_PORT = \([0-9]*\).*/\1/p' src/harness-port.ts | head -1)"
+[ -n "${HARNESS_PORT}" ] || { echo "Could not read DEFAULT_HARNESS_PORT from src/harness-port.ts" >&2; exit 1; }
+
 # The versions the checks assert, read from the Dockerfile itself rather than restated here: a
 # copy would pass while the image shipped something else, which is the drift the checks exist to
 # catch in the first place.
@@ -68,7 +72,7 @@ docker run -d --name "${CONTAINER}" -e HARNESS_SHARED_SECRET=smoketest-secret "$
 echo "== waiting for the harness to serve /health =="
 healthy=false
 for _ in $(seq 1 60); do
-  if docker exec "${CONTAINER}" curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1; then
+  if docker exec "${CONTAINER}" curl -fsS http://127.0.0.1:${HARNESS_PORT}/health >/dev/null 2>&1; then
     healthy=true
     break
   fi
@@ -84,7 +88,7 @@ echo "  ok: /health answered"
 # The version the harness reports IS what a mismatched-image dispatch is failed on, so it has to
 # match the package this image was built from.
 expected_version="$(node -p "require('./package.json').version")"
-reported="$(docker exec "${CONTAINER}" curl -fsS http://127.0.0.1:8080/health)"
+reported="$(docker exec "${CONTAINER}" curl -fsS http://127.0.0.1:${HARNESS_PORT}/health)"
 echo "  health: ${reported}"
 case "${reported}" in
   *"${expected_version}"*) echo "  ok: reports harness version ${expected_version}" ;;

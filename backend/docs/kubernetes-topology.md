@@ -27,7 +27,7 @@ healthy, and creating a second pod would strand the checkout the first one holds
 the pod, once, when the run no longer needs it.
 
 Dispatch and poll reach the harness through the apiserver **pod-proxy subresource**
-(`…/pods/<name>:<port>/proxy/…`, `DEFAULT_HARNESS_PORT` 8080). The run pod deliberately has **no
+(`…/pods/<name>:<port>/proxy/…`, `DEFAULT_HARNESS_PORT` 27182). The run pod deliberately has **no
 Service**: the RBAC-gated pod-proxy is the only route in, which is what lets the harness run with no
 inbound shared secret of its own. Giving a run pod a Service would remove that property silently,
 since nothing would fail.

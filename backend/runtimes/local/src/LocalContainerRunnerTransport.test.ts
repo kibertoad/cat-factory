@@ -3,6 +3,7 @@ import {
   type ContainerExec,
   LocalContainerRunnerTransport,
 } from './LocalContainerRunnerTransport.js'
+import { HARNESS_PORT } from './runtimes/containerRuntime.js'
 
 // Unit coverage for the local container transport with the CLI + fetch injected, so it
 // runs anywhere (no daemon, no Postgres). With no adapter supplied it defaults to the
@@ -72,7 +73,7 @@ describe('LocalContainerRunnerTransport — dispatch', () => {
     const runCall = calls.find((c) => c[0] === 'run')!
     expect(runCall).toContain('--label')
     expect(runCall).toContain('cat-factory.runId=job-1')
-    expect(runCall.join(' ')).toContain('-p 127.0.0.1:0:8080')
+    expect(runCall.join(' ')).toContain(`-p 127.0.0.1:0:${HARNESS_PORT}`)
     expect(runCall.join(' ')).toContain('HARNESS_SHARED_SECRET=sek')
     expect(runCall).toContain('harness:test')
 

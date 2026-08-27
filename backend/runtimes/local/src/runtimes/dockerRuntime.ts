@@ -12,7 +12,7 @@ import {
 // The Docker-CLI adapter — covers Docker, Podman, OrbStack and Colima, which all speak
 // the same `run/ps/port/inspect/rm` surface. It is the behaviour the transport had
 // inline before the seam was extracted, parameterised by binary + networking. A container
-// is labelled with its container key and a managed marker; the harness `:8080` is published
+// is labelled with its container key and a managed marker; the harness port is published
 // to an ephemeral host port read back with `docker port`.
 
 /**
@@ -91,7 +91,7 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
       `HARNESS_SHARED_SECRET=${spec.sharedSecret}`,
     ]
     // Extra published ports (the preview transport's served-app port) alongside the harness
-    // :8080. A pinned `host` gives a deterministic, pre-knowable host port (the preview origin);
+    // port. A pinned `host` gives a deterministic, pre-knowable host port (the preview origin);
     // an absent one takes an ephemeral port read back via `endpoint(id, port)`.
     for (const p of spec.publishPorts ?? [])
       args.push('-p', `127.0.0.1:${p.host ?? 0}:${p.container}`)
@@ -106,6 +106,15 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
     for (const host of spec.extraHosts ?? []) args.push(`--add-host=${host}:host-gateway`)
     if (spec.network) args.push('--network', spec.network)
     for (const [k, v] of Object.entries(spec.env)) args.push('-e', `${k}=${v}`)
+    // The port the harness must BIND, stated rather than left to whatever the image defaults to,
+    // and emitted last so neither a job's own `env` nor an image default can disagree with the
+    // `-p` above. Without it the published port and the served one are joined only by the image
+    // being the version this backend was built against: an operator-pinned older harness (a
+    // SUPPORTED, warn-level configuration) binds its own default, nothing answers on the port the
+    // transport addresses, and the version handshake that would name the skew never runs because
+    // it needs a reachable harness. The failure surfaced as a bare ready-timeout instead. The
+    // Kubernetes pod spec has always stated it this way (`buildPodManifest`'s `env`).
+    args.push('-e', `PORT=${HARNESS_PORT}`)
     args.push(spec.image)
 
     const { stdout } = await exec(args)
@@ -133,7 +142,7 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
     inContainerPort: number = HARNESS_PORT,
   ): Promise<ContainerEndpoint | undefined> {
     // `docker port` EXITS NON-ZERO for a container that isn't running ("no public port
-    // '8080/tcp' published for <id>"), and `find()` hands us exited containers by design. A
+    // '<port>/tcp' published for <id>"), and `find()` hands us exited containers by design. A
     // dead container is "not ready" per the port contract, so it must resolve to undefined:
     // a throw escapes `dispatchPerRun`'s `resolve()` and skips the remove-and-recreate
     // recovery an exited container exists to trigger, surfacing the CLI's message as the

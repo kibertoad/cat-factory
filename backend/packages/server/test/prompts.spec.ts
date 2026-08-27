@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { FRONTEND_WIREMOCK_PORT, HARNESS_JOB_PORT } from '@cat-factory/contracts'
 import type { AgentRunContext } from '@cat-factory/kernel'
 import { dispatchEnvironmentUrls, prBody, testerInfraSpec } from '../src/agents/prompts.js'
 
@@ -149,7 +150,7 @@ describe('testerInfraSpec', () => {
       buildScript: 'build',
       outputDir: 'dist',
       serveMode: 'static',
-      // Defaulted server port (NOT 8080 — the harness's own job server owns that).
+      // Defaulted serve port (NOT the harness's own job-server port, which it owns here).
       servePort: 4173,
       env: {
         // The live service under test keeps its real ephemeral URL...
@@ -222,7 +223,7 @@ describe('testerInfraSpec', () => {
   })
 
   it('falls back to the default serve port when the configured port collides with a reserved one', () => {
-    for (const reserved of [8080, 8089]) {
+    for (const reserved of [HARNESS_JOB_PORT, FRONTEND_WIREMOCK_PORT]) {
       const spec = testerInfraSpec(
         context({
           frontend: {
@@ -231,7 +232,8 @@ describe('testerInfraSpec', () => {
           },
         } as Record<string, unknown>),
       )
-      // 8080 is the harness job server, 8089 is WireMock — neither is usable, so fall back to 4173.
+      // The harness job server and WireMock already hold theirs, so neither is usable and the
+      // spec falls back to 4173.
       expect(spec).toMatchObject({ kind: 'frontend', servePort: 4173, wiremockPort: 8089 })
     }
   })

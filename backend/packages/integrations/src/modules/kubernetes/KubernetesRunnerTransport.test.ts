@@ -1,5 +1,6 @@
 import type { KubernetesRunnerConfig, RunnerJobView } from '@cat-factory/kernel'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DEFAULT_HARNESS_PORT } from './kubernetes.logic.js'
 import { KubernetesRunnerTransport } from './KubernetesRunnerTransport.js'
 
 const config: KubernetesRunnerConfig = {
@@ -66,7 +67,7 @@ describe('KubernetesRunnerTransport.dispatch', () => {
     // The pod-proxy name:port colon is sent LITERAL (kubectl/client-go do the same).
     expect(calls.at(-1)).toMatchObject({
       method: 'POST',
-      url: expect.stringContaining('cf-run-1:8080/proxy/jobs'),
+      url: expect.stringContaining(`cf-run-1:${DEFAULT_HARNESS_PORT}/proxy/jobs`),
     })
   })
 

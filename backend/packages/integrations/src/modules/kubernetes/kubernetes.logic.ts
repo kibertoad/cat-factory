@@ -12,7 +12,7 @@ import {
   unservablePlatformImageVariant,
   ValidationError,
 } from '@cat-factory/kernel'
-import { KUBERNETES_RUNNER_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
+import { HARNESS_JOB_PORT, KUBERNETES_RUNNER_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
 
 // Pure helpers for the native Kubernetes runner backend. No I/O here — URL
 // building, the per-run pod-name derivation, the pod manifest, and the readiness
@@ -26,8 +26,11 @@ import { KUBERNETES_RUNNER_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
  */
 export const KUBERNETES_TOKEN_KEY = KUBERNETES_RUNNER_TOKEN_SECRET_KEY
 
-/** Default port the executor-harness HTTP server listens on inside the pod. */
-export const DEFAULT_HARNESS_PORT = 8080
+/**
+ * Default port the executor-harness HTTP server listens on inside the pod, re-exported from the
+ * wire contract so the pod spec, the pod-proxy URL and the image itself can't name three numbers.
+ */
+export const DEFAULT_HARNESS_PORT = HARNESS_JOB_PORT
 
 /**
  * The shared NON-SECRET flat connect-form fields common to every apiserver-backed runner

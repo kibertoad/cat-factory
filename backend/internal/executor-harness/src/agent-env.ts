@@ -4,10 +4,10 @@
 //
 // The rule this exists for: the harness process and the agent's checkout are two different
 // programs, and a few of the harness's own environment variables are actively wrong for the
-// second. `NODE_ENV=production` is the one that bit: npm reads it as `omit=dev`, so `npm install`
-// in a checkout silently skips devDependencies, leaving the agent with no test runner, no linter
-// and no build tool. One measured coder run spent six of its forty budgeted tool calls
-// discovering and undoing that (install, `npm ls`, `npm config get omit`, reinstall with
+// second. `NODE_ENV=production` is the one that bit first: npm reads it as `omit=dev`, so an
+// `npm install` in a checkout silently skips devDependencies, leaving the agent with no test
+// runner, no linter and no build tool. One measured coder run spent six of its forty budgeted
+// tool calls discovering and undoing that (install, `npm ls`, `npm config get omit`, reinstall with
 // `--include=dev`, re-check the bin directory, approve an install script) — all of it caused by a
 // variable the platform set, on a project the platform knows nothing about.
 //
@@ -27,8 +27,19 @@
  * harness that a tool in the checkout will silently act on. It is not a sandbox (an agent can set
  * whatever it likes in its own shell) and not a secret filter (the harness holds per-job secrets
  * in `agentEnv`, never in `process.env`).
+ *
+ * `PORT` clears that bar the same way `NODE_ENV` does, and for the defect that moved the job
+ * server off 8080 in the first place. The port is handed to the container explicitly (the
+ * Kubernetes pod spec's `env`, the local adapters' `-e PORT=`, the native transport's per-process
+ * ephemeral port), so it sits in the harness's own environment, and `listen(process.env.PORT)` is
+ * the single most common way a service picks its port. Inherited, it aims the agent's own service
+ * at the one port in the namespace that is already taken: the service dies with `EADDRINUSE`, and
+ * a health check that also reads `$PORT` gets a 200 from the harness whose body begins
+ * `{"status":"ok"}`. That is the platform grading itself green in place of the product, which is
+ * exactly what moving the number was meant to stop, so moving it alone would have relocated the
+ * collision rather than closed it.
  */
-export const HARNESS_ONLY_ENV_NAMES: readonly string[] = ['NODE_ENV']
+export const HARNESS_ONLY_ENV_NAMES: readonly string[] = ['NODE_ENV', 'PORT']
 
 /**
  * The child env for a command run in the agent's checkout: the harness's own environment minus

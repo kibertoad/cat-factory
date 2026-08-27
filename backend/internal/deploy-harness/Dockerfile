@@ -79,5 +79,7 @@ RUN chmod +x ./entrypoint.sh
 ENV HOME=/home/harness
 USER harness
 
-EXPOSE 8080
+# The job server. Deliberately not 8080, and the same port the executor image binds: both are
+# addressed by one constant transport-side (see src/harness-port.ts).
+EXPOSE 27182
 ENTRYPOINT ["./entrypoint.sh"]

@@ -11,7 +11,7 @@ import { RunContainer } from './RunContainer'
 // agent steps with a `tester-ui` step, and a per-run container cannot change image mid-run. The
 // two are addressed by `containerKeyForRef`, which qualifies the run id with the variant.
 //
-// The UI image serves the SAME `POST /jobs` + `GET /jobs/{id}` contract on 8080 (it layers onto
+// The UI image serves the SAME `POST /jobs` + `GET /jobs/{id}` contract on the same port (it layers onto
 // the same harness), so the generic `CloudflareContainerTransport` drives it unchanged, and its
 // lifecycle behaviour is {@link RunContainer}'s, shared byte-for-byte with the agent one.
 export class UiTesterContainer extends RunContainer {}

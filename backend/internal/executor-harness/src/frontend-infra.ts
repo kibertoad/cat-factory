@@ -6,6 +6,7 @@ import type { FrontendInfraSpec, InfraSetupRecord } from './job.js'
 import type { RunOptions } from './runner.js'
 import { killChildProcess } from './process.js'
 import { agentChildEnv } from './agent-env.js'
+import { harnessListenPort } from './harness-port.js'
 import { pathExists } from './fs-utils.js'
 import { captureRedactedOutput, redactSecrets } from './redact.js'
 import { log, type Logger } from './logger.js'
@@ -71,6 +72,44 @@ function guardProcess(child: ChildProcess, label: string, logger: Logger): Child
 }
 
 /**
+ * The refusal a configured serve port owes when it is the port this harness process is listening
+ * on, else `undefined`.
+ *
+ * The contracts-side guard (`resolveFrontendServePort`) already reserves the DEFAULT harness port,
+ * and that is the right rule where it lives: the backend derives the tester's allowed CORS origin
+ * from the same call, so both sides agree on one number. But it is a PREDICTION. A deployment sets
+ * `PORT` per pod and a Kubernetes runner pool carries its own `harnessPort`, so the port actually
+ * held here can be one the shared constant never named. This is the only place both facts are
+ * known, so it is the only place that can tell.
+ *
+ * It refuses rather than relocating, for the defect that moved the job server off 8080 in the first
+ * place: on a collision the serve dies with `EADDRINUSE` and the health check that follows gets a
+ * 200 from the HARNESS, so the stand-up would hand the agent a serving app that never started and
+ * the tester would grade the platform in its place. Serving somewhere else instead would be a
+ * second wrong answer, since the CORS origin the backend allows was derived from the port that was
+ * asked for. Naming the collision is what leaves a human something to re-pick.
+ */
+function harnessPortCollision(
+  servePort: number,
+  serveUrl: string,
+  logger: Logger,
+): string | undefined {
+  const harnessPort = harnessListenPort()
+  if (servePort !== harnessPort) return undefined
+  logger.warn('agent(frontend): serve port collides with the harness port', {
+    servePort,
+    harnessPort,
+  })
+  return (
+    `the frontend was not served: its configured port ${servePort} is the port this job's ` +
+    `harness is listening on, so the app could not bind it and a health check against ` +
+    `${serveUrl} would have been answered by the harness rather than the app. Report this as an ` +
+    `infra gap, not an app defect: the frame's serve port (or the runner pool's harness port) ` +
+    `has to change.`
+  )
+}
+
+/**
  * Build the frontend, start WireMock, serve the built app and health-check both. Best-effort,
  * like the docker-compose stand-up: a failed build / server that never binds is surfaced to
  * the agent as a prompt note (and captured on the record) rather than failing the job — the
@@ -117,6 +156,11 @@ export async function standUpFrontend(
       ...extra,
     }
   }
+
+  // Refused BEFORE the install/build spend: a serve port equal to the one this harness holds can
+  // never carry the app, and would be GRADED as if it did.
+  const collision = harnessPortCollision(servePort, serveUrl, logger)
+  if (collision) return { processes, note: collision, record: record({ error: collision }) }
 
   const buildEnv =
     (infra.envInjection ?? DEFAULTS.envInjection) === 'build' ? (infra.env ?? {}) : {}
