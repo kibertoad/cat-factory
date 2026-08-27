@@ -81,6 +81,15 @@ describe('parseScoreMap', () => {
 // --- Executor: delegate vs run ------------------------------------------------
 
 const fakeProvider: ModelProvider = { resolve: () => ({}) as never }
+
+/** A resolved model declaring the subscription credential it was built on, as the real one does. */
+const attributedModel = (vendor: string) => ({
+  usageAttribution: { billing: 'subscription', vendor },
+})
+/** A provider serving that same declaration for every ref, as a single-credential deployment does. */
+const attributedProvider = (vendor: string): ModelProvider => ({
+  resolve: () => attributedModel(vendor) as never,
+})
 const agentRouting = { default: { ref: { provider: 'fake', model: 'm' } }, byKind: {} }
 
 function makeContext(over: Partial<AgentRunContext> = {}): AgentRunContext {
@@ -220,6 +229,46 @@ describe('ConsensusAgentExecutor', () => {
     expect(last.rounds[0]?.contributions).toHaveLength(2)
     expect(last.synthesis).toBe('SYNTHESIZED')
     expect(last.id).toBe('cns_ex_2')
+  })
+
+  it('files a panel on one subscription credential as subscription spend', async () => {
+    // The panel's tokens are the sum across its participants and synthesizer, and every one of
+    // them came back from the same subscription credential, so the ledger's one row says so.
+    // Without this the diverted step filed as metered spend that no card was ever charged for,
+    // exactly the mis-attribution the single-actor inline path had.
+    const exec = new ConsensusAgentExecutor({
+      ...baseDeps,
+      modelProvider: attributedProvider('claude'),
+    })
+    const res = await exec.run(
+      makeContext({
+        consensus: { enabled: true, strategy: 'specialist-panel', participants: twoParticipants },
+      }),
+    )
+    expect(res.usageBilling).toBe('subscription')
+    expect(res.usageVendor).toBe('claude')
+  })
+
+  it('leaves a panel whose models disagree on the metered default', async () => {
+    // Two credentials, one of them a per-token key: the step really did spend money, and one row
+    // cannot state both. Claiming the subscription half would hide that cost from the budget
+    // gate, so the panel reports nothing and the ledger's `'metered'` default stands.
+    // The executor resolves each participant and then the synthesizer, so answering the first
+    // resolve with a subscription model and the rest with a plain one is a panel straddling two
+    // credentials, whatever refs the participants pinned.
+    let resolved = 0
+    const mixed: ModelProvider = {
+      resolve: () => (resolved++ === 0 ? attributedModel('claude') : {}) as never,
+    }
+    const exec = new ConsensusAgentExecutor({ ...baseDeps, modelProvider: mixed })
+    const res = await exec.run(
+      makeContext({
+        consensus: { enabled: true, strategy: 'specialist-panel', participants: twoParticipants },
+      }),
+    )
+    expect(resolved).toBeGreaterThan(1)
+    expect(res.usageBilling).toBeUndefined()
+    expect(res.usageVendor).toBeUndefined()
   })
 
   it('keeps a subscription harness base ref when the deployment runs it inline (local ambient)', async () => {

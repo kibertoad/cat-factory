@@ -171,7 +171,19 @@
   an inline step the way the credential says rather than the way its execution path defaults. Same
   shape and same reason as `reportsOwnLlmCalls`: the provider chain resolves the credential and the
   executor holds only what came back, so the model is ASKED. A model declaring nothing is metered,
-  which is what a plain provider key is.
+  which is what a plain provider key is. It also owns `usageBillingFields`, the ONE reduction from
+  resolved models to the result's billing fields: the single-actor executor passes the one model it
+  holds, the consensus executor every model behind the sum it reports, and a PANEL only carries an
+  attribution its every model agrees on (mixed credentials spent real money, so the ledger's
+  `'metered'` default is what keeps that money in front of the budget gate).
+- **A `ModelProvider` decorator wraps through `wrapModelPreservingMarkers`, NEVER `wrapLanguageModel`.**
+  `model-markers.ts` owns this. The AI SDK's wrap returns a FRESH object carrying only the six
+  `LanguageModelV3` members, so every declaration on the model beneath is dropped, silently, with the
+  call behaviour intact. A marker exists precisely to be read ABOVE the layer that declared it, so a
+  bare wrap breaks whichever reader was relying on it and nothing fails until the deployment nobody
+  tested on: the limiter caps all five subscription vendors by DEFAULT, so the billing marker reached
+  `AiAgentExecutor` as `undefined` on exactly the local deployment it was written for. Adding a marker
+  to `ModelMarkers` without listing it in `MODEL_MARKER_KEYS` fails the build, and the error names it.
 - `fragmentLibrary/`: the prompt-fragment library plumbing. The repo-source engine both
   libraries share lives in `repoSourceSync/`, including
   `tier-installation-resolver.ts` (`createTierInstallationResolvers`), the ONE

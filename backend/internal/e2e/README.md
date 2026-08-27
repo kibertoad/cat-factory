@@ -446,6 +446,21 @@ ephemeral Postgres service per run, so accumulated rows are discarded with the c
 a retried spec simply seeds a new workspace. If a future spec needs a clean global state,
 add a `globalSetup` that truncates rather than relying on ordering.
 
+### Keep-alive sockets, and the `socket hang up` flake they cause
+
+Playwright's Node request context POOLS one socket per origin and reuses it across tests; Node reaps
+an idle keep-alive socket after 5 seconds. A spec that drives the browser for longer than that
+between two REST calls (every spec does) can dispatch onto a socket the server is closing right
+then, which surfaces as `apiRequestContext.post: socket hang up`, usually on the very first seeding
+call of an unrelated spec. A non-idempotent POST is not auto-retried, so the spec fails naming
+nothing about itself.
+
+`src/keepAlive.ts` closes the window at the source: every listener a spec seeds against holds idle
+sockets past any gap a run can produce, so the reaper never fires mid-run. **A new listener the
+specs make REST calls against calls `holdKeepAliveSockets` too.** The test-only control channel in
+`testServer.ts` answers the same race the other way (`Connection: close` per response), which is
+fine there because it serves a handful of sequential seeds and no live UI.
+
 ### Knobs
 
 These env vars set the **base** fake behaviour every workspace inherits. A spec overrides them

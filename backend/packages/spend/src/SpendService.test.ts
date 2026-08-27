@@ -866,6 +866,30 @@ describe('SpendService.record — the persisted row', () => {
     expect(rows[0]).toMatchObject({ billing: 'metered', vendor: null })
   })
 
+  it('drops a vendor a caller supplied on a metered row', async () => {
+    // The contradicted pair, which is reachable because billing and vendor arrive as two
+    // independent result fields. `TokenUsageRecord.vendor` states that a metered row has none,
+    // so the invariant is enforced at the one write boundary rather than trusted of each caller:
+    // a stray vendor would put a metered row in a subscription group of the usage report.
+    const { repo, rows } = recordingRepo()
+    const svc = new SpendService({
+      tokenUsageRepository: repo,
+      idGenerator,
+      clock,
+      pricing: DEFAULT_SPEND_PRICING,
+    })
+    await svc.record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'architect-companion',
+      model: 'anthropic:claude-opus-5',
+      usage: { inputTokens: 10, outputTokens: 1 },
+      billing: 'metered',
+      vendor: 'claude',
+    })
+    expect(rows[0]).toMatchObject({ billing: 'metered', vendor: null })
+  })
+
   it('prices a dynamic OpenRouter model at its catalog rate, and asks nothing for other providers', async () => {
     const { repo, rows } = recordingRepo()
     const dynamicPricesFor = vi.fn(async () => [

@@ -32,6 +32,7 @@ import {
   standardsVerbosityFor,
   systemPromptFor,
   traitDeliveryFor,
+  usageBillingFields,
   userPromptFor,
 } from '@cat-factory/agents'
 import { decideConsensusMode } from './gating.js'
@@ -371,6 +372,14 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
         output: result.synthesis,
         model: `consensus:${cfg.strategy}:${synthesizer.modelLabel}`,
         usage: result.usage,
+        // How the panel's tokens were BILLED, read off the resolved models the same way the
+        // single-actor inline executor reads it off its one model. `result.usage` is the sum
+        // across every participant and the synthesizer, so the ledger's one row can only state
+        // an attribution they ALL declare: a panel mixing a subscription credential with a
+        // metered key spent real money, and the `'metered'` default is what keeps it visible to
+        // the budget gate. Without this a diverted step on a subscription-only deployment filed
+        // as spend that no card was charged for, the same bug one layer over.
+        ...usageBillingFields([...participants.map((p) => p.model), synthesizer.model]),
       }
     } catch (error) {
       session.status = 'failed'

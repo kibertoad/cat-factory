@@ -13,6 +13,7 @@ import {
   CliInlineLanguageModel,
   type InlineCliRequest,
   reportsOwnLlmCalls,
+  usageAttributionOf,
   vendorConcurrencyLimiterFromEnv,
 } from '@cat-factory/agents'
 import { MAX_TIMER_DELAY_MS, wrapResolverWithTelemetry } from '@cat-factory/server'
@@ -1097,6 +1098,21 @@ describe('inline call telemetry across the local subscription wrap', () => {
       ...(tag ? { providerOptions: catFactoryObservability(tag) } : {}),
     } as GenerateOptions)
   }
+
+  it('keeps the substituted model BILLABLE to its subscription through both wraps', async () => {
+    // The whole point of the marker, asserted where every real wrap is in place: the facade wrap
+    // substitutes the host-CLI model, the instrumentation sits over that, and the limiter (capped
+    // by default for all five subscription vendors) sits over BOTH. `AiAgentExecutor` holds only
+    // what comes out of the last of those, and an AI SDK wrap keeps none of the model's own
+    // properties, so a bare wrap left the executor reading `undefined` and filing an ambient
+    // claude login's tokens as metered spend. Read it exactly as the executor does.
+    const provider = await compose([], exec).forScope({ workspaceId: 'ws_1' })
+
+    expect(usageAttributionOf(provider.resolve(CLAUDE_SUB))).toEqual({
+      billing: 'subscription',
+      vendor: CLAUDE_SUB.provider,
+    })
+  })
 
   it('records a call the wrap SUBSTITUTED, with the three input classes kept apart', async () => {
     const recorded: InlineLlmCall[] = []

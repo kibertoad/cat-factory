@@ -57,6 +57,7 @@ import {
 // than printing beside it.
 import { logger } from '@cat-factory/server'
 import { fanOutRealtime, serveAuthBackend } from './authBackend.ts'
+import { holdKeepAliveSockets } from './keepAlive.ts'
 import {
   AUTH_BACKEND_PORT,
   AUTH_FRONTEND_URL,
@@ -453,7 +454,7 @@ if (!env.DATABASE_URL) {
   )
 }
 
-await start({
+const backend = await start({
   env,
   // The composition root: the stock Node container, but with the agent executor + repo
   // bootstrapper swapped for the deterministic fakes. `start()` supplies `db`, the started
@@ -546,3 +547,7 @@ await start({
     return container
   },
 })
+
+// The seeding calls that open every spec land here, so this listener must not reap a socket
+// Playwright's request context is about to reuse. See `keepAlive.ts`.
+holdKeepAliveSockets(backend)

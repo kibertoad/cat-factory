@@ -17,7 +17,7 @@ import { standardsVerbosityFor, traitDeliveryFor } from '../kinds/traits.js'
 import { systemPromptFor, userPromptFor } from '../catalog.js'
 import { catFactoryObservability } from '../../providers/instrumented.js'
 import { agentUsageFromModelUsage } from '../../providers/cache.js'
-import { usageAttributionOf } from '../../providers/usage-attribution.js'
+import { usageBillingFields } from '../../providers/usage-attribution.js'
 import { type AgentRouting, resolveAgentConfig, resolveInlineModelRef } from './routing.js'
 import { composeBlockSystemPrompt } from './fragments.js'
 import {
@@ -30,20 +30,6 @@ import {
   foldLoadedDesignImages,
   loadDesignImages,
 } from './design-images.js'
-
-/**
- * The billing fields for a result, taken from the attribution the RESOLVED model declares.
- *
- * Empty for a model that declares none, which leaves the result exactly as it was: the spend
- * ledger's own default is `'metered'` with no vendor, and a plain provider API key is precisely
- * that. A declared attribution always carries both halves, so a subscription row can never
- * reach the ledger with the blank vendor that made the mis-filed rows unrecognisable.
- */
-function usageBillingFields(model: unknown): Pick<AgentRunResult, 'usageBilling' | 'usageVendor'> {
-  const attribution = usageAttributionOf(model)
-  if (!attribution) return {}
-  return { usageBilling: attribution.billing, usageVendor: attribution.vendor }
-}
 
 export interface AiAgentExecutorDependencies {
   /**
@@ -420,7 +406,7 @@ export class AiAgentExecutor implements AgentExecutor {
       // container on a leased subscription token) spent no per-token money, and defaulting to
       // metered here filed a run's companion and research steps as spend while the
       // containerised steps of the SAME run, on the SAME credential, filed as subscription.
-      ...usageBillingFields(model),
+      ...usageBillingFields([model]),
     }
   }
 }

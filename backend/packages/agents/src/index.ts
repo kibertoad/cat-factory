@@ -565,6 +565,14 @@ export {
   usageAttributionOf,
   type UsageAttributedLanguageModel,
   type UsageAttribution,
+  // The ONE reduction from resolved models to the result's billing fields, shared by both
+  // inline executors: a panel's tokens are the sum across several models, so a ledger row can
+  // only state an attribution every one of them agrees on.
+  usageBillingFields,
+  // How a decorator wraps a resolved model without erasing the markers above it, which is the
+  // whole reason either marker reaches its reader.
+  wrapModelPreservingMarkers,
+  type ModelMarkers,
   InstrumentedModelProvider,
   catFactoryObservability,
   type InlineObservabilityContext,

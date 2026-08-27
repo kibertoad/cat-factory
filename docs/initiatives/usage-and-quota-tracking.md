@@ -101,12 +101,19 @@ reuse the rollup substrate (`totalsSince*`, per-workspace/account/user) that alr
      result, and both metering sites (`recordJobFacts` and `CompanionController`, which used to drop
      the fields entirely) forward it. A subscription row's `vendor` can no longer be blank:
      `SpendService.record` falls back to the model's provider slug, the same value the container path
-     records for the same credential.
+     records for the same credential. Two traps that made the first cut of this inert, both now
+     pinned by tests: a marker travels on the MODEL, and the AI SDK's `wrapLanguageModel` returns a
+     fresh object that drops every property it does not know, so a `ModelProvider` decorator has to
+     wrap through `wrapModelPreservingMarkers` (the vendor concurrency limiter caps all five
+     subscription vendors by default, so the outermost wrap is the normal case, not an edge one);
+     and a CONSENSUS panel sums several models, so it reports only the attribution all of them
+     agree on, a mixed panel staying metered because it did spend real money.
    - **A subscription row's `cost_estimate` is a LIST PRICE, and every surface that shows it says
      so.** It is priced identically to a metered row on purpose (what the same tokens WOULD have cost
      metered), which is exactly why the number alone misleads: the Usage tab already separates the two
      billing kinds, and the step-level rollup now carries `PipelineStep.usageBilling` so
-     `metrics.costEstimate` renders labelled rather than as money spent.
+     `metrics.costEstimate` renders labelled rather than as money spent. A metered row's `vendor` is
+     `null` by construction, enforced in `SpendService.record` rather than trusted of each caller.
 
 5. **Controller + contract.** `GET /workspaces/:ws/usage` → the breakdown for the current
    period (+ optional range). Contract in `@cat-factory/contracts`.

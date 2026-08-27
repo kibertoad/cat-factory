@@ -10,7 +10,21 @@
  * every spend rollup — a quota plan costs nothing per token, so letting one into the
  * budget gate would wrongly pause runs. See the usage-and-quota-tracking initiative.
  */
-export type UsageBilling = 'metered' | 'subscription'
+export const ALL_USAGE_BILLING = ['metered', 'subscription'] as const
+
+export type UsageBilling = (typeof ALL_USAGE_BILLING)[number]
+
+/**
+ * Whether `value` is a member of the closed {@link UsageBilling} vocabulary.
+ *
+ * Derived from {@link ALL_USAGE_BILLING} rather than restating the members, so adding one
+ * cannot leave a reader silently rejecting it. For narrowing a billing kind that reached the
+ * engine from OUTSIDE the type system: a marker read off a resolved model, which any provider
+ * package (including one this repo does not own) may declare.
+ */
+export function isUsageBilling(value: unknown): value is UsageBilling {
+  return (ALL_USAGE_BILLING as readonly unknown[]).includes(value)
+}
 
 /**
  * One usage-report row: aggregated token usage for one `(billing, vendor, provider,

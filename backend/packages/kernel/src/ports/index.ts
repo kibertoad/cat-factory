@@ -112,6 +112,7 @@ export type {
   InlineUseCaseScope,
   InlineUseCaseSession,
 } from './inline-use-cases.js'
+export { ALL_USAGE_BILLING, isUsageBilling } from './token-usage.js'
 export type {
   TokenUsageRecord,
   ScopedSpendWindow,

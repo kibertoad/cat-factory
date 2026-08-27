@@ -137,9 +137,10 @@ export interface ScopedSpendForecast {
  * The vendor a ledger row records.
  *
  * A METERED row has none by construction: a per-token API key belongs to no subscription, and
- * `null` says exactly that. A SUBSCRIPTION row must name one — every read that reconciles quota
- * usage groups by it, and a blank there is a row that cannot be attributed to the plan that paid
- * for it. So the one the caller resolved wins, and a caller that knew the billing but not the
+ * `null` says exactly that. Enforced HERE rather than trusted of each caller, so the invariant
+ * `TokenUsageRecord.vendor` states holds at the one write boundary that can hold it. A
+ * SUBSCRIPTION row must name one: every read that reconciles quota usage groups by it, and a
+ * blank there is a row that cannot be attributed to the plan that paid for it. So the one the caller resolved wins, and a caller that knew the billing but not the
  * vendor falls back to the model's own PROVIDER slug, which is what the container dispatch path
  * records for the same credential. Never a guess: both are read off the credential that served
  * the call.
@@ -149,7 +150,7 @@ function vendorFor(
   declared: string | null | undefined,
   provider: string,
 ): string | null {
-  if (billing !== 'subscription') return declared ?? null
+  if (billing !== 'subscription') return null
   return declared?.trim() || provider
 }
 
