@@ -144,7 +144,11 @@ frame back to a run id and an unfreeable repository is held by a frame no read h
 and it STATES what the run in hand does not reclaim (cluster namespaces always, and without
 `--purge-repos` the repositories' content and any reporter-filed issue), so a cleared board never
 reads as a fresh one. The PREVIEW runs that same retention rule, so it never lists files the apply
-will keep, and anything unfreeable is a non-zero exit even when nothing was refused.
+will keep, and anything unfreeable is a non-zero exit even when nothing was refused. **The plan/apply
+machinery itself is the KIT's** (`@cat-factory/acceptance-kit`'s `reset.ts`): the write order, the
+retention rule, the pointer rule and the two formatters are shared, and `src/reset.ts` is now only
+what this suite knows, its two questions, its unfreeable repositories, its unlinked note and its
+leftovers prose. A change to any of those five decisions belongs upstream, with a kit test.
 
 **`--purge-repos` is the PROVIDER half of that paragraph, on `ACCEPTANCE_VCS_TOKEN`**
 (`src/providerPurge.ts` over `src/issuePurge.ts` + `src/repoPurge.ts`): it closes the issues this
