@@ -43,6 +43,15 @@ a possibly-filed task, and a pre-create evidence read read as the same. So only 
 about a call it made is classified (`isRequestFailure`), and a body's own reads belong in
 `prepareTask`. A new option that runs work around a create picks one of those halves.
 
+**A reset's SAFETY properties are the plan, not the delete.** `applyReset` consumes the plan
+`planReset` made rather than re-deriving one, so the preview and the apply cannot disagree about the
+target, and `keepReason` is ONE function with two readers for the same reason: a plan listing a file
+under "to remove" that the apply then keeps misstates an outcome it had already computed. The preview
+runs it with an empty refused set, which is exactly what a plan knows. Everything a suite contributes
+(`target`, `ledgerServiceIds`, `leftovers`) is data the kit renders, never a branch it takes: a
+suite-supplied reason phrase is printed after `because it `, and a suite that names no leftovers has
+that stated rather than rendered as an empty section.
+
 **Nothing here calls `process.exit`, and nothing writes to stderr.** An afternoon-long pass is piped
 to a file, `tee` captures one stream, and `process.exit` tears the process down without draining it:
 what that loses is the tail, which is the failure and the summary. `runPass` answers an exit code.
@@ -64,6 +73,7 @@ what that loses is the tail, which is the failure and the summary. `runPass` ans
 | `decisions.ts`         | The two kinds answered, what is answerable NOW, and the refusals. The most conservative module here.                                                                                            |
 | `runDriver.ts`         | One started run to terminal, under ONE budget spanning every park.                                                                                                                              |
 | `resume.ts`            | File or adopt; the four states a resumed pass can find, the preparation stage outside the create window, and what a create that never completed leaves behind.                                  |
+| `reset.ts`             | Clearing a board: plan then apply. Write order, the orphan rule, the pointer rule, the formatters. Targeting and leftovers are the suite's.                                                     |
 | `resource.ts`          | The same, for a resource the SUITE provisions: record before observing, adopt over re-provisioning, release on CONFIRMATION.                                                                    |
 | `brief.ts`             | The description-cap branch, read from the contracts' own caps. Over the attachment cap it REFUSES rather than cuts.                                                                             |
 | `consoleCredential.ts` | The opt-in `CredentialRetry`: its OWN subpath export, so the base package holds no terminal code.                                                                                               |

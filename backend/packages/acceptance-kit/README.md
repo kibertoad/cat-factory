@@ -25,6 +25,7 @@ worked example. What is here is that suite with the suite taken out.
 | `resource.ts`       | The same discipline for a RESOURCE your suite provisions itself: recorded before it can be observed, adopted rather than re-provisioned, released only when the provider agrees it is gone.                                                     |
 | `brief.ts`          | Getting a real brief onto a task whatever its size: under the description cap it is the description, over it an attached document, and past the attachment cap it is REFUSED rather than cut.                                                   |
 | `evidence.ts`       | Reductions over the PR verification report, so a scenario asserts on what the platform COMPUTED rather than on agent prose.                                                                                                                     |
+| `reset.ts`          | Clearing a board back to "before any pass ran": what a reset WOULD delete, then the apply, with the write order, the never-orphan-a-ledger rule and the `latest` pointer rule owned here. Your suite names the frames and the leftovers.        |
 | `pass.ts`           | The pass itself: banner, scenarios, summary, closing words, exit code, and the boundary that reports a bug in the suite without losing the resume.                                                                                              |
 
 One further module is a SEPARATE entry point, `@cat-factory/acceptance-kit/console-credential`, so
@@ -151,6 +152,17 @@ it is rather than the obvious way.
    evidence read composing a description fails exactly the ways a create does, and nothing has been
    filed when it fails.
 
+10. **A reset PLANS before it deletes, and the plan is what the apply carries out.** Clearing a
+    board deletes real service frames, real tasks and real run history on a board somebody may share,
+    so the preview is the safety property and `--yes` is the whole of the opt-in. Three of the rules
+    under it fail quietly rather than loudly, which is why `reset.ts` owns them: unfinished tasks go
+    before their frame (the frame delete refuses over them, deliberately) while finished ones ride its
+    cascade; a pass's ledger is never removed while a frame it names is still standing, because that
+    ledger is the only thing mapping the frame back to a resumable run id; and the `latest` pointer
+    goes both when it names a pass being removed and when it names nothing at all, since a dangling
+    pointer outlives every ledger and then resolves a resume onto an empty state directory. A `404`
+    is an outcome rather than a failure: something else got there first.
+
 ## Seams
 
 Four things the kit deliberately does NOT decide, because only a suite can:
@@ -165,6 +177,15 @@ Four things the kit deliberately does NOT decide, because only a suite can:
   all run on the deployment's own keys passes `passThroughCredentialRetry`, which says so in code,
   where an omission says nothing and surfaces as a pass dying at a `428` after an afternoon of spend.
   The OTHER branch is `@cat-factory/acceptance-kit/console-credential`, opt-in by import.
+
+A reset adds three more of the same kind, on `planReset`: `target` (which frames this
+configuration is asking about, and in whose words), `ledgerServiceIds` (which of your own facts name
+a frame) and `leftovers` (what a reset does not reclaim, which is per suite by nature). The kit owns
+the ordering, the retention rule, the pointer rule and the two formatters; it never guesses what a
+pass created. Whatever else your command takes is declared to `parseResetArgs` as `flags` and handed
+back un-interpreted; it REFUSES, loudly and on every invocation, a name it acts on itself (`--yes`,
+`-y`, `--all`) or one spelled without its dashes, because either would have your flag read as absent
+while the parser's own meaning ran in its place.
 
 **CONFIGURATION is the fifth thing the kit does not decide**, and it is listed apart because half of
 it is not a seam at all. Reading your own configuration is yours; ASSEMBLING it is a `.env` write,
