@@ -130,6 +130,11 @@ else imports its **ports** and domain types from here.
   verdict may overwrite. Four probe verdicts, because they need four dispositions: an outage, a
   recovery, an `indeterminate` we could not ask about (leave the record alone) and a
   `not_configured` area that is simply gone (forget the record, announce nothing).
+- `domain/environment-readiness.logic.ts`: **whether a provisioned environment exists yet** —
+  `judgeEnvironmentReadiness` (ready / still waiting / a state it will never leave / our own
+  ceiling spent) plus `ENVIRONMENT_READY_TIMEOUT_MS`. Here rather than beside a provider because
+  the ENGINE decides when a run may proceed, and because a `ready` environment with no URL is
+  legitimate: whether the consuming STEP has an address is a different question, asked at dispatch.
 - `domain/context-references.ts`: the **"a referenced context document reaches the agent whole, or
   the run breaks loudly naming it"** invariant: the two refusals
   (`assertContextDocumentsReadable` / `assertContextReferencesFit`) with their `details.reason`

@@ -21,6 +21,10 @@ top-level files are the domain contracts.
   agent's question, review comments, a companion verdict, and the approval gate — which is also
   the engine's GENERIC parking mechanism, so a pending approval does NOT by itself mean "approval
   gate"; orchestration's `dedicatedParkSurface` is what tells them apart).
+- `deploy-envs.ts`: the ephemeral-environment bookkeeping `PipelineStep` carries at both ends of
+  the lifecycle — `deployEnvStateSchema` (the deployer's per-frame TERMINAL outcome),
+  `disposeEnvStateSchema` (the disposer's), and `deployWaitStateSchema` (the readiness wait
+  between them, which is neither: it is the frame that has not settled yet).
 - `public-decisions.ts`: the external projection of every park a run can stop on, plus the bodies
   that answer them. The kind union is the surface's honesty check — a member with no route behind
   it is a promise `/api/v1` cannot keep.

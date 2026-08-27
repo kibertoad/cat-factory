@@ -113,6 +113,47 @@ function registerDisposerTests(harness: ConformanceHarness): void {
     expect(envs.body).toHaveLength(0)
   })
 
+  it('waits for an asynchronous provider before calling the environment ready', async () => {
+    // The shape of every real per-PR backend: `provision()` accepts the request and returns with
+    // the environment still building and no URL. The deployer used to record that frame `ready`
+    // and move on, so the tester was handed `URL: (pending)` and nothing ever read the provider
+    // again. Here the run parks, re-reads, and records what the provider finally published.
+    //
+    // Cross-runtime because the wait is PERSISTED: it survives on the run row between polls, so a
+    // facade whose repo dropped `deployWait` would resume the fan-out with no idea it was waiting.
+    let reads = 0
+    const slow = {
+      provision: async () =>
+        ({
+          externalId: 'env-1',
+          status: 'provisioning',
+          url: null,
+          expiresAt: null,
+          access: null,
+          fields: {},
+        }) as never,
+      status: async () =>
+        (reads++ === 0
+          ? { externalId: 'env-1', status: 'provisioning', url: null }
+          : { externalId: 'env-1', status: 'ready', url: 'https://preview.example' }) as never,
+      teardown: async () => ({ status: 'torn_down' }) as never,
+      confirmTeardown: async () => ({ state: 'gone' }) as never,
+    } as unknown as EnvironmentProvider
+
+    const { exec } = await runDeployThenDispose(slow)
+
+    expect(exec.status).toBe('done')
+    const deployStep = exec.steps.find((s) => s.agentKind === 'deployer')!
+    expect(reads).toBeGreaterThan(1)
+    expect(deployStep.deployWait).toBeUndefined()
+    expect(Object.values(deployStep.deployEnvs ?? {})[0]).toMatchObject({
+      status: 'ready',
+      url: 'https://preview.example',
+    })
+    // The run's own summary names the address it published, not "(pending)".
+    expect(deployStep.output).toContain('https://preview.example')
+  })
+
   it('never fails the run when the reclaim cannot be confirmed', async () => {
     // Disposal is cleanup, not a prerequisite, and a disposer commonly sits after `merger`: a
     // teardown the platform cannot vouch for must not flip a shipped, merged pipeline to failed.

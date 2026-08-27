@@ -20,6 +20,7 @@ const CFG: DriveConfig = {
 
 const AWAITING_JOB: AdvanceResult = { kind: 'awaiting_job', jobId: 'j1', stepIndex: 0 }
 const AWAITING_GATE: AdvanceResult = { kind: 'awaiting_gate', stepIndex: 0 }
+const AWAITING_ENV: AdvanceResult = { kind: 'awaiting_environment', stepIndex: 0 }
 const DONE: AdvanceResult = { kind: 'done' }
 
 /**
@@ -94,6 +95,30 @@ describe('driveExecution poll cadence', () => {
     const h = harness({ advance: [AWAITING_GATE], pollGate: [DONE] })
     await driveExecution(h.exec, 'ws', 'ex', CFG, { sleep: h.sleep })
     expect(h.events).toEqual(['advance', 'sleep:30000', 'pollGate'])
+  })
+
+  it('drains an environment wait on the job cadence, through pollAgentJob', async () => {
+    // A `deployer` waiting on its provider is infra coming up, not a human-scale gate, so it takes
+    // the JOB interval. It rides `pollAgentJob` because the deployer owns the wait: there is no
+    // job in flight, and the entry point routes on the step's own parked state.
+    const h = harness({ advance: [AWAITING_ENV], pollJob: [AWAITING_ENV, DONE] })
+    await driveExecution(h.exec, 'ws', 'ex', CFG, { sleep: h.sleep })
+    // Sleep-FIRST, like a gate and unlike a just-dispatched job: the advance that parked the step
+    // read the provider moments ago, so an immediate re-read would only duplicate that answer.
+    expect(h.events).toEqual(['advance', 'sleep:15000', 'pollJob', 'sleep:15000', 'pollJob'])
+  })
+
+  it('names the environment wait, not a job, when its poll budget runs out', async () => {
+    const h = harness({
+      advance: [AWAITING_ENV],
+      pollJob: Array.from({ length: CFG.jobMaxPolls }, () => AWAITING_ENV),
+    })
+    await driveExecution(h.exec, 'ws', 'ex', CFG, { sleep: h.sleep })
+    // "Implementation job did not settle" on a run whose jobs all finished sends an operator to
+    // the wrong place; the backstop says what was actually being waited for.
+    expect(h.events.at(-1)).toBe(
+      'fail:timeout:Environment readiness did not settle within its polling budget',
+    )
   })
 
   it('spends the full job poll budget (maxPolls polls, maxPolls-1 sleeps) then times out', async () => {

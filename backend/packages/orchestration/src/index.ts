@@ -74,6 +74,7 @@ export {
 } from '@cat-factory/kernel'
 export {
   driveExecution,
+  MAX_PARK_HOPS,
   type DriveConfig,
   type DriveOptions,
   type DriveOutcome,

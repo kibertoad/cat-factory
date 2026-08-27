@@ -305,6 +305,9 @@ export class DeployFixController {
     // the frame fresh, since the fixer may well have changed what it declares.
     step.deployProvisioning = undefined
     step.deployFrameId = undefined
+    // A readiness wait belongs to the environment the fixer's round supersedes; carrying it over
+    // would park the re-provision on the OLD environment's id.
+    step.deployWait = undefined
     await this.deps.runStateMachine.persistAndEmit(workspaceId, instance, {
       blockStatus: 'in_progress',
     })

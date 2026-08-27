@@ -125,6 +125,7 @@ export {
   isTestingKind,
   testingSystemPrompt,
   testerEnvironmentSection,
+  runsAgainstEphemeralEnvironment,
   TESTER_QC_SYSTEM_PROMPT,
 } from './agents/prompts/testing.js'
 // A bespoke system prompt SPLIT at the boundary a workspace override may cross — the shape the

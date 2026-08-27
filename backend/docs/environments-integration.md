@@ -68,11 +68,20 @@ does not say, and a change on this path has to hold:
 1. The **`deployer`** step calls `HttpEnvironmentProvider.provision`, interpolating the manifest's
    `provision` template with `{{input.*}}` derived from the block. It runs **deterministically**:
    no LLM, no token spend, so a provisioning failure is never a model's fault.
-2. An async `provision` is polled by the cron sweep against the `status` template until the mapped
-   status reaches `ready` or `failed`; the handle's URL and access creds come off the `response`
-   dot-paths, not off any fixed response shape.
+2. An async `provision` (the normal case: the create call returns with the environment still
+   building) does NOT complete the step. The deployer parks on a readiness wait and re-reads the
+   `status` template between driver polls until the mapped status reaches `ready`, reaches a state
+   it will never leave, or crosses `ENVIRONMENT_READY_TIMEOUT_MS` (kernel,
+   `domain/environment-readiness.logic.ts`). Only `ready` is recorded as the frame's outcome; the
+   handle's URL and access creds come off the `response` dot-paths, not off any fixed response
+   shape. The TTL sweep below reclaims environments, it does not reconcile their status: nothing
+   else polls a provisioning environment, which is why the wait lives on the step that made it.
 3. The tester job's `test.environmentUrl` is wired straight from the persisted handle, so nothing
-   downstream re-derives the address the environment was actually reached at.
+   downstream re-derives the address the environment was actually reached at. A step whose run mode
+   IS the ephemeral environment (`runsAgainstEphemeralEnvironment`, the predicate its own prompt
+   branches on) and that has no URL is REFUSED at dispatch rather than sent a `(pending)` address
+   (`environmentDispatch.logic.ts`): the readiness wait normally makes that unreachable, and this
+   covers what a wait cannot (an environment that expired mid-run, a chain with no `deployer`).
 4. The sweep (every 2 min) tears down at the handle's TTL, taken from `expiresAtPath` or falling
    back to `defaultTtlMs`, and tombstones the record. Teardown is best-effort and retried on the
    next pass rather than wedging the registry, and a teardown call returning cleanly is not a

@@ -685,6 +685,17 @@ export {
   type UnresolvedPlaceholder,
 } from './domain/environment-failure.js'
 
+// Environment READINESS: whether a provisioned environment exists yet, and how long the deployer
+// waits for one that does not. See `domain/environment-readiness.logic.ts` — the rule is stated
+// once here because the engine, not any single provider, decides when a run may proceed.
+export {
+  ENVIRONMENT_READY_TIMEOUT_MS,
+  describeWaitedFor,
+  judgeEnvironmentReadiness,
+  type EnvironmentReadiness,
+  type EnvironmentReadinessInput,
+} from './domain/environment-readiness.logic.js'
+
 // Per-step human-gate approval: who may resolve a gate and when a quorum is met. The rule lives in
 // `@cat-factory/contracts` because the SPA must agree about the answer (it disables the approve
 // button and renders the tally), and is re-exported here so the engine reaches it alongside the

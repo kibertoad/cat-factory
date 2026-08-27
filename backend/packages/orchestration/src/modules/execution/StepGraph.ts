@@ -132,6 +132,9 @@ export class StepGraph {
     step.deployFrameId = undefined
     step.deployProvisioning = undefined
     step.deployPrimaryFrameId = undefined
+    // A stale readiness wait would park the re-run on the SUPERSEDED environment's id — polling,
+    // and then reporting on, an environment this attempt never provisioned.
+    step.deployWait = undefined
     // The remediation budget goes with the fan-out state it belongs to. A re-run provisions from
     // scratch, so it is a fresh failure if it fails, and carrying the spent `attempts` across would
     // send its FIRST failure straight to the give-up: a `deploy_blocked` card raised with zero

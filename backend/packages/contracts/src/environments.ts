@@ -264,7 +264,16 @@ export type ProvisionType = v.InferOutput<typeof provisionTypeSchema>
  *    which is the tester's subject and the operator's, not a manifest repair.
  *  - `permission_denied` — the cluster refused the credentials (401/403, missing RBAC).
  *  - `cluster_unreachable` — the provider could not be reached at all.
- *  - `timeout` — the provision ran past its deadline with no terminal cause observed.
+ *  - `timeout` — the provision ran past its deadline with no terminal cause observed. This is
+ *    what a `deployer` records when its readiness wait expires: the provider kept answering
+ *    `provisioning` and never said why.
+ *  - `environment_not_ready` — the environment settled in a state it will not leave on its own
+ *    (`expired`, torn down under the run) or is still coming up when a step that needs it is
+ *    about to be dispatched. Distinct from `timeout` because nothing waited: there is a live
+ *    verdict, and it is not `ready`.
+ *  - `environment_missing` — a service whose steps run against an ephemeral environment has
+ *    none at all. The fix is the CHAIN (a tester with no `deployer` ahead of it) rather than the
+ *    provider, which is why it does not share `environment_not_ready`'s code.
  */
 export const environmentFailureReasonSchema = v.picklist([
   'deploy_runner_unwired',
@@ -275,6 +284,8 @@ export const environmentFailureReasonSchema = v.picklist([
   'permission_denied',
   'cluster_unreachable',
   'timeout',
+  'environment_not_ready',
+  'environment_missing',
 ])
 export type EnvironmentFailureReason = v.InferOutput<typeof environmentFailureReasonSchema>
 
@@ -309,6 +320,8 @@ const REPO_FIXABLE_ENVIRONMENT_FAILURES: Record<EnvironmentFailureReason, boolea
   permission_denied: false,
   cluster_unreachable: false,
   timeout: false,
+  environment_not_ready: false,
+  environment_missing: false,
 }
 
 /** See {@link REPO_FIXABLE_ENVIRONMENT_FAILURES}. An absent/unknown reason is never fixable. */

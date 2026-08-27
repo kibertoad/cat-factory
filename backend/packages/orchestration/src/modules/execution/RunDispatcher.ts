@@ -306,6 +306,7 @@ export class RunDispatcher {
       blockRepository: deps.blockRepository,
       contextBuilder: deps.contextBuilder,
       runStateMachine: deps.runStateMachine,
+      clock: deps.clock,
       environmentProvisioning: deps.environmentProvisioning,
       deployFix: this.deployFix,
       recordStepResult: (ws, instance, step, isFinalStep, result) =>
@@ -582,6 +583,13 @@ export class RunDispatcher {
     }
     const step = instance.steps[instance.currentStep]
     if (!step) return { kind: 'noop' }
+    // A `deployer` step parked on ENVIRONMENT READINESS has no job in flight: the deploy
+    // container (where there was one) finished and was reclaimed, and what the run is waiting on
+    // is the provider's own `status()`. Routed BEFORE the `jobId` guard below, which would
+    // otherwise read the absent job as "already recorded" and advance past a step still waiting.
+    if (step.deployWait && isDeployStep(step.agentKind) && this.environmentProvisioning) {
+      return this.deployer.pollDeployerEnvironment(workspaceId, instance, step)
+    }
     // No job in flight: a prior poll already recorded it (and advanced). Let the
     // driver loop and advance whatever step is now current.
     if (!step.jobId) return { kind: 'continue' }

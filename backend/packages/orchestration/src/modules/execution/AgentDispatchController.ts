@@ -17,6 +17,7 @@ import type { DispatchToolServers } from '@cat-factory/contracts'
 import { PR_REVIEWER_KIND, resolvePrNumber } from '@cat-factory/agents'
 import { recordDispatchedJob, recordInlineToolServers } from './step-fold.logic.js'
 import { classifyDispatchFailure, type DispatchFailureClassification } from './job.logic.js'
+import { environmentDispatchRefusal } from './environmentDispatch.logic.js'
 import { initialPrReviewState } from './prReview.logic.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { DeployerStepController } from './DeployerStepController.js'
@@ -115,11 +116,28 @@ export class AgentDispatchController {
     // (e.g. the PR-review `fix` resolution points the Fixer at the reviewed PR's head branch and
     // hands it the selected findings). Runs before pre-ops / dispatch so the job body sees it.
     augmentContext?.(context)
-    // A registered custom kind's PRE-ops run deterministic backend repo work before the
-    // agent dispatches (e.g. read a baseline `spec/` shard into the prompt). Gated on the
-    // step not having dispatched yet so a Workflows replay (jobId already set) doesn't
-    // re-run them; a no-op for built-in kinds and when GitHub isn't wired.
+    // Everything below is FIRST-DISPATCH-only work, gated together on the step not having
+    // dispatched yet so a replay (jobId already set) re-attaches instead of re-running it.
     if (!step.jobId) {
+      // Refuse, rather than dispatch, a step whose whole brief is an address it was not given.
+      // The prompt for a step in ephemeral-environment mode says "test against the environment
+      // described above" and then prints `URL: (pending)`; the two are contradictory, and an agent
+      // handed them does not reliably take the bail-out the prompt also offers — the run this guard
+      // was written for instead reconstructed the deployment locally, tested THAT, and greenlit the
+      // one thing it had not verified. Failing here says the same thing honestly, once, where a
+      // human can act on it. The deployer's readiness wait is what normally makes this unreachable;
+      // this catches what it cannot cover (an expired environment, a chain with no deployer at all).
+      //
+      // Inside the re-attach gate for the same reason the pre-ops below are: it judges the
+      // environment as it stands NOW, and a re-attach's environment has since moved on. An
+      // ephemeral env carries a TTL, so a long-running tester's environment routinely expires
+      // under it — and refusing on a replay would fail a run whose container is still alive,
+      // still working, and still holding a runner nothing would then reclaim.
+      const unreachable = environmentDispatchRefusal(context)
+      if (unreachable) return unreachable
+      // A registered custom kind's PRE-ops run deterministic backend repo work before the
+      // agent dispatches (e.g. read a baseline `spec/` shard into the prompt); a no-op for
+      // built-in kinds and when GitHub isn't wired.
       await this.deps.repoOps.runRegisteredPreOps(workspaceId, instance, block, step, context)
     }
     const executor = this.deps.agentExecutor

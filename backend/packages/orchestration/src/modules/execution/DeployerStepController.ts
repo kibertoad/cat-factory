@@ -3,6 +3,8 @@ import type {
   AgentRunResult,
   Block,
   BlockRepository,
+  Clock,
+  EnvironmentHandle,
   ExecutionInstance,
   Logger,
   PipelineStep,
@@ -10,7 +12,14 @@ import type {
   RunnerJobRef,
   ServiceProvisioning,
 } from '@cat-factory/kernel'
-import { getErrorMessage, getErrorReason, noopLogger, runBestEffort } from '@cat-factory/kernel'
+import {
+  describeWaitedFor,
+  getErrorMessage,
+  getErrorReason,
+  judgeEnvironmentReadiness,
+  noopLogger,
+  runBestEffort,
+} from '@cat-factory/kernel'
 import { frameProfile, frontendOriginsForService } from '@cat-factory/contracts'
 import { moduleSlug } from '@cat-factory/agents'
 import type {
@@ -115,6 +124,12 @@ export interface DeployerStepControllerDeps {
   blockRepository: BlockRepository
   contextBuilder: AgentContextBuilder
   runStateMachine: RunStateMachine
+  /**
+   * The engine clock. It anchors the environment-readiness wait, which is the one deployer
+   * decision measured in elapsed TIME rather than in attempts, so it is injected rather than read
+   * off `Date.now()` — a test drives the whole readiness ceiling without waiting through it.
+   */
+  clock: Clock
   environmentProvisioning?: EnvironmentProvisioningService
   recordStepResult: (
     workspaceId: string,
@@ -161,6 +176,7 @@ export class DeployerStepController {
   private readonly blockRepository: BlockRepository
   private readonly contextBuilder: AgentContextBuilder
   private readonly runStateMachine: RunStateMachine
+  private readonly clock: Clock
   private readonly environmentProvisioning?: EnvironmentProvisioningService
   private readonly recordStepResult: DeployerStepControllerDeps['recordStepResult']
   private readonly applyContainerRunning: DeployerStepControllerDeps['applyContainerRunning']
@@ -173,6 +189,7 @@ export class DeployerStepController {
     this.blockRepository = deps.blockRepository
     this.contextBuilder = deps.contextBuilder
     this.runStateMachine = deps.runStateMachine
+    this.clock = deps.clock
     this.environmentProvisioning = deps.environmentProvisioning
     this.recordStepResult = deps.recordStepResult
     this.applyContainerRunning = deps.applyContainerRunning
@@ -275,6 +292,18 @@ export class DeployerStepController {
     // skips the workspace block-list read.
     if (step.jobId) {
       return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    }
+    // The same re-attach rule for the OTHER park this step owns. A live `deployWait` means a
+    // frame's environment is already provisioned and still coming up, so re-park on it rather than
+    // re-entering the fan-out. `deployEnvs` records TERMINAL outcomes only, so a waiting frame is
+    // deliberately absent from it and {@link advanceDeployerFrames} would pick that same frame as
+    // the next un-settled one: any re-advance while a wait is live (a durable replay, a Node worker
+    // restart, the stale-run sweeper re-driving) would stand a SECOND environment up for it and
+    // leak the first, which nothing would then be pointing at to reclaim. Checked AFTER `jobId`
+    // only for symmetry of reading: the two are mutually exclusive, since `pollDeployerJob` clears
+    // `jobId` before the settle that can enter a wait.
+    if (step.deployWait) {
+      return { kind: 'awaiting_environment', stepIndex: instance.currentStep }
     }
     // Fan out over every service frame this run provisions an env for — the task's OWN frame plus
     // each still-valid involved-service frame (the connections initiative), ordered provider-
@@ -478,7 +507,6 @@ export class DeployerStepController {
     target: DeployTarget,
     settled: SettledProvision,
   ): Promise<AdvanceResult> {
-    const { workspaceId, instance, step } = ctx
     const { handle, reason } = settled
     if (handle.status === 'failed') {
       return this.settleDeployerFailure(ctx, target, {
@@ -493,31 +521,192 @@ export class DeployerStepController {
         ...(reason ? { reason } : {}),
       })
     }
-    if (handle.status !== 'ready' && !target.isPrimary) {
-      // A PEER env that isn't `ready` (`provisioning`, `expired`, `tearing_down`, …) is not usable
-      // context: `deployEnvs` can only record `ready`/`failed`/`skipped`, and recording it `ready`
-      // would BOTH advertise it "Provisioned involved-service environment …" AND inject its not-live
-      // URL into a consumer's `peerEnvUrls`. Drop it as a non-terminal peer failure instead. (The
-      // OWN frame keeps the historical behaviour — its env is the deploy's product; its live status
-      // is surfaced via the Environment projection, and the run proceeds as before.)
-      return this.settleDeployerFailure(ctx, target, {
-        url: handle.url,
-        environmentId: handle.id,
-        error: `Environment not ready (status: ${handle.status}).`,
-      })
+    if (handle.status !== 'ready') {
+      // The provider answered without a live environment. `deployEnvs` records TERMINAL outcomes
+      // only, so there is nothing honest to write here yet: `provisioning` means the environment
+      // is still coming (park and re-read the provider), and every other state means it never
+      // will be (record the frame failed, naming the state).
+      //
+      // The OWN frame used to be recorded `ready` regardless, which is the defect this replaces:
+      // it advertised "Provisioned ephemeral environment … (pending)" to the run summary and to
+      // every downstream env-consuming step, while the environment itself was still being built.
+      //
+      // A PEER frame takes the SAME route, which is a deliberate change from the fast-drop this
+      // replaces (a not-`ready` peer was recorded failed on the spot, as non-terminal enrichment
+      // the run could proceed without). It is not only enrichment: {@link buildPeerEnvUrls} feeds
+      // every already-ready peer into the NEXT frame's provision inputs, and
+      // {@link orderProvisionTargets} runs providers BEFORE consumers precisely so a consumer can
+      // template its provider's URL into its own manifest. Dropping a peer that is still building
+      // therefore does not lose a URL from a prompt, it provisions the consumer — usually the OWN
+      // frame, which goes last — against a provider address that is silently absent, which is the
+      // same class of defect as the one above. Under an async provider the fast-drop made that
+      // ordering guarantee vacuous, since every peer answers `provisioning` first. The cost is
+      // that a peer stuck coming up now holds the run up to the readiness ceiling rather than
+      // being dropped instantly; the ceiling is what bounds it, and the frame still settles
+      // `failed` (non-terminal for a peer) at the end of it.
+      return this.judgeSettledEnvironment(ctx, target, handle)
     }
-    const done = step.deployEnvs ?? {}
-    // The env's ID rides the record beside its URL: it is what the `disposer` reclaims by at the
-    // other end of the lifecycle, and this is the only moment the run can state WHICH environment
-    // it stood up for this frame without re-resolving (and mis-resolving) it later.
+    return this.recordReadyFrame(ctx, target, handle)
+  }
+
+  /**
+   * Decide what a NOT-`ready` provider answer means for the frame it settled, and act on it: a
+   * `provisioning` environment enters the readiness wait below, anything else is recorded as a
+   * failed frame carrying the state it is stuck in. Shared by the initial settle and by every
+   * readiness poll, so both read the same rule out of kernel rather than re-deriving it.
+   */
+  private async judgeSettledEnvironment(
+    ctx: DeployerFanOut,
+    target: DeployTarget,
+    handle: EnvironmentHandle,
+    waitedMs = 0,
+  ): Promise<AdvanceResult> {
+    const verdict = judgeEnvironmentReadiness(handle, waitedMs)
+    if (verdict.kind === 'waiting') return this.enterEnvironmentWait(ctx, target, handle)
+    if (verdict.kind === 'ready') return this.recordReadyFrame(ctx, target, handle)
+    return this.settleDeployerFailure(ctx, target, {
+      url: handle.url,
+      environmentId: handle.id,
+      error: verdict.error,
+      // The two are different faults and the vocabulary keeps them apart: `timeout` is OUR
+      // deadline expiring on a provider still answering `provisioning`, `environment_not_ready`
+      // is the provider's own verdict on an environment that will never become ready. Neither is
+      // repo-fixable, so the remediation loop stays out of both.
+      reason: verdict.kind === 'timed_out' ? 'timeout' : 'environment_not_ready',
+    })
+  }
+
+  /**
+   * Record one frame's READY environment on `step.deployEnvs` and continue the fan-out. The env's
+   * ID rides the record beside its URL: it is what the `disposer` reclaims by at the other end of
+   * the lifecycle, and this is the only moment the run can state WHICH environment it stood up
+   * for this frame without re-resolving (and mis-resolving) it later.
+   */
+  private async recordReadyFrame(
+    ctx: DeployerFanOut,
+    target: DeployTarget,
+    handle: EnvironmentHandle,
+  ): Promise<AdvanceResult> {
+    const { workspaceId, instance, step } = ctx
     step.deployEnvs = {
-      ...done,
+      ...step.deployEnvs,
       [target.frameId]: { status: 'ready', url: handle.url, environmentId: handle.id },
     }
     // Persist this frame's TERMINAL outcome BEFORE provisioning the next frame (see the infraless
     // branch) so a crash/replay resumes at the first un-settled frame, not re-provisioning this one.
     await this.runStateMachine.casPersist(workspaceId, instance)
     return this.advanceDeployerFrames(ctx)
+  }
+
+  /**
+   * Park the step on one frame's environment becoming ready. The wait is pinned to the
+   * environment's ID (never re-resolved from the frame, which can fall back to a frame-less row
+   * belonging to another provision) and anchored at the engine clock, so a durable replay
+   * re-attaches to the same environment with the same deadline.
+   */
+  private async enterEnvironmentWait(
+    ctx: DeployerFanOut,
+    target: DeployTarget,
+    handle: EnvironmentHandle,
+  ): Promise<AdvanceResult> {
+    const { workspaceId, instance, step } = ctx
+    step.deployWait = {
+      frameId: target.frameId,
+      environmentId: handle.id,
+      startedAt: this.clock.now(),
+      polls: 0,
+    }
+    // The waiting state is VISIBLE rather than a silent park: the frame's env projects onto the
+    // step (status `provisioning`, no URL yet), which is what the run's Environment panel renders
+    // beside the parked deployer.
+    await this.attachEnvironmentProjection(workspaceId, instance.blockId, step, target.frameId)
+    await this.runStateMachine.persistAndEmit(workspaceId, instance)
+    this.log.info('waiting for environment to become ready', {
+      workspaceId,
+      executionId: instance.id,
+      frameId: target.frameId,
+      environmentId: handle.id,
+    })
+    return { kind: 'awaiting_environment', stepIndex: instance.currentStep }
+  }
+
+  /**
+   * Re-read the provider for the environment a parked `deployer` step is waiting on, and settle
+   * or keep waiting. The durable driver calls this between sleeps while the step reports
+   * `awaiting_environment`; it is safe under replay because every decision is derived from the
+   * persisted `step.deployWait` plus the provider's current answer.
+   *
+   * A status read that THROWS propagates, exactly as the deploy-job poll lets `pollProvisionJob`
+   * throw: the driver counts consecutive unreadable polls and fails the run once its tolerance is
+   * spent. Swallowing it here would hide every read failure from that counter.
+   */
+  async pollDeployerEnvironment(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+  ): Promise<AdvanceResult> {
+    const wait = step.deployWait
+    if (!wait || !this.environmentProvisioning) return { kind: 'continue' }
+    const handle = await this.environmentProvisioning.refreshStatus(workspaceId, wait.environmentId)
+    const waitedMs = Math.max(0, this.clock.now() - wait.startedAt)
+    const verdict = judgeEnvironmentReadiness(handle, waitedMs)
+    if (verdict.kind === 'waiting') {
+      step.deployWait = { ...wait, polls: wait.polls + 1 }
+      await this.attachEnvironmentProjection(workspaceId, instance.blockId, step, wait.frameId)
+      await this.runStateMachine.casPersist(workspaceId, instance)
+      // A readiness tick makes no LLM calls, so skip the per-run metrics rollup (same reason as
+      // the deploy-job running fold).
+      await this.runStateMachine.emitInstance(workspaceId, instance, { rollUpMetrics: false })
+      return { kind: 'awaiting_environment', stepIndex: instance.currentStep }
+    }
+    const resumed = await this.resumeFanOut(workspaceId, instance, step, wait.frameId)
+    if (!resumed) return { kind: 'noop' }
+    // Clear the wait BEFORE settling: the settle paths persist, and a `deployWait` surviving a
+    // settled frame would re-route the next poll here instead of advancing the fan-out.
+    step.deployWait = undefined
+    if (verdict.kind === 'ready') {
+      this.log.info('environment became ready', {
+        workspaceId,
+        executionId: instance.id,
+        frameId: wait.frameId,
+        environmentId: handle.id,
+        waitedFor: describeWaitedFor(waitedMs),
+      })
+    }
+    return this.judgeSettledEnvironment(resumed.ctx, resumed.target, handle, waitedMs)
+  }
+
+  /**
+   * Rebuild the fan-out context for a frame the step parked on, so a poll can settle that frame
+   * and continue with the remaining ones. Mirrors the reconstruction {@link pollDeployerJob} does
+   * after its job settles, for the same reason: a poll has no dispatch in scope, so the block, the
+   * ordered target set and the pinned primary frame are re-resolved from storage. Null when the
+   * run's block is gone (a cancelled/removed run mid-poll).
+   */
+  private async resumeFanOut(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    frameId: string,
+  ): Promise<{ ctx: DeployerFanOut; target: DeployTarget } | null> {
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    if (!block) return null
+    const isFinalStep = instance.currentStep === instance.steps.length - 1
+    const targets = await this.resolveDeployTargets(workspaceId, block, step.deployPrimaryFrameId)
+    const ownFrameId =
+      step.deployPrimaryFrameId ?? targets.find((t) => t.isPrimary)?.frameId ?? block.id
+    // Recover the waiting frame's real service-frame block from the target set; fall back to a
+    // point-read (then the task block) if a connection was removed mid-flight so the frame is no
+    // longer a target — the frame still has an environment this step must settle.
+    const known = targets.find((t) => t.frameId === frameId)
+    const frame = known?.frame ?? (await this.blockRepository.get(workspaceId, frameId)) ?? block
+    const target: DeployTarget = {
+      frameId,
+      isPrimary: frameId === ownFrameId,
+      provisioning: known?.provisioning ?? step.deployProvisioning,
+      frame,
+    }
+    return { ctx: { workspaceId, instance, step, block, isFinalStep, targets }, target }
   }
 
   /**
