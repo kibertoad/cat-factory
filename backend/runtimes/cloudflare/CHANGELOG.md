@@ -1,5 +1,27 @@
 # @cat-factory/worker
 
+## 0.201.5
+
+### Patch Changes
+
+- Updated dependencies [e0eed49]
+  - @cat-factory/kernel@0.321.2
+  - @cat-factory/spend@0.16.19
+  - @cat-factory/agents@0.145.2
+  - @cat-factory/consensus@0.17.13
+  - @cat-factory/orchestration@0.288.5
+  - @cat-factory/server@0.307.1
+  - @cat-factory/binary-generators@0.3.14
+  - @cat-factory/caching@0.20.48
+  - @cat-factory/eks@0.1.352
+  - @cat-factory/gates@0.11.14
+  - @cat-factory/gitlab@0.22.14
+  - @cat-factory/integrations@0.166.14
+  - @cat-factory/observability-langfuse@0.11.14
+  - @cat-factory/observability-otel@0.23.7
+  - @cat-factory/prompt-fragments@1.1.10
+  - @cat-factory/provider-cloudflare@0.7.505
+
 ## 0.201.4
 
 ### Patch Changes
