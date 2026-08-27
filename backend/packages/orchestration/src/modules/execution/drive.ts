@@ -8,6 +8,20 @@ import {
 } from './runFailure.js'
 import type { ExecutionService } from './ExecutionService.js'
 
+/**
+ * Backstop on how many awaiting_* parks ONE step may drain before its driver re-advances.
+ * A park routinely resolves into a DIFFERENT park (a `ci` gate finding CI red dispatches a
+ * `ci-fixer` and returns `awaiting_job`; a deploy job whose provider is still building returns
+ * `awaiting_environment`), so both drivers hop until the result is no longer a park instead of
+ * relying on the next advance to re-establish one. Each hop is itself bounded by its own poll
+ * budget, so this only backstops a pathological park-to-park ping-pong.
+ *
+ * Exported because BOTH facades bound the same loop with it: `driveExecution` here and the
+ * Worker's `ExecutionWorkflow`. One knob, so the two cannot drift apart on how long a
+ * ping-ponging step is tolerated (the same reason `advanceTimeout` is shared).
+ */
+export const MAX_PARK_HOPS = 64
+
 /** Poll cadence + budgets for the gates a parked run waits on. */
 export interface DriveConfig {
   jobPollIntervalMs: number
@@ -249,8 +263,7 @@ export async function driveExecution(
     // the order of these checks must not matter). `pollUntil` itself is bounded, so the
     // outer guard only backstops a pathological gate↔gate ping-pong.
     let gateHops = 0
-    const MAX_GATE_HOPS = 64
-    while (gateHops++ < MAX_GATE_HOPS) {
+    while (gateHops++ < MAX_PARK_HOPS) {
       if (result.kind === 'awaiting_job') {
         const next = await pollUntil(
           'awaiting_job',

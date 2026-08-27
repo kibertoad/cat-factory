@@ -50,7 +50,7 @@ function handle(over: Partial<EnvironmentHandle> = {}): EnvironmentHandle {
  * can cross the readiness ceiling without waiting through it.
  */
 function controller(provisioned: EnvironmentHandle, statuses: EnvironmentHandle[] = []) {
-  const calls = { refreshed: 0, recorded: [] as { output: string }[] }
+  const calls = { provisioned: 0, refreshed: 0, recorded: [] as { output: string }[] }
   let now = START
   const deps = {
     blockRepository: { get: async () => FRAME, listByWorkspace: async () => [FRAME] },
@@ -66,11 +66,10 @@ function controller(provisioned: EnvironmentHandle, statuses: EnvironmentHandle[
       hasLegacyConnection: async () => false,
       supersedeForBlock: async () => undefined,
       getHandleForBlock: async () => undefined,
-      startProvision: async () => ({
-        kind: 'completed' as const,
-        handle: provisioned,
-        reason: null,
-      }),
+      startProvision: async () => {
+        calls.provisioned += 1
+        return { kind: 'completed' as const, handle: provisioned, reason: null }
+      },
       refreshStatus: async () => {
         const answer = statuses[Math.min(calls.refreshed, statuses.length - 1)] ?? provisioned
         calls.refreshed += 1
@@ -117,6 +116,26 @@ describe('DeployerStepController: environment readiness', () => {
       startedAt: START,
       polls: 0,
     })
+  })
+
+  it('re-parks on a live wait instead of provisioning the same frame twice', async () => {
+    const s = step()
+    const { controller: c, calls } = controller(handle())
+    await c.runDeployerStep('ws-1', instance(), s, FRAME, false)
+    expect(calls.provisioned).toBe(1)
+
+    // A re-advance while the wait is still live: a durable replay, a Node worker restarting
+    // mid-run, the stale-run sweeper re-driving. The waiting frame is deliberately ABSENT from
+    // `deployEnvs` (which records terminal outcomes only), so without a re-attach guard the
+    // fan-out picks it as the next un-settled frame and stands a SECOND environment up for it,
+    // leaking the first with nothing left pointing at it for the disposer to reclaim.
+    const again = await c.runDeployerStep('ws-1', instance(), s, FRAME, false)
+
+    expect(again).toMatchObject({ kind: 'awaiting_environment', stepIndex: 0 })
+    expect(calls.provisioned).toBe(1)
+    // The wait is re-attached UNCHANGED: same environment, same deadline anchor, so a replay
+    // cannot quietly restart the readiness ceiling and wait out a second full 20 minutes.
+    expect(s.deployWait).toMatchObject({ environmentId: 'env-1', startedAt: START, polls: 0 })
   })
 
   it('keeps waiting while the provider still says provisioning, counting the polls', async () => {

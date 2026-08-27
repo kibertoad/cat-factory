@@ -293,6 +293,18 @@ export class DeployerStepController {
     if (step.jobId) {
       return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
     }
+    // The same re-attach rule for the OTHER park this step owns. A live `deployWait` means a
+    // frame's environment is already provisioned and still coming up, so re-park on it rather than
+    // re-entering the fan-out. `deployEnvs` records TERMINAL outcomes only, so a waiting frame is
+    // deliberately absent from it and {@link advanceDeployerFrames} would pick that same frame as
+    // the next un-settled one: any re-advance while a wait is live (a durable replay, a Node worker
+    // restart, the stale-run sweeper re-driving) would stand a SECOND environment up for it and
+    // leak the first, which nothing would then be pointing at to reclaim. Checked AFTER `jobId`
+    // only for symmetry of reading: the two are mutually exclusive, since `pollDeployerJob` clears
+    // `jobId` before the settle that can enter a wait.
+    if (step.deployWait) {
+      return { kind: 'awaiting_environment', stepIndex: instance.currentStep }
+    }
     // Fan out over every service frame this run provisions an env for — the task's OWN frame plus
     // each still-valid involved-service frame (the connections initiative), ordered provider-
     // before-consumer. Resolve the target set ONCE here (one workspace block-list read); the
@@ -518,6 +530,20 @@ export class DeployerStepController {
       // The OWN frame used to be recorded `ready` regardless, which is the defect this replaces:
       // it advertised "Provisioned ephemeral environment … (pending)" to the run summary and to
       // every downstream env-consuming step, while the environment itself was still being built.
+      //
+      // A PEER frame takes the SAME route, which is a deliberate change from the fast-drop this
+      // replaces (a not-`ready` peer was recorded failed on the spot, as non-terminal enrichment
+      // the run could proceed without). It is not only enrichment: {@link buildPeerEnvUrls} feeds
+      // every already-ready peer into the NEXT frame's provision inputs, and
+      // {@link orderProvisionTargets} runs providers BEFORE consumers precisely so a consumer can
+      // template its provider's URL into its own manifest. Dropping a peer that is still building
+      // therefore does not lose a URL from a prompt, it provisions the consumer — usually the OWN
+      // frame, which goes last — against a provider address that is silently absent, which is the
+      // same class of defect as the one above. Under an async provider the fast-drop made that
+      // ordering guarantee vacuous, since every peer answers `provisioning` first. The cost is
+      // that a peer stuck coming up now holds the run up to the readiness ceiling rather than
+      // being dropped instantly; the ceiling is what bounds it, and the frame still settles
+      // `failed` (non-terminal for a peer) at the end of it.
       return this.judgeSettledEnvironment(ctx, target, handle)
     }
     return this.recordReadyFrame(ctx, target, handle)

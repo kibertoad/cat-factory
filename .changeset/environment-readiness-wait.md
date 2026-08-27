@@ -34,3 +34,21 @@ Three changes, in the order the run hits them:
 
 `EnvironmentFailureReason` gains those two members; a readiness ceiling that expires reports the
 existing `timeout`.
+
+Two behaviour changes worth knowing about beyond the headline:
+
+- **An involved-service (peer) frame now waits too**, where a peer that was not `ready` used to be
+  dropped on the spot as enrichment the run could proceed without. A peer is not only enrichment:
+  its URL is fed into the NEXT frame's provision inputs, and frames are provisioned
+  provider-before-consumer precisely so a consumer can template its provider's address into its own
+  manifest. Dropping a peer that is still building therefore provisions the consumer (usually the
+  task's own frame, which goes last) against an address that is silently missing. Under an
+  asynchronous provider every peer answers `provisioning` first, so the old fast-drop made that
+  ordering guarantee vacuous. The cost is that a peer stuck coming up now holds the run up to the
+  readiness ceiling instead of being dropped instantly; it still settles non-terminally.
+- **Both durable drivers now drain parks in a loop rather than a fixed branch sequence.** A poll
+  routinely resolves into a _different_ park (a deploy job settling into an environment that is
+  still building; a `ci` gate dispatching a `ci-fixer`), and only a loop makes the order of those
+  branches irrelevant. The Worker's durable step names are scoped per hop as a result, so a
+  Workflows instance in flight across the upgrade re-issues the polls of its current step rather
+  than replaying memoised ones.
