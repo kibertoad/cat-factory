@@ -1759,6 +1759,8 @@
       "calls": "{count} wywołanie | {count} wywołania | {count} wywołań",
       "inputCompletionTokens": "Łączna liczba tokenów wejścia / wyjscia. Wejście liczy takze tokeny z pamięci podręcznej: nadal zajmują okno kontekstu, dokładnie tak, jak liczy je wskaźnik kontekstu w Claude Code.",
       "costHint": "Szacowany koszt tokenów tego kroku według cennika, każda klasa wejścia po własnej stawce. Uruchomienie w ramach subskrypcji nie płaci za tokeny, więc jest to kwota, jaką te same tokeny kosztowałyby w rozliczeniu za użycie.",
+      "subscription": "subskrypcja",
+      "subscriptionCostHint": "Ten krok wykonał się w ramach subskrypcji o stałej opłacie, więc nie kosztował nic za tokeny. Kwota to tyle, ile te same tokeny kosztowałyby w API rozliczanym za użycie, i nie wlicza się do budżetu wydatków.",
       "fresh": "{tokens} świeżych",
       "freshHint": "Wejście przetworzone od zera, bez żadnej części obsłużonej z pamięci podręcznej",
       "cacheRead": "{tokens} odczytane z pamięci podręcznej",

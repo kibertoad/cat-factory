@@ -560,6 +560,11 @@ export {
   // asserts that a self-reporting model came back UNWRAPPED.
   reportsOwnLlmCalls,
   type SelfReportingLanguageModel,
+  // The sibling marker that travels the other billing fact from the credential that was
+  // resolved to the executor that reports the usage: what pays for this model's calls.
+  usageAttributionOf,
+  type UsageAttributedLanguageModel,
+  type UsageAttribution,
   InstrumentedModelProvider,
   catFactoryObservability,
   type InlineObservabilityContext,

@@ -609,6 +609,18 @@ export const pipelineStepSchema = v.object({
   /** LLM observability rollup for this step; see {@link stepMetricsSchema}. */
   metrics: v.optional(v.nullable(stepMetricsSchema)),
   /**
+   * How this step's tokens were BILLED, as the engine filed them in the spend ledger:
+   * `'metered'` for a real per-token cost, `'subscription'` for a flat-rate quota harness call
+   * that cost no money at all.
+   *
+   * It is what makes `metrics.costEstimate` readable. That figure is priced the same way for
+   * both kinds (a subscription step is priced at what the same tokens WOULD have cost on the
+   * metered API), so on its own it reads as spend for a step that spent nothing, and a reader
+   * of one real run took it for money. Absent ⇒ the step recorded no usage, or the snapshot
+   * predates this field.
+   */
+  usageBilling: v.optional(v.picklist(['metered', 'subscription'])),
+  /**
    * Live gate state while a polling gate step (`ci` / `conflicts`) runs its
    * precheck-or-escalate loop; see {@link gateStepStateSchema}. The gate kind is
    * `agentKind`.

@@ -62,7 +62,12 @@ export interface TokenUsageRecord {
    * (flat-rate quota harness usage, counted for reporting but excluded from spend).
    */
   billing: UsageBilling
-  /** The subscription vendor for a subscription row (claude/codex/glm/kimi/deepseek); null for metered. */
+  /**
+   * The vendor whose credential served the call, on a subscription row; null for a metered
+   * one, which belongs to no subscription. NEVER blank on a subscription row: the usage
+   * report groups by it, so an empty vendor is a row that cannot be attributed to the plan
+   * that paid for it. `SpendService.record` is what makes that total.
+   */
   vendor: string | null
   /** When the call was metered (epoch ms). */
   createdAt: number

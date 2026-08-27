@@ -3812,6 +3812,8 @@
       "calls": "{count} Aufruf | {count} Aufrufe",
       "inputCompletionTokens": "Eingabe- / Ausgabe-Tokens insgesamt. Die Eingabe zählt auch gecachte Tokens mit: Sie belegen weiterhin das Kontextfenster, genau wie es die Kontextanzeige von Claude Code zählt.",
       "costHint": "Geschätzte Kosten der Token dieses Schritts zu Listenpreisen, jede Eingabeklasse mit ihrem eigenen Satz. Ein Abonnementlauf zahlt nichts pro Token; dies ist also der Betrag, den dieselben Token nach Verbrauch gekostet hätten.",
+      "subscription": "Abonnement",
+      "subscriptionCostHint": "Dieser Schritt lief über ein Pauschalabonnement und kostete daher kein Geld pro Token. Der Betrag ist das, was dieselben Token über die verbrauchsabhängige API gekostet hätten, und er zählt nicht zum Ausgabenbudget.",
       "fresh": "{tokens} frisch",
       "freshHint": "Eingabe, die von Grund auf verarbeitet wurde, ohne Anteil aus dem Cache",
       "cacheRead": "{tokens} aus dem Cache gelesen",

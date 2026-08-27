@@ -164,7 +164,7 @@ export function defineCoreWorkspaceFeaturesConformance(harness: ConformanceHarne
         pipelineId: subPipe.body.id,
       })
       expect(subStart.status).toBe(201)
-      await sub.drive(subWs)
+      const subRuns = await sub.drive(subWs)
 
       const subUsage = await sub.call<UsageReport>('GET', `/workspaces/${subWs}/usage`)
       expect(subUsage.status).toBe(200)
@@ -178,6 +178,12 @@ export function defineCoreWorkspaceFeaturesConformance(harness: ConformanceHarne
       const subSpend = await sub.call<Spend>('GET', `/workspaces/${subWs}/spend`)
       expect(subSpend.body.inputTokens).toBe(0)
       expect(subSpend.body.costSpent).toBe(0)
+      // The same fact on the STEP, which is where a person reads the money: the step's own
+      // `metrics.costEstimate` is a list price priced identically for both billing kinds, so
+      // without this it reads as spend on a run that spent none.
+      expect(subRuns.at(-1)?.steps.find((s) => s.agentKind === 'coder')?.usageBilling).toBe(
+        'subscription',
+      )
 
       // A metered run (same usage, default billing) IS counted by both the report and the budget.
       const met = harness.makeApp({ usage: { inputTokens: 1000, outputTokens: 500 } })
@@ -191,7 +197,10 @@ export function defineCoreWorkspaceFeaturesConformance(harness: ConformanceHarne
         pipelineId: metPipe.body.id,
       })
       expect(metStart.status).toBe(201)
-      await met.drive(metWs)
+      const metRuns = await met.drive(metWs)
+      expect(metRuns.at(-1)?.steps.find((s) => s.agentKind === 'coder')?.usageBilling).toBe(
+        'metered',
+      )
 
       const metSpend = await met.call<Spend>('GET', `/workspaces/${metWs}/spend`)
       expect(metSpend.body.inputTokens).toBeGreaterThanOrEqual(1000)

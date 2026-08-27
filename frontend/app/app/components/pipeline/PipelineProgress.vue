@@ -549,6 +549,7 @@ const ITEM_ICON: Record<string, string> = {
           <StepMetricsBar
             v-if="s.metrics && s.metrics.calls > 0"
             :metrics="s.metrics"
+            :billing="s.usageBilling"
             clickable
             class="mt-2"
             @inspect="ui.openObservability(instance.id)"

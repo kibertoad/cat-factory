@@ -91,6 +91,23 @@ reuse the rollup substrate (`totalsSince*`, per-workspace/account/user) that alr
      subscription run; that per-call detail still lands in `llm_call_metrics` (recorded on every
      terminal state, success or failure) for run-level inspection. Fold failed-run tokens into the
      report only if Part B needs it: it would mean metering off the failed poll, not the result.
+   - **The `callMetrics` tell was CONTAINER-ONLY, and that was a bug** (issue #2122). It reads a
+     property of the DISPATCH PATH (a container job returns per-call metrics; an inline call does
+     not), so every non-containerised kind on the same subscription credential (`architect-companion`,
+     `spec-companion`, `doc-outliner`, `doc-researcher`, `researcher`) filed as metered spend with a
+     blank vendor. The billing kind is a property of the CREDENTIAL, so it is now resolved where the
+     credential is: a model built on a subscription harness declares `usageAttribution`
+     (`@cat-factory/agents` `providers/usage-attribution.ts`), `AiAgentExecutor` reads it onto the
+     result, and both metering sites (`recordJobFacts` and `CompanionController`, which used to drop
+     the fields entirely) forward it. A subscription row's `vendor` can no longer be blank:
+     `SpendService.record` falls back to the model's provider slug, the same value the container path
+     records for the same credential.
+   - **A subscription row's `cost_estimate` is a LIST PRICE, and every surface that shows it says
+     so.** It is priced identically to a metered row on purpose (what the same tokens WOULD have cost
+     metered), which is exactly why the number alone misleads: the Usage tab already separates the two
+     billing kinds, and the step-level rollup now carries `PipelineStep.usageBilling` so
+     `metrics.costEstimate` renders labelled rather than as money spent.
+
 5. **Controller + contract.** `GET /workspaces/:ws/usage` → the breakdown for the current
    period (+ optional range). Contract in `@cat-factory/contracts`.
 6. **Frontend.** A `useUsageStore` (snapshot-fed for headline totals, endpoint-fed for the
@@ -102,16 +119,17 @@ reuse the rollup substrate (`totalsSince*`, per-workspace/account/user) that alr
 
 ## Per-slice checklist
 
-| #   | Slice                           | Scope                                                                                                                                                                                                                                              | Status  | PR       |
-| --- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | -------- |
-| A1  | Ledger schema + port            | `billing`/`vendor` on `token_usage` (D1 + Drizzle + migrations), `TokenUsageRecord`, `SpendService.record` billing, `totalsSince*` metered-filter, `usageBreakdownForWorkspace` repo method (both repos)                                           | ✅ done | (part-a) |
-| A2  | Subscription capture            | `AgentRunResult.usageBilling`/`usageVendor`; `ContainerAgentExecutor.pollJob` stamps subscription usage (gated on `callMetrics`); `RunDispatcher.recordStepResult` forwards billing/vendor. No new facade wiring: the engine already owns `spend`. | ✅ done | (part-a) |
-| A3  | Reporting API                   | `GET /workspaces/:ws/usage` controller + `usageReportSchema` contract + rpc allow-list; `SpendService.usageBreakdown` (currency + rows)                                                                                                            | ✅ done | (part-a) |
-| A4  | Usage tab (frontend)            | `useUsageStore`, `UsageSettings.vue`, `WorkspaceSettingsPanel` tab, i18n (`en` + all 9 locales, real translations), `getUsage` api client                                                                                                          | ✅ done | (part-a) |
-| A5  | Conformance + changesets        | metered-vs-subscription split assertion on both runtimes (`FakeAgentExecutor` `usageBilling`/`usageVendor` option); changeset                                                                                                                      | ✅ done | (part-a) |
-| B1  | Quota port + modeled provider   | `SubscriptionQuotaProvider` port + adapter registry + modeled (first-use) window fallback; `subscription_quota_cycles` table (D1 ⇄ Drizzle); persist per user/pooled-token                                                                         | ✅ done | (part-b) |
-| B2  | Real Claude/GLM reads (harness) | executor-harness calls `/api/oauth/usage` (Claude) + `/api/monitor/usage/quota/limit` (GLM), returns a quota snapshot on `RunnerJobResult`; **image bump** + the 3 pinned tags + `RECOMMENDED_HARNESS_IMAGE`                                       | ⬜ todo |          |
-| B3  | Quota API + UI                  | quota endpoint(s); per-user quota bars in "My setup" + next to budget spend when a single individual-vendor preset is active; pooled-token quota in the Usage tab                                                                                  | ⬜ todo |          |
+| #   | Slice                           | Scope                                                                                                                                                                                                                                                                                                                      | Status  | PR       |
+| --- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | -------- |
+| A1  | Ledger schema + port            | `billing`/`vendor` on `token_usage` (D1 + Drizzle + migrations), `TokenUsageRecord`, `SpendService.record` billing, `totalsSince*` metered-filter, `usageBreakdownForWorkspace` repo method (both repos)                                                                                                                   | ✅ done | (part-a) |
+| A2  | Subscription capture            | `AgentRunResult.usageBilling`/`usageVendor`; `ContainerAgentExecutor.pollJob` stamps subscription usage (gated on `callMetrics`); `RunDispatcher.recordStepResult` forwards billing/vendor. No new facade wiring: the engine already owns `spend`.                                                                         | ✅ done | (part-a) |
+| A3  | Reporting API                   | `GET /workspaces/:ws/usage` controller + `usageReportSchema` contract + rpc allow-list; `SpendService.usageBreakdown` (currency + rows)                                                                                                                                                                                    | ✅ done | (part-a) |
+| A4  | Usage tab (frontend)            | `useUsageStore`, `UsageSettings.vue`, `WorkspaceSettingsPanel` tab, i18n (`en` + all 9 locales, real translations), `getUsage` api client                                                                                                                                                                                  | ✅ done | (part-a) |
+| A5  | Conformance + changesets        | metered-vs-subscription split assertion on both runtimes (`FakeAgentExecutor` `usageBilling`/`usageVendor` option); changeset                                                                                                                                                                                              | ✅ done | (part-a) |
+| A6  | Credential-resolved billing     | Billing/vendor resolved where the CREDENTIAL is (`usageAttribution` on the resolved model) instead of per execution path, so inline kinds on a subscription stop filing as metered; `CompanionController` forwards the fields; `vendor` total on subscription rows; `PipelineStep.usageBilling` labels the step-level cost | ✅ done | (#2122)  |
+| B1  | Quota port + modeled provider   | `SubscriptionQuotaProvider` port + adapter registry + modeled (first-use) window fallback; `subscription_quota_cycles` table (D1 ⇄ Drizzle); persist per user/pooled-token                                                                                                                                                 | ✅ done | (part-b) |
+| B2  | Real Claude/GLM reads (harness) | executor-harness calls `/api/oauth/usage` (Claude) + `/api/monitor/usage/quota/limit` (GLM), returns a quota snapshot on `RunnerJobResult`; **image bump** + the 3 pinned tags + `RECOMMENDED_HARNESS_IMAGE`                                                                                                               | ⬜ todo |          |
+| B3  | Quota API + UI                  | quota endpoint(s); per-user quota bars in "My setup" + next to budget spend when a single individual-vendor preset is active; pooled-token quota in the Usage tab                                                                                                                                                          | ⬜ todo |          |
 
 ## B1 reference implementation (the shape every Part-B slice follows)
 

@@ -3812,6 +3812,8 @@
       "calls": "{count} chiamata | {count} chiamate",
       "inputCompletionTokens": "Token totali di input / output. L'input conta anche i token in cache: occupano comunque la finestra di contesto, esattamente come li conta l'indicatore di contesto di Claude Code.",
       "costHint": "Costo stimato dei token di questo passo ai prezzi di listino, ogni classe di input alla propria tariffa. Un'esecuzione in abbonamento non paga nulla per token, quindi questo è quanto sarebbero costati gli stessi token a consumo.",
+      "subscription": "abbonamento",
+      "subscriptionCostHint": "Questo passo è stato eseguito con un abbonamento a tariffa fissa, quindi non è costato denaro per token. La cifra è quanto sarebbero costati gli stessi token sull'API a consumo ed è esclusa dal budget di spesa.",
       "fresh": "{tokens} freschi",
       "freshHint": "Input elaborato da zero, senza nulla servito dalla cache",
       "cacheRead": "{tokens} letti dalla cache",

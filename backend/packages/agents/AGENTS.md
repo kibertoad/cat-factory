@@ -164,6 +164,14 @@
   sits OUTSIDE the wrap that substitutes it and cannot see what that wrap returned. It also tells its
   runner whether bodies are worth assembling (`reportBodies`): a harness CLI's are RECONSTRUCTED, so
   a prompts-off deployment must refuse them at the source rather than via the usual thunk.
+  `usage-attribution.ts` carries the OTHER thing only the credential knows: `usageAttribution`
+  (`{ billing, vendor }`), which `CliInlineLanguageModel` declares as subscription because both of
+  its runners are (an ambient host CLI login, a container on a leased subscription token).
+  `AiAgentExecutor` reads it off the resolved model onto the run result, so the spend ledger files
+  an inline step the way the credential says rather than the way its execution path defaults. Same
+  shape and same reason as `reportsOwnLlmCalls`: the provider chain resolves the credential and the
+  executor holds only what came back, so the model is ASKED. A model declaring nothing is metered,
+  which is what a plain provider key is.
 - `fragmentLibrary/`: the prompt-fragment library plumbing. The repo-source engine both
   libraries share lives in `repoSourceSync/`, including
   `tier-installation-resolver.ts` (`createTierInstallationResolvers`), the ONE

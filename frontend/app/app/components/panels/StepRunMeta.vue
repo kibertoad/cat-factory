@@ -145,6 +145,10 @@ async function copyRunId() {
          run's observability panel even when this step recorded no calls (e.g. a gate that
          passed its precheck with no helper spun up), so every window reaches it the same
          way; the metrics bar shows only when the step itself made calls. -->
-    <StepModelActivity :metrics="step.metrics" :instance-id="instanceId" />
+    <StepModelActivity
+      :metrics="step.metrics"
+      :billing="step.usageBilling"
+      :instance-id="instanceId"
+    />
   </div>
 </template>

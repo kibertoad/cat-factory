@@ -1759,6 +1759,8 @@
       "calls": "{count} llamada | {count} llamadas",
       "inputCompletionTokens": "Tokens totales de entrada / salida. La entrada tambien cuenta los tokens en caché: siguen ocupando la ventana de contexto, igual que los cuenta el medidor de contexto de Claude Code.",
       "costHint": "Coste estimado de los tokens de este paso a precios de lista, cada clase de entrada con su propia tarifa. Una ejecución por suscripción no paga nada por token, así que esto es lo que habrían costado los mismos tokens con pago por uso.",
+      "subscription": "suscripción",
+      "subscriptionCostHint": "Este paso se ejecutó con una suscripción de tarifa plana, así que no costó dinero por token. La cifra es lo que habrían costado los mismos tokens en la API de pago por uso, y queda excluida del presupuesto de gasto.",
       "fresh": "{tokens} frescos",
       "freshHint": "Entrada procesada desde cero, sin nada servido desde la caché",
       "cacheRead": "{tokens} leídos de caché",

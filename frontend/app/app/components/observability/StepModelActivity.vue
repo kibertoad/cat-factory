@@ -13,6 +13,8 @@ import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
 // nothing only when there's neither a run to inspect nor any recorded calls.
 const props = defineProps<{
   metrics?: StepMetrics | null
+  /** How the step's tokens were billed, so the rollup's amount is not read as spend. */
+  billing?: 'metered' | 'subscription'
   /** The run whose per-call panel the header link / bar click opens. */
   instanceId?: string
 }>()
@@ -43,6 +45,7 @@ function openObservability() {
     <StepMetricsBar
       v-if="hasCalls && metrics"
       :metrics="metrics"
+      :billing="billing"
       clickable
       @inspect="openObservability"
     />

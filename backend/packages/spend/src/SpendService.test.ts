@@ -821,6 +821,51 @@ describe('SpendService.record — the persisted row', () => {
     )
   })
 
+  it('names the vendor of a subscription row whose producer supplied none', async () => {
+    // The producer knew the billing (it resolved a subscription credential) and had no separate
+    // vendor string to give. Blank is not an option: every usage-report read groups by vendor, and
+    // an empty one is a row that cannot be attributed to the plan that paid for it. The model's own
+    // provider is what the container dispatch path records for the same credential, so the two
+    // paths of one run agree.
+    const { repo, rows } = recordingRepo()
+    const svc = new SpendService({
+      tokenUsageRepository: repo,
+      idGenerator,
+      clock,
+      pricing: DEFAULT_SPEND_PRICING,
+    })
+    await svc.record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'architect-companion',
+      model: 'anthropic:claude-opus-5',
+      usage: { inputTokens: 10, outputTokens: 1 },
+      billing: 'subscription',
+    })
+    expect(rows[0]).toMatchObject({ billing: 'subscription', vendor: 'anthropic' })
+  })
+
+  it('leaves a metered row without a vendor, which is what it has', async () => {
+    // Null here is a fact, not a gap: a per-token API key belongs to no subscription. Filling it
+    // in would make the two billing kinds indistinguishable in the report that separates them.
+    const { repo, rows } = recordingRepo()
+    const svc = new SpendService({
+      tokenUsageRepository: repo,
+      idGenerator,
+      clock,
+      pricing: DEFAULT_SPEND_PRICING,
+    })
+    await svc.record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'architect-companion',
+      model: 'anthropic:claude-opus-5',
+      usage: { inputTokens: 10, outputTokens: 1 },
+      billing: 'metered',
+    })
+    expect(rows[0]).toMatchObject({ billing: 'metered', vendor: null })
+  })
+
   it('prices a dynamic OpenRouter model at its catalog rate, and asks nothing for other providers', async () => {
     const { repo, rows } = recordingRepo()
     const dynamicPricesFor = vi.fn(async () => [
