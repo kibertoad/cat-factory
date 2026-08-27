@@ -1,7 +1,6 @@
 import type {
   AgentRunContext,
   AgentRunResult,
-  AgentTokenUsage,
   Block,
   CompanionDispositionInput,
   CompanionDispositionResult,
@@ -15,6 +14,7 @@ import {
   companionParkReasonFor,
   DEFAULT_RISK_POLICY,
   disposeCompanionVerdict,
+  sumAgentTokenUsage,
 } from '@cat-factory/kernel'
 import {
   type CompanionAssessment,
@@ -66,19 +66,6 @@ function parseContainerVerdict(result: AgentRunResult): CompanionAssessment | un
  * a field renamed on the resolved policy fails to compile here.
  */
 type CompanionRiskPolicy = Pick<ResolvedRunRiskPolicy, 'companionMaxReworks' | 'autonomy'>
-
-/** Sum the token usage of two model calls (for the companion's repair retry). */
-function sumUsage(
-  a: AgentTokenUsage | undefined,
-  b: AgentTokenUsage | undefined,
-): AgentTokenUsage | undefined {
-  if (!a) return b
-  if (!b) return a
-  return {
-    inputTokens: a.inputTokens + b.inputTokens,
-    outputTokens: a.outputTokens + b.outputTokens,
-  }
-}
 
 /**
  * The engine flow-control operations the companion loop drives. These stay on
@@ -694,7 +681,7 @@ export class CompanionController {
     const repaired = parseCompanionOrUndefined(second.output)
     return {
       assessment: repaired,
-      result: { ...second, usage: sumUsage(first.usage, second.usage) },
+      result: { ...second, usage: sumAgentTokenUsage(first.usage, second.usage) },
     }
   }
 }

@@ -41,6 +41,7 @@ import type { OwnServiceContext } from '../domain/block-tree.js'
 import type { CustomTaskTypeContext } from '../domain/task-type-context.js'
 import type { ContainerEvictionKind } from './runner-transport.js'
 import type { HarnessFailureCause } from '../domain/harness-failure.js'
+import type { InputTokenClassCounts } from '../domain/llm-rollup.js'
 import type {
   AgentEffortReport,
   DispatchToolServers,
@@ -893,8 +894,27 @@ export interface AgentDecisionRequest {
 
 /** Token usage reported by the model for a single agent call. */
 export interface AgentTokenUsage {
+  /**
+   * TOTAL input across every billed class (fresh + cache read + cache write). This is the
+   * volume figure the usage ledger stores and the key-rotation window weights, so it stays a
+   * single count regardless of what {@link AgentTokenUsage.inputClasses} says about it.
+   */
   inputTokens: number
   outputTokens: number
+  /**
+   * How `inputTokens` splits across the three input classes, from a producer that can see the
+   * split (the agent CLI's own per-call telemetry, the AI SDK's input-token details). Present ⇒
+   * the meter prices each class at its own rate, so a cache read costs ~0.1x fresh input
+   * instead of 1x; the three always sum to `inputTokens` (build it with
+   * `partitionInputTokens`, which is what makes that unforgeable).
+   *
+   * ABSENT is a real state, not a zeroed one: it says the producer reported one lumped count,
+   * and the whole of it is then priced at the FRESH rate. That over-states a cached call and
+   * never under-states one, which is the only safe direction for a budget gate — so a producer
+   * that does not know its split leaves this off rather than defaulting the cache classes to 0,
+   * which would assert that nothing was cached.
+   */
+  inputClasses?: InputTokenClassCounts
 }
 
 export interface AgentRunResult {

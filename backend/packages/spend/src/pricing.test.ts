@@ -116,7 +116,7 @@ describe('ratesFor', () => {
   })
 })
 
-describe('estimateCost (lumped input)', () => {
+describe('estimateCost', () => {
   it('prices input and output at their own rates and SUMS them', () => {
     const cost = estimateCost(
       pricing,
@@ -127,7 +127,7 @@ describe('estimateCost (lumped input)', () => {
     expect(cost).toBeCloseTo(20 + 20)
   })
 
-  it('prices the whole input as FRESH, which over-states a cached call rather than under-stating it', () => {
+  it('prices a usage with NO split as FRESH, over-stating a cached call rather than under-stating it', () => {
     const ref = { provider: 'acme', model: 'big' }
     const lumped = estimateCost(pricing, ref, { inputTokens: 1_000_000, outputTokens: 0 })
     const classed = estimateClassedCost(pricing, ref, {
@@ -137,6 +137,28 @@ describe('estimateCost (lumped input)', () => {
       outputTokens: 0,
     })
     expect(lumped).toBeGreaterThan(classed)
+  })
+
+  it('prices per CLASS as soon as the usage carries a split', () => {
+    // The whole point of routing inside `estimateCost`: a caller holding a classed usage cannot
+    // silently get the lump price by reaching for the wrong function.
+    const ref = { provider: 'acme', model: 'cached' }
+    const classes = { promptTokens: 0, cacheReadTokens: 1_000_000, cacheWriteTokens: 0 }
+    expect(
+      estimateCost(pricing, ref, {
+        inputTokens: 1_000_000,
+        outputTokens: 0,
+        inputClasses: classes,
+      }),
+    ).toBeCloseTo(estimateClassedCost(pricing, ref, { ...classes, outputTokens: 0 }))
+    // 1M cache reads at this entry's stated 3/M, not the 10/M fresh rate the lump would apply.
+    expect(
+      estimateCost(pricing, ref, {
+        inputTokens: 1_000_000,
+        outputTokens: 0,
+        inputClasses: classes,
+      }),
+    ).toBeCloseTo(3)
   })
 })
 

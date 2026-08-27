@@ -53,7 +53,7 @@ import {
   buildDoneUpdate,
   buildFailureMeta,
   buildRunningUpdate,
-  toRunResult,
+  settledRunResult,
 } from './containerAgentResult.js'
 import { buildKindBody } from './jobBody.js'
 import { buildDispatchOptions } from './dispatchOptions.js'
@@ -66,7 +66,6 @@ import type { ContainerSessionService } from '../containers/ContainerSessionServ
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
 import {
   imageVariantFor,
-  providerOf,
   refForHandle,
   runImageVariants,
   stepJobId,
@@ -540,25 +539,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // modeled quota-cycle counters. Both are idempotent (once per job id) and behaviour-neutral.
     await this.accounting.recordPooledUsageOnce(handle, result)
     await this.accounting.recordQuotaUsageOnce(handle, result)
-    const runResult = toRunResult(result, handle.agentKind, this.agentKindRegistry)
-    // The poll site can't resolve the model ref, but the dispatch captured its label
-    // (`handle.model`, already used for `recordHarnessCalls`). Fold it onto the result so the
-    // durable poll path's `recordStepResult` → `spend.record` records the REAL model instead of
-    // 'unknown' (which `SpendService.parseModel` split into provider "unknown" / model ""). The
-    // inline `run()` path folded this in itself; doing it here fixes both paths at the source.
-    if (handle.model) runResult.model = handle.model
-    // A subscription harness (Claude Code / Codex / GLM / pooled Kimi & DeepSeek) bypasses
-    // the LLM proxy, so its tokens aren't metered there. It's the ONLY container path that
-    // emits per-call `callMetrics`, so their presence unambiguously marks a subscription
-    // run: stamp its usage onto the result tagged `'subscription'` so the engine records it
-    // in the durable usage ledger for the report — while the budget gate excludes it (a
-    // quota plan costs nothing per token). Pi (proxy-metered) has no `callMetrics`, so its
-    // usage stays off the result and the proxy remains its sole meter (no double-count).
-    if (result.callMetrics && result.callMetrics.length > 0 && result.usage) {
-      runResult.usage = result.usage
-      runResult.usageBilling = 'subscription'
-      runResult.usageVendor = handle.provider ?? providerOf(handle.model)
-    }
+    // Model label and subscription usage both come off the dispatch HANDLE, which the poll site
+    // has and the mapping does not; `settledRunResult` owns that fold for this path and `run()`.
+    const runResult = settledRunResult(result, handle, this.agentKindRegistry)
     jobLog.settled('done', { model: handle.model })
     return buildDoneUpdate(view, runResult, followUps)
   }

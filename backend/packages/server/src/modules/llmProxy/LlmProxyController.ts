@@ -898,11 +898,14 @@ async function handleChatCompletion(c: Context<AppEnv>): Promise<Response> {
       executionId: session.executionId,
       agentKind: session.agentKind,
       model: `${session.provider}:${session.model}`,
-      usage: { inputTokens, outputTokens },
-      inputClasses: {
-        promptTokens: input.fresh,
-        cacheReadTokens: input.cacheRead,
-        cacheWriteTokens: input.cacheWrite,
+      usage: {
+        inputTokens,
+        outputTokens,
+        inputClasses: {
+          promptTokens: input.fresh,
+          cacheReadTokens: input.cacheRead,
+          cacheWriteTokens: input.cacheWrite,
+        },
       },
     })
   }

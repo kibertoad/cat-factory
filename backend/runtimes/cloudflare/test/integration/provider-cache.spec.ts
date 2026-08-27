@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  agentUsageFromModelUsage,
   inlineCacheProviderOptions,
   promptCacheParams,
   providerCachePolicy,
@@ -106,5 +107,48 @@ describe('provider cache policy', () => {
     expect(
       readInputTokenClasses({ prompt_tokens: -1, prompt_tokens_details: { cached_tokens: 'x' } }),
     ).toEqual({ fresh: 0, cacheRead: 0, cacheWrite: 0 })
+  })
+})
+
+describe('agentUsageFromModelUsage', () => {
+  it('splits the AI SDK total by the cache classes the provider reported', () => {
+    expect(
+      agentUsageFromModelUsage({
+        inputTokens: 10_000,
+        outputTokens: 500,
+        inputTokenDetails: { cacheReadTokens: 8_000, cacheWriteTokens: 1_000 },
+      }),
+    ).toEqual({
+      inputTokens: 10_000,
+      outputTokens: 500,
+      inputClasses: { promptTokens: 1_000, cacheReadTokens: 8_000, cacheWriteTokens: 1_000 },
+    })
+  })
+
+  it('reports NO split when the provider said nothing about caching', () => {
+    // A provider that caches nothing still fills `noCacheTokens`, so keying on that would let
+    // every provider claim a split. Absent here means the lump is priced as fresh, which is the
+    // same money and an honest claim about what was observed.
+    const usage = agentUsageFromModelUsage({
+      inputTokens: 10_000,
+      outputTokens: 500,
+      inputTokenDetails: { cacheReadTokens: undefined, cacheWriteTokens: undefined },
+    })
+    expect(usage).toEqual({ inputTokens: 10_000, outputTokens: 500 })
+    expect(agentUsageFromModelUsage({})).toEqual({ inputTokens: 0, outputTokens: 0 })
+  })
+
+  it('keeps the classes summing to the total even when the details disagree with it', () => {
+    const usage = agentUsageFromModelUsage({
+      inputTokens: 1_000,
+      outputTokens: 0,
+      inputTokenDetails: { cacheReadTokens: 5_000, cacheWriteTokens: 0 },
+    })
+    expect(usage.inputTokens).toBe(1_000)
+    expect(usage.inputClasses).toEqual({
+      promptTokens: 0,
+      cacheReadTokens: 1_000,
+      cacheWriteTokens: 0,
+    })
   })
 })

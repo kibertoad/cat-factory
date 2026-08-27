@@ -16,6 +16,7 @@ import { type AgentKindRegistry, defaultAgentKindRegistry } from '../kinds/regis
 import { standardsVerbosityFor, traitDeliveryFor } from '../kinds/traits.js'
 import { systemPromptFor, userPromptFor } from '../catalog.js'
 import { catFactoryObservability } from '../../providers/instrumented.js'
+import { agentUsageFromModelUsage } from '../../providers/cache.js'
 import { type AgentRouting, resolveAgentConfig, resolveInlineModelRef } from './routing.js'
 import { composeBlockSystemPrompt } from './fragments.js'
 import {
@@ -392,12 +393,12 @@ export class AiAgentExecutor implements AgentExecutor {
     return {
       output: text.trim(),
       model: `${ref.provider}:${ref.model}`,
-      // Report metered tokens so the spend safeguard can price this call. The
-      // AI SDK leaves either field undefined when a provider omits it.
-      usage: {
-        inputTokens: usage.inputTokens ?? 0,
-        outputTokens: usage.outputTokens ?? 0,
-      },
+      // Report metered tokens so the spend safeguard can price this call, carrying the input
+      // CLASS split where the provider reported one — an inline step on a warm prefix cache is
+      // mostly cache reads, and metering those at the fresh rate charged a workspace budget
+      // several times what the call cost. The AI SDK leaves either total undefined when a
+      // provider omits it, and says nothing about caching for the providers that do none.
+      usage: agentUsageFromModelUsage(usage),
     }
   }
 }

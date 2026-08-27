@@ -210,7 +210,11 @@ const LEGACY_ALLOWANCES = new Map([
   // SUBSCRIPTION job's tokens are recorded (per-call telemetry, the leased pool token's rotation
   // counters, the modeled quota cycle) plus the four at-most-once guards those three need, which
   // were the executor's only long-lived mutable state and nobody else's business.
-  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1094],
+  // Ratcheted 1094 -> 1077 by moving the settled result's HANDLE fold (`settledRunResult`: the
+  // dispatch-captured model label plus the subscription usage stamp, now split by input class)
+  // into `containerAgentResult.ts`, which already owns the runner-result -> engine-result
+  // normalisation and is where the inline `run()` path reads the same fold from.
+  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1077],
   // The two `/search/*` endpoints (issue + code search) and their response shapes moved to
   // `github/searchApi.ts` when the bug hunt needed the issue search to surface the extra
   // fields its response already carries — so the client ratchets DOWN.
