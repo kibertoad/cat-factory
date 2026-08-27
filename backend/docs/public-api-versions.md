@@ -1009,3 +1009,19 @@ surface generally: a null-valued OPTIONAL field is not expressible from the Go, 
 clients, each of which drops one when serializing (`omitempty`, `@JsonInclude(NON_NULL)`,
 `if ... is not None`). A field where absent and null must mean different things is therefore a
 shape only the TypeScript client can drive, and `/api/v1` does not have one.
+
+## 1.62.0
+
+`PublicRunStep` gains an optional `skipped`, true on a step the pipeline skipped rather than ran.
+
+Additive, and it closes a hole a consumer could not work around: a skipped step's `state` is
+`done` with no output, which is byte-for-byte what a step that RAN and produced nothing looks
+like. Following a run's chain, the two are opposite facts (the engine decided the step was
+unnecessary, versus the step happened and had nothing to say), and until now nothing on this
+surface distinguished them. The acceptance kit's run-transition reducer already knew how to
+announce the difference and could never observe it against real API data.
+
+Present only when true, so a step that ran carries no flag rather than a `false` that a consumer
+would have to read as "false, or this run predates the field". A boolean rather than the engine's
+internal skip REASON: which axis skipped a step is a vocabulary the engine grows as it grows new
+gating, and publishing it here would be a promise to keep that vocabulary still.

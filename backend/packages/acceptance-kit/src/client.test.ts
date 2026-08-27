@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createClient, createPassClient, describeStepTransitions } from './client.js'
+import {
+  createClient,
+  createPassClient,
+  describeStepTransitions,
+  stepObservations,
+} from './client.js'
 import type { StepObservation } from './client.js'
+import type { PublicRun } from '@cat-factory/sdk'
 
 const TARGET = { baseUrl: 'https://deployment.invalid', apiKey: 'cfk_test' }
 
@@ -147,5 +153,45 @@ describe('describeStepTransitions', () => {
     // A companion or an auto-inserted gate lengthens the chain mid-run. The new tail has no prior
     // state, and announcing `undefined -> pending` for it would be noise, not an event.
     expect(describeStepTransitions(chain('working'), chain('working', 'pending'))).toEqual([])
+  })
+})
+
+describe('stepObservations', () => {
+  const pending = (...kinds: string[]): StepObservation[] =>
+    kinds.map((agentKind) => ({ agentKind, state: 'pending' }))
+
+  it('carries `skipped` off a real run step, so the skipped transition can actually fire', () => {
+    // Driven from the SDK's OWN step type rather than a literal, which is the point: the reducer's
+    // skipped branch was unreachable against real API data while `PublicRunStep` had no such
+    // field, and every unit test above hid that by supplying it by hand. Typed here, a field the
+    // API stops serving fails to compile.
+    const steps: PublicRun['steps'] = [
+      {
+        agentKind: 'tester-ui',
+        state: 'done',
+        progress: 1,
+        subtasks: null,
+        output: null,
+        data: null,
+        skipped: true,
+      },
+      {
+        agentKind: 'coder',
+        state: 'done',
+        progress: 1,
+        subtasks: null,
+        output: 'shipped',
+        data: null,
+      },
+    ]
+    const observed = stepObservations(steps)
+    expect(observed).toEqual([
+      { agentKind: 'tester-ui', state: 'done', skipped: true },
+      { agentKind: 'coder', state: 'done', skipped: undefined },
+    ])
+    expect(describeStepTransitions(pending('tester-ui', 'coder'), observed)).toEqual([
+      "step 0 'tester-ui': pending -> skipped",
+      "step 1 'coder': pending -> done",
+    ])
   })
 })

@@ -466,6 +466,35 @@ describe('ingress admission', () => {
       expect(verdict.problem).toContain('is-default-class')
     })
 
+    it('is PENDING when the requested class exists but nothing is marked default', () => {
+      // ingress-nginx installed on its own: the controller publishes and claims 'nginx', and
+      // nobody annotated it default because no Ingress here is classless. Refusing this failed a
+      // working deployment, and said the Ingress named no class while it plainly named one. The
+      // default class governs classless Ingresses only, so it may not be read as a cluster-wide
+      // requirement.
+      const facts = [{ requestedClass: 'nginx', hasAddress: false }]
+      expect(
+        classifyIngressAdmission(facts, { read: true, names: ['nginx'], defaultName: null }),
+      ).toEqual({ status: 'pending' })
+    })
+
+    it('still refuses the CLASSLESS Ingress in a chain whose sibling names a real class', () => {
+      // The precondition is per-chain, not per-Ingress: one Ingress being satisfiable says nothing
+      // about the one beside it that asked for nothing and has no default to claim it.
+      const facts = [
+        { requestedClass: 'nginx', hasAddress: false },
+        { requestedClass: null, hasAddress: false },
+      ]
+      const verdict = classifyIngressAdmission(facts, {
+        read: true,
+        names: ['nginx'],
+        defaultName: null,
+      })
+      expect(verdict.status).toBe('unrouted')
+      if (verdict.status !== 'unrouted') throw new Error('expected unrouted')
+      expect(verdict.problem).toContain('is-default-class')
+    })
+
     it('is PENDING, never a refusal, when the class resolves but no address has arrived', () => {
       // The safety property. A controller writing `status.loadBalancer` back is a choice, not a
       // guarantee, so an absent address may never be evidence of a broken route: it only

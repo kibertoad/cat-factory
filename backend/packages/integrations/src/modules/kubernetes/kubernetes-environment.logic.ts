@@ -432,7 +432,17 @@ export function classifyIngressAdmission(
         'Ingress, or set it to one of the classes above.',
     }
   }
-  if (catalog.defaultName === null) {
+  // The default class decides only what claims a CLASSLESS Ingress, so this refusal needs an
+  // Ingress that asked for none. Without that precondition it fired on an Ingress naming a class
+  // the cluster does publish, which is the ordinary ingress-nginx install: the controller is
+  // installed and claims its own class, and nobody annotated it default because nothing needed a
+  // default. That refused a working deployment while saying the Ingress named no class, which it
+  // did. A refusal whose own facts contradict the cluster sends its reader to the wrong layer,
+  // which is the failure this whole check exists to stop.
+  if (
+    ingresses.some((ingress) => ingress.requestedClass === null) &&
+    catalog.defaultName === null
+  ) {
     return {
       status: 'unrouted',
       problem:

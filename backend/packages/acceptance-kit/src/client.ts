@@ -163,12 +163,32 @@ export function describeRun(run: PublicRun): string {
  * One step of a run's chain, reduced to the fields a transition is decided from.
  *
  * A structural type rather than the SDK's `PublicRun['steps'][number]` so the reducer can be
- * driven from a literal in its own test without standing up a whole run.
+ * driven from a literal in its own test without standing up a whole run. {@link stepObservations}
+ * is what keeps that convenience honest: it is the ONE place a real run's chain becomes this
+ * shape, and it is typed against the SDK, so a field the reducer reads and the API does not serve
+ * fails to compile instead of quietly never firing.
  */
 export type StepObservation = {
   agentKind: string
   state: string
   skipped?: boolean | undefined
+}
+
+/**
+ * A run's chain as {@link describeStepTransitions} reads it.
+ *
+ * Exists to bind the reducer's structural shape to the REAL wire type at exactly one point. Before
+ * `skipped` was served on `PublicRunStep`, the reducer's skipped-rather-than-done branch was
+ * unreachable against real API data and nothing said so: the structural type admitted the field,
+ * every unit test supplied it from a literal, and the transition it announces could not happen in
+ * a live pass. Assigning the SDK's own step here is what would now fail.
+ */
+export function stepObservations(steps: PublicRun['steps']): StepObservation[] {
+  return steps.map((step) => ({
+    agentKind: step.agentKind,
+    state: step.state,
+    skipped: step.skipped,
+  }))
 }
 
 /**
@@ -295,10 +315,11 @@ export function waitForDecisionOrSettled(options: {
       // Announced as milestones, before the readiness branch below returns: a transition is a
       // discrete event that HAPPENED, where the sampled `state` line is only what was true when
       // someone looked, and the two belong on different channels for that reason.
-      for (const line of describeStepTransitions(seenSteps, run.steps)) {
+      const steps = stepObservations(run.steps)
+      for (const line of describeStepTransitions(seenSteps, steps)) {
         journal.say('milestone', line)
       }
-      seenSteps = run.steps
+      seenSteps = steps
       const ready = isTerminal(run.status) || decisions.decisions.some(isActionable)
       return ready
         ? { done: true, value: { run, decisions } }

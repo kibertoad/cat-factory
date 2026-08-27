@@ -1,4 +1,9 @@
 ---
+'@cat-factory/contracts': minor
+'@cat-factory/server': minor
+'@cat-factory/sdk': minor
+'@cat-factory/mcp-server': minor
+'@cat-factory/gatekeeper-bindings': minor
 '@cat-factory/integrations': patch
 '@cat-factory/acceptance-kit': patch
 '@cat-factory/local-server': patch
@@ -27,7 +32,18 @@ left open:
   namespace. The local facade now maps the environment's host to the container's host gateway, so
   one URL means the right thing to the operator's browser and to the agent alike. A container that
   predates its environment is replaced, and a bridged job never takes a warm-pool member (a member
-  is re-leased across runs, so one run's per-PR entry would leak into the next).
+  is re-leased across runs, so one run's per-PR entry would leak into the next). It covers every
+  environment a job is handed, not just the frame's own: a live peer service's environment for a
+  cross-service test and a frontend flow's resolved backend binding fail identically without it.
+  The URLs ride the dispatch OPTIONS as a declared, typed list rather than being dug back out of
+  the job body, where they sit three levels down under a wire shape the harness owns.
+
+  A URL naming this machine that NO bridge can re-point is reported rather than bridged: a hosts
+  entry cannot displace the `127.0.0.1 localhost` line an image ships with, and it is never
+  consulted for a bare IP literal. A compose environment publishes `http://localhost:<port>`, so
+  bridging it bought nothing while costing every such run its warm-pool member and a container
+  replacement. Those runs are pooled again, and the log now says the environment is out of the
+  agent's reach instead of leaving it to be discovered as a dead cluster.
 
 Also: the acceptance suite refuses a pass up front when the cluster runs no ingress controller or
 publishes no host port into it, reusing `cat-factory k3s`' probe; its scaffold briefs tell agents to
@@ -36,3 +52,9 @@ reports step TRANSITIONS instead of only sampling `currentStep`, so a step that 
 between two polls is still named. That last one is why this failure was misread: the `deployer`
 finished in one second against a ten-second poll, so the pass jumped from `reviewer` to
 `tester-api` and the step that published the bad URL never appeared in the log at all.
+
+Alongside them, `/api/v1` serves `skipped` on a run's steps (an additive optional field, OpenAPI
+`1.62.0`). A skipped step's `state` is `done` with no output, which is byte-for-byte a step that
+ran and produced nothing, so following a run's chain could not tell the engine deciding a step was
+unnecessary from the step happening and having nothing to say. The acceptance kit's transition
+reducer already knew how to announce the difference and could not observe it.

@@ -72,6 +72,51 @@ function isReservedEnvName(key: string): boolean {
   return RESERVED_ENV_PREFIXES.some((p) => lower.startsWith(p))
 }
 
+/**
+ * Every ephemeral-environment URL a dispatch hands this job, in no particular order.
+ *
+ * The three legs are the three places an environment URL reaches an agent, and they are listed
+ * here TOGETHER because a transport acting on them has no reason to care which leg a URL came
+ * from: it is the tester's own provisioned environment ({@link AgentRunContext.environment}), a
+ * live peer service's environment for a cross-service integration test, or the service-under-test
+ * behind a `frontend` flow's resolved binding. All three are equally unreachable from inside a
+ * container when the deployment is local, and all three fail identically: connection refused,
+ * reported by the agent as a dead environment.
+ *
+ * A URL that is only a MOCK is deliberately absent: an unresolved frontend binding is served by
+ * the harness's own in-container WireMock, which the job reaches exactly as written and which a
+ * bridge would break. That is why this reads the BINDINGS rather than the rendered infra spec,
+ * where the two are already indistinguishable.
+ *
+ * Rides `RunnerDispatchOptions.environmentUrls` (see that field for why it is declared rather
+ * than re-read from the job body). Kept beside {@link testerInfraSpec} because the two derive from
+ * the same context fields, and `prompts.spec.ts` pins that every URL the spec
+ * carries appears here.
+ */
+export function dispatchEnvironmentUrls(context: AgentRunContext): string[] {
+  const frontend = context.frontend
+  const urls = [
+    context.environment?.url,
+    ...(context.involvedServices ?? []).map((involved) => involved.envUrl),
+    ...(frontend ? injectedFrontendBindings(frontend) : []).map((binding) => binding.serviceUrl),
+  ]
+  return [...new Set(urls.filter((url): url is string => typeof url === 'string' && url !== ''))]
+}
+
+/**
+ * The frontend bindings that actually reach the job as env vars.
+ *
+ * Shared with {@link buildFrontendInfraSpec} rather than re-filtered, so the URLs a dispatch
+ * DECLARES it is handing the job stay exactly the ones it hands it: a binding dropped for a
+ * reserved name is not an environment the agent can reach, and listing it would buy a container
+ * bridge for a URL nothing will ever request.
+ */
+function injectedFrontendBindings(
+  frontend: NonNullable<AgentRunContext['frontend']>,
+): NonNullable<AgentRunContext['frontend']>['bindings'] {
+  return frontend.bindings.filter((binding) => binding.envVar && !isReservedEnvName(binding.envVar))
+}
+
 export function testerInfraSpec(context: AgentRunContext): Record<string, unknown> {
   // A `frontend` frame under the self-contained UI-test flow builds + serves the app and stands
   // WireMock up for its other upstreams — all as in-container processes (no DinD). The backend
@@ -141,11 +186,10 @@ export function testerInfraSpec(context: AgentRunContext): Record<string, unknow
 export function buildFrontendInfraSpec(
   frontend: NonNullable<AgentRunContext['frontend']>,
 ): Record<string, unknown> {
-  const { config, bindings } = frontend
+  const { config } = frontend
   const wiremockUrl = `http://localhost:${FRONTEND_WIREMOCK_PORT}`
   const env: Record<string, string> = {}
-  for (const binding of bindings) {
-    if (!binding.envVar || isReservedEnvName(binding.envVar)) continue
+  for (const binding of injectedFrontendBindings(frontend)) {
     env[binding.envVar] = binding.serviceUrl ?? wiremockUrl
   }
   return {

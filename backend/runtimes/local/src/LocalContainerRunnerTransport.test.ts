@@ -862,6 +862,15 @@ describe('LocalContainerRunnerTransport: ephemeral-environment host bridge', () 
   // this spent fourteen minutes on the former and reported the environment as dead.
   const ENV_URL = 'http://cf-acc-pr8.127.0.0.1.nip.io'
   const BRIDGE = '--add-host=cf-acc-pr8.127.0.0.1.nip.io:host-gateway'
+  const PEER_URL = 'http://email-pr8.127.0.0.1.nip.io'
+  const PEER_BRIDGE = '--add-host=email-pr8.127.0.0.1.nip.io:host-gateway'
+
+  // The environments ride the DISPATCH OPTIONS, never the job body. The body is an untyped bag
+  // whose URLs sit three levels down under a wire shape the harness owns, and the first cut of
+  // this feature read `spec.environmentUrl` — a path the engine has never emitted (it emits
+  // `body.infra.environmentUrl`), so the bridge could not fire in production while tests that
+  // hand-wrote the spec passed. `containerAgentJobBody.spec.ts` pins the engine's half.
+  const withEnvs = (...urls: string[]) => ({ environmentUrls: urls })
 
   function harnessFetch() {
     return vi.fn(async (input: string | URL | Request) => {
@@ -874,32 +883,60 @@ describe('LocalContainerRunnerTransport: ephemeral-environment host bridge', () 
 
   const runArgs = (calls: string[][]) => calls.filter((args) => args[0] === 'run')
 
-  it('adds the bridge for a loopback environment URL', async () => {
+  const mk = () => {
     const { exec, calls } = fakeDocker()
     const transport = mkTransport({
       image: 'harness:test',
       exec,
       fetchImpl: harnessFetch() as unknown as typeof fetch,
     })
-    await transport.dispatch({ runId: 'r1', jobId: 'j1' }, { environmentUrl: ENV_URL }, 'agent')
+    return { transport, calls }
+  }
+
+  it('adds the bridge for a loopback environment URL', async () => {
+    const { transport, calls } = mk()
+    await transport.dispatch({ runId: 'r1', jobId: 'j1' }, {}, 'agent', withEnvs(ENV_URL))
     expect(runArgs(calls)[0]).toContain(BRIDGE)
+  })
+
+  it('bridges a live PEER environment as well as the job own one', async () => {
+    // A cross-service integration test reaches the peer over the same unreachable name and fails
+    // the same way. Bridging only the run's own environment left that case broken while the
+    // feature looked complete.
+    const { transport, calls } = mk()
+    await transport.dispatch({ runId: 'r6', jobId: 'j1' }, {}, 'agent', withEnvs(ENV_URL, PEER_URL))
+    expect(runArgs(calls)[0]).toContain(BRIDGE)
+    expect(runArgs(calls)[0]).toContain(PEER_BRIDGE)
   })
 
   it('adds NO bridge for a remote environment URL', async () => {
     // The harmful direction, pinned: re-pointing a real host at the host gateway would break an
     // environment the container could already reach.
-    const { exec, calls } = fakeDocker()
-    const transport = mkTransport({
-      image: 'harness:test',
-      exec,
-      fetchImpl: harnessFetch() as unknown as typeof fetch,
-    })
+    const { transport, calls } = mk()
     await transport.dispatch(
       { runId: 'r2', jobId: 'j1' },
-      { environmentUrl: 'https://pr8.staging.example.com' },
+      {},
       'agent',
+      withEnvs('https://pr8.staging.example.com'),
     )
     expect(runArgs(calls)[0]?.some((arg) => arg.startsWith('--add-host=pr8.staging'))).toBe(false)
+  })
+
+  it('adds NO bridge for a localhost environment URL, which no hosts entry can re-point', async () => {
+    // A compose environment publishes `http://localhost:<port>`, so this is the ordinary case
+    // rather than a corner. The container will not honour an appended `localhost` entry, and the
+    // frontend flow serves WireMock and the built app on localhost INSIDE the container, so a
+    // bridge that DID take would break what the job is there to drive.
+    const { transport, calls } = mk()
+    await transport.dispatch(
+      { runId: 'r7', jobId: 'j1' },
+      {},
+      'agent',
+      withEnvs('http://localhost:32768'),
+    )
+    // Asserted against `localhost` rather than any `--add-host`: the runtime already adds its own
+    // host-gateway alias, which is the very entry a job reaches the host through.
+    expect(runArgs(calls)[0]?.some((arg) => arg.startsWith('--add-host=localhost'))).toBe(false)
   })
 
   it('REPLACES a run container that predates the environment, so the tester can reach it', async () => {
@@ -908,12 +945,7 @@ describe('LocalContainerRunnerTransport: ephemeral-environment host bridge', () 
     // `deployer` step. So the container every tester re-attaches to was necessarily built before
     // there was a host to bridge, and /etc/hosts is fixed at create time. Without the replacement
     // the bridge would be computed correctly and never applied to the container that needs it.
-    const { exec, calls } = fakeDocker()
-    const transport = mkTransport({
-      image: 'harness:test',
-      exec,
-      fetchImpl: harnessFetch() as unknown as typeof fetch,
-    })
+    const { transport, calls } = mk()
     const ref = { runId: 'r3', jobId: 'j1' }
     // Step one: no environment yet, so no bridge.
     await transport.dispatch(ref, {}, 'agent')
@@ -921,7 +953,7 @@ describe('LocalContainerRunnerTransport: ephemeral-environment host bridge', () 
     expect(runArgs(calls)[0]).not.toContain(BRIDGE)
 
     // The tester step, now carrying the provisioned URL.
-    await transport.dispatch({ ...ref, jobId: 'j2' }, { environmentUrl: ENV_URL }, 'agent')
+    await transport.dispatch({ ...ref, jobId: 'j2' }, {}, 'agent', withEnvs(ENV_URL))
     const runs = runArgs(calls)
     expect(runs).toHaveLength(2)
     expect(runs[1]).toContain(BRIDGE)
@@ -934,29 +966,29 @@ describe('LocalContainerRunnerTransport: ephemeral-environment host bridge', () 
   it('does NOT replace the container again once it carries the bridge', async () => {
     // Re-polls and later steps on the same URL must re-attach. A replacement per dispatch would
     // re-clone the checkout on every step, which is a worse bug than the one being fixed.
-    const { exec, calls } = fakeDocker()
-    const transport = mkTransport({
-      image: 'harness:test',
-      exec,
-      fetchImpl: harnessFetch() as unknown as typeof fetch,
-    })
+    const { transport, calls } = mk()
     const ref = { runId: 'r4', jobId: 'j1' }
-    await transport.dispatch(ref, { environmentUrl: ENV_URL }, 'agent')
-    await transport.dispatch({ ...ref, jobId: 'j2' }, { environmentUrl: ENV_URL }, 'agent')
+    await transport.dispatch(ref, {}, 'agent', withEnvs(ENV_URL))
+    await transport.dispatch({ ...ref, jobId: 'j2' }, {}, 'agent', withEnvs(ENV_URL))
+    expect(runArgs(calls)).toHaveLength(1)
+  })
+
+  it('does NOT replace the container when the same bridges arrive in another order', async () => {
+    // The engine lists a run's peers in whatever order it resolved them, and a set that reordered
+    // between two steps would read as a different set and cost the run a re-clone for nothing.
+    const { transport, calls } = mk()
+    const ref = { runId: 'r8', jobId: 'j1' }
+    await transport.dispatch(ref, {}, 'agent', withEnvs(ENV_URL, PEER_URL))
+    await transport.dispatch({ ...ref, jobId: 'j2' }, {}, 'agent', withEnvs(PEER_URL, ENV_URL))
     expect(runArgs(calls)).toHaveLength(1)
   })
 
   it('leaves a bridged container alone for a later step that needs no bridge', async () => {
     // A superset is fine: the entry is inert for a job that never resolves that name, so there is
     // nothing to gain by tearing the container down to remove it.
-    const { exec, calls } = fakeDocker()
-    const transport = mkTransport({
-      image: 'harness:test',
-      exec,
-      fetchImpl: harnessFetch() as unknown as typeof fetch,
-    })
+    const { transport, calls } = mk()
     const ref = { runId: 'r5', jobId: 'j1' }
-    await transport.dispatch(ref, { environmentUrl: ENV_URL }, 'agent')
+    await transport.dispatch(ref, {}, 'agent', withEnvs(ENV_URL))
     await transport.dispatch({ ...ref, jobId: 'j2' }, {}, 'agent')
     expect(runArgs(calls)).toHaveLength(1)
   })

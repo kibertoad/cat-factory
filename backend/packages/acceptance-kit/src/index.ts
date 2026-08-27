@@ -24,6 +24,7 @@ export {
   isTerminal,
   passThroughCredentialRetry,
   type StepObservation,
+  stepObservations,
   waitForDecisionOrSettled,
 } from './client.js'
 export {

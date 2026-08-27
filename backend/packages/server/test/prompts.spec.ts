@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentRunContext } from '@cat-factory/kernel'
-import { prBody, testerInfraSpec } from '../src/agents/prompts.js'
+import { dispatchEnvironmentUrls, prBody, testerInfraSpec } from '../src/agents/prompts.js'
 
 // Characterisation tests pinning what the container dispatch layer still renders itself: the
 // tester infra-spec branches and the pull-request body. The per-KIND prompts moved beside their
@@ -244,6 +244,85 @@ describe('testerInfraSpec', () => {
       } as Record<string, unknown>),
     )
     expect(spec).toMatchObject({ kind: 'frontend', servePort: 4173, wiremockPort: 8089 })
+  })
+})
+
+describe('dispatchEnvironmentUrls', () => {
+  /** Every string in a rendered infra spec that parses as an absolute http(s) URL. */
+  const urlsIn = (value: unknown): string[] => {
+    if (typeof value === 'string') {
+      return /^https?:\/\//.test(value) ? [value] : []
+    }
+    if (Array.isArray(value)) return value.flatMap(urlsIn)
+    if (value && typeof value === 'object') return Object.values(value).flatMap(urlsIn)
+    return []
+  }
+
+  // The one context that exercises all three legs at once: the frame's own provisioned
+  // environment, a live peer for a cross-service test, and a frontend binding resolved to the
+  // service under test.
+  const everyLeg = () =>
+    context({
+      service: { provisioning: { type: 'kubernetes' } },
+      environment: { url: 'https://env.example' },
+      involvedServices: [
+        { frameId: 'f_email', title: 'Email', envUrl: 'https://email.env' },
+        { frameId: 'f_db', title: 'DB' },
+      ],
+    } as Record<string, unknown>)
+
+  it('lists the run own environment and every live peer', () => {
+    expect(dispatchEnvironmentUrls(everyLeg()).sort()).toEqual([
+      'https://email.env',
+      'https://env.example',
+    ])
+  })
+
+  it('lists a frontend binding resolved to a real service, and never the in-container mock', () => {
+    // The WireMock URL the harness substitutes for an unresolved binding is served INSIDE the
+    // container and is reached exactly as written. Declaring it as an environment would invite a
+    // transport to re-point `localhost`, breaking what the job is there to drive.
+    const urls = dispatchEnvironmentUrls(
+      context({
+        frontend: {
+          config: { backendBindings: [] },
+          bindings: [
+            { envVar: 'PUB_API_URL', serviceUrl: 'https://api.ephemeral.example' },
+            { envVar: 'PUB_OTHER_URL' },
+            // Dropped for a reserved name, so the job never receives it.
+            { envVar: 'PATH', serviceUrl: 'https://never-injected.example' },
+          ],
+        },
+      } as Record<string, unknown>),
+    )
+    expect(urls).toEqual(['https://api.ephemeral.example'])
+  })
+
+  it('accounts for EVERY URL the rendered infra spec carries', () => {
+    // The relation that would have caught the bug this exists because of. A transport acting on
+    // these URLs cannot read them back out of the job body (an untyped bag, three levels deep,
+    // under a wire shape the harness owns) — the first cut tried and read a field the engine has
+    // never emitted, so the bridge could not fire in production. Declaring them separately is only
+    // safe while the declaration stays a SUPERSET of what the spec renders, and that is what this
+    // asserts: derived from the spec itself rather than pinned to a list, so a fourth leg added to
+    // the spec fails here instead of going silently unbridged.
+    for (const ctx of [
+      everyLeg(),
+      context({
+        frontend: {
+          config: { backendBindings: [] },
+          bindings: [{ envVar: 'PUB_API_URL', serviceUrl: 'https://api.ephemeral.example' }],
+        },
+      } as Record<string, unknown>),
+    ]) {
+      const declared = new Set(dispatchEnvironmentUrls(ctx))
+      const rendered = urlsIn(testerInfraSpec(ctx)).filter(
+        // The harness's own in-container mock is not an environment; see the case above.
+        (url) => !url.startsWith('http://localhost:'),
+      )
+      expect(rendered.length).toBeGreaterThan(0)
+      for (const url of rendered) expect(declared, url).toContain(url)
+    }
   })
 })
 

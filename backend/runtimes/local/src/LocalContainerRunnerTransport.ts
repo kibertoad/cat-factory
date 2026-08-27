@@ -24,7 +24,7 @@ import {
   unservablePlatformImageVariant,
 } from '@cat-factory/kernel'
 import { resolveDockerResources } from '@cat-factory/contracts'
-import { environmentHostNeedingBridge } from './environmentBridge.js'
+import { planEnvironmentBridges } from './environmentBridge.js'
 import type { LocalSettings } from '@cat-factory/contracts'
 import { logger } from '@cat-factory/server'
 import {
@@ -474,21 +474,51 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   }
 
   /**
-   * The host bridges this job needs inside its container, from the job body the engine dispatched.
+   * The host bridges this job needs inside its container, from the environments the engine
+   * declared it is handing the job.
    *
-   * Read off the SPEC rather than resolved here, because the environment URL is not knowable when
-   * a run's container is created: `dispatchPerRun` starts one container for the whole run at its
-   * FIRST step, and the environment does not exist until the `deployer` step several steps later.
-   * That ordering is the whole reason {@link containerMissingBridges} exists.
+   * Read off the DISPATCH OPTIONS rather than resolved here, because the environment URL is not
+   * knowable when a run's container is created: `dispatchPerRun` starts one container for the
+   * whole run at its FIRST step, and the environment does not exist until the `deployer` step
+   * several steps later. That ordering is the whole reason {@link containerMissingBridges} exists.
    *
-   * Only a host whose own answer is this machine is bridged; kernel's
-   * `environmentHostNeedingBridge` owns that rule and returns null for everything else, so a real
-   * remote environment is never re-pointed at the host gateway.
+   * Off the OPTIONS rather than the job body, which is the other half: the body is an untyped bag
+   * whose environment URLs sit at three depths under a wire shape the harness owns, so reading
+   * them here is one renamed field away from bridging nothing and saying nothing about it. See
+   * `RunnerDispatchOptions.environmentUrls`.
+   *
+   * Only a host whose own answer is this machine AND that a hosts-file entry can re-point is
+   * bridged; kernel's `classifyLocalMachineHostBridge` owns that rule, so a real remote
+   * environment is never re-pointed at the host gateway and a `localhost` URL never costs the job
+   * its warm-pool member for an entry the container would ignore.
    */
-  private bridgesFor(spec: Record<string, unknown>): readonly string[] {
-    const url = typeof spec.environmentUrl === 'string' ? spec.environmentUrl : null
-    const host = environmentHostNeedingBridge(url)
-    return host ? [host] : []
+  private bridgesFor(options?: RunnerDispatchOptions): readonly string[] {
+    return planEnvironmentBridges(options?.environmentUrls ?? []).hosts
+  }
+
+  /**
+   * Say once, per dispatch, which of this job's environments name this machine by an address NO
+   * bridge can reach: a compose stack published on `http://localhost:<port>`, or a bare loopback
+   * address (see kernel's `classifyLocalMachineHostBridge`).
+   *
+   * Reported rather than dropped because the two silent outcomes are indistinguishable and mean
+   * opposite things: a job with nothing to bridge is fine, and a job whose environment is
+   * unreachable from every container is going to spend its tester step on connection failures and
+   * conclude the environment is dead. That misreading is what this whole mechanism exists to stop,
+   * and here the platform genuinely cannot fix it, so the least it owes is to name it.
+   *
+   * At the top of {@link dispatch} because that is the one door every path enters through; the
+   * bridge computation itself is pure so the several places that ask for it do not each log.
+   */
+  private reportUnbridgeableEnvironments(options?: RunnerDispatchOptions): void {
+    for (const url of planEnvironmentBridges(options?.environmentUrls ?? []).unbridgeable) {
+      logger.warn(
+        'Environment URL names this machine by an address no container can be given, so the ' +
+          'agent will not reach it. Publish the environment on a name that resolves to the host ' +
+          '(a wildcard-DNS name such as <name>.127.0.0.1.nip.io), or run this step natively.',
+        { url },
+      )
+    }
   }
 
   /**
@@ -520,6 +550,9 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     kind: RunnerDispatchKind = 'agent',
     options?: RunnerDispatchOptions,
   ): Promise<RunnerDispatchAck | undefined> {
+    // Ahead of every routing decision, because it is about the job rather than about which
+    // container serves it, and this is the one door they all enter through.
+    this.reportUnbridgeableEnvironments(options)
     // A non-default image is always per-run, never pooled: pool members are started on ONE
     // image and reused across runs, so a leased member is by construction the wrong container
     // for a job that asked for a different one. Checked BEFORE the lease/cache lookups, which
@@ -531,7 +564,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     // /etc/hosts entry for one run's per-PR environment would outlive that run and sit in the
     // container the next one leases. Per-run containers have neither problem, and the run hands
     // its member back so the pool is not left holding a lease nothing will release.
-    const bridges = this.bridgesFor(spec)
+    const bridges = this.bridgesFor(options)
     if (bridges.length > 0) {
       if (this.hasLeasedMember(ref.runId)) await this.releasePooled(ref)
       return this.dispatchPerRun(ref, spec, kind, options)
@@ -563,7 +596,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     // Resolved BEFORE any container work so an unconfigured variant refuses without first
     // removing a container or starting one.
     const image = this.imageFor(ref)
-    const bridges = this.bridgesFor(spec)
+    const bridges = this.bridgesFor(options)
     let resolved = await this.resolve(containerKey)
     // A container that predates this job's environment cannot reach it: /etc/hosts is written at
     // create time. Drop it so the branch below builds one that can. Deliberately AFTER `resolve`,

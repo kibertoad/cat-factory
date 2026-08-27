@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { resolvesToLocalMachine } from './environment-host-bridge.logic.js'
+import {
+  classifyLocalMachineHostBridge,
+  resolvesToLocalMachine,
+} from './environment-host-bridge.logic.js'
 
 describe('resolvesToLocalMachine', () => {
   it('accepts the literal spellings of this machine', () => {
@@ -49,5 +52,41 @@ describe('resolvesToLocalMachine', () => {
   it('refuses an empty or blank hostname rather than treating it as local', () => {
     expect(resolvesToLocalMachine('')).toBe(false)
     expect(resolvesToLocalMachine('   ')).toBe(false)
+  })
+})
+
+describe('classifyLocalMachineHostBridge', () => {
+  it('bridges the names an added hosts-file entry is the first answer for', () => {
+    for (const host of ['cf-acc-pr8.127.0.0.1.nip.io', 'app.localhost', 'host.docker.internal']) {
+      expect(classifyLocalMachineHostBridge(host), host).toEqual({ kind: 'bridge', host })
+    }
+  })
+
+  it('normalises the host it hands back, so the entry matches what the container looks up', () => {
+    expect(classifyLocalMachineHostBridge(' CF-ACC-PR8.127.0.0.1.NIP.IO. ')).toEqual({
+      kind: 'bridge',
+      host: 'cf-acc-pr8.127.0.0.1.nip.io',
+    })
+  })
+
+  it('reports `localhost` and every IP literal as UNBRIDGEABLE, never as a bridge', () => {
+    // A compose environment publishes `http://localhost:<port>`, so this is the ordinary case
+    // rather than a corner. Graded as a bridge it costs the job its warm-pool member and forces a
+    // container replacement, for an /etc/hosts line the container will not honour: the image's own
+    // `127.0.0.1 localhost` is matched first, and an IP literal is never looked up at all.
+    for (const host of ['localhost', '127.0.0.1', '127.9.9.9', '::1', '[::1]', '0.0.0.0', '::']) {
+      const verdict = classifyLocalMachineHostBridge(host)
+      expect(verdict.kind, host).toBe('unbridgeable')
+    }
+  })
+
+  it('leaves a genuinely remote host alone', () => {
+    for (const host of ['pr8.staging.example.com', '203.0.113.10', 'cf-acc-5.127.0.0.1.nip.io']) {
+      expect(classifyLocalMachineHostBridge(host), host).toEqual({ kind: 'none' })
+    }
+  })
+
+  it('answers `none` for an empty hostname rather than inventing a bridge', () => {
+    expect(classifyLocalMachineHostBridge('   ')).toEqual({ kind: 'none' })
   })
 })
