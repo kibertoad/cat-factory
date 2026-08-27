@@ -227,6 +227,11 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
     // run local infra here — see capabilities.localDind=false).
     if (spec.instanceSize) args.push('-m', spec.instanceSize.memory, '-c', spec.instanceSize.cpus)
     for (const [k, v] of Object.entries(spec.env)) args.push('-e', `${k}=${v}`)
+    // Stated for the same reason the Docker adapter states it: `endpoint()` below addresses the
+    // harness at `HARNESS_PORT` on the container's own IP, so the container has to be TOLD to bind
+    // that port rather than inheriting whichever default its image was built with. Emitted last so
+    // a job's own `env` cannot disagree with the port the transport then connects to.
+    args.push('-e', `PORT=${HARNESS_PORT}`)
     args.push(spec.image)
     await exec(args)
     // The name IS the container id; the transport addresses everything by it.

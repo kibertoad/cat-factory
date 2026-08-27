@@ -106,6 +106,15 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
     for (const host of spec.extraHosts ?? []) args.push(`--add-host=${host}:host-gateway`)
     if (spec.network) args.push('--network', spec.network)
     for (const [k, v] of Object.entries(spec.env)) args.push('-e', `${k}=${v}`)
+    // The port the harness must BIND, stated rather than left to whatever the image defaults to,
+    // and emitted last so neither a job's own `env` nor an image default can disagree with the
+    // `-p` above. Without it the published port and the served one are joined only by the image
+    // being the version this backend was built against: an operator-pinned older harness (a
+    // SUPPORTED, warn-level configuration) binds its own default, nothing answers on the port the
+    // transport addresses, and the version handshake that would name the skew never runs because
+    // it needs a reachable harness. The failure surfaced as a bare ready-timeout instead. The
+    // Kubernetes pod spec has always stated it this way (`buildPodManifest`'s `env`).
+    args.push('-e', `PORT=${HARNESS_PORT}`)
     args.push(spec.image)
 
     const { stdout } = await exec(args)

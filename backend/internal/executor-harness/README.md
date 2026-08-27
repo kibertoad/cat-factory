@@ -442,7 +442,7 @@ verdict is stated.
 | `src/agent-shared.ts` | The few helpers every agent MODE shares (effort-report folding, the capability fields forwarded to `runAgentInWorkspace`). |
 | `src/logger.ts`    | Structured logging.                                                                                     |
 | `src/docker-status.ts` | This container's own verdict about its Docker daemon, as recorded by `entrypoint.sh`. Three-valued on purpose: a daemon that FAILED and a daemon nobody asked about are different facts, and only a DECIDED absence refuses a stand-up. See [Local infra: the container's Docker daemon](#local-infra-the-containers-docker-daemon). |
-| `src/agent-env.ts` | The env for anything the harness spawns into the agent's CHECKOUT: its own environment minus the variables that are facts about the HARNESS. Today that is `NODE_ENV` — the harness runs in production mode, and an inherited `NODE_ENV=production` makes npm omit devDependencies in a checkout that never asked for it. |
+| `src/agent-env.ts` | The env for anything the harness spawns into the agent's CHECKOUT: its own environment minus the variables that are facts about the HARNESS. Today that is `NODE_ENV` (the harness runs in production mode, and an inherited `NODE_ENV=production` makes npm omit devDependencies in a checkout that never asked for it) and `PORT` (the port this harness is listening on, so a service that reads it would bind the one address in the container's network namespace that is already taken). |
 
 ## Runner lifecycle knobs
 

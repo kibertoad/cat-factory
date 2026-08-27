@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   appendEnvironmentInventory,
   daemonPresence,
@@ -12,7 +12,7 @@ import {
   type ProbeRunner,
 } from '../src/environment-inventory.js'
 import type { Logger } from '../src/logger.js'
-import { DEFAULT_HARNESS_PORT } from '../src/harness-port.js'
+import { DEFAULT_HARNESS_PORT, harnessListenPort } from '../src/harness-port.js'
 
 // The block the harness appends to every agent's system prompt: what this machine HAS, so no
 // agent pays to find out. The property the whole thing turns on is that its three answers stay
@@ -460,11 +460,49 @@ describe('the reserved-port line', () => {
     expect(text).toContain('{"status":"ok"}')
   })
 
-  it('states the port this process ACTUALLY holds, not the default', () => {
-    // A deployment (and the native local transport, which picks an ephemeral port per harness
-    // process) overrides `PORT`, and a line naming the default there would send the agent around
-    // the collision it is meant to prevent.
+  it('renders the port it is handed, never the default it was built with', () => {
     expect(bare(41234)).toContain('Port 41234 is already bound here')
     expect(bare(41234)).not.toContain(String(DEFAULT_HARNESS_PORT))
+  })
+})
+
+// The renderer above is handed a number, so on its own it says nothing about WHICH number the
+// inventory reports. That answer is resolved twice over, and both halves need their own assertion:
+// `harnessListenPort` reads `PORT`, and `probeEnvironment` calls it when no port is injected. A
+// regression collapsing either onto the default would leave every rendering test above green while
+// the block named a port the harness does not hold, which is the one thing the line exists to say.
+describe('the port the inventory reports', () => {
+  const restore = { ...process.env }
+  afterEach(() => {
+    process.env = { ...restore }
+  })
+
+  it('is `PORT` when the deployment sets one', () => {
+    // A deployment sets it per pod, and the native local transport picks an ephemeral port per
+    // harness process and passes it this way.
+    expect(harnessListenPort({ PORT: '41234' })).toBe(41234)
+  })
+
+  it('falls back to the default when nothing sets `PORT`', () => {
+    expect(harnessListenPort({})).toBe(DEFAULT_HARNESS_PORT)
+  })
+
+  it('is what a probe with no injected port picks up from the environment', async () => {
+    process.env.PORT = '41234'
+    const inventory = await probeEnvironment(fakeRunner({}), {
+      daemonExpected: false,
+      sleep: async () => {},
+    })
+    expect(inventory.harnessPort).toBe(41234)
+    expect(renderEnvironmentInventory(inventory)).toContain('Port 41234 is already bound here')
+  })
+
+  it('is the default for a probe on a deployment that sets no `PORT`', async () => {
+    delete process.env.PORT
+    const inventory = await probeEnvironment(fakeRunner({}), {
+      daemonExpected: false,
+      sleep: async () => {},
+    })
+    expect(inventory.harnessPort).toBe(DEFAULT_HARNESS_PORT)
   })
 })

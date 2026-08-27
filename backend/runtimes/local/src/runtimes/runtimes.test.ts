@@ -114,6 +114,36 @@ describe('DockerRuntimeAdapter', () => {
     expect(run).toContain('--add-host=host.docker.internal:host-gateway')
   })
 
+  it('tells the container which port to bind, so a pinned older image stays reachable', async () => {
+    // The published port and the served one are otherwise joined only by the image happening to
+    // default to the same number. An operator-pinned older harness (supported: it warns, it does
+    // not refuse) would bind its own default, answer on nothing the transport addresses, and die
+    // on the ready timeout with the version handshake, which needs a reachable harness, unable to
+    // name the skew. Stating PORT is what keeps that configuration diagnosable.
+    const adapter = new DockerRuntimeAdapter({
+      id: 'docker',
+      binary: 'docker',
+      hostAlias: 'host.docker.internal',
+      addHostGateway: true,
+      localDind: true,
+      pooling: true,
+      installId: 'i0',
+    })
+    const { exec, calls } = fakeExec({ run: 'cid\n' })
+    await adapter.run(exec, {
+      containerKey: 'r1',
+      image: 'img:test',
+      sharedSecret: 'sek',
+      privileged: false,
+      // A job asking for its own PORT must NOT move the harness off the port just published for
+      // it: the platform's value is emitted last and wins.
+      env: { PORT: '8080' },
+    })
+    const run = calls[0]!.join(' ')
+    expect(run).toContain(`-p 127.0.0.1:0:${HARNESS_PORT}`)
+    expect(run.lastIndexOf(`PORT=${HARNESS_PORT}`)).toBeGreaterThan(run.indexOf('PORT=8080'))
+  })
+
   it('omits the add-host when disabled (e.g. Colima)', async () => {
     const adapter = new DockerRuntimeAdapter({
       id: 'colima',
@@ -364,6 +394,9 @@ describe('AppleContainerRuntimeAdapter', () => {
     expect(run.join(' ')).not.toContain('-p ')
     expect(run).not.toContain('--privileged')
     expect(run.join(' ')).toContain('FOO=bar')
+    // `endpoint()` reaches the harness at HARNESS_PORT on the container's own VM IP, so the
+    // container is TOLD to bind it rather than inheriting whatever its image defaults to.
+    expect(run.join(' ')).toContain(`PORT=${HARNESS_PORT}`)
     expect(run[run.length - 1]).toBe('ghcr.io/x/harness:1')
   })
 

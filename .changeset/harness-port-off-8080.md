@@ -22,7 +22,26 @@ literal by a conformity test. The environment inventory the harness states to ev
 names the port it holds and says a reply from it is not evidence, which stays true for a
 deployment that overrides `PORT`.
 
+Moving the number is not on its own the fix, because the harness exports the port it holds as
+`PORT` and the agent's own processes inherited it: a service written as `listen(process.env.PORT)`
+would have been aimed straight back at the one address in the namespace it cannot have. `PORT`
+joins `NODE_ENV` on the short list of harness variables stripped from everything spawned into the
+checkout, so the collision is closed rather than relocated.
+
+Two things now hold the port in one place per job. Every facade STATES the port the container must
+bind rather than leaving it to the image: the Kubernetes pod spec already did, and the local
+container adapters and the Cloudflare container class now do too. A deployment pins its own
+mirrored image tag, so without that the published port and the served one were joined only by the
+image happening to agree, and a tag from before this change would answer nothing and surface as a
+container that never became ready (rather than as the version handshake naming the skew, which
+needs a reachable harness to run at all). And the frontend stand-up refuses a serve port equal to
+the port the harness is listening on, read from the live process rather than predicted from the
+shared constant, which is what covers a deployment whose `PORT` the constant does not name.
+
 Breaking for a deployment that pins the harness port itself: a runner pool's pod spec, a
 `NetworkPolicy`, or a `harnessPort` runner-backend setting written against 8080 must move with the
-image tag. A `frontend` frame configured to serve on 8080 is no longer bumped to 4173, since that
-port is now free.
+image tag. **A pool left on `harnessPort: 8080` keeps dispatching, which is the trap rather than
+the relief**: the harness then holds 8080 inside every job container, exactly the collision this
+change removes, and a `frontend` frame is free to be configured to serve there because the shared
+guard now reserves 27182. The stand-up refusal above is what makes that land as a named infra gap
+instead of a green grade against the platform, but the pool setting is still the thing to clear.
