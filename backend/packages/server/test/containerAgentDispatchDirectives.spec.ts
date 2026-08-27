@@ -7,6 +7,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { AgentRouting } from '@cat-factory/agents'
 import {
+  BACKGROUND_PROCESS_GUIDANCE,
   CONTAINER_DISPATCH_DIRECTIVES,
   EFFORT_REPORT_FILE,
   EFFORT_REPORT_GUIDANCE,
@@ -24,7 +25,8 @@ import {
 import type { ContainerSessionService } from '../src/containers/ContainerSessionService.js'
 
 // The DIRECTIVES a dispatch appends around a kind's own prompt: the read-only guardrail, the three
-// unconditional `CONTAINER_DISPATCH_DIRECTIVES` (execution sandbox, tool preference, effort report)
+// unconditional `CONTAINER_DISPATCH_DIRECTIVES` (execution sandbox, tool preference, background
+// processes, effort report)
 // and the PR-description sentinel a PR-opening coding kind gets on top. Split out of
 // `containerAgentJobBody.spec` (which pins the per-kind body SHAPES) when that file hit its size
 // budget, the same way `containerAgentMultiRepo.spec` was: these texts are composed from three
@@ -258,6 +260,30 @@ describe('ContainerAgentExecutor dispatch directives', () => {
     // whose correctness depends on the answer may be built on it.
     expect(TOOL_PREFERENCE_GUIDANCE).not.toMatch(/\b(never|must|always) use\b/i)
     expect(TOOL_PREFERENCE_GUIDANCE).toMatch(/use your file tools/i)
+  })
+
+  it('tells every container kind how to stop what it backgrounded', async () => {
+    // A reviewer verifying a dev script backgrounded it and then killed it by PATTERN. The pattern
+    // matched the shell running the kill, so that shell died, the second cleanup command in the
+    // same invocation never ran, and the watcher it should have stopped was left for the next
+    // agent to find and kill by hand. Any kind that runs anything can hit it, so the hazard rides
+    // the chokepoint once rather than the track prompt of whichever kind happened to hit it.
+    for (const kind of ['coder', 'architect', 'reviewer', 'tester-api', 'merger']) {
+      const prompt = await promptFor(kind)
+      expect(prompt).toContain(BACKGROUND_PROCESS_GUIDANCE)
+      expect(prompt.split(BACKGROUND_PROCESS_GUIDANCE).length - 1).toBe(1)
+    }
+    // It names the REMEDY, not only the hazard: an agent told merely that pattern kills are risky
+    // has been given no way to clean up at all, and a leaked watcher is the worse outcome.
+    expect(BACKGROUND_PROCESS_GUIDANCE).toMatch(/capture the PID/i)
+    // And it stays a property of the IDIOM rather than a claim that some particular kill tool is
+    // installed, exactly as the sandbox paragraph names no tool: the same text reaches the harness
+    // image and a developer's own machine under `LOCAL_NATIVE_AGENTS`.
+    expect(BACKGROUND_PROCESS_GUIDANCE).not.toMatch(/pkill|killall|pgrep/i)
+    // The trailing-`true` clause is the half that changes behaviour: the run this came from ended
+    // three of those commands with one and lost the cleanup anyway. Without it the paragraph
+    // describes a hazard the agent has every reason to believe it already handled.
+    expect(BACKGROUND_PROCESS_GUIDANCE).toMatch(/trailing .true. does not save it/)
   })
 
   it('keeps the effort report LAST of the unconditional directives', () => {

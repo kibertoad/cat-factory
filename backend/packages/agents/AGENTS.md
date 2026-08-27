@@ -8,14 +8,20 @@
   `versions.ts` holds the versioned prompts, bump the number when you edit one), `prompts/`
   (`systemPromptFor`/`userPromptFor`; the shared fragments in `prompts/shared.ts`, incl.
   `FINAL_ANSWER_IN_REPLY`, `EXECUTION_SANDBOX_GUIDANCE` (what the execution environment can and
-  cannot run, and that an artifact it cannot execute is not incomplete for that reason) and the
-  sentinel-file guidances `EFFORT_REPORT_GUIDANCE`,
-  `FOLLOW_UP_GUIDANCE`, and `PR_DESCRIPTION_GUIDANCE` (the reviewer briefing a PR-opening coding
-  agent writes to `.cat-pr-description.md`, which the harness lifts onto the PR it opens). Only
-  `FINAL_ANSWER_IN_REPLY` is composed here: the other four are appended by the container-dispatch
-  chokepoint (`@cat-factory/server`'s `jobBody.ts`), the first two of them as the unconditional
-  `CONTAINER_DISPATCH_DIRECTIVES` pair and the rest per step. So the pair a read-only kind receives
-  is only assertable in `containerAgentJobBody.spec.ts`: `EFFORT_REPORT_GUIDANCE` carries the
+  cannot run, and that an artifact it cannot execute is not incomplete for that reason),
+  `TOOL_PREFERENCE_GUIDANCE` (which tool to reach for, so a search does not go through the shell
+  and spend the progress guard's no-edit budget), `BACKGROUND_PROCESS_GUIDANCE` (how to stop a
+  server or watcher the agent backgrounded, and why a pattern-matching kill signals the agent's
+  own shell) and the sentinel-file guidances `EFFORT_REPORT_GUIDANCE`, `FOLLOW_UP_GUIDANCE`, and
+  `PR_DESCRIPTION_GUIDANCE` (the reviewer briefing a PR-opening coding agent writes to
+  `.cat-pr-description.md`, which the harness lifts onto the PR it opens). Only
+  `FINAL_ANSWER_IN_REPLY` is composed here: the rest are appended by the container-dispatch
+  chokepoint (`@cat-factory/server`'s `jobBody.ts`), the first four of them as the unconditional
+  `CONTAINER_DISPATCH_DIRECTIVES` list (in that order, the effort report LAST) and the other two
+  per step. Adding a member is one entry on that list and nothing else: both consumers read it,
+  the dispatch itself and `appendedDirectivesFor`, which MEASURES the set for the prompt editor.
+  So the set a read-only kind receives is only assertable in
+  `containerAgentDispatchDirectives.spec.ts`: `EFFORT_REPORT_GUIDANCE` carries the
   carve-out naming `EFFORT_REPORT_FILE` as the one write a read-only instruction permits, because
   the chokepoint hands every container kind both "create no files" and "write this file" and is the
   only place that sees both halves (a carve-out in `READ_ONLY_GUARDRAIL` could not reach the bespoke

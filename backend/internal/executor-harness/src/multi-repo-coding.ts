@@ -16,7 +16,7 @@ import {
   refreshFromBaseIfClean,
   remoteBranchExists,
 } from './git.js'
-import { salvageOnlyNotice, salvageUntrackedWork } from './salvage.js'
+import { salvageUntrackedWork, withSalvageOnlyNote } from './salvage.js'
 import { openPullRequest } from './vcs-api.js'
 import { applyPrDescription, PR_DESCRIPTION_FILE, readPrDescription } from './pr-description.js'
 import { runAgentInWorkspace, withWorkspace } from './pi-workspace.js'
@@ -401,20 +401,6 @@ async function prepareMultiRepoCheckouts(
  */
 export function probeDirsForLegs(legs: readonly { dir: string; readOnly?: boolean }[]): string[] {
   return legs.filter((leg) => !leg.readOnly).map((leg) => leg.dir)
-}
-
-/**
- * Put {@link salvageOnlyNotice} at the top of a pull request that is nothing but a salvage.
- *
- * Only the BODY is marked. A title carrying it would follow the PR into every list and
- * notification a maintainer sees, which is a lot of noise for a caveat that belongs beside the
- * diff, and the salvage commit's own message elaborates on it there.
- */
-function withSalvageOnlyNote(
-  pr: { title: string; body: string },
-  salvageOnly: boolean,
-): { title: string; body: string } {
-  return salvageOnly ? { ...pr, body: `${salvageOnlyNotice()}\n\n${pr.body}` } : pr
 }
 
 /**

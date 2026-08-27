@@ -1,5 +1,12 @@
 # @cat-factory/agents
 
+## 0.145.0
+
+### Minor Changes
+
+- 82a3b94: Tell container agents how to stop what they backgrounded, so a pattern-matching kill stops taking
+  the agent's own shell down with it.
+
 ## 0.144.0
 
 ### Minor Changes
