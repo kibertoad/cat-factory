@@ -75,14 +75,19 @@ export async function recordJobFacts(
   // rollups (a flat-rate quota plan costs nothing per token); an inline metered call
   // defaults to `'metered'` and is summed by the spend gate as before.
   if (result.usage) {
+    const billing = result.usageBilling ?? 'metered'
     await deps.spend.record({
       workspaceId,
       executionId: instance.id,
       agentKind: step.agentKind,
       model: result.model ?? 'unknown',
       usage: result.usage,
-      billing: result.usageBilling ?? 'metered',
+      billing,
       vendor: result.usageVendor ?? null,
     })
+    // The same fact on the STEP, because that is where the money is read: `step.metrics`
+    // carries a `costEstimate` priced identically for both billing kinds, and without this a
+    // subscription step's list price renders as spend.
+    step.usageBilling = billing
   }
 }

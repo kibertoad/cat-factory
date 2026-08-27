@@ -28,6 +28,7 @@ import {
   type buildNodeContainer,
 } from '@cat-factory/node-server'
 import { type Logger } from '@cat-factory/server'
+import { holdKeepAliveSockets } from './keepAlive.ts'
 
 type Container = ReturnType<typeof buildNodeContainer>
 
@@ -117,11 +118,13 @@ export function serveAuthBackend(opts: {
     PORT: String(opts.port),
     CORS_ALLOWED_ORIGINS: opts.corsOrigin,
   }
-  serveAppWithRealtime({
+  const { server } = serveAppWithRealtime({
     app: createApp(container, env),
     realtimeHub: opts.hub,
     auth: container.config.auth,
     env,
     label: 'e2e auth-enabled backend',
   })
+  // Same reaper race as the primary listener: the identity specs seed over REST against this one.
+  holdKeepAliveSockets(server)
 }

@@ -10,6 +10,13 @@ export {
   type SelfReportingLanguageModel,
 } from './cli-inline.js'
 export {
+  usageAttributionOf,
+  usageBillingFields,
+  type UsageAttributedLanguageModel,
+  type UsageAttribution,
+} from './usage-attribution.js'
+export { wrapModelPreservingMarkers, type ModelMarkers } from './model-markers.js'
+export {
   InstrumentedModelProvider,
   catFactoryObservability,
   type InlineObservabilityContext,

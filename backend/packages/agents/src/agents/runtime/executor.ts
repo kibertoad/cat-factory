@@ -17,6 +17,7 @@ import { standardsVerbosityFor, traitDeliveryFor } from '../kinds/traits.js'
 import { systemPromptFor, userPromptFor } from '../catalog.js'
 import { catFactoryObservability } from '../../providers/instrumented.js'
 import { agentUsageFromModelUsage } from '../../providers/cache.js'
+import { usageBillingFields } from '../../providers/usage-attribution.js'
 import { type AgentRouting, resolveAgentConfig, resolveInlineModelRef } from './routing.js'
 import { composeBlockSystemPrompt } from './fragments.js'
 import {
@@ -393,12 +394,19 @@ export class AiAgentExecutor implements AgentExecutor {
     return {
       output: text.trim(),
       model: `${ref.provider}:${ref.model}`,
-      // Report metered tokens so the spend safeguard can price this call, carrying the input
+      // Report the tokens so the spend safeguard can price this call, carrying the input
       // CLASS split where the provider reported one — an inline step on a warm prefix cache is
       // mostly cache reads, and metering those at the fresh rate charged a workspace budget
       // several times what the call cost. The AI SDK leaves either total undefined when a
       // provider omits it, and says nothing about caching for the providers that do none.
       usage: agentUsageFromModelUsage(usage),
+      // How the call is BILLED, read off the model the provider chain returned rather than
+      // assumed from this being the inline path. A deployment that serves an inline step
+      // through a subscription harness (the local facade's ambient claude/codex CLI, or a
+      // container on a leased subscription token) spent no per-token money, and defaulting to
+      // metered here filed a run's companion and research steps as spend while the
+      // containerised steps of the SAME run, on the SAME credential, filed as subscription.
+      ...usageBillingFields([model]),
     }
   }
 }

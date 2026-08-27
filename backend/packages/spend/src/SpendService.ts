@@ -104,7 +104,12 @@ export interface RecordUsageInput {
    * `'metered'` (the inline/proxy metered path).
    */
   billing?: UsageBilling
-  /** The subscription vendor for a `'subscription'` row (claude/codex/glm/kimi/deepseek). */
+  /**
+   * The vendor whose credential served the call, for a `'subscription'` row. Absent on such a
+   * row falls back to the model's provider slug rather than being stored blank — see
+   * {@link vendorFor}. Ignored (recorded as null) for a metered row, which belongs to no
+   * subscription.
+   */
   vendor?: string | null
 }
 
@@ -126,6 +131,27 @@ export interface ScopedSpendForecast {
   currency: string
   forecast: SpendForecast
   alert: SpendAlertState
+}
+
+/**
+ * The vendor a ledger row records.
+ *
+ * A METERED row has none by construction: a per-token API key belongs to no subscription, and
+ * `null` says exactly that. Enforced HERE rather than trusted of each caller, so the invariant
+ * `TokenUsageRecord.vendor` states holds at the one write boundary that can hold it. A
+ * SUBSCRIPTION row must name one: every read that reconciles quota usage groups by it, and a
+ * blank there is a row that cannot be attributed to the plan that paid for it. So the one the caller resolved wins, and a caller that knew the billing but not the
+ * vendor falls back to the model's own PROVIDER slug, which is what the container dispatch path
+ * records for the same credential. Never a guess: both are read off the credential that served
+ * the call.
+ */
+function vendorFor(
+  billing: UsageBilling,
+  declared: string | null | undefined,
+  provider: string,
+): string | null {
+  if (billing !== 'subscription') return null
+  return declared?.trim() || provider
 }
 
 /** Which budget tiers to check when gating a run (the caller passes what ids it has). */
@@ -325,6 +351,7 @@ export class SpendService {
     // run's whole input at the fresh rate metered it at roughly ten times its real cost and
     // exhausted budgets that were nowhere near spent.
     const costEstimate = estimateCost(pricing, ref, input.usage)
+    const billing = input.billing ?? 'metered'
     await this.tokenUsageRepository.record({
       id: this.idGenerator.next('tok'),
       workspaceId: input.workspaceId,
@@ -337,8 +364,8 @@ export class SpendService {
       inputTokens: input.usage.inputTokens,
       outputTokens: input.usage.outputTokens,
       costEstimate,
-      billing: input.billing ?? 'metered',
-      vendor: input.vendor ?? null,
+      billing,
+      vendor: vendorFor(billing, input.vendor, ref.provider),
       createdAt: this.clock.now(),
     })
     return costEstimate

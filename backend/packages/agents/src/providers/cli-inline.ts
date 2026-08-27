@@ -19,6 +19,7 @@ import {
   resolveInlineAttribution,
   runBestEffort,
 } from '@cat-factory/kernel'
+import type { UsageAttributedLanguageModel, UsageAttribution } from './usage-attribution.js'
 
 // An AI SDK `LanguageModelV3` that runs a one-shot inline completion through a subscription
 // HARNESS CLI (Claude Code / Codex) instead of an HTTP provider. It exists so a deployment
@@ -208,7 +209,9 @@ function toUsage(usage: InlineCliResult['usage']): LanguageModelV3GenerateResult
   }
 }
 
-export class CliInlineLanguageModel implements LanguageModelV3, SelfReportingLanguageModel {
+export class CliInlineLanguageModel
+  implements LanguageModelV3, SelfReportingLanguageModel, UsageAttributedLanguageModel
+{
   readonly specificationVersion = 'v3' as const
   readonly supportedUrls: Record<string, RegExp[]> = {}
   /**
@@ -217,6 +220,14 @@ export class CliInlineLanguageModel implements LanguageModelV3, SelfReportingLan
    * store still gets its one aggregate generation per step.
    */
   readonly reportsOwnLlmCalls: boolean
+  /**
+   * Every call this model serves is a SUBSCRIPTION call: the two runners behind it are the
+   * developer's ambient host CLI login and a container on a leased subscription token, and
+   * neither is billed per token. Declared here, where the credential decided the transport,
+   * so an inline step's usage is filed the same way the containerised steps of the same run
+   * are — the vendor being the provider slug the container path also records.
+   */
+  readonly usageAttribution: UsageAttribution
   private readonly now: () => number
   private readonly log: Logger
 
@@ -227,6 +238,7 @@ export class CliInlineLanguageModel implements LanguageModelV3, SelfReportingLan
     private readonly telemetry?: InlineCliTelemetry,
   ) {
     this.reportsOwnLlmCalls = telemetry !== undefined
+    this.usageAttribution = { billing: 'subscription', vendor: provider }
     this.now = telemetry?.now ?? (() => Date.now())
     this.log = (telemetry?.logger ?? noopLogger).child({ scope: 'inlineCliTelemetry' })
   }

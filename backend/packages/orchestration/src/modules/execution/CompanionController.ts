@@ -191,13 +191,24 @@ export class CompanionController {
     // producer to grade. `result` carries the LAST call's output + the summed usage.
     const { assessment, result } = await this.runWithRepair(context, options, producerIndex >= 0)
     if (result.usage) {
+      const billing = result.usageBilling ?? 'metered'
       await this.deps.spend.record({
         workspaceId,
         executionId: instance.id,
         agentKind: step.agentKind,
         model: result.model ?? 'unknown',
         usage: result.usage,
+        // Forwarded exactly as the generic step's `recordJobFacts` forwards it. Dropping the
+        // two here filed every inline companion as metered spend, including the ones that ran
+        // on the same subscription credential as the producer they were grading: one run's
+        // `architect` counted as subscription usage and its `architect-companion`, one call
+        // later on the same credential, as money.
+        billing,
+        vendor: result.usageVendor ?? null,
       })
+      // And on the step, beside the metrics whose `costEstimate` it qualifies (see
+      // `recordJobFacts`, which stamps the same fact for a generic agent step).
+      step.usageBilling = billing
     }
     if (result.model) step.model = result.model
 

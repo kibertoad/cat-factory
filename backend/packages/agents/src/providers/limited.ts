@@ -1,8 +1,8 @@
-import { wrapLanguageModel } from 'ai'
 import type { LanguageModel, LanguageModelMiddleware } from 'ai'
 import type { SubscriptionVendor } from '@cat-factory/contracts'
 import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
 import { ALL_SUBSCRIPTION_VENDORS, subscriptionVendorForRef } from '@cat-factory/kernel'
+import { wrapModelPreservingMarkers } from './model-markers.js'
 import { type PermitRelease, Semaphore } from './semaphore.js'
 
 // Bounds how many INLINE LLM calls to a subscription/shared-pool vendor run at once, so a
@@ -143,8 +143,11 @@ export class LimitedModelProvider implements ModelProvider {
     if (typeof model === 'string' || !vendor || this.limiter.limitFor(vendor) === undefined) {
       return model
     }
-    return wrapLanguageModel({
-      model: model as Parameters<typeof wrapLanguageModel>[0]['model'],
+    // Through the marker-preserving wrap, never `wrapLanguageModel` directly: this is the
+    // OUTERMOST wrap, so what it returns is what `AiAgentExecutor` reads the billing marker off,
+    // and a bare wrap would hand it a model declaring nothing. See `model-markers.ts`.
+    return wrapModelPreservingMarkers({
+      model: model as Parameters<typeof wrapModelPreservingMarkers>[0]['model'],
       middleware: this.middlewareFor(vendor),
     })
   }

@@ -18,7 +18,17 @@ import {
 // on the step surfaces (step detail, pipeline timeline). A no-op when there are no
 // recorded calls. Clicking anywhere emits `inspect` so a parent can open the
 // drill-down panel.
-const props = defineProps<{ metrics: StepMetrics; clickable?: boolean }>()
+const props = defineProps<{
+  metrics: StepMetrics
+  /**
+   * How the step's tokens were billed, off `PipelineStep.usageBilling`. It is what makes the
+   * amount below readable: both billing kinds are priced identically here, so a subscription
+   * step's list price is indistinguishable from money actually spent unless it says so.
+   * Absent for a step that recorded no usage, which is also a step with no amount to qualify.
+   */
+  billing?: 'metered' | 'subscription'
+  clickable?: boolean
+}>()
 defineEmits<{ inspect: [] }>()
 
 const { t } = useI18n()
@@ -38,6 +48,7 @@ const hasCache = computed(() => cacheRead.value > 0 || cacheWrite.value > 0)
 // no rate for the model that ran — the figure is then OMITTED rather than shown as 0.00, which
 // would claim the step was free.
 const cost = computed(() => formatCost(m.value.costEstimate, m.value.costCurrency))
+const onSubscription = computed(() => props.billing === 'subscription')
 const headroom = computed(() => headroomRatio(m.value))
 const transport = computed(() => transportRatio(m.value))
 const headroomTone = computed(() => headroomColor(headroom.value, m.value.truncatedCalls > 0))
@@ -68,8 +79,23 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
       </span>
       <template v-if="cost">
         <span class="text-slate-500">·</span>
-        <span class="tabular-nums text-slate-300" :title="t('observability.metricsBar.costHint')">
-          {{ cost }}
+        <span
+          class="tabular-nums"
+          :class="onSubscription ? 'text-slate-500' : 'text-slate-300'"
+          :title="
+            onSubscription
+              ? t('observability.metricsBar.subscriptionCostHint')
+              : t('observability.metricsBar.costHint')
+          "
+        >
+          {{ onSubscription ? `~${cost}` : cost }}
+        </span>
+        <span
+          v-if="onSubscription"
+          class="text-[10px] uppercase tracking-wide text-slate-500"
+          :title="t('observability.metricsBar.subscriptionCostHint')"
+        >
+          {{ t('observability.metricsBar.subscription') }}
         </span>
       </template>
       <div class="ms-auto flex items-center gap-1">

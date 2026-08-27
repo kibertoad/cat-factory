@@ -1863,6 +1863,8 @@
       "calls": "{count} call | {count} calls",
       "inputCompletionTokens": "Total input / completion tokens. Input counts cached tokens too: they still occupy the context window, exactly as Claude Code's own context gauge counts them.",
       "costHint": "Estimated cost of this step's tokens at list rates, each input class priced at its own. A subscription run pays nothing per token, so this is what the same tokens would have cost metered.",
+      "subscription": "subscription",
+      "subscriptionCostHint": "This step ran on a flat-rate subscription, so it cost no money per token. The figure is what the same tokens would have cost on the metered API, and it is excluded from the spend budget.",
       "fresh": "{tokens} fresh",
       "freshHint": "Input processed from scratch, with nothing served from the cache",
       "cacheRead": "{tokens} cache read",

@@ -1,4 +1,4 @@
-import { wrapLanguageModel, type LanguageModelMiddleware } from 'ai'
+import type { LanguageModelMiddleware } from 'ai'
 import type { LanguageModel } from 'ai'
 import type {
   InlineLlmCallRecorder,
@@ -20,6 +20,7 @@ import {
   runBestEffort,
 } from '@cat-factory/kernel'
 import { reportsOwnLlmCalls } from './cli-inline.js'
+import { wrapModelPreservingMarkers } from './model-markers.js'
 
 /**
  * Whether prompt/response BODIES may leave this workspace for a trace sink — the
@@ -290,18 +291,21 @@ export class InstrumentedModelProvider implements ModelProvider {
 
   resolve(ref: ModelRef): LanguageModel {
     const model = this.inner.resolve(ref)
-    // wrapLanguageModel only accepts a model instance (not a model-id string). A bare
+    // The wrap only accepts a model instance (not a model-id string). A bare
     // string ref would be unusual for inline kinds, but pass it through untouched. The
     // base resolvers return current-spec (v3) models; the cast bridges the broader
-    // `LanguageModel` union to wrapLanguageModel's exact model param.
+    // `LanguageModel` union to the wrap's exact model param.
     if (typeof model === 'string') return model
     // A model that files its own per-call rows is left UNWRAPPED: it is behind a harness CLI
     // that runs a whole tool loop per `doGenerate`, so it knows the calls this middleware
     // cannot see, and wrapping it too would add one lumped duplicate to every step's rollup.
     // See `reportsOwnLlmCalls` for why the model is asked rather than the facade told.
     if (reportsOwnLlmCalls(model)) return model
-    return wrapLanguageModel({
-      model: model as Parameters<typeof wrapLanguageModel>[0]['model'],
+    // Marker-preserving, because a wrap erases every declaration the model carries and the
+    // limiter above this one is not the last reader: the executor reads the BILLING marker off
+    // whatever comes back. See `model-markers.ts`.
+    return wrapModelPreservingMarkers({
+      model: model as Parameters<typeof wrapModelPreservingMarkers>[0]['model'],
       middleware: this.middlewareFor(ref),
     })
   }

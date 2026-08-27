@@ -1759,6 +1759,8 @@
       "calls": "{count} appel | {count} appels",
       "inputCompletionTokens": "Total des tokens d'entrée / de sortie. L'entree compte aussi les tokens en cache : ils occupent toujours la fenêtre de contexte, exactement comme les compte la jauge de contexte de Claude Code.",
       "costHint": "Coût estimé des tokens de cette étape aux tarifs publics, chaque classe d'entrée à son propre taux. Une exécution sur abonnement ne paie rien au token ; ceci est donc ce que les mêmes tokens auraient coûté à l'usage.",
+      "subscription": "abonnement",
+      "subscriptionCostHint": "Cette étape s'est exécutée sur un abonnement forfaitaire et n'a donc rien coûté au token. Le montant correspond à ce que les mêmes tokens auraient coûté via l'API facturée à l'usage, et il est exclu du budget de dépenses.",
       "fresh": "{tokens} frais",
       "freshHint": "Entrée traitée de zero, sans rien servi depuis le cache",
       "cacheRead": "{tokens} lus depuis le cache",
