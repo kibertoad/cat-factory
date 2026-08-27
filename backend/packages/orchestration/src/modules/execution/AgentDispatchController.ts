@@ -17,6 +17,7 @@ import type { DispatchToolServers } from '@cat-factory/contracts'
 import { PR_REVIEWER_KIND, resolvePrNumber } from '@cat-factory/agents'
 import { recordDispatchedJob, recordInlineToolServers } from './step-fold.logic.js'
 import { classifyDispatchFailure, type DispatchFailureClassification } from './job.logic.js'
+import { environmentDispatchRefusal } from './environmentDispatch.logic.js'
 import { initialPrReviewState } from './prReview.logic.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { DeployerStepController } from './DeployerStepController.js'
@@ -111,6 +112,16 @@ export class AgentDispatchController {
         recordsDispatch: !step.jobId,
       },
     )
+    // Refuse, rather than dispatch, a step whose whole brief is an address it was not given.
+    // The prompt for a step in ephemeral-environment mode says "test against the environment
+    // described above" and then prints `URL: (pending)`; the two are contradictory, and an agent
+    // handed them does not reliably take the bail-out the prompt also offers — the run this guard
+    // was written for instead reconstructed the deployment locally, tested THAT, and greenlit the
+    // one thing it had not verified. Failing here says the same thing honestly, once, where a
+    // human can act on it. The deployer's readiness wait is what normally makes this unreachable;
+    // this catches what it cannot cover (an expired environment, a chain with no deployer at all).
+    const unreachable = environmentDispatchRefusal(context)
+    if (unreachable) return unreachable
     // A caller re-dispatching this step under an overriding kind can fold extra context in
     // (e.g. the PR-review `fix` resolution points the Fixer at the reviewed PR's head branch and
     // hands it the selected findings). Runs before pre-ops / dispatch so the job body sees it.

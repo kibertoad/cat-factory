@@ -46,8 +46,10 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   the public API's decision projection so what it offers and what this refuses cannot drift), `PollRunningController` + `PollCompletionController` (the RUNNING and SETTLED halves
   of the agent-poll branch tree), `OneShotStepController` (the one-shot engine steps `tracker` /
   `bug-intake` / `initiative-committer`),
-  `DeployerStepController` (the deployer provision fan-out + env projection; the fourth
-  one-shot step, which had its own controller first),
+  `DeployerStepController` (the deployer provision fan-out + env projection + the READINESS WAIT:
+  a provider answering `provisioning` parks the step on `awaiting_environment` and re-reads
+  `status()` rather than recording the frame ready with no URL; the fourth one-shot step, which had
+  its own controller first),
   `DisposerStepController` (the deployer's counterpart: reclaims the environments THIS RUN stood
   up, by the id the deployer recorded on `step.deployEnvs` — never re-resolved from the frame,
   because that read falls back to the block's frame-less manual/`human-test` environment — and is

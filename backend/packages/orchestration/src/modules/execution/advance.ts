@@ -24,6 +24,20 @@ export type AdvanceResult =
    */
   | { kind: 'awaiting_gate'; stepIndex: number }
   /**
+   * A `deployer` step has provisioned an environment the provider has not finished standing up,
+   * and the run is parked until it does. The durable driver sleeps, then polls
+   * {@link ExecutionService.pollAgentJob} — the deployer owns the wait, so the same entry point
+   * serves it, with no job in flight (the deploy container, when there was one, is finished and
+   * reclaimed). Polling stops the moment that poll returns anything else: a `ready` environment
+   * resumes the fan-out (`continue` / `awaiting_job` for the next frame), and an environment that
+   * failed or outlived its readiness ceiling fails the step.
+   *
+   * A distinct kind rather than `awaiting_job` because the two wait on different things and say
+   * so: nothing here is a job, and reporting one would put "job did not finish" on a run whose
+   * jobs all finished.
+   */
+  | { kind: 'awaiting_environment'; stepIndex: number }
+  /**
    * A step finished in a terminal failure; the driver records it via the single
    * `failRun` funnel and stops. `error` is the human-readable message. An inline
    * gate that already knows the precise classification sets `failureKind` (e.g. an

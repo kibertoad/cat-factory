@@ -67,11 +67,24 @@ interface PollLoopDeps {
  * already failed the run (the caller returns).
  */
 async function drivePollLoop(
-  deps: PollLoopDeps,
+  deps: PollLoopDeps & {
+    /** The park kind this loop drains; anything else settles it. Defaults to `awaiting_job`. */
+    awaiting?: AdvanceResult['kind']
+    /** What a spent budget FAILED at, e.g. "Implementation job". Defaults to that. */
+    label?: string
+    /**
+     * Whether the FIRST read runs before any sleep. True for a just-dispatched job (a leading
+     * interval would be dead air between "accepted" and the first progress reaching the board);
+     * false where the advance that parked the step already made the same read moments ago.
+     */
+    pollFirst?: boolean
+  },
   i: number,
   initial: AdvanceResult,
 ): Promise<AdvanceResult | null> {
   const { step, log, maxPolls, failureTolerance, pollInterval, pollOnce, failRun, poll } = deps
+  const awaiting = deps.awaiting ?? 'awaiting_job'
+  const label = deps.label ?? 'Implementation job'
   let result = initial
   let polled = false
   let pollReadFailures = 0
@@ -79,7 +92,7 @@ async function drivePollLoop(
     // Poll-first: the job was dispatched instants ago by `advance-${i}`, so the first
     // status read runs immediately — a leading sleep would be a full poll interval of
     // dead air. Later iterations sleep between polls.
-    if (p > 0) await step.sleep(`poll-wait-${i}-${p}`, pollInterval)
+    if (p > 0 || deps.pollFirst === false) await step.sleep(`poll-wait-${i}-${p}`, pollInterval)
     const attempt = await pollOnce(`poll-${i}-${p}`, poll)
     if (attempt.kind === 'read_failed') {
       pollReadFailures += 1
@@ -102,15 +115,15 @@ async function drivePollLoop(
     }
     pollReadFailures = 0
     result = attempt.result
-    if (result.kind !== 'awaiting_job') {
+    if (result.kind !== awaiting) {
       polled = true
       break
     }
   }
-  if (!polled && result.kind === 'awaiting_job') {
+  if (!polled && result.kind === awaiting) {
     await failRun(
       i,
-      failureFromDriver('Implementation job did not finish within its polling budget', 'timeout'),
+      failureFromDriver(`${label} did not finish within its polling budget`, 'timeout'),
     )
     return null
   }
@@ -311,6 +324,28 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
       // survives eviction. The job's bound is enforced container-side (inactivity +
       // max-duration watchdogs); `jobMaxPolls` is only a backstop. `null` means the loop
       // already failed the run.
+      // A `deployer` step is waiting for the environment it provisioned to become ready.
+      // Re-read the provider between durable sleeps on the JOB cadence (infra coming up, not a
+      // human-scale gate), through the same `pollAgentJob` entry point. Handled BEFORE the job
+      // branch so a ready environment that dispatches the next frame's deploy job falls straight
+      // into it. The wait's own ceiling settles it long before this budget does.
+      if (result.kind === 'awaiting_environment') {
+        const waited = await drivePollLoop(
+          {
+            ...jobPollDeps,
+            awaiting: 'awaiting_environment',
+            label: 'Environment readiness',
+            // Sleep-first, matching `drive.ts`: the advance that parked the step read the
+            // provider moments ago.
+            pollFirst: false,
+          },
+          i,
+          result,
+        )
+        if (waited === null) return
+        result = waited
+      }
+
       if (result.kind === 'awaiting_job') {
         const polledResult = await drivePollLoop(jobPollDeps, i, result)
         if (polledResult === null) return

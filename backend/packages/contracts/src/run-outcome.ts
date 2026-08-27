@@ -2,12 +2,8 @@ import * as v from 'valibot'
 import type { Block, PullRequestRef } from './entities.js'
 import { allPullRequests } from './entities.js'
 import type { EnvironmentStatus } from './environments.js'
-import type {
-  DeployEnvState,
-  DisposeEnvState,
-  ExecutionInstance,
-  PipelineStep,
-} from './execution.js'
+import type { DeployEnvState, DisposeEnvState } from './deploy-envs.js'
+import type { ExecutionInstance, PipelineStep } from './execution.js'
 import { reproductionStatusSchema } from './reproduction.js'
 import type { JoinedRequirement, RunEnvironmentObservation } from './run-evidence.js'
 import {

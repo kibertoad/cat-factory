@@ -1,7 +1,7 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
 import { frameProfile } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
-import { testerEnvironmentSection } from './testing.js'
+import { runsAgainstEphemeralEnvironment, testerEnvironmentSection } from './testing.js'
 
 function ctx(over: Partial<AgentRunContext> = {}): AgentRunContext {
   return {
@@ -91,5 +91,66 @@ describe('testerEnvironmentSection — library posture', () => {
     expect(
       testerEnvironmentSection(ctx({ agentKind: 'coder', service: { type: 'library' } })),
     ).toBe('')
+  })
+})
+
+describe('runsAgainstEphemeralEnvironment', () => {
+  // The predicate the ENGINE's dispatch guard shares with the prompt. It must answer TRUE for a
+  // step the prompt puts in ephemeral mode even when no URL has been published, because that case
+  // — told to test an address it was not given — is precisely the one the guard refuses.
+  it('is true for a declared kubernetes/custom service, URL or not', () => {
+    expect(
+      runsAgainstEphemeralEnvironment(ctx({ service: { provisioning: { type: 'custom' } } })),
+    ).toBe(true)
+    expect(
+      runsAgainstEphemeralEnvironment(
+        ctx({
+          service: { provisioning: { type: 'kubernetes' } },
+          environment: { url: null, status: 'provisioning', access: null, expiresAt: null },
+        }),
+      ),
+    ).toBe(true)
+  })
+
+  it('is true for any service this run actually gave a live URL', () => {
+    expect(
+      runsAgainstEphemeralEnvironment(
+        ctx({
+          service: { provisioning: { type: 'docker-compose' } },
+          environment: {
+            url: 'http://localhost:8080',
+            status: 'ready',
+            access: null,
+            expiresAt: null,
+          },
+        }),
+      ),
+    ).toBe(true)
+  })
+
+  it('is false for a library frame, a local/infraless service, and a non-tester kind', () => {
+    expect(
+      runsAgainstEphemeralEnvironment(
+        ctx({ service: { type: 'library', provisioning: { type: 'custom' } } }),
+      ),
+    ).toBe(false)
+    expect(
+      runsAgainstEphemeralEnvironment(ctx({ service: { provisioning: { type: 'infraless' } } })),
+    ).toBe(false)
+    expect(
+      runsAgainstEphemeralEnvironment(
+        ctx({ agentKind: 'coder', service: { provisioning: { type: 'custom' } } }),
+      ),
+    ).toBe(false)
+  })
+
+  it('agrees with the prompt section it was extracted from', () => {
+    const ephemeral = ctx({ service: { provisioning: { type: 'kubernetes' } } })
+    const local = ctx({ service: { provisioning: { type: 'docker-compose' } } })
+    for (const context of [ephemeral, local]) {
+      expect(runsAgainstEphemeralEnvironment(context)).toBe(
+        testerEnvironmentSection(context).includes('Run mode: ephemeral environment'),
+      )
+    }
   })
 })

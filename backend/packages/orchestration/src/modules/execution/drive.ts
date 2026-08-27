@@ -264,6 +264,25 @@ export async function driveExecution(
         result = next
         continue
       }
+      // A `deployer` step is waiting for the environment it provisioned to become ready.
+      // Re-read the provider between sleeps on the JOB cadence (this is infra coming up, not a
+      // human-scale gate), through the same `pollAgentJob` entry point the deployer's other park
+      // uses. SLEEP-FIRST, like a gate: the advance that parked the step read the provider moments
+      // ago, so an immediate re-read would only duplicate that answer. The wait's own ceiling
+      // settles it long before this budget does; the budget backstops a provider that answers
+      // `provisioning` forever.
+      if (result.kind === 'awaiting_environment') {
+        const next = await pollUntil(
+          'awaiting_environment',
+          () => exec.pollAgentJob(workspaceId, executionId),
+          cfg.jobPollIntervalMs,
+          cfg.jobMaxPolls,
+          'Environment readiness',
+        )
+        if (!next) return {}
+        result = next
+        continue
+      }
       // A polling gate step (`ci` / `conflicts`): re-run its precheck between sleeps;
       // which gate is resolved inside `pollGate` from the current step, so one branch
       // drives both.

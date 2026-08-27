@@ -209,6 +209,31 @@ export function testingSystemPrompt(kind: AgentKind): string | undefined {
  * Empty for non-tester kinds, so callers can append it unconditionally. Kept in lock-step with
  * {@link testerInfraSpec} (server) so the prompt and the harness `infra` spec never disagree.
  */
+/**
+ * Whether this step will be told to test an EPHEMERAL ENVIRONMENT rather than to stand something
+ * up for itself — the `Run mode: ephemeral environment` branch of
+ * {@link testerEnvironmentSection}, extracted so the ENGINE can ask the same question before it
+ * dispatches.
+ *
+ * It has to be one predicate, not two agreeing ones: the engine's dispatch guard refuses a step
+ * whose ephemeral environment has no URL, and a guard keyed off a slightly different condition
+ * than the prompt would either refuse a step the prompt was going to let stand up its own infra,
+ * or let through the exact case it exists to catch.
+ */
+export function runsAgainstEphemeralEnvironment(context: AgentRunContext): boolean {
+  if (context.agentKind !== TESTER_AGENT_KIND && context.agentKind !== UI_TESTER_AGENT_KIND) {
+    return false
+  }
+  // A `library` frame has no deployment and no running system to probe, so it never runs against
+  // an environment however the workspace's provisioning is configured.
+  const frameType = context.service?.type
+  if (frameType && frameProfile(frameType).testPosture === 'suite') return false
+  const type = context.service?.provisioning?.type
+  // A declared `kubernetes`/`custom` service is ALWAYS handed an environment; any other service
+  // is only in ephemeral mode when this run actually provisioned one it can reach.
+  return type === 'kubernetes' || type === 'custom' || Boolean(context.environment?.url)
+}
+
 export function testerEnvironmentSection(context: AgentRunContext): string {
   if (context.agentKind !== TESTER_AGENT_KIND && context.agentKind !== UI_TESTER_AGENT_KIND)
     return ''
@@ -229,10 +254,10 @@ export function testerEnvironmentSection(context: AgentRunContext): string {
       'against this change, and add the missing unit/integration tests on the branch.'
     )
   }
-  const type = context.service?.provisioning?.type
-  if (type === 'kubernetes' || type === 'custom' || context.environment?.url) {
+  if (runsAgainstEphemeralEnvironment(context)) {
     return '\nRun mode: ephemeral environment — test against the environment described under "Ephemeral environment under test" above (URL/host/port + any credentials); do not start the service locally.'
   }
+  const type = context.service?.provisioning?.type
   if (type === 'docker-compose') {
     return '\nRun mode: local — the service’s infra dependencies have been stood up on localhost; start the service yourself and test it there.'
   }

@@ -1,6 +1,7 @@
 import type { Block } from './entities.js'
 import type { EnvironmentStatus } from './environments.js'
-import type { DeployEnvState, DisposeEnvState, PipelineStep } from './execution.js'
+import type { DeployEnvState, DisposeEnvState } from './deploy-envs.js'
+import type { PipelineStep } from './execution.js'
 import type { VisualConfirmPair } from './human-verdict-gates.js'
 import type { RequirementPriority, RequirementState, SpecDoc } from './spec.js'
 import type { RequirementVerdict, RequirementVerdictStatus, TestReport } from './testing.js'
