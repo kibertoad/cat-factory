@@ -53,6 +53,9 @@ import type { LatestPointer } from './passFiles.js'
  * carries is declared in `options.flags` and handed back in {@link ResetArgs.flags} un-interpreted: a
  * flag the kit does not act on is a flag the kit may not guess the meaning of, and silently ignoring
  * one is how a reset runs a narrower job than the operator asked for while reporting success.
+ *
+ * THROWS on a `flags` entry this parser could never hand back (see {@link requireDeclarableFlags}),
+ * which is a fact about the suite's wiring rather than about anything an operator typed.
  */
 export function parseResetArgs(
   argv: readonly string[],
@@ -69,6 +72,7 @@ export function parseResetArgs(
       problem: string
     } {
   const suiteFlags = new Set(options.flags ?? [])
+  requireDeclarableFlags(suiteFlags)
   const seen = new Set<string>()
   let runId: string | null = null
   let apply = false
@@ -100,6 +104,51 @@ export function parseResetArgs(
     runId = arg
   }
   return { ok: true, runId, all, apply, flags: seen }
+}
+
+/** What {@link parseResetArgs} acts on itself, and therefore cannot hand back to a suite. */
+const RESERVED_FLAGS: readonly string[] = ['--yes', '-y', '--all']
+
+/**
+ * Refuse a `flags` declaration this parser could not honour, before it parses anything.
+ *
+ * The pass-through exists so a flag the kit does not act on reaches the suite that does. Two
+ * declarations break that silently rather than loudly, and both leave the reset running a job
+ * nobody asked for while reporting success:
+ *
+ *   - A name this module already acts on is matched HERE and never reaches
+ *     {@link ResetArgs.flags}, so the suite reads its own flag as absent while the kit's meaning
+ *     runs in its place. Declaring `--all` is the worst of them: every invocation of the suite's
+ *     flag becomes a whole-board clear, and the plan the operator reads says so in words they were
+ *     not looking for.
+ *   - A name spelled without its dashes is matched ahead of the POSITIONAL, so `reset <that name>`
+ *     sets the flag and names no pass. A reset aimed at one pass then clears whatever the
+ *     configuration points at, which is a different and wider request.
+ *
+ * A thrown `Error` rather than one of this module's operator refusals: nothing an operator typed
+ * produces either mistake, so what it owes its reader is the wiring that did, and a refusal an
+ * operator cannot act on is worse than a stack trace pointing at the line that can. It also fires
+ * on every invocation, so a suite cannot carry the mistake as far as a board.
+ */
+function requireDeclarableFlags(flags: ReadonlySet<string>): void {
+  const reserved = [...flags].filter((flag) => RESERVED_FLAGS.includes(flag))
+  if (reserved.length > 0) {
+    throw new Error(
+      `This reset declares ${reserved.join(', ')} as its own, and ${RESERVED_FLAGS.join(', ')} ` +
+        `belong to parseResetArgs: it acts on them itself, so they are never handed back and the ` +
+        `suite would read its own flag as absent on every invocation while this parser's meaning ` +
+        `ran in its place. Spell the suite's flag differently.`,
+    )
+  }
+  const undashed = [...flags].filter((flag) => !flag.startsWith('-'))
+  if (undashed.length > 0) {
+    throw new Error(
+      `This reset declares ${undashed.join(', ')} as a flag, and a flag is declared spelled as it ` +
+        `is typed ('--purge-repos'). Without the dashes it is matched ahead of the positional, so ` +
+        `'reset ${undashed[0]}' would set the flag and name no pass, and a reset aimed at one pass ` +
+        `would clear whatever the configuration points at instead. Spell it with its dashes.`,
+    )
+  }
 }
 
 /** One service frame, as `GET /api/v1/services` reports it. */
@@ -291,6 +340,38 @@ export type PlannedPass<Facts> = {
   facts: Facts | null
 }
 
+/**
+ * Why the `latest` pointer is in a plan: rule 3, as the two shapes it takes.
+ *
+ * Carried rather than re-derived by whoever renders it, because the two are different facts about
+ * the directory and only one of them has a pass to name. Re-reading it off `runId === null` would
+ * get the commoner half of `names-no-pass-on-disk` right and report the other half, a pointer whose
+ * ledger someone removed by hand, as a pass whose files are going.
+ *
+ * There is deliberately no `--all` member. That scope plans every pass on disk, so a pointer under
+ * it either names one of them or names none, and both are already here: a third member would be a
+ * scope wearing a reason's clothes.
+ */
+export type PointerReason =
+  /**
+   * It names a pass whose files this plan removes, so leaving it would have `latest` resolve to a
+   * ledger that is gone.
+   */
+  | 'names-a-removed-pass'
+  /**
+   * It names no pass this state directory holds: nothing readable (malformed, hand-edited), or a
+   * run id whose files someone removed by hand. It already resolves a resume onto a directory that
+   * answers for none of it, and removing it can strand nobody, so the scope does not enter into it.
+   *
+   * That "strands nobody" rests on an ordering `ledger.ts` owns: `patch` writes the LEDGER and then
+   * the pointer, so a pointer naming a pass whose files are not there yet is not a state a running
+   * pass passes through, and a pass that starts while a reset is planning cannot be read as this.
+   */
+  | 'names-no-pass-on-disk'
+
+/** The `latest` pointer file as a plan carries it. */
+export type PlannedPointer = { runId: string | null; path: string; reason: PointerReason }
+
 export type ResetPlan<Facts> = {
   /**
    * Which question built the frame list: this configuration's, or `--all`.
@@ -308,11 +389,13 @@ export type ResetPlan<Facts> = {
   notes: readonly string[]
   passes: readonly PlannedPass<Facts>[]
   /**
-   * The `latest` pointer, when this reset would remove it: it names a pass in this plan, or the
-   * scope is `--all` (which clears the state directory, so a pointer naming a pass that is no longer
-   * there goes with it). `runId` is null for a pointer that names nothing readable.
+   * The `latest` pointer, when this reset would remove it, with WHY: rule 3.
+   *
+   * `runId` is null for a pointer that names nothing readable, which is one of the two ways a
+   * pointer earns `names-no-pass-on-disk` and is not by itself the reason (see
+   * {@link PointerReason}).
    */
-  pointer: { runId: string | null; path: string } | null
+  pointer: PlannedPointer | null
   /** What a reset does NOT reclaim, from {@link ResetInput.leftovers}. */
   leftovers: readonly string[]
 }
@@ -410,11 +493,17 @@ export async function planReset<Facts>(
     ]
   })
 
-  // The pointer goes when the pass it names is in the plan, and ALSO under `--all`, which clears the
-  // directory: a pointer left behind there names a ledger that is gone (or, hand-edited, one that
-  // never existed). Keyed on the FILE, so a directory with no pointer at all is not announced as one
-  // about to lose it.
-  const namesPlannedPass = latestRunId !== null && passes.some((pass) => pass.runId === latestRunId)
+  // Rule 3, keyed on the FILE, so a directory with no pointer at all is not announced as one about
+  // to lose it. Both halves are read against the passes: the ones in this PLAN, and the ones this
+  // directory holds at all, which is the distinction a `--all` clause used to stand in for.
+  const reason =
+    input.latest === null
+      ? null
+      : pointerReason(
+          latestRunId,
+          new Set(passes.map((pass) => pass.runId)),
+          new Set(input.passes.map((pass) => pass.runId)),
+        )
   return {
     scope: input.all ? 'whole-board' : 'configured',
     frames,
@@ -422,8 +511,8 @@ export async function planReset<Facts>(
     notes: targeting.notes ?? [],
     passes,
     pointer:
-      input.latest !== null && (namesPlannedPass || input.all)
-        ? { runId: latestRunId, path: input.latest.path }
+      input.latest !== null && reason !== null
+        ? { runId: latestRunId, path: input.latest.path, reason }
         : null,
     leftovers: input.leftovers({ frames, passes }),
   }
@@ -461,7 +550,16 @@ export type PassResult = {
 export type ResetReport = {
   frames: readonly FrameResult[]
   passes: readonly PassResult[]
-  pointerRemoved: boolean
+  /**
+   * The `latest` pointer THIS call removed, with the reason the plan gave, or null.
+   *
+   * The reason rides the removal rather than being re-derived at format time: "removed with its
+   * pass" and "removed because it named no pass at all" are different facts about the directory, and
+   * a report re-deriving one from the other would name a pass in a directory that never held it.
+   * Null covers every way nothing went: no pointer, a pointer kept with the pass it names, and a
+   * pointer whose file something else had already removed.
+   */
+  pointer: { path: string; reason: PointerReason } | null
   /**
    * Carried through from the plan, with {@link notes}, for one reason: `--yes` is a SEPARATE
    * invocation, and it is the one every printed remedy ends with, so anything the preview stated
@@ -514,7 +612,7 @@ export async function applyReset<Facts>(
   return {
     frames,
     passes,
-    pointerRemoved,
+    pointer: pointerRemoved ? { path: pointer.path, reason: pointer.reason } : null,
     blockers: plan.blockers,
     notes: plan.notes,
     leftovers: plan.leftovers,
@@ -563,22 +661,41 @@ function keepReason<Facts>(
 }
 
 /**
- * Whether the `latest` pointer goes with what is being removed: rule 3.
+ * Whether a pass this plan names as the pointer's owner survived: the APPLY half of rule 3.
  *
  * Keyed on that pass's files being GONE rather than on any removal having happened, so a pointer
  * whose pass was kept (a frame survived) keeps pointing at a resume that still works.
  *
- * A pointer naming NO pass in this plan (`runId: null`, or an id whose ledger someone removed by
- * hand) can strand nobody, so it goes: `planReset` puts it here only under `--all`, which is the
- * scope that clears the directory it would otherwise outlive.
+ * A pointer naming NO pass in this plan can strand nobody, so it goes. That is the SAME answer
+ * `pointerReason` gives a pointer naming no pass on disk at all, and deliberately so: the two run at
+ * different moments over different sets, and a pointer that reaches here without an owner has
+ * already been judged unable to strand anything by whichever of them saw it.
  */
-function pointerGoes(
-  pointer: { runId: string | null; path: string } | null,
+function pointerGoes<Pointer extends { runId: string | null }>(
+  pointer: Pointer | null,
   passes: readonly { runId: string; kept: string | null }[],
-): pointer is { runId: string | null; path: string } {
+): pointer is Pointer {
   if (pointer === null) return false
   const owner = passes.find((pass) => pass.runId === pointer.runId)
   return owner === undefined || owner.kept === null
+}
+
+/**
+ * Which half of rule 3 puts the `latest` pointer in a plan, or null to leave it where it is.
+ *
+ * Two sets rather than one, because the questions differ: `planned` is what this reset REMOVES, and
+ * `onDisk` is what the state directory holds at all. A pointer naming a pass in neither is already
+ * resolving onto nothing; a pointer naming one that is on disk but not in the plan is the one case
+ * that must survive, since that pass is how somebody resumes.
+ */
+function pointerReason(
+  runId: string | null,
+  planned: ReadonlySet<string>,
+  onDisk: ReadonlySet<string>,
+): PointerReason | null {
+  if (runId !== null && planned.has(runId)) return 'names-a-removed-pass'
+  if (runId === null || !onDisk.has(runId)) return 'names-no-pass-on-disk'
+  return null
 }
 
 async function resetFrame(client: ResetClient, frame: PlannedFrame): Promise<FrameResult> {
@@ -711,13 +828,7 @@ export function formatResetPlan<Facts>(plan: ResetPlan<Facts>): string {
     for (const { pass, kept } of staying) lines.push(`  ${pass.runId}: ${kept}`)
   }
   if (pointerGoes(plan.pointer, outcome.map(toPassOutcome))) {
-    lines.push(
-      '',
-      plan.pointer.runId === null
-        ? `The 'latest' pointer names no pass this directory holds, and --all clears the ` +
-            `directory, so it goes too: ${plan.pointer.path}`
-        : `The 'latest' pointer names ${plan.pointer.runId}, so it goes too: ${plan.pointer.path}`,
-    )
+    lines.push('', `${describePlannedPointer(plan.pointer)}: ${plan.pointer.path}`)
   }
   return [
     ...lines,
@@ -760,13 +871,58 @@ export function formatResetReport(report: ResetReport): string {
       )
     }
   }
-  if (report.pointerRemoved) lines.push('', "The 'latest' pointer was removed with its pass.")
+  if (report.pointer !== null) {
+    lines.push('', `${describeRemovedPointer(report.pointer.reason)}: ${report.pointer.path}`)
+  }
   return [
     ...lines,
     ...noteLines(report.notes),
     ...blockerLines(report.blockers),
     ...leftoverLines(report.leftovers),
   ].join('\n')
+}
+
+/** The plan's sentence for the `latest` pointer, which owes the operator the reason it read. */
+function describePlannedPointer(pointer: PlannedPointer): string {
+  switch (pointer.reason) {
+    case 'names-a-removed-pass':
+      return `The 'latest' pointer names ${pointer.runId}, whose files are going, so it goes too`
+    case 'names-no-pass-on-disk':
+      return pointer.runId === null
+        ? `The 'latest' pointer names no pass at all, so it can only resolve a resume onto a ` +
+            `directory that answers for none of it, and it goes too`
+        : `The 'latest' pointer names ${pointer.runId}, which this directory does not hold, so it ` +
+            `can only resolve a resume onto nothing, and it goes too`
+    default:
+      return unknownPointerReason(pointer.reason)
+  }
+}
+
+/** The report's, for the pointer this run actually removed. */
+function describeRemovedPointer(reason: PointerReason): string {
+  switch (reason) {
+    case 'names-a-removed-pass':
+      return "The 'latest' pointer was removed with the pass it named"
+    case 'names-no-pass-on-disk':
+      return "The 'latest' pointer named no pass this directory holds, so it was removed too"
+    default:
+      return unknownPointerReason(reason)
+  }
+}
+
+/**
+ * A pointer reason neither sentence above was written for.
+ *
+ * `never` keeps both switches exhaustive at COMPILE time, so a third reason cannot be added without
+ * deciding what an operator is told about it. Reaching the throw takes a plan built somewhere other
+ * than {@link planReset}, which is the one case where the alternative is a reset announcing a
+ * deletion in wording written for a different one.
+ */
+function unknownPointerReason(reason: never): never {
+  throw new Error(
+    `A reset plan named the 'latest' pointer with reason '${String(reason)}', which neither ` +
+      `formatter can state. Build the plan with planReset.`,
+  )
 }
 
 function describeFrame(frame: { serviceId: string; title: string | null }): string {

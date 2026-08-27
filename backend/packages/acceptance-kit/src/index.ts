@@ -145,6 +145,8 @@ export {
   type PassResult,
   type PlannedFrame,
   type PlannedPass,
+  type PlannedPointer,
+  type PointerReason,
   type ResetBlocker,
   type ResetClient,
   type ResetFiles,

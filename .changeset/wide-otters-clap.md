@@ -21,7 +21,17 @@ configuration asks about, in its own words, plus anything it could not free or r
 `ledgerServiceIds`, and `leftovers`. `parseResetArgs` takes a suite's extra flags and hands them back
 un-interpreted.
 
+Two rules read directly rather than through a proxy. The `latest` pointer rule no longer carries an
+`--all` clause: that scope plans every pass in the state directory, so a pointer under it either
+names one of them or names none, and reading the rule itself also removes the dangling pointer a
+CONFIGURED reset used to leave behind. Which half put it there rides the plan and the report as a
+`PointerReason`, so the two sentences never borrow each other's words. And `parseResetArgs` throws on
+a `flags` declaration it could not hand back (a name it acts on itself, or one spelled without its
+dashes, which it would match ahead of the positional) rather than shadowing the suite's meaning with
+its own on every invocation.
+
 Internal break for anyone who copied the private version: `FrameReason` no longer carries
 suite-specific members (a suite's reason is a phrase the kit prints), `ResetPlan.stuck` /
-`ResetPlan.unlinked` are now `blockers` / `notes`, and `ResetClient` has four calls rather than five.
+`ResetPlan.unlinked` are now `blockers` / `notes`, `ResetReport.pointerRemoved` is now `pointer`
+(the removed file and why, or null), and `ResetClient` has four calls rather than five.
 Design record: `backend/docs/adr/0061-acceptance-kit-reset-machinery.md`.

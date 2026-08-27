@@ -938,15 +938,17 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 
 Everything above sits on [`@cat-factory/acceptance-kit`](../../packages/acceptance-kit), which is
 this suite with the suite taken out: the scenario driver, the ledger and journal mechanics, the
-prerequisite vocabulary and its refusals, the waits, the run driver and the evidence reductions. It
-is published, so a deployment can cover its OWN providers, agent kinds or gates the same way without
-copying this package.
+prerequisite vocabulary and its refusals, the waits, the run driver, the evidence reductions, and
+the reset's plan/apply machinery (the write order, the never-orphan-a-ledger rule, the `latest`
+pointer rule, the argument parser and both formatters). It is published, so a deployment can cover
+its OWN providers, agent kinds or gates the same way without copying this package.
 
 What stays here is what the kit cannot know: the prerequisites (what a deployment must have wired to
 run THIS pass), the five scenarios, the briefs, the configuration, the personal-subscription prompt,
-and the identity the kit's refusals render against (`src/identity.ts`). The seams are
-`Prerequisite`, `Scenario`, `SuiteIdentity` and `CredentialRetry`; the kit's own README documents
-each.
+the identity the kit's refusals render against (`src/identity.ts`), and the two questions a reset
+asks about THIS configuration's frames. The seams are `Prerequisite`, `Scenario`, `SuiteIdentity`
+and `CredentialRetry`, plus `planReset`'s three (`target`, `ledgerServiceIds`, `leftovers`); the
+kit's own README documents each.
 
 One consequence worth knowing before a pass: **the kit is a workspace package, so `pnpm build` has
 to have run** (the suite itself is type-stripped and builds nothing). Any tree that can serve a

@@ -252,7 +252,9 @@ describe('planReset', () => {
     expect(report.passes[0]?.removed).toHaveLength(2)
   })
 
-  it('names the pointer only when it names a pass in the plan', async () => {
+  it('LEAVES a pointer naming a pass this directory holds and this plan does not remove', async () => {
+    // The one pointer that must survive: the pass it names is how somebody else resumes, so a
+    // `latest` resolving to it is resolving to something.
     const f = fake({ services: [{ serviceId: 'blk_api', title: 'Catalog API' }] })
     const passes = [ledger('mine', 'blk_api'), ledger('theirs', 'blk_other')]
     const targeting = { frames: [{ serviceId: 'blk_api', because: 'is targeted' }] }
@@ -266,21 +268,50 @@ describe('planReset', () => {
       input({ passes, targeting, latest: { runId: 'theirs', path: '/state/latest.json' } }),
     )
 
-    expect(mine.pointer).toEqual({ runId: 'mine', path: '/state/latest.json' })
+    expect(mine.pointer).toEqual({
+      runId: 'mine',
+      path: '/state/latest.json',
+      reason: 'names-a-removed-pass',
+    })
     expect(theirs.pointer).toBeNull()
   })
 
-  it('takes a DANGLING pointer under --all, which is the scope that clears the directory', async () => {
-    // A pointer naming nothing outlives every ledger in the directory, and `latest` then resolves a
-    // resume onto a state directory holding none: a fresh pass wearing a finished pass's run id.
+  it('takes a pointer naming NO pass on disk whatever the scope, since it strands nobody', async () => {
+    // Rule 3's other half, and the reason it is not a `--all` clause: a dangling pointer outlives
+    // every ledger in the directory and `latest` then resolves a resume onto a state directory
+    // holding none, which reads as a fresh pass wearing a finished pass's run id. A configured
+    // reset that left it behind would report a clean board and leave that file to do it.
+    const f = fake({ services: [{ serviceId: 'blk_api', title: 'Catalog API' }] })
+    const targeting = { frames: [{ serviceId: 'blk_api', because: 'is targeted' }] }
+    // Both shapes: a pointer naming nothing readable, and one naming a pass whose files are gone.
+    for (const runId of [null, 'removed-by-hand']) {
+      const dangling = { runId, path: '/state/latest.json' }
+      const whole = await planReset(f.client, input({ all: true, latest: dangling }))
+      const narrow = await planReset(
+        f.client,
+        input({ passes: [ledger('theirs', 'blk_other')], targeting, latest: dangling }),
+      )
+
+      expect(whole.pointer).toEqual({ ...dangling, reason: 'names-no-pass-on-disk' })
+      expect(narrow.pointer).toEqual({ ...dangling, reason: 'names-no-pass-on-disk' })
+    }
+  })
+
+  it('needs no --all clause of its own, because that scope plans every pass on disk', async () => {
+    // `--all` takes every pass in the directory, so a pointer under it either names one of them or
+    // names none: both are already rule 3's, and a scope member would be a third reason that could
+    // only ever restate one of the two.
     const f = fake({ services: [] })
-    const dangling = { runId: null, path: '/state/latest.json' }
-
-    const whole = await planReset(f.client, input({ all: true, latest: dangling }))
-    const narrow = await planReset(f.client, input({ latest: dangling }))
-
-    expect(whole.pointer).toEqual(dangling)
-    expect(narrow.pointer).toBeNull()
+    const passes = [ledger('p1', 'blk_api'), ledger('p2', 'blk_web')]
+    for (const runId of ['p1', 'p2', 'gone', null]) {
+      const plan = await planReset(
+        f.client,
+        input({ all: true, passes, latest: { runId, path: '/state/latest.json' } }),
+      )
+      expect(plan.pointer?.reason).toBe(
+        runId === 'gone' || runId === null ? 'names-no-pass-on-disk' : 'names-a-removed-pass',
+      )
+    }
   })
 
   it('names no pointer when the state directory holds no pointer FILE', async () => {
@@ -502,7 +533,7 @@ describe('applyReset', () => {
     expect(f.removed).toEqual([])
     expect(report.passes[0]?.kept).toContain('blk_api')
     // …and the pointer stays with it, so a `latest` resume still resolves to a resumable pass.
-    expect(report.pointerRemoved).toBe(false)
+    expect(report.pointer).toBeNull()
   })
 
   it('removes the files of a pass whose frames all went, and the pointer naming it', async () => {
@@ -516,7 +547,10 @@ describe('applyReset', () => {
 
     expect(f.removed).toEqual(['/state/p1.json', '/state/p1.journal.jsonl', '/state/latest.json'])
     expect(report.passes[0]?.removed).toHaveLength(2)
-    expect(report.pointerRemoved).toBe(true)
+    expect(report.pointer).toEqual({
+      path: '/state/latest.json',
+      reason: 'names-a-removed-pass',
+    })
   })
 
   it('KEEPS every ledger while a blocker is still held, and FAILS', async () => {
@@ -539,21 +573,32 @@ describe('applyReset', () => {
     expect(report.frames[0]?.outcome).toEqual({ status: 'deleted' })
     expect(f.removed).toEqual([])
     expect(report.passes[0]?.kept).toContain('acme/catalog-api')
-    expect(report.pointerRemoved).toBe(false)
+    expect(report.pointer).toBeNull()
     expect(resetSucceeded(report)).toBe(false)
   })
 
-  it('removes a DANGLING pointer under --all, which no pass can be stranded by', async () => {
-    const f = fake({ services: [] })
+  it('removes a DANGLING pointer even where every ledger is KEPT, since it names none of them', async () => {
+    // A blocker keeps every pass's files (rule 2), and a pointer naming no pass on disk is still
+    // removed: rule 2 exists so a leftover frame can be mapped back to a run id, and this file maps
+    // nothing to anything.
+    const f = fake({ services: [{ serviceId: 'blk_web', title: 'Catalog Web' }] })
     const plan = await planFor(f, {
-      all: true,
+      passes: [ledger('p1', 'blk_web')],
       latest: { runId: null, path: '/state/latest.json' },
+      targeting: {
+        frames: [{ serviceId: 'blk_web', because: 'is targeted' }],
+        blockers: [{ subject: 'acme/catalog-api', steps: ['it is homed elsewhere'] }],
+      },
     })
 
     const report = await applyReset(f.client, f.files, plan)
 
     expect(f.removed).toEqual(['/state/latest.json'])
-    expect(report.pointerRemoved).toBe(true)
+    expect(report.passes[0]?.kept).toContain('acme/catalog-api')
+    expect(report.pointer).toEqual({
+      path: '/state/latest.json',
+      reason: 'names-no-pass-on-disk',
+    })
   })
 
   it('reports only the files that were there, since a pass routinely has one', async () => {
@@ -611,7 +656,11 @@ describe('the rendered plan and report', () => {
         facts: null,
       },
     ],
-    pointer: { runId: 'p1', path: '/state/latest.json' },
+    pointer: {
+      runId: 'p1',
+      path: '/state/latest.json',
+      reason: 'names-a-removed-pass' as const,
+    },
     leftovers: ['the repositories keep their content'],
   }
 
@@ -637,7 +686,7 @@ describe('the rendered plan and report', () => {
     const text = formatResetPlan(plan)
     expect(text).toContain('Local pass files to remove (1 pass(es))')
     expect(text).toContain('/state/p1.json')
-    expect(text).toContain("The 'latest' pointer names p1, so it goes too")
+    expect(text).toContain("The 'latest' pointer names p1, whose files are going, so it goes too")
     expect(text).not.toContain('Local pass files KEPT')
 
     const stranded = formatResetPlan({
@@ -649,6 +698,37 @@ describe('the rendered plan and report', () => {
     expect(stranded).not.toContain('Local pass files to remove')
     // …and the pointer stays with the pass whose files stay, or `latest` outlives its ledger.
     expect(stranded).not.toContain('so it goes too')
+  })
+
+  it('states WHY the pointer goes, so the two reasons never borrow each other’s words', () => {
+    // "Removed with its pass" and "removed because it named no pass at all" are different facts
+    // about the directory, and only one of them has a pass to name. Re-derived from `runId` alone,
+    // a pointer whose ledger someone removed by hand reads as a pass whose files are going.
+    const dangling = { ...plan, passes: [], pointer: null }
+    const nothing = formatResetPlan({
+      ...dangling,
+      pointer: { runId: null, path: '/state/latest.json', reason: 'names-no-pass-on-disk' },
+    })
+    expect(nothing).toContain("The 'latest' pointer names no pass at all")
+    expect(nothing).not.toContain('--all')
+
+    const byHand = formatResetPlan({
+      ...dangling,
+      pointer: { runId: 'gone', path: '/state/latest.json', reason: 'names-no-pass-on-disk' },
+    })
+    expect(byHand).toContain('names gone, which this directory does not hold')
+    expect(byHand).not.toContain('whose files are going')
+
+    expect(
+      formatResetReport({
+        frames: [],
+        passes: [],
+        pointer: { path: '/state/latest.json', reason: 'names-no-pass-on-disk' },
+        blockers: [],
+        notes: [],
+        leftovers: [],
+      }),
+    ).toContain('named no pass this directory holds')
   })
 
   it('says outright when there is nothing on the board to clear', () => {
@@ -710,7 +790,7 @@ describe('the rendered plan and report', () => {
         },
       ],
       passes: [{ runId: 'p1', removed: [], kept: 'blk_api could not be deleted' }],
-      pointerRemoved: false,
+      pointer: null,
       blockers: [{ subject: 'acme/catalog-web', steps: ['it is homed elsewhere'] }],
       // Restated by the OUTCOME and not only by the preview: `--yes` is a separate invocation and
       // the one every printed remedy ends with, so a report that dropped this reads as a clean board
@@ -803,5 +883,29 @@ describe('parseResetArgs', () => {
     const parsed = parseResetArgs(['p1', 'p2'], options)
     expect(parsed.ok).toBe(false)
     if (!parsed.ok) expect(parsed.problem).toContain('both name a pass')
+  })
+
+  it('THROWS on a suite flag this parser acts on itself, rather than shadowing it', () => {
+    // The pass-through exists so a flag the kit does not act on reaches the suite that does, and a
+    // name this module already matches never gets there: the suite would read its own flag as
+    // absent on every invocation while the kit's meaning ran in its place. `--all` is the one that
+    // costs the most, since the substituted meaning is a whole-board clear.
+    for (const flag of ['--yes', '-y', '--all']) {
+      expect(() => parseResetArgs([], { usage: USAGE, flags: [flag] })).toThrow(
+        /belong to parseResetArgs/,
+      )
+    }
+    // Not an operator refusal: nothing anyone typed produces it, and it fires on the argument-less
+    // preview, so a mis-wired suite cannot carry it as far as a board.
+    expect(() => parseResetArgs([], { usage: USAGE, flags: ['--all'] })).toThrow(/--all/)
+  })
+
+  it('THROWS on a suite flag declared without its dashes, which would eat the positional', () => {
+    // Matched ahead of the run id, so `reset latest` would set the flag and name no pass, and a
+    // reset aimed at one pass would clear whatever the configuration points at instead.
+    expect(() => parseResetArgs([], { usage: USAGE, flags: ['latest'] })).toThrow(
+      /spelled as it is typed/,
+    )
+    expect(() => parseResetArgs(['--purge-repos'], options)).not.toThrow()
   })
 })

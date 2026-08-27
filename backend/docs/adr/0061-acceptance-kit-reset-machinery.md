@@ -105,6 +105,17 @@ answering identically. That is a fact about `GET /api/v1/repos`, not about reset
 `blockedRepoMessage` already states it in full in the steps printed under the blocker in the same
 output. The kit's generic sentence names the rule; the suite's steps name the cause.
 
+**Rule 3 needs no `--all` clause, and having one made it narrower than it reads.** The private
+version planned the pointer's removal when it named a pass being removed OR the scope was `--all`,
+which is a scope standing in for a rule: `--all` plans every pass in the state directory, so a
+pointer under it either names one of them or names none. Read the rule directly (it names a pass this
+plan removes, or it names no pass this directory holds at all) and the flag drops out of the
+condition, and the dangling pointer a CONFIGURED reset used to leave behind goes with it. Which half
+put it in the plan rides the plan and the report as a `PointerReason`, because the two are different
+facts about the directory and only one of them has a pass to name: re-derived at format time from
+`runId === null`, a pointer whose ledger someone removed by hand reports as a pass whose files are
+going.
+
 **The kit gains a module whose only in-repo consumer is the suite that gave it up**, which is the
 ordinary case rather than ADR 0058's `resource.ts` problem: this code has been running against real
 deployments, and the platform's suite still drives every line of it.
@@ -122,3 +133,13 @@ deployments, and the platform's suite still drives every line of it.
 - A suite that answers no leftovers gets a sentence saying so rather than an empty section. An empty
   section reads exactly like a reset that reclaimed everything, which is the one reading the
   paragraph exists to prevent.
+- A configured reset now removes a dangling `latest` pointer, which only `--all` used to. It is the
+  file that can strand nobody by construction, and leaving it was the one place the shipped rule 3
+  was narrower than every sentence stating it.
+- `parseResetArgs` THROWS on a `flags` declaration it could not honour: a name it acts on itself
+  (`--yes` / `-y` / `--all`), or one spelled without its dashes, which it would match ahead of the
+  positional. Both are wiring rather than anything an operator typed, and both fail silently
+  otherwise: the suite reads its own flag as absent on every invocation while the kit's meaning runs
+  in its place, which is the exact "narrower job, reported as success" the pass-through exists to
+  prevent. A plain `Error` and not an operator refusal, the same disposition `requireResolved` takes
+  for a relative state directory.

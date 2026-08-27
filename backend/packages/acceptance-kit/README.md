@@ -182,7 +182,10 @@ A reset adds three more of the same kind, on `planReset`: `target` (which frames
 configuration is asking about, and in whose words), `ledgerServiceIds` (which of your own facts name
 a frame) and `leftovers` (what a reset does not reclaim, which is per suite by nature). The kit owns
 the ordering, the retention rule, the pointer rule and the two formatters; it never guesses what a
-pass created.
+pass created. Whatever else your command takes is declared to `parseResetArgs` as `flags` and handed
+back un-interpreted; it REFUSES, loudly and on every invocation, a name it acts on itself (`--yes`,
+`-y`, `--all`) or one spelled without its dashes, because either would have your flag read as absent
+while the parser's own meaning ran in its place.
 
 **CONFIGURATION is the fifth thing the kit does not decide**, and it is listed apart because half of
 it is not a seam at all. Reading your own configuration is yours; ASSEMBLING it is a `.env` write,
