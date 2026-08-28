@@ -139,8 +139,8 @@ Several shapes of entry fall out of this:
 
 - **Cloudflare-only**, e.g. `cloudflare-llama`, `kimi-k2.7`, `gpt-oss-120b`. One
   flavour, always on the binding.
-- **Dual-mode**: `qwen`, `kimi`, `deepseek`, `deepseek-v4-pro`, `glm`. A Cloudflare
-  base **plus** a direct, OpenRouter and/or subscription flavour. Note the **context
+- **Dual-mode**: `qwen`, `kimi`, `deepseek`, `deepseek-v4-pro`, `glm`, `glm-5.3-flash`. A
+  Cloudflare base **plus** a direct, OpenRouter and/or subscription flavour. Note the **context
   window** usually differs: the Cloudflare variant runs a cut context (e.g. DeepSeek V4
   Pro 131K) while the direct/subscription variant gets the full window (1M).
   `contextTokens` on the `ModelRef` surfaces this in the picker.
