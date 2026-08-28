@@ -12,7 +12,7 @@
 # 500 page that hangs the whole e2e suite. One version = one singleton. Keep these
 # in lockstep with the `vue` range in frontend/app/package.json.
 # The floor is 3.5.40: `@modular-vue/*` peer-requires `vue@^3.5.40`, so the whole
-# family moves up together (3.5.41 today) to keep the single-singleton invariant while
+# family moves up together (3.5.42 today) to keep the single-singleton invariant while
 # satisfying the modular-vue adoption (backend/docs/adr/0049-modular-vue-adoption.md).
 # vue-router is likewise pinned to one version. Nuxt 4.5.0 wants `vue-router@^5.2.0`
 # while `@nuxtjs/i18n` still resolves `^5.1.0`, so without this the SPA bundles two
@@ -20,7 +20,7 @@
 # so 5.2.0 satisfies every consumer — one version, one router singleton. Keep it in
 # lockstep with whatever `vue-router` Nuxt pulls on the next Nuxt bump.
 overrides:
-  vue: 3.5.41
+  vue: 3.5.42
   vue-router: 5.2.0
   # Single neutral engine: the @modular-vue/* bindings and @modular-frontend/journeys-engine
   # each depend on @modular-frontend/core across overlapping-but-not-identical ranges, so
@@ -90,15 +90,15 @@ overrides:
   '@nuxt/vite-builder>@babel/plugin-syntax-jsx': 7.29.7
   '@nuxt/nitro-server>@babel/plugin-proposal-decorators': 7.29.7
   '@nuxt/nitro-server>@babel/plugin-syntax-typescript': 7.29.7
-  '@vue/compiler-core': 3.5.41
-  '@vue/compiler-dom': 3.5.41
-  '@vue/compiler-sfc': 3.5.41
-  '@vue/compiler-ssr': 3.5.41
-  '@vue/reactivity': 3.5.41
-  '@vue/runtime-core': 3.5.41
-  '@vue/runtime-dom': 3.5.41
-  '@vue/server-renderer': 3.5.41
-  '@vue/shared': 3.5.41
+  '@vue/compiler-core': 3.5.42
+  '@vue/compiler-dom': 3.5.42
+  '@vue/compiler-sfc': 3.5.42
+  '@vue/compiler-ssr': 3.5.42
+  '@vue/reactivity': 3.5.42
+  '@vue/runtime-core': 3.5.42
+  '@vue/runtime-dom': 3.5.42
+  '@vue/server-renderer': 3.5.42
+  '@vue/shared': 3.5.42
 packages:
   - 'backend/packages/*'
   - 'backend/runtimes/*'

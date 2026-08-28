@@ -60,7 +60,7 @@
     "@cat-factory/spend": "workspace:*",
     "@hono/node-server": "^2.1.1",
     "drizzle-orm": "1.0.0-rc.4",
-    "hono": "^4.13.4",
+    "hono": "^4.13.5",
     "layered-loader": "^16.1.0",
     "pg": "^8.23.0",
     "pg-boss": "^12.28.0",
@@ -69,7 +69,7 @@
   },
   "devDependencies": {
     "@cat-factory/conformance": "workspace:*",
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.4.0",
     "@types/pg": "^8.23.1",
     "@types/ws": "^8.18.1",
     "drizzle-kit": "1.0.0-rc.4",
