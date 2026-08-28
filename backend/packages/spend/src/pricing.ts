@@ -210,6 +210,14 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
     outputPerMillion: 4.05,
     cacheReadPerMillion: 0.24,
   },
+  // GLM-5.3 Flash bills at $0.15 in / $0.03 cached / $0.50 out per 1M on Workers AI, the same
+  // list rate Z.ai and OpenRouter carry for it. Its cached tier is named because $0.03/M sits at
+  // twice the 0.1x floor its cheap input implies, so deriving it would under-meter a warm prefix.
+  'workers-ai:@cf/zai-org/glm-5.3-flash': {
+    inputPerMillion: 0.14,
+    outputPerMillion: 0.46,
+    cacheReadPerMillion: 0.03,
+  },
   'workers-ai:@cf/zai-org/glm-4.7-flash': { inputPerMillion: 0.06, outputPerMillion: 0.37 },
   'workers-ai:@cf/openai/gpt-oss-120b': { inputPerMillion: 0.32, outputPerMillion: 0.69 },
   'workers-ai:@cf/meta/llama-4-scout-17b-16e-instruct': {
@@ -287,6 +295,16 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // GLM-5.2's on the grounds of same base model and same vendor. Z.ai has since listed it at
   // $1.40 in / $0.26 cached / $4.40 out per 1M, identical to GLM-5.2, so the inherited rate is
   // now the published one and the two rows agree by fact rather than by assumption.
+  //
+  // GLM-5.3 Flash is a different tier entirely, listed at $0.15 in / $0.03 cached / $0.50 out.
+  // PRICED AT THAT LIST, not at the 50% launch promotion Z.ai runs until 2026-09-09: a temporary
+  // discount that lapses would leave the budget gate metering at half the real cost, and the gate
+  // may never undercount (the rule the Gemini Flash row states at length).
+  'zai:glm-5.3-flash': {
+    inputPerMillion: 0.14,
+    outputPerMillion: 0.46,
+    cacheReadPerMillion: 0.03,
+  },
   'zai:glm-5.3': { inputPerMillion: 1.29, outputPerMillion: 4.05, cacheReadPerMillion: 0.24 },
   'zai:glm-5.2': { inputPerMillion: 1.29, outputPerMillion: 4.05, cacheReadPerMillion: 0.24 },
   zai: { inputPerMillion: 1.29, outputPerMillion: 4.05, cacheReadPerMillion: 0.24 },
@@ -357,6 +375,14 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
     inputPerMillion: 1.09,
     outputPerMillion: 3.44,
     cacheReadPerMillion: 0.2,
+  },
+  // The same Z.ai list rates as the `zai:` row above: OpenRouter passes the upstream vendor's
+  // price through, and the launch promotion the slug is served at today is the half-rate this
+  // row deliberately does not carry.
+  'openrouter:z-ai/glm-5.3-flash': {
+    inputPerMillion: 0.14,
+    outputPerMillion: 0.46,
+    cacheReadPerMillion: 0.03,
   },
   // OpenRouter's published cache-read rate ($0.01/M) is ABOVE the 0.1x derived floor this
   // model's cheap input implies ($0.006/M), so it is named rather than derived.

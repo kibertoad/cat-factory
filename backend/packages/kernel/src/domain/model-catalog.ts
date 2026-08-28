@@ -275,6 +275,54 @@ export const MODEL_CATALOG: SelectableModel[] = [
     },
   },
   {
+    id: 'glm-5.3-flash',
+    family: 'glm',
+    label: 'GLM-5.3 Flash',
+    description:
+      "Z.ai's cheap multimodal sibling of GLM-5.3 (320B total, 18B active): reads images, " +
+      'runs on Workers AI or OpenRouter, and carries triple the coding-plan quota of GLM-5.3.',
+    // Z.ai shipped GLM-5.3-Flash on 2026-08-26 under MIT, weights and all, which is why this
+    // entry declares three routes on the day GLM-5.3 above still declares one: Workers AI and
+    // OpenRouter both serve GLM from the open weights, and the GLM Coding Plan carries it
+    // beside GLM-5.3.
+    //
+    // The window differs per route and each is the SERVING provider's own published figure
+    // rather than the vendor's headline "1M": Workers AI 1,048,576, OpenRouter 1,310,720, and
+    // Z.ai's own 1M on the coding plan.
+    cloudflare: {
+      provider: 'workers-ai',
+      model: '@cf/zai-org/glm-5.3-flash',
+      contextTokens: 1_048_576,
+      acceptsImages: true,
+    },
+    openrouter: {
+      ref: {
+        provider: 'openrouter',
+        model: 'z-ai/glm-5.3-flash',
+        contextTokens: 1_310_720,
+        acceptsImages: true,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+    // Run via Claude Code against Z.ai's Anthropic-compatible endpoint on a GLM coding-plan
+    // subscription. `acceptsImages` is left ABSENT here rather than copied off the two routes
+    // above: Z.ai documents the multimodal input on its own API shape, and nothing states that
+    // the Anthropic-compatible endpoint the coding plan is reached on carries it. Undeclared is
+    // reported as `unknown_model_image_input` and withholds a run's design renders, which is the
+    // honest answer until the route is verified; a copied `true` would promise a picture this
+    // platform never confirmed the endpoint accepts.
+    subscription: {
+      ref: {
+        provider: 'zai',
+        model: 'glm-5.3-flash',
+        harness: 'claude-code',
+        contextTokens: 1_000_000,
+      },
+      vendor: 'glm',
+    },
+  },
+  {
     id: 'glm',
     family: 'glm',
     label: 'GLM-5.2',

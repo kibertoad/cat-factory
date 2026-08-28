@@ -110,6 +110,19 @@ describe('contextWindowFor', () => {
     expect(cloudflare).not.toBe(subscription)
   })
 
+  it('reads three different windows off the three routes one entry declares', () => {
+    // `glm-5.3-flash` is served on all of Workers AI, OpenRouter and the GLM coding plan, and
+    // each publishes its own window. The catalog copies the SERVING provider's figure rather
+    // than the vendor's headline "1M", so a picker naming a route names that route's window.
+    expect(contextWindowFor({ provider: 'workers-ai', model: '@cf/zai-org/glm-5.3-flash' })).toBe(
+      1_048_576,
+    )
+    expect(contextWindowFor({ provider: 'openrouter', model: 'z-ai/glm-5.3-flash' })).toBe(
+      1_310_720,
+    )
+    expect(contextWindowFor({ provider: 'zai', model: 'glm-5.3-flash' })).toBe(1_000_000)
+  })
+
   it('resolves a bedrock ref through its catalog BASE id, prefix and all', () => {
     expect(contextWindowFor({ provider: 'bedrock', model: 'openai.gpt-oss-120b' })).toBe(131_072)
     expect(contextWindowFor({ provider: 'bedrock', model: 'eu.openai.gpt-oss-120b' })).toBe(131_072)
@@ -159,6 +172,15 @@ describe('isModelUsable', () => {
     expect(isModelUsable('qwen3.8-max', caps({ directProviders: new Set(['openrouter']) }))).toBe(
       true,
     )
+  })
+
+  it('keeps a Cloudflare floor under an entry that also declares a subscription route', () => {
+    // `glm-5.3-flash` ships with MIT weights, so Workers AI serves the same model the coding
+    // plan does: the binding alone makes it usable, unlike `glm-5.3`, whose weights had not
+    // been published and which therefore needs the GLM subscription.
+    expect(isModelUsable('glm-5.3-flash', caps({ cloudflareEnabled: true }))).toBe(true)
+    expect(isModelUsable('glm-5.3', caps({ cloudflareEnabled: true }))).toBe(false)
+    expect(isModelUsable('glm-5.3', caps({ subscriptionVendors: new Set(['glm']) }))).toBe(true)
   })
 
   it('gates an openrouter flavour on the openrouter key alone, not on the enabled-slug set', () => {
@@ -292,6 +314,28 @@ describe('resolveModelRef (the effective variant)', () => {
       model: 'qwen3.7-max',
       contextTokens: 1_000_000,
     })
+  })
+
+  it('carries image input per ROUTE, leaving an unverified route undeclared', () => {
+    // `glm-5.3-flash` is documented as multimodal by both providers that publish a model card
+    // for the id they serve. Its coding-plan route reaches Z.ai's Anthropic-compatible endpoint,
+    // which documents nothing about image input, so that ref declares NOTHING rather than
+    // inheriting the claim: absent is reported as `unknown_model_image_input` (a run withholds
+    // its design renders and says why), where a copied `true` would promise a picture nobody
+    // verified the endpoint accepts.
+    expect(resolveModelRef('glm-5.3-flash', caps({ cloudflareEnabled: true }))?.acceptsImages).toBe(
+      true,
+    )
+    expect(
+      resolveModelRef('glm-5.3-flash', caps({ directProviders: new Set(['openrouter']) }))
+        ?.acceptsImages,
+    ).toBe(true)
+    const subscription = resolveModelRef(
+      'glm-5.3-flash',
+      caps({ subscriptionVendors: new Set(['glm']) }),
+    )
+    expect(subscription?.model).toBe('glm-5.3-flash')
+    expect(subscription).not.toHaveProperty('acceptsImages')
   })
 
   it('walks the DEFAULT preference when several routes are usable', () => {
