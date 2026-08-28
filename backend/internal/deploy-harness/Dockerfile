@@ -20,8 +20,10 @@
 # standalone (the package's dev/test deps incl. pnpm `workspace:*` entries are irrelevant
 # here — the runtime uses only Node built-ins + the global k8s CLIs). Pinned by the
 # multi-arch index digest (valid for amd64 + arm64 via buildx); the mutable tag is kept
-# for readability. To bump: `docker buildx imagetools inspect node:26-trixie-slim`.
-FROM node:26-trixie-slim@sha256:4ebb5ace66f15a24c14c492e01a8beeed4fddf970a856109f5126e703e5fe503 AS build
+# for readability and can name a newer image, because the digest takes the same 24h
+# supply-chain window as the workspace dependencies (currently node 26.7.0). To bump:
+# `docker buildx imagetools inspect node:26-trixie-slim` and check the tag's age.
+FROM node:26-trixie-slim@sha256:5758d367d7b4f48b73a9bb3530e687e47efb289f3b43f9c0450a25225ae0db5d AS build
 WORKDIR /app
 COPY tsconfig.json ./
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
@@ -34,7 +36,7 @@ RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
 
 # ---- runtime: git + the k8s CLIs + the compiled wrapper ------------------
 # Pinned to the SAME digest as the build stage above (see that note to bump).
-FROM node:26-trixie-slim@sha256:4ebb5ace66f15a24c14c492e01a8beeed4fddf970a856109f5126e703e5fe503 AS runtime
+FROM node:26-trixie-slim@sha256:5758d367d7b4f48b73a9bb3530e687e47efb289f3b43f9c0450a25225ae0db5d AS runtime
 ENV NODE_ENV=production
 # buildx sets TARGETARCH (amd64 | arm64) — the CLI release assets use the same names.
 ARG TARGETARCH

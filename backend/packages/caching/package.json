@@ -35,7 +35,7 @@
     "layered-loader": "^16.1.0"
   },
   "devDependencies": {
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.4.0",
     "typescript": "7.0.2",
     "vitest": "^4.1.11"
   }
