@@ -2003,7 +2003,7 @@
       "calls": "{count} çağrı | {count} çağrı",
       "tokens": "{input} giriş / {output} çıkış",
       "subscriptionAside": "+{value} abonelik",
-      "capped": "En maliyetli {shown} tanesi gösteriliyor. {omitted} tanesi listelenmiyor, ancak yukarıdaki toplamlara dahil."
+      "capped": "En maliyetli {shown} tanesi gösteriliyor. {omitted} tanesi listelenmiyor, ancak yukarıdaki toplamlara dahil. | En maliyetli {shown} tanesi gösteriliyor. {omitted} tanesi listelenmiyor, ancak yukarıdaki toplamlara dahil."
     },
     "activity": {
       "heading": "Çalıştırmalar",

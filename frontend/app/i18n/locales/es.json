@@ -2003,7 +2003,7 @@
       "calls": "{count} llamada | {count} llamadas",
       "tokens": "{input} de entrada / {output} de salida",
       "subscriptionAside": "+{value} suscripción",
-      "capped": "Se muestran los {shown} más costosos. Hay {omitted} más que no aparecen, aunque los totales de arriba sí los incluyen."
+      "capped": "Se muestran los {shown} más costosos. Hay {omitted} más que no aparece, aunque los totales de arriba sí lo incluyen. | Se muestran los {shown} más costosos. Hay {omitted} más que no aparecen, aunque los totales de arriba sí los incluyen."
     },
     "activity": {
       "heading": "Ejecuciones",

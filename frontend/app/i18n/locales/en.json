@@ -2107,7 +2107,7 @@
       "calls": "{count} call | {count} calls",
       "tokens": "{input} in / {output} out",
       "subscriptionAside": "+{value} subscription",
-      "capped": "Showing the {shown} costliest. {omitted} more are not listed, though the totals above still include them."
+      "capped": "Showing the {shown} costliest. {omitted} more is not listed, though the totals above still include it. | Showing the {shown} costliest. {omitted} more are not listed, though the totals above still include them."
     },
     "activity": {
       "heading": "Runs",

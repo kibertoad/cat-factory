@@ -6,8 +6,8 @@ import { maxOf, segmentPct, spendMagnitude } from './ReportsPanel.logic'
 // One ranked spend breakdown: a horizontal bar per slice, split into the metered
 // (`violet-500`, real money) and subscription (`amber-600`, illustrative equivalent-API
 // cost) segments with a surface gap between them. Extracted from `ReportsPanel.vue` because
-// the panel renders four of these against different dimensions — the shape is identical,
-// only the row list and the heading differ.
+// the panel renders five of these against different dimensions: the shape is identical, only
+// the row list and the heading differ.
 //
 // Every bar is scaled against the HEAVIEST slice in this list, so a full bar means "the
 // biggest consumer here", never an absolute budget. The panel owns the legend (the two
@@ -77,8 +77,10 @@ const max = computed(() => maxOf(props.rows, spendMagnitude))
         </p>
       </li>
     </ul>
-    <p v-if="cap" class="mt-3 text-[10px] text-slate-500" data-testid="reports-spend-capped">
-      {{ t('reports.spend.capped', { shown: n(cap.returned), omitted: n(cap.omitted) }) }}
+    <p v-if="cap" class="mt-3 text-[10px] text-slate-500" :data-testid="`${testId}-capped`">
+      {{
+        t('reports.spend.capped', { shown: n(cap.returned), omitted: n(cap.omitted) }, cap.omitted)
+      }}
     </p>
   </div>
 </template>

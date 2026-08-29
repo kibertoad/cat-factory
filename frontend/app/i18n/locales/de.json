@@ -4056,7 +4056,7 @@
       "calls": "{count} Aufruf | {count} Aufrufe",
       "tokens": "{input} rein / {output} raus",
       "subscriptionAside": "+{value} Abo",
-      "capped": "Angezeigt werden die {shown} teuersten. {omitted} weitere sind nicht aufgeführt, in den Summen oben aber enthalten."
+      "capped": "Angezeigt werden die {shown} teuersten. {omitted} weiterer Eintrag ist nicht aufgeführt, in den Summen oben aber enthalten. | Angezeigt werden die {shown} teuersten. {omitted} weitere Einträge sind nicht aufgeführt, in den Summen oben aber enthalten."
     },
     "activity": {
       "heading": "Läufe",

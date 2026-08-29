@@ -266,11 +266,11 @@ The panel prints the note under the capped card. Pushing the cap down into SQL w
 transferring the tail, and is the follow-up if that transfer ever becomes the cost; it needs a
 `COUNT` beside the aggregate to keep `omitted` exact.
 
-### One request, twelve parallel aggregates
+### One request, thirteen parallel aggregates
 
 `ReportsService.summarize` issues eight spend breakdowns, four activity breakdowns and the
 trend in ONE `Promise.all`. They are independent aggregates over indexed columns, not an
-N+1: the alternative (a dimension query param) would make the panel issue the same twelve
+N+1: the alternative (a dimension query param) would make the panel issue the same thirteen
 requests serially from the browser.
 
 ### A dimension that can FAN OUT is pre-aggregated first

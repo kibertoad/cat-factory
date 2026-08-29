@@ -105,9 +105,9 @@ though. An export that serialises the PANEL's projection now inherits its cap, s
 export reads `ReportsService.breakdown` per dimension at a higher limit and states its own
 truncation, rather than saving what the browser happens to be holding.
 
-### 6. No caching on a twelve-aggregate read
+### 6. No caching on a thirteen-aggregate read
 
-Every panel open, window switch and board-filter change issues twelve aggregates, and nothing
+Every panel open, window switch and board-filter change issues thirteen aggregates, and nothing
 in the path touches the `AppCaches` seam. The short windows scan the ledger live, so this is
 real work repeated for a reader clicking between `24h` and `7d`.
 

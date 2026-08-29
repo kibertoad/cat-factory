@@ -4056,7 +4056,7 @@
       "calls": "{count} chiamata | {count} chiamate",
       "tokens": "{input} in ingresso / {output} in uscita",
       "subscriptionAside": "+{value} abbonamento",
-      "capped": "Vengono mostrati i {shown} più costosi. Altri {omitted} non sono elencati, ma i totali qui sopra li includono."
+      "capped": "Vengono mostrati i {shown} più costosi. Ne resta {omitted} non elencato, ma i totali qui sopra lo includono. | Vengono mostrati i {shown} più costosi. Ne restano altri {omitted} non elencati, ma i totali qui sopra li includono."
     },
     "activity": {
       "heading": "Esecuzioni",

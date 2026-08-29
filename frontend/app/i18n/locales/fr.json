@@ -2003,7 +2003,7 @@
       "calls": "{count} appel | {count} appels",
       "tokens": "{input} en entrée / {output} en sortie",
       "subscriptionAside": "+{value} abonnement",
-      "capped": "Les {shown} plus coûteux sont affichés. {omitted} autres ne sont pas listés, mais les totaux ci-dessus les incluent."
+      "capped": "Les {shown} plus coûteux sont affichés. {omitted} autre n’est pas listé, mais les totaux ci-dessus l’incluent. | Les {shown} plus coûteux sont affichés. {omitted} autres ne sont pas listés, mais les totaux ci-dessus les incluent."
     },
     "activity": {
       "heading": "Exécutions",

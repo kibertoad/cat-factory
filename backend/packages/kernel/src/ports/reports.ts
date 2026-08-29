@@ -22,8 +22,16 @@ import type { ReportActivityDimension, ReportSpendDimension } from '@cat-factory
 // what a reader receives. A SQL `LIMIT` would leave the store unable to say how much it
 // dropped, and every caller folds its window totals out of one of these breakdowns, so a
 // truncated aggregate would silently under-report the window. Returning everything grouped
-// is what lets the caller cap with an exact count of the tail: `ReportsService.summarize`
-// does that for the panel projection and `ReportsService.breakdown` for the public read.
+// is what lets the caller cap and still know the exact size of the tail: both callers do it
+// through the one `capSlices` helper, `ReportsService.summarize` for the panel projection and
+// `ReportsService.breakdown` for the public read.
+//
+// What each caller PUBLISHES of that cap differs, and only because their response shapes do.
+// The panel projection is internal, so it carries the exact count (`capped: [{ dimension,
+// returned, omitted }]`); the public `GET /api/v1/usage/spend` response is frozen on a boolean
+// `truncated`, so it narrows the same cap down to "there was more". That is a projection of one
+// computed cap, not a second mechanism: widening the public read to the exact count is an
+// additive change whenever a version bump is worth spending on it.
 //
 // For most dimensions the choice costs nothing: the model catalog, the agent-kind catalog,
 // an account's workspaces, its services, its repositories and the task-type picklist are all

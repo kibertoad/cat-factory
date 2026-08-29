@@ -2,6 +2,8 @@
 '@cat-factory/contracts': minor
 '@cat-factory/kernel': minor
 '@cat-factory/orchestration': minor
+'@cat-factory/app': minor
+'@cat-factory/conformance': patch
 '@cat-factory/worker': patch
 '@cat-factory/node-server': patch
 '@cat-factory/local-server': patch
@@ -26,7 +28,9 @@ projection as `capped: [{ dimension, returned, omitted }]`; an empty array means
 breakdown is complete, and the panel prints the note under the capped card. The cap is applied
 to the aggregated rows rather than pushed into the `GROUP BY` as a SQL `LIMIT`, which is what
 keeps `omitted` an exact count, and the window totals still fold from an uncapped breakdown,
-so what a cap costs the reader is the identity of the tail and never its money.
+so what a cap costs the reader is the identity of the tail and never its money. Both callers
+of the port now cap through the one `capSlices` helper; the public `GET /api/v1/usage/spend`
+keeps reporting it as the boolean `truncated` its frozen response schema carries.
 
 **Run activity gained a `repo` dimension.** Spend answered what a repository cost while
 activity could not answer how much work went into it or how much of it failed. The recorded

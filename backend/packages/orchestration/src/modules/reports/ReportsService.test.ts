@@ -207,12 +207,12 @@ describe('ReportsService.breakdown', () => {
   }
 
   it('routes ONE dimension through the same store the whole report would have used', async () => {
-    // The single-dimension read exists to cost one GROUP BY instead of eleven; what it must not
-    // do is answer from a different store than the panel, or a repository's quarterly cost would
-    // change with which surface asked for it.
+    // The single-dimension read exists to cost one GROUP BY instead of thirteen; what it must
+    // not do is answer from a different store than the panel, or a repository's quarterly cost
+    // would change with which surface asked for it.
     const live = await breakdown('7d', 'repo')
     expect(live.result.source).toBe('ledger')
-    // No activity aggregate either: a single-dimension read is one GROUP BY, not eleven.
+    // No activity aggregate either: a single-dimension read is one GROUP BY, not thirteen.
     expect(live.asked).toEqual({ ledger: ['repo'], rollup: [], activity: [] })
     expect(live.result.rolledUpThrough).toBeNull()
 
@@ -252,6 +252,18 @@ describe('ReportsService.breakdown', () => {
     )
     expect(exact.truncated).toBe(false)
     expect(exact.rows).toHaveLength(2)
+
+    // No limit at all is "serve the whole breakdown", which must read as a cap of nothing
+    // rather than as a cap the caller cannot see: `truncated` is the only thing this response
+    // has to say so, and a caller that named no limit is entitled to trust the list is whole.
+    const uncapped = await service({ reportsRepository, spendRollupRepository }).breakdown(
+      'acc_1',
+      'run',
+      '7d',
+      'ws_1',
+    )
+    expect(uncapped.truncated).toBe(false)
+    expect(uncapped.rows.map((row) => row.key)).toEqual(['heavy', 'light'])
   })
 
   it('folds the totals from the rows it returns, so the two cannot disagree', async () => {

@@ -2003,7 +2003,7 @@
       "calls": "{count} 件の呼び出し | {count} 件の呼び出し",
       "tokens": "入力 {input} / 出力 {output}",
       "subscriptionAside": "+{value} サブスクリプション",
-      "capped": "費用の大きい上位 {shown} 件を表示しています。ほかに {omitted} 件は一覧にありませんが、上の合計には含まれています。"
+      "capped": "費用の大きい上位 {shown} 件を表示しています。ほかに {omitted} 件は一覧にありませんが、上の合計には含まれています。 | 費用の大きい上位 {shown} 件を表示しています。ほかに {omitted} 件は一覧にありませんが、上の合計には含まれています。"
     },
     "activity": {
       "heading": "実行",

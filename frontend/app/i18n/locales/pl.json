@@ -2003,7 +2003,7 @@
       "calls": "{count} wywołanie | {count} wywołania | {count} wywołań",
       "tokens": "{input} wejścia / {output} wyjścia",
       "subscriptionAside": "+{value} subskrypcja",
-      "capped": "Pokazano {shown} najdroższych. Kolejnych {omitted} nie ujęto na liście, ale sumy powyżej je uwzględniają."
+      "capped": "Pokazano {shown} najdroższych. Kolejnej {omitted} pozycji nie ujęto na liście, ale sumy powyżej ją uwzględniają. | Pokazano {shown} najdroższych. Kolejnych {omitted} pozycji nie ujęto na liście, ale sumy powyżej je uwzględniają. | Pokazano {shown} najdroższych. Kolejnych {omitted} pozycji nie ujęto na liście, ale sumy powyżej je uwzględniają."
     },
     "activity": {
       "heading": "Uruchomienia",
