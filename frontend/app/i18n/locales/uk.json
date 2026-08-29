@@ -1969,6 +1969,7 @@
     "dimension": {
       "workspace": "Дошка",
       "service": "Сервіс",
+      "repo": "Репозиторій",
       "taskType": "Тип завдання"
     },
     "breakdown": {
@@ -1995,14 +1996,14 @@
     "spend": {
       "byModel": "Витрати за моделлю",
       "byAgentKind": "Витрати за типом агента",
-      "byRepo": "Витрати за репозиторієм",
       "byTicket": "Витрати за тікетом",
       "byRun": "Витрати за запуском",
       "heading": "Витрати",
       "empty": "За цей період використання не зафіксовано.",
       "calls": "{count} виклик | {count} виклики | {count} викликів",
       "tokens": "{input} вхід / {output} вихід",
-      "subscriptionAside": "+{value} підписка"
+      "subscriptionAside": "+{value} підписка",
+      "capped": "Показано {shown} найдорожчих. Ще {omitted} не наведено в списку, але підсумки вище їх ураховують."
     },
     "activity": {
       "heading": "Запуски",

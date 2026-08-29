@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ReportSpendRow } from '~/types/execution'
+import type { ReportSpendCap, ReportSpendRow } from '~/types/execution'
 import { maxOf, segmentPct, spendMagnitude } from './ReportsPanel.logic'
 
 // One ranked spend breakdown: a horizontal bar per slice, split into the metered
@@ -18,6 +18,13 @@ const props = defineProps<{
   testId: string
   /** Resolves a slice's display name (the panel owns the unattributed/i18n vocabulary). */
   labelOf: (row: ReportSpendRow) => string
+  /**
+   * What this breakdown left out, when the projection capped it. Rendered as a footer note:
+   * a reader who assumes a list is complete would read the heaviest hundred repositories as
+   * the whole bill, so the tail is STATED rather than left to be inferred from the row count.
+   * The window totals above still cover it, which is what the note says.
+   */
+  cap?: ReportSpendCap | null
 }>()
 
 const { t, n } = useI18n()
@@ -70,5 +77,8 @@ const max = computed(() => maxOf(props.rows, spendMagnitude))
         </p>
       </li>
     </ul>
+    <p v-if="cap" class="mt-3 text-[10px] text-slate-500" data-testid="reports-spend-capped">
+      {{ t('reports.spend.capped', { shown: n(cap.returned), omitted: n(cap.omitted) }) }}
+    </p>
   </div>
 </template>

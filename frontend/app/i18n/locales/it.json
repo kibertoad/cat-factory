@@ -4022,6 +4022,7 @@
     "dimension": {
       "workspace": "Board",
       "service": "Servizio",
+      "repo": "Repository",
       "taskType": "Tipo di attività"
     },
     "breakdown": {
@@ -4048,14 +4049,14 @@
     "spend": {
       "byModel": "Spesa per modello",
       "byAgentKind": "Spesa per tipo di agente",
-      "byRepo": "Spesa per repository",
       "byTicket": "Spesa per ticket",
       "byRun": "Spesa per esecuzione",
       "heading": "Spesa",
       "empty": "Nessun utilizzo registrato in questo periodo.",
       "calls": "{count} chiamata | {count} chiamate",
       "tokens": "{input} in ingresso / {output} in uscita",
-      "subscriptionAside": "+{value} abbonamento"
+      "subscriptionAside": "+{value} abbonamento",
+      "capped": "Vengono mostrati i {shown} più costosi. Altri {omitted} non sono elencati, ma i totali qui sopra li includono."
     },
     "activity": {
       "heading": "Esecuzioni",

@@ -1,4 +1,9 @@
-import type { ReportSpendDimension, ReportWindow } from '@cat-factory/contracts'
+import type {
+  ReportActivityDimension,
+  ReportSpendDimension,
+  ReportWindow,
+} from '@cat-factory/contracts'
+import { REPORT_SLICE_LIMIT } from '@cat-factory/contracts'
 import type {
   ReportActivityGroup,
   ReportSpendGroup,
@@ -31,7 +36,11 @@ function group(key: string, meteredCost: number): ReportSpendGroup {
 
 /** Records which dimensions each store was asked for, so the routing is observable. */
 function fakes() {
-  const asked = { ledger: [] as ReportSpendDimension[], rollup: [] as ReportSpendDimension[] }
+  const asked = {
+    ledger: [] as ReportSpendDimension[],
+    rollup: [] as ReportSpendDimension[],
+    activity: [] as ReportActivityDimension[],
+  }
   const activity: ReportActivityGroup[] = []
   const trend: ReportSpendTrendBucket[] = []
   const reportsRepository: ReportsRepository = {
@@ -39,7 +48,10 @@ function fakes() {
       asked.ledger.push(dimension)
       return [group('from-ledger', 2)]
     },
-    activityByDimension: async () => activity,
+    activityByDimension: async (_scope, dimension) => {
+      asked.activity.push(dimension)
+      return activity
+    },
     spendTrend: async () => trend,
   }
   const spendRollupRepository: SpendRollupRepository = {
@@ -125,6 +137,60 @@ describe('ReportsService source routing', () => {
     const { view } = await summarize('90d', true)
     expect(view.activity.byWorkspace).toEqual([])
   })
+
+  it('asks the run table for every activity dimension the projection carries', async () => {
+    // `repo` among them: several services can point at one repository and no read publishes
+    // that mapping, so folding the service counts up to a repository is not something a
+    // reader could do for itself.
+    const { asked, reportsRepository, spendRollupRepository } = fakes()
+    await service({ reportsRepository, spendRollupRepository }).summarize('acc_1', '7d')
+    expect(asked.activity).toEqual(['workspace', 'service', 'repo', 'taskType'])
+  })
+})
+
+describe('ReportsService activity-scaled caps', () => {
+  /** A store whose every breakdown returns `count` slices, heaviest first. */
+  function wideRepository(count: number): ReportsRepository {
+    return {
+      spendByDimension: async () =>
+        Array.from({ length: count }, (_, i) => group(`slice-${i}`, count - i)),
+      activityByDimension: async () => [],
+      spendTrend: async () => [],
+    }
+  }
+
+  it('serves the catalog-bounded dimensions whole and caps only the activity-scaled ones', async () => {
+    const wide = REPORT_SLICE_LIMIT + 7
+    const view = await service({ reportsRepository: wideRepository(wide) }).summarize('acc_1', '7d')
+    // A model or an agent kind comes from a catalog and stays small on its own; capping it
+    // would drop slices for nothing.
+    expect(view.spend.byModel).toHaveLength(wide)
+    expect(view.spend.byService).toHaveLength(wide)
+    // `run` and `ticket` grow with activity instead, so a busy 90-day window is otherwise a
+    // payload (and a DOM) nobody sized.
+    expect(view.spend.byRun).toHaveLength(REPORT_SLICE_LIMIT)
+    expect(view.spend.byTicket).toHaveLength(REPORT_SLICE_LIMIT)
+    expect(view.capped).toEqual([
+      { dimension: 'ticket', returned: REPORT_SLICE_LIMIT, omitted: 7 },
+      { dimension: 'run', returned: REPORT_SLICE_LIMIT, omitted: 7 },
+    ])
+  })
+
+  it('keeps the window totals over the WHOLE population a cap trimmed', async () => {
+    // What a cap costs the reader is the identity of the tail, never its money. The totals
+    // fold from the uncapped model breakdown, so the share the shown slices account for stays
+    // computable and a capped list can never read as the whole window.
+    const wide = REPORT_SLICE_LIMIT + 7
+    const view = await service({ reportsRepository: wideRepository(wide) }).summarize('acc_1', '7d')
+    expect(view.totals.calls).toBe(wide)
+    const shown = view.spend.byRun.reduce((sum, row) => sum + row.calls, 0)
+    expect(shown).toBeLessThan(view.totals.calls)
+  })
+
+  it('announces nothing when every breakdown fits, so an empty list means complete', async () => {
+    const view = await service({ reportsRepository: wideRepository(3) }).summarize('acc_1', '7d')
+    expect(view.capped).toEqual([])
+  })
 })
 
 describe('ReportsService.breakdown', () => {
@@ -146,12 +212,13 @@ describe('ReportsService.breakdown', () => {
     // change with which surface asked for it.
     const live = await breakdown('7d', 'repo')
     expect(live.result.source).toBe('ledger')
-    expect(live.asked).toEqual({ ledger: ['repo'], rollup: [] })
+    // No activity aggregate either: a single-dimension read is one GROUP BY, not eleven.
+    expect(live.asked).toEqual({ ledger: ['repo'], rollup: [], activity: [] })
     expect(live.result.rolledUpThrough).toBeNull()
 
     const durable = await breakdown('90d', 'ticket')
     expect(durable.result.source).toBe('daily-rollup')
-    expect(durable.asked).toEqual({ ledger: [], rollup: ['ticket'] })
+    expect(durable.asked).toEqual({ ledger: [], rollup: ['ticket'], activity: [] })
     expect(durable.result.rolledUpThrough).toBe(NOW - DAY)
   })
 

@@ -1969,6 +1969,7 @@
     "dimension": {
       "workspace": "Tableau",
       "service": "Service",
+      "repo": "Dépôt",
       "taskType": "Type de tâche"
     },
     "breakdown": {
@@ -1995,14 +1996,14 @@
     "spend": {
       "byModel": "Dépense par modèle",
       "byAgentKind": "Dépense par type d’agent",
-      "byRepo": "Dépense par dépôt",
       "byTicket": "Dépense par ticket",
       "byRun": "Dépense par exécution",
       "heading": "Dépense",
       "empty": "Aucune utilisation enregistrée sur cette période.",
       "calls": "{count} appel | {count} appels",
       "tokens": "{input} en entrée / {output} en sortie",
-      "subscriptionAside": "+{value} abonnement"
+      "subscriptionAside": "+{value} abonnement",
+      "capped": "Les {shown} plus coûteux sont affichés. {omitted} autres ne sont pas listés, mais les totaux ci-dessus les incluent."
     },
     "activity": {
       "heading": "Exécutions",

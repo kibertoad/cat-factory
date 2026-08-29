@@ -43,6 +43,7 @@ export type {
   ReportSpendDimension,
   ReportActivityDimension,
   ReportSpendRow,
+  ReportSpendCap,
   ReportActivityRow,
   ReportTrendPoint,
   ReportTotals,

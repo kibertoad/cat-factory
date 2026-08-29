@@ -1969,6 +1969,7 @@
     "dimension": {
       "workspace": "Tablica",
       "service": "Usługa",
+      "repo": "Repozytorium",
       "taskType": "Typ zadania"
     },
     "breakdown": {
@@ -1995,14 +1996,14 @@
     "spend": {
       "byModel": "Koszty według modelu",
       "byAgentKind": "Koszty według typu agenta",
-      "byRepo": "Koszty według repozytorium",
       "byTicket": "Koszty według zgłoszenia",
       "byRun": "Koszty według uruchomienia",
       "heading": "Koszty",
       "empty": "W tym okresie nie zarejestrowano użycia.",
       "calls": "{count} wywołanie | {count} wywołania | {count} wywołań",
       "tokens": "{input} wejścia / {output} wyjścia",
-      "subscriptionAside": "+{value} subskrypcja"
+      "subscriptionAside": "+{value} subskrypcja",
+      "capped": "Pokazano {shown} najdroższych. Kolejnych {omitted} nie ujęto na liście, ale sumy powyżej je uwzględniają."
     },
     "activity": {
       "heading": "Uruchomienia",

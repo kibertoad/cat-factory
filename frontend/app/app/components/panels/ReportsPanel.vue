@@ -5,6 +5,7 @@ import { lastCompleteRollupDay } from '@cat-factory/contracts'
 import type {
   ReportActivityDimension,
   ReportActivityRow,
+  ReportSpendDimension,
   ReportSpendRow,
   ReportWindow,
 } from '~/types/execution'
@@ -56,12 +57,14 @@ const WINDOWS: { value: ReportWindow; label: string }[] = [
   { value: '90d', label: t('reports.window.ninetyDays') },
 ]
 
-// The dimension the paired spend + activity breakdowns are grouped by. Model and agent
-// kind have no activity counterpart (a run carries no single kind), so they render
-// unconditionally above rather than joining this switch.
+// The dimension the paired spend + activity breakdowns are grouped by. Model and agent kind
+// have no activity counterpart (a run carries no single kind), and neither do ticket and run
+// (a ticket counts no runs of its own, and a run IS the unit), so those four render as
+// spend-only cards rather than joining this switch.
 const DIMENSIONS: { value: ReportActivityDimension; label: string }[] = [
   { value: 'workspace', label: t('reports.dimension.workspace') },
   { value: 'service', label: t('reports.dimension.service') },
+  { value: 'repo', label: t('reports.dimension.repo') },
   { value: 'taskType', label: t('reports.dimension.taskType') },
 ]
 const dimension = ref<ReportActivityDimension>('workspace')
@@ -80,6 +83,7 @@ const spendByDimension = computed<ReportSpendRow[]>(() => {
   if (!spend) return []
   if (dimension.value === 'workspace') return spend.byWorkspace
   if (dimension.value === 'service') return spend.byService
+  if (dimension.value === 'repo') return spend.byRepo
   return spend.byTaskType
 })
 const activityByDimension = computed<ReportActivityRow[]>(() => {
@@ -87,8 +91,18 @@ const activityByDimension = computed<ReportActivityRow[]>(() => {
   if (!activity) return []
   if (dimension.value === 'workspace') return activity.byWorkspace
   if (dimension.value === 'service') return activity.byService
+  if (dimension.value === 'repo') return activity.byRepo
   return activity.byTaskType
 })
+
+/**
+ * What a given breakdown left out, or null when it is complete. Only the activity-scaled
+ * dimensions are ever capped, so this is null for everything else and the card renders no
+ * footer at all.
+ */
+function capFor(dimension: ReportSpendDimension) {
+  return view.value?.capped.find((cap) => cap.dimension === dimension) ?? null
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -408,22 +422,12 @@ watch(
               </section>
             </div>
 
-            <!-- The TCO axes: what a repository, a ticket and a single run actually cost.
-                 Spend-only, like the pair above, because a run's activity is already sliced by
-                 the service that owns the repo and there is no second population to pair a
-                 ticket with, and a run IS the unit activity counts. -->
-            <div class="grid gap-6 md:grid-cols-3">
-              <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {{ t('reports.spend.byRepo') }}
-                </h2>
-                <ReportsSpendBreakdown
-                  :rows="view.spend.byRepo"
-                  :currency="currency"
-                  test-id="reports-spend-repo"
-                  :label-of="sliceLabel"
-                />
-              </section>
+            <!-- The two spend-only TCO axes: what a ticket and a single run cost. There is no
+                 second population to pair a ticket with, and a run IS the unit activity counts.
+                 The repository axis has both halves, so it sits in the paired switch below.
+                 Both of these grow with ACTIVITY rather than with a catalog, so both are the
+                 breakdowns the projection caps, and each says so under its own card. -->
+            <div class="grid gap-6 md:grid-cols-2">
               <section>
                 <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                   {{ t('reports.spend.byTicket') }}
@@ -433,6 +437,7 @@ watch(
                   :currency="currency"
                   test-id="reports-spend-ticket"
                   :label-of="sliceLabel"
+                  :cap="capFor('ticket')"
                 />
               </section>
               <section>
@@ -444,6 +449,7 @@ watch(
                   :currency="currency"
                   test-id="reports-spend-run"
                   :label-of="sliceLabel"
+                  :cap="capFor('run')"
                 />
               </section>
             </div>

@@ -177,6 +177,13 @@ function activityKeyAndLabel(
         key: sql<string>`coalesce(${agentRuns.service_id}, '')`,
         label: sql<string | null>`max(${labels.title})`,
       }
+    case 'repo':
+      // Key off the service (which always knows its repo id), label off the projection
+      // (which the run's board may hold no row in), mirroring the `repo` SPEND dimension.
+      return {
+        key: sql<string>`coalesce(${services.repo_github_id}::text, '')`,
+        label: sql<string | null>`max(${githubRepos.owner} || '/' || ${githubRepos.name})`,
+      }
     case 'taskType':
       return {
         key: sql<string>`coalesce(${blocks.task_type}, '')`,
@@ -348,6 +355,18 @@ export class DrizzleReportsRepository implements ReportsRepository {
       query = query.leftJoin(workspaces, eq(workspaces.id, agentRuns.workspace_id))
     } else if (dimension === 'service') {
       query = query.leftJoin(labels, eq(labels.serviceId, agentRuns.service_id))
+    } else if (dimension === 'repo') {
+      // Both joins are on primary keys (`services.id`, `(workspace_id, github_id)`), so
+      // neither can fan the aggregate out and multiply a repository's run count.
+      query = query
+        .leftJoin(services, eq(services.id, agentRuns.service_id))
+        .leftJoin(
+          githubRepos,
+          and(
+            eq(githubRepos.workspace_id, agentRuns.workspace_id),
+            eq(githubRepos.github_id, services.repo_github_id),
+          ),
+        )
     } else if (dimension === 'taskType') {
       query = query.leftJoin(
         blocks,

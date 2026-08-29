@@ -1,4 +1,5 @@
 import type {
+  ReportSpendCap,
   ReportSpendDimension,
   ReportSpendRow,
   ReportSpendSource,
@@ -6,6 +7,7 @@ import type {
   ReportWindow,
   ReportsView,
 } from '@cat-factory/contracts'
+import { REPORT_SLICE_LIMIT } from '@cat-factory/contracts'
 import type {
   Clock,
   ReportRange,
@@ -19,6 +21,7 @@ import {
   REPORT_WINDOWS,
   alignWindowStart,
   buildSpendTrend,
+  capSlices,
   foldTotals,
   toActivityRow,
   toSpendRow,
@@ -130,6 +133,7 @@ export class ReportsService {
       spendByRun,
       activityByWorkspace,
       activityByService,
+      activityByRepo,
       activityByTaskType,
       trend,
       rolledUpThrough,
@@ -144,11 +148,18 @@ export class ReportsService {
       spend.byDimension(scope, 'run', range),
       repo.activityByDimension(scope, 'workspace', range),
       repo.activityByDimension(scope, 'service', range),
+      repo.activityByDimension(scope, 'repo', range),
       repo.activityByDimension(scope, 'taskType', range),
       spend.trend(scope, range, bucketMs),
       spend.watermark(),
     ])
     const spendByModel = byModel.map(toSpendRow)
+    // Only the activity-scaled dimensions are capped. Everything else keys on a catalog and
+    // stays small on its own, so capping it would drop slices for nothing. The two that are
+    // capped announce it in `capped` below; the totals fold from the UNCAPPED model breakdown,
+    // so what a cap costs the reader is the identity of the tail and never its money.
+    const ticket = capSlices('ticket', spendByTicket.map(toSpendRow), REPORT_SLICE_LIMIT)
+    const run = capSlices('run', spendByRun.map(toSpendRow), REPORT_SLICE_LIMIT)
     return {
       window,
       generatedAt: until,
@@ -167,12 +178,14 @@ export class ReportsService {
         byService: spendByService.map(toSpendRow),
         byRepo: spendByRepo.map(toSpendRow),
         byTaskType: spendByTaskType.map(toSpendRow),
-        byTicket: spendByTicket.map(toSpendRow),
-        byRun: spendByRun.map(toSpendRow),
+        byTicket: ticket.rows,
+        byRun: run.rows,
       },
+      capped: [ticket.cap, run.cap].filter((cap): cap is ReportSpendCap => cap !== null),
       activity: {
         byWorkspace: activityByWorkspace.map(toActivityRow),
         byService: activityByService.map(toActivityRow),
+        byRepo: activityByRepo.map(toActivityRow),
         byTaskType: activityByTaskType.map(toActivityRow),
       },
       trend: { bucketMs, points: buildSpendTrend(trend, since, until, bucketMs) },

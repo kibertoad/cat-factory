@@ -1,12 +1,24 @@
 import { describe, expect, it } from 'vitest'
+import type { ReportSpendRow } from '@cat-factory/contracts'
 import type { ReportSpendTrendBucket } from '@cat-factory/kernel'
 import {
   REPORT_WINDOWS,
   alignWindowStart,
   buildSpendTrend,
+  capSlices,
   foldTotals,
   toSpendRow,
 } from './reports.logic.js'
+
+const spendRow = (key: string, meteredCost: number): ReportSpendRow => ({
+  key,
+  label: null,
+  inputTokens: 1,
+  outputTokens: 1,
+  calls: 1,
+  meteredCost,
+  subscriptionCost: 0,
+})
 
 const bucket = (over: Partial<ReportSpendTrendBucket>): ReportSpendTrendBucket => ({
   bucketStart: 0,
@@ -125,5 +137,31 @@ describe('reports logic', () => {
     )
     expect(points).toHaveLength(1)
     expect(points[0]).toMatchObject({ start: 1_000, meteredCost: 3, inputTokens: 12 })
+  })
+
+  it('leaves a breakdown that fits under the limit untouched and uncapped', () => {
+    // The `cap` is null rather than a zero-omission record, so an empty `capped` list on the
+    // projection means every breakdown in it is complete.
+    const rows = [spendRow('a', 3), spendRow('b', 2)]
+    const capped = capSlices('run', rows, 2)
+    expect(capped.rows).toEqual(rows)
+    expect(capped.cap).toBeNull()
+  })
+
+  it('keeps the heaviest slices and reports exactly how many it dropped', () => {
+    const rows = [spendRow('a', 5), spendRow('b', 4), spendRow('c', 3), spendRow('d', 2)]
+    const capped = capSlices('ticket', rows, 2)
+    expect(capped.rows.map((r) => r.key)).toEqual(['a', 'b'])
+    expect(capped.cap).toEqual({ dimension: 'ticket', returned: 2, omitted: 2 })
+  })
+
+  it('folds totals over the UNCAPPED rows, so a cap never costs the window its money', () => {
+    // The invariant the cap rests on: what a reader loses is the identity of the tail, and
+    // the totals still account for it. Folding after the cap would under-report the window
+    // while the projection still read as complete.
+    const rows = [spendRow('a', 5), spendRow('b', 4), spendRow('c', 3)]
+    const capped = capSlices('run', rows, 1)
+    expect(foldTotals(rows).meteredCost).toBe(12)
+    expect(foldTotals(capped.rows).meteredCost).toBe(5)
   })
 })

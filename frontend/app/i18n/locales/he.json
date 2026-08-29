@@ -1969,6 +1969,7 @@
     "dimension": {
       "workspace": "לוח",
       "service": "שירות",
+      "repo": "מאגר",
       "taskType": "סוג משימה"
     },
     "breakdown": {
@@ -1995,14 +1996,14 @@
     "spend": {
       "byModel": "עלות לפי מודל",
       "byAgentKind": "עלות לפי סוג סוכן",
-      "byRepo": "עלות לפי מאגר",
       "byTicket": "עלות לפי כרטיס",
       "byRun": "עלות לפי הרצה",
       "heading": "עלות",
       "empty": "לא נרשם שימוש בטווח הזה.",
       "calls": "קריאה אחת | שתי קריאות | {count} קריאות",
       "tokens": "{input} נכנס / {output} יוצא",
-      "subscriptionAside": "+{value} מנוי"
+      "subscriptionAside": "+{value} מנוי",
+      "capped": "מוצגים {shown} היקרים ביותר. {omitted} נוספים אינם מופיעים ברשימה, אך הסיכומים שלמעלה כוללים גם אותם."
     },
     "activity": {
       "heading": "ריצות",
