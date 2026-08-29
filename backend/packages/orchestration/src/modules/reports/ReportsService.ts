@@ -1,4 +1,5 @@
 import type {
+  ReportSpendCap,
   ReportSpendDimension,
   ReportSpendRow,
   ReportSpendSource,
@@ -6,6 +7,7 @@ import type {
   ReportWindow,
   ReportsView,
 } from '@cat-factory/contracts'
+import { REPORT_SLICE_LIMIT } from '@cat-factory/contracts'
 import type {
   Clock,
   ReportRange,
@@ -19,6 +21,7 @@ import {
   REPORT_WINDOWS,
   alignWindowStart,
   buildSpendTrend,
+  capSlices,
   foldTotals,
   toActivityRow,
   toSpendRow,
@@ -56,7 +59,14 @@ export interface ReportsBreakdown {
   totals: ReportTotals
   /** The heaviest slices by metered cost, capped by the caller's `limit` when it named one. */
   rows: ReportSpendRow[]
-  /** True when the window held more slices than `limit`, so `rows` is a prefix of them. */
+  /**
+   * True when the window held more slices than `limit`, so `rows` is a prefix of them.
+   *
+   * The cap itself is computed by `capSlices`, the same helper the panel projection uses, and
+   * carries an exact `omitted` count; this narrows it to a boolean because the public
+   * `GET /api/v1/usage/spend` response schema is frozen on one. Publishing the count is an
+   * additive change to that schema whenever it is worth a version bump.
+   */
   truncated: boolean
 }
 
@@ -130,6 +140,7 @@ export class ReportsService {
       spendByRun,
       activityByWorkspace,
       activityByService,
+      activityByRepo,
       activityByTaskType,
       trend,
       rolledUpThrough,
@@ -144,11 +155,18 @@ export class ReportsService {
       spend.byDimension(scope, 'run', range),
       repo.activityByDimension(scope, 'workspace', range),
       repo.activityByDimension(scope, 'service', range),
+      repo.activityByDimension(scope, 'repo', range),
       repo.activityByDimension(scope, 'taskType', range),
       spend.trend(scope, range, bucketMs),
       spend.watermark(),
     ])
     const spendByModel = byModel.map(toSpendRow)
+    // Only the activity-scaled dimensions are capped. Everything else keys on a catalog and
+    // stays small on its own, so capping it would drop slices for nothing. The two that are
+    // capped announce it in `capped` below; the totals fold from the UNCAPPED model breakdown,
+    // so what a cap costs the reader is the identity of the tail and never its money.
+    const ticket = capSlices('ticket', spendByTicket.map(toSpendRow), REPORT_SLICE_LIMIT)
+    const run = capSlices('run', spendByRun.map(toSpendRow), REPORT_SLICE_LIMIT)
     return {
       window,
       generatedAt: until,
@@ -167,12 +185,14 @@ export class ReportsService {
         byService: spendByService.map(toSpendRow),
         byRepo: spendByRepo.map(toSpendRow),
         byTaskType: spendByTaskType.map(toSpendRow),
-        byTicket: spendByTicket.map(toSpendRow),
-        byRun: spendByRun.map(toSpendRow),
+        byTicket: ticket.rows,
+        byRun: run.rows,
       },
+      capped: [ticket.cap, run.cap].filter((cap): cap is ReportSpendCap => cap !== null),
       activity: {
         byWorkspace: activityByWorkspace.map(toActivityRow),
         byService: activityByService.map(toActivityRow),
+        byRepo: activityByRepo.map(toActivityRow),
         byTaskType: activityByTaskType.map(toActivityRow),
       },
       trend: { bucketMs, points: buildSpendTrend(trend, since, until, bucketMs) },
@@ -185,8 +205,8 @@ export class ReportsService {
    * question (what did this repository cost, what did that ticket cost) actually needs.
    *
    * A separate method rather than a `dimension` option on `summarize`, because the two differ
-   * in what they COST: the panel renders every slice together and pays for eleven aggregates,
-   * where this is one `GROUP BY` and returning the other ten would be work nobody asked for.
+   * in what they COST: the panel renders every slice together and pays for thirteen aggregates,
+   * where this is one `GROUP BY` and returning the other twelve would be work nobody asked for.
    * Everything else about it is deliberately the same read, so a number here and the same
    * number in the panel come from one code path.
    *
@@ -194,6 +214,11 @@ export class ReportsService {
    * population either way, so a capped breakdown still reports what was spent and only loses
    * the identity of the tail. That is why the cap is applied here rather than pushed into the
    * `GROUP BY` as a SQL `LIMIT`, which would take the totals down with it.
+   *
+   * The cap runs through `capSlices`, the same helper the panel projection caps its two
+   * activity-scaled dimensions with, so there is ONE place a spend breakdown is shortened and
+   * one definition of which end it keeps. This read then reports the cap as the boolean its
+   * frozen public response schema carries; see `truncated`.
    */
   async breakdown(
     accountId: string,
@@ -216,6 +241,9 @@ export class ReportsService {
       spend.watermark(),
     ])
     const rows = groups.map(toSpendRow)
+    // An absent `limit` means "serve the whole breakdown", which is a cap of nothing rather
+    // than a different code path.
+    const capped = limit === undefined ? { rows, cap: null } : capSlices(dimension, rows, limit)
     return {
       dimension,
       window,
@@ -229,8 +257,8 @@ export class ReportsService {
       // cap for the same reason: a total over the returned prefix would under-report the
       // window while still reading as the window's total.
       totals: foldTotals(rows),
-      truncated: limit !== undefined && rows.length > limit,
-      rows: limit !== undefined ? rows.slice(0, limit) : rows,
+      truncated: capped.cap !== null,
+      rows: capped.rows,
     }
   }
 

@@ -1969,6 +1969,7 @@
     "dimension": {
       "workspace": "Pano",
       "service": "Servis",
+      "repo": "Depo",
       "taskType": "Görev türü"
     },
     "breakdown": {
@@ -1995,14 +1996,14 @@
     "spend": {
       "byModel": "Modele göre harcama",
       "byAgentKind": "Ajan türüne göre harcama",
-      "byRepo": "Depoya göre harcama",
       "byTicket": "Bilete göre harcama",
       "byRun": "Çalıştırmaya göre harcama",
       "heading": "Harcama",
       "empty": "Bu dönemde kayıtlı kullanım yok.",
       "calls": "{count} çağrı | {count} çağrı",
       "tokens": "{input} giriş / {output} çıkış",
-      "subscriptionAside": "+{value} abonelik"
+      "subscriptionAside": "+{value} abonelik",
+      "capped": "En maliyetli {shown} tanesi gösteriliyor. {omitted} tanesi listelenmiyor, ancak yukarıdaki toplamlara dahil. | En maliyetli {shown} tanesi gösteriliyor. {omitted} tanesi listelenmiyor, ancak yukarıdaki toplamlara dahil."
     },
     "activity": {
       "heading": "Çalıştırmalar",

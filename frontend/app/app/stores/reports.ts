@@ -4,9 +4,9 @@ import type { ReportWindow, ReportsView } from '~/types/execution'
 import { useAccountsStore } from '~/stores/accounts'
 
 /**
- * Reports: cross-cutting usage analytics for the active account — spend per model and
- * agent kind, spend + run activity per workspace / service / task type, and a spend trend,
- * over a selectable window and optionally narrowed to one board.
+ * Reports: cross-cutting usage analytics for the active account: spend per model, agent
+ * kind, ticket and run, spend + run activity per workspace / service / repository / task
+ * type, and a spend trend, over a selectable window and optionally narrowed to one board.
  *
  * The sibling of the `platformObservability` store: same account scope, same admin gate,
  * same on-demand load. Nothing is pushed live (these are periodic rollups); changing the

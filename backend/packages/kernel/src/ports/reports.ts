@@ -4,7 +4,7 @@ import type { ReportActivityDimension, ReportSpendDimension } from '@cat-factory
 // `PlatformMetricsRepository` answers "is the deployment HEALTHY" (outcomes, failure
 // taxonomy, latency), this answers "how is it being USED" — where the spend and the
 // work actually go, sliced by model, agent kind, workspace, service, repository, task
-// type and tracker ticket.
+// type, tracker ticket and run.
 //
 // Every method is ONE aggregate query. A breakdown is a single `GROUP BY` over the
 // ledger (`token_usage`) or the run table (`agent_runs`), scoped to an account by the
@@ -18,18 +18,28 @@ import type { ReportActivityDimension, ReportSpendDimension } from '@cat-factory
 // not a cross-database read. The telemetry store (`llm_call_metrics`) is a physically
 // separate database on Cloudflare and is never joined here.
 //
-// No row cap, on purpose. Capping would either silently drop slices or make the folded
-// totals disagree with the rows, so a breakdown returns everything it grouped.
+// No row cap HERE, on purpose, and that is a statement about this port rather than about
+// what a reader receives. A SQL `LIMIT` would leave the store unable to say how much it
+// dropped, and every caller folds its window totals out of one of these breakdowns, so a
+// truncated aggregate would silently under-report the window. Returning everything grouped
+// is what lets the caller cap and still know the exact size of the tail: both callers do it
+// through the one `capSlices` helper, `ReportsService.summarize` for the panel projection and
+// `ReportsService.breakdown` for the public read.
 //
-// For every dimension but one that is free: the model catalog, the agent-kind catalog,
-// an account's workspaces, its services, its repositories and the task-type picklist are
-// all naturally bounded. `ticket` is NOT: its cardinality is the number of distinct
-// tracker issues with spend in the window, which grows with ACTIVITY rather than with a
-// catalog, so a busy account over a 90-day window can return thousands of rows where the
-// others return tens. That is a stated, bounded-by-window cost rather than an unbounded
-// one, and it is the honest shape: a partial ticket list is exactly the "smaller number
-// that reads as complete" this port refuses everywhere else. Capping it properly means a
-// contract that reports what it dropped, not a silent `LIMIT`.
+// What each caller PUBLISHES of that cap differs, and only because their response shapes do.
+// The panel projection is internal, so it carries the exact count (`capped: [{ dimension,
+// returned, omitted }]`); the public `GET /api/v1/usage/spend` response is frozen on a boolean
+// `truncated`, so it narrows the same cap down to "there was more". That is a projection of one
+// computed cap, not a second mechanism: widening the public read to the exact count is an
+// additive change whenever a version bump is worth spending on it.
+//
+// For most dimensions the choice costs nothing: the model catalog, the agent-kind catalog,
+// an account's workspaces, its services, its repositories and the task-type picklist are all
+// naturally bounded. `ticket` and `run` are NOT. Their cardinality is the number of distinct
+// tracker issues, and of pipeline executions, that spent anything in the window, which grows
+// with ACTIVITY rather than with a catalog, so a busy account over a 90-day window can group
+// thousands of rows where the others group tens. Anything reading those two straight off this
+// port and handing them to a client owes its reader a cap that says what it left out.
 
 /** Which rows a report aggregates: an account, optionally narrowed to one of its boards. */
 export interface ReportScope {
@@ -70,6 +80,11 @@ export interface ReportSpendGroup {
 
 /**
  * One slice of an activity breakdown, aggregated from the runs CREATED in the window.
+ *
+ * Sliceable by board, service, REPOSITORY and task type. The repository axis is not derivable
+ * from the service one: several services legitimately point at a single repository (the
+ * monorepo case), and no read publishes the service-to-repository map, so folding service
+ * counts up to a repository is not something a caller can do for itself.
  *
  * Spans EVERY `agent_runs` kind (`execution`, `bootstrap`, `env-config-repair`), deliberately
  * and unlike `PlatformMetricsRepository`, which groups by kind because its question is about

@@ -33,7 +33,7 @@ What existed was scattered and none of it composed:
 - One admin view over an **account**, with an optional narrowing to a single board, that
   slices the same window every way an operator asks about: **spend by model, by agent kind,
   by board, by service, by repository, by task type, by tracker ticket, by run**, and **run
-  activity by board, by service, by task type**, plus a **spend trend**. Run, repository and
+  activity by board, by service, by repository, by task type**, plus a **spend trend**. Run, repository and
   ticket are the TCO axes: what an organisation actually budgets against, and the ones that
   have to still be answerable a year later (see "Durable cost attribution").
 - **Never conflate real money with flat-rate quota usage.** A subscription harness call's
@@ -153,13 +153,13 @@ A call whose run cannot be resolved (a run pruned by retention, or a call record
 Dropping it would under-report the window while the report still looked complete. The SPA
 labels it "Unattributed"; conformance asserts it survives.
 
-### No row cap
+### No row cap in the PORT
 
-Every dimension has naturally bounded cardinality: the model catalog, the agent-kind
-catalog, an account's boards, its services, the task-type picklist. Capping would either
-silently drop slices (which the repo's "no silent caps" rule forbids) or make the folded
-totals disagree with the rows shown. Documented on the port so a future dimension with
-unbounded cardinality is a deliberate decision, not an accident.
+The store returns every slice it grouped, and the cap above happens a layer up. That is what
+lets the cap report an exact `omitted`, and it keeps the port's "a breakdown partitions the
+whole window" property intact, which is what every caller's totals fold rests on. Documented on
+the port, so a new dimension with unbounded cardinality has to decide where its cap goes rather
+than acquiring one by accident.
 
 ### Totals are folded, not queried
 
@@ -215,18 +215,62 @@ reports the real `since`, and the panel prints it, so the view always says what 
 ### Activity has a narrower axis than spend
 
 A RUN carries no single agent kind or model: those are per-step facts, which is precisely
-what the spend breakdowns key on. So `ReportActivityDimension` is `workspace | service |
-taskType` while `ReportSpendDimension` adds `model`, `agentKind`, `repo`, `ticket` and `run`. The
+what the spend breakdowns key on. So `ReportActivityDimension` is `workspace | service | repo
+| taskType` while `ReportSpendDimension` adds `model`, `agentKind`, `ticket` and `run`. The
 contract encodes the difference rather than returning empty arrays for combinations that
-cannot exist. `repo` and `ticket` could in principle be activity axes too, but a run is
-already counted under the service that owns its repo, so the second population would answer
-the same question twice.
+cannot exist.
 
-### One request, eleven parallel aggregates
+`ticket` stays out of it because a ticket is a unit of INTENT that carries no runs of its own
+and that a run may share with other tickets, so counting runs under it would invent a
+population. `run` stays out because a run IS the unit activity counts.
 
-`ReportsService.summarize` issues seven spend breakdowns, three activity breakdowns and the
+`repo` was originally out too, on the reasoning that a run is already counted under the
+service that owns its repository, so a repository axis would answer the same question twice.
+That holds only where services map one-to-one onto repositories. Several services pointing at
+ONE repository is the ordinary monorepo shape (it is what the repo link's `directory` carries),
+and no read here publishes the service-to-repository map, so a reader could not fold the
+service counts up to a repository even knowing they needed to. "How much work went into this
+repository, and how much of it failed" was therefore unanswerable while its cost sat one card
+away. It is now its own `GROUP BY` over `agent_runs`, joining the same two primary-key joins
+the `repo` spend dimension uses (`services.id`, then `github_repos (workspace_id, github_id)`),
+so neither can fan the run count out. The conformance fixture seeds two services on one
+repository across two boards, which is what pins the fold.
+
+### The activity-scaled dimensions are capped, and each says what it dropped
+
+`ticket` and `run` are the two dimensions whose row count grows with ACTIVITY rather than with
+a catalog: one row per tracker issue that a run touched, one per pipeline execution that spent
+anything. Every other dimension keys on a model catalog, an agent-kind catalog, an account's
+boards, its services, its repositories or the task-type picklist, and stays in the tens on its
+own. A busy account over `90d` produces thousands of the first two, which the panel projection
+carried whole and the SPA rendered as one DOM row each.
+
+So `summarize` caps those two at `REPORT_SLICE_LIMIT` (100) and reports each cap on the
+projection's `capped` array as `{ dimension, returned, omitted }`; a dimension with no tail
+contributes no entry, so an empty array means every breakdown in the projection is complete.
+The public `GET /api/v1/usage/spend` had already reached this conclusion for its own reasons
+(`PUBLIC_SPEND_MAX_ROWS`), and the two now cap through the same service.
+
+Three properties make the cap honest rather than a smaller number that reads as complete:
+
+- **The cap is applied to the AGGREGATED rows, not pushed into the `GROUP BY` as a SQL
+  `LIMIT`.** A `LIMIT` would leave the store unable to say how big the tail was, which is the
+  difference between "100 shown, 4,212 more" and a bare "there was more".
+- **Totals fold from an UNCAPPED breakdown** (the `model` one), so what a cap costs the reader
+  is the identity of the tail and never its money: the share the shown slices account for stays
+  computable. This is the same rule the public read states about its own `totals`.
+- **Rows arrive heaviest-first from the store**, so the prefix is the heavy end a cost question
+  is actually about.
+
+The panel prints the note under the capped card. Pushing the cap down into SQL would save
+transferring the tail, and is the follow-up if that transfer ever becomes the cost; it needs a
+`COUNT` beside the aggregate to keep `omitted` exact.
+
+### One request, thirteen parallel aggregates
+
+`ReportsService.summarize` issues eight spend breakdowns, four activity breakdowns and the
 trend in ONE `Promise.all`. They are independent aggregates over indexed columns, not an
-N+1: the alternative (a dimension query param) would make the panel issue the same eleven
+N+1: the alternative (a dimension query param) would make the panel issue the same thirteen
 requests serially from the browser.
 
 ### A dimension that can FAN OUT is pre-aggregated first
@@ -264,11 +308,12 @@ self-describing, so their `label` is null and the SPA renders the key.
 `reportsViewSchema`:
 
 ```
-{ window, generatedAt, since, workspaceId, currency,
+{ window, generatedAt, since, workspaceId, currency, source, rolledUpThrough,
   totals:   { inputTokens, outputTokens, calls, meteredCost, subscriptionCost },
   spend:    { byModel, byAgentKind, byWorkspace, byService,
-              byRepo, byTaskType, byTicket },                             // ReportSpendRow[]
-  activity: { byWorkspace, byService, byTaskType },                        // ReportActivityRow[]
+              byRepo, byTaskType, byTicket, byRun },                       // ReportSpendRow[]
+  capped:   [ { dimension, returned, omitted } ],                          // ReportSpendCap[]
+  activity: { byWorkspace, byService, byRepo, byTaskType },                // ReportActivityRow[]
   trend:    { bucketMs, points } }                                         // ReportTrendPoint[]
 ```
 
@@ -316,14 +361,10 @@ activity cards.
 
 ## Not done (deliberately)
 
-- **No cap on the `ticket` breakdown, and it is the one dimension that could want one.**
-  Every other dimension's cardinality comes from a catalog (models, agent kinds, an account's
-  boards / services / repos, the task-type picklist) and is naturally bounded; a ticket
-  breakdown's row count grows with ACTIVITY, so a busy account over 90 days can return
-  thousands of rows where the others return tens. It is left uncapped deliberately: a silent
-  `LIMIT` is precisely the "smaller number that reads as complete" this view refuses
-  everywhere else, and capping it honestly means a contract that reports what it dropped.
-  Add that when someone hits the size, not before.
+- **No wire shape for a cap that is NOT a plain prefix.** `capped` says how many slices were
+  dropped, and the reader may assume they were the cheapest, because the cap is a prefix of the
+  store's heaviest-first order. A future cap that is not (a sampled tail, a per-board quota)
+  would have to say so rather than reusing this field.
 - **No CSV/JSON export.** The endpoint already returns the whole projection as JSON; an
   export button is a thin SPA addition once someone asks for one. The public per-dimension read
   above covers the machine consumer that would otherwise have been the reason to add one.
@@ -332,6 +373,8 @@ activity cards.
   its older history only for as long as the ledger's own retention holds it. Widening that is a
   one-constant change plus a slower first few passes; it is not done by default because the
   catch-up cost lands on a cron nobody is watching.
+- **No `repo` or `ticket` axis on the SPEND TREND.** The trend is one series over the window,
+  and per-dimension trend lines are a different chart, not a wider aggregate.
 - **No per-user spend dimension.** `token_usage.user_id` is denormalized and would make one
   more spend axis trivial, but attributing cost to individuals is a policy decision, not a
   reporting one.

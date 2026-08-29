@@ -1,5 +1,7 @@
 import type {
   ReportActivityRow,
+  ReportSpendCap,
+  ReportSpendDimension,
   ReportSpendRow,
   ReportSpendSource,
   ReportTotals,
@@ -111,6 +113,33 @@ export function foldTotals(rows: ReportSpendRow[]): ReportTotals {
     totals.subscriptionCost += row.subscriptionCost
   }
   return totals
+}
+
+/**
+ * Take the heaviest `limit` slices of a breakdown and say what that left behind.
+ *
+ * Only the activity-scaled dimensions are passed through here (`run` is one row per pipeline
+ * execution, `ticket` one per tracker issue a run touched); everything else keys on a catalog
+ * and is served whole. The cap is applied to the AGGREGATED rows rather than pushed into the
+ * `GROUP BY` as a SQL `LIMIT`, which is what makes the returned `omitted` an exact count of
+ * the tail rather than a boolean "there was more". Rows arrive heaviest-first from the store,
+ * so the prefix is the heavy end a cost question is actually about.
+ *
+ * The `cap` is null when nothing was dropped: a projection whose `capped` list is empty is
+ * complete everywhere, which is what lets the reader trust an ordinary breakdown without
+ * checking anything. Window totals are folded from an UNCAPPED breakdown, so they still cover
+ * the tail this drops.
+ */
+export function capSlices(
+  dimension: ReportSpendDimension,
+  rows: ReportSpendRow[],
+  limit: number,
+): { rows: ReportSpendRow[]; cap: ReportSpendCap | null } {
+  if (rows.length <= limit) return { rows, cap: null }
+  return {
+    rows: rows.slice(0, limit),
+    cap: { dimension, returned: limit, omitted: rows.length - limit },
+  }
 }
 
 /**

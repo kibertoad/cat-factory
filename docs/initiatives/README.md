@@ -86,6 +86,7 @@ a tracker document](../../CLAUDE.md).
 - [Per-class token telemetry + cost surfacing](./token-telemetry-per-class-and-cost.md)
 - [Per-model Bedrock enablement + per-preset provider preference](./model-provider-preference.md)
 - [Per-run token-burn instrumentation](./token-burn-instrumentation.md)
+- [Reporting-surface gaps](./reporting-surface-gaps.md)
 - [Spend forecasting, burn-rate and budget alerts](./spend-forecasting-and-alerts.md)
 - [Stuck-run audit](./stuck-run-audit.md)
 - [Token-usage and subscription-quota tracking](./usage-and-quota-tracking.md)

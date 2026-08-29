@@ -143,6 +143,17 @@ const ACTIVITY_DIMENSIONS: Record<
     key: "COALESCE(ar.service_id, '')",
     label: 'MAX(sl.title)',
   },
+  repo: {
+    // The same two 1:1 primary-key joins the `repo` SPEND dimension uses, minus the hop to
+    // the run (a run row IS the unit counted here). Key off the service, label off the
+    // projection, so a repository the run's board holds no projection row for keeps its runs
+    // and loses its name.
+    joins: `LEFT JOIN services s ON s.id = ar.service_id
+            LEFT JOIN github_repos gr ON gr.workspace_id = ar.workspace_id
+                                     AND gr.github_id = s.repo_github_id`,
+    key: "COALESCE(CAST(s.repo_github_id AS TEXT), '')",
+    label: "MAX(gr.owner || '/' || gr.name)",
+  },
   taskType: {
     joins: 'LEFT JOIN blocks b ON b.workspace_id = ar.workspace_id AND b.id = ar.block_id',
     key: "COALESCE(b.task_type, '')",

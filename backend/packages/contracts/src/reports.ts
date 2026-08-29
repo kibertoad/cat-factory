@@ -84,9 +84,57 @@ export type ReportSpendDimension = v.InferOutput<typeof reportSpendDimensionSche
  * What an ACTIVITY breakdown groups by. A run carries no single agent kind or model
  * (those are per-step facts, which is what the spend breakdowns key on), so the
  * activity axis is deliberately narrower than the spend axis.
+ *
+ * `repo` is here and `ticket` is not, and the asymmetry is the point. A ticket names a unit
+ * of INTENT that a run may share with other tickets and that carries no runs of its own, so
+ * counting runs under it would invent a population; a repository is where the work physically
+ * lands, and every run has exactly one. It is also not derivable from the `service` axis:
+ * several services legitimately point at ONE repository (the monorepo case the repo link's
+ * `directory` carries), and the report publishes no service-to-repository map for a reader to
+ * fold the counts with, so "how much work went into this repository, and how much of it
+ * failed" is unanswerable without its own axis.
  */
-export const reportActivityDimensionSchema = v.picklist(['workspace', 'service', 'taskType'])
+export const reportActivityDimensionSchema = v.picklist([
+  'workspace',
+  'service',
+  'repo',
+  'taskType',
+])
 export type ReportActivityDimension = v.InferOutput<typeof reportActivityDimensionSchema>
+
+/**
+ * How many slices the panel projection carries for a spend dimension that grows with ACTIVITY
+ * rather than with a catalog.
+ *
+ * Those are `ticket` and `run`, and only those: every other dimension keys on something
+ * bounded (the model catalog, the agent-kind catalog, an account's boards, its services, its
+ * repositories, the task-type picklist) and stays in the tens on its own. `run` is one row per
+ * pipeline execution that spent anything and `ticket` one per tracker issue a run touched, so
+ * a busy account over `90d` produces thousands of slices where the others produce tens.
+ *
+ * A cost question is about the heavy end and the rows are heaviest-first, so a hundred slices
+ * is the whole of the answer and the tail is a payload (and a DOM) nobody sized. The cap is
+ * applied AFTER the aggregate rather than as a SQL `LIMIT`, which is what lets
+ * {@link reportSpendCapSchema} report the exact size of what it dropped.
+ */
+export const REPORT_SLICE_LIMIT = 100
+
+/**
+ * What one capped breakdown dropped.
+ *
+ * Present only for a dimension that actually had a tail, so an empty `capped` array means
+ * every breakdown in the projection is complete. The window `totals` are folded from an
+ * UNCAPPED breakdown and are unaffected by any of this, so a capped list loses the identity of
+ * its tail and never its money: the reader can still say what share the shown slices are.
+ */
+export const reportSpendCapSchema = v.object({
+  dimension: reportSpendDimensionSchema,
+  /** Slices carried in the projection. */
+  returned: v.number(),
+  /** Slices the window held beyond `returned`. Always ≥ 1 (a cap with nothing dropped is absent). */
+  omitted: v.number(),
+})
+export type ReportSpendCap = v.InferOutput<typeof reportSpendCapSchema>
 
 /**
  * One slice of a spend breakdown. `key` is the raw dimension value and the row's
@@ -213,10 +261,19 @@ export const reportsViewSchema = v.object({
      */
     byRun: v.array(reportSpendRowSchema),
   }),
+  /**
+   * Which spend breakdowns above were CAPPED, and by how much. Empty when every one of them
+   * is complete, which is the normal case: only the activity-scaled dimensions are capped at
+   * all (see {@link REPORT_SLICE_LIMIT}), and only once they have a tail. `totals` covers the
+   * whole window either way.
+   */
+  capped: v.array(reportSpendCapSchema),
   /** Run activity sliced every way, each busiest-first. */
   activity: v.object({
     byWorkspace: v.array(reportActivityRowSchema),
     byService: v.array(reportActivityRowSchema),
+    /** Runs per linked REPOSITORY, keyed by the provider repo id and labelled `owner/name`. */
+    byRepo: v.array(reportActivityRowSchema),
     byTaskType: v.array(reportActivityRowSchema),
   }),
   /** Spend over time at `bucketMs` resolution. */

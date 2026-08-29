@@ -259,10 +259,12 @@ export const getPlatformObservabilityContract = defineApiContract({
 
 // ---- reports (admin-only) -------------------------------------------------
 
-// Cross-cutting usage analytics for the account: spend per model / agent kind, and
-// spend + run activity per workspace / service / task type, over a time window. Admin
-// gated for the same reason as the dashboard above (cross-workspace operational data).
-// `workspaceId` narrows EVERY breakdown to one board; absent ⇒ the whole account.
+// Cross-cutting usage analytics for the account: spend per model / agent kind / ticket /
+// run, and spend + run activity per workspace / service / repository / task type, over a
+// time window. Admin gated for the same reason as the dashboard above (cross-workspace
+// operational data). `workspaceId` narrows EVERY breakdown to one board; absent ⇒ the whole
+// account. The two activity-scaled spend axes (`ticket`, `run`) are capped, and the
+// projection's `capped` array names each cap; an empty array means nothing was dropped.
 export const getReportsContract = defineApiContract({
   method: 'get',
   requestPathParamsSchema: accountIdParams,

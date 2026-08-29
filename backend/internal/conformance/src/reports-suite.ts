@@ -118,8 +118,18 @@ export async function seedReportsFixture(
   // svcOne is linked to a repo; svcTwo deliberately is NOT, so the repo breakdown has a
   // real unattributed bucket rather than only fully-linked services.
   const repoId = 4_242
+  const frameThree = `frame-3-${tag}`
+  const svcThree = `svc-3-${tag}`
+  await seed.block(wsB, frameThree, 'Checkout Admin', null)
   await seed.service(svcOne, account, frameOne, repoId)
   await seed.service(svcTwo, account, frameTwo)
+  // A THIRD service pointing at the SAME repository as svcOne, on the other board: the
+  // monorepo shape, and the reason `repo` is an activity axis of its own. Its runs fold into
+  // svcOne's repository slice, which nothing reading the service breakdown could do for
+  // itself (no read publishes the service-to-repository map).
+  await seed.service(svcThree, account, frameThree, repoId)
+  // The projection row exists on board A only, so the repository's runs on board B resolve
+  // their LABEL from the board that does hold it, and an unsynced board keeps its runs.
   await seed.repo(ws, repoId, 'acme', 'checkout')
   await seed.block(ws, taskOne, 'Add coupon', 'feature')
   await seed.block(wsB, taskTwo, 'Fix rounding', 'bug')
@@ -168,6 +178,15 @@ export async function seedReportsFixture(
     createdAt: 4_000,
     updatedAt: 4_100,
     serviceId: svcTwo,
+    blockId: taskTwo,
+  })
+  await seed.run({
+    workspaceId: wsB,
+    id: `run-b2-${tag}`,
+    status: 'done',
+    createdAt: 4_200,
+    updatedAt: 4_400,
+    serviceId: svcThree,
     blockId: taskTwo,
   })
   // Outside the window (at `until`, which is exclusive) → excluded everywhere.
@@ -281,7 +300,7 @@ export async function seedReportsFixture(
     billing: 'metered',
     createdAt: range.since - 1,
   })
-  return { account, ws, wsB, svcOne, svcTwo, repoId, tag, other }
+  return { account, ws, wsB, svcOne, svcTwo, svcThree, repoId, tag, other }
 }
 
 export function defineReportsSuite(
@@ -486,7 +505,8 @@ export function defineReportsSuite(
         // (400 + 600 + 200) / 3 — the out-of-window run never enters the average.
         avgDurationMs: 400,
       })
-      expect(rows.get(wsB)).toMatchObject({ runs: 1, running: 1, done: 0, avgDurationMs: null })
+      // Board B: the running run plus the shared-repository service's done run (200ms).
+      expect(rows.get(wsB)).toMatchObject({ runs: 2, running: 1, done: 1, avgDurationMs: 200 })
     })
 
     it('groups run activity by service and task type', async () => {
@@ -497,10 +517,31 @@ export function defineReportsSuite(
       expect(services.get(svcOne)).toMatchObject({ label: 'Checkout', runs: 2 })
       expect(services.get(svcTwo)).toMatchObject({ label: 'Billing', runs: 1 })
       expect(taskTypes.get('feature')).toMatchObject({ runs: 2, done: 1, failed: 1 })
-      expect(taskTypes.get('bug')).toMatchObject({ runs: 1, running: 1 })
+      expect(taskTypes.get('bug')).toMatchObject({ runs: 2, running: 1, done: 1 })
       // The bootstrap run has neither, so it lands in the unattributed slice of both.
       expect(services.get('')).toMatchObject({ runs: 1 })
       expect(taskTypes.get('')).toMatchObject({ runs: 1 })
+    })
+
+    it('groups run activity by REPOSITORY, folding every service that points at one', async () => {
+      // The axis exists because this fold is not derivable from the service breakdown: two
+      // of the account's services point at the same repository, and no read publishes that
+      // mapping for a caller to sum the counts itself.
+      const repo = makeRepo()
+      const { account, repoId } = await seedFixture()
+      const rows = byKey(await repo.activityByDimension(scopeOf(account), 'repo', range))
+      expect(rows.get(String(repoId))).toMatchObject({
+        label: 'acme/checkout',
+        // svcOne's done + failed runs on board A, plus svcThree's done run on board B.
+        runs: 3,
+        done: 2,
+        failed: 1,
+        // (400 + 600 + 200) / 3, over the slice's terminal runs.
+        avgDurationMs: 400,
+      })
+      // Two different causes land in the same real bucket: a run under a service with no
+      // repository, and a bootstrap that has no service at all.
+      expect(rows.get('')).toMatchObject({ runs: 2 })
     })
 
     it('counts every run kind, not just task pipelines', async () => {

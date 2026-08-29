@@ -1969,6 +1969,7 @@
     "dimension": {
       "workspace": "Tablero",
       "service": "Servicio",
+      "repo": "Repositorio",
       "taskType": "Tipo de tarea"
     },
     "breakdown": {
@@ -1995,14 +1996,14 @@
     "spend": {
       "byModel": "Gasto por modelo",
       "byAgentKind": "Gasto por tipo de agente",
-      "byRepo": "Gasto por repositorio",
       "byTicket": "Gasto por tique",
       "byRun": "Gasto por ejecución",
       "heading": "Gasto",
       "empty": "No se registró uso en este periodo.",
       "calls": "{count} llamada | {count} llamadas",
       "tokens": "{input} de entrada / {output} de salida",
-      "subscriptionAside": "+{value} suscripción"
+      "subscriptionAside": "+{value} suscripción",
+      "capped": "Se muestran los {shown} más costosos. Hay {omitted} más que no aparece, aunque los totales de arriba sí lo incluyen. | Se muestran los {shown} más costosos. Hay {omitted} más que no aparecen, aunque los totales de arriba sí los incluyen."
     },
     "activity": {
       "heading": "Ejecuciones",
