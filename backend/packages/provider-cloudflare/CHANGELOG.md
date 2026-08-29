@@ -1,5 +1,12 @@
 # @cat-factory/provider-cloudflare
 
+## 0.7.510
+
+### Patch Changes
+
+- Updated dependencies [4b41767]
+  - @cat-factory/agents@0.146.3
+
 ## 0.7.509
 
 ### Patch Changes
