@@ -12,6 +12,7 @@ import { useTaskExpansion } from '~/composables/useTaskExpansion'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameStacking } from '~/composables/useFrameStacking'
 import { useFramePlacement } from '~/composables/useFramePlacement'
+import { useFrameOverlapGuard } from '~/composables/useFrameOverlapGuard'
 import { useViewport } from '~/composables/useViewport'
 import { boardPanMode } from '~/utils/boardPanMode'
 import { createBoardNodeProjection } from './BoardCanvas.logic'
@@ -32,6 +33,10 @@ const { onNodeDragStop, onViewportChange, screenToFlowCoordinate } = useVueFlow(
 const { draggingId } = useBlockDrag()
 const { hoveredFrameId } = useFrameStacking()
 const { freeFramePosition, focusFrame } = useFramePlacement()
+// The board's "no two top-level nodes overlap" invariant: whenever a frame comes to overlap a
+// neighbour (dragged onto it, grown into it by a border drag, or grown by its first task), the
+// two are bounced apart and the correction is written back. See useFrameOverlapGuard.
+useFrameOverlapGuard()
 // Touch drives the canvas gestures: a touch-capable surface needs one-finger pan.
 // We gate on `hasTouch` (any-pointer: coarse), not `isTouch` (the *primary* pointer),
 // so a touchscreen laptop / 2-in-1 — whose primary pointer is the trackpad — still
@@ -62,10 +67,11 @@ useTaskExpansion(boardEl, boardActivity)
 // into a dead zone. We therefore make every frame non-draggable (the pane pans straight
 // through it) and move it via its header handle instead.
 //
-// Frames are rendered exactly at their stored position and may overlap freely —
-// moving one never shifts another. The frame being dragged is lifted to the top,
-// then the hovered frame (the un-obscured one under the pointer), so overlapping
-// services can always be reached and reordered. See useFrameStacking.
+// Frames are rendered at their stored position, which the overlap guard keeps clear of every
+// other top-level node, so a frame is never hidden behind a neighbour. Stacking still decides
+// what is on top of what for the moment a drag is in flight (and for the frame chrome that
+// extends past the box): the dragged frame is lifted to the top, then the hovered one. See
+// useFrameStacking.
 //
 // `elevate-nodes-on-select` is turned OFF on <VueFlow> for this to work: Vue Flow's
 // default adds +1000 to a selected node's z-index, so a frame stayed pinned on top

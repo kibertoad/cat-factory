@@ -342,6 +342,32 @@ projects through kernel's `applyMountLayout`. The resize path is where people hi
 because a `size`-only edit is the one frame patch with no other visible effect: the SPA upserts the
 authoritative block the mutation returned and the frame jumps to coordinates no board shows it at.
 
+**No two top-level board nodes may overlap**, and that is a standing invariant rather than a rule
+each write remembers. `useFrameOverlapGuard` (mounted by `BoardCanvas`) watches the rendered
+geometry of every frame and epic and, whenever two come to overlap, bounces them apart through
+`framePlacement.resolveFrameOverlaps`. Placement alone was not enough: `findFreeFramePosition`
+refuses to CREATE an overlap, but three later events make one anyway, and only one of them is a
+drag. A border drag grows a frame into its neighbour, and a frame GROWS ON ITS OWN when its first
+task arrives, because an empty service renders the "add the first task" panel and reserves a much
+smaller footprint than one rendering lanes. Watching the geometry covers all three, and covers the
+next write nobody has thought of yet.
+
+Three things about it are load-bearing:
+
+- **It runs in the SPA because only the SPA can measure a frame.** The footprint is derived from
+  the lane geometry the browser renders at (`containerSize`); the backend stores a position and at
+  most a size override, so it cannot tell whether two frames overlap. The correction is written
+  back through the ordinary move.
+- **The frame the user is placing is the ANCHOR and never moves**; its neighbours do. The
+  settlement ORDER is the whole policy (`bySettlementOrder`): the dragged or just-grown frame
+  first, then everything else in reading order. A frame ARRIVING on the board is deliberately not
+  an anchor, so it yields to the frames already there rather than shoving them aside.
+- **Every client resolves independently and they agree**, because the resolution is a pure function
+  of the rects and the anchor order, with fixed tie-breaks that read nothing off the board. Two
+  browsers therefore write the same corrected positions instead of trading them back and forth. The
+  write is held while a drag or border resize is still running, for the same reason `previewMove`
+  exists: only the local preview follows the pointer, never a write per move.
+
 **Dragging a card now only reparents** (`positioned: false` in `useBlockDrag`): between services,
 and into or out of a module via a module group header's drop zone. Which LANE a card is in is not
 something a drop can decide — the lane is derived from state, so dropping a not-started card on
