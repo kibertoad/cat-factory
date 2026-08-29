@@ -356,17 +356,32 @@ Three things about it are load-bearing:
 
 - **It runs in the SPA because only the SPA can measure a frame.** The footprint is derived from
   the lane geometry the browser renders at (`containerSize`); the backend stores a position and at
-  most a size override, so it cannot tell whether two frames overlap. The correction is written
-  back through the ordinary move.
-- **The frame the user is placing is the ANCHOR and never moves**; its neighbours do. The
-  settlement ORDER is the whole policy (`bySettlementOrder`): the dragged or just-grown frame
-  first, then everything else in reading order. A frame ARRIVING on the board is deliberately not
-  an anchor, so it yields to the frames already there rather than shoving them aside.
-- **Every client resolves independently and they agree**, because the resolution is a pure function
-  of the rects and the anchor order, with fixed tie-breaks that read nothing off the board. Two
-  browsers therefore write the same corrected positions instead of trading them back and forth. The
-  write is held while a drag or border resize is still running, for the same reason `previewMove`
-  exists: only the local preview follows the pointer, never a write per move.
+  most a size override, so it cannot tell whether two frames overlap.
+- **Correcting the VIEW and WRITING the correction are separate, and only a local gesture
+  authorises the write.** Every client always draws the board clear, which needs no coordination
+  because `resolveFrameOverlaps` is pure: two browsers holding one board draw it identically
+  whatever order their events arrived in, and a read-only viewer gets the corrected view for free.
+  Persisting is the narrower act, and a drag or border resize is the only cause with an
+  unambiguous single author, so that client settles the board when the gesture ends and writes what
+  it displaced. A frame that grew ON ITS OWN has no author, so its correction is drawn everywhere
+  and written by nobody: better than every open session racing to persist the same value, and
+  better behaved besides, since a projected neighbour comes back off the server's own geometry when
+  the frame shrinks again while a persisted one would stay pushed.
+- **The settlement ORDER is the whole policy** (`bySettlementOrder`), and it takes at most ONE
+  anchor: the node the local user is placing, held still while its neighbours move aside. A LIST of
+  anchors would carry an order of its own, and every order available to build one from is
+  per-client (the sequence a client's live events arrived in, or a history only the client that
+  watched the change has), so two clients would resolve one overlap to different positions and
+  write over each other. Everything else settles in READING ORDER, which is POSITIONAL: the node
+  nearest the top-left keeps its place. Note that this is not "the newcomer yields to the frames
+  already there": a block carries no shared creation stamp, so arrival is knowable only from a
+  client's own session, which is the per-client input this rules out.
+
+The guard stands down for the whole of a gesture. A drag previews a position on every pointer move,
+and bouncing neighbours off those in-flight positions displaces frames the user is merely passing
+OVER: each pass reads the neighbour where the previous pass pushed it, so the displacement
+accumulates instead of springing back. A frame drawn over its neighbours while the pointer holds it
+is what direct manipulation looks like; the board settles on release.
 
 **Dragging a card now only reparents** (`positioned: false` in `useBlockDrag`): between services,
 and into or out of a module via a module group header's drop zone. Which LANE a card is in is not

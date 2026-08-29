@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import {
-  changedRectIds,
   findFreeFramePosition,
   framesCollide,
   resolveFrameOverlaps,
@@ -107,7 +106,7 @@ describe('resolveFrameOverlaps', () => {
       { id: 'dropped', x: 40, y: 0, ...size },
       { id: 'sitting', x: 0, y: 0, ...size },
     ]
-    const moved = resolveFrameOverlaps(rects, { anchorIds: ['dropped'] })
+    const moved = resolveFrameOverlaps(rects, { anchorId: 'dropped' })
     // The frame the user placed keeps the exact spot they aimed at.
     expect(moved.has('dropped')).toBe(false)
     expect(moved.has('sitting')).toBe(true)
@@ -119,7 +118,7 @@ describe('resolveFrameOverlaps', () => {
       { id: 'anchor', x: 0, y: 0, ...size },
       { id: 'nudged', x: size.w - 10, y: 0, ...size },
     ]
-    const moved = resolveFrameOverlaps(rects, { anchorIds: ['anchor'] })
+    const moved = resolveFrameOverlaps(rects, { anchorId: 'anchor' })
     // Clearing rightwards costs 10px of penetration plus the gap; going around would cost a
     // whole frame width.
     expect(moved.get('nudged')).toEqual({ x: size.w + FRAME_GAP, y: 0 })
@@ -133,7 +132,7 @@ describe('resolveFrameOverlaps', () => {
       { id: 'grown', x: 0, y: 0, ...grown },
       { id: 'neighbour', x: 360 + FRAME_GAP, y: 0, ...size },
     ]
-    const moved = resolveFrameOverlaps(rects, { anchorIds: ['grown'] })
+    const moved = resolveFrameOverlaps(rects, { anchorId: 'grown' })
     expect(moved.has('grown')).toBe(false)
     assertNoOverlap(rects, moved)
   })
@@ -175,38 +174,37 @@ describe('resolveFrameOverlaps', () => {
       { id: 'a', x: 0.5, y: 0.25, ...size },
       { id: 'b', x: 10.75, y: 0.5, ...size },
     ]
-    const moved = resolveFrameOverlaps(rects, { anchorIds: ['a'] })
+    const moved = resolveFrameOverlaps(rects, { anchorId: 'a' })
     assertNoOverlap(rects, moved)
     const settled = rects.map((r) => ({ ...r, ...moved.get(r.id) }))
-    expect(resolveFrameOverlaps(settled, { anchorIds: ['a'] })).toEqual(new Map())
-  })
-})
-
-describe('changedRectIds', () => {
-  const previous = new Map<string, FrameRect>([
-    ['a', { x: 0, y: 0, ...size }],
-    ['b', { x: 500, y: 0, ...size }],
-  ])
-
-  it('reports a rect that moved and one that only changed size', () => {
-    expect(
-      changedRectIds(previous, [
-        { id: 'a', x: 40, y: 0, ...size },
-        { id: 'b', x: 500, y: 0, w: size.w, h: size.h + 100 },
-      ]),
-    ).toEqual(['a', 'b'])
+    expect(resolveFrameOverlaps(settled, { anchorId: 'a' })).toEqual(new Map())
   })
 
-  it('reports nothing for an unchanged board', () => {
-    expect(
-      changedRectIds(previous, [
-        { id: 'a', x: 0, y: 0, ...size },
-        { id: 'b', x: 500, y: 0, ...size },
-      ]),
-    ).toEqual([])
+  it('settles the unanchored board in reading order: the top-left node keeps its place', () => {
+    // The policy with no anchor is POSITIONAL, not temporal. Whichever node is nearer the top of
+    // the board holds its spot and the one below it yields, regardless of which of the two arrived
+    // first: a block carries no shared creation stamp, so "the newcomer yields" is only knowable
+    // from a client's own history and two clients would answer it differently.
+    const rects: PlacedRect[] = [
+      { id: 'upper', x: 0, y: 480, ...size },
+      { id: 'lower', x: 0, y: 500, ...size },
+    ]
+    const moved = resolveFrameOverlaps(rects)
+    expect(moved.has('upper')).toBe(false)
+    expect(moved.has('lower')).toBe(true)
+    assertNoOverlap(rects, moved)
   })
 
-  it('does not report a rect it has never seen, so an arriving frame yields to the board', () => {
-    expect(changedRectIds(previous, [{ id: 'new', x: 0, y: 0, ...size }])).toEqual([])
+  it('falls back to reading order when the anchor is not on the board', () => {
+    // The guard anchors on the id of whatever gesture just ended, which is routinely a task card
+    // rather than a top-level node. An anchor nothing matches must resolve exactly as none at all,
+    // or a task drag would settle the board differently from the growth it caused.
+    const rects: PlacedRect[] = [
+      { id: 'a', x: 0, y: 0, ...size },
+      { id: 'b', x: 40, y: 0, ...size },
+    ]
+    expect(resolveFrameOverlaps(rects, { anchorId: 'task-not-a-frame' })).toEqual(
+      resolveFrameOverlaps(rects),
+    )
   })
 })

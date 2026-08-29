@@ -34,8 +34,9 @@ const { draggingId } = useBlockDrag()
 const { hoveredFrameId } = useFrameStacking()
 const { freeFramePosition, focusFrame } = useFramePlacement()
 // The board's "no two top-level nodes overlap" invariant: whenever a frame comes to overlap a
-// neighbour (dragged onto it, grown into it by a border drag, or grown by its first task), the
-// two are bounced apart and the correction is written back. See useFrameOverlapGuard.
+// neighbour (dragged onto it, grown into it by a border drag, or grown by its first task), the two
+// are bounced apart. Every client draws that correction; only the one whose own gesture caused the
+// overlap writes it back. See useFrameOverlapGuard.
 useFrameOverlapGuard()
 // Touch drives the canvas gestures: a touch-capable surface needs one-finger pan.
 // We gate on `hasTouch` (any-pointer: coarse), not `isTouch` (the *primary* pointer),
@@ -67,11 +68,11 @@ useTaskExpansion(boardEl, boardActivity)
 // into a dead zone. We therefore make every frame non-draggable (the pane pans straight
 // through it) and move it via its header handle instead.
 //
-// Frames are rendered at their stored position, which the overlap guard keeps clear of every
-// other top-level node, so a frame is never hidden behind a neighbour. Stacking still decides
-// what is on top of what for the moment a drag is in flight (and for the frame chrome that
-// extends past the box): the dragged frame is lifted to the top, then the hovered one. See
-// useFrameStacking.
+// Frames are rendered at the position the overlap guard keeps clear of every other top-level
+// node, so a frame is never hidden behind a neighbour once it has settled. Stacking still decides
+// what is on top of what while a drag is in flight (the guard stands down for the whole gesture,
+// so a dragged frame does cross its neighbours) and for the frame chrome that extends past the
+// box: the dragged frame is lifted to the top, then the hovered one. See useFrameStacking.
 //
 // `elevate-nodes-on-select` is turned OFF on <VueFlow> for this to work: Vue Flow's
 // default adds +1000 to a selected node's z-index, so a frame stayed pinned on top
