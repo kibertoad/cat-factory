@@ -12,6 +12,12 @@ import { LIVE_TIMEOUT, taskCard } from './helpers'
 // swimlanes did to the seeded board when a populated frame outgrew a grid pitch authored for the
 // old free canvas: three unrelated specs went red with lost clicks and blamed the run they were
 // driving. This one names the actual cause instead.
+//
+// The SPA now holds this as a standing invariant rather than by luck of the authored pitch:
+// `useFrameOverlapGuard` bounces any two top-level board nodes that come to overlap apart. So
+// read a failure here as the guard not reaching these frames (or not running at all), not as a
+// seed pitch to re-tune. Both still earn their place: the seed is authored to clear without help,
+// and this spec is the only thing that measures what the assembled product actually draws.
 test.describe('seeded board layout', () => {
   test('no seeded service frame overlaps another', async ({ page, seededBoard }) => {
     void seededBoard
