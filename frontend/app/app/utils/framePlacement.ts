@@ -106,3 +106,111 @@ export function findFreeFramePosition(
   const rightmost = existing.reduce((m, r) => Math.max(m, r.x + r.w), desired.x)
   return { x: rightmost + gap, y: desired.y }
 }
+
+/** A rect on the board that knows which block it belongs to. */
+export interface PlacedRect extends FrameRect {
+  readonly id: string
+}
+
+/**
+ * How many times one rect may be pushed off a neighbour before we stop nudging and fall back to
+ * the ring search. Each push clears the rect it hit but can walk it into a third one, so a dense
+ * cluster needs several; a cluster that needs more than this is one the incremental nudge is not
+ * going to untangle, and {@link findFreeFramePosition} always answers.
+ */
+const MAX_SEPARATION_PUSHES = 8
+
+/**
+ * The nearest place `moving` can sit that clears `settled` by `gap`: the minimum translation
+ * along whichever axis it is cheapest to leave by, which is what makes a frame nudged onto a
+ * neighbour bounce off the nearest border rather than teleport around it.
+ *
+ * Each candidate edge is rounded OUTWARD, away from the rect being cleared. A drag divides the
+ * pointer delta by the board zoom, so the positions coming in here are routinely fractional, and
+ * rounding the other way would leave a sub-pixel of the overlap behind for the next pass to find
+ * and shave again.
+ *
+ * Ties are broken in a fixed order (right before left, horizontal before vertical) rather than by
+ * anything read off the board, because every client resolves the same overlap independently and
+ * two of them answering differently would have the frames trade places on every refresh. A tie
+ * only arises when the two rects are exactly concentric on that axis.
+ */
+function separatedPosition(moving: FrameRect, settled: FrameRect, gap: number): Point {
+  const right = Math.ceil(settled.x + settled.w + gap)
+  const left = Math.floor(settled.x - gap - moving.w)
+  const down = Math.ceil(settled.y + settled.h + gap)
+  const up = Math.floor(settled.y - gap - moving.h)
+  const x = Math.abs(right - moving.x) <= Math.abs(left - moving.x) ? right : left
+  const y = Math.abs(down - moving.y) <= Math.abs(up - moving.y) ? down : up
+  return Math.abs(x - moving.x) <= Math.abs(y - moving.y) ? { x, y: moving.y } : { x: moving.x, y }
+}
+
+/**
+ * Order the rects for settlement: `anchorId` first if it is on the board, then everything else in
+ * reading order (top row first, then left to right), with the id as the final tie-break.
+ *
+ * The order IS the policy. A rect settles into the space the ones before it have already taken, so
+ * whatever comes first keeps its exact position and later ones bounce off it. Naming the frame the
+ * local user is placing as the anchor is what makes a deliberate drop land where it was aimed
+ * while its neighbours move aside, instead of the other way round.
+ *
+ * There is at most ONE anchor, and that is deliberate rather than a simplification. A list would
+ * carry an order of its own, and the only orders available to build one from are per-client (the
+ * order a client's live events happened to arrive in, or a history only the client that watched
+ * the change has). Two clients ordering two anchors differently resolve the same overlap to
+ * different positions and then write over each other, which is the one failure mode a pure
+ * resolution exists to rule out. A single anchor has no order to disagree about.
+ *
+ * Everything else settles in READING ORDER, which is a POSITIONAL policy, not a temporal one: the
+ * node nearest the top-left of the board keeps its place and those below and to the right yield.
+ * It is worth being exact about this, because "a frame arriving on the board yields to the frames
+ * already there" is the rule one would reach for first and it is not implementable here. A block
+ * carries no shared creation or update stamp (see `blockSchema`), so arrival is only knowable from
+ * a client's own session history, which is precisely the per-client input ruled out above. Reading
+ * order is the strongest rule every client can agree on from the board alone.
+ */
+function bySettlementOrder(anchorId: string | null | undefined) {
+  const priority = (r: PlacedRect) => (r.id === anchorId ? 0 : 1)
+  return (a: PlacedRect, b: PlacedRect): number =>
+    priority(a) - priority(b) || a.y - b.y || a.x - b.x || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+}
+
+/**
+ * Push apart every board node that overlaps another, returning the new top-left of each one that
+ * had to move (and nothing for the ones that did not, so an already-clear board answers empty).
+ *
+ * This is the board's standing layout invariant, not a placement decision: a frame can come to
+ * overlap a neighbour long after it was placed, by being dragged onto it, by a border drag, or by
+ * growing when its first task arrives (an empty service reserves a much smaller footprint than
+ * one rendering lanes). All three land here, so the rule is stated once rather than at each of
+ * the writes that can break it.
+ *
+ * The result is a pure function of the rects and the single `anchorId`, with tie-breaks fixed in
+ * code rather than read off the board, so every client holding the same board computes the same
+ * answer whatever order its own events arrived in. That is what lets each of them correct what it
+ * DRAWS without any of them having to agree first; who may WRITE a correction back is a separate
+ * question, settled in {@link useFrameOverlapGuard}.
+ */
+export function resolveFrameOverlaps(
+  rects: readonly PlacedRect[],
+  opts?: { anchorId?: string | null; gap?: number },
+): Map<string, Point> {
+  const gap = opts?.gap ?? FRAME_GAP
+  const settled: FrameRect[] = []
+  const moved = new Map<string, Point>()
+  for (const rect of [...rects].sort(bySettlementOrder(opts?.anchorId))) {
+    let at: FrameRect = { ...rect }
+    for (let push = 0; push < MAX_SEPARATION_PUSHES; push++) {
+      const blocker = settled.find((s) => framesCollide(at, s, gap))
+      if (!blocker) break
+      at = { ...at, ...separatedPosition(at, blocker, gap) }
+    }
+    if (!fits(at, settled, gap)) {
+      const free = findFreeFramePosition(settled, rect, { x: rect.x, y: rect.y }, gap)
+      at = { ...rect, x: free.x, y: free.y }
+    }
+    settled.push(at)
+    if (at.x !== rect.x || at.y !== rect.y) moved.set(rect.id, { x: at.x, y: at.y })
+  }
+  return moved
+}

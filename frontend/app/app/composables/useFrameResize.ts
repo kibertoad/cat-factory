@@ -22,6 +22,16 @@ const HANDLES = {
 
 export type ResizeEdge = keyof typeof HANDLES
 
+/**
+ * Id of the container currently being resized, for cursor/grip styling and for the board's
+ * overlap guard, which stands down while a border is still under the pointer and settles the
+ * board around this container once it is released.
+ *
+ * Module-level for the same reason as `useBlockDrag`'s `draggingId`: only one container is ever
+ * resized at a time, and the grips that start the drag are not the only reader.
+ */
+const resizingId = ref<string | null>(null)
+
 /** The grips in render order, so a component can `v-for` them instead of listing eight blocks. */
 export const RESIZE_EDGES = Object.keys(HANDLES) as ResizeEdge[]
 
@@ -51,8 +61,6 @@ export function useFrameResize() {
   const board = useBoardStore()
   const ui = useUiStore()
   const access = useWorkspaceAccess()
-  /** Id of the container currently being resized, for cursor/grip styling. */
-  const resizingId = ref<string | null>(null)
 
   /**
    * How far the origin may travel INWARD before the nearest child would land at a negative
@@ -136,10 +144,15 @@ export function useFrameResize() {
       window.removeEventListener('pointercancel', onUp)
       body.style.cursor = priorCursor
       body.style.userSelect = priorUserSelect
-      resizingId.value = null
       // A press with no movement is not a resize: committing it would emit a coarse board signal
       // (every other client re-hydrates) to store the geometry it already had.
+      //
+      // Committed BEFORE the id is released, matching `useBlockDrag`'s drop: `resizeBlock` applies
+      // the final bounds optimistically, and the overlap guard settles the board on the release of
+      // this id, so clearing it first would have the guard read the geometry of a resize that had
+      // not landed yet.
       if (moved) void board.resizeBlock(block.id, bounds, from)
+      resizingId.value = null
     }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
