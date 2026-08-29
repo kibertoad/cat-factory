@@ -144,9 +144,10 @@ The two landed slices are the model for anything else on this list:
 
 ## Prioritized checklist
 
-- [x] **1. Cap `byRun` and `byTicket` on the panel projection**, with a `capped: [{ dimension,
-    returned, omitted }]` array at `REPORT_SLICE_LIMIT`, an empty array meaning every
-      breakdown is complete, and a footer note on the capped card. (This PR.)
+- [x] **1. Cap `byRun` and `byTicket` on the panel projection** at `REPORT_SLICE_LIMIT`,
+      reporting each cap on the projection as a dimension with its returned and omitted slice
+      counts. An empty list means every breakdown is complete, and the capped card carries a
+      footer note. (This PR.)
 - [x] **2. Add `repo` to `ReportActivityDimension`**, wired on D1 and Drizzle, folded into the
       paired spend + activity dimension switch in the panel, with the monorepo fold pinned by
       conformance. (This PR.)
