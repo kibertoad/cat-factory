@@ -167,7 +167,7 @@ class_name = "EnvironmentTestWorkflow"
 # pin that tag here, with your own account id in place of the placeholder below.
 [[containers]]
 class_name = "ExecutionContainer"
-image = "registry.cloudflare.com/REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID/cat-factory-executor:1.142.1"
+image = "registry.cloudflare.com/REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID/cat-factory-executor:1.143.0"
 max_instances = 10
 # Coding/bootstrap runs legitimately install dependencies and run build/test/e2e
 # suites inside the box. The default `dev` tier (~256 MiB / ~1/16 vCPU) thrashes
@@ -192,7 +192,7 @@ class_name = "ExecutionContainer"
 # raw-manifest REST path still works); a render-needing config then fails loudly.
 [[containers]]
 class_name = "DeployContainer"
-image = "registry.cloudflare.com/REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID/cat-factory-deploy:0.5.1"
+image = "registry.cloudflare.com/REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID/cat-factory-deploy:0.6.0"
 max_instances = 10
 # kustomize/helm rendering + kubectl apply/rollout is light vs a coding run, but the
 # slim base still wants real headroom for a large manifest tree; standard-1 matches the
@@ -221,7 +221,7 @@ class_name = "DeployContainer"
 # uploads by hand.
 [[containers]]
 class_name = "UiTesterContainer"
-image = "registry.cloudflare.com/REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID/cat-factory-executor-ui:1.142.1"
+image = "registry.cloudflare.com/REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID/cat-factory-executor-ui:1.143.0"
 max_instances = 10
 # A browser, a JRE and a frontend build in one box: the same tier the coding runs get, for the
 # same reason (the `dev` tier thrashes under an install + build + Chromium).

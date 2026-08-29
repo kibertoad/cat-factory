@@ -26,9 +26,9 @@
 # name a NEWER image than the digest: the base takes the same 24h supply-chain window as
 # the workspace dependencies (pnpm-workspace.yaml `minimumReleaseAge`), so the digest is
 # the newest one that has aged past it, not whatever the tag points at today. This one is
-# node 26.7.0. To bump: `docker buildx imagetools inspect node:26-trixie-slim`, check the
+# node 26.8.1. To bump: `docker buildx imagetools inspect node:26-trixie-slim`, check the
 # tag's age on Docker Hub, and update EVERY stage.
-FROM node:26-trixie-slim@sha256:5758d367d7b4f48b73a9bb3530e687e47efb289f3b43f9c0450a25225ae0db5d AS build
+FROM node:26-trixie-slim@sha256:c0753125a3789977aefe869cbebccf70e3cfd7ea84ca48547458f02e4f1d7146 AS build
 WORKDIR /app
 # Install the TS toolchain BEFORE copying src so editing harness source doesn't
 # reinvalidate the dependency layer (helps local rebuilds; CI builds --no-cache).
@@ -47,14 +47,14 @@ RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
 # (see src/version.ts). Extract just the version string here — a plain JSON read, no npm,
 # so the `workspace:*` deps that stopped us copying package.json into the build stage are
 # irrelevant — and copy the resulting file into the runtime image next to dist/.
-FROM node:26-trixie-slim@sha256:5758d367d7b4f48b73a9bb3530e687e47efb289f3b43f9c0450a25225ae0db5d AS version
+FROM node:26-trixie-slim@sha256:c0753125a3789977aefe869cbebccf70e3cfd7ea84ca48547458f02e4f1d7146 AS version
 WORKDIR /v
 COPY package.json ./
 RUN node -p "require('./package.json').version" > harness-version.txt
 
 # ---- runtime: git + the Pi CLI + the compiled wrapper --------------------
 # Pinned to the SAME digest as the build stage above (see that note to bump).
-FROM node:26-trixie-slim@sha256:5758d367d7b4f48b73a9bb3530e687e47efb289f3b43f9c0450a25225ae0db5d AS runtime
+FROM node:26-trixie-slim@sha256:c0753125a3789977aefe869cbebccf70e3cfd7ea84ca48547458f02e4f1d7146 AS runtime
 # NODE_ENV is deliberately NOT set image-wide. It is the harness PROCESS's setting, and
 # `entrypoint.sh` gives it to that process alone (`exec env NODE_ENV=production node …`),
 # with `agentChildEnv` dropping it again from every child the harness spawns into the
@@ -118,8 +118,8 @@ RUN echo 'harness:100000:65536' > /etc/subuid \
 # times a week and the harness tracks them closely. That exemption is specific to these
 # three pins (an explicit call, re-made each time they are bumped) and does NOT extend to
 # the Pi extensions below or to anything installed through the workspace lockfile.
-ARG PI_VERSION=0.84.3
-ARG CLAUDE_CODE_VERSION=2.1.250
+ARG PI_VERSION=0.84.4
+ARG CLAUDE_CODE_VERSION=2.1.251
 ARG CODEX_VERSION=0.150.1
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl procps psmisc python3 jq ripgrep && rm -rf /var/lib/apt/lists/*; \
