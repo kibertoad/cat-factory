@@ -45,7 +45,7 @@ services:
     # a backend started with `LOCAL_WEB_SEARCH=off`.
     profiles:
       - web-search
-    image: searxng/searxng:2026.8.22-9fea41204
+    image: searxng/searxng:2026.8.29-d226b78bc
     ports:
       - '8080:8080'
     volumes:

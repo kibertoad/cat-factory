@@ -120,7 +120,7 @@ RUN echo 'harness:100000:65536' > /etc/subuid \
 # the Pi extensions below or to anything installed through the workspace lockfile.
 ARG PI_VERSION=0.84.4
 ARG CLAUDE_CODE_VERSION=2.1.251
-ARG CODEX_VERSION=0.150.1
+ARG CODEX_VERSION=0.151.0
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl procps psmisc python3 jq ripgrep && rm -rf /var/lib/apt/lists/*; \
     if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
@@ -192,8 +192,8 @@ USER harness
 # auto-detects it, writes the config and nudges the agent to use the tools
 # (WEB_SEARCH_PROVIDER pins the active provider). No key is baked into the image.
 # Both pinned for the same reproducibility reason as Pi itself.
-ARG PI_TODO_EXTENSION_VERSION=2.7.1
-ARG PI_WEB_TOOLS_EXTENSION_VERSION=2.7.1
+ARG PI_TODO_EXTENSION_VERSION=2.8.0
+ARG PI_WEB_TOOLS_EXTENSION_VERSION=2.8.0
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
     pi install "npm:@juicesharp/rpiv-todo@${PI_TODO_EXTENSION_VERSION}"; \
