@@ -1,4 +1,5 @@
-import { bigint, integer, pgTable, primaryKey, text } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
+import { bigint, boolean, index, integer, pgTable, primaryKey, text } from 'drizzle-orm/pg-core'
 
 // The opt-in INTEGRATION tables: a workspace's sealed third-party connections (observability,
 // private package registries, incident enrichment) and the per-SERVICE-FRAME configuration that
@@ -34,6 +35,41 @@ export const packageRegistryConnections = pgTable('package_registry_connections'
   created_at: bigint('created_at', { mode: 'number' }).notNull(),
   updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
 })
+
+// The workspace's SERVICE CATALOG connection: the developer portal (Backstage) whose services are
+// imported into the foundational-services catalog as `workspace`-tier rows (mirror of D1 migration
+// 0097's `service_catalog_connections`). `credentials` is ONE sealed JSON credential bag (domain
+// tag 'cat-factory:service-catalog'), the empty string for `auth_mode = 'none'`.
+//
+// The non-secret CONFIGURATION lives in its own columns rather than a JSON summary blob, unlike
+// the connections above: every one of these is read on the import path, so a blob would be parsed
+// on every pass to get at the URL the request goes to. See backend/docs/service-catalog-import.md.
+export const serviceCatalogConnections = pgTable(
+  'service_catalog_connections',
+  {
+    workspace_id: text('workspace_id').primaryKey(),
+    provider: text('provider').notNull(),
+    base_url: text('base_url').notNull(),
+    auth_mode: text('auth_mode').notNull(),
+    credentials: text('credentials').notNull().default(''),
+    // JSON string[] of portal-side filter terms, ANDed.
+    entity_filter: text('entity_filter').notNull().default('["kind=component"]'),
+    include_apis: boolean('include_apis').notNull().default(true),
+    max_services: integer('max_services').notNull().default(200),
+    last_synced_at: bigint('last_synced_at', { mode: 'number' }),
+    last_sync_status: text('last_sync_status'),
+    last_sync_message: text('last_sync_message'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    // The autorefresh sweep drains the stalest live connections in bounded batches.
+    index('idx_service_catalog_stale')
+      .on(t.last_synced_at)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
+)
 
 // Per-workspace incident-enrichment connection (PagerDuty + incident.io), moved out of
 // env onto a sealed row (mirror of D1 migration 0013's `incident_enrichment_connections`).

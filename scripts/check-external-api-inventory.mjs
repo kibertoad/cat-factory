@@ -249,6 +249,15 @@ const CLASSIFICATION = [
     kind: 'vendor',
     vendors: ['linear'],
   },
+  {
+    // The developer-portal (Software Catalog) reads. Self-hosted, so the base URL arrives from the
+    // connection rather than a constant: what the sweep verifies here is the PATHS and the auth
+    // schemes (`/api/catalog/entities/by-query`, `/entities/by-refs`, the external-access token
+    // shapes), which are the vendor's and which the vendor has changed before.
+    path: 'backend/packages/integrations/src/modules/serviceCatalog/',
+    kind: 'vendor',
+    vendors: ['backstage'],
+  },
   { path: 'backend/packages/integrations/src/modules/slack/', kind: 'vendor', vendors: ['slack'] },
   {
     path: 'backend/packages/integrations/src/modules/tasks/',

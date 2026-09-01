@@ -91,6 +91,8 @@ export {
   BRIEF_STANDARDS_TRAIT,
   FOUNDATIONAL_CATALOG_TRAIT,
   FOUNDATIONAL_CONTRACTS_TRAIT,
+  SERVICE_ESTATE_GUIDANCE,
+  SERVICE_ESTATE_TRAIT,
   FOUNDATIONAL_CATALOG_GUIDANCE,
   FOUNDATIONAL_CONTRACTS_GUIDANCE,
   BINARY_OUTPUT_TRAIT,
@@ -697,6 +699,12 @@ export { FoundationalServiceRunResolver } from './foundationalServices/Foundatio
 export { assertValidDefinition } from './foundationalServices/contract-validation.js'
 export { mergeFoundationalTiers } from './foundationalServices/foundational-catalog.js'
 export * as foundationalSourceLogic from './foundationalServices/foundational-source.logic.js'
+export {
+  SERVICE_CATALOG_SOURCE_ID,
+  ServiceCatalogSyncService,
+  describeImport,
+  type ServiceCatalogSyncServiceDependencies,
+} from './foundationalServices/ServiceCatalogSyncService.js'
 export {
   syncRepoSource,
   probeRepoSourceStatus,

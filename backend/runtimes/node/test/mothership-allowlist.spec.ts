@@ -494,6 +494,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // rule, the record-based `upsert` via the `workspaceField` rule.
   observabilityConnectionRepository: {},
   incidentEnrichmentConnectionRepository: {},
+  // The workspace's service-catalog (developer portal) connection. Fully remote except the
+  // autorefresh sweep's own query: `listStale` is unscoped across workspaces by construction and
+  // runs on the deployment that holds the portal credentials, which is never a laptop.
+  serviceCatalogConnectionRepository: { listStale: 'sweeper' },
   // The private package-registry connection surface is fully remote too (the registries
   // panel's get/upsert/delete + the container dispatch's decrypt-time get).
   packageRegistryConnectionRepository: {},

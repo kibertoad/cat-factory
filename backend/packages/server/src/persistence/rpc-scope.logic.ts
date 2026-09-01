@@ -223,6 +223,35 @@ export async function checkOwnerPairScope(
 }
 
 /**
+ * The `ownerFieldList` kind: {@link checkOwnerPairScope} applied to EVERY record of a batched
+ * write, so one foreign row cannot ride along with a list of the caller's own.
+ *
+ * A non-array argument fails closed, because a batch method whose argument is not a list is a
+ * caller this rule cannot bind at all. An EMPTY list is admitted: it names no row, and every
+ * batched write treats it as the no-op it is.
+ */
+export async function checkOwnerFieldListScope(
+  records: unknown,
+  opts: DispatchOptions,
+  inScope: (accountId: string | null | undefined) => boolean,
+  denied: DispatchResult,
+): Promise<DispatchResult | undefined> {
+  if (!Array.isArray(records)) return denied
+  for (const record of records) {
+    const fields = record && typeof record === 'object' ? (record as Record<string, unknown>) : {}
+    const denial = await checkOwnerPairScope(
+      fields.ownerKind,
+      fields.ownerId,
+      opts,
+      inScope,
+      denied,
+    )
+    if (denial) return denial
+  }
+  return undefined
+}
+
+/**
  * The `librarySource` kind: a repo-sourced content library's SYNC method carries a source id and
  * nothing else, so resolve that source row's owning `(ownerKind, ownerId)` pair server-side and bind
  * it exactly like `owner`. A non-string id, an absent resolver, and a source that does not exist all

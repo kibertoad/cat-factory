@@ -36,10 +36,22 @@ function serviceRepo(seed: FoundationalServiceRecord[] = []): FoundationalServic
     upsert: async (record) => {
       rows.set(`${record.ownerKind}:${record.ownerId}:${record.serviceId}`, record)
     },
+    upsertMany: async (records) => {
+      for (const record of records) {
+        rows.set(`${record.ownerKind}:${record.ownerId}:${record.serviceId}`, record)
+      }
+    },
     softDelete: async (ownerKind, ownerId, serviceId, at) => {
       const key = `${ownerKind}:${ownerId}:${serviceId}`
       const row = rows.get(key)
       if (row) rows.set(key, { ...row, deletedAt: at })
+    },
+    softDeleteByIds: async (ownerKind, ownerId, serviceIds, at) => {
+      for (const serviceId of serviceIds) {
+        const key = `${ownerKind}:${ownerId}:${serviceId}`
+        const row = rows.get(key)
+        if (row) rows.set(key, { ...row, deletedAt: at })
+      }
     },
     hardDelete: async (ownerKind, ownerId, serviceId) => {
       rows.delete(`${ownerKind}:${ownerId}:${serviceId}`)
@@ -68,6 +80,7 @@ function contractRepo(seed: ApiContractRecord[] = []): ApiContractRepository {
           operations: r.operations,
           omittedOperations: r.omittedOperations,
           sourcePath: r.sourcePath,
+          sourceSha: r.sourceSha,
         })),
     listByServiceIds: async (ownerKind, ownerId, serviceIds) =>
       serviceIds.length === 0
@@ -84,9 +97,22 @@ function contractRepo(seed: ApiContractRecord[] = []): ApiContractRepository {
       )
       rows.push(...contracts)
     },
+    replaceForServices: async (ownerKind, ownerId, sets) => {
+      const replaced = new Set(sets.map((set) => set.serviceId))
+      rows = rows.filter(
+        (r) => !(r.ownerKind === ownerKind && r.ownerId === ownerId && replaced.has(r.serviceId)),
+      )
+      rows.push(...sets.flatMap((set) => set.contracts))
+    },
     deleteForService: async (ownerKind, ownerId, serviceId) => {
       rows = rows.filter(
         (r) => !(r.ownerKind === ownerKind && r.ownerId === ownerId && r.serviceId === serviceId),
+      )
+    },
+    deleteForServices: async (ownerKind, ownerId, serviceIds) => {
+      rows = rows.filter(
+        (r) =>
+          !(r.ownerKind === ownerKind && r.ownerId === ownerId && serviceIds.includes(r.serviceId)),
       )
     },
   }

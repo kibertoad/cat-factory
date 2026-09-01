@@ -344,6 +344,14 @@ export function applyMothershipRemoteRepos(
     remoteRepos.apiContractRepository as CoreDependencies['apiContractRepository']
   dependencies.foundationalServiceSourceRepository =
     remoteRepos.foundationalServiceSourceRepository as CoreDependencies['foundationalServiceSourceRepository']
+  // The developer-portal connection that feeds that catalog. Routed only when the local selector
+  // built one at all (it is gated on the encryption key), because unlike the three above this is
+  // a real capability gate: assigning a remote repo here would turn the connection surface ON for
+  // a deployment that configured no key to seal a credential with.
+  if (dependencies.serviceCatalogConnectionRepository) {
+    dependencies.serviceCatalogConnectionRepository =
+      remoteRepos.serviceCatalogConnectionRepository as CoreDependencies['serviceCatalogConnectionRepository']
+  }
 }
 
 interface PostAssemblyContext extends PreviewModuleContext {

@@ -10,6 +10,7 @@ import { REMOTE_PERSISTENCE_METHODS } from './rpc-allowlist.js'
 import {
   checkInstallationListScope,
   checkLibrarySourceScope,
+  checkOwnerFieldListScope,
   checkOwnerFieldUpsertScope,
   checkOwnerPairScope,
   checkServiceInsertScope,
@@ -309,6 +310,15 @@ export type ScopeRule =
   | { kind: 'usageRecord'; arg: number }
   | { kind: 'owner'; kindArg: number; idArg: number }
   | { kind: 'ownerField'; arg: number }
+  /**
+   * `ownerField` over a BATCH write: EVERY record in the list must declare an in-scope owner.
+   *
+   * Its own kind rather than reusing `ownerField` on the array, because the check that matters is
+   * the per-element one: a batched write whose scope was read off the first record would let a
+   * caller smuggle another tenant's row in at position two, which is precisely the admission the
+   * single-record rule exists to refuse.
+   */
+  | { kind: 'ownerFieldList'; arg: number }
   | { kind: 'librarySource'; arg: number; entity: LibrarySourceEntity }
   | { kind: 'ownerFieldUpsert'; arg: number; entity: LibrarySourceEntity }
 
@@ -896,6 +906,7 @@ async function checkEntityCallScope(
         | 'usageRecord'
         | 'owner'
         | 'ownerField'
+        | 'ownerFieldList'
         | 'librarySource'
         | 'ownerFieldUpsert'
     }
@@ -965,6 +976,10 @@ async function checkEntityCallScope(
         denied,
       )
     }
+    case 'ownerFieldList':
+      // The same pair as fields of EVERY record of a batched write; split out to keep this
+      // function under the complexity ceiling, same contract (404 `denied` / `undefined`).
+      return checkOwnerFieldListScope(args[rule.arg], opts, inScope, denied)
     case 'librarySource':
       // A repo-sourced library's sync method carries only a source id; resolve that source's owning
       // tier PAIR server-side and bind it like `owner` (the owner-pair analogue of `skillSource`).

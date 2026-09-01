@@ -12,7 +12,7 @@ import type {
   FoundationalServiceSourceRecord,
   FoundationalServiceSourceRepository,
 } from '@cat-factory/kernel'
-import type { D1Database } from '@cloudflare/workers-types'
+import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types'
 
 // D1-backed stores for the foundational-services catalog (migration 0073). The Drizzle mirrors
 // live in `runtimes/node/src/repositories/foundationalServices.ts`; the two are kept honest by
@@ -24,6 +24,24 @@ import type { D1Database } from '@cloudflare/workers-types'
  * rather than issued as a query per id (which is the banned N+1) or as one over-long statement.
  */
 const ID_CHUNK = 50
+
+/**
+ * How many prepared statements ride ONE `db.batch(…)`.
+ *
+ * The write-side counterpart of {@link ID_CHUNK}, and a statement count rather than a row count
+ * because that is what a batch bounds: a multi-row `INSERT … VALUES` would hit D1's per-statement
+ * parameter ceiling after a handful of thirteen-column rows, where a batch of single-row
+ * statements is one round trip whatever the column count. So a thousand-service import is twenty
+ * batched writes rather than a thousand sequential ones.
+ */
+const STATEMENT_BATCH = 50
+
+/** Successive slices of `values`, each at most `size` long. */
+function chunked<T>(values: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < values.length; i += size) out.push(values.slice(i, i + size))
+  return out
+}
 
 interface ServiceRow {
   service_id: string
@@ -114,9 +132,15 @@ export class D1FoundationalServiceRepository implements FoundationalServiceRepos
   }
 
   async upsert(record: FoundationalServiceRecord): Promise<void> {
-    await this.db
-      .prepare(
-        `INSERT INTO foundational_services
+    await this.upsertMany([record])
+  }
+
+  async upsertMany(records: FoundationalServiceRecord[]): Promise<void> {
+    if (records.length === 0) return
+    const statements = records.map((record) =>
+      this.db
+        .prepare(
+          `INSERT INTO foundational_services
           (service_id, owner_kind, owner_id, name, summary, description, capabilities,
            source_id, source_path, pinned_commit, created_at, updated_at, deleted_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -130,23 +154,24 @@ export class D1FoundationalServiceRepository implements FoundationalServiceRepos
            pinned_commit = excluded.pinned_commit,
            updated_at = excluded.updated_at,
            deleted_at = excluded.deleted_at`,
-      )
-      .bind(
-        record.serviceId,
-        record.ownerKind,
-        record.ownerId,
-        record.name,
-        record.summary,
-        record.description,
-        JSON.stringify(record.capabilities),
-        record.sourceId,
-        record.sourcePath,
-        record.pinnedCommit,
-        record.createdAt,
-        record.updatedAt,
-        record.deletedAt,
-      )
-      .run()
+        )
+        .bind(
+          record.serviceId,
+          record.ownerKind,
+          record.ownerId,
+          record.name,
+          record.summary,
+          record.description,
+          JSON.stringify(record.capabilities),
+          record.sourceId,
+          record.sourcePath,
+          record.pinnedCommit,
+          record.createdAt,
+          record.updatedAt,
+          record.deletedAt,
+        ),
+    )
+    for (const batch of chunked(statements, STATEMENT_BATCH)) await this.db.batch(batch)
   }
 
   async softDelete(
@@ -155,12 +180,27 @@ export class D1FoundationalServiceRepository implements FoundationalServiceRepos
     serviceId: string,
     at: number,
   ): Promise<void> {
-    await this.db
-      .prepare(
-        'UPDATE foundational_services SET deleted_at = ?, updated_at = ? WHERE owner_kind = ? AND owner_id = ? AND service_id = ?',
-      )
-      .bind(at, at, ownerKind, ownerId, serviceId)
-      .run()
+    await this.softDeleteByIds(ownerKind, ownerId, [serviceId], at)
+  }
+
+  async softDeleteByIds(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+    serviceIds: string[],
+    at: number,
+  ): Promise<void> {
+    const ids = [...new Set(serviceIds)].filter(Boolean)
+    if (ids.length === 0) return
+    for (const chunk of chunked(ids, ID_CHUNK)) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      await this.db
+        .prepare(
+          `UPDATE foundational_services SET deleted_at = ?, updated_at = ?
+            WHERE owner_kind = ? AND owner_id = ? AND service_id IN (${placeholders})`,
+        )
+        .bind(at, at, ownerKind, ownerId, ...chunk)
+        .run()
+    }
   }
 
   async hardDelete(
@@ -229,7 +269,7 @@ export class D1ApiContractRepository implements ApiContractRepository {
     const { results } = await this.db
       .prepare(
         `SELECT service_id, contract_id, format, title, length(body) AS size,
-                operations, omitted_operations, source_path
+                operations, omitted_operations, source_path, source_sha
            FROM api_contracts
           WHERE owner_kind = ? AND owner_id = ?
           ORDER BY service_id, contract_id`,
@@ -244,6 +284,7 @@ export class D1ApiContractRepository implements ApiContractRepository {
         operations: string
         omitted_operations: number
         source_path: string | null
+        source_sha: string | null
       }>()
     return results.map((row) => ({
       serviceId: row.service_id,
@@ -254,6 +295,7 @@ export class D1ApiContractRepository implements ApiContractRepository {
       operations: parseStringArray(row.operations),
       omittedOperations: row.omitted_operations,
       sourcePath: row.source_path,
+      sourceSha: row.source_sha,
     }))
   }
 
@@ -287,41 +329,59 @@ export class D1ApiContractRepository implements ApiContractRepository {
     serviceId: string,
     contracts: ApiContractRecord[],
   ): Promise<void> {
-    // One BATCH so the delete and the inserts land together: a reader between the two would
-    // otherwise see a service whose contracts had vanished, which the catalog renders as a
-    // service with no interface rather than as a write in progress.
-    const statements = [
-      this.db
-        .prepare(
-          'DELETE FROM api_contracts WHERE owner_kind = ? AND owner_id = ? AND service_id = ?',
-        )
-        .bind(ownerKind, ownerId, serviceId),
-      ...contracts.map((contract) =>
+    await this.replaceForServices(ownerKind, ownerId, [{ serviceId, contracts }])
+  }
+
+  async replaceForServices(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+    sets: { serviceId: string; contracts: ApiContractRecord[] }[],
+  ): Promise<void> {
+    if (sets.length === 0) return
+    // A service's delete and its inserts must land TOGETHER: a reader between them would see a
+    // service whose contracts had vanished, which the catalog renders as a service with no
+    // interface rather than as a write in progress. So the packing is by whole SET, and a set
+    // never straddles two batches even when it alone exceeds the statement bound.
+    let batch: D1PreparedStatement[] = []
+    for (const set of sets) {
+      const statements = [
         this.db
           .prepare(
-            `INSERT INTO api_contracts
+            'DELETE FROM api_contracts WHERE owner_kind = ? AND owner_id = ? AND service_id = ?',
+          )
+          .bind(ownerKind, ownerId, set.serviceId),
+        ...set.contracts.map((contract) =>
+          this.db
+            .prepare(
+              `INSERT INTO api_contracts
               (owner_kind, owner_id, service_id, contract_id, format, title, body,
                operations, omitted_operations, source_path, source_sha, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          )
-          .bind(
-            ownerKind,
-            ownerId,
-            serviceId,
-            contract.contractId,
-            contract.format,
-            contract.title,
-            contract.body,
-            JSON.stringify(contract.operations),
-            contract.omittedOperations,
-            contract.sourcePath,
-            contract.sourceSha,
-            contract.createdAt,
-            contract.updatedAt,
-          ),
-      ),
-    ]
-    await this.db.batch(statements)
+            )
+            .bind(
+              ownerKind,
+              ownerId,
+              set.serviceId,
+              contract.contractId,
+              contract.format,
+              contract.title,
+              contract.body,
+              JSON.stringify(contract.operations),
+              contract.omittedOperations,
+              contract.sourcePath,
+              contract.sourceSha,
+              contract.createdAt,
+              contract.updatedAt,
+            ),
+        ),
+      ]
+      if (batch.length > 0 && batch.length + statements.length > STATEMENT_BATCH) {
+        await this.db.batch(batch)
+        batch = []
+      }
+      batch.push(...statements)
+    }
+    if (batch.length > 0) await this.db.batch(batch)
   }
 
   async deleteForService(
@@ -329,10 +389,26 @@ export class D1ApiContractRepository implements ApiContractRepository {
     ownerId: string,
     serviceId: string,
   ): Promise<void> {
-    await this.db
-      .prepare('DELETE FROM api_contracts WHERE owner_kind = ? AND owner_id = ? AND service_id = ?')
-      .bind(ownerKind, ownerId, serviceId)
-      .run()
+    await this.deleteForServices(ownerKind, ownerId, [serviceId])
+  }
+
+  async deleteForServices(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+    serviceIds: string[],
+  ): Promise<void> {
+    const ids = [...new Set(serviceIds)].filter(Boolean)
+    if (ids.length === 0) return
+    for (const chunk of chunked(ids, ID_CHUNK)) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      await this.db
+        .prepare(
+          `DELETE FROM api_contracts
+            WHERE owner_kind = ? AND owner_id = ? AND service_id IN (${placeholders})`,
+        )
+        .bind(ownerKind, ownerId, ...chunk)
+        .run()
+    }
   }
 }
 

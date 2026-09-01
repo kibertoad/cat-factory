@@ -51,6 +51,18 @@ export const apiContractFormatSchema = v.picklist([
   'toad-contract',
   /** A module built on `@lokalise/api-contract` (`buildPayloadRoute` / `buildGetRoute` …). */
   'lokalise-api-contract',
+  /**
+   * An AsyncAPI 2.x/3.x document, JSON or YAML: an event-driven interface (topics, channels,
+   * message payloads). Added with the service-catalog import, because an org's catalog
+   * routinely describes a queue consumer alongside its HTTP services and folding an AsyncAPI
+   * document in as `openapi` would have it fail the OpenAPI parse and register as a service
+   * whose interface declares nothing.
+   */
+  'asyncapi',
+  /** A GraphQL schema (SDL). */
+  'graphql',
+  /** A Protocol Buffers service definition (`.proto`). */
+  'grpc',
 ])
 export type ApiContractFormat = v.InferOutput<typeof apiContractFormatSchema>
 
@@ -66,9 +78,16 @@ export type ApiContractFormat = v.InferOutput<typeof apiContractFormatSchema>
  * `lokalise-api-contract` is false because its route builders' shapes are not pinned down here
  * and a partial guess at them would be reported as fact. Adding an extractor for it means
  * flipping this and nothing else.
+ *
+ * `asyncapi` is TRUE for the same reason `openapi` is: the document is JSON/YAML and its
+ * channels (2.x) or operations (3.x) are a declared map, so the index is a parse rather than a
+ * guess. `graphql` and `grpc` are false: SDL and protobuf are neither, and a brace-counting
+ * regex over them would name root fields that a nested type or an `extend type Query` block
+ * makes up. An invented operation is worse than a missing one, because a consumer writes
+ * against it.
  */
 export function operationsAreIndexable(format: ApiContractFormat): boolean {
-  return format === 'openapi' || format === 'toad-contract'
+  return format === 'openapi' || format === 'toad-contract' || format === 'asyncapi'
 }
 
 /**

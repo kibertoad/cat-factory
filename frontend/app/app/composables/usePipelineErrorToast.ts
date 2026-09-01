@@ -358,6 +358,11 @@ const UNAVAILABLE_DESCRIPTION_KEYS: Record<UnavailableReason, string> = {
   connection_credentials_unreadable:
     'errors.unavailable.description.connection_credentials_unreadable',
   vcs_capability_unsupported: 'errors.unavailable.description.vcs_capability_unsupported',
+  service_catalog_unreachable: 'errors.unavailable.description.service_catalog_unreachable',
+  service_catalog_unauthorized: 'errors.unavailable.description.service_catalog_unauthorized',
+  service_catalog_filter_missing: 'errors.unavailable.description.service_catalog_filter_missing',
+  service_catalog_response_too_large:
+    'errors.unavailable.description.service_catalog_response_too_large',
 }
 
 /**

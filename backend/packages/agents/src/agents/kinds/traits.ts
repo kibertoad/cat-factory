@@ -7,6 +7,7 @@ import {
   FOUNDATIONAL_CATALOG_FILE,
   FOUNDATIONAL_CONTEXT_DIR,
   FOUNDATIONAL_DECLARATION_TAG,
+  FOUNDATIONAL_ESTATE_FILE,
   FOUNDATIONAL_INDEX_FILE,
   INITIATIVE_INTERVIEWER_AGENT_KIND,
 } from '@cat-factory/kernel'
@@ -156,6 +157,34 @@ export const FOUNDATIONAL_CATALOG_TRAIT: AgentTrait = 'foundational-catalog'
  */
 export const FOUNDATIONAL_CONTRACTS_TRAIT: AgentTrait = 'foundational-contracts'
 
+/**
+ * ORIENTATION-time kinds that need to know what the organisation RUNS in order to locate work: a
+ * bug triager deciding which service a report belongs to, an on-call investigator attributing a
+ * regression, any kind whose first problem is "whose is this".
+ *
+ * A third trait rather than a reuse of {@link FOUNDATIONAL_CATALOG_TRAIT}, because that one's
+ * guidance asks the kind to prefer consuming a shared service and to END its reply with a
+ * machine-read declaration block. Both are wrong here and the second is actively harmful: the
+ * triage kinds are structured-output kinds whose reply IS a JSON object, so appending "end your
+ * reply with a fenced block" would put their contract in conflict with itself. What this trait
+ * delivers is the same rows under a different framing (`.cat-context/foundational-services/
+ * estate.md`), stating ownership and interface surface and asking for nothing back.
+ *
+ * It deliberately does NOT carry the full API documents. Those stay behind a design's declaration,
+ * which is the whole point of the catalog/contracts split: an orientation read happens on every
+ * triage dispatch, and folding every service's OpenAPI document into one would make the prompt
+ * scale with the size of the organisation's specs. A kind that genuinely needs a document carries
+ * `foundational-contracts` and reads the ids a prior design declared.
+ */
+export const SERVICE_ESTATE_TRAIT: AgentTrait = 'service-estate'
+
+/** The guidance an orientation kind gets: locate and attribute, do not choose or declare. */
+export const SERVICE_ESTATE_GUIDANCE = [
+  `This organisation records the services it runs in a catalog, and it is provided to you as \`.cat-context/${FOUNDATIONAL_ESTATE_FILE}\`. Read it when you need to work out WHICH service a piece of work belongs to, who owns it, or what interface it exposes to the rest of the estate.`,
+  `Use it for attribution and for scope. Naming the owning team, or the neighbouring service a fault crosses into, is far more useful than a guess drawn from a repository name. Where the file says an owner is not recorded, say that rather than inferring one.`,
+  `It lists each service's operations, NOT its full API documents: enough to say which service exposes what, and not enough to write a call against. Do not invent an endpoint, a field or an owner it does not state, and if what you need belongs to a service the file does not carry, say so in your report.`,
+].join('\n')
+
 /** The guidance a design-time kind gets: consult the catalog, then DECLARE what it used. */
 export const FOUNDATIONAL_CATALOG_GUIDANCE = [
   `This deployment runs shared FOUNDATIONAL SERVICES — capabilities such as file storage, notifications or audit that already exist and that new systems are expected to CONSUME rather than rebuild. The catalog of what is available is provided to you as \`.cat-context/${FOUNDATIONAL_CATALOG_FILE}\`; read it before you settle on a design.`,
@@ -259,8 +288,10 @@ export const STANDARD_AGENT_TRAITS: Partial<Record<AgentKind, AgentTrait[]>> = {
   mocker: [SPEC_AWARE_TRAIT],
   merger: [SPEC_AWARE_TRAIT],
   // The on-call agent clones the released change and reads the code to correlate the diff
-  // with the regression evidence, so it gets the service's best-practice + spec context.
-  'on-call': [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
+  // with the regression evidence, so it gets the service's best-practice + spec context, plus
+  // the estate: a release regression routinely shows up in a service other than the one that
+  // shipped, and attributing it needs to know which services exist and who owns them.
+  'on-call': [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, SERVICE_ESTATE_TRAIT],
   // The document reviewer is a companion (no `AgentKindDefinition` of its own), so it
   // gets `doc-aware` here — folding the SAME writing-style fragments the writer received,
   // which become its review criteria (style guidance as both instruction and check).
@@ -366,6 +397,14 @@ export const STANDARD_TRAIT_DEFINITIONS: readonly AgentTraitDefinition[] = [
     id: FOUNDATIONAL_CONTRACTS_TRAIT,
     guidance: (_kind, delivery) =>
       wasDelivered(delivery, FOUNDATIONAL_INDEX_FILE) ? FOUNDATIONAL_CONTRACTS_GUIDANCE : undefined,
+  },
+  // Gated on its file for the same reason the two above are: on a deployment with no catalog
+  // resolver the engine injects nothing, and a guidance section whose first sentence names a
+  // missing path reads to the agent as a platform fault rather than as an absence.
+  {
+    id: SERVICE_ESTATE_TRAIT,
+    guidance: (_kind, delivery) =>
+      wasDelivered(delivery, FOUNDATIONAL_ESTATE_FILE) ? SERVICE_ESTATE_GUIDANCE : undefined,
   },
   // NOT gated, deliberately, though it names a file the same way. Its own text handles the absent
   // case as a REFUSAL ("If that file is absent, the platform could not provide storage — do not

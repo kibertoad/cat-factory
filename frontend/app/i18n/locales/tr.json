@@ -617,7 +617,11 @@
         "binary_generators_unreachable": "Bu dağıtımın üretken entegrasyonları şu anda okunamadı, bu yüzden çalıştırma başlatılmadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin.",
         "foundational_builtins_unreachable": "Bu dağıtımın yerleşik temel hizmetleri şu anda okunamadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin.",
         "connection_credentials_unreadable": "Bu bağlantı için saklanan kimlik bilgileri okunamadı. Bu dağıtım, anahtarını tutan hizmete ulaşabiliyorsa kaynağı yeniden bağlayarak bilgileri değiştirin; ulaşamıyorsa o bağlantı düzeldiğinde yeniden deneyin.",
-        "vcs_capability_unsupported": "Bu çalışma alanına bağlı kaynak kontrol sağlayıcısı bu işlemi sunmuyor. Yanlış yapılandırılmış bir şey yok ve ayar değiştirmek işe yaramaz: bu işlem bu sağlayıcıda kullanılamıyor."
+        "vcs_capability_unsupported": "Bu çalışma alanına bağlı kaynak kontrol sağlayıcısı bu işlemi sunmuyor. Yanlış yapılandırılmış bir şey yok ve ayar değiştirmek işe yaramaz: bu işlem bu sağlayıcıda kullanılamıyor.",
+        "service_catalog_unreachable": "Bu çalışma alanının geliştirici portalı yanıt vermedi ya da bu platformun okuyamadığı bir yanıt döndü. Burada yapılandırma hatası yok ve hiçbir değişiklik yardımcı olmaz: portal erişilebilir olduğunda yeniden deneyin.",
+        "service_catalog_unauthorized": "Geliştirici portalı kayıtlı kimlik bilgisini reddetti. Büyük olasılıkla yenilenmiş ya da iptal edilmiş: servis kataloğu ayarlarını açıp güncel bir tane girin.",
+        "service_catalog_filter_missing": "Bu bağlantının varlık filtresi okunamadı, dolayısıyla aktarılacak bir şey yok. Geri getirmek için servis kataloğu bağlantısını yeniden kaydedin.",
+        "service_catalog_response_too_large": "Geliştirici portalı, bu platformun tek bir yanıtta tutacağından daha fazla veri döndürdü. Servis kataloğu ayarlarını açıp servis sınırını düşürün ya da arayüz tanımlarının aktarımını kapatın, sonra yeniden aktarın."
       }
     },
     "action": {
@@ -6544,7 +6548,8 @@
     },
     "tab": {
       "catalog": "Katalog",
-      "sources": "Bağlı depolar"
+      "sources": "Bağlı depolar",
+      "portal": "Geliştirici portalı"
     },
     "panel": {
       "title": "Temel hizmetler",
@@ -6558,7 +6563,10 @@
     "format": {
       "openapi": "OpenAPI",
       "toadContract": "toad-contracts",
-      "lokaliseApiContract": "lokalise/api-contract"
+      "lokaliseApiContract": "lokalise/api-contract",
+      "asyncapi": "AsyncAPI",
+      "graphql": "GraphQL",
+      "grpc": "gRPC"
     },
     "contracts": {
       "omitted": "+{count} tanesi listelenmedi",
@@ -8101,5 +8109,79 @@
       "title": "Karşılaştırılacak bir şey yok"
     },
     "loadFailed": "Üretilen adaylar yüklenemedi."
+  },
+  "serviceCatalog": {
+    "unavailable": "Bu kurulumda servis kataloğu içe aktarımı yapılandırılmamış.",
+    "intro": "Platformu kuruluşunuzun hâlihazırda işlettiği geliştirici portalına yönlendirin: portaldaki servisler kimlikleri, sahipleri ve her birinin yayımladığı API tanımlarıyla yukarıdaki kataloğa aktarılır. Hata ayıklayan ya da inceleme yapan ajanlar bir işin hangi servise ait olduğunu bunlardan çıkarır.",
+    "summary": "Filtre: {filter} · en fazla {max} servis",
+    "form": {
+      "connect": "Bir portal bağla",
+      "replace": "Bu bağlantıyı değiştir"
+    },
+    "field": {
+      "baseUrl": "Portal adresi",
+      "authMode": "Kimlik doğrulama",
+      "token": "Servis belirteci",
+      "sharedSecret": "Paylaşılan sır",
+      "tokenUrl": "Belirteç uç noktası",
+      "clientId": "İstemci kimliği",
+      "clientSecret": "İstemci sırrı",
+      "scope": "Scope (isteğe bağlı)",
+      "audience": "Audience (isteğe bağlı)",
+      "username": "Kullanıcı adı",
+      "password": "Şifre",
+      "headerName": "Başlık adı",
+      "headerValue": "Başlık değeri",
+      "secondHeaderName": "İkinci başlık (isteğe bağlı)",
+      "secondHeaderValue": "İkinci başlığın değeri",
+      "entityFilter": "Varlık filtresi",
+      "maxServices": "En fazla servis sayısı",
+      "includeApis": "Her servisin yayımladığı API tanımlarını da aktar"
+    },
+    "help": {
+      "baseUrl": "Backstage örneğinizin temel adresi. Özel ya da iç ağdaki bir konak yalnızca kurulum izin veriyorsa kabul edilir.",
+      "token": "Backstage'in dış erişim yapılandırmasından alınan servisler arası belirteç.",
+      "sharedSecret": "`backend.auth.keys` içindeki base64 bir sır. Platform her istekte bununla kısa ömürlü bir belirteç imzalar.",
+      "headers": "Kendi başlıklarıyla kimlik doğrulayan bir ağ geçidi için, örneğin Cloudflare Access servis belirteci.",
+      "entityFilter": "Satır başına bir `key=value` koşulu; hepsinin sağlanması gerekir. Varsayılan `kind=component`. Paylaşılan yetenek olarak sunmak istediğiniz servislere daraltın.",
+      "maxServices": "Bu sınıra ulaşan bir aktarım, portalın tamamı değil bir kesiti olarak bildirilir."
+    },
+    "auth": {
+      "none": "Yok",
+      "staticToken": "Sabit servis belirteci",
+      "legacySharedSecret": "Paylaşılan sır (eski belirteç)",
+      "oauth2": "OAuth2 istemci kimlik bilgileri",
+      "basic": "HTTP Basic",
+      "headers": "Özel başlıklar"
+    },
+    "status": {
+      "ok": "Aktarıldı",
+      "partial": "Kısmen aktarıldı",
+      "failed": "Aktarım başarısız",
+      "never": "Hiç aktarılmadı"
+    },
+    "action": {
+      "connect": "Bağla",
+      "replace": "Değiştir",
+      "probe": "Bağlantıyı sına",
+      "import": "Şimdi aktar",
+      "disconnect": "Bağlantıyı kes"
+    },
+    "disconnect": {
+      "title": "Servis kataloğu bağlantısı kesilsin mi?",
+      "body": "Bu portaldan aktarılan servisler katalogdan geri çekilir. Elle kaydettiğiniz veya yüklediğiniz hiçbir şey etkilenmez.",
+      "confirm": "Bağlantıyı kes"
+    },
+    "toast": {
+      "connected": "Servis kataloğu bağlandı",
+      "connectFailed": "Servis kataloğu bağlanamadı",
+      "probeOk": "Portal yanıt verdi",
+      "probeFailed": "Portala ulaşılamadı",
+      "imported": "Servis kataloğu aktarıldı",
+      "importedDetail": "{upserted} güncellendi, {unchanged} değişmedi, {tombstoned} geri çekildi",
+      "importFailed": "Servis kataloğu aktarılamadı",
+      "disconnected": "Servis kataloğu bağlantısı kesildi",
+      "disconnectFailed": "Servis kataloğu bağlantısı kesilemedi"
+    }
   }
 }

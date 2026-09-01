@@ -686,7 +686,11 @@
         "binary_generators_unreachable": "This deployment's generative integrations could not be read just now, so the run was not started. Nothing is misconfigured and no change is needed: try again once the connection recovers.",
         "foundational_builtins_unreachable": "This deployment's built-in foundational services could not be read just now. Nothing is misconfigured and no change is needed: try again once the connection recovers.",
         "connection_credentials_unreadable": "The stored credentials for this connection could not be read. If this deployment can reach the service holding its key, re-connect the source to replace them; otherwise try again once that connection recovers.",
-        "vcs_capability_unsupported": "The source-control provider connected to this workspace does not offer this operation. Nothing is misconfigured and setting something up will not help: it is unavailable for this provider."
+        "vcs_capability_unsupported": "The source-control provider connected to this workspace does not offer this operation. Nothing is misconfigured and setting something up will not help: it is unavailable for this provider.",
+        "service_catalog_unreachable": "This workspace's developer portal did not answer, or answered with something this platform cannot read. Nothing here is misconfigured and no change will help: try again once the portal is reachable.",
+        "service_catalog_unauthorized": "The developer portal refused the stored credential. It has most likely been rotated or revoked: open the service-catalog settings and enter a current one.",
+        "service_catalog_filter_missing": "This connection's entity filter could not be read, so there is nothing to import. Re-save the service-catalog connection to restore it.",
+        "service_catalog_response_too_large": "The developer portal answered with more data than this platform will hold in one response. Open the service-catalog settings and lower the service cap, or turn off importing interface definitions, then import again."
       }
     },
     "action": {
@@ -6855,7 +6859,8 @@
     },
     "tab": {
       "catalog": "Catalog",
-      "sources": "Repo sources"
+      "sources": "Repo sources",
+      "portal": "Developer portal"
     },
     "panel": {
       "title": "Foundational services",
@@ -6869,7 +6874,10 @@
     "format": {
       "openapi": "OpenAPI",
       "toadContract": "toad-contracts",
-      "lokaliseApiContract": "lokalise/api-contract"
+      "lokaliseApiContract": "lokalise/api-contract",
+      "asyncapi": "AsyncAPI",
+      "graphql": "GraphQL",
+      "grpc": "gRPC"
     },
     "contracts": {
       "omitted": "+{count} more not listed",
@@ -8390,5 +8398,79 @@
       "title": "Nothing to compare"
     },
     "loadFailed": "Could not load the generated candidates."
+  },
+  "serviceCatalog": {
+    "unavailable": "Importing a service catalog is not configured for this deployment.",
+    "intro": "Point the platform at the developer portal your organisation already runs, and its services are imported into the catalog above, with the identity, ownership and API definitions each one publishes. Agents that triage or investigate read them to work out which service a piece of work belongs to.",
+    "summary": "Filter: {filter} · at most {max} services",
+    "form": {
+      "connect": "Connect a portal",
+      "replace": "Replace this connection"
+    },
+    "field": {
+      "baseUrl": "Portal URL",
+      "authMode": "Authentication",
+      "token": "Service token",
+      "sharedSecret": "Shared secret",
+      "tokenUrl": "Token endpoint",
+      "clientId": "Client ID",
+      "clientSecret": "Client secret",
+      "scope": "Scope (optional)",
+      "audience": "Audience (optional)",
+      "username": "Username",
+      "password": "Password",
+      "headerName": "Header name",
+      "headerValue": "Header value",
+      "secondHeaderName": "Second header name (optional)",
+      "secondHeaderValue": "Second header value",
+      "entityFilter": "Entity filter",
+      "maxServices": "Maximum services",
+      "includeApis": "Import the API definitions each service publishes"
+    },
+    "help": {
+      "baseUrl": "The base URL of your Backstage instance. A private or internal host is allowed only where the deployment permits it.",
+      "token": "A service-to-service token from Backstage's external-access configuration.",
+      "sharedSecret": "A base64 secret from `backend.auth.keys`. The platform signs a short-lived token with it per request.",
+      "headers": "For a gateway that authenticates on its own header names, such as a Cloudflare Access service token.",
+      "entityFilter": "One `key=value` term per line, all of which must match. Defaults to `kind=component`. Narrow it to the services you want offered as shared capabilities.",
+      "maxServices": "An import that reaches this cap is reported as a prefix of the portal, not as the whole of it."
+    },
+    "auth": {
+      "none": "None",
+      "staticToken": "Static service token",
+      "legacySharedSecret": "Shared secret (legacy token)",
+      "oauth2": "OAuth2 client credentials",
+      "basic": "HTTP Basic",
+      "headers": "Custom headers"
+    },
+    "status": {
+      "ok": "Imported",
+      "partial": "Imported in part",
+      "failed": "Import failed",
+      "never": "Never imported"
+    },
+    "action": {
+      "connect": "Connect",
+      "replace": "Replace",
+      "probe": "Test connection",
+      "import": "Import now",
+      "disconnect": "Disconnect"
+    },
+    "disconnect": {
+      "title": "Disconnect the service catalog?",
+      "body": "The services this portal imported are withdrawn from the catalog. Nothing you registered or uploaded by hand is touched.",
+      "confirm": "Disconnect"
+    },
+    "toast": {
+      "connected": "Service catalog connected",
+      "connectFailed": "Could not connect the service catalog",
+      "probeOk": "The portal answered",
+      "probeFailed": "Could not reach the portal",
+      "imported": "Service catalog imported",
+      "importedDetail": "{upserted} updated, {unchanged} unchanged, {tombstoned} withdrawn",
+      "importFailed": "Could not import the service catalog",
+      "disconnected": "Service catalog disconnected",
+      "disconnectFailed": "Could not disconnect the service catalog"
+    }
   }
 }

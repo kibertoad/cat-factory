@@ -1,3 +1,4 @@
+import { SERVICE_CATALOG_CIPHER_INFO } from '@cat-factory/integrations'
 import { ORG_SECRET_KEY_ARITY, ORG_SECRET_SOURCES, type OrgSecretSource } from '@cat-factory/kernel'
 
 // The server-side half of mothership secret delegation: what each `OrgSecretSource` actually
@@ -102,6 +103,20 @@ export const SEALED_SECRET_SOURCES: Record<OrgSecretSource, SealedSecretSourceSp
     field: 'credentialsCipher',
     info: 'cat-factory:tasks',
     label: 'task source credentials',
+  },
+  // The developer-portal credential the service-catalog import reads with. Same argument as the
+  // two above: the import is an outbound call made from wherever the request landed, so a
+  // mothership-mode board's "import now" and its autorefresh both need the plaintext on the node.
+  // Workspace-keyed alone, since a workspace holds exactly one connection. The domain tag is
+  // IMPORTED rather than spelled again: it must equal what each facade seals the row with, and a
+  // divergence between the two would fail as an authentication error against a key nobody can
+  // name, so it is one constant rather than three matching literals.
+  service_catalog_connection: {
+    repo: 'serviceCatalogConnectionRepository',
+    method: 'get',
+    field: 'credentialsCipher',
+    info: SERVICE_CATALOG_CIPHER_INFO,
+    label: 'service catalog credentials',
   },
 }
 

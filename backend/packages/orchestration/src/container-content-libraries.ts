@@ -6,10 +6,12 @@ import {
   FragmentLibraryService,
   FragmentSourceService,
   LlmFragmentBriefGenerator,
+  ServiceCatalogSyncService,
   SkillCatalogService,
   SkillRunResolver,
   SkillSourceService,
 } from '@cat-factory/agents'
+import { ServiceCatalogConnectionService } from '@cat-factory/integrations'
 import type {
   AppCaches,
   DocumentContentResolver,
@@ -86,6 +88,20 @@ export interface FoundationalServiceModule {
    * sync (or a direct upload) already persisted.
    */
   runResolver: FoundationalServiceRunResolver
+  /**
+   * The workspace's DEVELOPER PORTAL connection (Backstage) and the import that turns its
+   * services into `workspace`-tier catalog rows. A THIRD member of this module rather than a
+   * module of its own, because what it produces is this catalog: keeping it here is what makes
+   * the connection surface, the import and the reads share one cache-invalidation seam.
+   *
+   * Present only when the connection repository and its secret cipher are wired. Absent ⇒ the
+   * controller answers 503 and the catalog holds only what was uploaded or linked, which is
+   * byte-for-byte the behaviour before the integration existed.
+   */
+  serviceCatalog?: {
+    connectionService: ServiceCatalogConnectionService
+    syncService: ServiceCatalogSyncService
+  }
 }
 
 /**
@@ -139,10 +155,67 @@ export function createFoundationalServiceModule(
         })
       : undefined
 
+  const serviceCatalog = buildServiceCatalog(deps, (ownerKind, ownerId) =>
+    catalogService.invalidate(ownerKind, ownerId),
+  )
   return {
     catalogService,
     sourceService,
     runResolver: new FoundationalServiceRunResolver(catalogService),
+    ...(serviceCatalog ? { serviceCatalog } : {}),
+  }
+}
+
+/**
+ * Assemble the service-catalog connection + import when both halves are wired.
+ *
+ * The connection service is built FIRST and its `resolveClient` handed to the import, so the
+ * import never opens a credential bag: it depends on the kernel's
+ * `ResolveServiceCatalogClient` port and stays testable with a fake that holds no secret. The
+ * invalidation is threaded in from the catalog service for the same reason the repo source's is:
+ * the eviction policy for this catalog lives in exactly one place.
+ */
+function buildServiceCatalog(
+  deps: CoreDependencies,
+  invalidateCatalog: (ownerKind: 'workspace', ownerId: string) => Promise<void>,
+):
+  | { connectionService: ServiceCatalogConnectionService; syncService: ServiceCatalogSyncService }
+  | undefined {
+  const {
+    serviceCatalogConnectionRepository,
+    serviceCatalogSecretCipher,
+    foundationalServiceRepository,
+    apiContractRepository,
+  } = deps
+  if (
+    !serviceCatalogConnectionRepository ||
+    !serviceCatalogSecretCipher ||
+    !foundationalServiceRepository ||
+    !apiContractRepository
+  ) {
+    return undefined
+  }
+  const connectionService = new ServiceCatalogConnectionService({
+    serviceCatalogConnectionRepository,
+    secretCipher: serviceCatalogSecretCipher,
+    ...(deps.secretDelegate ? { secretDelegate: deps.secretDelegate } : {}),
+    clock: deps.clock,
+    logger: deps.logger,
+    ...(deps.serviceCatalogUrlSafetyPolicy
+      ? { urlPolicy: deps.serviceCatalogUrlSafetyPolicy }
+      : {}),
+  })
+  return {
+    connectionService,
+    syncService: new ServiceCatalogSyncService({
+      serviceCatalogConnectionRepository,
+      resolveServiceCatalogClient: connectionService.resolveClient,
+      foundationalServiceRepository,
+      apiContractRepository,
+      clock: deps.clock,
+      logger: deps.logger,
+      invalidateCatalog,
+    }),
   }
 }
 

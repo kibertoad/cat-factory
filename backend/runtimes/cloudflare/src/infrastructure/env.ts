@@ -601,6 +601,14 @@ export interface Env {
    * with the shared `ENCRYPTION_KEY`.
    */
   RUNNERS_ENABLED?: string
+  /**
+   * Comma-separated hostnames exempt from the strict public-https guard for the SERVICE CATALOG
+   * (developer portal) integration. Widening this is the normal case rather than an exception: a
+   * self-hosted Backstage usually lives on an internal host. Scoped to this integration alone.
+   */
+  SERVICE_CATALOG_ALLOW_URL_HOSTS?: string
+  /** `'true'` permits `http` for a trusted internal portal URL (see the host list above). */
+  SERVICE_CATALOG_ALLOW_HTTP_URLS?: string
   /** Comma-separated hostnames exempt from the strict public-https guard (see ENVIRONMENTS_ALLOW_URL_HOSTS). */
   RUNNERS_ALLOW_URL_HOSTS?: string
   /** `true` to permit `http` for a trusted internal pool scheduler URL. */

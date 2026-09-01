@@ -1,4 +1,5 @@
 import { createTierInstallationResolvers, LlmFragmentSelector } from '@cat-factory/agents'
+import { SERVICE_CATALOG_CIPHER_INFO } from '@cat-factory/integrations'
 import type {
   GitHubClient,
   GitHubInstallationRepository,
@@ -6,7 +7,8 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
-import type { AppConfig } from '@cat-factory/server'
+import type { AppConfig, ServiceCatalogConfig } from '@cat-factory/server'
+import { WebCryptoSecretCipher, resolveUrlSafetyPolicy } from '@cat-factory/server'
 import type { DrizzleDb } from './db/client.js'
 import {
   DrizzleFragmentBriefRepository,
@@ -22,6 +24,7 @@ import {
   DrizzleFoundationalServiceRepository,
   DrizzleFoundationalServiceSourceRepository,
 } from './repositories/foundationalServices.js'
+import { DrizzleServiceCatalogConnectionRepository } from './repositories/drizzle/serviceCatalog.js'
 
 // The Node facade's content-library dependency selectors (prompt-fragment library + repo-sourced
 // Claude Skills), extracted from `container.ts` for file-size hygiene and symmetric with the shared
@@ -113,12 +116,29 @@ export function selectNodeFoundationalServiceDeps(
   githubClient: GitHubClient | undefined,
   installations: GitHubInstallationRepository,
   workspaces: WorkspaceRepository,
+  /** The service-catalog config slice: its encryption key and its own URL allow-list. */
+  serviceCatalog: ServiceCatalogConfig,
 ): Partial<CoreDependencies> {
   const resolvers = createTierInstallationResolvers({ installations, workspaces })
+  const urlPolicy = resolveUrlSafetyPolicy(serviceCatalog)
   return {
     foundationalServiceRepository: new DrizzleFoundationalServiceRepository(db),
     apiContractRepository: new DrizzleApiContractRepository(db),
     foundationalServiceSourceRepository: new DrizzleFoundationalServiceSourceRepository(db),
     ...(githubClient ? { githubClient, resolveFragmentInstallationId: resolvers.forOwner } : {}),
+    // The developer-portal connection that FEEDS this catalog. Gated on the encryption key rather
+    // than ungated like the catalog itself, and for the reason the catalog is ungated: a contract
+    // can be uploaded with no credential at all, but a PORTAL cannot be read without one, so a
+    // connection surface with nothing to seal it is a surface that can only fail.
+    ...(serviceCatalog.encryptionKey
+      ? {
+          serviceCatalogConnectionRepository: new DrizzleServiceCatalogConnectionRepository(db),
+          serviceCatalogSecretCipher: new WebCryptoSecretCipher({
+            masterKeyBase64: serviceCatalog.encryptionKey,
+            info: SERVICE_CATALOG_CIPHER_INFO,
+          }),
+          ...(urlPolicy ? { serviceCatalogUrlSafetyPolicy: urlPolicy } : {}),
+        }
+      : {}),
   }
 }

@@ -50,7 +50,10 @@ import { startScheduleSweeper } from './recurring.js'
 import { resolveSweepInterval, startInitiativeLoopSweeper } from './initiativeLoop.js'
 import { startKaizenSweeper } from './kaizen.js'
 import { startNotificationEscalationSweeper } from './notifications.js'
-import { startFoundationalSourceSweeper } from './foundationalServices.js'
+import {
+  startFoundationalSourceSweeper,
+  startServiceCatalogSweeper,
+} from './foundationalServices.js'
 import { startPlatformHealthSweeper } from './platformHealth.js'
 import { startInfraReachabilitySweeper } from './infraReachability.js'
 import { startSpendAlertSweeper } from './spendAlerts.js'
@@ -692,6 +695,10 @@ function startBackgroundSweepers(deps: {
   // catalog without anyone opening the management surface (the Worker uses cron). No-op unless
   // the catalog + GitHub are both wired.
   const stopFoundationalSources = startFoundationalSourceSweeper(container, logger, sweepHealth)
+  // Re-import connected SERVICE CATALOGS (developer portals) on its own, longer window, so a
+  // service the organisation retired stops being handed to agents as current. No-op unless the
+  // catalog and its encryption key are both wired.
+  const stopServiceCatalog = startServiceCatalogSweeper(container, logger, sweepHealth)
   // Report what has landed in the dead-letter queues (slice 4.5). Reporting only, never a
   // replay: a job that failed every retry will fail again, so the decision to re-drive one
   // stays a human's. Before this, a job that exhausted `retryLimit` simply stopped existing.
@@ -722,6 +729,7 @@ function startBackgroundSweepers(deps: {
     stopInfraReachability,
     stopSpendAlerts,
     stopFoundationalSources,
+    stopServiceCatalog,
   }
 }
 
@@ -772,6 +780,19 @@ export async function backfillDeclaredSeeds(
       err: getErrorMessage(err),
     })
   }
+}
+
+/**
+ * Stop every background sweeper.
+ *
+ * Generic over the returned bag rather than a list of calls, so a sweeper added to
+ * {@link startBackgroundSweepers} is stopped on shutdown by construction. The ORDER among them is
+ * not significant (each is a `clearInterval`), and it is the object's insertion order anyway; what
+ * IS significant is that all of them stop before the realtime hub, the pool and the log sink, which
+ * the caller keeps in sequence around this one call.
+ */
+function stopAll(sweepers: Record<string, () => void>): void {
+  for (const stop of Object.values(sweepers)) stop()
 }
 
 /** The real boot sequence, wrapped by {@link start} so a {@link ConfigValidationError} falls back. */
@@ -941,24 +962,19 @@ async function bootServer(
   // The background sweepers only schedule `setInterval`s (no work runs until a timer fires), so
   // start them AFTER the listener binds — the server accepts requests a few ms sooner. The pg-boss
   // workers above stay before listen so an enqueued job always has a consumer.
-  const {
-    stopSweeper,
-    stopDeadLetter,
-    stopEnvTestSweeper,
-    stopRetention,
-    stopArtifactRetention,
-    stopScheduleSweeper,
-    stopInitiativeLoop,
-    stopEnvironmentSweeper,
-    stopNotificationEscalation,
-    stopKaizenSweeper,
-    stopGitHubReconcile,
-    stopPlatformMetrics,
-    stopPlatformHealth,
-    stopInfraReachability,
-    stopSpendAlerts,
-    stopFoundationalSources,
-  } = startBackgroundSweepers({ boss, pool, db, container, repos, runtime, clock, env })
+  // Held as ONE object rather than destructured: every entry is a `clearInterval` closure and the
+  // shutdown below stops all of them, so naming each sweeper a third time bought nothing but a
+  // place to forget one.
+  const sweepers = startBackgroundSweepers({
+    boss,
+    pool,
+    db,
+    container,
+    repos,
+    runtime,
+    clock,
+    env,
+  })
 
   // Backfill the deployment's declared environment-handler seeds onto every existing workspace
   // (idempotent; new workspaces are seeded by WorkspaceService.create). FIRE-AND-FORGET after the
@@ -977,22 +993,7 @@ async function bootServer(
     // before we start tearing down — new requests go elsewhere while in-flight ones finish.
     draining = true
     logger.info('shutting down cat-factory node server', { signal })
-    stopSweeper()
-    stopDeadLetter()
-    stopEnvTestSweeper()
-    stopRetention()
-    stopArtifactRetention()
-    stopScheduleSweeper()
-    stopInitiativeLoop()
-    stopEnvironmentSweeper()
-    stopNotificationEscalation()
-    stopKaizenSweeper()
-    stopGitHubReconcile()
-    stopPlatformMetrics()
-    stopPlatformHealth()
-    stopInfraReachability()
-    stopSpendAlerts()
-    stopFoundationalSources()
+    stopAll(sweepers)
     stopRealtime()
     // Release any cross-node propagation adapters (Redis connections); a no-op when none.
     await realtimePropagator.stop()

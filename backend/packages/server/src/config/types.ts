@@ -272,6 +272,30 @@ export interface TasksConfig {
   // time via AccountSettingsService — so an admin can set/rotate them without a redeploy.
 }
 
+/**
+ * The SERVICE CATALOG integration: the developer portal (Backstage) a workspace connects so its
+ * services are imported into the foundational-services catalog.
+ *
+ * No enable flag, the same "always on where the key is set" model documents and tasks use: the
+ * portal credential must be sealable, and whether anything is imported is governed by whether a
+ * workspace connected a portal.
+ */
+export interface ServiceCatalogConfig {
+  /** Service-level master key (base64) backing portal-credential encryption at rest. */
+  encryptionKey?: string
+  /**
+   * Hostnames exempt from the strict public-https URL guard.
+   *
+   * Widening this is the NORMAL case for this integration rather than an exception: a self-hosted
+   * developer portal usually lives on an internal host, and without an exemption the strict guard
+   * refuses to fetch one. Scoped independently of the environment and runner slices, so admitting
+   * `.corp.internal` here admits nothing there.
+   */
+  allowUrlHosts?: string[]
+  /** Permit `http` (not just `https`) for a trusted internal portal URL. */
+  allowHttpUrls?: boolean
+}
+
 export interface EnvironmentsConfig {
   /**
    * Service-level master key (base64) backing credential encryption at rest. The
@@ -628,6 +652,8 @@ export interface AppConfig {
   documents: DocumentsConfig
   /** Task-source integration config; always on where the runtime serves task sources. */
   tasks: TasksConfig
+  /** Service-catalog (developer portal) import config; always on where an encryption key is set. */
+  serviceCatalog: ServiceCatalogConfig
   /** Environment provider integration config; assembles wherever an encryption key is set. */
   environments: EnvironmentsConfig
   /** Self-hosted runner-pool config; `enabled` is false unless opted in. */

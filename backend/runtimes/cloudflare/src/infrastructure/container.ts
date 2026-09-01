@@ -9,7 +9,6 @@ import {
   type WorkRunner,
   type ProviderRegistry,
 } from '@cat-factory/kernel'
-import { createTierInstallationResolvers } from '@cat-factory/agents'
 import {
   EMAIL_CIPHER_INFO,
   ProvisioningLogRecorder,
@@ -76,11 +75,9 @@ import { WorkflowsWorkRunner } from './workflows/WorkflowsWorkRunner'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
 import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepository'
 import { D1ProvisioningLogRepository } from './repositories/D1ProvisioningLogRepository'
-import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
 import { D1AccountInvitationRepository } from './repositories/D1AccountInvitationRepository'
 import { D1PasswordResetTokenRepository } from './repositories/D1PasswordResetTokenRepository'
 import { D1EmailConnectionRepository } from './repositories/D1EmailConnectionRepository'
-import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository'
 import { D1EnvironmentConnectionRepository } from './repositories/D1EnvironmentConnectionRepository'
 import { D1CustomManifestTypeRepository } from './repositories/D1CustomManifestTypeRepository'
 import { D1EnvironmentRegistryRepository } from './repositories/D1EnvironmentRegistryRepository'
@@ -129,17 +126,7 @@ import {
 } from '@cat-factory/gitlab'
 import { wireEngineVcsDeps } from './container-engine-vcs-deps'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
-import { D1FragmentBriefRepository } from './repositories/D1FragmentBriefRepository'
-import { D1PromptFragmentRepository } from './repositories/D1PromptFragmentRepository'
-import { D1FragmentSourceRepository } from './repositories/D1FragmentSourceRepository'
-import { D1AccountSkillRepository } from './repositories/D1AccountSkillRepository'
-import { D1SkillSourceRepository } from './repositories/D1SkillSourceRepository'
-import {
-  D1ApiContractRepository,
-  D1FoundationalServiceRepository,
-  D1FoundationalServiceSourceRepository,
-} from './repositories/D1FoundationalServiceRepository'
-import { LlmFragmentSelector } from './ai/LlmFragmentSelector'
+import {} from './repositories/D1FoundationalServiceRepository'
 import { CryptoIdGenerator, SystemClock } from './runtime'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -566,94 +553,14 @@ export function selectRunnersDeps(
   }
 }
 
-/**
- * Build the prompt-fragment library's concrete ports when opted in (ADR 0006):
- * the two D1 repositories, the relevance selector (LLM when configured, else the
- * core deterministic matcher via `fragmentSelector: undefined`), and the
- * installation resolver repo-source sync uses to read guideline repos through the
- * tier's GitHub installation. Returns `{}` when disabled, so `createCore` leaves
- * the `fragmentLibrary` module unassembled and the engine uses manual fragmentIds.
- */
-export function selectFragmentLibraryDeps(
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-): Partial<CoreDependencies> {
-  if (!config.fragmentLibrary.enabled) return {}
-  // The shared tier resolver: workspace tier by direct binding, account tier bound directly
-  // (migration 0017) with a fallback through the account's own boards (a per-workspace PAT
-  // connect stores no accountId on its installation row).
-  const resolvers = createTierInstallationResolvers({
-    installations: new D1GitHubInstallationRepository({ db }),
-    workspaces: new D1WorkspaceRepository({ db }),
-  })
-  return {
-    promptFragmentRepository: new D1PromptFragmentRepository({ db }),
-    fragmentBriefRepository: new D1FragmentBriefRepository({ db }),
-    fragmentSourceRepository: new D1FragmentSourceRepository({ db }),
-    resolveFragmentInstallationId: resolvers.forOwner,
-    ...(config.fragmentLibrary.selector === 'llm'
-      ? {
-          fragmentSelector: new LlmFragmentSelector({
-            modelProviderResolver: buildModelProviderResolver(env, db),
-            modelRef: config.agents.routing.default.ref,
-          }),
-        }
-      : {}),
-  }
-}
-
-/**
- * Build the repo-sourced Claude Skills library's concrete ports when opted in
- * (ADR 0024). Skills live in ONE tier (the account), so the
- * installation resolver is account-only. Gated on the same `fragmentLibrary.enabled`
- * flag as the fragment library (both are the repo-sourced prompt library). Returns
- * `{}` when disabled, so `createCore` leaves the skill module unassembled.
- */
-export function selectSkillLibraryDeps(
-  _env: Env,
-  config: AppConfig,
-  db: D1Database,
-): Partial<CoreDependencies> {
-  if (!config.fragmentLibrary.enabled) return {}
-  const resolvers = createTierInstallationResolvers({
-    installations: new D1GitHubInstallationRepository({ db }),
-    workspaces: new D1WorkspaceRepository({ db }),
-  })
-  return {
-    accountSkillRepository: new D1AccountSkillRepository({ db }),
-    skillSourceRepository: new D1SkillSourceRepository({ db }),
-    resolveSkillInstallationId: resolvers.forAccount,
-  }
-}
-
-/**
- * Build the foundational-services catalog's concrete ports (migration 0073,
- * backend/docs/adr/0031-foundational-services.md).
- *
- * Deliberately UNGATED, unlike the two libraries above: a service can be registered with its
- * contracts uploaded directly, so the catalog is useful on a deployment that wants neither
- * repo-sourced prompt fragments nor Claude skills. The feature is opt-in by CONTENT — a
- * deployment that registers nothing gets an empty catalog, and an empty catalog renders as the
- * "none are registered" line, which leaves every design prompt exactly as it was.
- *
- * It reuses the FRAGMENT installation resolver (`resolveFragmentInstallationId`), which already
- * answers for both tiers — the same pair this catalog is keyed by. `selectFragmentLibraryDeps`
- * sets the identical resolver when it is enabled; the two agree by construction because both
- * come from `createTierInstallationResolvers`.
- */
-export function selectFoundationalServiceDeps(db: D1Database): Partial<CoreDependencies> {
-  const resolvers = createTierInstallationResolvers({
-    installations: new D1GitHubInstallationRepository({ db }),
-    workspaces: new D1WorkspaceRepository({ db }),
-  })
-  return {
-    foundationalServiceRepository: new D1FoundationalServiceRepository({ db }),
-    apiContractRepository: new D1ApiContractRepository({ db }),
-    foundationalServiceSourceRepository: new D1FoundationalServiceSourceRepository({ db }),
-    resolveFragmentInstallationId: resolvers.forOwner,
-  }
-}
+// The three CONTENT-LIBRARY selectors live in `container-content-library-deps.ts` (the twin of
+// the Node facade's file of the same name). Re-exported here because `container-assembly.ts` and
+// the extension-surface tests import them from this module.
+export {
+  selectFoundationalServiceDeps,
+  selectFragmentLibraryDeps,
+  selectSkillLibraryDeps,
+} from './container-content-library-deps'
 
 /**
  * The hosted PAT-login registry: lets a user sign in by pasting their OWN source-control PAT,

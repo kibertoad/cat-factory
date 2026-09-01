@@ -106,6 +106,12 @@ export const PLATFORM_RESERVED_ENV_PREFIXES: readonly string[] = [
   'PLATFORM_ALERTS_',
   'REDIS_',
   'RUNNERS_',
+  // The SERVICE CATALOG (developer-portal) import's own configuration. A family rather than the two
+  // exact names, because the platform owns this namespace outright and the alternative is the
+  // failure the family rule exists to prevent: the next knob added here would be read by config
+  // before anyone remembered to reserve it, and a capability credential could already be looked up
+  // under that name.
+  'SERVICE_CATALOG_',
   'SLACK_',
   'STALE_RUN_',
   'TOKEN_USAGE_',

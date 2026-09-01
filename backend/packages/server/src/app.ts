@@ -22,6 +22,7 @@ import { eventsRelayController } from './modules/events/EventsRelayController.js
 import { executionController } from './modules/execution/ExecutionController.js'
 import { fragmentLibraryController } from './modules/fragmentLibrary/FragmentLibraryController.js'
 import { foundationalServiceController } from './modules/foundationalServices/FoundationalServiceController.js'
+import { serviceCatalogController } from './modules/serviceCatalog/ServiceCatalogController.js'
 import { skillLibraryController } from './modules/skillLibrary/SkillLibraryController.js'
 import { githubController } from './modules/github/GitHubController.js'
 import { gitlabController } from './modules/gitlab/GitLabController.js'
@@ -532,6 +533,10 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
     mount: WORKSPACE_MOUNT,
     build: () => foundationalServiceController('workspace'),
   },
+  // The developer-portal connection that FEEDS the catalog above, so it registers beside it.
+  // Workspace-only: the credential rides the workspace-keyed secret delegation, so there is no
+  // account-scoped shape of it to serve.
+  { name: 'serviceCatalog', mount: WORKSPACE_MOUNT, build: () => serviceCatalogController() },
   { name: 'github', mount: WORKSPACE_MOUNT, build: () => githubController() },
   { name: 'gitlab', mount: WORKSPACE_MOUNT, build: () => gitlabController() },
   { name: 'vcsConnect', mount: WORKSPACE_MOUNT, build: () => vcsConnectController() },

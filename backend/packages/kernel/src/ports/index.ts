@@ -460,6 +460,18 @@ export type {
   FoundationalSourceResyncRequest,
 } from './foundational-service-repositories.js'
 export type {
+  ServiceCatalogConnectionRecord,
+  ServiceCatalogConnectionRepository,
+} from './service-catalog-repositories.js'
+export type {
+  ResolveServiceCatalogClient,
+  ServiceCatalogApi,
+  ServiceCatalogClient,
+  ServiceCatalogEntry,
+  ServiceCatalogFetch,
+  ServiceCatalogFetchOptions,
+} from './service-catalog.js'
+export type {
   AppCaches,
   AccountModelPolicyCacheValue,
   BudgetLimitCacheValue,

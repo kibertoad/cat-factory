@@ -21,6 +21,7 @@ import { loadGitLabConfig } from './gitlab'
 import { type AuthConfig, loadAuthConfig } from './auth'
 import { type DocumentsConfig, loadDocumentsConfig } from './documents'
 import { type TasksConfig, loadTasksConfig } from './tasks'
+import { loadServiceCatalogConfig } from './serviceCatalog'
 import { type EnvironmentsConfig, loadEnvironmentsConfig } from './environments'
 import { type RunnerPoolConfig, loadRunnerPoolConfig } from './runners'
 import { type SlackConfig, loadSlackConfig } from './slack'
@@ -100,6 +101,7 @@ export function loadConfig(env: Env): AppConfig {
     auth: loadAuthConfig(env),
     documents: loadDocumentsConfig(env),
     tasks: loadTasksConfig(env),
+    serviceCatalog: loadServiceCatalogConfig(env),
     environments: loadEnvironmentsConfig(env),
     runners: loadRunnerPoolConfig(env),
     slack: loadSlackConfig(env),

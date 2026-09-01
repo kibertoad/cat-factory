@@ -28,6 +28,13 @@ import { apiContracts, foundationalServiceSources, foundationalServices } from '
 const ID_CHUNK = 50
 
 /**
+ * How many rows ride ONE multi-row `INSERT … VALUES`. The write-side counterpart of
+ * {@link ID_CHUNK}: an import reconciling a whole estate writes in bounded statements rather than
+ * one per service (the banned N+1) or one statement carrying thousands of bound parameters.
+ */
+const ROW_CHUNK = 50
+
+/**
  * A JSON `string[]` column, read LENIENTLY (the D1 repo does the same). A malformed value
  * degrades to `[]` rather than throwing: these columns are written only by our own repos, so a
  * bad value means a hand edit, and failing the whole catalog read over one row's tags would take
@@ -63,6 +70,25 @@ function rowToService(row: ServiceRow): FoundationalServiceRecord {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
+  }
+}
+
+/** One service record as its column values; shared by the single and batched writes. */
+function toServiceValues(record: FoundationalServiceRecord) {
+  return {
+    service_id: record.serviceId,
+    owner_kind: record.ownerKind,
+    owner_id: record.ownerId,
+    name: record.name,
+    summary: record.summary,
+    description: record.description,
+    capabilities: JSON.stringify(record.capabilities),
+    source_id: record.sourceId,
+    source_path: record.sourcePath,
+    pinned_commit: record.pinnedCommit,
+    created_at: record.createdAt,
+    updated_at: record.updatedAt,
+    deleted_at: record.deletedAt,
   }
 }
 
@@ -106,42 +132,42 @@ export class DrizzleFoundationalServiceRepository implements FoundationalService
   }
 
   async upsert(record: FoundationalServiceRecord): Promise<void> {
-    const values = {
-      service_id: record.serviceId,
-      owner_kind: record.ownerKind,
-      owner_id: record.ownerId,
-      name: record.name,
-      summary: record.summary,
-      description: record.description,
-      capabilities: JSON.stringify(record.capabilities),
-      source_id: record.sourceId,
-      source_path: record.sourcePath,
-      pinned_commit: record.pinnedCommit,
-      created_at: record.createdAt,
-      updated_at: record.updatedAt,
-      deleted_at: record.deletedAt,
+    await this.upsertMany([record])
+  }
+
+  async upsertMany(records: FoundationalServiceRecord[]): Promise<void> {
+    // Last write wins on a repeated key, which is what the same records applied one at a time
+    // would have produced. De-duplicated because Postgres refuses an `ON CONFLICT DO UPDATE` that
+    // would touch one row twice in a single statement, and a caller's duplicate must not turn a
+    // batched write into an error the sequential one never raised.
+    const byKey = new Map<string, FoundationalServiceRecord>()
+    for (const record of records) {
+      byKey.set(JSON.stringify([record.ownerKind, record.ownerId, record.serviceId]), record)
     }
-    await this.db
-      .insert(foundationalServices)
-      .values(values)
-      .onConflictDoUpdate({
-        target: [
-          foundationalServices.owner_kind,
-          foundationalServices.owner_id,
-          foundationalServices.service_id,
-        ],
-        set: {
-          name: values.name,
-          summary: values.summary,
-          description: values.description,
-          capabilities: values.capabilities,
-          source_id: values.source_id,
-          source_path: values.source_path,
-          pinned_commit: values.pinned_commit,
-          updated_at: values.updated_at,
-          deleted_at: values.deleted_at,
-        },
-      })
+    const unique = [...byKey.values()]
+    for (let i = 0; i < unique.length; i += ROW_CHUNK) {
+      await this.db
+        .insert(foundationalServices)
+        .values(unique.slice(i, i + ROW_CHUNK).map(toServiceValues))
+        .onConflictDoUpdate({
+          target: [
+            foundationalServices.owner_kind,
+            foundationalServices.owner_id,
+            foundationalServices.service_id,
+          ],
+          set: {
+            name: sql`excluded.name`,
+            summary: sql`excluded.summary`,
+            description: sql`excluded.description`,
+            capabilities: sql`excluded.capabilities`,
+            source_id: sql`excluded.source_id`,
+            source_path: sql`excluded.source_path`,
+            pinned_commit: sql`excluded.pinned_commit`,
+            updated_at: sql`excluded.updated_at`,
+            deleted_at: sql`excluded.deleted_at`,
+          },
+        })
+    }
   }
 
   async softDelete(
@@ -150,16 +176,28 @@ export class DrizzleFoundationalServiceRepository implements FoundationalService
     serviceId: string,
     at: number,
   ): Promise<void> {
-    await this.db
-      .update(foundationalServices)
-      .set({ deleted_at: at, updated_at: at })
-      .where(
-        and(
-          eq(foundationalServices.owner_kind, ownerKind),
-          eq(foundationalServices.owner_id, ownerId),
-          eq(foundationalServices.service_id, serviceId),
-        ),
-      )
+    await this.softDeleteByIds(ownerKind, ownerId, [serviceId], at)
+  }
+
+  async softDeleteByIds(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+    serviceIds: string[],
+    at: number,
+  ): Promise<void> {
+    const ids = [...new Set(serviceIds)].filter(Boolean)
+    for (let i = 0; i < ids.length; i += ID_CHUNK) {
+      await this.db
+        .update(foundationalServices)
+        .set({ deleted_at: at, updated_at: at })
+        .where(
+          and(
+            eq(foundationalServices.owner_kind, ownerKind),
+            eq(foundationalServices.owner_id, ownerId),
+            inArray(foundationalServices.service_id, ids.slice(i, i + ID_CHUNK)),
+          ),
+        )
+    }
   }
 
   async hardDelete(
@@ -241,6 +279,7 @@ export class DrizzleApiContractRepository implements ApiContractRepository {
         operations: apiContracts.operations,
         omitted_operations: apiContracts.omitted_operations,
         source_path: apiContracts.source_path,
+        source_sha: apiContracts.source_sha,
       })
       .from(apiContracts)
       .where(and(eq(apiContracts.owner_kind, ownerKind), eq(apiContracts.owner_id, ownerId)))
@@ -254,6 +293,7 @@ export class DrizzleApiContractRepository implements ApiContractRepository {
       operations: parseStringArray(row.operations),
       omittedOperations: row.omitted_operations,
       sourcePath: row.source_path,
+      sourceSha: row.source_sha,
     }))
   }
 
@@ -288,37 +328,54 @@ export class DrizzleApiContractRepository implements ApiContractRepository {
     serviceId: string,
     contracts: ApiContractRecord[],
   ): Promise<void> {
-    // One TRANSACTION so the delete and the inserts land together: a reader between the two would
+    await this.replaceForServices(ownerKind, ownerId, [{ serviceId, contracts }])
+  }
+
+  async replaceForServices(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+    sets: { serviceId: string; contracts: ApiContractRecord[] }[],
+  ): Promise<void> {
+    if (sets.length === 0) return
+    // One TRANSACTION so each delete and its inserts land together: a reader between the two would
     // otherwise see a service whose contracts had vanished, which the catalog renders as a service
     // with no interface rather than as a write in progress (the D1 repo uses a batch for this).
+    // The whole set of services rides ONE transaction here, where D1 packs them into bounded
+    // batches; both give the per-service atomicity the renderer needs.
     await this.db.transaction(async (tx) => {
-      await tx
-        .delete(apiContracts)
-        .where(
+      for (let i = 0; i < sets.length; i += ROW_CHUNK) {
+        const chunk = sets.slice(i, i + ROW_CHUNK)
+        await tx.delete(apiContracts).where(
           and(
             eq(apiContracts.owner_kind, ownerKind),
             eq(apiContracts.owner_id, ownerId),
-            eq(apiContracts.service_id, serviceId),
+            inArray(
+              apiContracts.service_id,
+              chunk.map((set) => set.serviceId),
+            ),
           ),
         )
-      if (contracts.length === 0) return
-      await tx.insert(apiContracts).values(
-        contracts.map((contract) => ({
-          owner_kind: ownerKind,
-          owner_id: ownerId,
-          service_id: serviceId,
-          contract_id: contract.contractId,
-          format: contract.format,
-          title: contract.title,
-          body: contract.body,
-          operations: JSON.stringify(contract.operations),
-          omitted_operations: contract.omittedOperations,
-          source_path: contract.sourcePath,
-          source_sha: contract.sourceSha,
-          created_at: contract.createdAt,
-          updated_at: contract.updatedAt,
-        })),
-      )
+        const rows = chunk.flatMap((set) =>
+          set.contracts.map((contract) => ({
+            owner_kind: ownerKind,
+            owner_id: ownerId,
+            service_id: set.serviceId,
+            contract_id: contract.contractId,
+            format: contract.format,
+            title: contract.title,
+            body: contract.body,
+            operations: JSON.stringify(contract.operations),
+            omitted_operations: contract.omittedOperations,
+            source_path: contract.sourcePath,
+            source_sha: contract.sourceSha,
+            created_at: contract.createdAt,
+            updated_at: contract.updatedAt,
+          })),
+        )
+        for (let j = 0; j < rows.length; j += ROW_CHUNK) {
+          await tx.insert(apiContracts).values(rows.slice(j, j + ROW_CHUNK))
+        }
+      }
     })
   }
 
@@ -327,15 +384,26 @@ export class DrizzleApiContractRepository implements ApiContractRepository {
     ownerId: string,
     serviceId: string,
   ): Promise<void> {
-    await this.db
-      .delete(apiContracts)
-      .where(
-        and(
-          eq(apiContracts.owner_kind, ownerKind),
-          eq(apiContracts.owner_id, ownerId),
-          eq(apiContracts.service_id, serviceId),
-        ),
-      )
+    await this.deleteForServices(ownerKind, ownerId, [serviceId])
+  }
+
+  async deleteForServices(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+    serviceIds: string[],
+  ): Promise<void> {
+    const ids = [...new Set(serviceIds)].filter(Boolean)
+    for (let i = 0; i < ids.length; i += ID_CHUNK) {
+      await this.db
+        .delete(apiContracts)
+        .where(
+          and(
+            eq(apiContracts.owner_kind, ownerKind),
+            eq(apiContracts.owner_id, ownerId),
+            inArray(apiContracts.service_id, ids.slice(i, i + ID_CHUNK)),
+          ),
+        )
+    }
   }
 }
 

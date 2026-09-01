@@ -43,6 +43,31 @@ export const MAX_CATALOG_OPERATIONS = 40
  */
 export const MAX_CONTRACT_BODY_CHARS = 120_000
 
+/**
+ * How many characters the rendered CATALOG (or estate) block may run to.
+ *
+ * A total, where {@link MAX_CATALOG_OPERATIONS} is a per-contract cap, because the two bound
+ * different growth. The per-contract cap keeps one verbose spec from dominating; this one keeps
+ * the block proportional to nothing at all, which is what an imported estate demands: a portal
+ * import admits up to a thousand services, each carrying a description as long as the stored
+ * field allows, so an organisation's size would otherwise decide how much of every dispatch's
+ * context the catalog eats.
+ *
+ * What is dropped is STATED as a prefix (see {@link renderFoundationalCatalog}), because a
+ * silently shortened catalog reads as an organisation that runs fewer services than it does.
+ */
+export const MAX_CATALOG_RENDER_CHARS = 40_000
+
+/**
+ * How much of ONE service's description rides the rendered block.
+ *
+ * Its own cap beside the total, so a single service with a 20,000-character description cannot
+ * consume the whole budget and push every service after it out of the list. The description is
+ * the field an author writes for this purpose, so it keeps a generous share; the truncation is
+ * stated on the line itself.
+ */
+export const MAX_CATALOG_DESCRIPTION_CHARS = 1_500
+
 /** The `.cat-context/` directory the resolved contract documents are injected under. */
 export const FOUNDATIONAL_CONTEXT_DIR = 'foundational-services'
 
@@ -57,6 +82,19 @@ export const FOUNDATIONAL_INDEX_FILE = `${FOUNDATIONAL_CONTEXT_DIR}/index.md`
  * to agree on a rendering.
  */
 export const FOUNDATIONAL_CATALOG_FILE = `${FOUNDATIONAL_CONTEXT_DIR}/catalog.md`
+
+/**
+ * The file an ORIENTATION-time kind reads: a triage or investigation agent that has to work out
+ * WHICH of the organisation's services a piece of work belongs to.
+ *
+ * A separate path from {@link FOUNDATIONAL_CATALOG_FILE} carrying a separate rendering of the
+ * same rows, because the two readers need opposite framings of them. The catalog file tells a
+ * designer "prefer consuming one of these over building your own", which is the wrong sentence
+ * to put in front of an agent whose job is to locate a fault: it invites a triage report that
+ * recommends adopting a shared service. The estate file states ownership and interface surface
+ * and asks for neither a preference nor a declaration.
+ */
+export const FOUNDATIONAL_ESTATE_FILE = `${FOUNDATIONAL_CONTEXT_DIR}/estate.md`
 
 /**
  * The fenced block the Architect writes its declaration in. Parsed back by
@@ -81,8 +119,18 @@ export function detectContractFormat(path: string, content: string): ApiContract
     if (content.includes('@toad-contracts/')) return 'toad-contract'
     return null
   }
-  if (endsWithAny(lower, OPENAPI_DOCUMENT_EXTENSIONS)) {
-    return isOpenApiDocument(content) ? 'openapi' : null
+  if (endsWithAny(lower, GRAPHQL_DOCUMENT_EXTENSIONS)) {
+    return isGraphqlSchemaDocument(content) ? 'graphql' : null
+  }
+  if (endsWithAny(lower, PROTOBUF_DOCUMENT_EXTENSIONS)) {
+    return isGrpcServiceDocument(content) ? 'grpc' : null
+  }
+  if (endsWithAny(lower, STRUCTURED_DOCUMENT_EXTENSIONS)) {
+    if (isOpenApiDocument(content)) return 'openapi'
+    // AsyncAPI shares OpenAPI's extensions and its envelope shape, so the two are told apart by
+    // the version key alone. Checked SECOND rather than in parallel because a document carrying
+    // both keys is malformed either way and `openapi` is the one whose operations are indexed.
+    return isAsyncApiDocument(content) ? 'asyncapi' : null
   }
   return null
 }
@@ -90,8 +138,20 @@ export function detectContractFormat(path: string, content: string): ApiContract
 /** Extensions a TypeScript/JavaScript contract MODULE can carry. */
 const CONTRACT_MODULE_EXTENSIONS = ['.ts', '.mts', '.js']
 
-/** Extensions an OpenAPI document can carry (JSON or YAML). */
-const OPENAPI_DOCUMENT_EXTENSIONS = ['.json', '.yaml', '.yml', '.openapi']
+/**
+ * Extensions a STRUCTURED (JSON/YAML) API document can carry: an OpenAPI or an AsyncAPI one.
+ *
+ * Shared between the two on purpose: they are the same serialisation and differ only in the
+ * version key their envelope declares, so a per-format extension list would be two copies of
+ * one fact and would make `service.asyncapi.yaml` unreadable for no reason.
+ */
+const STRUCTURED_DOCUMENT_EXTENSIONS = ['.json', '.yaml', '.yml', '.openapi', '.asyncapi']
+
+/** Extensions a GraphQL schema (SDL) can carry. */
+const GRAPHQL_DOCUMENT_EXTENSIONS = ['.graphql', '.graphqls', '.gql']
+
+/** Extensions a Protocol Buffers service definition can carry. */
+const PROTOBUF_DOCUMENT_EXTENSIONS = ['.proto']
 
 /**
  * Basenames that carry a contract EXTENSION but are never served as contracts: the package,
@@ -133,20 +193,28 @@ const TSCONFIG_BASENAME = /^tsconfig(\..+)?\.json$/
  * contract. This keeps a scan's file reads proportional to the CANDIDATES rather than to the
  * folder's size.
  *
- * The extension half is derived from the same two lists `detectContractFormat` branches on, so
- * the two cannot drift. The basename half ({@link NON_CONTRACT_BASENAMES}) is definitional
- * rather than derived: a candidate may still be rejected on its content, and a non-candidate is
- * never a contract we serve.
+ * The extension half is derived from the same lists `detectContractFormat` branches on, so the
+ * two cannot drift. The basename half ({@link NON_CONTRACT_BASENAMES}) is definitional rather
+ * than derived: a candidate may still be rejected on its content, and a non-candidate is never a
+ * contract we serve.
  */
 export function isContractCandidatePath(path: string): boolean {
   const lower = path.toLowerCase()
   const base = lower.split('/').pop() ?? lower
   if (NON_CONTRACT_BASENAMES.has(base) || TSCONFIG_BASENAME.test(base)) return false
-  return (
-    endsWithAny(lower, CONTRACT_MODULE_EXTENSIONS) ||
-    endsWithAny(lower, OPENAPI_DOCUMENT_EXTENSIONS)
-  )
+  return CONTRACT_EXTENSIONS.some((extension) => lower.endsWith(extension))
 }
+
+/**
+ * Every extension a contract document can carry, in ONE list so the candidate test and the
+ * detector can never disagree about what is worth reading.
+ */
+const CONTRACT_EXTENSIONS = [
+  ...CONTRACT_MODULE_EXTENSIONS,
+  ...STRUCTURED_DOCUMENT_EXTENSIONS,
+  ...GRAPHQL_DOCUMENT_EXTENSIONS,
+  ...PROTOBUF_DOCUMENT_EXTENSIONS,
+]
 
 /**
  * Whether `path` names a TypeScript/JavaScript contract MODULE rather than an OpenAPI document,
@@ -193,9 +261,168 @@ function parseOpenApiDocument(content: string): Record<string, unknown> | null {
   return doc
 }
 
+/** Whether `content` parses as an AsyncAPI **2.x/3.x** document (JSON or YAML). */
+export function isAsyncApiDocument(content: string): boolean {
+  return parseAsyncApiDocument(content) !== null
+}
+
+/**
+ * Parse an AsyncAPI 2.x/3.x document from JSON or YAML, or null when it is neither.
+ *
+ * The twin of {@link parseOpenApiDocument} and deliberately as strict: the `asyncapi` version key
+ * is what separates an event-driven interface from the many other `channels`-bearing YAML files a
+ * repo holds (a broker config, a Kafka Connect descriptor), and accepting any of them would
+ * register a service whose "interface" is infrastructure config.
+ */
+function parseAsyncApiDocument(content: string): Record<string, unknown> | null {
+  let parsed: unknown
+  try {
+    parsed = parseYaml(content)
+  } catch {
+    // silent-catch-ok: an unparseable document is simply "not AsyncAPI"; the caller reports the
+    // file as unrecognised, and the parse error names only the file's own syntax.
+    return null
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+  const doc = parsed as Record<string, unknown>
+  const version = doc.asyncapi
+  if (typeof version !== 'string') return null
+  return version.startsWith('2.') || version.startsWith('3.') ? doc : null
+}
+
+/**
+ * Whether `content` is a GraphQL SDL **schema** rather than an operation document.
+ *
+ * The distinction is the whole reason this exists. A `.graphql` / `.gql` file in a repository is
+ * far more often a client's `query`/`mutation`/`fragment` text than the schema a service
+ * publishes, and a scan that registered one would tell an Architect the service exposes a surface
+ * it does not. What separates the two is a TYPE-SYSTEM definition, which an operation document by
+ * construction never carries.
+ *
+ * Recognition rather than validation, deliberately: the platform indexes no GraphQL operations
+ * ({@link operationsAreIndexable}), so the verdict this needs to reach is only "is this file the
+ * service's published interface", and a real parser would buy nothing for the extra dependency.
+ */
+export function isGraphqlSchemaDocument(content: string): boolean {
+  return GRAPHQL_TYPE_SYSTEM_DEFINITION.test(stripLineComments(content, '#'))
+}
+
+/**
+ * Whether `content` declares a gRPC **service** rather than only message shapes.
+ *
+ * A `.proto` file is routinely vendored, generated, or purely structural (shared `message`
+ * definitions with no RPCs at all), and none of those is an interface the owning service
+ * publishes. What makes a protobuf file a gRPC contract is a `service` block, so that is what is
+ * required rather than the extension alone.
+ */
+export function isGrpcServiceDocument(content: string): boolean {
+  return PROTOBUF_SERVICE_DEFINITION.test(stripLineComments(content, '//'))
+}
+
+/** A GraphQL type-system definition (or extension), which only a SCHEMA document carries. */
+const GRAPHQL_TYPE_SYSTEM_DEFINITION =
+  /^[ \t]*(extend[ \t]+)?(schema|type|interface|input|enum|union|scalar|directive)[ \t]/m
+
+/** A protobuf `service Foo` declaration, the one thing that makes a `.proto` a gRPC contract. */
+const PROTOBUF_SERVICE_DEFINITION = /^[ \t]*service[ \t]+[A-Za-z_][A-Za-z0-9_]*/m
+
+/**
+ * Drop whole-line comments so a keyword mentioned in prose cannot be read as a declaration.
+ *
+ * Whole-line only, and that asymmetry is on purpose: a trailing comment cannot introduce a false
+ * POSITIVE (the line already holds real syntax before it), while stripping mid-line would have to
+ * understand string literals to avoid cutting a `#` or `//` inside one.
+ */
+function stripLineComments(content: string, marker: string): string {
+  return content
+    .split(/\r?\n/)
+    .filter((line) => !line.trimStart().startsWith(marker))
+    .join('\n')
+}
+
 // --- operation indexing ----------------------------------------------------
 
 const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'patch', 'head', 'options', 'trace']
+
+/** The per-channel operation keys AsyncAPI **2.x** declares (3.x moved these to `operations`). */
+const ASYNCAPI_2_CHANNEL_OPERATIONS = ['publish', 'subscribe']
+
+/**
+ * The operations an AsyncAPI document declares, as `PUBLISH orders/created` strings, capped at
+ * {@link MAX_CATALOG_OPERATIONS}.
+ *
+ * Both major versions are read, because an org's portal will hold documents of each and the two
+ * state the same fact in different places:
+ *
+ * - **2.x** puts the verb under the channel (`channels['orders/created'].subscribe`), so the
+ *   operation is the channel name plus which side of it the document declares.
+ * - **3.x** hoists them into a top-level `operations` map whose entries carry an `action`
+ *   (`send`/`receive`) and a `$ref` to the channel, so the operation is the action plus the
+ *   channel the ref names, falling back to the operation's own key when the ref is not a local
+ *   `#/channels/<name>` pointer. That fallback is the honest half: following an external ref
+ *   would need a fetch this parser will not make, and the key is the document's own name for
+ *   the operation rather than an invented one.
+ *
+ * A document whose version is neither indexes to nothing rather than being guessed at.
+ */
+export function indexAsyncApiOperations(content: string): {
+  operations: string[]
+  omitted: number
+} {
+  const doc = parseAsyncApiDocument(content)
+  if (!doc) return { operations: [], omitted: 0 }
+  const all = String(doc.asyncapi).startsWith('3.')
+    ? asyncApi3Operations(doc)
+    : asyncApi2Operations(doc)
+  all.sort()
+  return {
+    operations: all.slice(0, MAX_CATALOG_OPERATIONS),
+    omitted: Math.max(0, all.length - MAX_CATALOG_OPERATIONS),
+  }
+}
+
+function asyncApi2Operations(doc: Record<string, unknown>): string[] {
+  const channels = doc.channels
+  if (!channels || typeof channels !== 'object') return []
+  const out: string[] = []
+  for (const [channel, item] of Object.entries(channels as Record<string, unknown>)) {
+    if (!item || typeof item !== 'object') continue
+    for (const operation of ASYNCAPI_2_CHANNEL_OPERATIONS) {
+      if (operation in (item as Record<string, unknown>)) {
+        out.push(`${operation.toUpperCase()} ${channel}`)
+      }
+    }
+  }
+  return out
+}
+
+function asyncApi3Operations(doc: Record<string, unknown>): string[] {
+  const operations = doc.operations
+  if (!operations || typeof operations !== 'object') return []
+  const out: string[] = []
+  for (const [key, item] of Object.entries(operations as Record<string, unknown>)) {
+    if (!item || typeof item !== 'object') continue
+    const operation = item as { action?: unknown; channel?: { $ref?: unknown } }
+    const action = typeof operation.action === 'string' ? operation.action.toUpperCase() : null
+    if (!action) continue
+    out.push(`${action} ${asyncApi3ChannelName(operation.channel?.$ref) ?? key}`)
+  }
+  return out
+}
+
+/** The channel a 3.x operation's `$ref` names, when it is a local `#/channels/<name>` pointer. */
+function asyncApi3ChannelName(ref: unknown): string | null {
+  if (typeof ref !== 'string') return null
+  const local = /^#\/channels\/(.+)$/.exec(ref)
+  const pointer = local?.[1]
+  if (!pointer) return null
+  // AsyncAPI escapes `/` in a JSON-Pointer segment as `~1` (and `~` as `~0`), which is what a
+  // slash-bearing channel name like `orders/created` becomes. Decoding is what stops the
+  // rendered operation naming a channel the document does not contain. `~1` is unescaped first
+  // and `~0` second, which is the order RFC 6901 fixes: the reverse turns a literal `~1` into a
+  // slash.
+  return pointer.replace(/~1/g, '/').replace(/~0/g, '~')
+}
 
 /**
  * The operations an OpenAPI document declares, as `GET /files/{id}` strings, capped at
@@ -239,6 +466,7 @@ export function indexContractOperations(
   body: string,
 ): { operations: string[]; omitted: number } {
   if (format === 'openapi') return indexOpenApiOperations(body)
+  if (format === 'asyncapi') return indexAsyncApiOperations(body)
   if (format === 'toad-contract') return indexToadContractOperations(body)
   return { operations: [], omitted: 0 }
 }
@@ -334,6 +562,7 @@ const CONTRACT_LIBRARY: Partial<Record<ApiContractFormat, { package: string; lab
 export type FoundationalDefinitionProblem =
   | { reason: 'duplicate_contract_id'; contractId: string }
   | { reason: 'invalid_openapi_document'; contractId: string }
+  | { reason: 'invalid_asyncapi_document'; contractId: string }
   | {
       reason: 'contract_library_not_referenced'
       format: ApiContractFormat
@@ -380,8 +609,9 @@ export function validateFoundationalDefinition(input: {
       problems.push({ reason: 'duplicate_contract_id', contractId: contract.contractId })
     }
     seen.add(contract.contractId)
-    if (contract.format === 'openapi' && !isOpenApiDocument(contract.body)) {
-      problems.push({ reason: 'invalid_openapi_document', contractId: contract.contractId })
+    const invalid = describeInvalidStructuredDocument(contract.format, contract.body)
+    if (invalid) {
+      problems.push({ reason: invalid, contractId: contract.contractId })
     }
   }
   for (const [format, library] of Object.entries(CONTRACT_LIBRARY) as [
@@ -408,11 +638,36 @@ export function describeFoundationalProblem(problem: FoundationalDefinitionProbl
       return `Duplicate contract id '${problem.contractId}'`
     case 'invalid_openapi_document':
       return `Contract '${problem.contractId}' is not a valid OpenAPI 3.x document (JSON or YAML)`
+    case 'invalid_asyncapi_document':
+      return `Contract '${problem.contractId}' is not a valid AsyncAPI 2.x/3.x document (JSON or YAML)`
     case 'contract_library_not_referenced':
       return `No document declared as '${problem.format}' (${problem.contractIds.join(', ')}) references ${problem.expected}. A set may include the modules a contract imports, but at least one of them must be the contract itself.`
     case 'capability_tag_near_miss':
       return `Capability tag '${problem.capability}' differs from the reserved tag '${problem.expected}' only in case or separators. The platform matches '${problem.expected}' exactly, so this tag would be silently ignored — use it, or pick a tag that is not a near-miss of it.`
   }
+}
+
+/**
+ * Why a document does not hold up as the STRUCTURED format it was declared as, or null when it
+ * does (and for every format that is not parsed here).
+ *
+ * Only the two JSON/YAML formats are checked, and the reason is the failure this rule exists to
+ * prevent rather than a preference for parseable things: a document claiming to be OpenAPI or
+ * AsyncAPI but which is neither registers cleanly and then lists ZERO operations, which reads to
+ * an Architect as a fully-specified service that offers no endpoints. GraphQL SDL and protobuf
+ * index no operations at all (`operationsAreIndexable` says so), so neither can produce that
+ * false impression here. Their own recognisers ({@link isGraphqlSchemaDocument},
+ * {@link isGrpcServiceDocument}) answer a different question and are used where it is asked: a
+ * SCAN has to decide whether a file it found is the service's published interface, where an
+ * upload was told so by the person making it.
+ */
+function describeInvalidStructuredDocument(
+  format: ApiContractFormat,
+  body: string,
+): 'invalid_openapi_document' | 'invalid_asyncapi_document' | null {
+  if (format === 'openapi') return isOpenApiDocument(body) ? null : 'invalid_openapi_document'
+  if (format === 'asyncapi') return isAsyncApiDocument(body) ? null : 'invalid_asyncapi_document'
+  return null
 }
 
 /** Build the catalog-facing summary of one stored contract document. */
@@ -556,23 +811,79 @@ export function renderFoundationalCatalog(read: FoundationalCatalogRead): string
     'FOUNDATIONAL SERVICES available to this system (shared capabilities that already exist — prefer consuming one over building your own):',
     '',
   ]
-  for (const service of services) {
-    lines.push(`- id: ${service.id} — ${service.name}`)
-    lines.push(`  ${service.summary}`)
-    if (service.capabilities.length > 0) {
-      lines.push(`  capabilities: ${service.capabilities.join(', ')}`)
-    }
-    if (service.description.trim()) {
-      lines.push(`  ${service.description.trim().replace(/\r?\n/g, '\n  ')}`)
-    }
-    for (const contract of service.contracts) {
-      lines.push(
-        `  contract (${contract.format}): ${contract.title}${describeOperations(contract)}`,
+  const rendered = withinRenderBudget(
+    services.map((service) => {
+      const block: string[] = [`- id: ${service.id} (${service.name})`, `  ${service.summary}`]
+      appendServiceBody(block, service, 'contract')
+      block.push('')
+      return block
+    }),
+  )
+  for (const block of rendered.kept) lines.push(...block)
+  if (rendered.omitted > 0) lines.push(describeOmittedServices(rendered.omitted))
+  return lines.join('\n').trimEnd()
+}
+
+/**
+ * The half of a service's block both renderings share: its tags, its description and its
+ * interface lines.
+ *
+ * Shared where the two documents agree and no further: the heading line and the contract label
+ * differ because the two readers are doing different jobs, and folding those into one parameterised
+ * template would make every future change to one framing a change to the other by default.
+ */
+function appendServiceBody(
+  block: string[],
+  service: FoundationalCatalogView,
+  contractLabel: 'contract' | 'interface',
+): void {
+  if (service.capabilities.length > 0) {
+    block.push(`  capabilities: ${service.capabilities.join(', ')}`)
+  }
+  const description = service.description.trim()
+  if (description) {
+    const capped = description.slice(0, MAX_CATALOG_DESCRIPTION_CHARS)
+    block.push(`  ${capped.replace(/\r?\n/g, '\n  ')}`)
+    if (description.length > capped.length) {
+      block.push(
+        `  [description truncated here: ${description.length - capped.length} further characters are recorded in the catalog]`,
       )
     }
-    lines.push('')
   }
-  return lines.join('\n').trimEnd()
+  for (const contract of service.contracts) {
+    block.push(
+      `  ${contractLabel} (${contract.format}): ${contract.title}${describeOperations(contract)}`,
+    )
+  }
+}
+
+/**
+ * As many whole service blocks as fit in {@link MAX_CATALOG_RENDER_CHARS}, plus how many were left
+ * out.
+ *
+ * WHOLE blocks, never a partial one: half a service reads as a service whose interfaces are the
+ * ones listed, which is the same lie the operation caps exist to avoid telling. The catalog is
+ * ordered by service id, so the kept set is a plain prefix and the caller says so.
+ */
+function withinRenderBudget(blocks: string[][]): { kept: string[][]; omitted: number } {
+  const kept: string[][] = []
+  let used = 0
+  for (const [index, block] of blocks.entries()) {
+    const size = block.reduce((total, line) => total + line.length + 1, 0)
+    // The FIRST block is admitted whatever it costs: an over-budget single service must render as
+    // one (capped) service rather than as an empty catalog, which is the outage-shaped answer.
+    if (index > 0 && used + size > MAX_CATALOG_RENDER_CHARS) {
+      return { kept, omitted: blocks.length - index }
+    }
+    kept.push(block)
+    used += size
+  }
+  return { kept, omitted: 0 }
+}
+
+/** The line that states a rendered catalog is a PREFIX, never a silently shortened whole. */
+function describeOmittedServices(omitted: number): string {
+  return `... and ${omitted} further registered services that did not fit in this file. The list above is a PREFIX of the catalog, not all of it: do not conclude that a service does not exist because it is missing here.`
 }
 
 /**
@@ -597,6 +908,58 @@ function describeOperations(contract: ApiContractSummary): string {
       ? ` (+${contract.omittedOperations} more operations not listed here)`
       : ''
   return ` — ${contract.operations.join(', ')}${omitted}`
+}
+
+/**
+ * Render the ESTATE block an orientation-time kind reads: which services the organisation runs,
+ * who owns each, and what interface each publishes.
+ *
+ * The same rows as {@link renderFoundationalCatalog} and a different document, because the reader
+ * is doing a different job. A triage agent is not choosing a shared capability to build against;
+ * it is trying to work out which service a report belongs to and who to route it to, and the
+ * design framing ("prefer consuming one of these") would push it towards recommending an
+ * adoption instead of naming a fault. So this states ownership first, asks for no declaration,
+ * and says plainly what it does NOT carry: the full interface documents, which stay behind a
+ * design's declaration because folding every one of them into every dispatch is the cost the
+ * catalog/contracts split exists to avoid.
+ *
+ * The three-state input is the same one the catalog renderer takes, and for the same reason: an
+ * estate that could not be READ must not render as an organisation that runs nothing, which is
+ * exactly the substitution that would have a triage agent conclude a service does not exist.
+ */
+export function renderServiceEstate(read: FoundationalCatalogRead): string {
+  if (read.status === 'unavailable') {
+    return [
+      "SERVICE ESTATE: the catalog of this organisation's services COULD NOT BE READ, so which services exist, who owns them and what they expose is unknown here.",
+      'This is a platform failure, not evidence about the organisation. Do not conclude that a service you would expect does not exist, and do not attribute ownership from a name.',
+      'Work from the repositories and code you can actually see, and state in your report that the service catalog was unavailable.',
+    ].join('\n')
+  }
+  const services = read.services
+  if (services.length === 0) {
+    return [
+      'SERVICE ESTATE: no service catalog is registered for this workspace, so the only services you can reason about are the ones whose code you have been given.',
+      'Do not infer ownership or the existence of a neighbouring service from a name alone; if the work plainly crosses into a system you cannot see, say so in your report.',
+    ].join('\n')
+  }
+  const lines: string[] = [
+    'SERVICE ESTATE. These are the services this organisation runs, as its own catalog records them. Use the list to work out WHICH service a piece of work belongs to and WHO owns it:',
+    '',
+  ]
+  const rendered = withinRenderBudget(
+    services.map((service) => {
+      const block: string[] = [`- id: ${service.id} (${service.name})`, `  ${service.summary}`]
+      appendServiceBody(block, service, 'interface')
+      block.push('')
+      return block
+    }),
+  )
+  for (const block of rendered.kept) lines.push(...block)
+  if (rendered.omitted > 0) lines.push(describeOmittedServices(rendered.omitted), '')
+  lines.push(
+    'The operation lists above are the interface SURFACE, not the full API documents: they are enough to say which service exposes what, and not enough to write a call against. Never invent an endpoint, a field or an owner that is not stated here, and if what you need is a service this list does not carry, say so rather than guessing at it.',
+  )
+  return lines.join('\n').trimEnd()
 }
 
 /** One contract document as the lazy read hands it downstream. */
@@ -628,7 +991,7 @@ export function renderContractDocument(bundle: FoundationalContractBundle): stri
   ]
   for (const contract of bundle.contracts) {
     lines.push(`## ${contract.title} (${contract.format})`, '')
-    const fence = contract.format === 'openapi' ? 'yaml' : 'ts'
+    const fence = contractFenceLanguage(contract.format)
     const { text, omitted } = capBody(contract.body)
     lines.push(`\`\`\`${fence}`, text, '```')
     if (omitted > 0) {
@@ -640,6 +1003,37 @@ export function renderContractDocument(bundle: FoundationalContractBundle): stri
     lines.push('')
   }
   return lines.join('\n').trimEnd()
+}
+
+/**
+ * The fence language one contract document is rendered under.
+ *
+ * Exhaustive over the format union with a `never` guard, so adding a format fails the BUILD here
+ * rather than fencing a `.proto` file as TypeScript. The fence is not cosmetic: it is what tells
+ * the agent which artifact it is reading, and a document fenced as the wrong language is one a
+ * model will try to fix rather than call.
+ */
+function contractFenceLanguage(format: ApiContractFormat): string {
+  switch (format) {
+    case 'openapi':
+    case 'asyncapi':
+      // YAML's grammar is a superset of JSON's, so one fence serves a document stored as either.
+      return 'yaml'
+    case 'graphql':
+      return 'graphql'
+    case 'grpc':
+      return 'proto'
+    case 'toad-contract':
+    case 'lokalise-api-contract':
+      return 'ts'
+    default:
+      return exhaustiveContractFormat(format)
+  }
+}
+
+/** The compile-time totality guard for {@link contractFenceLanguage}. */
+function exhaustiveContractFormat(format: never): string {
+  return String(format)
 }
 
 function capBody(body: string): { text: string; omitted: number } {

@@ -1,6 +1,11 @@
 import {
+  connectServiceCatalogContract,
   createFoundationalServiceContract,
   deleteFoundationalServiceContract,
+  disconnectServiceCatalogContract,
+  getServiceCatalogContract,
+  probeServiceCatalogContract,
+  syncServiceCatalogContract,
   foundationalServiceSourceStatusContract,
   getFoundationalServiceContractsContract,
   linkFoundationalServiceSourceContract,
@@ -15,6 +20,7 @@ import {
   updateFoundationalServiceContract,
 } from '@cat-factory/contracts'
 import type {
+  ConnectServiceCatalogInput,
   CreateFoundationalServiceInput,
   FoundationalServiceOwnerKind,
   LinkFoundationalServiceSourceInput,
@@ -136,5 +142,23 @@ export function foundationalServicesApi({ send, ws, scope }: ApiContext) {
         pathPrefix: scope(kind, id),
         pathParams: { id: sourceId },
       }),
+
+    // ---- the SERVICE CATALOG connection (a developer portal) --------------
+    // Workspace-only, and not by omission: the portal credential rides the workspace-keyed secret
+    // delegation, so there is no account-scoped shape of this connection to serve.
+    getServiceCatalog: (workspaceId: string) =>
+      send(getServiceCatalogContract, { pathPrefix: ws(workspaceId) }),
+
+    connectServiceCatalog: (workspaceId: string, body: ConnectServiceCatalogInput) =>
+      send(connectServiceCatalogContract, { pathPrefix: ws(workspaceId), body }),
+
+    disconnectServiceCatalog: (workspaceId: string) =>
+      send(disconnectServiceCatalogContract, { pathPrefix: ws(workspaceId) }),
+
+    probeServiceCatalog: (workspaceId: string, body: ConnectServiceCatalogInput) =>
+      send(probeServiceCatalogContract, { pathPrefix: ws(workspaceId), body }),
+
+    syncServiceCatalog: (workspaceId: string) =>
+      send(syncServiceCatalogContract, { pathPrefix: ws(workspaceId) }),
   }
 }

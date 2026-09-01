@@ -40,9 +40,20 @@ class FakeServiceRepo implements FoundationalServiceRepository {
   async upsert(record: FoundationalServiceRecord) {
     this.rows.set(this.key(record.ownerKind, record.ownerId, record.serviceId), { ...record })
   }
+  async upsertMany(records: FoundationalServiceRecord[]) {
+    for (const record of records) await this.upsert(record)
+  }
   async softDelete(ownerKind: string, ownerId: string, serviceId: string, at: number) {
     const r = this.rows.get(this.key(ownerKind, ownerId, serviceId))
     if (r) r.deletedAt = at
+  }
+  async softDeleteByIds(
+    ownerKind: string,
+    ownerId: string,
+    serviceIds: string[],
+    at: number,
+  ): Promise<void> {
+    for (const serviceId of serviceIds) await this.softDelete(ownerKind, ownerId, serviceId, at)
   }
   async hardDelete(ownerKind: string, ownerId: string, serviceId: string) {
     this.rows.delete(this.key(ownerKind, ownerId, serviceId))
@@ -75,10 +86,22 @@ class FakeContractRepo implements ApiContractRepository {
     await this.deleteForService(ownerKind, ownerId, serviceId)
     this.rows.push(...contracts.map((c) => ({ ...c })))
   }
+  async replaceForServices(
+    ownerKind: string,
+    ownerId: string,
+    sets: { serviceId: string; contracts: ApiContractRecord[] }[],
+  ) {
+    for (const set of sets) {
+      await this.replaceForService(ownerKind, ownerId, set.serviceId, set.contracts)
+    }
+  }
   async deleteForService(ownerKind: string, ownerId: string, serviceId: string) {
     this.rows = this.rows.filter(
       (r) => !(r.ownerKind === ownerKind && r.ownerId === ownerId && r.serviceId === serviceId),
     )
+  }
+  async deleteForServices(ownerKind: string, ownerId: string, serviceIds: string[]) {
+    for (const serviceId of serviceIds) await this.deleteForService(ownerKind, ownerId, serviceId)
   }
 }
 

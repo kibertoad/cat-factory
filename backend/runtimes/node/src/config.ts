@@ -13,6 +13,7 @@ import type {
   GitLabConfig,
   PrivilegedAppConfig,
   SsoConfig,
+  ServiceCatalogConfig,
   TasksConfig,
 } from '@cat-factory/server'
 import {
@@ -175,6 +176,26 @@ function loadTasksConfig(env: NodeJS.ProcessEnv): TasksConfig {
   return {
     enabled: true,
     encryptionKey,
+  }
+}
+
+/**
+ * SERVICE-CATALOG integration config, byte-for-byte the rule the Worker's
+ * `loadServiceCatalogConfig` applies: the integration assembles wherever the shared ENCRYPTION_KEY
+ * is set (the portal credential must be sealable) and stays unwired where it is not. It carries its
+ * OWN URL allow-list, because a self-hosted developer portal is typically on an internal host and
+ * widening one integration's SSRF guard must never widen another's.
+ *
+ * An absent key is therefore NOT a boot failure here, unlike its document and tracker siblings
+ * above. Those integrations are unconditional, so a missing key really is a misconfiguration they
+ * must refuse; this one is optional, and failing the whole boot over an unwired optional capability
+ * would be a stricter contract than the other facade's for no gain.
+ */
+function loadServiceCatalogConfig(env: NodeJS.ProcessEnv): ServiceCatalogConfig {
+  return {
+    encryptionKey: env.ENCRYPTION_KEY?.trim(),
+    allowUrlHosts: csv(env.SERVICE_CATALOG_ALLOW_URL_HOSTS),
+    allowHttpUrls: env.SERVICE_CATALOG_ALLOW_HTTP_URLS === 'true',
   }
 }
 
@@ -789,6 +810,7 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     // ENCRYPTION_KEY backs credential encryption at rest).
     documents: loadDocumentsConfig(env),
     tasks: loadTasksConfig(env),
+    serviceCatalog: loadServiceCatalogConfig(env),
     environments: buildEnvironmentsConfig(env),
     runners: buildRunnersConfig(env),
     slack:

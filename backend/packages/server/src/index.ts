@@ -66,6 +66,12 @@ export {
   FOUNDATIONAL_SOURCE_SWEEP_BATCH,
   sweepFoundationalSources,
 } from './modules/foundationalServices/sweepFoundationalSources.js'
+export {
+  SERVICE_CATALOG_STALE_MS,
+  SERVICE_CATALOG_SWEEP_BATCH,
+  SERVICE_CATALOG_SWEEP_PERIOD_MS,
+  sweepServiceCatalogs,
+} from './modules/serviceCatalog/sweepServiceCatalog.js'
 export { noRunnerBackendAvailableError } from './runtime/runnerBackendError.js'
 export {
   GITHUB_RECONCILE_STALE_MS,
@@ -515,6 +521,7 @@ export type {
   RunnerPoolConfig,
   SlackConfig,
   SsoConfig,
+  ServiceCatalogConfig,
   TasksConfig,
 } from './config/types.js'
 // Enterprise SSO (generic OIDC): the shared env resolver both facades call, and the pieces a
