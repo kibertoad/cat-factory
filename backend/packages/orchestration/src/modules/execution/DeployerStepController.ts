@@ -14,6 +14,7 @@ import type {
   ServiceProvisioning,
 } from '@cat-factory/kernel'
 import {
+  describeInconclusiveRoute,
   describeUnreachableEnvironment,
   describeWaitedFor,
   getErrorMessage,
@@ -599,6 +600,19 @@ export class DeployerStepController {
         // A DNS zone, a security group or a load balancer, none of which is in the checkout, which
         // is why this reason is not repo-fixable and the remediation loop stays out of it.
         reason: 'environment_unreachable',
+      })
+    }
+    if (proof?.state === 'inconclusive') {
+      // The frame ADVANCES: `inconclusive` is the platform saying it could not tell, and failing a
+      // frame on it would make the diagnostic a second way for a healthy deploy to die. Logged
+      // rather than silent, because a probe that stops being able to classify anything (a runtime
+      // restriction, a resolver fault) otherwise degrades to "the feature does nothing" with the
+      // rows to prove it and nobody looking. The agent is told separately, off the stored proof.
+      this.log.warn(describeInconclusiveRoute(handle.url, proof), {
+        workspaceId,
+        executionId: instance.id,
+        environmentId: handle.id,
+        reason: proof.reason,
       })
     }
     step.deployEnvs = {

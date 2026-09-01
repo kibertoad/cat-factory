@@ -47,13 +47,19 @@ export const workerRouteProbe: RouteProbe = async (
 ): Promise<RouteProbeOutcome> => {
   let timer: ReturnType<typeof setTimeout> | undefined
   let timedOut = false
-  const socket = connect({ hostname: req.address ?? req.host, port: req.port })
-  // The timeout leg wins the race on a hanging connect, which leaves `opened` to reject later with
-  // nobody awaiting it. In workerd that is an unhandled rejection, and an unhandled rejection is
-  // how a diagnostic comes to kill the isolate serving the run it was diagnosing. Observed here so
-  // it is always handled; the race below still decides the answer.
-  void socket.opened.then(undefined, () => undefined)
+  // INSIDE the try, because `connect()` itself throws SYNCHRONOUSLY for a target workerd refuses
+  // (a malformed hostname, a blocked port, an address range the runtime will not dial). Outside
+  // it, that throw becomes a REJECTED probe: the port promises it never rejects, and the caller's
+  // best-effort wrapper would swallow the rejection and record no proof at all, where the `failed`
+  // member exists precisely to put "we could not tell" on the record.
+  let socket: ReturnType<typeof connect> | undefined
   try {
+    socket = connect({ hostname: req.address ?? req.host, port: req.port })
+    // The timeout leg wins the race on a hanging connect, which leaves `opened` to reject later
+    // with nobody awaiting it. In workerd that is an unhandled rejection, and an unhandled
+    // rejection is how a diagnostic comes to kill the isolate serving the run it was diagnosing.
+    // Observed here so it is always handled; the race below still decides the answer.
+    void socket.opened.then(undefined, () => undefined)
     const deadline = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
         timedOut = true
@@ -67,7 +73,7 @@ export const workerRouteProbe: RouteProbe = async (
   } finally {
     if (timer) clearTimeout(timer)
     try {
-      await socket.close()
+      await socket?.close()
     } catch {
       // The connection is already dead on every failure path, and a close fault has nothing to add
       // and nobody to add it to: this port promises it never rejects.

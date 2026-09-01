@@ -714,8 +714,10 @@ export {
 export {
   MAX_PROBED_ADDRESSES,
   ROUTE_PROBE_TIMEOUT_MS,
+  describeInconclusiveRoute,
   describeUnreachableEnvironment,
   planRouteProbes,
+  recordRefusedAttempt,
   recordRouteAttempt,
   reduceRouteProof,
   unprovedRoute,
@@ -951,6 +953,7 @@ export {
   decimalV4,
   mappedV4,
   decodeIpv4,
+  decodeIpv6,
   isCloudMetadataHost,
   isBlockedPrivateHost,
   isLoopbackHost,
@@ -965,6 +968,7 @@ export {
 export type {
   HostBridgeTarget,
   LocalMachineHostBridge,
+  UnbridgeableCause,
 } from './shared/environment-host-bridge.logic.js'
 export {
   isSecretShapedFilename,

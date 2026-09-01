@@ -329,9 +329,38 @@ export class KubernetesRunnerTransport implements RunnerTransport {
       throw new Error(`Failed to create runner pod (HTTP ${res.status}): ${await safeText(res)}`)
     }
     if (await this.podMissingHostAliases(name, options)) {
-      await this.apiFetch('DELETE', podUrl(this.config, name), undefined, DISPATCH_TIMEOUT_MS)
+      await this.deletePodForReplacement(name)
       await this.recreatePod(name, manifest)
     }
+  }
+
+  /**
+   * Delete the pod standing in the way of a replacement, and FAIL on a refusal rather than
+   * proceeding to the recreate.
+   *
+   * The result has to be read. A delete the apiserver refuses (a ServiceAccount with `create` but
+   * not `delete`, an admission webhook, a 500) leaves the pod running, and {@link recreatePod}
+   * then spends the whole 90-second replacement window collecting 409s before throwing an error
+   * that names the CREATE: a step burning a minute and a half of the driver's budget, and an
+   * operator sent to the wrong permission. A deployment missing `pods/delete` hits this on every
+   * environment-bearing step, so it is a standing misconfiguration rather than a transient.
+   *
+   * 404 is success: something already removed the pod, which is exactly the state the delete was
+   * asking for.
+   */
+  private async deletePodForReplacement(name: string): Promise<void> {
+    const res = await this.apiFetch(
+      'DELETE',
+      podUrl(this.config, name),
+      undefined,
+      DISPATCH_TIMEOUT_MS,
+    )
+    if (res.ok || res.status === 404) return
+    throw new Error(
+      `Could not delete runner pod '${name}' to give it a host alias it needs (HTTP ` +
+        `${res.status}): ${await safeText(res)}. The pod is still running without the alias, so ` +
+        `the job would not reach its environment.`,
+    )
   }
 
   /**

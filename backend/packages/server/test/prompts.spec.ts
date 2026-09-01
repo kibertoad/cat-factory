@@ -297,7 +297,7 @@ describe('dispatchEnvironments', () => {
               frameId: 'f_email',
               title: 'Email',
               envUrl: 'https://email.env',
-              envAddress: '10.4.19.23',
+              envReachability: { state: 'reached', address: '10.4.19.23' },
             },
           ],
         } as Record<string, unknown>),
@@ -318,6 +318,28 @@ describe('dispatchEnvironments', () => {
         } as Record<string, unknown>),
       ),
     ).toEqual([{ url: 'https://env.example' }])
+  })
+
+  it('carries the PROVED address for a frontend binding too, off the same handle', () => {
+    // The third leg. A bound peer only reachable by address fails a UI test on name resolution
+    // exactly as the run's own environment would, and the binding resolution reads the proof off
+    // the very handle it takes the URL from, so omitting it dropped a fact the platform held.
+    expect(
+      dispatchEnvironments(
+        context({
+          frontend: {
+            config: { backendBindings: [] },
+            bindings: [
+              {
+                envVar: 'PUB_API_URL',
+                serviceUrl: 'https://api.ephemeral.example',
+                serviceAddress: '10.4.19.24',
+              },
+            ],
+          },
+        } as Record<string, unknown>),
+      ),
+    ).toEqual([{ url: 'https://api.ephemeral.example', address: '10.4.19.24' }])
   })
 
   it('lists a frontend binding resolved to a real service, and never the in-container mock', () => {

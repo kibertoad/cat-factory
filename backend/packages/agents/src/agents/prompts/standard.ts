@@ -14,6 +14,10 @@ import {
   originSuffix,
   renderTaskContext,
 } from '@cat-factory/kernel'
+// The ONE deriver of an environment URL's host/port/scheme, in contracts because the platform has
+// to DIAL exactly what this prompt tells the agent to dial: a second parser here is how the route
+// proof and the Tester's coordinates come to disagree about the same string.
+import { deriveEnvironmentCoordinates } from '@cat-factory/contracts'
 import { PLATFORM_DELIVERY_CONTRACT } from './delivery-contract.js'
 import { renderOpenFindings } from './review-rounds.js'
 import { FINAL_ANSWER_IN_REPLY } from './shared.js'
@@ -209,43 +213,6 @@ function toView(context: AgentRunContext): UserPromptView {
   }
 }
 
-/** The reachable coordinates of a provisioned environment, parsed from its URL. */
-interface EnvironmentCoordinates {
-  host: string
-  /** Port — explicit from the URL, else the scheme default (443/80), else null. */
-  port: number | null
-  /** URL scheme without the trailing colon (e.g. `https`). */
-  scheme: string
-}
-
-/**
- * Derive standardized coordinates from an environment URL, or null when there is no URL or
- * it does not parse. Having one deriver means the Tester prompt gets a consistent
- * host/port/scheme breakdown regardless of which provider stood the environment up — no
- * per-provider change required. When the URL omits an explicit port, fall back to the
- * scheme default (`https`→443, `http`→80) so the Tester always has a concrete port.
- */
-function deriveEnvironmentCoordinates(
-  url: string | null | undefined,
-): EnvironmentCoordinates | null {
-  if (!url) return null
-  let parsed: URL
-  try {
-    parsed = new URL(url)
-  } catch {
-    return null
-  }
-  const scheme = parsed.protocol.replace(/:$/, '')
-  const port = parsed.port
-    ? Number(parsed.port)
-    : scheme === 'https'
-      ? 443
-      : scheme === 'http'
-        ? 80
-        : null
-  return { host: parsed.hostname, port, scheme }
-}
-
 /**
  * What the platform already established about REACHING this environment, as prompt lines.
  *
@@ -267,10 +234,16 @@ function reachabilityLines(
   reachability: NonNullable<AgentRunContext['environment']>['reachability'],
 ): string[] {
   if (!reachability) return []
-  if (reachability.state === 'unproved') {
+  if (reachability.state === 'inconclusive') {
+    // The platform LOOKED and could not tell, which is a different thing from having no prober
+    // (that case reaches here as no note at all) and the one worth a line: an agent told only
+    // "connection failed" reaches for "the environment is down", and this is the sentence that
+    // makes that a hypothesis rather than the conclusion.
     return [
-      '- Reachability: NOT VERIFIED by the platform. Treat a connection failure as unexplained ' +
-        'rather than as evidence the environment is down.',
+      '- Reachability: the platform TRIED to reach this environment and could not establish ' +
+        `anything either way (${reachability.reason ?? 'unknown cause'}` +
+        `${reachability.detail ? `: ${reachability.detail}` : ''}). Treat a connection failure ` +
+        'as unexplained rather than as evidence the environment is down.',
     ]
   }
   if (reachability.state === 'not_reached') {
@@ -371,12 +344,40 @@ export function involvedServicesSection(context: AgentRunContext): string {
     const parts = [`- ${service.title}`]
     if (service.description) parts.push(`— ${service.description}`)
     if (service.envUrl) parts.push(`(live environment: ${service.envUrl})`)
-    // The peer's environment fails in exactly the same way the run's own does and reads as exactly
-    // the same "the environment is down", so the address that carried travels with it.
-    if (service.envAddress) parts.push(`(reachable at ${service.envAddress}, not by hostname)`)
+    parts.push(...peerReachabilityParts(service.envReachability))
     lines.push(parts.join(' '))
   }
   return lines.join('\n')
+}
+
+/**
+ * What the platform established about reaching ONE peer's environment, as a parenthetical.
+ *
+ * Every state gets a clause, including the two that carry no address, and that is the whole point:
+ * a peer's environment fails in exactly the same way the run's own does and reads as exactly the
+ * same "the environment is down". Stating only the carrying address left a peer the platform could
+ * not reach rendering as a plain healthy URL, so a cross-service tester spent its step on
+ * connection failures and reported the peer as down. Silent only for the ordinary case, where the
+ * peer's own name carried.
+ */
+function peerReachabilityParts(
+  reachability: NonNullable<AgentRunContext['involvedServices']>[number]['envReachability'],
+): string[] {
+  if (!reachability) return []
+  if (reachability.state === 'not_reached') {
+    return [
+      `(the platform could NOT reach this peer: ${reachability.reason ?? 'unknown cause'}. A ` +
+        `connection failure against it is expected and is NOT evidence about your own service)`,
+    ]
+  }
+  if (reachability.state === 'inconclusive') {
+    return [
+      `(the platform could not establish whether this peer is reachable: ` +
+        `${reachability.reason ?? 'unknown cause'}. Treat a connection failure against it as ` +
+        `unexplained)`,
+    ]
+  }
+  return reachability.address ? [`(reachable at ${reachability.address}, not by hostname)`] : []
 }
 
 /**

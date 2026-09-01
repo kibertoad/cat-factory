@@ -14,13 +14,19 @@
 // mapping is expressible in both. Only the `host-gateway` target is Docker-family-specific, which
 // is why it is a discriminated target rather than a second list.
 
-import type { DispatchEnvironment, HostBridgeTarget } from '@cat-factory/kernel'
+import type { DispatchEnvironment, HostBridgeTarget, UnbridgeableCause } from '@cat-factory/kernel'
 import { classifyLocalMachineHostBridge, hostBridgeKey } from '@cat-factory/kernel'
 
 /** One name a container must have re-pointed, and what to re-point it at. */
 export interface HostBridge {
   host: string
   target: HostBridgeTarget
+}
+
+/** One environment no bridge this transport can install will make reachable, and why. */
+export interface UnbridgeableEnvironment {
+  url: string
+  cause: UnbridgeableCause
 }
 
 /** What a job's environments mean for the container the transport is about to start. */
@@ -35,15 +41,19 @@ export interface EnvironmentBridgePlan {
    */
   bridges: readonly HostBridge[]
   /**
-   * The URLs that name this machine and that no bridge reaches: a compose environment published on
-   * `http://localhost:<port>`, or one published on a bare loopback address.
+   * The environments no bridge reaches, each with the CAUSE that decides the remedy: one naming
+   * this machine by a spelling nothing looks up (a compose stack on `http://localhost:<port>`, a
+   * bare loopback address), or one the platform proved is reachable ONLY at an address this
+   * transport cannot install.
    *
    * Carried rather than dropped because "nothing to bridge" and "unreachable and unfixable here"
    * are opposite facts that would otherwise render identically, and the second is a run that is
-   * going to spend its tester step on connection failures. The transport says so once at dispatch;
-   * nothing downstream branches on it.
+   * going to spend its tester step on connection failures. The second cause is the worse of the
+   * two: the run record then asserts the environment was reached at an address the container never
+   * got, which puts the evidence further from the cause than no bridge at all. The transport says
+   * so once at dispatch; nothing downstream branches on it.
    */
-  unbridgeable: readonly string[]
+  unbridgeable: readonly UnbridgeableEnvironment[]
 }
 
 /** The hostname of `url`, or null when it has none or is not a URL (never a guess). */
@@ -73,7 +83,7 @@ export function planEnvironmentBridges(
   environments: readonly (DispatchEnvironment | null | undefined)[],
 ): EnvironmentBridgePlan {
   const bridges = new Map<string, HostBridge>()
-  const unbridgeable = new Set<string>()
+  const unbridgeable = new Map<string, UnbridgeableEnvironment>()
   for (const environment of environments) {
     if (!environment?.url) continue
     const hostname = hostnameOf(environment.url)
@@ -82,14 +92,16 @@ export function planEnvironmentBridges(
     if (verdict.kind === 'bridge') {
       bridges.set(hostBridgeKey(verdict), { host: verdict.host, target: verdict.target })
     } else if (verdict.kind === 'unbridgeable') {
-      unbridgeable.add(environment.url)
+      unbridgeable.set(environment.url, { url: environment.url, cause: verdict.cause })
     }
   }
   return {
     bridges: [...bridges.entries()]
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
       .map(([, v]) => v),
-    unbridgeable: [...unbridgeable].sort(),
+    unbridgeable: [...unbridgeable.values()].sort((a, b) =>
+      a.url < b.url ? -1 : a.url > b.url ? 1 : 0,
+    ),
   }
 }
 

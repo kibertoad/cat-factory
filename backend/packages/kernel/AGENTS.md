@@ -141,7 +141,10 @@ else imports its **ports** and domain types from here.
   order) and `reduceRouteProof` (which one CARRIED, and which layer failed when none did) over a
   `RouteProbe`, one bounded TCP connect per facade. Beside readiness rather than folded into it:
   readiness is about the environment, reachability about anyone getting to it, and only the second
-  can be `unproved`, a verdict about the DEPLOYMENT that must never fail a run. Design:
+  can be `inconclusive` or `unproved`, verdicts about the PLATFORM that must never fail a run
+  (`not_reached` is graded only when every attempt established something). Which addresses may be
+  dialled at all is `isBridgeableAddress`, read from the bridge module and applied at PLAN time so
+  a provider-authored list cannot aim the platform's own socket. Design:
   [ADR 0062](../../docs/adr/0062-environment-address-bridge-and-route-proof.md).
 - `domain/context-references.ts`: the **"a referenced context document reaches the agent whole, or
   the run breaks loudly naming it"** invariant: the two refusals

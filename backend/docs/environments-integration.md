@@ -109,7 +109,7 @@ versioned `v1.…` envelope so a rotation can tell the generations apart.
 > manifest is authored in the app by a user with no checkout, so none of it is here.
 
 The single generic `HttpEnvironmentProvider` interprets it and nothing about your endpoints is
-assumed. Three facts about that interpretation belong to this repository:
+assumed. Four facts about that interpretation belong to this repository:
 
 - **The schema is Valibot, in `backend/packages/contracts/src/environments.ts`**, enforced at
   registration. A field added there is a field the website page has to gain, in the same change.
@@ -122,6 +122,17 @@ assumed. Three facts about that interpretation belong to this repository:
   widen. The response mapping is deliberately a set of dot-paths rather than an expression
   language: a platform whose URL is only reachable through a computed structure has outgrown the
   manifest, and the answer is the code-adapter seam below.
+- **`addressesPath` is a CLAIM the platform then proves**, and the proving is the part that lives
+  here. What an author writes is the website's
+  ([Addresses](https://www.catfactory.ai/extend/manifests.html#addresses-the-half-a-url-cannot-express));
+  what this repo owns is which addresses are dialled at all (kernel's `isBridgeableAddress`, at
+  PLAN time, so a provider-authored list cannot aim the platform's own socket at loopback or a
+  metadata endpoint), what the verdict may be (`EnvironmentRouteProof`, whose `inconclusive` state
+  never fails a frame), and how the address reaches a container. Design:
+  [ADR 0062](./adr/0062-environment-address-bridge-and-route-proof.md).
+  **A field present on the response mapping is present only when the manifest DECLARES it**, empty
+  list included, because "the provider stated none" and "this response said nothing" are different
+  facts and conflating them erases a stored candidate list on the first status poll.
 
 ### Auth schemes (calling the management API)
 

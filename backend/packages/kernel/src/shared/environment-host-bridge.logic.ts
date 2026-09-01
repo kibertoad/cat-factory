@@ -28,6 +28,7 @@ import { wildcardDnsSuffix, wildcardDnsWindows } from '@cat-factory/contracts'
 import {
   decimalV4,
   decodeIpv4,
+  decodeIpv6,
   isCloudMetadataHost,
   isLocalMachineHost,
   isLoopbackHost,
@@ -90,8 +91,24 @@ export type LocalMachineHostBridge =
   | { kind: 'none' }
   /** A NAME an added hosts-file entry re-points, and what to point it AT. */
   | { kind: 'bridge'; host: string; target: HostBridgeTarget }
-  /** This machine, and no hosts-file entry can reach it. See {@link isHostsFileAddressable}. */
-  | { kind: 'unbridgeable'; host: string }
+  /** No hosts-file entry can make this reachable, and {@link UnbridgeableCause} says why. */
+  | { kind: 'unbridgeable'; host: string; cause: UnbridgeableCause }
+
+/**
+ * Why a name cannot be bridged, because the two causes have different remedies and a transport
+ * that reported them with one sentence would send an operator to the wrong fix.
+ *
+ *   - `local_machine`    the URL names THIS machine by a spelling no hosts entry re-points
+ *                        (`localhost`, a bare IP literal). Remedy: publish the environment on a
+ *                        name that resolves to the host, or run the step natively.
+ *   - `unusable_address` the platform PROVED the name does not carry and that an address does, and
+ *                        that address cannot be installed: it is one no bridge may name, or the
+ *                        URL's own host is a literal nothing looks up. Remedy: publish a name and
+ *                        an address a bridge may name. This one is a run heading for failure with
+ *                        a proof on the record saying the environment is reachable, which is
+ *                        evidence pointing further from the cause than no bridge at all.
+ */
+export type UnbridgeableCause = 'local_machine' | 'unusable_address'
 
 /**
  * What a bridged name is mapped TO.
@@ -134,31 +151,46 @@ export type HostBridgeTarget = 'host-gateway' | { ip: string }
  *   - LINK-LOCAL and the vendor metadata addresses, the endpoint an SSRF aims at for instance
  *     credentials, reached here by a name the agent has every reason to fetch.
  *   - The unspecified, multicast and broadcast addresses, which name no host at all.
+ *
+ * Every one of those classes is judged on the DECODED address rather than on how it is written.
+ * IPv6 has many spellings of one value, so a `host === '::1'` comparison admits `0::1` and
+ * `0:0:0:0:0:0:0:1`, and a `startsWith('fe80:')` test covers an eighth of `fe80::/10`; the
+ * metadata targets are read out of `isCloudMetadataHost`, the swept definition every other guard
+ * in the tree shares, rather than restated here where a vendor added there would not reach.
  */
 export function isBridgeableAddress(address: string): boolean {
   const host = normalizeHostname(address)
   if (!host) return false
+  // Link-local (169.254/16, incl. IMDS), every vendor metadata address and the metadata NAMES,
+  // across every obfuscated encoding. One definition, shared with the SSRF guards.
+  if (isCloudMetadataHost(host)) return false
   if (host.includes(':')) {
     // IPv6. An IPv4-mapped literal is judged on the address it carries, never on its spelling.
     const mapped = mappedV4(host)
     if (mapped) return isBridgeableV4(mapped)
-    if (!/^[0-9a-f:]+$/.test(host)) return false
-    if (host === '::' || host === '::1') return false
-    // Link-local (fe80::/10) and the AWS IPv6 IMDS address.
-    if (host.startsWith('fe80:') || isCloudMetadataHost(host)) return false
-    return true
+    const groups = decodeIpv6(host)
+    return groups !== null && isBridgeableV6(groups)
   }
   const v4 = decimalV4(host)
   return v4 !== null && isBridgeableV4(v4)
 }
 
-/** The address half of {@link isBridgeableAddress}, once the literal has been decoded. */
+/** The IPv4 half of {@link isBridgeableAddress}, once the literal has been decoded. */
 function isBridgeableV4(parts: [number, number, number, number]): boolean {
-  const [a, b, c, d] = parts
+  const [a] = parts
   if (a === 0 || a === 127) return false // unspecified / loopback
-  if (a === 169 && b === 254) return false // link-local, incl. 169.254.169.254 IMDS
-  if (a === 100 && b === 100 && c === 100 && d === 200) return false // Alibaba metadata
   if (a >= 224) return false // multicast, reserved, and 255.255.255.255
+  return true
+}
+
+/** The IPv6 half, judged on the decoded groups so no spelling of a refused class gets through. */
+function isBridgeableV6(groups: readonly number[]): boolean {
+  if (groups.every((group) => group === 0)) return false // unspecified, `::`
+  // Loopback, `::1` in any spelling.
+  if (groups.every((group, index) => group === (index === 7 ? 1 : 0))) return false
+  const first = groups[0] ?? 0
+  if ((first & 0xffc0) === 0xfe80) return false // link-local, fe80::/10
+  if ((first & 0xff00) === 0xff00) return false // multicast, ff00::/8
   return true
 }
 
@@ -207,11 +239,13 @@ function isHostsFileAddressable(host: string): boolean {
  * machine's own address is a dead end inside a container whatever a provider says about it, so it
  * takes the gateway branch first and a stated address never overrides it.
  *
- * Note the asymmetry this leaves, which is correct. A LOCAL name that no hosts-file entry can
- * re-point is reported `unbridgeable`, because it names a live environment the run is going to
- * fail against. A REMOTE name in the same shape (an IP literal) is reported `none`, because an
- * address literal reaches whatever it reaches from inside the container exactly as it does
- * outside, and there is nothing to report.
+ * Note the asymmetry this leaves, which is correct. A REMOTE name with NO address is reported
+ * `none`: it reaches whatever it reaches from inside the container exactly as it does outside, and
+ * there is nothing to report. A remote name WITH one is a different fact, because an address is
+ * only ever present when the proof established that the name did not carry and the address did
+ * (`EnvironmentRouteProof.via`). Failing to install THAT is a run heading for the connection
+ * failures this mechanism exists to stop, with a proof on the record vouching for a route the
+ * container never got, so it is reported `unbridgeable` rather than passed over as `none`.
  */
 export function classifyLocalMachineHostBridge(
   hostname: string,
@@ -222,12 +256,13 @@ export function classifyLocalMachineHostBridge(
   if (resolvesToLocalMachine(host)) {
     return isHostsFileAddressable(host)
       ? { kind: 'bridge', host, target: 'host-gateway' }
-      : { kind: 'unbridgeable', host }
+      : { kind: 'unbridgeable', host, cause: 'local_machine' }
   }
   if (!address) return { kind: 'none' }
   const ip = normalizeHostname(address)
-  if (!isBridgeableAddress(ip)) return { kind: 'none' }
-  if (!isHostsFileAddressable(host)) return { kind: 'none' }
+  if (!isBridgeableAddress(ip) || !isHostsFileAddressable(host)) {
+    return { kind: 'unbridgeable', host, cause: 'unusable_address' }
+  }
   return { kind: 'bridge', host, target: { ip } }
 }
 

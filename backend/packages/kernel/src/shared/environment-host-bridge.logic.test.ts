@@ -83,7 +83,7 @@ describe('classifyLocalMachineHostBridge', () => {
     // `127.0.0.1 localhost` is matched first, and an IP literal is never looked up at all.
     for (const host of ['localhost', '127.0.0.1', '127.9.9.9', '::1', '[::1]', '0.0.0.0', '::']) {
       const verdict = classifyLocalMachineHostBridge(host)
-      expect(verdict.kind, host).toBe('unbridgeable')
+      expect(verdict, host).toMatchObject({ kind: 'unbridgeable', cause: 'local_machine' })
     }
   })
 
@@ -118,7 +118,11 @@ describe('classifyLocalMachineHostBridge', () => {
     })
   })
 
-  it('answers `none` for an address a bridge may not name, rather than half-bridging', () => {
+  it('reports an address a bridge may not name as UNBRIDGEABLE, never as nothing to do', () => {
+    // An address is only ever present when the proof established that the NAME did not carry and
+    // this address did. Dropping it to `none` left the container with no mapping, no signal
+    // anywhere, and a run record vouching for a route the container never got: evidence pointing
+    // further from the cause than no bridge at all.
     for (const address of [
       '127.0.0.1',
       '169.254.169.254',
@@ -126,14 +130,24 @@ describe('classifyLocalMachineHostBridge', () => {
       '0x7f000001',
       'not-an-ip',
     ]) {
-      expect(classifyLocalMachineHostBridge('pr-14.test.example.cloud', address), address).toEqual({
-        kind: 'none',
-      })
+      expect(
+        classifyLocalMachineHostBridge('pr-14.test.example.cloud', address),
+        address,
+      ).toMatchObject({ kind: 'unbridgeable', cause: 'unusable_address' })
     }
   })
 
-  it('answers `none` for a remote IP LITERAL with an address, which no hosts entry re-points', () => {
-    expect(classifyLocalMachineHostBridge('203.0.113.10', '10.4.19.22')).toEqual({ kind: 'none' })
+  it('reports a remote IP LITERAL with a proved address as unbridgeable too', () => {
+    // No hosts entry re-points a literal, so the mapping cannot be installed; with an address on
+    // the environment the platform HAS proved the literal itself does not carry.
+    expect(classifyLocalMachineHostBridge('203.0.113.10', '10.4.19.22')).toMatchObject({
+      kind: 'unbridgeable',
+      cause: 'unusable_address',
+    })
+  })
+
+  it('still answers `none` for a remote host with NO address, where there is nothing to say', () => {
+    expect(classifyLocalMachineHostBridge('203.0.113.10')).toEqual({ kind: 'none' })
   })
 })
 
@@ -163,6 +177,34 @@ describe('isBridgeableAddress', () => {
       '',
     ]) {
       expect(isBridgeableAddress(address), address).toBe(false)
+    }
+  })
+
+  it('judges the DECODED IPv6 address, not how it is spelled', () => {
+    // One value has many spellings, so a rule comparing against the canonical one is not a rule:
+    // `0:0:0:0:0:0:0:1` is loopback, and admitting it re-points the environment's name at the
+    // container's OWN namespace, where the harness listens. Same for `fe80::/10`, an eighth of
+    // which a `startsWith('fe80:')` test covers, and for IPv6 multicast, which it covered not at
+    // all.
+    for (const address of [
+      '0:0:0:0:0:0:0:1',
+      '0::1',
+      '[0:0:0:0:0:0:0:1]',
+      '0000:0000:0000:0000:0000:0000:0000:0001',
+      '0:0:0:0:0:0:0:0',
+      'fe90::1',
+      'febf::1',
+      'ff02::1',
+      'ff00::',
+      'fe80::1%eth0',
+      'gggg::1',
+      '2001:db8::1::2',
+    ]) {
+      expect(isBridgeableAddress(address), address).toBe(false)
+    }
+    // And the ordinary remote IPv6 a balancer answers on still passes.
+    for (const address of ['2001:db8::1', 'fd12::1', 'fec0::1', '::ffff:203.0.113.10']) {
+      expect(isBridgeableAddress(address), address).toBe(true)
     }
   })
 })

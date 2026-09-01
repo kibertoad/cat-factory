@@ -1,4 +1,4 @@
-import { connect } from 'node:net'
+import { connect, type Socket } from 'node:net'
 import type { RouteProbe, RouteProbeOutcome, RouteProbeRequest } from '@cat-factory/kernel'
 
 // The Node facade's `RouteProbe`: one bounded TCP connect, classified by what the socket said.
@@ -45,12 +45,22 @@ function classify(error: NodeJS.ErrnoException): RouteProbeOutcome {
 export const nodeRouteProbe: RouteProbe = (req: RouteProbeRequest) =>
   new Promise<RouteProbeOutcome>((resolve) => {
     let settled = false
-    const socket = connect({ host: req.address ?? req.host, port: req.port })
+    let socket: Socket | undefined
     const finish = (outcome: RouteProbeOutcome) => {
       if (settled) return
       settled = true
-      socket.destroy()
+      socket?.destroy()
       resolve(outcome)
+    }
+    // `connect` validates its arguments SYNCHRONOUSLY and throws for a port outside 1-65535 or a
+    // host of the wrong shape, and a throw inside this executor is a REJECTED probe. The port
+    // promises it never rejects: a caller's best-effort wrapper would swallow that and record no
+    // proof at all, where the `failed` member exists to say "we could not tell" on the record.
+    try {
+      socket = connect({ host: req.address ?? req.host, port: req.port })
+    } catch (error) {
+      finish(classify(error as NodeJS.ErrnoException))
+      return
     }
     socket.setTimeout(req.timeoutMs, () => finish({ state: 'no_route' }))
     socket.once('connect', () => finish({ state: 'carried' }))

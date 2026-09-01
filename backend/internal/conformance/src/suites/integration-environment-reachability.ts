@@ -62,6 +62,80 @@ export function registerEnvironmentReachabilityTests(harness: ConformanceHarness
     expect(exec.failure?.detail).toContain('resolves nowhere')
     expect(exec.failure?.reason).toBe('environment_unreachable')
   })
+
+  it('keeps the addresses a provider stated ONCE, across every readiness poll', async () => {
+    // The async shape this feature exists for, and the one that turned it into a hard failure: a
+    // provider states its balancer list on the CREATE response and answers `{state, url}` from its
+    // status endpoint. Re-deriving reachability from each poll erased the candidate list before the
+    // proof ever ran, so the proof dialled only the name it already knows resolves nowhere and the
+    // deployer settled the frame FAILED. Absent is not empty.
+    //
+    // Cross-runtime because the erasure went through each facade's own registry `update`: a repo
+    // that writes the column on every patch diverges here instead of shipping.
+    const dialled: string[] = []
+    let reads = 0
+    const app = harness.makeApp(undefined, {
+      environmentProvider: {
+        provision: async () => ({
+          externalId: 'pr-9',
+          status: 'provisioning',
+          url: null,
+          addresses: [{ address: '10.4.19.22' }, { address: '10.4.19.23', label: 'public ALB' }],
+          expiresAt: null,
+          access: null,
+          fields: {},
+        }),
+        // Every later answer states nothing about addresses, which is what a narrower status
+        // endpoint does. It must not be read as "the provider now states none".
+        status: async () =>
+          reads++ === 0
+            ? { externalId: 'pr-9', status: 'provisioning', url: null, fields: {} }
+            : {
+                externalId: 'pr-9',
+                status: 'ready',
+                url: 'https://pr-9.preview.test',
+                expiresAt: null,
+                access: null,
+                fields: {},
+              },
+        teardown: async () => ({ status: 'torn_down' }),
+      } as unknown as EnvironmentProvider,
+      routeProbe: async (req) => {
+        dialled.push(req.address ?? req.host)
+        return req.address === '10.4.19.23' ? { state: 'carried' } : { state: 'unresolved' }
+      },
+    })
+    const { wsId, exec } = await driveDeployOnly(app)
+    expect(exec.steps.find((s) => s.agentKind === 'deployer')?.state).toBe('done')
+    expect(dialled).toEqual(['pr-9.preview.test', '10.4.19.22', '10.4.19.23'])
+
+    const envs = await app.call<EnvironmentHandle[]>('GET', `/workspaces/${wsId}/environments`)
+    const env = envs.body!.find((e) => e.url === 'https://pr-9.preview.test')!
+    expect(env.reachability?.candidates.map((c) => c.address)).toEqual(['10.4.19.22', '10.4.19.23'])
+    expect(env.reachability?.proof).toMatchObject({ state: 'reached', via: '10.4.19.23' })
+  })
+
+  it('ADVANCES the frame when the probe could not tell, and records that it could not', async () => {
+    // The disposition that keeps the diagnostic from becoming a second way for a healthy deploy to
+    // die. `probe_failed` is where a workerd connect message matching none of that facade's markers
+    // and a Node errno outside the mapped five both land, so grading it as a verdict about the
+    // environment fails runs on a wording change. The proof still records what happened, detail and
+    // all, because "we could not tell" with nothing behind it is not a diagnostic either.
+    const app = harness.makeApp(undefined, {
+      environmentProvider: statedAddressProvider() as unknown as EnvironmentProvider,
+      routeProbe: async () => ({ state: 'failed', detail: 'connect blocked by the runtime' }),
+    })
+    const { wsId, exec } = await driveDeployOnly(app)
+    expect(exec.steps.find((s) => s.agentKind === 'deployer')?.state).toBe('done')
+    expect(exec.failure).toBeUndefined()
+
+    const envs = await app.call<EnvironmentHandle[]>('GET', `/workspaces/${wsId}/environments`)
+    const env = envs.body!.find((e) => e.url === 'https://pr-9.preview.test')!
+    expect(env.reachability?.proof).toMatchObject({ state: 'inconclusive', reason: 'probe_failed' })
+    expect(env.reachability?.proof?.attempts[0]).toMatchObject({
+      detail: 'connect blocked by the runtime',
+    })
+  })
 }
 
 /**

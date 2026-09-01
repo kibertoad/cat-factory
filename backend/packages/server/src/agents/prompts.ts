@@ -83,10 +83,11 @@ function isReservedEnvName(key: string): boolean {
  * when the deployment is local, and all three fail identically: connection refused, reported by the
  * agent as a dead environment.
  *
- * Each carries the address PROVED to carry traffic for its host, where one was needed and found,
- * so a transport can install the mapping rather than the job discovering the gap. The frontend leg
- * has none: a binding resolves to a peer's URL through a projection that never carried the
- * reachability fact, and inventing one here would be a guess about a host nobody probed.
+ * Each of the three carries the address PROVED to carry traffic for its host, where one was needed
+ * and found, so a transport can install the mapping rather than the job discovering the gap. That
+ * includes the frontend leg, whose binding resolution reads the address off the very handle it
+ * takes the URL from (`indexLiveServiceEnvRoutes`); nothing here invents one, and an environment
+ * whose name resolved or that nothing probed carries none.
  *
  * A URL that is only a MOCK is deliberately absent: an unresolved frontend binding is served by
  * the harness's own in-container WireMock, which the job reaches exactly as written and which a
@@ -108,10 +109,11 @@ export function dispatchEnvironments(context: AgentRunContext): DispatchEnvironm
     },
     ...(context.involvedServices ?? []).map((involved) => ({
       url: involved.envUrl ?? '',
-      ...(involved.envAddress ? { address: involved.envAddress } : {}),
+      ...(involved.envReachability?.address ? { address: involved.envReachability.address } : {}),
     })),
     ...(frontend ? injectedFrontendBindings(frontend) : []).map((binding) => ({
       url: binding.serviceUrl ?? '',
+      ...(binding.serviceAddress ? { address: binding.serviceAddress } : {}),
     })),
   ]
   const seen = new Set<string>()

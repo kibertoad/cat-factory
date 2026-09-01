@@ -18,7 +18,12 @@ import type {
   EnvironmentRouteProof,
   EnvironmentUnreachableReason,
 } from '@cat-factory/contracts'
+import { environmentUnreachableReasonSchema } from '@cat-factory/contracts'
 import type { RouteProbeOutcome, RouteProbeRequest } from '../ports/route-probe.js'
+import { isBridgeableAddress } from '../shared/environment-host-bridge.logic.js'
+
+/** How much of a probe's own error message is kept on the attempt it explains. */
+const MAX_PROBE_DETAIL_CHARS = 200
 
 /** How long one target gets before it counts as a route that does not carry. */
 export const ROUTE_PROBE_TIMEOUT_MS = 4000
@@ -34,14 +39,19 @@ export const ROUTE_PROBE_TIMEOUT_MS = 4000
  */
 export const MAX_PROBED_ADDRESSES = 4
 
-/** One target a proof will try, in the order the proof will try it. */
-export interface RouteProbeTarget {
-  request: RouteProbeRequest
-  /** The stated address this target dials, or null when it dials the name. */
-  address: string | null
-  /** How the attempt is recorded: `host:port`, or `host@address:port`. */
-  label: string
-}
+/**
+ * One target a proof will try, in the order the proof will try it.
+ *
+ * A discriminated union rather than a dial target with a "skip me" flag, because the refused
+ * member carries NO {@link RouteProbeRequest}: an address the platform will not dial must be
+ * structurally undialable by whoever iterates this list, not merely marked. Handing out a request
+ * beside a boolean is how the next caller opens the socket anyway.
+ */
+export type RouteProbeTarget =
+  /** Open a socket to this. `address` is null when the target dials the URL's own name. */
+  | { kind: 'dial'; request: RouteProbeRequest; address: string | null; label: string }
+  /** RECORD this and dial nothing: a stated address {@link isBridgeableAddress} refuses. */
+  | { kind: 'refused'; address: string; label: string; reason: EnvironmentUnreachableReason }
 
 /**
  * The targets a proof tries for one environment, in order: the URL's own name first, then each
@@ -52,9 +62,19 @@ export interface RouteProbeTarget {
  * addresses keep the provider's order because the provider is the only thing that knows which of
  * its balancers is the one it wants used; the platform decides only which one CARRIED.
  *
- * Empty when there is no host to probe, which the caller reads as `no_candidate`: an environment
- * with no URL was never going to be reached, and that is a different fact from one that was tried
- * and failed.
+ * **A stated address is dialled only if a bridge could NAME it.** The rule is
+ * `isBridgeableAddress`, and applying it HERE rather than only at bridge-build time is the whole
+ * safety property of the probe: `addresses` is provider-authored data, so without it the
+ * orchestrator opens sockets wherever a manifest says and records the results on a row a workspace
+ * can read back, which is a liveness oracle against the deployment's own private network. The
+ * refusal costs nothing real either, because an address no bridge may name is an address no
+ * container could be pointed at, so proving it would prove something unusable. Refused addresses
+ * are RECORDED (`kind: 'refused'`) rather than dropped: a shortened list nobody is told about is
+ * how a provider's bad address becomes an unexplained `name_unresolved`.
+ *
+ * Empty when there is no host or port to dial, which the caller reads as `no_candidate`: an
+ * environment with no URL was never going to be reached, and that is a different fact from one
+ * that was tried and failed.
  */
 export function planRouteProbes(
   host: string | null | undefined,
@@ -64,19 +84,29 @@ export function planRouteProbes(
 ): RouteProbeTarget[] {
   if (!host || !port) return []
   const targets: RouteProbeTarget[] = [
-    { request: { host, port, timeoutMs }, address: null, label: `${host}:${port}` },
+    { kind: 'dial', request: { host, port, timeoutMs }, address: null, label: `${host}:${port}` },
   ]
   const seen = new Set<string>()
+  let dialable = 0
+  let refused = 0
   for (const candidate of candidates) {
     const address = candidate.address.trim()
     if (!address || seen.has(address)) continue
     seen.add(address)
-    if (targets.length > MAX_PROBED_ADDRESSES) break
-    targets.push({
-      request: { host, address, port, timeoutMs },
-      address,
-      label: `${host}@${address}:${port}`,
-    })
+    const label = `${host}@${address}:${port}`
+    // Bounded separately, and by `continue` rather than `break`, so a manifest listing four
+    // refused addresses ahead of a good one still gets the good one dialled. A refusal costs no
+    // I/O; the dial budget is what the deployer's settle path is actually waiting on.
+    if (!isBridgeableAddress(address)) {
+      if (refused < MAX_PROBED_ADDRESSES) {
+        refused += 1
+        targets.push({ kind: 'refused', address, label, reason: 'address_refused' })
+      }
+      continue
+    }
+    if (dialable >= MAX_PROBED_ADDRESSES) continue
+    dialable += 1
+    targets.push({ kind: 'dial', request: { host, address, port, timeoutMs }, address, label })
   }
   return targets
 }
@@ -95,7 +125,8 @@ function reasonFor(
 ): EnvironmentUnreachableReason {
   switch (outcome.state) {
     case 'carried':
-      // Never reached: the caller stops at the first `carried`. Present so the switch stays total.
+      // Never reached: `recordRouteAttempt` answers `carried` before asking. Present so the
+      // switch stays total against the port's union.
       return 'probe_failed'
     case 'unresolved':
       return address === null ? 'name_unresolved' : 'probe_failed'
@@ -108,42 +139,115 @@ function reasonFor(
   }
 }
 
-/** Record one attempt for the proof's log, whether it carried or not. */
+/**
+ * Record one DIALLED attempt for the proof's log, whether it carried or not.
+ *
+ * `detail` rides along for the one outcome that names no layer: `probe_failed` says "we could not
+ * tell", and the probe's own message is then the only thing that distinguishes a resolver fault
+ * from a runtime restriction from a bug here. Capped rather than dropped or passed whole, because
+ * it lands in an operator's failure prose and in an agent's prompt.
+ */
 export function recordRouteAttempt(
-  target: RouteProbeTarget,
+  target: Extract<RouteProbeTarget, { kind: 'dial' }>,
   outcome: RouteProbeOutcome,
 ): EnvironmentRouteAttempt {
+  if (outcome.state === 'carried') return { target: target.label, outcome: 'carried' }
+  const detail = outcome.state === 'failed' ? outcome.detail.trim() : ''
   return {
     target: target.label,
-    outcome: outcome.state === 'carried' ? 'carried' : reasonFor(outcome, target.address),
+    outcome: reasonFor(outcome, target.address),
+    ...(detail ? { detail: detail.slice(0, MAX_PROBE_DETAIL_CHARS) } : {}),
   }
+}
+
+/** Record a target the platform REFUSED to dial, so the omission is on the proof rather than lost. */
+export function recordRefusedAttempt(
+  target: Extract<RouteProbeTarget, { kind: 'refused' }>,
+): EnvironmentRouteAttempt {
+  return { target: target.label, outcome: target.reason }
+}
+
+/**
+ * Whether one attempt's outcome leaves a route the platform never actually RULED OUT.
+ *
+ * The rule that decides whether a proof is a verdict about the environment or an admission about
+ * the platform, and it lives here because two layers read the answer and neither may re-derive it:
+ * the deployer fails a frame on the first and must never fail one on the second. `probe_failed`
+ * names no layer by construction, so an attempt that produced it establishes nothing; every other
+ * outcome does establish something, `address_refused` included, since an address no bridge may
+ * name is one no container could have been pointed at either way.
+ */
+const LEAVES_ROUTE_UNKNOWN: Record<EnvironmentUnreachableReason, boolean> = {
+  no_candidate: true,
+  name_unresolved: false,
+  no_route: false,
+  connection_refused: false,
+  address_refused: false,
+  probe_failed: true,
+}
+
+/**
+ * Read an attempt's stored outcome as a known reason, or undefined.
+ *
+ * Derived from the picklist's own options rather than a hand-listed set, so adding a member fails
+ * the `Record` above until it has picked a side. An outcome this build does not know (a proof
+ * written by a newer one) is treated as leaving the route unknown, which is the disposition that
+ * cannot turn an unreadable value into a failed deploy.
+ */
+function knownReason(outcome: string): EnvironmentUnreachableReason | undefined {
+  return (environmentUnreachableReasonSchema.options as readonly string[]).includes(outcome)
+    ? (outcome as EnvironmentUnreachableReason)
+    : undefined
+}
+
+function leavesRouteUnknown(outcome: string): boolean {
+  const reason = knownReason(outcome)
+  return reason === undefined || LEAVES_ROUTE_UNKNOWN[reason]
 }
 
 /**
  * Fold a completed set of attempts into the proof that is stored and narrated.
  *
- * The reported reason is the FIRST attempt's, not the last, and that is deliberate: the first
- * attempt is always the name, so a reader is told what happened to the address they were given
- * rather than what happened to the last balancer in someone's preference list. The attempt log
- * carries the rest, in order, so nothing is lost by choosing.
+ * Three outcomes, and which one this returns is the most consequential line in the feature,
+ * because only `not_reached` fails a deployer frame:
+ *
+ *   - **`reached`** as soon as any attempt carried, publishing the target that did.
+ *   - **`inconclusive`** when nothing carried AND some attempt left a route unruled-out: a probe
+ *     that could not classify its own failure, or nothing to try at all. A workerd connect message
+ *     matching none of that facade's markers, or a Node errno outside the mapped five, arrives
+ *     here, and reading either as a verdict about the environment is how a diagnostic becomes a
+ *     second way for a healthy deploy to die. The reason names the attempt that left it unknown.
+ *   - **`not_reached`** only when EVERY attempt established something and none of them carried.
+ *     The reported reason is then the FIRST attempt's, which is always the name, so a reader is
+ *     told what happened to the address they were given rather than what happened to the last
+ *     balancer in someone's preference list. The attempt log carries the rest, in order.
  */
 export function reduceRouteProof(
   attempts: readonly EnvironmentRouteAttempt[],
   carriedVia: string | null,
   checkedAt: number,
 ): EnvironmentRouteProof {
+  if (attempts.some((attempt) => attempt.outcome === 'carried'))
+    return { state: 'reached', via: carriedVia, reason: null, attempts: [...attempts], checkedAt }
   if (attempts.length === 0) {
     return {
-      state: 'not_reached',
+      state: 'inconclusive',
       via: null,
       reason: 'no_candidate' satisfies EnvironmentUnreachableReason,
       attempts: [],
       checkedAt,
     }
   }
-  const carried = attempts.some((attempt) => attempt.outcome === 'carried')
-  if (carried)
-    return { state: 'reached', via: carriedVia, reason: null, attempts: [...attempts], checkedAt }
+  const unknown = attempts.find((attempt) => leavesRouteUnknown(attempt.outcome))
+  if (unknown) {
+    return {
+      state: 'inconclusive',
+      via: null,
+      reason: unknown.outcome,
+      attempts: [...attempts],
+      checkedAt,
+    }
+  }
   return {
     state: 'not_reached',
     via: null,
@@ -160,6 +264,8 @@ const UNREACHABLE_CAUSES: Record<EnvironmentUnreachableReason, string> = {
     'its hostname resolves nowhere from this deployment, and no address the provider stated for it carried either',
   no_route: 'nothing answered within the probe window, so no route reaches it',
   connection_refused: 'the route reaches it and nothing is listening on that port',
+  address_refused:
+    'every address its provider stated is one no host bridge may name (loopback, link-local or vendor metadata, or a non-canonical literal), so none could be dialled',
   probe_failed: 'the probe could not complete, so nothing was established either way',
 }
 
@@ -168,8 +274,10 @@ const UNREACHABLE_CAUSES: Record<EnvironmentUnreachableReason, string> = {
  *
  * States the LAYER rather than a verdict about the application, because they are different faults
  * with different owners and the whole point of proving the route is to stop reporting one as the
- * other. The attempt list is included verbatim: a reader who wants to reproduce the finding needs
- * the exact targets, and the reason alone names none of them.
+ * other. The attempt list is included verbatim, each attempt carrying its `detail` where it has
+ * one: a reader who wants to reproduce the finding needs the exact targets, the reason alone names
+ * none of them, and a `probe_failed` with its detail stripped is a sentence saying only that
+ * something went wrong somewhere.
  */
 export function describeUnreachableEnvironment(
   url: string | null,
@@ -178,8 +286,38 @@ export function describeUnreachableEnvironment(
   const reason = proof.reason as EnvironmentUnreachableReason | null
   const cause = (reason && UNREACHABLE_CAUSES[reason]) || UNREACHABLE_CAUSES.probe_failed
   const where = url ? `The environment at ${url} is unreachable` : 'The environment is unreachable'
-  const tried = proof.attempts.map((attempt) => `${attempt.target} (${attempt.outcome})`).join(', ')
-  return tried ? `${where}: ${cause}. Tried: ${tried}.` : `${where}: ${cause}.`
+  return `${where}: ${cause}.${describeRouteAttempts(proof)}`
+}
+
+/**
+ * The operator-facing sentence for a proof that established nothing either way, with every target
+ * tried.
+ *
+ * Its own describer rather than a branch inside {@link describeUnreachableEnvironment}, because
+ * every clause differs: this one may not say "unreachable", must not name a layer as the fault,
+ * and exists to be readable beside a run that CONTINUED. Nothing settles on it; it is what the
+ * deployer logs and what the environment surface shows so an inconclusive proof is visible rather
+ * than merely harmless.
+ */
+export function describeInconclusiveRoute(
+  url: string | null,
+  proof: EnvironmentRouteProof,
+): string {
+  const reason = proof.reason as EnvironmentUnreachableReason | null
+  const cause = (reason && UNREACHABLE_CAUSES[reason]) || UNREACHABLE_CAUSES.probe_failed
+  const where = url ? `The route to the environment at ${url}` : 'The route to the environment'
+  return `${where} could not be established either way: ${cause}.${describeRouteAttempts(proof)}`
+}
+
+/** ` Tried: <target> (<outcome>: <detail>), ….`, or empty when nothing was tried. */
+function describeRouteAttempts(proof: EnvironmentRouteProof): string {
+  const tried = proof.attempts
+    .map(
+      (attempt) =>
+        `${attempt.target} (${attempt.outcome}${attempt.detail ? `: ${attempt.detail}` : ''})`,
+    )
+    .join(', ')
+  return tried ? ` Tried: ${tried}.` : ''
 }
 
 /**
@@ -189,6 +327,11 @@ export function describeUnreachableEnvironment(
  * verdicts about different things: `not_reached` is about the environment and fails the frame,
  * `unproved` is about the deployment and must never fail anything. A facade that cannot probe is
  * a facade that behaves exactly as it did before this existed.
+ *
+ * Distinct from `inconclusive` too, which is the probe having RUN and established nothing. Both
+ * are admissions rather than verdicts, and the difference is who is told: an inconclusive proof is
+ * narrated to the agent that has to interpret a connection failure, an unproved one is withheld
+ * from every prompt (`reachabilityNote`) because it is the standing state of the deployment.
  */
 export function unprovedRoute(checkedAt: number): EnvironmentRouteProof {
   return { state: 'unproved', via: null, reason: null, attempts: [], checkedAt }

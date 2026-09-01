@@ -52,7 +52,10 @@ describe('planEnvironmentBridges', () => {
       planEnvironmentBridges([url('http://localhost:32768'), url('http://127.0.0.1:9000')]),
     ).toEqual({
       bridges: [],
-      unbridgeable: ['http://127.0.0.1:9000', 'http://localhost:32768'],
+      unbridgeable: [
+        { url: 'http://127.0.0.1:9000', cause: 'local_machine' },
+        { url: 'http://localhost:32768', cause: 'local_machine' },
+      ],
     })
   })
 
@@ -77,17 +80,26 @@ describe('planEnvironmentBridges', () => {
     ).toEqual([{ host: 'pr-14.test.example.cloud', target: { ip: '10.4.19.22' } }])
   })
 
-  it('refuses an address a bridge must never name, and says nothing rather than half-bridging', () => {
+  it('refuses an address a bridge must never name, and REPORTS the loss rather than dropping it', () => {
     // Metadata and loopback are the two an address bridge could only ever be abused to reach:
     // loopback inside a container is the container's own namespace, where the harness is
-    // listening. The verdict is `none`, which is the same as before the address was offered.
+    // listening. Refused, and named: an address is present only because the proof established the
+    // NAME does not carry, so a silent `none` here is a job that cannot reach its environment with
+    // a run record saying it was reached.
     expect(
       planEnvironmentBridges([
         { url: 'https://pr-14.test.example.cloud', address: '169.254.169.254' },
         { url: 'https://pr-15.test.example.cloud', address: '127.0.0.1' },
         { url: 'https://pr-16.test.example.cloud', address: '2130706433' },
       ]),
-    ).toEqual({ bridges: [], unbridgeable: [] })
+    ).toEqual({
+      bridges: [],
+      unbridgeable: [
+        { url: 'https://pr-14.test.example.cloud', cause: 'unusable_address' },
+        { url: 'https://pr-15.test.example.cloud', cause: 'unusable_address' },
+        { url: 'https://pr-16.test.example.cloud', cause: 'unusable_address' },
+      ],
+    })
   })
 
   it('keeps a local name on the host gateway even when an address is offered for it', () => {

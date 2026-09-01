@@ -304,6 +304,7 @@ export {
   planEnvironmentBridges,
   type EnvironmentBridgePlan,
   type HostBridge,
+  type UnbridgeableEnvironment,
 } from './modules/shared/environmentBridge.js'
 // The shared SSRF-safe fetch (per-hop redirect revalidation + response byte cap) used by
 // the policy-based providers; also reused by the server's web-search upstream.

@@ -28,8 +28,17 @@ layer the platform already ruled out and which address carried.
 
 An environment nothing can reach now settles the frame `failed` with the new
 `environment_unreachable` reason, in about two minutes, rather than being handed on for a tester to
-spend ten minutes and a model budget misdiagnosing. A facade with no way to open a socket records
-`unproved`, which never fails anything.
+spend ten minutes and a model budget misdiagnosing. That failing verdict is deliberately the narrow
+one, because a wrong "unreachable" kills a healthy deploy while a wrong "could not tell" costs one
+diagnostic: a probe that could not classify its own failure, an environment with no address to dial
+(a `ready` service that publishes no ingress), and a facade with nothing wired to open a socket are
+`inconclusive` or `unproved`, and neither fails anything. The agent is told when a check was
+inconclusive; a deployment with no prober carries no reachability line at all.
+
+The addresses the platform will dial are limited to those a host bridge may name, applied when the
+probe is PLANNED rather than only when a bridge is built, so a provider-authored address list
+cannot aim the platform's own outbound socket at loopback or a cloud metadata endpoint. A refused
+address is recorded on the proof rather than silently dropped.
 
 Internal breaks, both deliberate: `RunnerDispatchOptions.environmentUrls` becomes `environments`,
 a list of `{ url, address? }` (the pairing is what keeps the host side of a bridge a host the job

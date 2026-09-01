@@ -504,9 +504,8 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   }
 
   /**
-   * Say once, per dispatch, which of this job's environments name this machine by an address NO
-   * bridge can reach: a compose stack published on `http://localhost:<port>`, or a bare loopback
-   * address (see kernel's `classifyLocalMachineHostBridge`).
+   * Say once, per dispatch, which of this job's environments NO bridge can make reachable, and
+   * which of the two causes it is (see kernel's `classifyLocalMachineHostBridge`).
    *
    * Reported rather than dropped because the two silent outcomes are indistinguishable and mean
    * opposite things: a job with nothing to bridge is fine, and a job whose environment is
@@ -514,16 +513,33 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
    * conclude the environment is dead. That misreading is what this whole mechanism exists to stop,
    * and here the platform genuinely cannot fix it, so the least it owes is to name it.
    *
+   * One message per cause, never one message for both, because the remedies are different and a
+   * shared sentence sends an operator to the wrong one. `unusable_address` is the worse case: the
+   * platform PROVED the name does not carry and an address does, so the run record vouches for a
+   * route this container never got.
+   *
    * At the top of {@link dispatch} because that is the one door every path enters through; the
    * bridge computation itself is pure so the several places that ask for it do not each log.
    */
   private reportUnbridgeableEnvironments(options?: RunnerDispatchOptions): void {
     const plan = planEnvironmentBridges(options?.environments ?? [])
-    for (const url of plan.unbridgeable) {
+    for (const { url, cause } of plan.unbridgeable) {
+      if (cause === 'local_machine') {
+        logger.warn(
+          'Environment URL names this machine by an address no container can be given, so the ' +
+            'agent will not reach it. Publish the environment on a name that resolves to the ' +
+            'host (a wildcard-DNS name such as <name>.127.0.0.1.nip.io), or run this step ' +
+            'natively.',
+          { url },
+        )
+        continue
+      }
       logger.warn(
-        'Environment URL names this machine by an address no container can be given, so the ' +
-          'agent will not reach it. Publish the environment on a name that resolves to the host ' +
-          '(a wildcard-DNS name such as <name>.127.0.0.1.nip.io), or run this step natively.',
+        'The platform reached this environment only at an address no host bridge may name ' +
+          '(loopback, link-local or vendor metadata, or a non-canonical literal), or at a URL ' +
+          'whose own host is an IP literal nothing looks up. The container gets no mapping, so ' +
+          'the agent will not reach it: publish an ordinary hostname and a routable address for ' +
+          'it.',
         { url },
       )
     }

@@ -668,7 +668,13 @@ export interface AgentRunContext {
    */
   frontend?: {
     config: FrontendConfig
-    bindings: { envVar: string; serviceUrl?: string }[]
+    /**
+     * `serviceAddress` is the address PROVED to carry for `serviceUrl`'s host, when its name did
+     * not: a bound peer whose per-environment DNS record lives in an internal view fails the UI
+     * test on name resolution exactly as the run's own environment would, and the proof is on the
+     * handle this resolution already read.
+     */
+    bindings: { envVar: string; serviceUrl?: string; serviceAddress?: string }[]
   }
   /**
    * The connected services "directly involved" in this task beyond its own (see the service
@@ -686,12 +692,19 @@ export interface AgentRunContext {
     description?: string
     envUrl?: string
     /**
-     * The address proved to carry traffic for {@link envUrl}'s host, when its name did not. A peer's
+     * What the platform proved about REACHING {@link envUrl}, when it proved anything.
+     *
+     * The whole note rather than the carrying address alone, and that is the point: a peer's
      * environment fails in exactly the same way the run's own does and reads as exactly the same
-     * "the environment is down", which is why the peer leg carries the same fact rather than only
-     * the URL.
+     * "the environment is down", so the peer leg owes the same evidence. Carrying only the address
+     * kept the ONE case where there is nothing to carry (the platform could not reach the peer at
+     * all) silent, handing a cross-service tester a URL that looks healthy and letting it spend
+     * its step concluding the peer was down: the misdiagnosis this all exists to retire, arriving
+     * one service over.
+     *
+     * Absent when nothing has probed the peer. Never a provider's unverified claim.
      */
-    envAddress?: string
+    envReachability?: EnvironmentReachabilityNote
   }[]
   /**
    * The service the work itself belongs to — the enclosing service FRAME's title and description,
