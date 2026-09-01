@@ -1,5 +1,108 @@
 # @cat-factory/integrations
 
+## 0.168.0
+
+### Minor Changes
+
+- 92232a6: Let a provider say WHY an environment is not ready yet, so the readiness ceiling stops reporting only its own duration
+  
+  `judgeEnvironmentReadiness` formatted the provider's `lastError` into its `timed_out` message, and
+  `lastError` is structurally always `null` on the one status that can reach that branch. Both
+  persistence sites write it on `failed` alone and null it otherwise, so every poll that keeps a
+  readiness wait alive cleared it and any poll that would have filled it settled the wait as `failed`
+  first. The clause was unreachable, and the platform's whole account of a 20-minute wait was that it
+  had waited 20 minutes.
+  
+  The missing thing was not the clause. `ProvisionedEnvironment` had no channel at all for a
+  non-terminal explanation, so a provider that could name the stage an environment was stuck at had
+  nowhere to put it. `ProvisionedEnvironment.statusNote` is that channel: one sentence, persisted on
+  every provision and every poll whatever the status, surfaced in the step's Environment panel while
+  the run is parked, in the run outcome's environment row, and in the `timed_out` failure detail.
+  
+  **A sibling field rather than `lastError` widened to every status**, which was the cheaper option
+  and the wrong one. The note is rendered, and under the error's name a healthy environment
+  mid-rollout would show an operator a "last error" it does not have. The two are read by different
+  readers for opposite reasons and only one of them is a fault, so each keeps its own column and its
+  own label wherever it is shown.
+  
+  **A recorded fault outranks a note on every reader, and neither is ever dropped for the other.**
+  The `timed_out` message states both when both are present, fault first, each under its own label.
+  The Environment panel withholds the note whenever a `lastError` is recorded, whatever the status
+  (a torn-down environment carries the fault of the failure that preceded it), and says nothing
+  beside a status that has already left the state a note describes. And where the run OUTCOME's
+  environment row shows one of them, it says which: `OutcomeEnvironment.detailKind` is `fault` or
+  `note`, because the two arrive through one slot, read identically as prose, and send a reader to
+  opposite conclusions. Public API surface 1.63.0, additive.
+  
+  **The note is bounded where it is written**, not where it is read: provider-authored prose reaches
+  three surfaces, and a code adapter answering with a controller dump would otherwise push each of
+  them off screen. A capped note says it was capped.
+  
+  **The note is the current account, never a log.** It is re-read and rewritten on every poll,
+  including back to `null`, so a note a provider stops returning stops being stored and cannot outlive
+  the state it described. A deployment whose providers never set one keeps today's behaviour byte for
+  byte, including the exact wording of both refusals.
+  
+  The built-in Kubernetes adapter is the first producer, at the two places it already knew and said
+  nothing: which Deployments have not finished rolling out (capped, and the cap says it is capped),
+  and a workload that is healthy behind an Ingress no controller has routed yet, where the ceiling
+  previously reported a bare twenty-minute wait on an environment that had been up for nineteen of
+  them. `IngressAdmission`'s `pending` verdict gained the prose that distinguishes its two causes.
+  
+  Its FAULT channel had the same hole, one status over, and it is closed here too: a rollout that
+  gave up and a namespace that no longer exists were both reported as the generic `Provisioning
+  failed` literal, though the reduction computing the verdict was holding the workload's own name.
+  Both now name what happened.
+  
+  Watch for: the new `status_note` column lands as a nullable add on both runtimes (D1 migration 0098
+  and the Drizzle mirror), and the deployer's projection comparison is now derived from the projected
+  object rather than a hand-listed subset of its fields. During a wait the note is the only field that
+  moves, so leaving it off the list would have meant the one update the projection exists to deliver
+  was the one it never pushed; the TTL, provision type and engine beside it were already in that
+  position, and now a field added to the projection joins the comparison with no second edit.
+  
+  The Node Drizzle schema's ephemeral-environment tables moved into `db/tables/environments.ts` to
+  keep `schema.ts` inside its size budget, re-exported so no importer changes.
+- a08d2ad: Diagnose an environment that never became usable, instead of ending the run at the tester
+  
+  A provisioning failure that no edit in the checkout could fix used to be terminal and
+  unexplained: the `deploy-fixer` correctly declines every cause outside `manifest_invalid`, and
+  nothing else looked. The run died at the tester with a report saying a human had to look, while
+  the facts that explained it sat unread in the provider's own response.
+  
+  A `deployer` step now investigates such a failure. The platform gathers the evidence it already
+  had (the environment record, the WHOLE captured provision-field bag rather than the four fields
+  a consuming step is handed, and the run's provisioning timeline), asks the provider for its own
+  account through a new optional `EnvironmentProvider.diagnostics` capability, and runs one inline
+  model call that names the fault layer and picks one remediation from a list the engine narrowed
+  first. The engine performs it and the deployer re-enters its own path, so the provider's next
+  verdict is what settles the frame. When nothing is worth trying, the run still fails, but with a
+  named cause instead of a tester's guess.
+  
+  The Kubernetes backend implements the new capability: `describe` reads the namespace phase, the
+  Deployments' unsatisfied conditions, every pod through `analyzePodStatus`, the namespace's
+  warning events and a log tail from each unhealthy pod, and `remediate` rolls the Deployments the
+  `kubectl rollout restart` way. Every other provider is unaffected and degrades to the platform's
+  own evidence, which it states rather than presenting as an absence of problems.
+  
+  Internal break: `EnvironmentProvisioningServiceDependencies` gains an optional
+  `readProvisioningLog` and an optional `logger`; both facades wire them through the shared
+  container, so nothing outside a hand-built instance is affected.
+  
+  The provisioning-log operation vocabulary gains `remediate`, and the platform appends one such row
+  whenever it asks a provider to repair an environment in place. It is a distinct actor, the way
+  `teardown-verify` is: the investigation's own second round rebuilds its timeline from that log, so
+  an unlogged restart leaves the next round reasoning about an environment it believes nothing has
+  touched. Additive on `/api/v1` (spec `info.version` 1.63.0); the clients tolerate unknown enum
+  values, and a consumer that maps `operation` through an exhaustive table gains a member to name.
+
+### Patch Changes
+
+- Updated dependencies [92232a6]
+- Updated dependencies [a08d2ad]
+  - @cat-factory/contracts@0.336.0
+  - @cat-factory/kernel@0.325.0
+
 ## 0.167.0
 
 ### Minor Changes
