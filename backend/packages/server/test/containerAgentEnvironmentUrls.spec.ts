@@ -74,7 +74,7 @@ const context = (over: Record<string, unknown> = {}): AgentRunContext =>
     ...over,
   }) as unknown as AgentRunContext
 
-describe('ContainerAgentExecutor environment URLs on the dispatch options', () => {
+describe('ContainerAgentExecutor environments on the dispatch options', () => {
   it('carries the run own environment and every live peer', async () => {
     const { executor, dispatched } = makeExecutor()
     await executor.startJob(
@@ -87,9 +87,27 @@ describe('ContainerAgentExecutor environment URLs on the dispatch options', () =
         ],
       }),
     )
-    expect([...(dispatched[0]?.environmentUrls ?? [])].sort()).toEqual([
+    expect([...(dispatched[0]?.environments ?? [])].map((env) => env.url).sort()).toEqual([
       'http://cf-env-pr8.127.0.0.1.nip.io',
       'http://email-pr8.127.0.0.1.nip.io',
+    ])
+  })
+
+  it('carries the address proved to carry, beside the URL it belongs to', async () => {
+    // The pairing is the security property: the host side of every bridge a transport builds is,
+    // by construction, a host this job was handed rather than a name a provider chose.
+    const { executor, dispatched } = makeExecutor()
+    await executor.startJob(
+      context({
+        service: { provisioning: { type: 'kubernetes' } },
+        environment: {
+          url: 'https://pr-14.test.example.cloud',
+          reachability: { state: 'reached', address: '10.4.19.22' },
+        },
+      }),
+    )
+    expect(dispatched[0]?.environments).toEqual([
+      { url: 'https://pr-14.test.example.cloud', address: '10.4.19.22' },
     ])
   })
 
@@ -98,6 +116,6 @@ describe('ContainerAgentExecutor environment URLs on the dispatch options', () =
     // the same shape as every other optional dispatch directive.
     const { executor, dispatched } = makeExecutor()
     await executor.startJob(context({ agentKind: 'coder' }))
-    expect(dispatched[0]?.environmentUrls).toBeUndefined()
+    expect(dispatched[0]?.environments).toBeUndefined()
   })
 })

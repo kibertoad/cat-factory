@@ -126,6 +126,10 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
   // One VM per container with its own IP and no published-port model: a preview's served-app
   // port is reached at the container's IP, not a pinnable localhost port (see the transport).
   readonly publishesToLocalhost = false
+  // Apple's `container` has no `--add-host`, so a job handed an unreachable environment name gets
+  // no mapping here. Stated rather than left to a silently ignored spec field, because the cost
+  // lands on a tester that reports the environment dead.
+  readonly honoursHostBridges = false
   // One-VM-per-container with a deterministic-name identity: no Docker-in-Docker, and the
   // warm pool isn't supported (re-leasing a name-keyed VM is messy) — so the transport
   // keeps the per-run path here even when a pool size is configured.

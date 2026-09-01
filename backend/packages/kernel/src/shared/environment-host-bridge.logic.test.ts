@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   classifyLocalMachineHostBridge,
+  hostBridgeKey,
+  isBridgeableAddress,
   resolvesToLocalMachine,
 } from './environment-host-bridge.logic.js'
 
@@ -58,7 +60,11 @@ describe('resolvesToLocalMachine', () => {
 describe('classifyLocalMachineHostBridge', () => {
   it('bridges the names an added hosts-file entry is the first answer for', () => {
     for (const host of ['cf-acc-pr8.127.0.0.1.nip.io', 'app.localhost', 'host.docker.internal']) {
-      expect(classifyLocalMachineHostBridge(host), host).toEqual({ kind: 'bridge', host })
+      expect(classifyLocalMachineHostBridge(host), host).toEqual({
+        kind: 'bridge',
+        host,
+        target: 'host-gateway',
+      })
     }
   })
 
@@ -66,6 +72,7 @@ describe('classifyLocalMachineHostBridge', () => {
     expect(classifyLocalMachineHostBridge(' CF-ACC-PR8.127.0.0.1.NIP.IO. ')).toEqual({
       kind: 'bridge',
       host: 'cf-acc-pr8.127.0.0.1.nip.io',
+      target: 'host-gateway',
     })
   })
 
@@ -88,5 +95,87 @@ describe('classifyLocalMachineHostBridge', () => {
 
   it('answers `none` for an empty hostname rather than inventing a bridge', () => {
     expect(classifyLocalMachineHostBridge('   ')).toEqual({ kind: 'none' })
+  })
+
+  it('maps a remote NAME onto a stated address, which `none` could never express', () => {
+    // The gap this closes. A per-environment record that lives in an internal DNS view resolves
+    // nowhere from the deployment while the balancer fronting it is perfectly reachable, and
+    // `none`'s own contract asserts the opposite: that the container reaches it as written.
+    expect(classifyLocalMachineHostBridge('PR-14.test.example.cloud.', ' 10.4.19.22 ')).toEqual({
+      kind: 'bridge',
+      host: 'pr-14.test.example.cloud',
+      target: { ip: '10.4.19.22' },
+    })
+  })
+
+  it('keeps a LOCAL name on the host gateway even when an address is offered for it', () => {
+    // A name that answers with this machine's own address is a dead end inside a container
+    // whatever a provider says about it, so the ordering is load-bearing rather than incidental.
+    expect(classifyLocalMachineHostBridge('cf-acc-pr8.127.0.0.1.nip.io', '10.4.19.22')).toEqual({
+      kind: 'bridge',
+      host: 'cf-acc-pr8.127.0.0.1.nip.io',
+      target: 'host-gateway',
+    })
+  })
+
+  it('answers `none` for an address a bridge may not name, rather than half-bridging', () => {
+    for (const address of [
+      '127.0.0.1',
+      '169.254.169.254',
+      '2130706433',
+      '0x7f000001',
+      'not-an-ip',
+    ]) {
+      expect(classifyLocalMachineHostBridge('pr-14.test.example.cloud', address), address).toEqual({
+        kind: 'none',
+      })
+    }
+  })
+
+  it('answers `none` for a remote IP LITERAL with an address, which no hosts entry re-points', () => {
+    expect(classifyLocalMachineHostBridge('203.0.113.10', '10.4.19.22')).toEqual({ kind: 'none' })
+  })
+})
+
+describe('isBridgeableAddress', () => {
+  it('allows the private and public addresses a real balancer answers on', () => {
+    // RFC1918 is deliberately ALLOWED, unlike the strict URL policy: an internal load balancer on
+    // 10.x is the population this exists for, and refusing it would leave nothing to name.
+    for (const address of ['10.4.19.22', '172.16.3.4', '192.168.1.9', '203.0.113.10', 'fd12::1']) {
+      expect(isBridgeableAddress(address), address).toBe(true)
+    }
+  })
+
+  it('refuses what an address bridge could only ever be abused to reach', () => {
+    for (const address of [
+      '127.0.0.1', // the container's OWN namespace, where the harness is listening
+      '::1',
+      '0.0.0.0',
+      '169.254.169.254', // instance credentials
+      'fe80::1',
+      '100.100.100.200',
+      '224.0.0.1',
+      '255.255.255.255',
+      '2130706433', // loopback, spelled so a `127.` prefix match misses it
+      '0x7f.0.0.1',
+      '::ffff:127.0.0.1',
+      'balancer.internal', // a NAME is just the lookup that already failed
+      '',
+    ]) {
+      expect(isBridgeableAddress(address), address).toBe(false)
+    }
+  })
+})
+
+describe('hostBridgeKey', () => {
+  it('separates the same host on two different targets', () => {
+    // The key is an IDENTITY: a mismatch destroys and rebuilds a warm container, so folding these
+    // two together would leave a run wedged against a stale address nothing will replace.
+    expect(hostBridgeKey({ host: 'env.example', target: 'host-gateway' })).not.toBe(
+      hostBridgeKey({ host: 'env.example', target: { ip: '10.4.19.22' } }),
+    )
+    expect(hostBridgeKey({ host: 'env.example', target: { ip: '10.4.19.22' } })).toBe(
+      hostBridgeKey({ host: 'env.example', target: { ip: '10.4.19.22' } }),
+    )
   })
 })

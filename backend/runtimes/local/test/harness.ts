@@ -174,6 +174,7 @@ type ConformanceAppOpts = {
   promptFragmentRegistry?: CoreDependencies['promptFragmentRegistry']
   gateProviders?: GateProviderOverrides
   environmentProvider?: CoreDependencies['environmentProvider']
+  routeProbe?: CoreDependencies['routeProbe']
   resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
   deployJobClient?: CoreDependencies['deployJobClient']
   resolveDeployCloneTarget?: CoreDependencies['resolveDeployCloneTarget']
@@ -271,6 +272,12 @@ function buildConformanceOverrides(
       new FakeTaskSourceProvider('jira'),
       new FakeTaskSourceProvider('linear'),
     ],
+    // Proving a provisioned environment's route. Injected on every conformance app rather than
+    // left to the facade's real probe: the suite's environment URLs are fixtures on reserved TLDs
+    // that resolve nowhere, so a real probe would fail every deploy here on the machine's DNS
+    // instead of on anything the suite asserts. A case driving the unreachable path supplies its
+    // own probe.
+    routeProbe: o.routeProbe ?? (async () => ({ state: 'carried' as const })),
     // Each override below lands only when the suite supplies it (mirrors the prior
     // `...(v ? { k: v } : {})` spreads): the engine's run-repo resolver, the binary-artifact
     // store resolver, a native env provider + block-less coords resolver, detection-convention

@@ -352,6 +352,7 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
       hostAlias: '192.168.64.1',
       capabilities: { localDind: false, pooling: false },
       publishesToLocalhost: false,
+      honoursHostBridges: true,
       run: vi.fn(async (_exec: ContainerExec, _spec: RunContainerSpec) => 'c-apple'),
       find: vi.fn(async () => undefined),
       endpoint: vi.fn(async () => ({ host: '127.0.0.1', port: 51111 })),
@@ -489,6 +490,7 @@ describe('post-mortem on a pooled member', () => {
       hostAlias: 'host.docker.internal',
       capabilities: { localDind: true, pooling: true },
       publishesToLocalhost: true,
+      honoursHostBridges: true,
       run: vi.fn(async () => `pool-${++n}`),
       find: vi.fn(async () => undefined),
       endpoint: vi.fn(async () => ({ host: '127.0.0.1', port: 51234 })),
@@ -569,7 +571,7 @@ describe('warm pool and the ephemeral-environment host bridge', () => {
   const BRIDGE = '--add-host=cf-acc-pr8.127.0.0.1.nip.io:host-gateway'
   // The environments ride the dispatch OPTIONS, never the job body. See the sibling suite in
   // `LocalContainerRunnerTransport.test.ts` for why reading them off the body could not work.
-  const withEnvs = (...urls: string[]) => ({ environmentUrls: urls })
+  const withEnvs = (...urls: string[]) => ({ environments: urls.map((url) => ({ url })) })
 
   it('serves a bridged job PER RUN and hands the leased member back', async () => {
     // Two independent reasons a pool member cannot serve this job, and the second is the one that

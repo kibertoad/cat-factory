@@ -12,6 +12,7 @@
 import { createHash } from 'node:crypto'
 import { HARNESS_JOB_PORT } from '@cat-factory/contracts'
 import { tailPostMortemMaterial } from '@cat-factory/kernel'
+import type { HostBridge } from '@cat-factory/integrations'
 
 /**
  * The in-container port the executor-harness listens on, re-exported from the wire contract so
@@ -116,20 +117,24 @@ export interface RunContainerSpec {
   /** Optional `--network` (docker family only). */
   network?: string
   /**
-   * Hostnames to map to the runtime's HOST GATEWAY inside the container, over and above the
+   * Names to re-point inside the container, each with what to re-point it AT, over and above the
    * standing {@link ContainerRuntimeAdapter.hostAlias}.
    *
-   * This carries the ephemeral-environment host on a local deployment, and it is the only way a
-   * containerized tester can reach one. Such a URL resolves to loopback, which is correct for the
-   * operator's browser and is the container's own empty network namespace: the failure is a total
-   * connection refusal that reads as a dead environment (see kernel's
-   * `environment-host-bridge.logic.ts` for why a rewritten URL cannot serve both audiences).
+   * Two targets, and they cover two different failures. `host-gateway` carries the
+   * ephemeral-environment host on a LOCAL deployment, where the URL resolves to loopback: correct
+   * for the operator's browser, and the container's own empty network namespace, so the failure is
+   * a total connection refusal that reads as a dead environment. An address carries the REMOTE
+   * version of the same gap, where the name lives in a DNS view the deployment cannot see and the
+   * balancer fronting it is perfectly reachable. See kernel's `environment-host-bridge.logic.ts`
+   * for why a rewritten URL cannot serve both audiences, and which addresses may be named.
    *
    * An /etc/hosts entry rather than anything cleverer because it wins over DNS and leaves the
-   * `Host` header alone, which is what name-based ingress routing needs. Empty/absent adds nothing,
-   * and a runtime with a per-container IP and no gateway alias ignores it.
+   * `Host` header alone, which is what name-based ingress routing needs. Empty/absent adds nothing.
+   * A runtime that honours none of this declares {@link ContainerRuntimeAdapter.honoursHostBridges}
+   * false, so the transport can SAY the job will not reach its environment rather than dropping the
+   * entries silently.
    */
-  extraHosts?: readonly string[]
+  extraHosts?: readonly HostBridge[]
   /** Extra `-e KEY=VALUE` env passed into the container. */
   env: Record<string, string>
   /** Host resource limits derived from the service's abstract instance size. */
@@ -176,6 +181,19 @@ export interface ContainerRuntimeAdapter {
    * (`http://<ip>:<servePort>`), which is NOT pre-knowable and so is never injected.
    */
   readonly publishesToLocalhost: boolean
+  /**
+   * Whether this runtime can install {@link RunContainerSpec.extraHosts} in the container it
+   * starts.
+   *
+   * Declared rather than inferred because the two answers cost different things and only one of
+   * them is visible. A runtime that honours bridges pays for them (a job needing one leaves the
+   * warm pool and its container is replaced), which is worth it because the alternative is a step
+   * that fails every single time. A runtime that CANNOT is not thereby fine: its job is going to
+   * spend its tester step on connection failures and report the environment as dead, which is the
+   * exact misreading this whole mechanism exists to stop. Saying so lets the transport name it once
+   * at dispatch instead of dropping the entries in silence.
+   */
+  readonly honoursHostBridges: boolean
 
   /** Start a per-run container detached; resolves to its container id/name. */
   run(exec: ContainerExec, spec: RunContainerSpec): Promise<string>

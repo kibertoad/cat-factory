@@ -37,7 +37,16 @@ prerequisites are configured.
   repository its service frame is linked to, and offering its reachable repositories as boards
   would aim a hunt at one no service on that board points to.
 - `environments/`: ephemeral-environment provisioning (the heaviest module) + `kubernetes/`,
-  `runners/` (the self-hosted runner-pool transports).
+  `runners/` (the self-hosted runner-pool transports). `environments/environmentReachability.ts`
+  is the URL half of the route proof (kernel compiles with no `URL`): dial the environment's name
+  and then, in the provider's order, each address it stated, and keep the stored claim and the
+  stored proof in step as the provider re-states one.
+- `shared/environmentBridge.ts`: which names a container must have re-pointed to reach the
+  environments a job was handed, and what to re-point each AT. HERE rather than beside a transport
+  because TWO of them build the same bridges from the same dispatch options (the local Docker
+  `--add-host`, the Kubernetes pod `hostAliases`) and must not disagree about what they dropped;
+  `addressBridges` owns that split. The RULE is kernel's `classifyLocalMachineHostBridge`. Design:
+  [ADR 0062](../../docs/adr/0062-environment-address-bridge-and-route-proof.md).
 - `compose/`: the Docker Compose environment backend + the STACK RECIPE machinery. `compose-sources.ts`
   is the one seam that turns an ordered `-f` layer list into text + the path each layer lands at,
   whether the layer is a path in the repo being provisioned, an INLINE compose document, or a file in

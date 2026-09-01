@@ -85,6 +85,9 @@ export function buildEnvironmentProvisioningService(args: {
     clock: deps.clock,
     environmentTeardown: teardownService,
     ...(deps.environmentUrlSafetyPolicy ? { urlPolicy: deps.environmentUrlSafetyPolicy } : {}),
+    // Proving a route to a provisioned environment. Absent ⇒ every proof records `unproved`, which
+    // is a statement about the DEPLOYMENT and never fails a frame.
+    ...(deps.routeProbe ? { routeProbe: deps.routeProbe } : {}),
     ...(deps.resolveRunRepoContext ? { resolveRunRepoContext: deps.resolveRunRepoContext } : {}),
     ...(deps.resolveRepoFilesForCoords
       ? { resolveRepoFilesForWorkspace: deps.resolveRepoFilesForCoords }

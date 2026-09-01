@@ -8,6 +8,12 @@
 > human-intervention park loop). Slice C is the SEALED counterpart of Slice B and shares its
 > per-service-frame model; Slice D consumes BOTH cred stores.
 
+> **What this tracker does NOT cover.** Slice A standardized the coordinates by RE-PARSING the
+> environment's one URL, which answers "where do I aim" and never "can anything get there". The
+> address a container must be given when that name resolves nowhere, and the proof that anything
+> carries at all, are
+> [ADR 0062](../../backend/docs/adr/0062-environment-address-bridge-and-route-proof.md).
+
 ## Goal & rationale
 
 A Tester run aborted with _"Ephemeral environment not provided/reachable: searched process

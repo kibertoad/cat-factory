@@ -192,6 +192,21 @@ export interface EnvironmentRecord {
   expiresAt: number | null
   lastError: string | null
   deletedAt: number | null
+  /**
+   * The serialized {@link EnvironmentReachability}: the addresses the provider stated for this
+   * environment's URL host, plus what dialling them proved. Null when the provider states none and
+   * nothing has probed, and for rows written before the column existed.
+   *
+   * A JSON STRING rather than a parsed object because a record mirrors its row one field per
+   * column, and both facades would otherwise need their own parse of the same blob: two
+   * implementations of one validator is how a D1 row and a Postgres row come to disagree about
+   * what they hold. The single parse lives in `recordToHandle`.
+   *
+   * Stored in the CLEAR, unlike its neighbours. `access_cipher` holds credentials and
+   * `provision_fields_cipher` holds whatever a provider captured, which may be anything; a list of
+   * addresses for a host already published in plaintext beside it is neither.
+   */
+  reachability: string | null
   /** The service's declared provision type this env was stood up for; null for legacy rows. */
   provisionType: string | null
   /** The resolved engine that handled the provisioning; null for legacy rows. */
@@ -208,6 +223,7 @@ export type EnvironmentRecordPatch = Partial<
     | 'provisionFieldsCipher'
     | 'expiresAt'
     | 'lastError'
+    | 'reachability'
     | 'provisionType'
     | 'engine'
   >

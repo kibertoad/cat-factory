@@ -25,7 +25,14 @@
 // routes on correct for free, which a rewritten authority would not.
 
 import { wildcardDnsSuffix, wildcardDnsWindows } from '@cat-factory/contracts'
-import { decodeIpv4, isLocalMachineHost, isLoopbackHost } from './ip-host.logic.js'
+import {
+  decimalV4,
+  decodeIpv4,
+  isCloudMetadataHost,
+  isLocalMachineHost,
+  isLoopbackHost,
+  mappedV4,
+} from './ip-host.logic.js'
 
 /**
  * The one spelling every rule here compares against: lower-cased, trimmed, IPv6 brackets and the
@@ -79,12 +86,81 @@ export function resolvesToLocalMachine(hostname: string): boolean {
  * replaced, for a `--add-host` the container will not honour.
  */
 export type LocalMachineHostBridge =
-  /** Not this machine. The container reaches it as written, and re-pointing it would break it. */
+  /** Not this machine, and nowhere else to point it. The container reaches it as written. */
   | { kind: 'none' }
-  /** A NAME an added hosts-file entry re-points. `host` is what to map to the host gateway. */
-  | { kind: 'bridge'; host: string }
+  /** A NAME an added hosts-file entry re-points, and what to point it AT. */
+  | { kind: 'bridge'; host: string; target: HostBridgeTarget }
   /** This machine, and no hosts-file entry can reach it. See {@link isHostsFileAddressable}. */
   | { kind: 'unbridgeable'; host: string }
+
+/**
+ * What a bridged name is mapped TO.
+ *
+ * A member on `bridge` rather than a fourth sibling `kind`, so `none` / `bridge` / `unbridgeable`
+ * keep meaning exactly what they mean: the three of them answer "what can this transport do about
+ * this name", and both targets are the same answer (re-point it) with different data.
+ *
+ *   - `host-gateway` is the container runtime's own alias for the machine it runs on, and it is
+ *     the ONLY target a local-machine name can take. It is a Docker-family token, resolved by the
+ *     runtime rather than by us, which is why it is a literal here and never an address.
+ *   - `{ ip }` is an address the ENVIRONMENT'S PROVIDER stated carries traffic for this name. It
+ *     is the remote case, and it is the case that makes a bridge target DATA for the first time.
+ *     Two rules bind it, both in {@link isBridgeableAddress} and at the caller: the address must
+ *     be one a bridge may name, and the HOST side must be a host the job was actually handed,
+ *     never a free-form string a provider chose. A provider that could re-point any name inside
+ *     the container could re-point the harness's own alias for reaching back to its host.
+ */
+export type HostBridgeTarget = 'host-gateway' | { ip: string }
+
+/**
+ * Whether an address a provider stated may be used as a bridge target.
+ *
+ * Until this existed the target was the fixed literal `host-gateway`, so the destination of every
+ * bridge was CODE. An address makes it DATA, on a path whose container is itself the trust
+ * boundary, so the rule is stated here beside the classifier rather than left to whichever
+ * adapter interpolates the string.
+ *
+ * Deliberately NOT {@link isBlockedPrivateHost}, which is the strict policy for a URL an org
+ * supplies and blocks the whole RFC1918 space. An internal load balancer on `10.x` is precisely
+ * the population this feature exists for, and refusing it would leave the feature with nothing to
+ * name. What is refused instead is the set an address bridge could only ever be ABUSED to reach:
+ *
+ *   - Anything that is not a CANONICAL literal. `decodeIpv4` accepts a bare 32-bit integer and
+ *     hex/octal octets because a URL guard must see through those encodings; a bridge target has
+ *     no reason to be spelled that way, and accepting the obfuscated forms is how `2130706433`
+ *     becomes loopback in a reader that only pattern-matched `127.`.
+ *   - LOOPBACK, which inside a container is the container's own namespace, where the harness
+ *     itself is listening. A name re-pointed there does not reach the host; it reaches us.
+ *   - LINK-LOCAL and the vendor metadata addresses, the endpoint an SSRF aims at for instance
+ *     credentials, reached here by a name the agent has every reason to fetch.
+ *   - The unspecified, multicast and broadcast addresses, which name no host at all.
+ */
+export function isBridgeableAddress(address: string): boolean {
+  const host = normalizeHostname(address)
+  if (!host) return false
+  if (host.includes(':')) {
+    // IPv6. An IPv4-mapped literal is judged on the address it carries, never on its spelling.
+    const mapped = mappedV4(host)
+    if (mapped) return isBridgeableV4(mapped)
+    if (!/^[0-9a-f:]+$/.test(host)) return false
+    if (host === '::' || host === '::1') return false
+    // Link-local (fe80::/10) and the AWS IPv6 IMDS address.
+    if (host.startsWith('fe80:') || isCloudMetadataHost(host)) return false
+    return true
+  }
+  const v4 = decimalV4(host)
+  return v4 !== null && isBridgeableV4(v4)
+}
+
+/** The address half of {@link isBridgeableAddress}, once the literal has been decoded. */
+function isBridgeableV4(parts: [number, number, number, number]): boolean {
+  const [a, b, c, d] = parts
+  if (a === 0 || a === 127) return false // unspecified / loopback
+  if (a === 169 && b === 254) return false // link-local, incl. 169.254.169.254 IMDS
+  if (a === 100 && b === 100 && c === 100 && d === 200) return false // Alibaba metadata
+  if (a >= 224) return false // multicast, reserved, and 255.255.255.255
+  return true
+}
 
 /**
  * Whether mapping `host` to the container's host gateway would achieve anything.
@@ -117,19 +193,56 @@ function isHostsFileAddressable(host: string): boolean {
 }
 
 /**
- * Grade a hostname for the host-gateway bridge: leave it alone, map it, or report that it names
- * this machine and cannot be mapped.
+ * Grade a hostname for a host bridge: leave it alone, map it (to the host gateway or to a stated
+ * address), or report that it names this machine and cannot be mapped.
  *
  * The whole rule lives here rather than beside the container runtime because more than one layer
  * has to agree about it, and because both wrong answers are silent in production: bridging a
  * remote host breaks an environment that worked, and not bridging a wildcard-DNS loopback name
  * leaves the tester on connection failures it reports as a dead environment.
+ *
+ * `address` is the address the environment's provider stated for THIS hostname, already PROVED to
+ * carry (see `EnvironmentRouteProof`); absent means the name is all anyone has. The two cases are
+ * ordered rather than combined, and the order is not arbitrary: a name that answers with this
+ * machine's own address is a dead end inside a container whatever a provider says about it, so it
+ * takes the gateway branch first and a stated address never overrides it.
+ *
+ * Note the asymmetry this leaves, which is correct. A LOCAL name that no hosts-file entry can
+ * re-point is reported `unbridgeable`, because it names a live environment the run is going to
+ * fail against. A REMOTE name in the same shape (an IP literal) is reported `none`, because an
+ * address literal reaches whatever it reaches from inside the container exactly as it does
+ * outside, and there is nothing to report.
  */
-export function classifyLocalMachineHostBridge(hostname: string): LocalMachineHostBridge {
+export function classifyLocalMachineHostBridge(
+  hostname: string,
+  address?: string | null,
+): LocalMachineHostBridge {
   const host = normalizeHostname(hostname)
   if (!host) return { kind: 'none' }
-  if (!resolvesToLocalMachine(host)) return { kind: 'none' }
-  return isHostsFileAddressable(host) ? { kind: 'bridge', host } : { kind: 'unbridgeable', host }
+  if (resolvesToLocalMachine(host)) {
+    return isHostsFileAddressable(host)
+      ? { kind: 'bridge', host, target: 'host-gateway' }
+      : { kind: 'unbridgeable', host }
+  }
+  if (!address) return { kind: 'none' }
+  const ip = normalizeHostname(address)
+  if (!isBridgeableAddress(ip)) return { kind: 'none' }
+  if (!isHostsFileAddressable(host)) return { kind: 'none' }
+  return { kind: 'bridge', host, target: { ip } }
+}
+
+/**
+ * The one spelling of a bridge, for comparing a needed bridge against what a running container
+ * was CREATED with and for recording it on that container's handle.
+ *
+ * Derived rather than hand-formatted at each site because the comparison is an IDENTITY: a
+ * mismatch destroys and rebuilds a warm container, so two spellings of the same bridge would
+ * replace one for nothing, and one spelling covering two different targets would leave a run
+ * wedged against a stale address in a container nothing will replace.
+ */
+export function hostBridgeKey(bridge: { host: string; target: HostBridgeTarget }): string {
+  const target = bridge.target === 'host-gateway' ? 'host-gateway' : bridge.target.ip
+  return bridge.host + '=' + target
 }
 
 // The URL half of this (pull the hostname out, decide whether to bridge it) is deliberately NOT

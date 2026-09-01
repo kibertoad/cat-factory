@@ -609,6 +609,16 @@ Do not lean on any of these; the codebase explicitly refuses to:
   secrets ride the job body only, resolved by name through `ToolSecretResolver`), but anything the
   agent can read, assume it can also try to exfiltrate through text it writes, which is why
   Layer 5 scrubs at every exit.
+- **The host bridge a run container is started with.** An environment whose name a deployment
+  cannot resolve is reached by re-pointing that name inside the container (`--add-host`, or a pod
+  `hostAliases` entry), so a PROVIDER now influences name resolution in the container for the first
+  time. Two structural limits keep that from being a lever: the address must be one kernel's
+  `isBridgeableAddress` allows, which refuses loopback (the container's own namespace, where the
+  harness listens), link-local and vendor metadata; and the HOST side comes from a URL the job was
+  already handed, because a dispatch pairs each address with its URL rather than carrying a map a
+  provider could key by any name (including the harness's own alias for reaching back to its host).
+  It is not an egress control: what the container can reach is unchanged, only what a name resolves
+  to. See [ADR 0062](./adr/0062-environment-address-bridge-and-route-proof.md).
 - **The provenance of a wired MCP tool server.** A server's RESULTS are untrusted input like
   everything else the agent reads (the threat model above), so wiring one extends the set of
   parties who can attempt injection to that server's operator and its upstreams; and the run

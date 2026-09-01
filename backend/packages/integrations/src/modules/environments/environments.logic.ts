@@ -10,6 +10,9 @@ import type {
 } from '@cat-factory/kernel'
 import type { EnvironmentRecord, UrlSafetyPolicy } from '@cat-factory/kernel'
 import { connectionFailureResult, STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
+import type { EnvironmentAddress, EnvironmentReachability } from '@cat-factory/contracts'
+import { environmentReachabilitySchema } from '@cat-factory/contracts'
+import * as v from 'valibot'
 import { safeFetch } from '../shared/safe-fetch.js'
 import { assertSafePublicUrl, publicUrlHost } from '../shared/url-guard.js'
 
@@ -410,6 +413,68 @@ export function mapStatus(
   return fallback
 }
 
+/**
+ * Read a manifest's `addressesPath` off an arbitrary provider response.
+ *
+ * Three shapes are accepted because a self-rolled management API can reasonably return any of
+ * them, and refusing two would push an org into reshaping its API for us: a single address string,
+ * an array of strings, or an array of `{ address, label }` objects. Anything else in the array is
+ * SKIPPED rather than coerced, so an unexpected element cannot become the literal `[object
+ * Object]` in an `--add-host` argument.
+ *
+ * Nothing here validates the addresses. Which ones a bridge may name is kernel's rule
+ * (`isBridgeableAddress`), applied where the bridge is built, and what actually carries is the
+ * proof's answer; a provider stating a useless address gets a recorded failed attempt, which is
+ * the honest outcome.
+ */
+export function extractAddresses(json: unknown, path: string | undefined): EnvironmentAddress[] {
+  if (!path) return []
+  const raw = extractByPath(json, path)
+  if (typeof raw === 'string') return raw.trim() ? [{ address: raw.trim() }] : []
+  if (!Array.isArray(raw)) return []
+  const out: EnvironmentAddress[] = []
+  for (const entry of raw) {
+    if (typeof entry === 'string') {
+      if (entry.trim()) out.push({ address: entry.trim() })
+      continue
+    }
+    if (!entry || typeof entry !== 'object') continue
+    const record = entry as Record<string, unknown>
+    const address = typeof record.address === 'string' ? record.address.trim() : ''
+    if (!address) continue
+    const label = typeof record.label === 'string' ? record.label.trim() : ''
+    out.push(label ? { address, label } : { address })
+  }
+  return out
+}
+
+/**
+ * Parse the stored reachability blob, or null when there is none and when what is there does not
+ * validate.
+ *
+ * The ONE parse of that column, which is why it is here rather than in each facade's repository:
+ * two implementations of one validator is how a D1 row and a Postgres row come to disagree about
+ * what they hold. A blob that fails validation reads as ABSENT rather than throwing, because the
+ * caller is a projection every environment read goes through and a stale shape written by an older
+ * build must not take the whole handle down with it: an unreadable proof and no proof are the same
+ * fact to every reader (nothing has been shown to carry).
+ */
+export function parseReachability(raw: string | null): EnvironmentReachability | null {
+  if (!raw) return null
+  try {
+    const parsed = v.safeParse(environmentReachabilitySchema, JSON.parse(raw))
+    return parsed.success ? parsed.output : null
+  } catch {
+    return null
+  }
+}
+
+/** Serialize reachability for the row, or null when there is nothing worth a column. */
+export function serializeReachability(value: EnvironmentReachability | null): string | null {
+  if (!value || (value.candidates.length === 0 && !value.proof)) return null
+  return JSON.stringify(value)
+}
+
 /** Project a stored record onto the wire handle, optionally with decrypted access. */
 export function recordToHandle(
   record: EnvironmentRecord,
@@ -424,6 +489,7 @@ export function recordToHandle(
     providerId: record.providerId,
     externalId: record.externalId,
     url: record.url,
+    reachability: parseReachability(record.reachability),
     status: record.status,
     ...(access ? { access } : {}),
     createdAt: record.createdAt,

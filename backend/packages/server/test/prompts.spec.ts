@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { FRONTEND_WIREMOCK_PORT, HARNESS_JOB_PORT } from '@cat-factory/contracts'
 import type { AgentRunContext } from '@cat-factory/kernel'
-import { dispatchEnvironmentUrls, prBody, testerInfraSpec } from '../src/agents/prompts.js'
+import { dispatchEnvironments, prBody, testerInfraSpec } from '../src/agents/prompts.js'
 
 // Characterisation tests pinning what the container dispatch layer still renders itself: the
 // tester infra-spec branches and the pull-request body. The per-KIND prompts moved beside their
@@ -249,7 +249,7 @@ describe('testerInfraSpec', () => {
   })
 })
 
-describe('dispatchEnvironmentUrls', () => {
+describe('dispatchEnvironments', () => {
   /** Every string in a rendered infra spec that parses as an absolute http(s) URL. */
   const urlsIn = (value: unknown): string[] => {
     if (typeof value === 'string') {
@@ -274,17 +274,57 @@ describe('dispatchEnvironmentUrls', () => {
     } as Record<string, unknown>)
 
   it('lists the run own environment and every live peer', () => {
-    expect(dispatchEnvironmentUrls(everyLeg()).sort()).toEqual([
-      'https://email.env',
-      'https://env.example',
+    expect(
+      dispatchEnvironments(everyLeg())
+        .map((env) => env.url)
+        .sort(),
+    ).toEqual(['https://email.env', 'https://env.example'])
+  })
+
+  it('carries the PROVED address beside the URL, for the own environment and for a peer', () => {
+    // The address is what a transport installs as a hosts entry, and it has to arrive PAIRED with
+    // the URL it belongs to: that pairing is what makes the host side of every bridge, by
+    // construction, a host this job was handed rather than a name a provider chose.
+    expect(
+      dispatchEnvironments(
+        context({
+          environment: {
+            url: 'https://env.example',
+            reachability: { state: 'reached', address: '10.4.19.22' },
+          },
+          involvedServices: [
+            {
+              frameId: 'f_email',
+              title: 'Email',
+              envUrl: 'https://email.env',
+              envAddress: '10.4.19.23',
+            },
+          ],
+        } as Record<string, unknown>),
+      ),
+    ).toEqual([
+      { url: 'https://env.example', address: '10.4.19.22' },
+      { url: 'https://email.env', address: '10.4.19.23' },
     ])
+  })
+
+  it('carries no address for an environment whose own name carried', () => {
+    // `reached` with nothing to dial around is the ordinary case, and it must not produce a bridge:
+    // re-pointing a name that already resolves correctly breaks an environment that worked.
+    expect(
+      dispatchEnvironments(
+        context({
+          environment: { url: 'https://env.example', reachability: { state: 'reached' } },
+        } as Record<string, unknown>),
+      ),
+    ).toEqual([{ url: 'https://env.example' }])
   })
 
   it('lists a frontend binding resolved to a real service, and never the in-container mock', () => {
     // The WireMock URL the harness substitutes for an unresolved binding is served INSIDE the
     // container and is reached exactly as written. Declaring it as an environment would invite a
     // transport to re-point `localhost`, breaking what the job is there to drive.
-    const urls = dispatchEnvironmentUrls(
+    const urls = dispatchEnvironments(
       context({
         frontend: {
           config: { backendBindings: [] },
@@ -297,7 +337,7 @@ describe('dispatchEnvironmentUrls', () => {
         },
       } as Record<string, unknown>),
     )
-    expect(urls).toEqual(['https://api.ephemeral.example'])
+    expect(urls).toEqual([{ url: 'https://api.ephemeral.example' }])
   })
 
   it('accounts for EVERY URL the rendered infra spec carries', () => {
@@ -317,7 +357,7 @@ describe('dispatchEnvironmentUrls', () => {
         },
       } as Record<string, unknown>),
     ]) {
-      const declared = new Set(dispatchEnvironmentUrls(ctx))
+      const declared = new Set(dispatchEnvironments(ctx).map((env) => env.url))
       const rendered = urlsIn(testerInfraSpec(ctx)).filter(
         // The harness's own in-container mock is not an environment; see the case above.
         (url) => !url.startsWith('http://localhost:'),

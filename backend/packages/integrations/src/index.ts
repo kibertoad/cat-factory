@@ -296,6 +296,15 @@ export {
   type EnvironmentTeardownServiceDependencies,
 } from './modules/environments/EnvironmentTeardownService.js'
 export * as environmentsLogic from './modules/environments/environments.logic.js'
+// Which hosts a container must have re-pointed to reach the environments a job was handed, and
+// what to re-point each at. Shared because BOTH container transports build the same bridges out of
+// the same dispatch options (local Docker `--add-host`, Kubernetes pod `hostAliases`).
+export {
+  addressBridges,
+  planEnvironmentBridges,
+  type EnvironmentBridgePlan,
+  type HostBridge,
+} from './modules/shared/environmentBridge.js'
 // The shared SSRF-safe fetch (per-hop redirect revalidation + response byte cap) used by
 // the policy-based providers; also reused by the server's web-search upstream.
 export {

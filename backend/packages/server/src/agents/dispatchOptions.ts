@@ -2,7 +2,7 @@ import type { AgentRunContext, RunnerDispatchOptions } from '@cat-factory/kernel
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { resolveInstanceTypeId } from '@cat-factory/contracts'
 import { imageVariantFor } from './containerJobAddressing.js'
-import { dispatchEnvironmentUrls } from './prompts.js'
+import { dispatchEnvironments } from './prompts.js'
 
 // What a container dispatch tells its transport ABOUT the job, beside the job body.
 //
@@ -31,10 +31,10 @@ export function buildDispatchOptions(
   const provider = context.service?.cloudProvider
   const size = context.service?.instanceSize
   const image = imageVariantFor(context.agentKind, registry)
-  // The environments this job is being handed, so a transport whose containers cannot reach a
-  // local address can do something about it before it starts one. See `dispatchEnvironmentUrls`.
-  const environmentUrls = dispatchEnvironmentUrls(context)
-  if (!provider && !size && !image && environmentUrls.length === 0) return undefined
+  // The environments this job is being handed, so a transport whose containers cannot reach one as
+  // written can do something about it before it starts one. See `dispatchEnvironments`.
+  const environments = dispatchEnvironments(context)
+  if (!provider && !size && !image && environments.length === 0) return undefined
   return {
     ...(provider || size ? { instanceTypeId: resolveInstanceTypeId(provider, size) } : {}),
     ...(provider ? { provider } : {}),
@@ -42,6 +42,6 @@ export function buildDispatchOptions(
     // container (`--memory`/`--cpus`) without decoding the cloud id.
     ...(size ? { instanceSize: size } : {}),
     ...(image ? { image } : {}),
-    ...(environmentUrls.length ? { environmentUrls } : {}),
+    ...(environments.length ? { environments } : {}),
   }
 }

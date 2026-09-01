@@ -5,6 +5,7 @@ import type {
   BlockRepository,
   Clock,
   EnvironmentHandle,
+  EnvironmentRouteProof,
   ExecutionInstance,
   Logger,
   PipelineStep,
@@ -13,6 +14,7 @@ import type {
   ServiceProvisioning,
 } from '@cat-factory/kernel'
 import {
+  describeUnreachableEnvironment,
   describeWaitedFor,
   getErrorMessage,
   getErrorReason,
@@ -588,6 +590,17 @@ export class DeployerStepController {
     handle: EnvironmentHandle,
   ): Promise<AdvanceResult> {
     const { workspaceId, instance, step } = ctx
+    const proof = await this.proveEnvironmentRoute(ctx, handle)
+    if (proof?.state === 'not_reached') {
+      return this.settleDeployerFailure(ctx, target, {
+        url: handle.url,
+        environmentId: handle.id,
+        error: describeUnreachableEnvironment(handle.url, proof),
+        // A DNS zone, a security group or a load balancer, none of which is in the checkout, which
+        // is why this reason is not repo-fixable and the remediation loop stays out of it.
+        reason: 'environment_unreachable',
+      })
+    }
     step.deployEnvs = {
       ...step.deployEnvs,
       [target.frameId]: { status: 'ready', url: handle.url, environmentId: handle.id },
@@ -596,6 +609,40 @@ export class DeployerStepController {
     // branch) so a crash/replay resumes at the first un-settled frame, not re-provisioning this one.
     await this.runStateMachine.casPersist(workspaceId, instance)
     return this.advanceDeployerFrames(ctx)
+  }
+
+  /**
+   * Dial the environment once, at the moment its frame settles `ready`, and record what carried.
+   *
+   * Here rather than at dispatch because a bridge classifier that made a DNS call would put
+   * network I/O and a new failure mode on the container-dispatch path, and here rather than in a
+   * gate because the deployer owns provisioning through to a terminal verdict (the withdrawn
+   * `deploy-health` gate, `docs/initiatives/deployment-failure-remediation.md`). This is the one
+   * moment where the I/O is free and the answer still changes what happens next.
+   *
+   * BEST-EFFORT, and the asymmetry is deliberate. A `not_reached` verdict is evidence and fails the
+   * frame in about two minutes rather than letting a tester spend ten and a model budget arriving
+   * at a confident diagnosis of the wrong layer. A proof that could not be TAKEN (no prober wired,
+   * the persistence write failed) is not evidence of anything and returns null, which advances
+   * exactly as before this existed: the failure mode to avoid is a diagnostic that becomes a second
+   * way for a healthy deploy to die.
+   */
+  private async proveEnvironmentRoute(
+    ctx: DeployerFanOut,
+    handle: EnvironmentHandle,
+  ): Promise<EnvironmentRouteProof | null> {
+    const provisioning = this.environmentProvisioning
+    if (!provisioning) return null
+    let proved: EnvironmentHandle | undefined
+    await runBestEffort(
+      this.log,
+      'prove environment route',
+      async () => {
+        proved = await provisioning.proveReachability(ctx.workspaceId, handle.id)
+      },
+      { workspaceId: ctx.workspaceId, executionId: ctx.instance.id, environmentId: handle.id },
+    )
+    return proved?.reachability?.proof ?? null
   }
 
   /**

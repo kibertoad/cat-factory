@@ -610,8 +610,13 @@ export type {
   EnvironmentTestRunner,
 } from './environment-test.js'
 export { NoopEnvironmentTestRunner } from './environment-test.js'
+
+// Proving a route to a provisioned environment: one bounded TCP connect, per facade. See
+// `ports/route-probe.ts` for why it is a connect rather than a request.
+export type { RouteProbe, RouteProbeOutcome, RouteProbeRequest } from './route-probe.js'
 export type {
   ContainerEvictionKind,
+  DispatchEnvironment,
   HarnessCallMetric,
   RunnerDispatchAck,
   RunnerDispatchKind,

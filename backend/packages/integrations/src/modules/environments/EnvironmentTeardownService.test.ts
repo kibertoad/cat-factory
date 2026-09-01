@@ -40,6 +40,7 @@ const RECORD: EnvironmentRecord = {
   status: 'ready',
   accessCipher: null,
   provisionFieldsCipher: null,
+  reachability: null,
   createdAt: 1_000,
   expiresAt: null,
   lastError: null,

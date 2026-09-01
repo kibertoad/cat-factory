@@ -595,6 +595,7 @@ describe('EnvironmentProvisioningService — supersedeForBlock (infraless flip)'
       status: 'ready',
       accessCipher: null,
       provisionFieldsCipher: null,
+      reachability: null,
       createdAt: 1,
       expiresAt: null,
       lastError: null,

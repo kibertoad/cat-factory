@@ -7,6 +7,7 @@ import type {
   DesignImageSet,
   DocumentOrigin,
   EnvironmentAccessHandle,
+  EnvironmentReachabilityNote,
   EnvironmentStatus,
   FrontendConfig,
   InjectedContextFile,
@@ -609,6 +610,19 @@ export interface AgentRunContext {
     status: EnvironmentStatus
     access: EnvironmentAccessHandle | null
     expiresAt: number | null
+    /**
+     * What the platform proved about REACHING this environment, when it proved anything.
+     *
+     * Beside the URL because the two are different claims and only one of them was ever backed by
+     * evidence. An agent handed a name it cannot resolve has no way to tell a DNS gap from a dead
+     * environment, and the hypothesis its own task makes salient is the wrong one; this is the
+     * platform saying which layer it already checked, and naming the address that carried so the
+     * agent can dial it directly where its container was not given the mapping.
+     *
+     * Absent when nothing has probed, which is the ordinary state mid-provision. Never a
+     * provider's unverified claim.
+     */
+    reachability?: EnvironmentReachabilityNote
   }
   /**
    * Service-level (frame) configuration resolved by the engine from this run's
@@ -671,6 +685,13 @@ export interface AgentRunContext {
     title: string
     description?: string
     envUrl?: string
+    /**
+     * The address proved to carry traffic for {@link envUrl}'s host, when its name did not. A peer's
+     * environment fails in exactly the same way the run's own does and reads as exactly the same
+     * "the environment is down", which is why the peer leg carries the same fact rather than only
+     * the URL.
+     */
+    envAddress?: string
   }[]
   /**
    * The service the work itself belongs to — the enclosing service FRAME's title and description,

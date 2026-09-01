@@ -70,6 +70,7 @@ import type { Env } from './env'
 import { envBag, requireDb, requireTelemetryDb } from './env'
 import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
+import { workerRouteProbe } from './routeProbe'
 import { DurableObjectEventPublisher } from './events/DurableObjectEventPublisher'
 import { WorkflowsWorkRunner } from './workflows/WorkflowsWorkRunner'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
@@ -516,6 +517,9 @@ export function selectEnvironmentsDeps(
     }),
     environmentCustomTlsSupported: false,
     ...(urlPolicy ? { environmentUrlSafetyPolicy: urlPolicy } : {}),
+    // Proving a route to a provisioned environment before a tester is pointed at it. The Worker
+    // opens the socket through `cloudflare:sockets`; Node's symmetric wiring uses `net`.
+    routeProbe: workerRouteProbe,
     // Deployment-level, additive extensions to the built-in provisioning-detection conventions.
     ...(config.environments.detectionConventions
       ? { detectionConventions: config.environments.detectionConventions }

@@ -1275,6 +1275,9 @@ export const environments = pgTable(
     status: text('status').notNull(),
     access_cipher: text('access_cipher'),
     provision_fields_cipher: text('provision_fields_cipher'),
+    // The serialized `EnvironmentReachability` (ADR 0062), in the clear: a list of addresses for a
+    // host already published in plaintext beside it is neither a credential nor provider state.
+    reachability: text('reachability'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     expires_at: bigint('expires_at', { mode: 'number' }),
     last_error: text('last_error'),

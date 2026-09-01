@@ -135,6 +135,14 @@ else imports its **ports** and domain types from here.
   ceiling spent) plus `ENVIRONMENT_READY_TIMEOUT_MS`. Here rather than beside a provider because
   the ENGINE decides when a run may proceed, and because a `ready` environment with no URL is
   legitimate: whether the consuming STEP has an address is a different question, asked at dispatch.
+- `domain/environment-reachability.logic.ts` + `ports/route-probe.ts`: **whether anything can
+  actually reach that environment**, which is the question the URL beside it only ever asserted.
+  `planRouteProbes` (the name first, then each address its provider stated, in the provider's
+  order) and `reduceRouteProof` (which one CARRIED, and which layer failed when none did) over a
+  `RouteProbe`, one bounded TCP connect per facade. Beside readiness rather than folded into it:
+  readiness is about the environment, reachability about anyone getting to it, and only the second
+  can be `unproved`, a verdict about the DEPLOYMENT that must never fail a run. Design:
+  [ADR 0062](../../docs/adr/0062-environment-address-bridge-and-route-proof.md).
 - `domain/context-references.ts`: the **"a referenced context document reaches the agent whole, or
   the run breaks loudly naming it"** invariant: the two refusals
   (`assertContextDocumentsReadable` / `assertContextReferencesFit`) with their `details.reason`

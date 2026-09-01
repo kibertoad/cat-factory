@@ -247,6 +247,47 @@ function deriveEnvironmentCoordinates(
 }
 
 /**
+ * What the platform already established about REACHING this environment, as prompt lines.
+ *
+ * The one thing a tester could never work out for itself, and the reason it reported the wrong
+ * layer: a connection failure covers a name that resolves nowhere, a route that does not carry and
+ * a port with nothing listening, and from inside a container those are one undifferentiated
+ * symptom. Saying which of them the platform already ruled out turns "the environment is down"
+ * from the salient hypothesis into a claim the agent has evidence against.
+ *
+ * The address is stated even where the container was given the mapping, which is deliberate: an
+ * agent that can see the address can dial it directly (`curl --resolve`) when its own runtime could
+ * not install a hosts entry, and a mapping it does not know about is a mapping it cannot reason
+ * about when something else goes wrong.
+ *
+ * Silent for the ordinary case (the name carried), because a line that appears on every prompt is
+ * a line nobody reads on the one prompt where it matters.
+ */
+function reachabilityLines(
+  reachability: NonNullable<AgentRunContext['environment']>['reachability'],
+): string[] {
+  if (!reachability) return []
+  if (reachability.state === 'unproved') {
+    return [
+      '- Reachability: NOT VERIFIED by the platform. Treat a connection failure as unexplained ' +
+        'rather than as evidence the environment is down.',
+    ]
+  }
+  if (reachability.state === 'not_reached') {
+    return [
+      `- Reachability: the platform could NOT reach this environment (${reachability.reason ?? 'unknown cause'}).`,
+    ]
+  }
+  if (!reachability.address) return []
+  return [
+    `- Reachability: the platform reached this environment at ${reachability.address}, NOT by ` +
+      'resolving its hostname (which resolves nowhere from here). Your container is normally ' +
+      'given that mapping; if a request still fails to resolve, dial the address directly and ' +
+      'keep the Host header as the URL above (the ingress routes on it).',
+  ]
+}
+
+/**
  * Render the "ephemeral environment under test" section from the run context, or
  * an empty string when no environment is attached. Surfaces the standardized
  * coordinates (URL + host/port/scheme, derived once via {@link deriveEnvironmentCoordinates})
@@ -269,6 +310,7 @@ export function environmentSection(context: AgentRunContext): string {
     )
   }
   lines.push(`- Status: ${env.status}`)
+  lines.push(...reachabilityLines(env.reachability))
   const access = env.access
   if (access && access.scheme !== 'none') {
     if (access.scheme === 'bearer' && access.token) {
@@ -329,6 +371,9 @@ export function involvedServicesSection(context: AgentRunContext): string {
     const parts = [`- ${service.title}`]
     if (service.description) parts.push(`— ${service.description}`)
     if (service.envUrl) parts.push(`(live environment: ${service.envUrl})`)
+    // The peer's environment fails in exactly the same way the run's own does and reads as exactly
+    // the same "the environment is down", so the address that carried travels with it.
+    if (service.envAddress) parts.push(`(reachable at ${service.envAddress}, not by hostname)`)
     lines.push(parts.join(' '))
   }
   return lines.join('\n')

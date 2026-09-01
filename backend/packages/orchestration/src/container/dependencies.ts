@@ -152,6 +152,7 @@ import type {
   TaskTypeRegistry,
   InlineUseCaseGenerator,
   InlineUseCaseRegistry,
+  RouteProbe,
   TestSecretRef,
   TicketTrackerProvider,
   TokenUsageRepository,
@@ -841,6 +842,15 @@ export interface CoreDependencies extends ContentLibraryDependencies {
   // adapter can reach an internal platform on a private/VPN host. Scoped independently of
   // the runner pool: widening one integration must not widen the other's SSRF guard.
   environmentUrlSafetyPolicy?: UrlSafetyPolicy
+  /**
+   * Opens one bounded TCP connection, so the deployer can PROVE a route to the environment it just
+   * stood up rather than handing a tester a name nobody has dialled.
+   *
+   * Both facades wire it (Node over `net`, the Worker over `cloudflare:sockets`), so absent means a
+   * facade that genuinely has no socket API: every proof then records `unproved`, which never fails
+   * a frame and leaves the deploy path byte-for-byte as it was.
+   */
+  routeProbe?: RouteProbe
   // Deployment-level, ADDITIVE extensions to the built-in provisioning-detection conventions
   // (extra compose file names/dirs, seed dirs, env-template dirs), read from
   // `config.environments.detectionConventions` by each facade and threaded into BOTH detection

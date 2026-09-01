@@ -385,6 +385,31 @@ describe('buildPodManifest', () => {
       httpGet: { path: '/health', port: DEFAULT_HARNESS_PORT },
     })
   })
+
+  it('carries a `hostAliases` entry for every environment reached by ADDRESS, grouped by address', () => {
+    // Name-to-address is native here (`{ ip, hostnames[] }`), which is why the bridge target is a
+    // discriminated value rather than a Docker-only literal: this runtime can honour half of it.
+    const pod = buildPodManifest(config, 'run-1', 'cf-run-1', {
+      environments: [
+        { url: 'https://pr-14.test.example.cloud', address: '10.4.19.22' },
+        { url: 'https://api.pr-14.test.example.cloud', address: '10.4.19.22' },
+        { url: 'https://pr-15.test.example.cloud', address: '10.4.19.23' },
+      ],
+    }) as { spec: { hostAliases?: unknown } }
+    expect(pod.spec.hostAliases).toEqual([
+      { ip: '10.4.19.22', hostnames: ['api.pr-14.test.example.cloud', 'pr-14.test.example.cloud'] },
+      { ip: '10.4.19.23', hostnames: ['pr-15.test.example.cloud'] },
+    ])
+  })
+
+  it('omits `hostAliases` for a host-gateway bridge, which has no Kubernetes equivalent', () => {
+    // Dropping it is correct and dropping it SILENTLY is what `addressBridges` exists to stop
+    // each transport deciding for itself: `host-gateway` is a Docker-family token.
+    const pod = buildPodManifest(config, 'run-1', 'cf-run-1', {
+      environments: [{ url: 'http://cf-acc-pr8.127.0.0.1.nip.io' }],
+    }) as { spec: { hostAliases?: unknown } }
+    expect(pod.spec.hostAliases).toBeUndefined()
+  })
 })
 
 describe('apiServerConnectionFailureMessage', () => {

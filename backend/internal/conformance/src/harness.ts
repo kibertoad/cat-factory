@@ -16,6 +16,7 @@ import type {
   DocumentRepository,
   DeployCloneTarget,
   EnvironmentProvider,
+  RouteProbe,
   ExecutionEventPublisher,
   ExecutionInstance,
   ExecutionRepository,
@@ -675,6 +676,16 @@ export interface ConformanceAppOptions {
    * seam + the GitHub-derived coords resolver).
    */
   environmentProvider?: EnvironmentProvider
+  /**
+   * The probe the deployer proves a provisioned environment's route with.
+   *
+   * ALWAYS injected, never left to the facade's real wiring, and the default each harness supplies
+   * answers `carried`. A conformance app's environment URLs are fixtures on reserved TLDs that
+   * resolve nowhere, so a real probe would fail every deploy in this suite on the machine's DNS
+   * rather than on anything the suite is asserting. A case that wants the unreachable path supplies
+   * a probe that says so, which is also the only way to assert it deterministically.
+   */
+  routeProbe?: RouteProbe
   resolveRepoFilesForCoords?: (
     workspaceId: string,
     coords: { owner: string; repo: string; provider?: 'github' | 'gitlab' },

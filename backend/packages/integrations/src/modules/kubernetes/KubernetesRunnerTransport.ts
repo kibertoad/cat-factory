@@ -29,6 +29,7 @@ import {
   apiServerConnectionFailureMessage,
   buildPodManifest,
   classifyPodReadiness,
+  podHostAliases,
   describePodTermination,
   KUBERNETES_TOKEN_KEY,
   podExitedCleanly,
@@ -79,6 +80,11 @@ const STOP_TIMEOUT_MS = 30_000
 // created (ensurePod 409s) and its image is cached, so the re-drive proceeds.
 const READY_WAIT_MS = 120_000
 const READY_POLL_INTERVAL_MS = 1_500
+// How long a replacement pod waits out the terminating one holding its name. A bare Pod deletes
+// gracefully, so the name stays taken for the grace period (30s by default) plus the kubelet's
+// own settle; the window covers a doubled default rather than an arbitrary round number.
+const POD_REPLACE_WAIT_MS = 90_000
+const POD_REPLACE_POLL_MS = 1_500
 
 export class KubernetesRunnerTransport implements RunnerTransport {
   /** Backend id recorded in run diagnostics (self-hosted runner pool on Kubernetes). */
@@ -316,10 +322,76 @@ export class KubernetesRunnerTransport implements RunnerTransport {
   ): Promise<void> {
     const manifest = buildPodManifest(this.config, runId, name, options)
     const res = await this.apiFetch('POST', podsUrl(this.config), manifest, DISPATCH_TIMEOUT_MS)
+    if (res.ok) return
     // 409 AlreadyExists ⇒ the run's pod is already up (a later step or a replay):
     // idempotent re-attach, exactly like CloudflareContainerTransport.
-    if (res.ok || res.status === 409) return
-    throw new Error(`Failed to create runner pod (HTTP ${res.status}): ${await safeText(res)}`)
+    if (res.status !== 409) {
+      throw new Error(`Failed to create runner pod (HTTP ${res.status}): ${await safeText(res)}`)
+    }
+    if (await this.podMissingHostAliases(name, options)) {
+      await this.apiFetch('DELETE', podUrl(this.config, name), undefined, DISPATCH_TIMEOUT_MS)
+      await this.recreatePod(name, manifest)
+    }
+  }
+
+  /**
+   * Whether the pod already serving this run was created without a host alias the job now needs.
+   *
+   * `hostAliases` is fixed at pod creation, and a run's pod is created by its FIRST step while the
+   * environment it must reach does not exist until the `deployer` several steps later, so the
+   * ordinary case for a name-to-address bridge is a pod that predates it. Left unchecked, the
+   * re-attach is silent and the tester spends its whole step on connection failures, which is the
+   * misreading the bridge exists to stop.
+   *
+   * Read back off the LIVE pod rather than remembered in this process, which is the one thing this
+   * transport can do that the Docker one cannot (`--add-host` is not readable off a container).
+   * That also makes the check survive a restart with no cache to lose.
+   *
+   * A read that FAILS answers false. The alternative is worse in the direction that matters: a
+   * transient apiserver blip would delete a healthy pod mid-run, where answering false costs at
+   * most the diagnostic the tester was going to produce anyway.
+   */
+  private async podMissingHostAliases(
+    name: string,
+    options?: RunnerDispatchOptions,
+  ): Promise<boolean> {
+    const needed = podHostAliases(options)
+    if (needed.length === 0) return false
+    const res = await this.apiFetch('GET', podUrl(this.config, name), undefined, POLL_TIMEOUT_MS)
+    if (!res.ok) return false
+    const pod = (await res.json()) as { spec?: { hostAliases?: unknown } } | null
+    const present = new Set<string>()
+    for (const alias of Array.isArray(pod?.spec?.hostAliases) ? pod.spec.hostAliases : []) {
+      const entry = alias as { ip?: unknown; hostnames?: unknown }
+      if (typeof entry.ip !== 'string' || !Array.isArray(entry.hostnames)) continue
+      for (const host of entry.hostnames) present.add(`${String(host)}=${entry.ip}`)
+    }
+    return needed.some((alias) =>
+      alias.hostnames.some((host) => !present.has(`${host}=${alias.ip}`)),
+    )
+  }
+
+  /**
+   * Re-create a pod just deleted for a stale host-alias set, tolerating the window in which the
+   * apiserver still holds the terminating one.
+   *
+   * A bare Pod deletes gracefully, so the name stays taken for its termination period and an
+   * immediate POST 409s again. Retried rather than failed because the alternative leaves the run
+   * attached to the very pod that cannot reach its environment; giving up after the window is an
+   * ordinary dispatch failure the engine already recovers by re-driving the step.
+   */
+  private async recreatePod(name: string, manifest: Record<string, unknown>): Promise<void> {
+    const deadline = Date.now() + POD_REPLACE_WAIT_MS
+    for (;;) {
+      const res = await this.apiFetch('POST', podsUrl(this.config), manifest, DISPATCH_TIMEOUT_MS)
+      if (res.ok) return
+      if (res.status !== 409 || Date.now() >= deadline) {
+        throw new Error(
+          `Failed to replace runner pod '${name}' (HTTP ${res.status}): ${await safeText(res)}`,
+        )
+      }
+      await new Promise((resolve) => setTimeout(resolve, POD_REPLACE_POLL_MS))
+    }
   }
 
   private async waitForPodReady(name: string): Promise<void> {

@@ -14,6 +14,7 @@ import type {
   DocInterviewRepository,
   DocKind,
   DocumentRepository,
+  EnvironmentHandle,
   ExecutionInstance,
   FrontendConfig,
   Initiative,
@@ -61,11 +62,12 @@ import { resolveDispatchSettings } from './dispatchPromptSettings.js'
 import {
   boundServiceFrameIds,
   buildFrontendRunNotes,
+  indexLiveServiceEnvs,
   indexLiveServiceEnvUrls,
   resolveFrontendBindings,
   type ResolvedFrontendBinding,
 } from './frontend-infra.logic.js'
-import { connectionDescription } from '@cat-factory/contracts'
+import { connectionDescription, reachabilityNote } from '@cat-factory/contracts'
 import type { ResolvedValidationChecks } from '@cat-factory/contracts'
 import { reproductionFor, validationChecksFor } from './builder-validation-context.js'
 import { stepObservations, type StepObservations } from './builder-step-observations.js'
@@ -1455,21 +1457,26 @@ export class AgentContextBuilder {
     const valid = validInvolvedServiceFrames(blocks, block, ownFrameId)
     if (valid.length === 0) return undefined
     const frameIds = new Set(valid.map((b) => b.id))
-    const liveEnvUrls =
+    // The whole handle rather than the URL alone: a cross-service tester dials the PEER's
+    // environment and fails on an unresolvable name exactly as it used to fail on its own, so the
+    // address proved to carry travels with it. Same newest-wins index either way.
+    const liveEnvs =
       this.deps.environmentProvisioning && frameIds.size > 0
-        ? indexLiveServiceEnvUrls(
+        ? indexLiveServiceEnvs(
             await this.deps.environmentProvisioning.listHandles(workspaceId),
             frameIds,
           )
-        : new Map<string, string>()
+        : new Map<string, EnvironmentHandle>()
     return valid.map((frame) => {
       const description = connectionDescription(blocks, ownFrameId, frame.id)
-      const envUrl = liveEnvUrls.get(frame.id)
+      const live = liveEnvs.get(frame.id)
+      const envAddress = reachabilityNote(live?.reachability)?.address
       return {
         frameId: frame.id,
         title: frame.title,
         ...(description ? { description } : {}),
-        ...(envUrl ? { envUrl } : {}),
+        ...(live?.url ? { envUrl: live.url } : {}),
+        ...(envAddress ? { envAddress } : {}),
       }
     })
   }

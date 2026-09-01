@@ -257,8 +257,30 @@ export function indexLiveServiceEnvUrls(
   handles: Iterable<LiveEnvHandle>,
   serviceFrameIds: ReadonlySet<string>,
 ): Map<string, string> {
-  const liveServiceEnvUrls = new Map<string, string>()
-  if (serviceFrameIds.size === 0) return liveServiceEnvUrls
+  const urls = new Map<string, string>()
+  for (const [frameId, handle] of indexLiveServiceEnvs(handles, serviceFrameIds)) {
+    if (handle.url) urls.set(frameId, handle.url)
+  }
+  return urls
+}
+
+/**
+ * The same newest-wins index, keeping the whole handle.
+ *
+ * Generic in the handle so a caller reading a field this contract does not model (the address
+ * proved to carry for a peer's environment, which lives on `EnvironmentHandle` and not on the
+ * binding-resolution shape) gets it back typed.
+ *
+ * The rule is stated ONCE here and {@link indexLiveServiceEnvUrls} derives from it, because a
+ * consumer that needs more than the URL would otherwise re-implement "newest ready env per frame"
+ * and the two would settle on different environments for the same frame.
+ */
+export function indexLiveServiceEnvs<T extends LiveEnvHandle>(
+  handles: Iterable<T>,
+  serviceFrameIds: ReadonlySet<string>,
+): Map<string, T> {
+  const live = new Map<string, T>()
+  if (serviceFrameIds.size === 0) return live
   const newestAt = new Map<string, number>()
   for (const handle of handles) {
     if (
@@ -269,10 +291,10 @@ export function indexLiveServiceEnvUrls(
       handle.createdAt >= (newestAt.get(handle.frameId) ?? Number.NEGATIVE_INFINITY)
     ) {
       newestAt.set(handle.frameId, handle.createdAt)
-      liveServiceEnvUrls.set(handle.frameId, handle.url)
+      live.set(handle.frameId, handle)
     }
   }
-  return liveServiceEnvUrls
+  return live
 }
 
 /**
