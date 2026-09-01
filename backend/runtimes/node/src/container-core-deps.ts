@@ -763,6 +763,7 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
       githubClient,
       githubInstallationRepository,
       repos.workspaceRepository,
+      config.serviceCatalog,
     ),
     // Push-webhook skill-source freshness fan-out (slice 4): resync affected sources via the
     // pg-boss GitHub-sync queue. No boss (pure-logic test) ⇒ no proactive resync; the

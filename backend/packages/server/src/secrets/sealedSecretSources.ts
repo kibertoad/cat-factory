@@ -103,6 +103,17 @@ export const SEALED_SECRET_SOURCES: Record<OrgSecretSource, SealedSecretSourceSp
     info: 'cat-factory:tasks',
     label: 'task source credentials',
   },
+  // The developer-portal credential the service-catalog import reads with. Same argument as the
+  // two above: the import is an outbound call made from wherever the request landed, so a
+  // mothership-mode board's "import now" and its autorefresh both need the plaintext on the node.
+  // Workspace-keyed alone, since a workspace holds exactly one connection.
+  service_catalog_connection: {
+    repo: 'serviceCatalogConnectionRepository',
+    method: 'get',
+    field: 'credentialsCipher',
+    info: 'cat-factory:service-catalog',
+    label: 'service catalog credentials',
+  },
 }
 
 /**

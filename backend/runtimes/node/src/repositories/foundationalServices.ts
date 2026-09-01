@@ -241,6 +241,7 @@ export class DrizzleApiContractRepository implements ApiContractRepository {
         operations: apiContracts.operations,
         omitted_operations: apiContracts.omitted_operations,
         source_path: apiContracts.source_path,
+        source_sha: apiContracts.source_sha,
       })
       .from(apiContracts)
       .where(and(eq(apiContracts.owner_kind, ownerKind), eq(apiContracts.owner_id, ownerId)))
@@ -254,6 +255,7 @@ export class DrizzleApiContractRepository implements ApiContractRepository {
       operations: parseStringArray(row.operations),
       omittedOperations: row.omitted_operations,
       sourcePath: row.source_path,
+      sourceSha: row.source_sha,
     }))
   }
 

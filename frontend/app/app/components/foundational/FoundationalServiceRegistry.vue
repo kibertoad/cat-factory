@@ -37,6 +37,9 @@ const formatLabel = computed<Record<ApiContractFormat, string>>(() => ({
   openapi: t('foundational.format.openapi'),
   'toad-contract': t('foundational.format.toadContract'),
   'lokalise-api-contract': t('foundational.format.lokaliseApiContract'),
+  asyncapi: t('foundational.format.asyncapi'),
+  graphql: t('foundational.format.graphql'),
+  grpc: t('foundational.format.grpc'),
 }))
 const formatItems = computed(() =>
   (Object.keys(formatLabel.value) as ApiContractFormat[]).map((value) => ({

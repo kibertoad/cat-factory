@@ -40,7 +40,11 @@ export interface ApiContractRecord {
   operations: string[]
   /** How many operations the cap dropped from {@link operations}; states the list is a prefix. */
   omittedOperations: number
-  /** Repo provenance (path + blob sha), both null for a direct upload. */
+  /**
+   * Where the document came from, and WHICH VERSION of it: a repo path plus the blob sha for a
+   * linked source, the portal's own entity reference plus its revision for an imported one, both
+   * null for a direct upload.
+   */
   sourcePath: string | null
   sourceSha: string | null
   createdAt: number
@@ -60,6 +64,17 @@ export interface ApiContractManifestEntry {
   operations: string[]
   omittedOperations: number
   sourcePath: string | null
+  /**
+   * The stored document's content identity ({@link ApiContractRecord.sourceSha}), so a SYNC can
+   * decide whether a document changed without reading a body.
+   *
+   * It belongs on the identity-without-body projection precisely because the alternative is
+   * worse than it looks: comparing what is available otherwise (an id set, a title, a
+   * `length(body)`) is a check that passes for any edit which happens to keep the length, and a
+   * sync built on it would report a changed contract as `unchanged` and serve the old document
+   * indefinitely. Null for a document with no upstream version (a direct upload).
+   */
+  sourceSha: string | null
 }
 
 export interface ApiContractRepository {

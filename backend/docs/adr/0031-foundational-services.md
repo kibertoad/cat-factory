@@ -49,6 +49,15 @@ service's documents live in the definition, which is a third supply route in the
 no new plumbing: the registry projects them through the same `summarizeContract` and hands them to
 the same lazy read.
 
+A LATER slice added a genuinely third route: an **imported developer portal** (Backstage), whose
+components become `workspace`-tier services and whose API entities become their contracts. It is
+deliberately not a second catalog: everything below (the tier merge, the two reads, the suppression
+sub-resource, the `.cat-context/` delivery) applies to an imported service exactly as it does to an
+uploaded one, and the only thing that distinguishes one is its `sourceId`. That slice also added
+the third agent-facing read named in the next section, and the `asyncapi` / `graphql` / `grpc`
+contract formats. Its own design record, including the auth shapes a self-hosted portal runs
+behind: [`service-catalog-import.md`](../service-catalog-import.md).
+
 **A contract set is validated as a SET, not document by document.** A `@toad-contracts/core`
 contract is a module GRAPH (the `defineApiContract` module plus the schema modules it imports)
 and only the first names the library. The rule is therefore that a set declared as a format must
@@ -104,10 +113,11 @@ with a blank catalog entry.
 
 This is the feature's load-bearing design decision.
 
-| Read          | Who gets it                                                              | What it carries                                                                                                        |
-| ------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| **Catalog**   | kinds carrying the `foundational-catalog` trait: the `architect`         | id, name, summary, description, capability tags, and each contract's format + operation names. **No document bodies.** |
-| **Contracts** | kinds carrying the `foundational-contracts` trait: `researcher`, `coder` | the FULL contract documents, for exactly the ids the design declared                                                   |
+| Read          | Who gets it                                                              | What it carries                                                                                                                                            |
+| ------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Catalog**   | kinds carrying the `foundational-catalog` trait: the `architect`         | id, name, summary, description, capability tags, and each contract's format + operation names. **No document bodies.**                                     |
+| **Contracts** | kinds carrying the `foundational-contracts` trait: `researcher`, `coder` | the FULL contract documents, for exactly the ids the design declared                                                                                       |
+| **Estate**    | kinds carrying the `service-estate` trait: `bug-investigator`, `on-call` | the same rows as the catalog under an ORIENTATION framing: who owns each service and what it exposes. **No document bodies, and nothing to declare back.** |
 
 An OpenAPI document routinely runs to hundreds of kilobytes and there is one per service, so
 folding every document into every design dispatch would make a design prompt scale with the size of

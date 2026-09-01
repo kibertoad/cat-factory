@@ -617,7 +617,10 @@
         "binary_generators_unreachable": "Nie udało się teraz odczytać integracji generatywnych tego wdrożenia, więc uruchomienie nie wystartowało. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
         "foundational_builtins_unreachable": "Nie udało się teraz odczytać wbudowanych usług podstawowych tego wdrożenia. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
         "connection_credentials_unreadable": "Nie udało się odczytać zapisanych poświadczeń tego połączenia. Jeśli to wdrożenie ma dostęp do usługi przechowującej jego klucz, połącz źródło ponownie, aby je zastąpić; w przeciwnym razie spróbuj ponownie, gdy to połączenie wróci.",
-        "vcs_capability_unsupported": "Dostawca kontroli źródeł połączony z tą przestrzenią roboczą nie obsługuje tej operacji. Nic nie jest źle skonfigurowane i zmiana ustawień nie pomoże: dla tego dostawcy ta operacja jest niedostępna."
+        "vcs_capability_unsupported": "Dostawca kontroli źródeł połączony z tą przestrzenią roboczą nie obsługuje tej operacji. Nic nie jest źle skonfigurowane i zmiana ustawień nie pomoże: dla tego dostawcy ta operacja jest niedostępna.",
+        "service_catalog_unreachable": "Portal deweloperski tej tablicy nie odpowiedział albo odpowiedział czymś, czego ta platforma nie umie odczytać. Nic tutaj nie jest źle skonfigurowane i żadna zmiana nie pomoże: spróbuj ponownie, gdy portal będzie dostępny.",
+        "service_catalog_unauthorized": "Portal deweloperski odrzucił zapisane dane uwierzytelniające. Najprawdopodobniej zostały wymienione lub unieważnione: otwórz ustawienia katalogu usług i wprowadź aktualne.",
+        "service_catalog_filter_missing": "Nie udało się odczytać filtra encji tego połączenia, więc nie ma czego importować. Zapisz połączenie katalogu usług ponownie, aby go przywrócić."
       }
     },
     "action": {
@@ -6541,7 +6544,8 @@
     },
     "tab": {
       "catalog": "Katalog",
-      "sources": "Powiązane repozytoria"
+      "sources": "Powiązane repozytoria",
+      "portal": "Portal deweloperski"
     },
     "panel": {
       "title": "Usługi fundamentalne",
@@ -6555,7 +6559,10 @@
     "format": {
       "openapi": "OpenAPI",
       "toadContract": "toad-contracts",
-      "lokaliseApiContract": "lokalise/api-contract"
+      "lokaliseApiContract": "lokalise/api-contract",
+      "asyncapi": "AsyncAPI",
+      "graphql": "GraphQL",
+      "grpc": "gRPC"
     },
     "contracts": {
       "omitted": "+{count} więcej, niewymienionych",
@@ -8098,5 +8105,79 @@
       "title": "Nie ma czego porównywać"
     },
     "loadFailed": "Nie udało się wczytać wygenerowanych kandydatów."
+  },
+  "serviceCatalog": {
+    "unavailable": "Import katalogu usług nie jest skonfigurowany w tym wdrożeniu.",
+    "intro": "Wskaż platformie portal deweloperski, który Twoja organizacja już prowadzi: jego usługi zostaną zaimportowane do katalogu powyżej, wraz z tożsamością, właścicielem i definicjami API, które każda z nich publikuje. Agenci klasyfikujący lub badający zgłoszenia czytają je, aby ustalić, do której usługi należy dana praca.",
+    "summary": "Filtr: {filter} · najwyżej {max} usług",
+    "form": {
+      "connect": "Połącz portal",
+      "replace": "Zastąp to połączenie"
+    },
+    "field": {
+      "baseUrl": "Adres portalu",
+      "authMode": "Uwierzytelnianie",
+      "token": "Token usługowy",
+      "sharedSecret": "Wspólny sekret",
+      "tokenUrl": "Punkt końcowy tokenu",
+      "clientId": "Identyfikator klienta",
+      "clientSecret": "Sekret klienta",
+      "scope": "Scope (opcjonalnie)",
+      "audience": "Audience (opcjonalnie)",
+      "username": "Nazwa użytkownika",
+      "password": "Hasło",
+      "headerName": "Nazwa nagłówka",
+      "headerValue": "Wartość nagłówka",
+      "secondHeaderName": "Drugi nagłówek (opcjonalnie)",
+      "secondHeaderValue": "Wartość drugiego nagłówka",
+      "entityFilter": "Filtr encji",
+      "maxServices": "Maksymalna liczba usług",
+      "includeApis": "Importuj definicje API publikowane przez każdą usługę"
+    },
+    "help": {
+      "baseUrl": "Adres bazowy Twojej instancji Backstage. Host prywatny lub wewnętrzny jest dopuszczony tylko wtedy, gdy wdrożenie na to pozwala.",
+      "token": "Token usługa-do-usługi z konfiguracji dostępu zewnętrznego w Backstage.",
+      "sharedSecret": "Sekret w base64 z `backend.auth.keys`. Platforma podpisuje nim krótkotrwały token przy każdym żądaniu.",
+      "headers": "Dla bramy uwierzytelniającej własnymi nagłówkami, na przykład tokenu usługowego Cloudflare Access.",
+      "entityFilter": "Jeden warunek `key=value` w wierszu; wszystkie muszą być spełnione. Domyślnie `kind=component`. Zawęź go do usług, które chcesz udostępniać jako wspólne możliwości.",
+      "maxServices": "Import, który osiągnie ten limit, jest raportowany jako wycinek portalu, a nie jego całość."
+    },
+    "auth": {
+      "none": "Brak",
+      "staticToken": "Statyczny token usługowy",
+      "legacySharedSecret": "Wspólny sekret (token starszego typu)",
+      "oauth2": "Dane klienta OAuth2",
+      "basic": "HTTP Basic",
+      "headers": "Własne nagłówki"
+    },
+    "status": {
+      "ok": "Zaimportowano",
+      "partial": "Zaimportowano częściowo",
+      "failed": "Import nie udał się",
+      "never": "Nigdy nie importowano"
+    },
+    "action": {
+      "connect": "Połącz",
+      "replace": "Zastąp",
+      "probe": "Sprawdź połączenie",
+      "import": "Importuj teraz",
+      "disconnect": "Rozłącz"
+    },
+    "disconnect": {
+      "title": "Rozłączyć katalog usług?",
+      "body": "Usługi zaimportowane z tego portalu zostaną wycofane z katalogu. Nic, co zarejestrowałeś lub wgrałeś ręcznie, nie zostanie zmienione.",
+      "confirm": "Rozłącz"
+    },
+    "toast": {
+      "connected": "Katalog usług połączony",
+      "connectFailed": "Nie udało się połączyć katalogu usług",
+      "probeOk": "Portal odpowiedział",
+      "probeFailed": "Nie udało się połączyć z portalem",
+      "imported": "Katalog usług zaimportowany",
+      "importedDetail": "{upserted} zaktualizowanych, {unchanged} bez zmian, {tombstoned} wycofanych",
+      "importFailed": "Nie udało się zaimportować katalogu usług",
+      "disconnected": "Katalog usług rozłączony",
+      "disconnectFailed": "Nie udało się rozłączyć katalogu usług"
+    }
   }
 }

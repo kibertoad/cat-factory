@@ -229,7 +229,7 @@ export class D1ApiContractRepository implements ApiContractRepository {
     const { results } = await this.db
       .prepare(
         `SELECT service_id, contract_id, format, title, length(body) AS size,
-                operations, omitted_operations, source_path
+                operations, omitted_operations, source_path, source_sha
            FROM api_contracts
           WHERE owner_kind = ? AND owner_id = ?
           ORDER BY service_id, contract_id`,
@@ -244,6 +244,7 @@ export class D1ApiContractRepository implements ApiContractRepository {
         operations: string
         omitted_operations: number
         source_path: string | null
+        source_sha: string | null
       }>()
     return results.map((row) => ({
       serviceId: row.service_id,
@@ -254,6 +255,7 @@ export class D1ApiContractRepository implements ApiContractRepository {
       operations: parseStringArray(row.operations),
       omittedOperations: row.omitted_operations,
       sourcePath: row.source_path,
+      sourceSha: row.source_sha,
     }))
   }
 

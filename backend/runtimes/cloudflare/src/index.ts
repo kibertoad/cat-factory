@@ -51,8 +51,10 @@ import {
   GITHUB_RECONCILE_STALE_MS,
   escalateStaleNotifications,
   FOUNDATIONAL_SOURCE_STALE_MS,
+  SERVICE_CATALOG_STALE_MS,
   shouldRunReachabilityPass,
   sweepFoundationalSources,
+  sweepServiceCatalogs,
   sweepInfraReachability,
   sweepPlatformHealth,
   sweepSpendAlerts,
@@ -1019,6 +1021,17 @@ function runPeriodicBackstops(
     tick.run(
       { name: 'foundational-sources', failureMessage: 'foundational-source sweep failed' },
       sweepFoundationalSources(buildContainer(env).foundationalServices, logger),
+    )
+  }
+
+  // Re-import connected SERVICE CATALOGS (developer portals) whose last import has aged out, so a
+  // service the organisation retired stops being handed to agents as current. Its own window
+  // through the same stateless gate, and a longer one than the source sweep above: a portal import
+  // has no cheap "did anything change" probe, so every pass pages the matching estate.
+  if (shouldRunReachabilityPass(scheduledTime, FREQUENT_CRON_PERIOD_MS, SERVICE_CATALOG_STALE_MS)) {
+    tick.run(
+      { name: 'service-catalog', failureMessage: 'service-catalog sweep failed' },
+      sweepServiceCatalogs(buildContainer(env).foundationalServices, logger),
     )
   }
 

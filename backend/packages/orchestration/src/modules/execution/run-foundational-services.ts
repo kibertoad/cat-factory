@@ -2,6 +2,7 @@ import type { AgentKindRegistry } from '@cat-factory/agents'
 import {
   FOUNDATIONAL_CATALOG_TRAIT,
   FOUNDATIONAL_CONTRACTS_TRAIT,
+  SERVICE_ESTATE_TRAIT,
   hasTrait,
 } from '@cat-factory/agents'
 import type {
@@ -20,11 +21,13 @@ import type {
 } from '@cat-factory/kernel'
 import {
   FOUNDATIONAL_CATALOG_FILE,
+  FOUNDATIONAL_ESTATE_FILE,
   FOUNDATIONAL_INDEX_FILE,
   noopLogger,
   parseFoundationalDeclaration,
   renderFoundationalCatalog,
   renderFoundationalIndex,
+  renderServiceEstate,
   runBestEffort,
 } from '@cat-factory/kernel'
 
@@ -115,7 +118,15 @@ export interface ResolveFoundationalContextInput {
  *   capabilities and operation names for every registered service, no document bodies;
  * - a kind carrying `foundational-contracts` (the researcher, the coder) gets the full API
  *   CONTRACTS, for exactly the ids a prior design step declared;
+ * - a kind carrying `service-estate` (the bug investigator, on-call) gets the ESTATE: the same
+ *   rows as the catalog under an orientation framing: who owns each service and what it exposes,
+ *   with no preference to express and nothing to declare back;
  * - anything else gets nothing, and pays for nothing.
+ *
+ * The three are EXCLUSIVE in that order, which is a statement about cost rather than about
+ * capability: a kind that designs or implements against declared services already has a richer,
+ * more targeted read of the same catalog, so injecting the estate file beside it would put a
+ * second, broader copy of the same information into one prompt.
  *
  * BEST-EFFORT as a whole: the catalog is enrichment, and an unreachable store must not fail a
  * run that would otherwise proceed exactly as it did before the feature existed. A failure is
@@ -183,6 +194,33 @@ export async function resolveFoundationalContext(
         {
           path: FOUNDATIONAL_INDEX_FILE,
           content: renderFoundationalIndex({ status: 'unavailable' }),
+        },
+      ]
+    )
+  }
+  if (hasTrait(agentKind, SERVICE_ESTATE_TRAIT, agentKindRegistry)) {
+    const files = await runBestEffort(
+      input.logger ?? noopLogger,
+      'foundationalServices.estate',
+      async () => {
+        const catalog = await resolver.catalogFor(input.workspaceId)
+        return [
+          {
+            path: FOUNDATIONAL_ESTATE_FILE,
+            content: renderServiceEstate({ status: 'resolved', services: catalog }),
+          },
+        ]
+      },
+      { workspaceId: input.workspaceId, agentKind },
+    )
+    // The same three-state discipline the catalog branch keeps, and it matters MORE here: an
+    // orientation kind that read an empty estate file concludes the organisation runs nothing it
+    // needs to attribute a fault to, and an unreadable read must not produce that conclusion.
+    return (
+      files ?? [
+        {
+          path: FOUNDATIONAL_ESTATE_FILE,
+          content: renderServiceEstate({ status: 'unavailable' }),
         },
       ]
     )

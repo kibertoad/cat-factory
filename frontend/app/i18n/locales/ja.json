@@ -617,7 +617,10 @@
         "binary_generators_unreachable": "このデプロイメントの生成系インテグレーションを現在読み取れなかったため、実行は開始されませんでした。設定に誤りはなく、変更も不要です。接続が回復してからもう一度お試しください。",
         "foundational_builtins_unreachable": "このデプロイメントの組み込み基盤サービスを現在読み取れませんでした。設定に誤りはなく、変更も不要です。接続が回復してからもう一度お試しください。",
         "connection_credentials_unreadable": "この接続に保存されている認証情報を読み取れませんでした。このデプロイメントが鍵を保持しているサービスに到達できる場合は、ソースを接続し直して認証情報を置き換えてください。到達できない場合は、その接続が回復してからもう一度お試しください。",
-        "vcs_capability_unsupported": "このワークスペースに接続されているソース管理プロバイダーは、この操作に対応していません。設定に誤りはなく、設定を変更しても解決しません。このプロバイダーでは利用できない操作です。"
+        "vcs_capability_unsupported": "このワークスペースに接続されているソース管理プロバイダーは、この操作に対応していません。設定に誤りはなく、設定を変更しても解決しません。このプロバイダーでは利用できない操作です。",
+        "service_catalog_unreachable": "このワークスペースの開発者ポータルが応答しなかった、またはこのプラットフォームが読めない応答を返しました。設定の誤りはなく、何を変更しても解決しません。ポータルに到達できるようになってから再試行してください。",
+        "service_catalog_unauthorized": "開発者ポータルが保存された資格情報を拒否しました。ローテーションまたは失効した可能性が高いため、サービスカタログの設定を開いて有効なものを入力してください。",
+        "service_catalog_filter_missing": "この接続のエンティティフィルターを読み取れなかったため、取り込むものがありません。サービスカタログの接続を保存し直して復元してください。"
       }
     },
     "action": {
@@ -6541,7 +6544,8 @@
     },
     "tab": {
       "catalog": "カタログ",
-      "sources": "リポジトリ連携"
+      "sources": "リポジトリ連携",
+      "portal": "開発者ポータル"
     },
     "panel": {
       "title": "基盤サービス",
@@ -6555,7 +6559,10 @@
     "format": {
       "openapi": "OpenAPI",
       "toadContract": "toad-contracts",
-      "lokaliseApiContract": "lokalise/api-contract"
+      "lokaliseApiContract": "lokalise/api-contract",
+      "asyncapi": "AsyncAPI",
+      "graphql": "GraphQL",
+      "grpc": "gRPC"
     },
     "contracts": {
       "omitted": "他 {count} 件は未掲載",
@@ -8098,5 +8105,79 @@
       "title": "比較する候補はありません"
     },
     "loadFailed": "生成された候補を読み込めませんでした。"
+  },
+  "serviceCatalog": {
+    "unavailable": "このデプロイではサービスカタログの取り込みが設定されていません。",
+    "intro": "組織が既に運用している開発者ポータルをプラットフォームに指定すると、そのサービスが上のカタログに取り込まれます。各サービスの識別情報、所有者、公開している API 定義が含まれます。トリアージや調査を行うエージェントは、作業がどのサービスに属するかを判断するためにこれらを読みます。",
+    "summary": "フィルター: {filter} · 最大 {max} サービス",
+    "form": {
+      "connect": "ポータルを接続",
+      "replace": "この接続を置き換える"
+    },
+    "field": {
+      "baseUrl": "ポータル URL",
+      "authMode": "認証方式",
+      "token": "サービストークン",
+      "sharedSecret": "共有シークレット",
+      "tokenUrl": "トークンエンドポイント",
+      "clientId": "クライアント ID",
+      "clientSecret": "クライアントシークレット",
+      "scope": "スコープ（任意）",
+      "audience": "オーディエンス（任意）",
+      "username": "ユーザー名",
+      "password": "パスワード",
+      "headerName": "ヘッダー名",
+      "headerValue": "ヘッダー値",
+      "secondHeaderName": "2 つ目のヘッダー名（任意）",
+      "secondHeaderValue": "2 つ目のヘッダー値",
+      "entityFilter": "エンティティフィルター",
+      "maxServices": "最大サービス数",
+      "includeApis": "各サービスが公開している API 定義も取り込む"
+    },
+    "help": {
+      "baseUrl": "Backstage インスタンスのベース URL。プライベートまたは内部ホストはデプロイが許可している場合のみ使えます。",
+      "token": "Backstage の外部アクセス設定で発行したサービス間トークン。",
+      "sharedSecret": "`backend.auth.keys` にある base64 のシークレット。プラットフォームがリクエストごとに短命なトークンを署名します。",
+      "headers": "Cloudflare Access のサービストークンのように、独自のヘッダーで認証するゲートウェイ向け。",
+      "entityFilter": "1 行につき `key=value` を 1 つ、すべて一致する必要があります。既定は `kind=component`。共有機能として提供したいサービスに絞り込んでください。",
+      "maxServices": "この上限に達した取り込みは、ポータル全体ではなくその一部として報告されます。"
+    },
+    "auth": {
+      "none": "なし",
+      "staticToken": "静的サービストークン",
+      "legacySharedSecret": "共有シークレット（レガシートークン）",
+      "oauth2": "OAuth2 クライアントクレデンシャル",
+      "basic": "HTTP Basic",
+      "headers": "カスタムヘッダー"
+    },
+    "status": {
+      "ok": "取り込み済み",
+      "partial": "一部のみ取り込み",
+      "failed": "取り込み失敗",
+      "never": "未取り込み"
+    },
+    "action": {
+      "connect": "接続",
+      "replace": "置き換える",
+      "probe": "接続をテスト",
+      "import": "今すぐ取り込む",
+      "disconnect": "切断"
+    },
+    "disconnect": {
+      "title": "サービスカタログを切断しますか？",
+      "body": "このポータルから取り込んだサービスはカタログから取り下げられます。手動で登録・アップロードしたものには影響しません。",
+      "confirm": "切断"
+    },
+    "toast": {
+      "connected": "サービスカタログを接続しました",
+      "connectFailed": "サービスカタログを接続できませんでした",
+      "probeOk": "ポータルが応答しました",
+      "probeFailed": "ポータルに到達できませんでした",
+      "imported": "サービスカタログを取り込みました",
+      "importedDetail": "更新 {upserted} 件、変更なし {unchanged} 件、取り下げ {tombstoned} 件",
+      "importFailed": "サービスカタログを取り込めませんでした",
+      "disconnected": "サービスカタログを切断しました",
+      "disconnectFailed": "サービスカタログを切断できませんでした"
+    }
   }
 }

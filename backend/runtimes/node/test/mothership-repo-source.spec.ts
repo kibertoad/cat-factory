@@ -85,7 +85,14 @@ describe('applyMothershipRemoteRepos (content-library re-sourcing)', () => {
       }),
     ),
     ...Object.keys(selectNodeSkillLibraryDeps(enabled, db, undefined, installations, workspaces)),
-    ...Object.keys(selectNodeFoundationalServiceDeps(db, undefined, installations, workspaces)),
+    ...Object.keys(
+      // A key is supplied so the service-catalog connection repository is among the built set:
+      // the assertion below is about which built repos the allow-list re-points, and a selector
+      // called with the integration off would silently drop one from the comparison.
+      selectNodeFoundationalServiceDeps(db, undefined, installations, workspaces, {
+        encryptionKey: 'a'.repeat(44),
+      }),
+    ),
   ]
 
   it('re-points every built repository the allow-list names as remote', () => {

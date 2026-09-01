@@ -5231,7 +5231,8 @@
     },
     "tab": {
       "catalog": "Katalog",
-      "sources": "Repo-Quellen"
+      "sources": "Repo-Quellen",
+      "portal": "Entwicklerportal"
     },
     "panel": {
       "title": "Basisdienste",
@@ -5245,7 +5246,10 @@
     "format": {
       "openapi": "OpenAPI",
       "toadContract": "toad-contracts",
-      "lokaliseApiContract": "lokalise/api-contract"
+      "lokaliseApiContract": "lokalise/api-contract",
+      "asyncapi": "AsyncAPI",
+      "graphql": "GraphQL",
+      "grpc": "gRPC"
     },
     "contracts": {
       "omitted": "+{count} weitere nicht aufgeführt",
@@ -5923,7 +5927,10 @@
         "binary_generators_unreachable": "Die generativen Integrationen dieser Installation konnten gerade nicht gelesen werden, deshalb wurde der Lauf nicht gestartet. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht.",
         "foundational_builtins_unreachable": "Die integrierten Basisdienste dieser Installation konnten gerade nicht gelesen werden. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht.",
         "connection_credentials_unreadable": "Die gespeicherten Zugangsdaten dieser Verbindung konnten nicht gelesen werden. Wenn diese Installation den Dienst mit dem zugehörigen Schlüssel erreicht, verbinden Sie die Quelle neu, um sie zu ersetzen; andernfalls versuchen Sie es erneut, sobald diese Verbindung wiederhergestellt ist.",
-        "vcs_capability_unsupported": "Der mit diesem Workspace verbundene Quellcode-Anbieter bietet diesen Vorgang nicht an. Es ist nichts falsch konfiguriert und eine Einrichtung hilft hier nicht: Für diesen Anbieter ist der Vorgang nicht verfügbar."
+        "vcs_capability_unsupported": "Der mit diesem Workspace verbundene Quellcode-Anbieter bietet diesen Vorgang nicht an. Es ist nichts falsch konfiguriert und eine Einrichtung hilft hier nicht: Für diesen Anbieter ist der Vorgang nicht verfügbar.",
+        "service_catalog_unreachable": "Das Entwicklerportal dieses Boards hat nicht geantwortet oder eine Antwort geliefert, die diese Plattform nicht lesen kann. Hier ist nichts falsch konfiguriert und keine Änderung hilft: versuche es erneut, sobald das Portal erreichbar ist.",
+        "service_catalog_unauthorized": "Das Entwicklerportal hat die gespeicherte Zugangsdaten abgelehnt. Sie wurden wahrscheinlich rotiert oder widerrufen: öffne die Servicekatalog-Einstellungen und trage aktuelle ein.",
+        "service_catalog_filter_missing": "Der Entitätsfilter dieser Verbindung konnte nicht gelesen werden, es gibt also nichts zu importieren. Speichere die Servicekatalog-Verbindung erneut, um ihn wiederherzustellen."
       }
     },
     "action": {
@@ -8098,5 +8105,79 @@
       "title": "Nichts zu vergleichen"
     },
     "loadFailed": "Die erzeugten Kandidaten konnten nicht geladen werden."
+  },
+  "serviceCatalog": {
+    "unavailable": "Der Import eines Servicekatalogs ist für diese Installation nicht konfiguriert.",
+    "intro": "Verweise die Plattform auf das Entwicklerportal, das deine Organisation bereits betreibt: Ihre Services werden in den Katalog oben importiert, mit Identität, Verantwortlichkeit und den API-Definitionen, die jeder Service veröffentlicht. Agenten, die Fehler einordnen oder untersuchen, lesen sie, um zu bestimmen, zu welchem Service eine Aufgabe gehört.",
+    "summary": "Filter: {filter} · höchstens {max} Services",
+    "form": {
+      "connect": "Portal verbinden",
+      "replace": "Verbindung ersetzen"
+    },
+    "field": {
+      "baseUrl": "Portal-URL",
+      "authMode": "Authentifizierung",
+      "token": "Service-Token",
+      "sharedSecret": "Gemeinsames Geheimnis",
+      "tokenUrl": "Token-Endpunkt",
+      "clientId": "Client-ID",
+      "clientSecret": "Client-Secret",
+      "scope": "Scope (optional)",
+      "audience": "Audience (optional)",
+      "username": "Benutzername",
+      "password": "Passwort",
+      "headerName": "Header-Name",
+      "headerValue": "Header-Wert",
+      "secondHeaderName": "Zweiter Header-Name (optional)",
+      "secondHeaderValue": "Zweiter Header-Wert",
+      "entityFilter": "Entitätsfilter",
+      "maxServices": "Maximale Anzahl Services",
+      "includeApis": "API-Definitionen der Services mitimportieren"
+    },
+    "help": {
+      "baseUrl": "Die Basis-URL deiner Backstage-Instanz. Ein privater oder interner Host ist nur zulässig, wenn die Installation ihn erlaubt.",
+      "token": "Ein Service-zu-Service-Token aus der External-Access-Konfiguration von Backstage.",
+      "sharedSecret": "Ein base64-Geheimnis aus `backend.auth.keys`. Die Plattform signiert damit pro Anfrage ein kurzlebiges Token.",
+      "headers": "Für ein Gateway, das über eigene Header authentifiziert, etwa ein Cloudflare-Access-Service-Token.",
+      "entityFilter": "Ein `key=value`-Ausdruck pro Zeile; alle müssen zutreffen. Standard ist `kind=component`. Grenze ihn auf die Services ein, die als gemeinsame Fähigkeiten angeboten werden sollen.",
+      "maxServices": "Ein Import, der dieses Limit erreicht, wird als Auszug des Portals gemeldet, nicht als dessen Gesamtheit."
+    },
+    "auth": {
+      "none": "Keine",
+      "staticToken": "Statisches Service-Token",
+      "legacySharedSecret": "Gemeinsames Geheimnis (Legacy-Token)",
+      "oauth2": "OAuth2 Client Credentials",
+      "basic": "HTTP Basic",
+      "headers": "Eigene Header"
+    },
+    "status": {
+      "ok": "Importiert",
+      "partial": "Teilweise importiert",
+      "failed": "Import fehlgeschlagen",
+      "never": "Nie importiert"
+    },
+    "action": {
+      "connect": "Verbinden",
+      "replace": "Ersetzen",
+      "probe": "Verbindung testen",
+      "import": "Jetzt importieren",
+      "disconnect": "Trennen"
+    },
+    "disconnect": {
+      "title": "Servicekatalog trennen?",
+      "body": "Die von diesem Portal importierten Services werden aus dem Katalog zurückgezogen. Manuell registrierte oder hochgeladene Einträge bleiben unberührt.",
+      "confirm": "Trennen"
+    },
+    "toast": {
+      "connected": "Servicekatalog verbunden",
+      "connectFailed": "Servicekatalog konnte nicht verbunden werden",
+      "probeOk": "Das Portal hat geantwortet",
+      "probeFailed": "Das Portal war nicht erreichbar",
+      "imported": "Servicekatalog importiert",
+      "importedDetail": "{upserted} aktualisiert, {unchanged} unverändert, {tombstoned} zurückgezogen",
+      "importFailed": "Servicekatalog konnte nicht importiert werden",
+      "disconnected": "Servicekatalog getrennt",
+      "disconnectFailed": "Servicekatalog konnte nicht getrennt werden"
+    }
   }
 }

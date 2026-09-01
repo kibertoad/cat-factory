@@ -50,6 +50,19 @@ prerequisites are configured.
   stack whose layers are all inline / from other repos needs NO repo of its own and materializes an
   empty working tree instead of cloning. `SharedStackSeeder.ts` is the deployment-declared side:
   `startNode`/`startLocal`'s `seedSharedStacks` flows through it, idempotently by NAME.
+- `serviceCatalog/`: the workspace's DEVELOPER PORTAL connection (Backstage), whose services are
+  imported into the foundational-services catalog as `workspace`-tier rows.
+  `ServiceCatalogConnectionService.ts` owns the sealed connection plus the probe and is the only
+  place its credential bag is opened; `BackstageCatalogClient.ts` is the wire half (a paged
+  `entities/by-query` listing with a `fields` projection, then ONE batched `entities/by-refs` per
+  chunk for the API definitions, so an import is two requests rather than one per service);
+  `backstage-catalog.logic.ts` holds every mapping rule and is where the word "Backstage" stops.
+  What consumes the result is `ServiceCatalogSyncService` in `@cat-factory/agents`, over the
+  vendor-NEUTRAL `ServiceCatalogEntry` vocabulary, which is what makes a second portal product a
+  second adapter here rather than a branch inside the import. The auth vocabulary is CLOSED for a
+  reason (each mode needs a different request built, and the legacy shared secret is base64-DECODED
+  into an HMAC key rather than used as UTF-8, which decides whether the token verifies at all). See
+  `backend/docs/service-catalog-import.md`.
 - `datadog/` + `observability/`: release-health providers; `pagerduty/`, `incidentio/`,
   `incident/`, `incidentEnrichment/`: incident enrichment.
 - `mcpOAuth/`: the per-workspace OAuth grants a remote (`http`) MCP tool server needs.

@@ -31,3 +31,17 @@ export type {
   UpdateFoundationalServiceInput,
   UploadApiContract,
 } from '@cat-factory/contracts'
+
+// The SERVICE CATALOG connection: the developer portal (Backstage) whose services are imported
+// into the catalog above as `workspace`-tier rows. Beside the catalog types rather than in a file
+// of its own, because everything it produces IS that catalog.
+export type {
+  ConnectServiceCatalogInput,
+  ServiceCatalogAuth,
+  ServiceCatalogAuthMode,
+  ServiceCatalogConnection,
+  ServiceCatalogCoverage,
+  ServiceCatalogProvider,
+  ServiceCatalogSyncResult,
+  ServiceCatalogSyncStatus,
+} from '@cat-factory/contracts'

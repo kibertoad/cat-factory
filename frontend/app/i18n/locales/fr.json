@@ -617,7 +617,10 @@
         "binary_generators_unreachable": "Les intégrations génératives de ce déploiement n'ont pas pu être lues pour l'instant, l'exécution n'a donc pas démarré. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie.",
         "foundational_builtins_unreachable": "Les services fondamentaux intégrés de ce déploiement n'ont pas pu être lus pour l'instant. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie.",
         "connection_credentials_unreadable": "Les identifiants enregistrés pour cette connexion n'ont pas pu être lus. Si ce déploiement peut joindre le service qui détient sa clé, reconnectez la source pour les remplacer ; sinon, réessayez une fois cette connexion rétablie.",
-        "vcs_capability_unsupported": "Le fournisseur de gestion de code source connecté à cet espace de travail ne propose pas cette opération. Rien n'est mal configuré et aucun réglage n'y changera quoi que ce soit : elle n'est pas disponible pour ce fournisseur."
+        "vcs_capability_unsupported": "Le fournisseur de gestion de code source connecté à cet espace de travail ne propose pas cette opération. Rien n'est mal configuré et aucun réglage n'y changera quoi que ce soit : elle n'est pas disponible pour ce fournisseur.",
+        "service_catalog_unreachable": "Le portail développeur de cet espace n'a pas répondu, ou a répondu quelque chose que cette plateforme ne sait pas lire. Rien n'est mal configuré ici et aucune modification n'aidera : réessayez dès que le portail est joignable.",
+        "service_catalog_unauthorized": "Le portail développeur a refusé les identifiants enregistrés. Ils ont très probablement été renouvelés ou révoqués : ouvrez les réglages du catalogue de services et saisissez-en des valides.",
+        "service_catalog_filter_missing": "Le filtre d'entités de cette connexion n'a pas pu être lu, il n'y a donc rien à importer. Enregistrez à nouveau la connexion au catalogue de services pour le rétablir."
       }
     },
     "action": {
@@ -6541,7 +6544,8 @@
     },
     "tab": {
       "catalog": "Catalogue",
-      "sources": "Dépôts liés"
+      "sources": "Dépôts liés",
+      "portal": "Portail développeur"
     },
     "panel": {
       "title": "Services fondamentaux",
@@ -6555,7 +6559,10 @@
     "format": {
       "openapi": "OpenAPI",
       "toadContract": "toad-contracts",
-      "lokaliseApiContract": "lokalise/api-contract"
+      "lokaliseApiContract": "lokalise/api-contract",
+      "asyncapi": "AsyncAPI",
+      "graphql": "GraphQL",
+      "grpc": "gRPC"
     },
     "contracts": {
       "omitted": "+{count} autres non listées",
@@ -8098,5 +8105,79 @@
       "title": "Rien à comparer"
     },
     "loadFailed": "Impossible de charger les candidats générés."
+  },
+  "serviceCatalog": {
+    "unavailable": "L'import d'un catalogue de services n'est pas configuré pour ce déploiement.",
+    "intro": "Indiquez à la plateforme le portail développeur que votre organisation exploite déjà : ses services sont importés dans le catalogue ci-dessus, avec leur identité, leur responsable et les définitions d'API que chacun publie. Les agents qui trient ou instruisent un incident les lisent pour déterminer à quel service un travail appartient.",
+    "summary": "Filtre : {filter} · au plus {max} services",
+    "form": {
+      "connect": "Connecter un portail",
+      "replace": "Remplacer cette connexion"
+    },
+    "field": {
+      "baseUrl": "URL du portail",
+      "authMode": "Authentification",
+      "token": "Jeton de service",
+      "sharedSecret": "Secret partagé",
+      "tokenUrl": "Point de terminaison du jeton",
+      "clientId": "Identifiant client",
+      "clientSecret": "Secret client",
+      "scope": "Scope (facultatif)",
+      "audience": "Audience (facultatif)",
+      "username": "Nom d'utilisateur",
+      "password": "Mot de passe",
+      "headerName": "Nom de l'en-tête",
+      "headerValue": "Valeur de l'en-tête",
+      "secondHeaderName": "Second en-tête (facultatif)",
+      "secondHeaderValue": "Valeur du second en-tête",
+      "entityFilter": "Filtre d'entités",
+      "maxServices": "Nombre maximal de services",
+      "includeApis": "Importer les définitions d'API publiées par chaque service"
+    },
+    "help": {
+      "baseUrl": "L'URL de base de votre instance Backstage. Un hôte privé ou interne n'est admis que si le déploiement l'autorise.",
+      "token": "Un jeton de service à service issu de la configuration d'accès externe de Backstage.",
+      "sharedSecret": "Un secret en base64 tiré de `backend.auth.keys`. La plateforme signe avec lui un jeton de courte durée à chaque requête.",
+      "headers": "Pour une passerelle qui authentifie avec ses propres en-têtes, comme un jeton de service Cloudflare Access.",
+      "entityFilter": "Un terme `key=value` par ligne, tous devant correspondre. Par défaut `kind=component`. Restreignez-le aux services que vous voulez proposer comme capacités partagées.",
+      "maxServices": "Un import qui atteint ce plafond est signalé comme un extrait du portail, pas comme sa totalité."
+    },
+    "auth": {
+      "none": "Aucune",
+      "staticToken": "Jeton de service statique",
+      "legacySharedSecret": "Secret partagé (jeton historique)",
+      "oauth2": "Identifiants client OAuth2",
+      "basic": "HTTP Basic",
+      "headers": "En-têtes personnalisés"
+    },
+    "status": {
+      "ok": "Importé",
+      "partial": "Importé en partie",
+      "failed": "Import échoué",
+      "never": "Jamais importé"
+    },
+    "action": {
+      "connect": "Connecter",
+      "replace": "Remplacer",
+      "probe": "Tester la connexion",
+      "import": "Importer maintenant",
+      "disconnect": "Déconnecter"
+    },
+    "disconnect": {
+      "title": "Déconnecter le catalogue de services ?",
+      "body": "Les services importés depuis ce portail sont retirés du catalogue. Rien de ce que vous avez enregistré ou téléversé à la main n'est touché.",
+      "confirm": "Déconnecter"
+    },
+    "toast": {
+      "connected": "Catalogue de services connecté",
+      "connectFailed": "Impossible de connecter le catalogue de services",
+      "probeOk": "Le portail a répondu",
+      "probeFailed": "Impossible d'atteindre le portail",
+      "imported": "Catalogue de services importé",
+      "importedDetail": "{upserted} mis à jour, {unchanged} inchangés, {tombstoned} retirés",
+      "importFailed": "Impossible d'importer le catalogue de services",
+      "disconnected": "Catalogue de services déconnecté",
+      "disconnectFailed": "Impossible de déconnecter le catalogue de services"
+    }
   }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildJiraIssuePayload, markdownToAdf } from './jira.create.logic.js'
-import { toBase64 } from './base64.js'
+import { toBase64 } from '../shared/base64.js'
 
 describe('markdownToAdf', () => {
   it('maps headings, paragraphs and bullet lists', () => {

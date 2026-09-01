@@ -273,16 +273,36 @@ export type ConflictReason = (typeof CONFLICT_REASONS)[number]
  *                                        misconfigured sends them to a build with nothing wrong
  *                                        in it. `details` carries `provider` and `operation`.
  *
+ *  - `service_catalog_unreachable`     : the workspace's connected developer portal (Backstage)
+ *                                        did not answer, or answered with something this platform
+ *                                        cannot read. An OUTAGE in someone else's system, so the
+ *                                        generic "not configured" copy is wrong twice over: the
+ *                                        portal is configured, and no wiring here will fix it.
+ *  - `service_catalog_unauthorized`    : the portal (or the identity provider in front of it)
+ *                                        REFUSED the stored credential. Distinct from the reason
+ *                                        above because the remedy is the opposite of waiting: the
+ *                                        token has been rotated or revoked and has to be re-entered.
+ *  - `service_catalog_filter_missing`  : the connection's stored entity filter could not be read,
+ *                                        so the import has no narrowing to apply and refuses
+ *                                        rather than pulling the whole estate. Re-saving the
+ *                                        connection restores it.
+ *
  * Its sibling `vcs_client_unconfigured` (no client wired for the routed connection's provider) is
  * deliberately NOT here. That one IS a wiring gap, so the generic copy states it correctly, and
  * this list is a short set of exceptions to that copy rather than a second vocabulary mirroring
- * every reason the backend emits.
+ * every reason the backend emits. `service_catalog_credential_unreadable` is absent for the
+ * opposite reason: an unopenable portal credential bag is the same fact as an unopenable document
+ * or tracker one, so it reuses `connection_credentials_unreadable` rather than earning a
+ * near-duplicate with near-duplicate copy.
  */
 export const UNAVAILABLE_REASONS = [
   'binary_generators_unreachable',
   'foundational_builtins_unreachable',
   'connection_credentials_unreadable',
   'vcs_capability_unsupported',
+  'service_catalog_unreachable',
+  'service_catalog_unauthorized',
+  'service_catalog_filter_missing',
 ] as const
 
 export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number]

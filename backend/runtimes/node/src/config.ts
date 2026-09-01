@@ -13,6 +13,7 @@ import type {
   GitLabConfig,
   PrivilegedAppConfig,
   SsoConfig,
+  ServiceCatalogConfig,
   TasksConfig,
 } from '@cat-factory/server'
 import {
@@ -182,6 +183,24 @@ function loadTasksConfig(env: NodeJS.ProcessEnv): TasksConfig {
  * The deployment-level system sender for auth emails (password reset), read entirely
  * from env. Present only when the provider, From address, and API key are all set.
  */
+/**
+ * SERVICE-CATALOG integration config, mirroring the Worker's `loadServiceCatalogConfig`: always on
+ * where the shared ENCRYPTION_KEY is set (the portal credential must be sealable), with its OWN
+ * URL allow-list because a self-hosted developer portal is typically on an internal host and
+ * widening one integration's SSRF guard must never widen another's.
+ */
+function loadServiceCatalogConfig(env: NodeJS.ProcessEnv): ServiceCatalogConfig {
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) {
+    throw configProblem({ key: 'ENCRYPTION_KEY', ...ENV_HELP.ENCRYPTION_KEY })
+  }
+  return {
+    encryptionKey,
+    allowUrlHosts: csv(env.SERVICE_CATALOG_ALLOW_URL_HOSTS),
+    allowHttpUrls: env.SERVICE_CATALOG_ALLOW_HTTP_URLS === 'true',
+  }
+}
+
 function loadSystemEmailSender(env: NodeJS.ProcessEnv): EmailConfig['system'] {
   const provider = env.EMAIL_SYSTEM_PROVIDER?.trim()
   const from = env.EMAIL_SYSTEM_FROM?.trim()
@@ -789,6 +808,7 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     // ENCRYPTION_KEY backs credential encryption at rest).
     documents: loadDocumentsConfig(env),
     tasks: loadTasksConfig(env),
+    serviceCatalog: loadServiceCatalogConfig(env),
     environments: buildEnvironmentsConfig(env),
     runners: buildRunnersConfig(env),
     slack:

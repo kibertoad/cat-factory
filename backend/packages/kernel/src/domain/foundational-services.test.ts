@@ -4,9 +4,11 @@ import {
   MAX_CONTRACT_BODY_CHARS,
   describeFoundationalProblem,
   detectContractFormat,
+  indexAsyncApiOperations,
   indexContractOperations,
   indexOpenApiOperations,
   indexToadContractOperations,
+  isAsyncApiDocument,
   isOpenApiDocument,
   isContractCandidatePath,
   isContractModulePath,
@@ -14,6 +16,7 @@ import {
   renderContractDocument,
   renderFoundationalCatalog,
   renderFoundationalIndex,
+  renderServiceEstate,
   summarizeContract,
   validateFoundationalDefinition,
 } from './foundational-services.js'
@@ -826,5 +829,230 @@ describe('describeFoundationalProblem', () => {
       expect(text).not.toContain('undefined')
       expect(text.trim()).not.toBe('')
     }
+  })
+})
+
+const ASYNCAPI_2_YAML = [
+  'asyncapi: 2.6.0',
+  'info:',
+  '  title: Orders events',
+  '  version: "1"',
+  'channels:',
+  '  orders/created:',
+  '    subscribe:',
+  '      summary: an order was placed',
+  '  orders/cancelled:',
+  '    publish:',
+  '      summary: cancel an order',
+].join('\n')
+
+const ASYNCAPI_3_YAML = [
+  'asyncapi: 3.0.0',
+  'info:',
+  '  title: Orders events',
+  '  version: "1"',
+  'channels:',
+  '  ordersCreated:',
+  '    address: orders/created',
+  'operations:',
+  '  receiveOrderCreated:',
+  '    action: receive',
+  '    channel:',
+  "      $ref: '#/channels/ordersCreated'",
+].join('\n')
+
+describe('isAsyncApiDocument', () => {
+  it('recognises 2.x and 3.x', () => {
+    expect(isAsyncApiDocument(ASYNCAPI_2_YAML)).toBe(true)
+    expect(isAsyncApiDocument(ASYNCAPI_3_YAML)).toBe(true)
+  })
+
+  it('refuses a channels-bearing document that is not AsyncAPI', () => {
+    // The version key is what separates an event interface from the other `channels`-bearing YAML
+    // a repo holds (a broker config, a Kafka Connect descriptor).
+    expect(isAsyncApiDocument('channels:\n  orders/created:\n    subscribe: {}\n')).toBe(false)
+    expect(isAsyncApiDocument(OPENAPI_YAML)).toBe(false)
+    expect(isAsyncApiDocument('not: [yaml')).toBe(false)
+  })
+})
+
+describe('indexAsyncApiOperations', () => {
+  it('reads a 2.x document channel by channel', () => {
+    expect(indexAsyncApiOperations(ASYNCAPI_2_YAML)).toEqual({
+      operations: ['PUBLISH orders/cancelled', 'SUBSCRIBE orders/created'],
+      omitted: 0,
+    })
+  })
+
+  it('reads a 3.x document through its operations map, naming the channel the ref points at', () => {
+    expect(indexAsyncApiOperations(ASYNCAPI_3_YAML)).toEqual({
+      operations: ['RECEIVE ordersCreated'],
+      omitted: 0,
+    })
+  })
+
+  it('decodes a JSON-Pointer-escaped channel name rather than naming one that does not exist', () => {
+    const document = [
+      'asyncapi: 3.0.0',
+      'channels:',
+      '  orders/created: {}',
+      'operations:',
+      '  send:',
+      '    action: send',
+      '    channel:',
+      "      $ref: '#/channels/orders~1created'",
+    ].join('\n')
+    expect(indexAsyncApiOperations(document).operations).toEqual(['SEND orders/created'])
+  })
+
+  it('falls back to the operation key when the ref is not a local channel pointer', () => {
+    const document = [
+      'asyncapi: 3.0.0',
+      'operations:',
+      '  receiveOrderCreated:',
+      '    action: receive',
+      '    channel:',
+      "      $ref: 'https://elsewhere.example/asyncapi.yaml#/channels/x'",
+    ].join('\n')
+    // Following an external ref would need a fetch this parser will not make, and the key is the
+    // document's own name for the operation rather than an invented one.
+    expect(indexAsyncApiOperations(document).operations).toEqual(['RECEIVE receiveOrderCreated'])
+  })
+
+  it('indexes nothing for a document that is not AsyncAPI', () => {
+    expect(indexAsyncApiOperations(OPENAPI_YAML)).toEqual({ operations: [], omitted: 0 })
+  })
+
+  it('states how many operations the cap dropped', () => {
+    const channels = Array.from(
+      { length: MAX_CATALOG_OPERATIONS + 3 },
+      (_, i) => `  topic-${i}:\n    publish: {}`,
+    ).join('\n')
+    const indexed = indexAsyncApiOperations(`asyncapi: 2.6.0\nchannels:\n${channels}\n`)
+    expect(indexed.operations).toHaveLength(MAX_CATALOG_OPERATIONS)
+    expect(indexed.omitted).toBe(3)
+  })
+})
+
+describe('detectContractFormat: the formats the service-catalog import adds', () => {
+  it('tells AsyncAPI from OpenAPI on content, both sharing the extension', () => {
+    expect(detectContractFormat('events.yaml', ASYNCAPI_2_YAML)).toBe('asyncapi')
+    expect(detectContractFormat('api.yaml', OPENAPI_YAML)).toBe('openapi')
+  })
+
+  it('recognises GraphQL SDL and protobuf by extension', () => {
+    expect(detectContractFormat('schema.graphql', 'type Query { a: String }')).toBe('graphql')
+    expect(detectContractFormat('schema.gql', 'type Query { a: String }')).toBe('graphql')
+    expect(detectContractFormat('orders.proto', 'service Orders {}')).toBe('grpc')
+  })
+
+  it('treats every one of them as a candidate worth reading', () => {
+    for (const path of ['events.asyncapi', 'schema.graphql', 'orders.proto']) {
+      expect(isContractCandidatePath(path)).toBe(true)
+    }
+  })
+})
+
+describe('indexContractOperations: dispatch by format', () => {
+  it('routes AsyncAPI to its own indexer and leaves the unread formats empty', () => {
+    expect(indexContractOperations('asyncapi', ASYNCAPI_2_YAML).operations).toHaveLength(2)
+    expect(indexContractOperations('graphql', 'type Query { a: String }')).toEqual({
+      operations: [],
+      omitted: 0,
+    })
+    expect(indexContractOperations('grpc', 'service Orders {}')).toEqual({
+      operations: [],
+      omitted: 0,
+    })
+  })
+})
+
+describe('renderContractDocument: the fence each new format gets', () => {
+  const render = (format: 'asyncapi' | 'graphql' | 'grpc', body: string) =>
+    renderContractDocument({
+      id: 'orders',
+      name: 'Orders',
+      summary: 's',
+      description: 'd',
+      contracts: [{ contractId: 'c', format, title: 'Interface', body }],
+    })
+
+  it('fences a document as the artifact it is', () => {
+    // Not cosmetic: the fence is what tells the agent which artifact it is reading, and a
+    // `.proto` fenced as TypeScript is one a model will try to fix rather than call.
+    expect(render('asyncapi', ASYNCAPI_2_YAML)).toContain('```yaml')
+    expect(render('graphql', 'type Query { a: String }')).toContain('```graphql')
+    expect(render('grpc', 'service Orders {}')).toContain('```proto')
+  })
+})
+
+describe('validateFoundationalDefinition: the AsyncAPI document check', () => {
+  it('refuses a document declared as AsyncAPI that is not one', () => {
+    const problems = validateFoundationalDefinition({
+      contracts: [
+        { contractId: 'events', format: 'asyncapi', title: 'Events', body: 'channels: {}' },
+      ],
+    })
+    expect(problems).toEqual([{ reason: 'invalid_asyncapi_document', contractId: 'events' }])
+    expect(describeFoundationalProblem(problems[0]!)).toMatch(/AsyncAPI 2.x\/3.x/)
+  })
+
+  it('accepts a real one, and says nothing about the formats it does not parse', () => {
+    expect(
+      validateFoundationalDefinition({
+        contracts: [
+          { contractId: 'events', format: 'asyncapi', title: 'Events', body: ASYNCAPI_2_YAML },
+          { contractId: 'gql', format: 'graphql', title: 'Graph', body: 'nonsense' },
+          { contractId: 'rpc', format: 'grpc', title: 'RPC', body: 'nonsense' },
+        ],
+      }),
+    ).toEqual([])
+  })
+})
+
+describe('renderServiceEstate', () => {
+  const service = {
+    id: 'orders',
+    name: 'Orders',
+    summary: 'Places and tracks orders.',
+    description: 'Owner: payments (group:default/payments)\nSystem: checkout',
+    capabilities: ['service'],
+    contracts: [
+      {
+        contractId: 'orders-api',
+        format: 'openapi' as const,
+        title: 'Orders API',
+        size: 42,
+        path: 'api:default/orders-api',
+        operations: ['GET /orders'],
+        omittedOperations: 0,
+      },
+    ],
+  }
+
+  it('states ownership and the interface surface, and asks for no declaration', () => {
+    const rendered = renderServiceEstate({ status: 'resolved', services: [service] })
+    expect(rendered).toContain('SERVICE ESTATE')
+    expect(rendered).toContain('Owner: payments (group:default/payments)')
+    expect(rendered).toContain('interface (openapi): Orders API')
+    expect(rendered).toContain('GET /orders')
+    // The design framing would push a triage agent towards recommending an adoption instead of
+    // naming a fault, and its declaration block would collide with a structured-output contract.
+    expect(rendered).not.toContain('prefer consuming')
+    expect(rendered).not.toContain('foundational-services')
+  })
+
+  it('says nothing is registered rather than rendering an empty section', () => {
+    const rendered = renderServiceEstate({ status: 'resolved', services: [] })
+    expect(rendered).toContain('no service catalog is registered')
+    expect(rendered).toContain('Do not infer ownership')
+  })
+
+  it('renders an UNREADABLE estate as a platform failure, not as an empty organisation', () => {
+    const rendered = renderServiceEstate({ status: 'unavailable' })
+    expect(rendered).toContain('COULD NOT BE READ')
+    expect(rendered).toContain('platform failure')
+    // The one substitution this whole three-state shape exists to prevent.
+    expect(rendered).not.toContain('no service catalog is registered')
   })
 })

@@ -5,6 +5,8 @@ import type {
   FoundationalServiceRepository,
   FoundationalServiceSourceRecord,
   FoundationalServiceSourceRepository,
+  ServiceCatalogConnectionRecord,
+  ServiceCatalogConnectionRepository,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 
@@ -27,6 +29,13 @@ export interface FoundationalServiceRepos {
   services: FoundationalServiceRepository
   contracts: ApiContractRepository
   sources: FoundationalServiceSourceRepository
+  /**
+   * The workspace's developer-portal connection, whose import produces `workspace`-tier rows in
+   * the catalog above. Part of THIS suite rather than one of its own because it is the third
+   * supply route into the same tables, and its own store has a cross-runtime trap of exactly the
+   * kind this suite exists for (see the `listStale` assertion).
+   */
+  serviceCatalog: ServiceCatalogConnectionRepository
 }
 
 /** Assert a runtime's foundational-services repositories behave identically to the others. */
@@ -34,13 +43,15 @@ export function defineFoundationalServicesSuite(
   name: string,
   makeRepos: () => FoundationalServiceRepos,
 ): void {
-  describe(`[${name}] foundational-services repository parity`, () => {
-    let seq = 0
-    const scope = () => {
-      seq += 1
-      return `${name}-owner-${seq}-${Math.floor(Math.random() * 1e9)}`
-    }
+  // Hoisted out of the `describe` so BOTH halves draw from one generator: the two register against
+  // the same store, and a per-half sequence would mint colliding owner ids.
+  let seq = 0
+  const scope = () => {
+    seq += 1
+    return `${name}-owner-${seq}-${Math.floor(Math.random() * 1e9)}`
+  }
 
+  describe(`[${name}] foundational-services repository parity`, () => {
     const service = (
       ownerId: string,
       serviceId: string,
@@ -361,6 +372,143 @@ export function defineFoundationalServicesSuite(
       expect(found.map((s) => s.id).sort()).toEqual([accountSource.id, workspaceSource.id].sort())
       // Another repo in the same owner namespace shares nothing.
       expect(await sources.listByRepo('acme', `${repoName}-other`)).toEqual([])
+    })
+
+    // The service-catalog CONNECTION's parity lives in its own `describe`, registered by the same
+    // entry point below: it is the third supply route into these very tables, so a facade must run
+    // it or not run this suite at all, and a separate export would be one more registration to
+    // forget (the lesson `check-conformance-group-parity.mjs` exists for).
+  })
+
+  defineServiceCatalogConnectionParity(name, makeRepos, scope)
+}
+
+/**
+ * Cross-runtime parity for the SERVICE CATALOG connection: the developer portal whose services the
+ * importer turns into `workspace`-tier catalog rows (backend/docs/service-catalog-import.md).
+ *
+ * Its own function because the suite above hit its per-function line budget, and this is the
+ * cohesive half: one store, read by one importer and one sweep. It takes the caller's `scope`
+ * generator rather than minting its own, so both halves stay isolated from each other's rows in
+ * the shared store either facade hands them.
+ */
+function defineServiceCatalogConnectionParity(
+  name: string,
+  makeRepos: () => FoundationalServiceRepos,
+  scope: () => string,
+): void {
+  describe(`[${name}] service-catalog connection parity`, () => {
+    // --- the SERVICE CATALOG connection (the third supply route) --------------------------
+
+    const connection = (
+      workspaceId: string,
+      overrides: Partial<ServiceCatalogConnectionRecord> = {},
+    ): ServiceCatalogConnectionRecord => ({
+      workspaceId,
+      provider: 'backstage',
+      baseUrl: 'https://backstage.example.com',
+      authMode: 'static-token',
+      credentialsCipher: 'v1.sealed-envelope',
+      entityFilter: ['kind=component', 'spec.type=service'],
+      includeApis: true,
+      maxServices: 200,
+      lastSyncedAt: null,
+      lastSyncStatus: null,
+      lastSyncMessage: null,
+      createdAt: 1_000,
+      updatedAt: 1_000,
+      deletedAt: null,
+      ...overrides,
+    })
+
+    it('round-trips a service-catalog connection, filter list and flags included', async () => {
+      const { serviceCatalog } = makeRepos()
+      const workspaceId = scope()
+      const record = connection(workspaceId)
+      await serviceCatalog.upsert(record)
+
+      // The filter is a JSON array in both stores and the two flags are an INTEGER on one store
+      // and a boolean on the other, which is exactly where a mapping drifts unnoticed.
+      expect(await serviceCatalog.get(workspaceId)).toEqual(record)
+      expect(await serviceCatalog.get(scope())).toBeNull()
+    })
+
+    it('stamps a sync verdict without touching the credential envelope', async () => {
+      const { serviceCatalog } = makeRepos()
+      const workspaceId = scope()
+      await serviceCatalog.upsert(connection(workspaceId))
+
+      await serviceCatalog.updateSyncState(workspaceId, {
+        lastSyncedAt: 9_000,
+        lastSyncStatus: 'partial',
+        lastSyncMessage: 'The import stopped at the configured service cap.',
+      })
+
+      const stamped = await serviceCatalog.get(workspaceId)
+      expect(stamped?.lastSyncStatus).toBe('partial')
+      expect(stamped?.lastSyncMessage).toBe('The import stopped at the configured service cap.')
+      // The load-bearing half: an import runs where the request landed, which in mothership mode
+      // is a node holding no key to RE-seal with. A stamp that rewrote this would replace a
+      // readable envelope with an unreadable one.
+      expect(stamped?.credentialsCipher).toBe('v1.sealed-envelope')
+    })
+
+    it('tombstones a disconnected connection and forgets its credential', async () => {
+      const { serviceCatalog } = makeRepos()
+      const workspaceId = scope()
+      await serviceCatalog.upsert(connection(workspaceId))
+
+      await serviceCatalog.softDelete(workspaceId, 7_000)
+
+      const gone = await serviceCatalog.get(workspaceId)
+      expect(gone?.deletedAt).toBe(7_000)
+      expect(gone?.credentialsCipher).toBe('')
+    })
+
+    // `listStale` is UNSCOPED across workspaces by construction (it is a sweep query), so these
+    // two assert only over the rows they created: the returned order is read back through a
+    // filter, which preserves relative order while making the assertions independent of whatever
+    // other connections this shared store holds.
+    it('lists a NEVER-imported connection ahead of an already-imported one', async () => {
+      const { serviceCatalog } = makeRepos()
+      const fresh = scope()
+      const imported = scope()
+      const tombstoned = scope()
+      const mine = new Set([fresh, imported, tombstoned])
+      await serviceCatalog.upsert(connection(fresh))
+      await serviceCatalog.upsert(connection(imported, { lastSyncedAt: 500 }))
+      await serviceCatalog.upsert(connection(tombstoned, { deletedAt: 100 }))
+
+      // A limit far above the number of rows any one of these tests creates, so the window this
+      // reads is not the thing under test; the ORDER within it is.
+      const stale = await serviceCatalog.listStale(1_000, 500)
+      const ids = stale.map((row) => row.workspaceId).filter((id) => mine.has(id))
+
+      // The trap this assertion exists for: SQLite orders NULLs LOW on an ascending sort and
+      // Postgres orders them HIGH, so a `last_synced_at ASC` with no explicit NULLS clause puts a
+      // never-imported connection first on one facade and last on the other. On the second, a
+      // freshly connected portal would wait out a staleness window it has never been inside
+      // whenever the batch is full, a drift nothing else fails on.
+      expect(ids).toEqual([fresh, imported])
+      // A disconnected connection is not refreshed at all.
+      expect(ids).not.toContain(tombstoned)
+    })
+
+    it('bounds the stale batch and skips a connection imported inside the window', async () => {
+      const { serviceCatalog } = makeRepos()
+      const recent = scope()
+      const stale = scope()
+      await serviceCatalog.upsert(connection(recent, { lastSyncedAt: 5_000 }))
+      await serviceCatalog.upsert(connection(stale, { lastSyncedAt: 10 }))
+
+      const found = await serviceCatalog.listStale(1_000, 500)
+      const ids = found.map((row) => row.workspaceId)
+      expect(ids).toContain(stale)
+      // Imported more recently than the window: the sweep must not re-import it.
+      expect(ids).not.toContain(recent)
+      // Bounded, so a deployment with hundreds of connections spreads the work across ticks
+      // instead of paging every portal in one pass.
+      expect(await serviceCatalog.listStale(1_000, 1)).toHaveLength(1)
     })
   })
 }

@@ -13,6 +13,7 @@ import type {
   UpdateFoundationalServiceInput,
 } from '~/types/domain'
 import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
+import { createServiceCatalogState } from '~/stores/serviceCatalogConnection'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -88,6 +89,17 @@ function foundationalServicesSetup(
     return requireOwnerId()
   }
 
+  // The workspace's connected developer portal, in its own factory (`./serviceCatalogConnection`):
+  // one connection with one store behind it, where everything else here is the catalog's tiers,
+  // suppressions and repo sources. `reloadCatalog` is a THUNK so it can name `reload`, declared
+  // further down.
+  const portal = createServiceCatalogState({
+    api,
+    requireWorkspaceId,
+    isWorkspaceTier: hasResolved,
+    reloadCatalog: () => reload(),
+  })
+
   /** Probe the feature + load this owner's tier, sources and (ws) the merged catalog. */
   async function runProbe() {
     const id = resolveOwnerId()
@@ -115,6 +127,7 @@ function foundationalServicesSetup(
       sources.value = []
       sourceChanges.value = {}
       sourcesAvailable.value = false
+      portal.reset()
       return
     }
     // Repo sources need the GitHub integration; a 503 here hides only the linking UI — the
@@ -126,6 +139,9 @@ function foundationalServicesSetup(
       sources.value = []
       sourcesAvailable.value = false
     }
+    // The portal connection is its own gate again (the service-catalog encryption key), and it is
+    // workspace-only. See `createServiceCatalogState`, which owns that half.
+    await portal.load(id)
   }
   // Single-flight the probe keyed on the owner id, so a panel-open fan-out loads once per owner.
   const { probe, ensureProbed } = useSingleFlightProbe(runProbe, () => resolveOwnerId())
@@ -243,6 +259,8 @@ function foundationalServicesSetup(
     suppressions,
     sources,
     sourceChanges,
+    serviceCatalog: portal.serviceCatalog,
+    serviceCatalogAvailable: portal.serviceCatalogAvailable,
     contractBodies,
     inheritedCount,
     probe,
@@ -257,6 +275,10 @@ function foundationalServicesSetup(
     unlinkSource,
     syncSource,
     checkSource,
+    connectServiceCatalog: portal.connect,
+    disconnectServiceCatalog: portal.disconnect,
+    probeServiceCatalog: portal.probe,
+    importServiceCatalog: portal.importNow,
   }
 }
 

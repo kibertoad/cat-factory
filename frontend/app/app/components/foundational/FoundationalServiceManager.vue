@@ -20,6 +20,7 @@ import FoundationalServiceCatalogList from '~/components/foundational/Foundation
 import FoundationalServiceRegistry from '~/components/foundational/FoundationalServiceRegistry.vue'
 import FoundationalServiceSources from '~/components/foundational/FoundationalServiceSources.vue'
 import FoundationalSuppressions from '~/components/foundational/FoundationalSuppressions.vue'
+import ServiceCatalogConnection from '~/components/foundational/ServiceCatalogConnection.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -50,7 +51,7 @@ watch(
   { immediate: true },
 )
 
-type Tab = 'catalog' | 'registry' | 'sources'
+type Tab = 'catalog' | 'registry' | 'sources' | 'portal'
 const tab = ref<Tab>(props.showCatalog ? 'catalog' : 'registry')
 
 const ownerLabel = computed(() =>
@@ -62,10 +63,14 @@ const tabs = computed(() => {
     { value: 'registry' as const, label: ownerLabel.value, slot: 'registry' },
     { value: 'sources' as const, label: t('foundational.tab.sources'), slot: 'sources' },
   ]
+  // The developer-portal import is WORKSPACE-only, so it rides the same flag the merged catalog
+  // does rather than a second one: the credential is workspace-keyed, and an account tab would
+  // offer a connection the backend serves at no scope.
   if (!props.showCatalog) return items
   return [
     { value: 'catalog' as const, label: t('foundational.tab.catalog'), slot: 'catalog' },
     ...items,
+    { value: 'portal' as const, label: t('foundational.tab.portal'), slot: 'portal' },
   ]
 })
 
@@ -115,6 +120,9 @@ const activeTab = computed({
       </template>
       <template #sources>
         <FoundationalServiceSources :kind="props.kind" :owner-id="props.ownerId" />
+      </template>
+      <template #portal>
+        <ServiceCatalogConnection />
       </template>
     </UTabs>
   </div>

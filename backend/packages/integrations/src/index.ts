@@ -704,3 +704,50 @@ export {
   type RenderedNotificationEmail,
 } from './modules/email/emailNotification.logic.js'
 export { AuditService, type AuditServiceDependencies } from './modules/audit/AuditService.js'
+
+// The SERVICE CATALOG connection: a workspace's developer portal (Backstage), whose services are
+// imported into the foundational-services catalog. See backend/docs/service-catalog-import.md.
+export {
+  ServiceCatalogConnectionService,
+  type ServiceCatalogConnectionServiceDependencies,
+} from './modules/serviceCatalog/ServiceCatalogConnectionService.js'
+export {
+  BackstageCatalogClient,
+  type BackstageCatalogClientOptions,
+} from './modules/serviceCatalog/BackstageCatalogClient.js'
+export {
+  API_FETCH_FIELDS,
+  CATALOG_LIST_FIELDS,
+  MAX_DEFINITION_CHARS,
+  MAX_DESCRIPTION_CHARS,
+  type BackstageEntity,
+  type BackstageEntityRef,
+  apiContractFormatForType,
+  composeDescription,
+  entityCapabilities,
+  entityRef,
+  entitySummary,
+  formatEntityRef,
+  ownerLabel,
+  parseEntityRef,
+  providedApiRefs,
+  serviceIdForEntity,
+  slugify,
+  toServiceCatalogApi,
+  toServiceCatalogEntry,
+} from './modules/serviceCatalog/backstage-catalog.logic.js'
+export {
+  clientCredentialsBody,
+  mintLegacyBackstageToken,
+  parseServiceCatalogAuth,
+  readAccessToken,
+  requiresResolvedBearer,
+  serviceCatalogAuthHeaders,
+} from './modules/serviceCatalog/serviceCatalogAuth.js'
+export {
+  base64ToBytes,
+  bytesToBase64,
+  bytesToBase64Url,
+  toBase64,
+  toBase64Url,
+} from './modules/shared/base64.js'

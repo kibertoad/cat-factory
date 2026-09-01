@@ -54,6 +54,16 @@ export const ORG_SECRET_SOURCES = [
   'document_source_connection',
   /** `task_connections.credentials`: a workspace's tracker credential bag. */
   'task_source_connection',
+  /**
+   * `service_catalog_connections.credentials`: the credential a workspace's developer portal
+   * (Backstage) is read with.
+   *
+   * Admitted because the IMPORT genuinely runs on the node: a mothership-mode board's
+   * "import now" and its autorefresh both reach the portal from wherever the request landed,
+   * and a node that could hold the row but not open it would offer an import that permanently
+   * fails on the one deployment shape this delegation exists for.
+   */
+  'service_catalog_connection',
 ] as const
 
 export type OrgSecretSource = (typeof ORG_SECRET_SOURCES)[number]
@@ -80,6 +90,7 @@ export const ORG_SECRET_KEY_ARITY = {
   incident_enrichment_connection: 0,
   document_source_connection: 1,
   task_source_connection: 1,
+  service_catalog_connection: 0,
 } as const satisfies Record<OrgSecretSource, number>
 
 /** The declared arity of each source, as literal types. */

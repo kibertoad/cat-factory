@@ -158,7 +158,12 @@ const LEGACY_ALLOWANCES = new Map([
   // 1014 -> 995 by extracting `dispatchTokenMint.ts`: the one mint three modules the root itself
   // pulls in were reading back out of it, which for `containers/deployJobDeps.ts` closed a real
   // import cycle.
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 874],
+  // 874 -> 800 by extracting `container-content-library-deps.ts` (the prompt-fragment, Claude-Skills
+  // and foundational-services selectors, plus the service-catalog cipher domain). It moved when the
+  // developer-portal connection pushed the file over, along the seam the NODE facade already used:
+  // its file of the same name is this one's twin, so the two facades now hold the same three
+  // selectors in the same place.
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 800],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)

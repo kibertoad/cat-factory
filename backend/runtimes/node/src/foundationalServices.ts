@@ -1,6 +1,8 @@
 import {
   FOUNDATIONAL_SOURCE_STALE_MS,
+  SERVICE_CATALOG_STALE_MS,
   sweepFoundationalSources,
+  sweepServiceCatalogs,
   type Logger,
   type ServerContainer,
   type SweepHealthTracker,
@@ -40,6 +42,33 @@ export function startFoundationalSourceSweeper(
     failureMessage: 'foundational-source sweep failed',
     tick: async () => {
       await sweepFoundationalSources(container.foundationalServices, log)
+    },
+  })
+}
+
+/**
+ * Start the periodic SERVICE-CATALOG refresh: the Node analogue of the Worker's cron pass, over
+ * the same shared `sweepServiceCatalogs` (which owns the window and the batch bound).
+ *
+ * Its own sweeper rather than another `tick` inside the one above, because the two have different
+ * windows for a real reason: a repo source's refresh is one conditional head-commit read, and a
+ * portal import pages the estate. Folding them would make the cheaper pass run at the slower
+ * cadence or the expensive one at the faster.
+ */
+export function startServiceCatalogSweeper(
+  container: ServerContainer,
+  log: Logger,
+  health: SweepHealthTracker,
+): () => void {
+  if (!container.foundationalServices?.serviceCatalog) return () => {}
+  return startSweeper({
+    name: 'service-catalog',
+    intervalMs: SERVICE_CATALOG_STALE_MS,
+    log,
+    health,
+    failureMessage: 'service-catalog sweep failed',
+    tick: async () => {
+      await sweepServiceCatalogs(container.foundationalServices, log)
     },
   })
 }

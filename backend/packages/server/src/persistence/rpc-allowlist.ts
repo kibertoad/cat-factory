@@ -1053,6 +1053,23 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
     delete: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // The workspace's SERVICE CATALOG connection (the developer portal whose services are imported
+  // into the foundational-services catalog). Remote for the same reason the row above is: the
+  // panel has to work end-to-end in mothership mode, AND the import itself runs on the node, so
+  // the node needs the row while the mothership keeps the key, so the `get` hands back the sealed
+  // envelope and the plaintext comes separately over `/internal/secrets/unseal`.
+  //
+  // What stays OFF is `listStale`, the autorefresh sweep's query: it is unscoped across
+  // workspaces by construction, and the sweep runs on the deployment that holds the credentials
+  // rather than on a laptop. `updateSyncState` is HERE rather than folded into `upsert`
+  // deliberately: an import must be able to stamp its verdict without re-sealing the credential
+  // envelope it just read through, which on a mothership-mode node it holds no key to re-seal.
+  serviceCatalogConnectionRepository: {
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    updateSyncState: { scope: { kind: 'workspace', arg: 0 } },
+    softDelete: { scope: { kind: 'workspace', arg: 0 } },
+  },
   releaseHealthConfigRepository: {
     getByBlock: { scope: { kind: 'workspace', arg: 0 } },
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },

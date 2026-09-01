@@ -542,6 +542,7 @@ function manifestOf(record: ApiContractRecord): ApiContractManifestEntry {
     operations: record.operations,
     omittedOperations: record.omittedOperations,
     sourcePath: record.sourcePath,
+    sourceSha: record.sourceSha,
   }
 }
 

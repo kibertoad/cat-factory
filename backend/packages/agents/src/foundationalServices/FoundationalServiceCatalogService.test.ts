@@ -68,6 +68,7 @@ function contractRepo(seed: ApiContractRecord[] = []): ApiContractRepository {
           operations: r.operations,
           omittedOperations: r.omittedOperations,
           sourcePath: r.sourcePath,
+          sourceSha: r.sourceSha,
         })),
     listByServiceIds: async (ownerKind, ownerId, serviceIds) =>
       serviceIds.length === 0

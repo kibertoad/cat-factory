@@ -35,6 +35,7 @@ import type {
   MergeTrackRecordRepository,
   ModelPresetRepository,
   ObservabilityConnectionRepository,
+  ServiceCatalogConnectionRepository,
   PackageRegistryConnectionRepository,
   AuditEventRepository,
   AuthAttemptRepository,
@@ -166,6 +167,8 @@ import {
   DrizzleMcpOAuthGrantRepository,
 } from './drizzle/connections.js'
 
+import { DrizzleServiceCatalogConnectionRepository } from './drizzle/serviceCatalog.js'
+
 export interface CoreRepositories {
   workspaceRepository: WorkspaceRepository
   workspaceMemberRepository: WorkspaceMemberRepository
@@ -219,6 +222,7 @@ export interface CoreRepositories {
   tutorialProgressRepository: TutorialProgressRepository
   userSettingsRepository: UserSettingsRepository
   observabilityConnectionRepository: ObservabilityConnectionRepository
+  serviceCatalogConnectionRepository: ServiceCatalogConnectionRepository
   packageRegistryConnectionRepository: PackageRegistryConnectionRepository
   incidentEnrichmentConnectionRepository: IncidentEnrichmentConnectionRepository
   accountSettingsRepository: AccountSettingsRepository
@@ -286,6 +290,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     tutorialProgressRepository: new DrizzleTutorialProgressRepository(db),
     userSettingsRepository: new DrizzleUserSettingsRepository(db),
     observabilityConnectionRepository: new DrizzleObservabilityConnectionRepository(db),
+    serviceCatalogConnectionRepository: new DrizzleServiceCatalogConnectionRepository(db),
     packageRegistryConnectionRepository: new DrizzlePackageRegistryConnectionRepository(db),
     incidentEnrichmentConnectionRepository: new DrizzleIncidentEnrichmentConnectionRepository(db),
     accountSettingsRepository: new DrizzleAccountSettingsRepository(db),

@@ -5,6 +5,7 @@ import {
   DrizzleFoundationalServiceRepository,
   DrizzleFoundationalServiceSourceRepository,
 } from '../src/repositories/foundationalServices.js'
+import { DrizzleServiceCatalogConnectionRepository } from '../src/repositories/drizzle/serviceCatalog.js'
 import { setupTestDb } from './harness.js'
 
 // Cross-runtime parity for the foundational-services catalog against the Node facade's real
@@ -19,6 +20,7 @@ if (databaseUrl) {
     services: new DrizzleFoundationalServiceRepository(db),
     contracts: new DrizzleApiContractRepository(db),
     sources: new DrizzleFoundationalServiceSourceRepository(db),
+    serviceCatalog: new DrizzleServiceCatalogConnectionRepository(db),
   }))
 } else {
   describe.skip('[node] foundational services (set DATABASE_URL to run)', () => {

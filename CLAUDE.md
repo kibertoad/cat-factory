@@ -756,11 +756,11 @@ NEVER a gate; an install is SETUP, so every failure becomes a prompt NOTE and th
 [`agent-dependency-prepopulation.md`](./docs/initiatives/agent-dependency-prepopulation.md).
 
 **Foundational services**: a tiered (builtin ⊕ account ⊕ workspace) catalog of the shared capabilities
-an org already runs, injected as `.cat-context/` files. Traps: the catalog and the CONTRACTS are two
-separate reads and that split IS the feature; the code-registered `builtin` tier holds no rows; "no
-declaration", "empty declaration" and "unknown id" are three states needing different reactions, with
-`operationsAreIndexable` the one place the fourth (an unparseable format) lives. Doc:
-[ADR 0031](./backend/docs/adr/0031-foundational-services.md).
+an org already runs, injected as `.cat-context/` files; supplied by upload, a linked repo or an IMPORTED
+developer portal. Traps: catalog and CONTRACTS are two separate reads and that split IS the feature; the
+code-registered `builtin` tier holds no rows; "no declaration"/"empty"/"unknown id" need different
+reactions, with `operationsAreIndexable` the one place the fourth (unparseable format) lives; a TRIAGE
+kind reads the estate under `service-estate`, NEVER the design trait. Docs: [ADR 0031](./backend/docs/adr/0031-foundational-services.md), [import](./backend/docs/service-catalog-import.md).
 
 **Binary-output steps**: a `binary-output`-trait kind generates artifacts, stored through a foundational
 service its step SELECTS; what MAKES them is `BinaryGeneratorRegistry`, read only via `BinaryGeneratorSource`
