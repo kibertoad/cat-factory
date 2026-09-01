@@ -20,6 +20,7 @@ const env = (overrides: Partial<OutcomeEnvironment> = {}): OutcomeEnvironment =>
   frameId: 'frm_own',
   environmentId: 'env_1',
   detail: null,
+  detailKind: null,
   ...overrides,
 })
 

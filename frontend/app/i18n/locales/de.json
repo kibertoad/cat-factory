@@ -6874,6 +6874,7 @@
     "empty": "Keine ephemere Umgebung für diesen Lauf.",
     "provisionTypeLabel": "Bereitstellungstyp:",
     "engineLabel": "Engine:",
+    "statusNote": "Hinweis des Anbieters: {note}",
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",

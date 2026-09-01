@@ -45,7 +45,7 @@ import {
 import {
   apiBase,
   apiServerConnectionFailureMessage,
-  classifyDeploymentReadiness,
+  reduceRolloutProgress,
 } from './kubernetes.logic.js'
 import {
   buildDeployJobSpec,
@@ -304,6 +304,9 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     const config = this.parseConfig(req.manifest)
     const namespace = req.provisionFields.namespace ?? req.externalId
     if (!namespace) {
+      // Nothing to read a status FROM, and it says that rather than leaving the caller to record
+      // its generic fallback: an environment with no namespace on it is a provision that never
+      // got far enough to make one, which is a different thing from a namespace that failed.
       return {
         externalId: null,
         url: null,
@@ -311,17 +314,20 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
         expiresAt: null,
         access: null,
         fields: {},
+        error:
+          'this environment record carries no namespace, so there is nothing in the cluster to ' +
+          'read its status from: the provision never got as far as creating one.',
       }
     }
     const client = this.makeClient(config, req.resolveSecret)
-    const status = await this.deploymentStatus(client, config, namespace)
+    const rollout = await this.deploymentStatus(client, config, namespace)
     const url = await this.resolveLiveUrl(client, config, namespace, req.provisionFields)
     // Only once the WORKLOAD is otherwise ready, and only for a URL derived from a host template.
     // Both narrowings matter. Grading earlier would race a controller that has not looked at a
     // just-applied Ingress yet, and a status-backed source already waits on the live address, so
     // it cannot publish a host the cluster never assigned. A template source can: it is config
     // text, and this is the one check that asks the cluster whether it agrees.
-    if (status === 'ready' && config.url.source === 'ingressTemplate') {
+    if (rollout.status === 'ready' && config.url.source === 'ingressTemplate') {
       const admission = await this.ingressAdmission(client, config, namespace)
       if (admission.status === 'unrouted') {
         return {
@@ -343,6 +349,9 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
       }
       // `pending` withholds `ready` rather than failing: nothing has claimed the Ingress YET, and
       // the provision's own deadline is what turns a route that never arrives into a `timeout`.
+      // It says which pending this is, because that deadline used to report a bare twenty-minute
+      // wait on an environment whose workload had been healthy for nineteen of them, and the
+      // reader has to know the hold-up is the ROUTE and not the app.
       if (admission.status === 'pending') {
         return {
           externalId: namespace,
@@ -351,6 +360,7 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
           expiresAt: null,
           access: null,
           fields: req.provisionFields,
+          statusNote: `the workload is ready but the environment URL is not routed yet: ${admission.detail}`,
         }
       }
       // `unknown` falls through to publish exactly as before. That is the deliberate disposition
@@ -361,10 +371,17 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     return {
       externalId: namespace,
       url,
-      status,
+      status: rollout.status,
       expiresAt: null,
       access: null,
       fields: req.provisionFields,
+      // Present only while the rollout is outstanding, and re-derived from THIS read every poll,
+      // so it can never outlive the state it describes.
+      ...(rollout.note ? { statusNote: rollout.note } : {}),
+      // The other half of the same rule, for the verdict that is a fault: without it a rollout
+      // that gave up on a NAMED workload was persisted as the generic 'Provisioning failed'
+      // fallback, which is the defect the note exists to fix, one status over.
+      ...(rollout.error ? { error: rollout.error } : {}),
     }
   }
 
@@ -821,19 +838,38 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     }
   }
 
-  /** Aggregate the namespace's Deployments into one lifecycle verdict. */
+  /**
+   * Aggregate the namespace's Deployments into one lifecycle verdict, plus the note that says
+   * what a `provisioning` verdict is waiting on ({@link reduceRolloutProgress}).
+   *
+   * The note is the whole reason this returns a pair rather than a bare status: `provisioning` is
+   * what keeps the deployer's readiness wait alive, and it is persisted as the environment's
+   * `statusNote`, so the run states which workloads have not landed instead of only how long it
+   * has been waiting for them.
+   */
   private async deploymentStatus(
     client: KubernetesApiClient,
     config: KubernetesEnvironmentConfig,
     namespace: string,
-  ): Promise<EnvironmentStatus> {
+  ): Promise<{ status: EnvironmentStatus; note?: string; error?: string }> {
     const res = await client.fetch(
       'GET',
       resourceUrl(config, 'apps/v1', 'Deployment', namespace),
       undefined,
       READ_TIMEOUT_MS,
     )
-    if (res.status === 404) return 'failed'
+    // A 404 on the namespace's own collection means the namespace is gone. It SAYS so, because
+    // the alternative is what the caller records with nothing to record: the literal
+    // 'Provisioning failed' on an environment that was in fact deleted out from under the run.
+    if (res.status === 404) {
+      return {
+        status: 'failed',
+        error:
+          `namespace '${namespace}' no longer exists: the apiserver answered 404 for its ` +
+          'Deployment list, so whatever stood this environment up has been deleted (a TTL ' +
+          'reclaim, a manual cleanup, or a provision that never created it).',
+      }
+    }
     // A credential / permission error (the apiserver rejecting the token, or the
     // ServiceAccount lacking RBAC to read Deployments) will NEVER self-heal — so surface it as a
     // hard failure (the caller's `refreshStatus` logs it to the provisioning log and the gate
@@ -845,17 +881,18 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
           `ServiceAccount token and its RBAC: ${await safeText(res)}`,
       )
     }
-    if (!res.ok) return 'provisioning'
-    const body = (await res.json()) as { items?: unknown[] }
-    const items = Array.isArray(body.items) ? body.items : []
-    if (items.length === 0) return 'ready' // nothing to roll out (e.g. a static Service)
-    let anyPending = false
-    for (const item of items) {
-      const readiness = classifyDeploymentReadiness(item)
-      if (readiness === 'gone') return 'failed'
-      if (readiness !== 'ready') anyPending = true
+    // A transient read failure keeps polling, but it SAYS SO: an environment held at
+    // `provisioning` because the platform cannot read the cluster is a different thing from one
+    // held there because a workload is slow, and until this note existed the two were the same
+    // silence for up to twenty minutes.
+    if (!res.ok) {
+      return {
+        status: 'provisioning',
+        note: `the Deployment status read is failing (HTTP ${res.status}); still polling`,
+      }
     }
-    return anyPending ? 'provisioning' : 'ready'
+    const body = (await res.json()) as { items?: unknown[] }
+    return reduceRolloutProgress(Array.isArray(body.items) ? body.items : [])
   }
 
   /**

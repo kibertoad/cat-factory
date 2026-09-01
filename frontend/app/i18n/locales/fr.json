@@ -6293,6 +6293,7 @@
     "empty": "Aucun environnement éphémère pour cette exécution.",
     "provisionTypeLabel": "Type de provisionnement :",
     "engineLabel": "Moteur :",
+    "statusNote": "Note du fournisseur : {note}",
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",

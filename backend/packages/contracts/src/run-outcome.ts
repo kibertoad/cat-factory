@@ -334,6 +334,14 @@ export type OutcomeEnvironmentState = v.InferOutput<typeof outcomeEnvironmentSta
 export const outcomeEnvironmentOriginSchema = v.picklist(['deployer', 'human_test', 'projected'])
 export type OutcomeEnvironmentOrigin = v.InferOutput<typeof outcomeEnvironmentOriginSchema>
 
+/**
+ * Which of an environment's two prose channels its `detail` came from: a recorded `fault`, or the
+ * provider's `note` about a state it has not left yet. The pair is closed on purpose; a third
+ * channel would be a third field, not a third member here.
+ */
+export const outcomeEnvironmentDetailKindSchema = v.picklist(['fault', 'note'])
+export type OutcomeEnvironmentDetailKind = v.InferOutput<typeof outcomeEnvironmentDetailKindSchema>
+
 /** One environment this run stood up: where it is, where it stands, and how long it lasts. */
 export const outcomeEnvironmentSchema = v.object({
   /** The public URL, or null when there is not one to open (still provisioning, or it failed). */
@@ -359,8 +367,24 @@ export const outcomeEnvironmentSchema = v.object({
   frameId: v.nullable(v.string()),
   /** The environments-registry id, the handle an operator greps for. Null when not recorded. */
   environmentId: v.nullable(v.string()),
-  /** The producer's own verbatim cause, when it recorded one. Detail, never the headline. */
+  /**
+   * The producer's own verbatim account of this environment, when it recorded one: either a
+   * FAULT or the provider's own NOTE about a state the environment has not left yet, told apart
+   * by `detailKind` below. Detail, never the headline.
+   */
   detail: v.nullable(v.string()),
+  /**
+   * WHICH of the two claims `detail` carries. Null exactly when `detail` is null.
+   *
+   * They arrive through one slot and read identically as prose, and a reader acts on which one it
+   * was: "quota exceeded" is something to fix, "the deploy job is queued behind 3 others" is
+   * something to wait for. Rendered unlabelled, the note is read as the fault it is not, which is
+   * the same misattribution that keeps a provider's note out of `lastError` in the first place.
+   *
+   * Stated rather than derived, because nothing else on the row derives it: a recorded fault
+   * survives onto a reclaimed environment, so `state` cannot stand in for it.
+   */
+  detailKind: v.nullable(outcomeEnvironmentDetailKindSchema),
 })
 export type OutcomeEnvironment = v.InferOutput<typeof outcomeEnvironmentSchema>
 
@@ -799,6 +823,24 @@ function observationLookup(
 }
 
 /**
+ * The row's one detail slot, resolved over every account of this environment and LABELLED with
+ * which kind of claim won it.
+ *
+ * Faults first, in the caller's order, then the provider's note. A note is the only thing a row
+ * about a still-building environment has (the commonest row on a live run's card), and it is
+ * also the weaker claim of the two, so it is the last resort rather than a peer.
+ */
+function environmentDetail(
+  faults: readonly (string | null | undefined)[],
+  note: string | null | undefined,
+): Pick<OutcomeEnvironment, 'detail' | 'detailKind'> {
+  const fault = faults.find((candidate): candidate is string => !!candidate?.trim())
+  if (fault) return { detail: fault, detailKind: 'fault' }
+  const stated = note?.trim()
+  return stated ? { detail: stated, detailKind: 'note' } : { detail: null, detailKind: null }
+}
+
+/**
  * The rows for the frames the run's deploys settled, beside the count of frames that declared no
  * environment at all.
  *
@@ -832,7 +874,10 @@ function deployedEnvironments(
       // is about it, and is then listed a second time as an environment no frame accounts for.
       frameId,
       environmentId: deployed.environmentId ?? observed?.id ?? null,
-      detail: deployed.error ?? disposal?.error ?? observed?.lastError ?? null,
+      ...environmentDetail(
+        [deployed.error, disposal?.error, observed?.lastError],
+        observed?.statusNote,
+      ),
     })
   }
   return { entries, skipped }
@@ -868,7 +913,7 @@ function unclaimedEnvironments(
       retained: false,
       frameId: null,
       environmentId: observed.id,
-      detail: observed.lastError,
+      ...environmentDetail([observed.lastError], observed.statusNote),
     })
   }
   return entries

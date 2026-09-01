@@ -6293,6 +6293,7 @@
     "empty": "אין סביבה זמנית להרצה הזו.",
     "provisionTypeLabel": "סוג אספקה:",
     "engineLabel": "מנוע:",
+    "statusNote": "הערת הספק: {note}",
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",

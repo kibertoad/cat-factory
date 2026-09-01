@@ -315,6 +315,13 @@ export const runEnvironmentSchema = v.object({
   /** The verbatim provider error when the environment failed/expired, else null. */
   lastError: v.optional(v.nullable(v.string())),
   /**
+   * The provider's own account of a state it has not left yet (why this environment is not
+   * ready), where it gave one. The counterpart of `lastError` for the non-terminal half of the
+   * lifecycle: it is what the Environment panel shows beside a parked deployer, so a readiness
+   * wait states what it is waiting on rather than only that it is waiting.
+   */
+  statusNote: v.optional(v.nullable(v.string())),
+  /**
    * The service's declared provision type this environment was stood up for
    * (`kubernetes` | `docker-compose` | `custom` | `infraless`), recorded at provision
    * time so a run's details show exactly what was provisioned. Null for legacy rows /

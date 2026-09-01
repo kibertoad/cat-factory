@@ -700,6 +700,7 @@ export {
 // once here because the engine, not any single provider, decides when a run may proceed.
 export {
   ENVIRONMENT_READY_TIMEOUT_MS,
+  describeTerminalEnvironment,
   describeWaitedFor,
   judgeEnvironmentReadiness,
   type EnvironmentReadiness,

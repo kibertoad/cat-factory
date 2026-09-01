@@ -26,6 +26,7 @@ export type {
   OutcomeDisposition,
   OutcomeEnvironment,
   OutcomeEnvironments,
+  OutcomeEnvironmentDetailKind,
   OutcomeEnvironmentOrigin,
   OutcomeEnvironmentState,
   OutcomePullRequest,

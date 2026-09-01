@@ -26,6 +26,7 @@ function record(overrides: Partial<EnvironmentRecord> = {}): EnvironmentRecord {
     createdAt: 1_000,
     expiresAt: null,
     lastError: null,
+    statusNote: null,
     deletedAt: null,
     provisionType: 'preview',
     engine: 'remote-custom',

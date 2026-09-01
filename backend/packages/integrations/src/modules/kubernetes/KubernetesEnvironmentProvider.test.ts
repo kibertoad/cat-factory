@@ -1043,7 +1043,89 @@ describe('KubernetesEnvironmentProvider.status: ingress admission', () => {
       ingresses: [{ metadata: { name: 'api' }, spec: { ingressClassName: 'traefik' } }],
       classes: [namedClass('traefik', true)],
     })
-    expect((await statusOf()).status).toBe('provisioning')
+    const result = await statusOf()
+    expect(result.status).toBe('provisioning')
+    // …and it says the hold-up is the ROUTE and not the app. The readiness ceiling used to report
+    // a bare twenty-minute wait on an environment whose workload had been healthy for nineteen of
+    // them, which sends a reader to the wrong layer for the whole wait.
+    expect(result.statusNote).toContain('the workload is ready')
+    expect(result.statusNote).toContain('no controller has written an address')
+    // A note, not a fault: nothing here has failed, so the error channel stays empty.
+    expect(result.error).toBeUndefined()
+  })
+
+  it('carries the rollout note while the workload itself is still coming up', async () => {
+    // The other half of the channel, and the common case: a namespace mid-rollout. The status the
+    // readiness wait keeps re-reading now names which workloads have not landed, so a run parked
+    // for twenty minutes says what it is parked ON.
+    stubFetch((c) => {
+      if (c.method !== 'GET') return { status: 200 }
+      if (c.url.includes('/deployments')) {
+        return {
+          body: {
+            items: [
+              {
+                metadata: { name: 'api' },
+                spec: { replicas: 2 },
+                status: { availableReplicas: 2 },
+              },
+              { metadata: { name: 'worker' }, spec: { replicas: 2 }, status: {} },
+            ],
+          },
+        }
+      }
+      return { status: 200 }
+    })
+    const result = await statusOf()
+    expect(result.status).toBe('provisioning')
+    expect(result.statusNote).toBe("1 of 2 Deployments is still rolling out: 'worker'")
+  })
+
+  it('names the workload a failed rollout gave up on, as the provider error', async () => {
+    // The fault channel, end to end through the provider: `EnvironmentProvisioningService` writes
+    // `provisioned.error?.trim() || 'Provisioning failed'`, so a rollout that gave up on a NAMED
+    // Deployment was persisted, rendered and reported as that generic literal.
+    stubFetch((c) => {
+      if (c.method !== 'GET') return { status: 200 }
+      if (c.url.includes('/deployments')) {
+        return {
+          body: {
+            items: [
+              {
+                metadata: { name: 'api' },
+                spec: { replicas: 1 },
+                status: {
+                  availableReplicas: 0,
+                  conditions: [
+                    { type: 'Progressing', status: 'False', reason: 'ProgressDeadlineExceeded' },
+                  ],
+                },
+              },
+            ],
+          },
+        }
+      }
+      return { status: 200 }
+    })
+    const result = await statusOf()
+    expect(result.status).toBe('failed')
+    expect(result.error).toContain("'api'")
+    // A fault, not a wait: the note channel stays empty so the two never read as two problems.
+    expect(result.statusNote).toBeUndefined()
+  })
+
+  it('says the namespace is GONE rather than leaving a bare failed status', async () => {
+    // The sibling branch: a 404 on the namespace's own Deployment collection. Silent, it recorded
+    // the same 'Provisioning failed' literal for an environment that was in fact deleted.
+    stubFetch((c) => {
+      if (c.method !== 'GET') return { status: 200 }
+      if (c.url.includes('/deployments')) return { status: 404, body: { message: 'not found' } }
+      return { status: 200 }
+    })
+    const result = await statusOf()
+    expect(result.status).toBe('failed')
+    expect(result.error).toContain('no longer exists')
+    expect(result.error).toContain('cf-env-42')
   })
 
   it('publishes exactly as before when the catalog read is REFUSED', async () => {

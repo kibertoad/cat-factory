@@ -115,6 +115,46 @@ driven through the methods above and never asked of `remediate`. Omitting the wh
 supported choice: the investigation runs on the platform's evidence alone and STATES that it did.
 Full model: [`environment-investigation.md`](../../docs/initiatives/environment-investigation.md).
 
+### Saying WHY an environment is not ready yet: `statusNote`
+
+An async provision means every poll until the environment lands answers `provisioning`, and the
+deployer waits on those answers for up to `ENVIRONMENT_READY_TIMEOUT_MS` (20 minutes) before it
+records the frame failed. `ProvisionedEnvironment.statusNote` is what that wait reads: one sentence
+saying where the environment is.
+
+**It is not `error`.** `error` is read only on `status: 'failed'`, and both persistence sites null it
+on every other status, so before this field a provider that knew exactly which stage an environment
+was stuck at had nowhere to put it. The ceiling could report only its own duration, and the only
+workaround was to report `failed` early purely because `failed` was the only status whose reason
+survived persistence: a truthful lifecycle state traded for an explainable one.
+
+Three rules:
+
+- **Say what distinguishes THIS poll from the last one.** "the deploy job has not started" and "the
+  deploy succeeded and no target went healthy" are both `provisioning`, and which one it is decides
+  who looks at what. A note that repeats the status word adds nothing.
+- **It is the current account, never a log.** Like `error`, it is re-read from you and rewritten on
+  every poll, so a note you stop returning stops being stored. Nothing accumulates, and a note
+  cannot outlive the state it described.
+- **Absent means nothing to add**, which is byte-for-byte the prior behaviour. A provider that
+  never sets it keeps exactly today's messages.
+- **It is bounded.** A note is stored capped at 400 characters, with a marker saying how much was
+  dropped, because it renders as one muted line beside an environment that is doing fine (the
+  fault beside it gets its own scrollable block). Write the sentence, not the controller dump.
+
+Where it surfaces: the step's Environment panel while the run is parked, the run outcome's
+environment row, and the `timed_out` failure detail (`Last provider note: …`), which is the message
+a human reads when the ceiling is spent. The built-in Kubernetes adapter is the worked example: it
+names the Deployments that have not finished rolling out, and distinguishes a workload that is still
+coming up from one that is healthy behind an Ingress nothing has routed yet.
+
+**A recorded fault outranks a note on every one of those readers**, so you may set both without
+deciding which wins: where a `failed` status carries an `error`, that error is what a person is
+shown. Which is also the obligation on the other half of the pair. `error` unset on a `failed`
+status is persisted as the literal `Provisioning failed`, and a reader given that sentence learns
+only that something did not happen, so a failure your adapter can NAME should name it (the built-in
+Kubernetes adapter names the workload whose rollout gave up, and says when the namespace is gone).
+
 ### `frontendOrigins`: wiring a bound frontend's CORS
 
 When a `deployer` step provisions a service that one or more `frontend` frames bind (via the
@@ -396,13 +436,18 @@ export class AcmeEnvsEnvironmentProvider implements EnvironmentProvider {
   }
 
   private toEnvironment(env: AcmeEnv): ProvisionedEnvironment {
+    const status = STATUS_MAP[env.status] ?? 'provisioning' // unknown -> keep polling
     return {
       externalId: env.id,
       url: pickTestableLink(env.links), // lowest-priority absolute-http link
-      status: STATUS_MAP[env.status] ?? 'provisioning', // unknown -> keep polling
+      status,
       expiresAt: env.online_until ? Date.parse(env.online_until) : null,
       access: null,
       fields: { project: env.project },
+      // Why it is not ready YET, in the provider's own words: this is what the deployer's
+      // readiness ceiling quotes instead of reporting only how long it waited. Absent on a
+      // status that has nothing left to say. See `statusNote` above.
+      ...(status === 'provisioning' && env.stage ? { statusNote: describeStage(env.stage) } : {}),
     }
   }
 }

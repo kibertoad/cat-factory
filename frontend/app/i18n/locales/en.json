@@ -6597,6 +6597,7 @@
     "empty": "No ephemeral environment for this run.",
     "provisionTypeLabel": "Provision type:",
     "engineLabel": "Engine:",
+    "statusNote": "Provider note: {note}",
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",

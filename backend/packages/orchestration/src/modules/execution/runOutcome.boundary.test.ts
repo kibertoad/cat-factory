@@ -102,6 +102,7 @@ describe('boundOutcomeForApi', () => {
               frameId: 'frm_own',
               environmentId: 'env_1',
               detail: `provision refused: ${SECRET}`,
+              detailKind: 'fault',
             },
           ],
         },
@@ -110,6 +111,9 @@ describe('boundOutcomeForApi', () => {
     if (bounded.environments.status !== 'reported') throw new Error('expected environments')
     expect(bounded.environments.entries[0]!.url).not.toContain(SECRET)
     expect(bounded.environments.entries[0]!.detail).not.toContain(SECRET)
+    // The label rides through with the text it labels: scrubbed prose in an unlabelled slot is
+    // exactly the misreading the kind exists to prevent.
+    expect(bounded.environments.entries[0]!.detailKind).toBe('fault')
   })
 
   it('leaves an ordinary payload byte-for-byte alone', () => {

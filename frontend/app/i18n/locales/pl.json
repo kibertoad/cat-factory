@@ -6293,6 +6293,7 @@
     "empty": "Brak środowiska efemerycznego dla tego uruchomienia.",
     "provisionTypeLabel": "Typ provisioningu:",
     "engineLabel": "Silnik:",
+    "statusNote": "Uwaga dostawcy: {note}",
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",

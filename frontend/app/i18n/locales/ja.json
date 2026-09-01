@@ -6293,6 +6293,7 @@
     "empty": "この実行に一時環境はありません。",
     "provisionTypeLabel": "プロビジョニングタイプ:",
     "engineLabel": "エンジン:",
+    "statusNote": "プロバイダーからの注記: {note}",
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",

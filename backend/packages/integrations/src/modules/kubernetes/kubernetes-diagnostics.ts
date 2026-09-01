@@ -10,7 +10,7 @@ import type {
 import { getErrorMessage } from '@cat-factory/kernel'
 import type { KubernetesApiClient } from './KubernetesApiClient.js'
 import { safeText } from './KubernetesApiClient.js'
-import { apiBase, analyzePodStatus, classifyDeploymentReadiness } from './kubernetes.logic.js'
+import { analyzePodStatus, apiBase, describeDeploymentRollout } from './kubernetes.logic.js'
 import { namespaceUrl, resourceUrl } from './kubernetes-environment.logic.js'
 
 // ---------------------------------------------------------------------------
@@ -188,25 +188,20 @@ async function readDeployments(
     acc.facts.push({ key: 'deployments.count', value: String(items.length) })
     for (const item of items) {
       const name = metaName(item) ?? '(unnamed)'
-      const readiness = classifyDeploymentReadiness(item)
+      // The DIAGNOSTIC reader, not the lifecycle one: a diagnosis is a table of per-object facts
+      // the investigator reconciles, which is what `reduceRolloutProgress` reduces away on purpose.
+      const rollout = describeDeploymentRollout(item)
       acc.facts.push({
         key: `deployments.${name}.readiness`,
-        value: readiness,
-        healthy: readiness === 'ready',
+        value: rollout.readiness,
+        healthy: rollout.readiness === 'ready',
       })
-      const status = (item as { status?: Record<string, unknown> }).status ?? {}
-      const spec = (item as { spec?: Record<string, unknown> }).spec ?? {}
-      // The DESIRED count comes off `spec`, as `classifyDeploymentReadiness` reads it, not off
-      // `status.replicas`: a Deployment whose ReplicaSet never created a pod (a ResourceQuota or
-      // an admission webhook refusing it) has no `status.replicas` at all, and `0/0 ready` reads
-      // byte-for-byte like one deliberately scaled to zero. Absent `spec.replicas` means 1, which
-      // is the apiserver's own default.
-      const desired = numberOr(spec.replicas, 1)
       acc.facts.push({
         key: `deployments.${name}.replicas`,
-        value: `${numberOr(status.readyReplicas, 0)}/${desired} desired ready`,
-        healthy: numberOr(status.readyReplicas, 0) >= desired,
+        value: `${rollout.ready}/${rollout.desired} desired ready`,
+        healthy: rollout.ready >= rollout.desired,
       })
+      const status = (item as { status?: Record<string, unknown> }).status ?? {}
       for (const condition of conditionsOf(status)) {
         // Only the conditions that are NOT satisfied: a Deployment carries `Available=True` on
         // every healthy object, and listing those buries the one that says why it is stuck.
