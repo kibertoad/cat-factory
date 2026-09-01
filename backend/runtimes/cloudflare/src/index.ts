@@ -51,7 +51,7 @@ import {
   GITHUB_RECONCILE_STALE_MS,
   escalateStaleNotifications,
   FOUNDATIONAL_SOURCE_STALE_MS,
-  SERVICE_CATALOG_STALE_MS,
+  SERVICE_CATALOG_SWEEP_PERIOD_MS,
   shouldRunReachabilityPass,
   sweepFoundationalSources,
   sweepServiceCatalogs,
@@ -1025,10 +1025,17 @@ function runPeriodicBackstops(
   }
 
   // Re-import connected SERVICE CATALOGS (developer portals) whose last import has aged out, so a
-  // service the organisation retired stops being handed to agents as current. Its own window
-  // through the same stateless gate, and a longer one than the source sweep above: a portal import
-  // has no cheap "did anything change" probe, so every pass pages the matching estate.
-  if (shouldRunReachabilityPass(scheduledTime, FREQUENT_CRON_PERIOD_MS, SERVICE_CATALOG_STALE_MS)) {
+  // service the organisation retired stops being handed to agents as current. Gated on the sweep's
+  // own PERIOD rather than on its staleness window: the window is how stale one connection may
+  // get, and firing only once per window would cap the whole deployment at one bounded batch per
+  // six hours, which no number of workspaces can be kept fresh under.
+  if (
+    shouldRunReachabilityPass(
+      scheduledTime,
+      FREQUENT_CRON_PERIOD_MS,
+      SERVICE_CATALOG_SWEEP_PERIOD_MS,
+    )
+  ) {
     tick.run(
       { name: 'service-catalog', failureMessage: 'service-catalog sweep failed' },
       sweepServiceCatalogs(buildContainer(env).foundationalServices, logger),

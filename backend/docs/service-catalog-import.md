@@ -147,22 +147,54 @@ is reported as a SKIPPED interface rather than stored as OpenAPI. Storing it und
 not would produce a contract that fails the parse and lists zero operations, which reads to an
 Architect as a fully-specified service that publishes nothing.
 
+The two new formats also changed what a SCAN of a linked repository picks up, and there the
+extension alone is not enough to conclude anything. A `.gql` file is far more often a client's
+`query` text than a schema, and a `.proto` is routinely a vendored or generated file of message
+shapes with no RPCs at all; neither is an interface the owning service publishes. So
+`detectContractFormat` requires a type-system definition of a GraphQL document and a `service`
+block of a protobuf one (`isGraphqlSchemaDocument` / `isGrpcServiceDocument`), and the candidate
+test stays by extension because a file has to be READ before its content can refuse it. Upload
+validation asks a different question and is unchanged: there a human declared the format.
+
 ## Degrading loudly
 
 An import's verdict is stamped on the connection, and three values are kept apart:
 
 - **`ok`**: everything the filter matched arrived, with nothing dropped.
 - **`partial`**: the catalog holds real services and not all of them. Truncated by the cap,
-  entities that yielded no usable identity, or interfaces with no storable definition. An `empty`
-  filter match lands here too rather than in `ok`, because a filter that matched nothing is a
-  configuration problem with a remedy and reporting it as a healthy import of zero services is
-  exactly how a workspace comes to believe its estate is empty.
-- **`failed`**: the portal could not be read. Stamped BEFORE the error propagates, so a workspace
+  entities that yielded no usable identity, interfaces with no storable definition, or services the
+  import REFUSED to write (below). An `empty` filter match lands here too rather than in `ok`,
+  because a filter that matched nothing is a configuration problem with a remedy and reporting it as
+  a healthy import of zero services is exactly how a workspace comes to believe its estate is empty.
+- **`failed`**: the import could not complete. Stamped BEFORE the error propagates, so a workspace
   whose portal has been unreachable for a week does not show the last pass that worked. Nothing is
   tombstoned: an unreachable portal and an empty one are opposite facts.
 
 `lastSyncMessage` carries the sentence a human has to act on, and is NULL for a clean pass. Filling
 it on every success is how the one pass that needs reading stops standing out.
+
+**Every failure past the connection lookup is stamped, not only a transport one.** `lastSyncedAt` is
+what the autorefresh sweep orders on and it sorts nulls first, so a fault that fires BEFORE the
+portal is contacted (a credential bag that will not open) would otherwise pin that connection to the
+head of the stale queue forever and occupy the whole bounded batch on every pass, starving every
+other workspace with nothing failing anywhere. The stamp is best-effort, so a failing stamp cannot
+replace the fault it is recording.
+
+**Three counts, because they have three different remedies.** `skippedServices` is an entity the
+PORTAL describes in a way this platform cannot use. `skippedApis` is a declared interface that was
+not stored, counted per DISTINCT interface (an interface three components provide and this pass
+could not resolve is one loss, not three) and including one dropped because another interface of the
+same service already claimed its id. `skippedConflicts` is a portal service whose id the workspace
+already registers by another route: the import YIELDS, because an upsert would replace a
+hand-authored row, delete its uploaded contracts, strip any platform capability it was granted, and
+then hand it to the disconnect path to tombstone.
+
+**An over-large answer is OUR limit, and says so.** A batched by-refs request carrying fifty large
+definitions can legitimately exceed what the platform will buffer. Read with a truncating cap that
+arrives as a JSON document cut mid-token and is then reported as "the portal answered with a body
+that is not JSON", blaming someone else's server; the success path therefore throws
+`service_catalog_response_too_large`, whose copy names the two settings that shrink the response.
+The error path still truncates, because there the body is quoted as an excerpt and never parsed.
 
 ## Deployment shape
 
@@ -173,9 +205,20 @@ it on every success is how the one pass that needs reading stops standing out.
 - **`updateSyncState` is its own narrow write.** An import must be able to record its verdict
   without rewriting the credential envelope it just read through, which on a mothership-mode node
   it holds no key to re-seal.
-- **Autorefresh** runs on a six-hour window (`sweepServiceCatalogs`), longer than the repo-source
-  sweep's hour: a repo source's refresh is one conditional head-commit read, and a portal import has
-  no equivalent cheap probe, so every pass pages the matching estate.
+- **Autorefresh** holds a connection's import to a six-hour staleness window
+  (`sweepServiceCatalogs`), longer than the repo-source sweep's hour: a repo source's refresh is one
+  conditional head-commit read, and a portal import has no equivalent cheap probe, so every pass
+  pages the matching estate. **The window is not the pass's period.** Firing once per window caps a
+  whole deployment at one bounded batch per six hours, so any deployment with more connected
+  workspaces than the batch could never keep them fresh however long it ran, and each extra
+  workspace pushed the others further behind. `SERVICE_CATALOG_SWEEP_PERIOD_MS` is the cadence
+  (four batches an hour, matching the repo-source sweep's throughput) and a pass with nothing stale
+  costs one indexed query.
+- **A whole-estate write is BATCHED.** `upsertMany` / `replaceForServices` /
+  `softDeleteByIds` / `deleteForServices` exist because reconciling a thousand-service estate one
+  row at a time is two thousand sequential round trips inside one request: a D1 subrequest budget on
+  the Worker and a write storm on Node. Each service's contract delete and inserts still land
+  together, so a reader never sees a service whose interfaces have vanished.
 - **Disconnecting TOMBSTONES what the portal produced.** Leaving the rows would keep handing agents
   an estate nothing refreshes and nothing can explain the provenance of, which is worse than an
   empty catalog because it still reads as current.

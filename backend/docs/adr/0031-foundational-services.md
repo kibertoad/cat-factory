@@ -129,6 +129,13 @@ the org's specs rather than with the number of its services. Hence:
   caller has to remember.
 - **operations are indexed ONCE at write time** and stored on the contract row, so the catalog can
   show an agent what an interface offers without loading a body.
+- **the rendered block itself is capped** (`MAX_CATALOG_RENDER_CHARS`, plus a per-service
+  description cap). Leaving out the DOCUMENTS bounds one axis and not the other: an imported portal
+  admits up to a thousand services, each carrying a description as long as the stored field allows,
+  so without a total the size of the organisation would decide how much of every dispatch's context
+  the catalog eats. Whole services are kept or dropped, never half of one, and what is dropped is
+  named as a prefix rather than silently shortened, since a shortened catalog reads as an
+  organisation that runs fewer services than it does.
 
 **What "indexed" means is per FORMAT, and the catalog says which.** OpenAPI is parsed. A
 `@toad-contracts/core` module is read STATICALLY (`indexToadContractOperations`): the library

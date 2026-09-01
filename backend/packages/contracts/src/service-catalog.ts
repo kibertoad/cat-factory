@@ -258,10 +258,23 @@ export const serviceCatalogSyncResultSchema = v.object({
    */
   skippedServices: v.number(),
   /**
+   * Portal services this pass REFUSED to write because the workspace already registers a service
+   * under that id by another route (an upload, a linked repo).
+   *
+   * Its own count rather than folded into {@link skippedServices}, because the two name opposite
+   * faults with opposite remedies: a skipped service is an entity the PORTAL describes in a way
+   * this platform cannot use, and this is a collision between two things the workspace itself
+   * did. Refusing is the only safe disposition, since overwriting would silently replace a
+   * hand-authored service (and its uploaded contracts, and any platform capability it was granted)
+   * with the portal's row, and disconnecting would then tombstone the original.
+   */
+  skippedConflicts: v.number(),
+  /**
    * API definitions a service DECLARES that this pass could not store: a type the platform
    * serves no format for, an entity the portal would not return, an empty or oversized
-   * definition. Reported rather than dropped, because a service listed with no interface reads
-   * to an agent as a service that publishes none.
+   * definition, or an id that collides with another interface of the same service. Reported
+   * rather than dropped, because a service listed with no interface reads to an agent as a
+   * service that publishes none.
    */
   skippedApis: v.number(),
   status: serviceCatalogSyncStatusSchema,

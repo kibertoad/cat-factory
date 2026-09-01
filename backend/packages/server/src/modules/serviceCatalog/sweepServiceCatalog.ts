@@ -25,12 +25,26 @@ import type { FoundationalServiceModule } from '@cat-factory/orchestration'
 export const SERVICE_CATALOG_STALE_MS = 6 * 60 * 60_000
 
 /**
+ * How often the pass RUNS, which is deliberately not the same number as the window above.
+ *
+ * The two answer different questions: the window is how old one connection's import may get, and
+ * this is how often the sweep looks for connections that old. Running it once per window caps the
+ * deployment's whole throughput at one batch per window, so a deployment with more connected
+ * workspaces than {@link SERVICE_CATALOG_SWEEP_BATCH} could never keep them fresh no matter how
+ * long it ran, and each extra workspace pushed every other one further behind. At this cadence the
+ * ceiling is four batches an hour, matching the repo-source sweep's throughput, and a pass with
+ * nothing stale costs exactly one indexed query.
+ */
+export const SERVICE_CATALOG_SWEEP_PERIOD_MS = 15 * 60_000
+
+/**
  * How many connections one pass refreshes. Bounded so a deployment with hundreds of connected
  * workspaces spreads the work across successive ticks rather than issuing hundreds of paged
  * portal reads at once, and so a Worker pass stays inside its cron CPU budget.
  *
- * Smaller than the repo-source batch for the same reason the window is longer: one unit of work
- * here is a paged listing plus a batched definition fetch, not a single conditional read.
+ * Smaller than the repo-source batch because one unit of work here is a paged listing plus a
+ * batched definition fetch, not a single conditional read. The deployment-wide rate is this
+ * number over {@link SERVICE_CATALOG_SWEEP_PERIOD_MS}, not over the staleness window.
  */
 export const SERVICE_CATALOG_SWEEP_BATCH = 5
 

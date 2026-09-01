@@ -43,6 +43,31 @@ export const MAX_CATALOG_OPERATIONS = 40
  */
 export const MAX_CONTRACT_BODY_CHARS = 120_000
 
+/**
+ * How many characters the rendered CATALOG (or estate) block may run to.
+ *
+ * A total, where {@link MAX_CATALOG_OPERATIONS} is a per-contract cap, because the two bound
+ * different growth. The per-contract cap keeps one verbose spec from dominating; this one keeps
+ * the block proportional to nothing at all, which is what an imported estate demands: a portal
+ * import admits up to a thousand services, each carrying a description as long as the stored
+ * field allows, so an organisation's size would otherwise decide how much of every dispatch's
+ * context the catalog eats.
+ *
+ * What is dropped is STATED as a prefix (see {@link renderFoundationalCatalog}), because a
+ * silently shortened catalog reads as an organisation that runs fewer services than it does.
+ */
+export const MAX_CATALOG_RENDER_CHARS = 40_000
+
+/**
+ * How much of ONE service's description rides the rendered block.
+ *
+ * Its own cap beside the total, so a single service with a 20,000-character description cannot
+ * consume the whole budget and push every service after it out of the list. The description is
+ * the field an author writes for this purpose, so it keeps a generous share; the truncation is
+ * stated on the line itself.
+ */
+export const MAX_CATALOG_DESCRIPTION_CHARS = 1_500
+
 /** The `.cat-context/` directory the resolved contract documents are injected under. */
 export const FOUNDATIONAL_CONTEXT_DIR = 'foundational-services'
 
@@ -94,8 +119,12 @@ export function detectContractFormat(path: string, content: string): ApiContract
     if (content.includes('@toad-contracts/')) return 'toad-contract'
     return null
   }
-  if (endsWithAny(lower, GRAPHQL_DOCUMENT_EXTENSIONS)) return 'graphql'
-  if (endsWithAny(lower, PROTOBUF_DOCUMENT_EXTENSIONS)) return 'grpc'
+  if (endsWithAny(lower, GRAPHQL_DOCUMENT_EXTENSIONS)) {
+    return isGraphqlSchemaDocument(content) ? 'graphql' : null
+  }
+  if (endsWithAny(lower, PROTOBUF_DOCUMENT_EXTENSIONS)) {
+    return isGrpcServiceDocument(content) ? 'grpc' : null
+  }
   if (endsWithAny(lower, STRUCTURED_DOCUMENT_EXTENSIONS)) {
     if (isOpenApiDocument(content)) return 'openapi'
     // AsyncAPI shares OpenAPI's extensions and its envelope shape, so the two are told apart by
@@ -259,6 +288,56 @@ function parseAsyncApiDocument(content: string): Record<string, unknown> | null 
   const version = doc.asyncapi
   if (typeof version !== 'string') return null
   return version.startsWith('2.') || version.startsWith('3.') ? doc : null
+}
+
+/**
+ * Whether `content` is a GraphQL SDL **schema** rather than an operation document.
+ *
+ * The distinction is the whole reason this exists. A `.graphql` / `.gql` file in a repository is
+ * far more often a client's `query`/`mutation`/`fragment` text than the schema a service
+ * publishes, and a scan that registered one would tell an Architect the service exposes a surface
+ * it does not. What separates the two is a TYPE-SYSTEM definition, which an operation document by
+ * construction never carries.
+ *
+ * Recognition rather than validation, deliberately: the platform indexes no GraphQL operations
+ * ({@link operationsAreIndexable}), so the verdict this needs to reach is only "is this file the
+ * service's published interface", and a real parser would buy nothing for the extra dependency.
+ */
+export function isGraphqlSchemaDocument(content: string): boolean {
+  return GRAPHQL_TYPE_SYSTEM_DEFINITION.test(stripLineComments(content, '#'))
+}
+
+/**
+ * Whether `content` declares a gRPC **service** rather than only message shapes.
+ *
+ * A `.proto` file is routinely vendored, generated, or purely structural (shared `message`
+ * definitions with no RPCs at all), and none of those is an interface the owning service
+ * publishes. What makes a protobuf file a gRPC contract is a `service` block, so that is what is
+ * required rather than the extension alone.
+ */
+export function isGrpcServiceDocument(content: string): boolean {
+  return PROTOBUF_SERVICE_DEFINITION.test(stripLineComments(content, '//'))
+}
+
+/** A GraphQL type-system definition (or extension), which only a SCHEMA document carries. */
+const GRAPHQL_TYPE_SYSTEM_DEFINITION =
+  /^[ \t]*(extend[ \t]+)?(schema|type|interface|input|enum|union|scalar|directive)[ \t]/m
+
+/** A protobuf `service Foo` declaration, the one thing that makes a `.proto` a gRPC contract. */
+const PROTOBUF_SERVICE_DEFINITION = /^[ \t]*service[ \t]+[A-Za-z_][A-Za-z0-9_]*/m
+
+/**
+ * Drop whole-line comments so a keyword mentioned in prose cannot be read as a declaration.
+ *
+ * Whole-line only, and that asymmetry is on purpose: a trailing comment cannot introduce a false
+ * POSITIVE (the line already holds real syntax before it), while stripping mid-line would have to
+ * understand string literals to avoid cutting a `#` or `//` inside one.
+ */
+function stripLineComments(content: string, marker: string): string {
+  return content
+    .split(/\r?\n/)
+    .filter((line) => !line.trimStart().startsWith(marker))
+    .join('\n')
 }
 
 // --- operation indexing ----------------------------------------------------
@@ -576,8 +655,11 @@ export function describeFoundationalProblem(problem: FoundationalDefinitionProbl
  * prevent rather than a preference for parseable things: a document claiming to be OpenAPI or
  * AsyncAPI but which is neither registers cleanly and then lists ZERO operations, which reads to
  * an Architect as a fully-specified service that offers no endpoints. GraphQL SDL and protobuf
- * are not parsed at all (`operationsAreIndexable` says so), so an unparseable one produces no
- * such false impression and refusing it would need a parser whose verdict nothing else uses.
+ * index no operations at all (`operationsAreIndexable` says so), so neither can produce that
+ * false impression here. Their own recognisers ({@link isGraphqlSchemaDocument},
+ * {@link isGrpcServiceDocument}) answer a different question and are used where it is asked: a
+ * SCAN has to decide whether a file it found is the service's published interface, where an
+ * upload was told so by the person making it.
  */
 function describeInvalidStructuredDocument(
   format: ApiContractFormat,
@@ -729,23 +811,79 @@ export function renderFoundationalCatalog(read: FoundationalCatalogRead): string
     'FOUNDATIONAL SERVICES available to this system (shared capabilities that already exist — prefer consuming one over building your own):',
     '',
   ]
-  for (const service of services) {
-    lines.push(`- id: ${service.id} — ${service.name}`)
-    lines.push(`  ${service.summary}`)
-    if (service.capabilities.length > 0) {
-      lines.push(`  capabilities: ${service.capabilities.join(', ')}`)
-    }
-    if (service.description.trim()) {
-      lines.push(`  ${service.description.trim().replace(/\r?\n/g, '\n  ')}`)
-    }
-    for (const contract of service.contracts) {
-      lines.push(
-        `  contract (${contract.format}): ${contract.title}${describeOperations(contract)}`,
+  const rendered = withinRenderBudget(
+    services.map((service) => {
+      const block: string[] = [`- id: ${service.id} (${service.name})`, `  ${service.summary}`]
+      appendServiceBody(block, service, 'contract')
+      block.push('')
+      return block
+    }),
+  )
+  for (const block of rendered.kept) lines.push(...block)
+  if (rendered.omitted > 0) lines.push(describeOmittedServices(rendered.omitted))
+  return lines.join('\n').trimEnd()
+}
+
+/**
+ * The half of a service's block both renderings share: its tags, its description and its
+ * interface lines.
+ *
+ * Shared where the two documents agree and no further: the heading line and the contract label
+ * differ because the two readers are doing different jobs, and folding those into one parameterised
+ * template would make every future change to one framing a change to the other by default.
+ */
+function appendServiceBody(
+  block: string[],
+  service: FoundationalCatalogView,
+  contractLabel: 'contract' | 'interface',
+): void {
+  if (service.capabilities.length > 0) {
+    block.push(`  capabilities: ${service.capabilities.join(', ')}`)
+  }
+  const description = service.description.trim()
+  if (description) {
+    const capped = description.slice(0, MAX_CATALOG_DESCRIPTION_CHARS)
+    block.push(`  ${capped.replace(/\r?\n/g, '\n  ')}`)
+    if (description.length > capped.length) {
+      block.push(
+        `  [description truncated here: ${description.length - capped.length} further characters are recorded in the catalog]`,
       )
     }
-    lines.push('')
   }
-  return lines.join('\n').trimEnd()
+  for (const contract of service.contracts) {
+    block.push(
+      `  ${contractLabel} (${contract.format}): ${contract.title}${describeOperations(contract)}`,
+    )
+  }
+}
+
+/**
+ * As many whole service blocks as fit in {@link MAX_CATALOG_RENDER_CHARS}, plus how many were left
+ * out.
+ *
+ * WHOLE blocks, never a partial one: half a service reads as a service whose interfaces are the
+ * ones listed, which is the same lie the operation caps exist to avoid telling. The catalog is
+ * ordered by service id, so the kept set is a plain prefix and the caller says so.
+ */
+function withinRenderBudget(blocks: string[][]): { kept: string[][]; omitted: number } {
+  const kept: string[][] = []
+  let used = 0
+  for (const [index, block] of blocks.entries()) {
+    const size = block.reduce((total, line) => total + line.length + 1, 0)
+    // The FIRST block is admitted whatever it costs: an over-budget single service must render as
+    // one (capped) service rather than as an empty catalog, which is the outage-shaped answer.
+    if (index > 0 && used + size > MAX_CATALOG_RENDER_CHARS) {
+      return { kept, omitted: blocks.length - index }
+    }
+    kept.push(block)
+    used += size
+  }
+  return { kept, omitted: 0 }
+}
+
+/** The line that states a rendered catalog is a PREFIX, never a silently shortened whole. */
+function describeOmittedServices(omitted: number): string {
+  return `... and ${omitted} further registered services that did not fit in this file. The list above is a PREFIX of the catalog, not all of it: do not conclude that a service does not exist because it is missing here.`
 }
 
 /**
@@ -808,22 +946,16 @@ export function renderServiceEstate(read: FoundationalCatalogRead): string {
     'SERVICE ESTATE. These are the services this organisation runs, as its own catalog records them. Use the list to work out WHICH service a piece of work belongs to and WHO owns it:',
     '',
   ]
-  for (const service of services) {
-    lines.push(`- id: ${service.id} (${service.name})`)
-    lines.push(`  ${service.summary}`)
-    if (service.capabilities.length > 0) {
-      lines.push(`  capabilities: ${service.capabilities.join(', ')}`)
-    }
-    if (service.description.trim()) {
-      lines.push(`  ${service.description.trim().replace(/\r?\n/g, '\n  ')}`)
-    }
-    for (const contract of service.contracts) {
-      lines.push(
-        `  interface (${contract.format}): ${contract.title}${describeOperations(contract)}`,
-      )
-    }
-    lines.push('')
-  }
+  const rendered = withinRenderBudget(
+    services.map((service) => {
+      const block: string[] = [`- id: ${service.id} (${service.name})`, `  ${service.summary}`]
+      appendServiceBody(block, service, 'interface')
+      block.push('')
+      return block
+    }),
+  )
+  for (const block of rendered.kept) lines.push(...block)
+  if (rendered.omitted > 0) lines.push(describeOmittedServices(rendered.omitted), '')
   lines.push(
     'The operation lists above are the interface SURFACE, not the full API documents: they are enough to say which service exposes what, and not enough to write a call against. Never invent an endpoint, a field or an owner that is not stated here, and if what you need is a service this list does not carry, say so rather than guessing at it.',
   )

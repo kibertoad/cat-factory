@@ -63,12 +63,20 @@ const REF_CHUNK = 50
  *
  * Independent of the service cap because the two counts are independent: a 200-service estate
  * where each component provides four interfaces is 800 entities, and the definitions are the
- * large half of the payload. Whatever this drops is COUNTED as a skipped interface, so a service
- * never appears to publish fewer interfaces than it does without the number saying so.
+ * large half of the payload. Whatever this drops stays out of the resolved map, which is what
+ * makes `fetchCatalog` count it as a skipped interface: a service never appears to publish fewer
+ * interfaces than it does without the number saying so.
  */
 const MAX_API_REFS = 600
 
-/** How many bytes one response may carry before it is refused. */
+/**
+ * How many bytes one response may carry before it is refused.
+ *
+ * A ceiling on what this platform will buffer, not a claim about what a portal may send: a batched
+ * by-refs request carrying {@link REF_CHUNK} large definitions can exceed it legitimately, which is
+ * why passing it produces a refusal naming the two settings that shrink the response rather than a
+ * quietly truncated document (see `makeOversizedError`).
+ */
 const MAX_RESPONSE_BYTES = 8_000_000
 
 export interface BackstageCatalogClientOptions {
@@ -112,13 +120,18 @@ export class BackstageCatalogClient implements ServiceCatalogClient {
     }
     const bearer = await this.resolveBearer()
     const listed = await this.listEntities(fetchOptions, bearer)
-    const apis = fetchOptions.includeApis
+    const byRef = fetchOptions.includeApis
       ? await this.resolveApis(listed.entities, bearer)
-      : { byRef: new Map<string, ServiceCatalogApi>(), skipped: 0 }
+      : new Map<string, ServiceCatalogApi>()
     const entries: ServiceCatalogEntry[] = []
     const claimed = new Set<string>()
+    // Every DISTINCT interface an imported service declares and this pass could not store, counted
+    // once however many components declare it. A per-declaration tally double-counts twice over: an
+    // interface provided by three components would add three, and a reference dropped by the
+    // resolver's own cap would be counted there AND here. The number is the only evidence an
+    // operator has of how much of the estate is missing, so it has to be the count of things.
+    const unresolvedApis = new Set<string>()
     let skippedEntries = listed.skipped
-    let skippedApis = apis.skipped
     for (const entity of listed.entities) {
       const id = serviceIdForEntity(entity)
       // Two entities slugging onto one id is a real collision (a namespaced name whose prefix
@@ -131,20 +144,30 @@ export class BackstageCatalogClient implements ServiceCatalogClient {
       }
       const refs = fetchOptions.includeApis ? providedApiRefs(entity) : []
       const resolved: ServiceCatalogApi[] = []
+      const missing: string[] = []
       for (const ref of refs) {
-        const api = apis.byRef.get(ref)
+        const api = byRef.get(ref)
         if (api) resolved.push(api)
-        else skippedApis += 1
+        else missing.push(ref)
       }
       const entry = toServiceCatalogEntry(entity, resolved)
       if (!entry) {
         skippedEntries += 1
         continue
       }
+      // Recorded only once the entity is ADMITTED: an entity that became no service at all is
+      // already reported as a skipped service, and counting its interfaces again would describe
+      // one loss twice.
+      for (const ref of missing) unresolvedApis.add(ref)
       claimed.add(id)
       entries.push(entry)
     }
-    return { entries, coverage: listed.coverage, skippedEntries, skippedApis }
+    return {
+      entries,
+      coverage: listed.coverage,
+      skippedEntries,
+      skippedApis: unresolvedApis.size,
+    }
   }
 
   async probe(): Promise<ConnectionTestResult> {
@@ -196,14 +219,13 @@ export class BackstageCatalogClient implements ServiceCatalogClient {
       },
       body: clientCredentialsBody(auth),
     })
-    const text = await readCappedText(response, MAX_RESPONSE_BYTES, makeCatalogError, false)
     if (!response.ok) {
       throw upstream(
-        `The identity provider refused the service-catalog client credentials (HTTP ${response.status}): ${snippet(text)}`,
+        `The identity provider refused the service-catalog client credentials (HTTP ${response.status}): ${snippet(await readSnippetBody(response))}`,
         'service_catalog_unauthorized',
       )
     }
-    const token = readAccessToken(parseJson(text))
+    const token = readAccessToken(parseJson(await readWholeBody(response)))
     if (!token) {
       throw upstream(
         'The identity provider answered the service-catalog token request without an `access_token`.',
@@ -258,22 +280,23 @@ export class BackstageCatalogClient implements ServiceCatalogClient {
    * Indexed rather than returned in order, because one interface is routinely provided by several
    * components and the portal answers a by-refs request positionally: a map is what lets the
    * caller attach the same definition to each provider without asking for it twice.
+   *
+   * Nothing is COUNTED here, deliberately. A reference dropped by {@link MAX_API_REFS} is simply
+   * absent from the map, which is the same state as one the portal would not serve, and the caller
+   * counts both once by looking at what it could not attach.
    */
   private async resolveApis(
     entities: BackstageEntity[],
     bearer: string | null,
-  ): Promise<{ byRef: Map<string, ServiceCatalogApi>; skipped: number }> {
+  ): Promise<Map<string, ServiceCatalogApi>> {
     const refs: string[] = []
-    let skipped = 0
     for (const entity of entities) {
       for (const ref of providedApiRefs(entity)) {
         if (refs.includes(ref)) continue
-        if (refs.length >= MAX_API_REFS) {
-          skipped += 1
-          continue
-        }
+        if (refs.length >= MAX_API_REFS) break
         refs.push(ref)
       }
+      if (refs.length >= MAX_API_REFS) break
     }
     const byRef = new Map<string, ServiceCatalogApi>()
     for (let offset = 0; offset < refs.length; offset += REF_CHUNK) {
@@ -293,7 +316,7 @@ export class BackstageCatalogClient implements ServiceCatalogClient {
         if (api) byRef.set(ref, api)
       }
     }
-    return { byRef, skipped }
+    return byRef
   }
 
   private listUrl(
@@ -367,7 +390,6 @@ export class BackstageCatalogClient implements ServiceCatalogClient {
   }
 
   private async readJson(response: Response, url: string): Promise<unknown> {
-    const text = await readCappedText(response, MAX_RESPONSE_BYTES, makeCatalogError, false)
     if (!response.ok) {
       const reason =
         response.status === 401 || response.status === 403
@@ -380,11 +402,11 @@ export class BackstageCatalogClient implements ServiceCatalogClient {
         path: pathOf(url),
       })
       throw upstream(
-        `The Backstage catalog answered HTTP ${response.status}: ${snippet(text)}`,
+        `The Backstage catalog answered HTTP ${response.status}: ${snippet(await readSnippetBody(response))}`,
         reason,
       )
     }
-    const parsed = parseJson(text)
+    const parsed = parseJson(await readWholeBody(response))
     if (parsed === null) {
       throw upstream(
         'The Backstage catalog answered with a body that is not JSON.',
@@ -393,6 +415,25 @@ export class BackstageCatalogClient implements ServiceCatalogClient {
     }
     return parsed
   }
+}
+
+/**
+ * The body of a SUCCESSFUL response, or a refusal naming OUR limit.
+ *
+ * The overflow THROWS here, where the error path below truncates. That asymmetry is the whole
+ * point: a truncated error snippet is still a usable excerpt, while a truncated success body is a
+ * JSON document cut mid-token, which the parser then rejects and the caller reports as "the portal
+ * answered with a body that is not JSON", blaming someone else's server for a ceiling on this
+ * side of the wire. A batched by-refs request carrying fifty definitions can genuinely exceed it,
+ * so the refusal names the two knobs that shrink the response.
+ */
+function readWholeBody(response: Response): Promise<string> {
+  return readCappedText(response, MAX_RESPONSE_BYTES, makeOversizedError, true)
+}
+
+/** The body of a FAILED response, truncated: it is quoted as an excerpt, never parsed. */
+function readSnippetBody(response: Response): Promise<string> {
+  return readCappedText(response, MAX_RESPONSE_BYTES, makeCatalogError, false)
 }
 
 /** The `items` array a catalog response carries, or empty when it carries none. */
@@ -454,5 +495,18 @@ function makeCatalogError(status: number, message: string): Error {
   return new UnavailableError(
     `Backstage catalog request failed (${status}): ${message}`,
     'service_catalog_unreachable',
+  )
+}
+
+/**
+ * The refusal an oversized SUCCESS body raises. Its own reason, because it is the one portal
+ * failure with a remedy on this side: the operator lowers the service cap or turns off interface
+ * import, and the next pass fits. Reported as "unreachable" it would read as someone else's
+ * outage and send them to wait for it to end.
+ */
+function makeOversizedError(_status: number, _message: string): Error {
+  return new UnavailableError(
+    `The Backstage catalog answered with more than ${MAX_RESPONSE_BYTES} bytes in one response, which this platform will not buffer. Lower the service cap, or turn off interface import, so the portal answers in smaller pieces.`,
+    'service_catalog_response_too_large',
   )
 }

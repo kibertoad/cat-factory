@@ -620,7 +620,8 @@
         "vcs_capability_unsupported": "El proveedor de control de código conectado a este espacio de trabajo no ofrece esta operación. No hay nada mal configurado y configurar algo no servirá de nada: no está disponible para este proveedor.",
         "service_catalog_unreachable": "El portal de desarrollo de este espacio no respondió, o respondió con algo que esta plataforma no puede leer. Aquí no hay nada mal configurado y ningún cambio ayudará: vuelve a intentarlo cuando el portal esté accesible.",
         "service_catalog_unauthorized": "El portal de desarrollo rechazó las credenciales guardadas. Lo más probable es que se hayan rotado o revocado: abre los ajustes del catálogo de servicios e introduce unas vigentes.",
-        "service_catalog_filter_missing": "No se pudo leer el filtro de entidades de esta conexión, así que no hay nada que importar. Vuelve a guardar la conexión del catálogo de servicios para restaurarlo."
+        "service_catalog_filter_missing": "No se pudo leer el filtro de entidades de esta conexión, así que no hay nada que importar. Vuelve a guardar la conexión del catálogo de servicios para restaurarlo.",
+        "service_catalog_response_too_large": "El portal de desarrollo respondió con más datos de los que esta plataforma admite en una sola respuesta. Abre la configuración del catálogo de servicios y reduce el límite de servicios, o desactiva la importación de definiciones de interfaz, y vuelve a importar."
       }
     },
     "action": {

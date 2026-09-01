@@ -82,11 +82,17 @@ export function createServiceCatalogState(deps: ServiceCatalogStateDependencies)
     serviceCatalogAvailable.value = false
   }
 
+  /**
+   * Store the connection. The first import is the CALLER's next step, not part of this promise.
+   *
+   * A connection that shows nothing reads as a broken one, so an import does follow immediately
+   * (the same reason a linked repo source syncs on link). What it must not do is settle this
+   * promise: by the time the import runs the connection is already stored, so folding an import
+   * failure in here would reject a call that succeeded, and the panel would show a "could not
+   * connect" toast beside the connection it just made, hiding the remedy the real failure names.
+   */
   async function connect(input: ConnectServiceCatalogInput) {
     serviceCatalog.value = await api.connectServiceCatalog(requireWorkspaceId(), input)
-    // Import immediately, for the reason a linked repo source syncs on link: a connection that
-    // shows nothing reads as a broken one.
-    await importNow()
     return serviceCatalog.value
   }
 

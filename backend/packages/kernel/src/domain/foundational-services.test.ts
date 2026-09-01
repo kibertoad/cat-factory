@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  MAX_CATALOG_DESCRIPTION_CHARS,
   MAX_CATALOG_OPERATIONS,
+  MAX_CATALOG_RENDER_CHARS,
   MAX_CONTRACT_BODY_CHARS,
   describeFoundationalProblem,
   detectContractFormat,
@@ -940,13 +942,33 @@ describe('detectContractFormat: the formats the service-catalog import adds', ()
     expect(detectContractFormat('api.yaml', OPENAPI_YAML)).toBe('openapi')
   })
 
-  it('recognises GraphQL SDL and protobuf by extension', () => {
+  it('recognises GraphQL SDL and protobuf by extension AND content', () => {
     expect(detectContractFormat('schema.graphql', 'type Query { a: String }')).toBe('graphql')
     expect(detectContractFormat('schema.gql', 'type Query { a: String }')).toBe('graphql')
     expect(detectContractFormat('orders.proto', 'service Orders {}')).toBe('grpc')
   })
 
+  it('refuses a GraphQL OPERATION document, which is a call site and not an interface', () => {
+    // The common `.gql` file in a repository. Registering one would tell an Architect the service
+    // publishes a surface it does not.
+    const query = 'query GetOrder($id: ID!) {\n  order(id: $id) { id }\n}'
+    expect(detectContractFormat('getOrder.gql', query)).toBeNull()
+    const fragment = 'fragment OrderFields on Order {\n  id\n}'
+    expect(detectContractFormat('fragment.graphql', fragment)).toBeNull()
+  })
+
+  it('refuses a protobuf file that declares only MESSAGES, with no service to publish', () => {
+    const messagesOnly =
+      'syntax = "proto3";\npackage orders;\n\nmessage Order {\n  string id = 1;\n}\n'
+    expect(detectContractFormat('orders.proto', messagesOnly)).toBeNull()
+    // A commented-out service is not one either: a keyword in prose must not read as a declaration.
+    const commented = '// service Orders {}\nmessage Order {}'
+    expect(detectContractFormat('orders.proto', commented)).toBeNull()
+  })
+
   it('treats every one of them as a candidate worth reading', () => {
+    // The candidate test stays by EXTENSION: a file has to be read before its content can refuse
+    // it, so narrowing this rule would skip the very read that decides.
     for (const path of ['events.asyncapi', 'schema.graphql', 'orders.proto']) {
       expect(isContractCandidatePath(path)).toBe(true)
     }
@@ -1054,5 +1076,52 @@ describe('renderServiceEstate', () => {
     expect(rendered).toContain('platform failure')
     // The one substitution this whole three-state shape exists to prevent.
     expect(rendered).not.toContain('no service catalog is registered')
+  })
+})
+
+describe('the rendered catalog is bounded, and says so when it is a prefix', () => {
+  const bulky = (id: string, description: string) => ({
+    id,
+    name: id,
+    summary: 'x',
+    description,
+    capabilities: [],
+    contracts: [],
+  })
+
+  it('caps one service DESCRIPTION and states how much it withheld', () => {
+    const description = 'd'.repeat(MAX_CATALOG_DESCRIPTION_CHARS + 250)
+    const rendered = renderFoundationalCatalog({
+      status: 'resolved',
+      services: [bulky('one', description)],
+    })
+    expect(rendered).toContain('[description truncated here: 250 further characters')
+    expect(rendered.length).toBeLessThan(description.length)
+  })
+
+  it('stops at the render budget and names the services it left out', () => {
+    // Enough to exceed the budget several times over, so the cut is the budget's and not the
+    // fixture's; the count asserted is derived from what the render actually kept.
+    const filler = 'd'.repeat(MAX_CATALOG_DESCRIPTION_CHARS)
+    const services = Array.from({ length: 60 }, (_, i) => bulky(`svc-${i}`, filler))
+    const rendered = renderServiceEstate({ status: 'resolved', services })
+
+    const listed = services.filter((service) => rendered.includes(`id: ${service.id} `)).length
+    expect(listed).toBeGreaterThan(0)
+    expect(listed).toBeLessThan(services.length)
+    expect(rendered).toContain(`and ${services.length - listed} further registered services`)
+    expect(rendered).toContain('is a PREFIX of the catalog')
+    expect(rendered.length).toBeLessThan(MAX_CATALOG_RENDER_CHARS * 2)
+  })
+
+  it('renders a single over-budget service rather than an empty catalog', () => {
+    // An outage renders as "COULD NOT BE READ" and an empty tier as "none are registered"; a
+    // catalog emptied by its own cap would read as the second and be neither.
+    const rendered = renderFoundationalCatalog({
+      status: 'resolved',
+      services: [bulky('huge', 'd'.repeat(MAX_CATALOG_RENDER_CHARS * 2))],
+    })
+    expect(rendered).toContain('id: huge')
+    expect(rendered).not.toContain('none are registered')
   })
 })

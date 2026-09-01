@@ -69,6 +69,7 @@ export {
 export {
   SERVICE_CATALOG_STALE_MS,
   SERVICE_CATALOG_SWEEP_BATCH,
+  SERVICE_CATALOG_SWEEP_PERIOD_MS,
   sweepServiceCatalogs,
 } from './modules/serviceCatalog/sweepServiceCatalog.js'
 export { noRunnerBackendAvailableError } from './runtime/runnerBackendError.js'

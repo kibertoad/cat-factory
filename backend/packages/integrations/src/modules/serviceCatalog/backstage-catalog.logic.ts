@@ -98,13 +98,22 @@ export function formatEntityRef(ref: BackstageEntityRef): string {
   return `${ref.kind}:${ref.namespace}/${ref.name}`
 }
 
-/** The canonical reference for an entity as it came back, or null when it carries no name. */
+/**
+ * The canonical reference for an entity as it came back, or null when it carries no name.
+ *
+ * Kind AND namespace are lower-cased, exactly as {@link parseEntityRef} does to the references it
+ * reads out of `providesApis` and `spec.owner`. Both halves matter: an entity declaring
+ * `namespace: Payments` would otherwise be recorded as `component:Payments/orders` while every
+ * reference the platform builds for the same entity resolves to `payments/...`, so the stored
+ * provenance would address nothing and the sync's `sourcePath` comparison would be against a value
+ * the canonical form can never produce.
+ */
 export function entityRef(entity: BackstageEntity): string | null {
   const name = entity.metadata?.name?.trim()
   if (!name) return null
   return formatEntityRef({
     kind: (entity.kind ?? 'component').toLowerCase(),
-    namespace: entity.metadata?.namespace?.trim() || DEFAULT_NAMESPACE,
+    namespace: entity.metadata?.namespace?.trim().toLowerCase() || DEFAULT_NAMESPACE,
     name,
   })
 }
@@ -123,6 +132,20 @@ export function entityRef(entity: BackstageEntity): string | null {
  * as a skipped entity rather than importing under a generated id nobody can look up.
  */
 export function serviceIdForEntity(entity: BackstageEntity): string | null {
+  return namespacedSlug(entity)
+}
+
+/**
+ * The slug an entity is stored under: its name, prefixed with its namespace when that is not the
+ * default one. Shared by {@link serviceIdForEntity} and {@link toServiceCatalogApi}.
+ *
+ * ONE rule for both, because the two ids collide for the same reason and the fix is the same:
+ * `payments/orders` and `billing/orders` are two different API entities whose names are equal, and
+ * deriving a contract id from the name alone silently keeps whichever the portal answered first.
+ * Component ids were prefixed from the start; interfaces were not, and there is no reading of the
+ * catalog under which one of these needs the namespace and the other does not.
+ */
+function namespacedSlug(entity: BackstageEntity): string | null {
   const name = slugify(entity.metadata?.name ?? '')
   if (!name) return null
   const namespace = entity.metadata?.namespace?.trim().toLowerCase()
@@ -321,7 +344,7 @@ export function providedApiRefs(entity: BackstageEntity): string[] {
  */
 export function toServiceCatalogApi(entity: BackstageEntity): ServiceCatalogApi | null {
   const ref = entityRef(entity)
-  const id = slugify(entity.metadata?.name ?? '')
+  const id = namespacedSlug(entity)
   if (!ref || !id) return null
   const definition = entity.spec?.definition
   if (typeof definition !== 'string') return null

@@ -82,10 +82,20 @@ function inMemoryRepos() {
     upsert: async (record) => {
       services.set(key(record), record)
     },
+    upsertMany: async (records) => {
+      for (const record of records) services.set(key(record), record)
+    },
     softDelete: async (ownerKind, ownerId, serviceId, at) => {
       const k = key({ ownerKind, ownerId, serviceId })
       const row = services.get(k)
       if (row) services.set(k, { ...row, deletedAt: at })
+    },
+    softDeleteByIds: async (ownerKind, ownerId, serviceIds, at) => {
+      for (const serviceId of serviceIds) {
+        const k = key({ ownerKind, ownerId, serviceId })
+        const row = services.get(k)
+        if (row) services.set(k, { ...row, deletedAt: at })
+      }
     },
     hardDelete: async (ownerKind, ownerId, serviceId) => {
       services.delete(key({ ownerKind, ownerId, serviceId }))
@@ -108,7 +118,13 @@ function inMemoryRepos() {
       }
       contracts.push(...next)
     },
+    replaceForServices: async (ownerKind, ownerId, sets) => {
+      for (const set of sets) {
+        await contractRepository.replaceForService(ownerKind, ownerId, set.serviceId, set.contracts)
+      }
+    },
     deleteForService: async () => undefined,
+    deleteForServices: async () => undefined,
   } satisfies ApiContractRepository
 
   return { services, contracts, serviceRepository, contractRepository }

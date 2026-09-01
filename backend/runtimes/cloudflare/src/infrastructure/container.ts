@@ -557,7 +557,6 @@ export function selectRunnersDeps(
 // the Node facade's file of the same name). Re-exported here because `container-assembly.ts` and
 // the extension-surface tests import them from this module.
 export {
-  SERVICE_CATALOG_CIPHER_INFO,
   selectFoundationalServiceDeps,
   selectFragmentLibraryDeps,
   selectSkillLibraryDeps,

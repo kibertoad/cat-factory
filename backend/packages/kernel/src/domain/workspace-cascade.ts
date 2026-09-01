@@ -96,6 +96,7 @@ export const WORKSPACE_SCOPED_TABLES = [
   'risk_policy_suppressions',
   'review_question_posts',
   'runner_pool_connections',
+  'service_catalog_connections',
   'shared_stacks',
   'slack_settings',
   'task_connections',

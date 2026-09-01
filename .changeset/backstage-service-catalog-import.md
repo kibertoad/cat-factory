@@ -64,10 +64,18 @@ followed by hand and re-checked per hop, with the body and `Authorization` dropp
 cross-origin one, because the base URL is operator-supplied.
 
 **A partial import must never read as the estate.** An import reports `complete` / `truncated` /
-`empty` coverage plus two skip counts, and stamps `ok` / `partial` / `failed` with a sentence on
+`empty` coverage plus three skip counts, and stamps `ok` / `partial` / `failed` with a sentence on
 the connection. `empty` is `partial` rather than a healthy import of zero services, because a
-filter that matched nothing is a configuration problem with a remedy. A failure is stamped BEFORE
-it propagates and tombstones nothing: an unreachable portal and an empty one are opposite facts.
+filter that matched nothing is a configuration problem with a remedy. EVERY failure past the
+connection lookup is stamped before it propagates, including one raised before the portal is
+contacted: `lastSyncedAt` is what the autorefresh sweep orders on and it sorts nulls first, so an
+unstamped failure would pin that connection to the head of the stale queue and starve the sweep.
+A failure tombstones nothing: an unreachable portal and an empty one are opposite facts.
+
+**The import YIELDS to a service the workspace already registered by another route**, counting the
+refusal as `skippedConflicts` rather than taking the id over. An upsert there would replace a
+hand-authored row, delete its uploaded contracts and strip any platform capability it was granted,
+and disconnecting would then tombstone the original.
 
 **Two size ratchets moved DOWN, both by splitting.** The Worker's `container.ts` lost its three
 content-library selectors to a new `container-content-library-deps.ts`, the twin of the file the
@@ -78,5 +86,18 @@ default).
 
 Also in here, because the import needs them: `asyncapi`, `graphql` and `grpc` join the
 contract-format vocabulary, with AsyncAPI indexed (its channels are a parse, not a guess) and the
-other two answering through `operationsAreIndexable` as formats nobody reads. `ApiContractManifestEntry`
-gains `sourceSha`, so a sync can decide whether a document changed without reading a body.
+other two answering through `operationsAreIndexable` as formats nobody reads. That widened what a
+linked-repository SCAN picks up too, so `detectContractFormat` requires a type-system definition of
+a `.graphql`/`.gql` file and a `service` block of a `.proto` one: the common `.gql` in a repo is a
+client's query text and the common `.proto` is generated message shapes, and neither is an
+interface the service publishes. `ApiContractManifestEntry` gains `sourceSha`, so a sync can decide
+whether a document changed without reading a body. The rendered catalog and estate blocks gained a
+total size cap that states what it dropped, because an imported estate is the first catalog whose
+size is decided by the organisation rather than by this deployment; the catalog's per-service
+heading now reads `id (Name)`, the form the estate block already used.
+
+Four batched repository methods land with it (`upsertMany`, `softDeleteByIds`,
+`replaceForServices`, `deleteForServices`, all on the mothership allow-list): reconciling a
+thousand-service estate one row at a time is two thousand sequential round trips inside one
+request. The `ownerFieldList` scope rule is new beside them, binding every record of a batched
+write rather than the first.

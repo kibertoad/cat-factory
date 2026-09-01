@@ -5930,7 +5930,8 @@
         "vcs_capability_unsupported": "Der mit diesem Workspace verbundene Quellcode-Anbieter bietet diesen Vorgang nicht an. Es ist nichts falsch konfiguriert und eine Einrichtung hilft hier nicht: Für diesen Anbieter ist der Vorgang nicht verfügbar.",
         "service_catalog_unreachable": "Das Entwicklerportal dieses Boards hat nicht geantwortet oder eine Antwort geliefert, die diese Plattform nicht lesen kann. Hier ist nichts falsch konfiguriert und keine Änderung hilft: versuche es erneut, sobald das Portal erreichbar ist.",
         "service_catalog_unauthorized": "Das Entwicklerportal hat die gespeicherte Zugangsdaten abgelehnt. Sie wurden wahrscheinlich rotiert oder widerrufen: öffne die Servicekatalog-Einstellungen und trage aktuelle ein.",
-        "service_catalog_filter_missing": "Der Entitätsfilter dieser Verbindung konnte nicht gelesen werden, es gibt also nichts zu importieren. Speichere die Servicekatalog-Verbindung erneut, um ihn wiederherzustellen."
+        "service_catalog_filter_missing": "Der Entitätsfilter dieser Verbindung konnte nicht gelesen werden, es gibt also nichts zu importieren. Speichere die Servicekatalog-Verbindung erneut, um ihn wiederherzustellen.",
+        "service_catalog_response_too_large": "Das Entwicklerportal hat mit mehr Daten geantwortet, als diese Plattform in einer Antwort aufnimmt. Öffne die Servicekatalog-Einstellungen und senke das Service-Limit oder deaktiviere den Import von Schnittstellendefinitionen, und importiere dann erneut."
       }
     },
     "action": {

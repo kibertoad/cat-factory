@@ -620,7 +620,8 @@
         "vcs_capability_unsupported": "Le fournisseur de gestion de code source connecté à cet espace de travail ne propose pas cette opération. Rien n'est mal configuré et aucun réglage n'y changera quoi que ce soit : elle n'est pas disponible pour ce fournisseur.",
         "service_catalog_unreachable": "Le portail développeur de cet espace n'a pas répondu, ou a répondu quelque chose que cette plateforme ne sait pas lire. Rien n'est mal configuré ici et aucune modification n'aidera : réessayez dès que le portail est joignable.",
         "service_catalog_unauthorized": "Le portail développeur a refusé les identifiants enregistrés. Ils ont très probablement été renouvelés ou révoqués : ouvrez les réglages du catalogue de services et saisissez-en des valides.",
-        "service_catalog_filter_missing": "Le filtre d'entités de cette connexion n'a pas pu être lu, il n'y a donc rien à importer. Enregistrez à nouveau la connexion au catalogue de services pour le rétablir."
+        "service_catalog_filter_missing": "Le filtre d'entités de cette connexion n'a pas pu être lu, il n'y a donc rien à importer. Enregistrez à nouveau la connexion au catalogue de services pour le rétablir.",
+        "service_catalog_response_too_large": "Le portail développeur a renvoyé plus de données que cette plateforme n'en accepte dans une seule réponse. Ouvrez les paramètres du catalogue de services et abaissez la limite de services, ou désactivez l'import des définitions d'interface, puis relancez l'import."
       }
     },
     "action": {

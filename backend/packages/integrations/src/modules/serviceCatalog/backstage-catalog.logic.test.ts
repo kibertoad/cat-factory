@@ -270,6 +270,21 @@ describe('toServiceCatalogApi', () => {
   it('refuses a type the platform serves no format for', () => {
     expect(toServiceCatalogApi(api({ type: 'sql', definition: 'select 1' }))).toBeNull()
   })
+
+  it('prefixes the NAMESPACE onto the id, so two same-named interfaces stay two', () => {
+    // `payments/orders` and `billing/orders` are different API entities whose names are equal. An
+    // id from the name alone collapses them onto one contract, and the second is then dropped by
+    // the importer with only a counter to say so.
+    const scoped = (namespace: string) => ({
+      kind: 'API',
+      metadata: { name: 'orders', namespace },
+      spec: { type: 'openapi', definition: 'openapi: 3.0.0' },
+    })
+    expect(toServiceCatalogApi(scoped('payments'))?.id).toBe('payments-orders')
+    expect(toServiceCatalogApi(scoped('billing'))?.id).toBe('billing-orders')
+    // The default namespace is left off, exactly as it is for a component id.
+    expect(toServiceCatalogApi(scoped('default'))?.id).toBe('orders')
+  })
 })
 
 describe('toServiceCatalogEntry', () => {
@@ -300,5 +315,16 @@ describe('entityRef', () => {
 
   it('is null with no name', () => {
     expect(entityRef({ kind: 'Component', metadata: {} })).toBeNull()
+  })
+
+  it('lower-cases the NAMESPACE as well as the kind, matching every parsed reference', () => {
+    // A reference the platform builds from a `providesApis` string resolves to the lower-cased
+    // form, so an upper-cased namespace here would store provenance that addresses nothing.
+    expect(
+      entityRef({ kind: 'Component', metadata: { name: 'orders', namespace: 'Payments' } }),
+    ).toBe('component:payments/orders')
+    expect(formatEntityRef(parseEntityRef('Component:Payments/orders', 'component')!)).toBe(
+      'component:payments/orders',
+    )
   })
 })

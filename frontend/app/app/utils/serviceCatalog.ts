@@ -8,9 +8,9 @@ import type { ServiceCatalogAuthMode, ServiceCatalogSyncStatus } from '~/types/d
 // one gained a member.
 //
 // Both are also the case the typed-message-key guard cannot see: the keys are reached through a
-// lookup rather than written as a literal `t('a.b.c')`, so nothing proves the entry still names a
-// key that exists. `serviceCatalog.spec.ts` asserts every value against the base catalog, which is
-// the convention `test/i18nKeys.ts` exists for.
+// lookup rather than written out at the call site, so nothing proves the entry still names a key
+// that exists. `serviceCatalog.spec.ts` asserts every value against the base catalog, which is the
+// convention `test/i18nKeys.ts` exists for.
 
 /**
  * The label for one authentication mode.

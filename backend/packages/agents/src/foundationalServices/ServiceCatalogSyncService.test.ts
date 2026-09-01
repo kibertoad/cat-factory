@@ -83,8 +83,15 @@ function serviceRepo(seed: FoundationalServiceRecord[] = []): {
       upsert: async (record) => {
         rows = [...rows.filter((r) => r.serviceId !== record.serviceId), record]
       },
+      upsertMany: async (records) => {
+        const written = new Set(records.map((r) => r.serviceId))
+        rows = [...rows.filter((r) => !written.has(r.serviceId)), ...records]
+      },
       softDelete: async (_ownerKind, _ownerId, serviceId, at) => {
         rows = rows.map((r) => (r.serviceId === serviceId ? { ...r, deletedAt: at } : r))
+      },
+      softDeleteByIds: async (_ownerKind, _ownerId, serviceIds, at) => {
+        rows = rows.map((r) => (serviceIds.includes(r.serviceId) ? { ...r, deletedAt: at } : r))
       },
       hardDelete: async (_ownerKind, _ownerId, serviceId) => {
         rows = rows.filter((r) => r.serviceId !== serviceId)
@@ -124,8 +131,18 @@ function contractRepo(seed: ApiContractRecord[] = []): {
       replaceForService: async (_ownerKind, _ownerId, serviceId, contracts) => {
         rows = [...rows.filter((r) => r.serviceId !== serviceId), ...contracts]
       },
+      replaceForServices: async (_ownerKind, _ownerId, sets) => {
+        const replaced = new Set(sets.map((set) => set.serviceId))
+        rows = [
+          ...rows.filter((r) => !replaced.has(r.serviceId)),
+          ...sets.flatMap((set) => set.contracts),
+        ]
+      },
       deleteForService: async (_ownerKind, _ownerId, serviceId) => {
         rows = rows.filter((r) => r.serviceId !== serviceId)
+      },
+      deleteForServices: async (_ownerKind, _ownerId, serviceIds) => {
+        rows = rows.filter((r) => !serviceIds.includes(r.serviceId))
       },
     },
   }
@@ -415,6 +432,141 @@ describe('ServiceCatalogSyncService.sync', () => {
     // …and nothing is tombstoned on a transport failure: an unreachable portal is not an empty one.
     expect(services.rows()).toEqual([])
   })
+
+  it('records a failure raised BEFORE the portal is contacted, so the sweep cannot starve', async () => {
+    const connection = connectionRepo({})
+    const services = serviceRepo()
+    const service = new ServiceCatalogSyncService({
+      serviceCatalogConnectionRepository: connection.repo,
+      // An unopenable credential bag: the failure lands in `resolveClient`, which used to sit
+      // outside the stamping try. `lastSyncedAt` then stayed null, and `listStale` sorts nulls
+      // first, so this workspace held a slot in every bounded batch forever.
+      resolveServiceCatalogClient: async () => {
+        throw new Error('connection credentials could not be read')
+      },
+      foundationalServiceRepository: services.repo,
+      apiContractRepository: contractRepo().repo,
+      clock: { now: () => now },
+    })
+
+    await expect(service.sync(WORKSPACE)).rejects.toThrow(/credentials could not be read/)
+
+    expect(connection.row()?.lastSyncStatus).toBe('failed')
+    expect(connection.row()?.lastSyncedAt).toBe(now)
+  })
+
+  it('yields to a service the workspace registered by another route, and COUNTS the refusal', async () => {
+    const uploaded: FoundationalServiceRecord = {
+      serviceId: 'orders',
+      ownerKind: 'workspace',
+      ownerId: WORKSPACE,
+      name: 'Orders (hand-authored)',
+      summary: 'Uploaded by hand.',
+      description: '',
+      capabilities: ['asset-storage'],
+      sourceId: null,
+      sourcePath: null,
+      pinnedCommit: null,
+      createdAt: 1,
+      updatedAt: 1,
+      deletedAt: null,
+    }
+    const uploadedContract: ApiContractRecord = {
+      ownerKind: 'workspace',
+      ownerId: WORKSPACE,
+      serviceId: 'orders',
+      contractId: 'hand-written',
+      format: 'openapi',
+      title: 'Hand-written API',
+      body: 'openapi: 3.0.3',
+      operations: [],
+      omittedOperations: 0,
+      sourcePath: null,
+      sourceSha: null,
+      createdAt: 1,
+      updatedAt: 1,
+    }
+    const connection = connectionRepo({})
+    const { service, services, contracts } = build({
+      connection,
+      services: serviceRepo([uploaded]),
+      contracts: contractRepo([uploadedContract]),
+      catalogClient: client({ entries: [entry()] }),
+    })
+
+    const result = await service.sync(WORKSPACE)
+
+    // The hand-authored row survives INTACT, capability tag and uploaded contract included.
+    expect(services.rows().find((r) => r.serviceId === 'orders')).toEqual(uploaded)
+    expect(contracts.rows()).toEqual([uploadedContract])
+    expect(result.upserted).toBe(0)
+    expect(result.skippedConflicts).toBe(1)
+    expect(result.status).toBe('partial')
+    expect(connection.row()?.lastSyncMessage).toMatch(
+      /already registers a service under the same id/,
+    )
+  })
+
+  it('re-imports a service the portal dropped and later offers again', async () => {
+    const tombstoned: FoundationalServiceRecord = {
+      serviceId: 'orders',
+      ownerKind: 'workspace',
+      ownerId: WORKSPACE,
+      name: 'Orders',
+      summary: 'Places and tracks orders.',
+      description: 'Owner: payments (group:default/payments)',
+      capabilities: ['service'],
+      sourceId: SERVICE_CATALOG_SOURCE_ID,
+      sourcePath: 'component:default/orders',
+      pinnedCommit: null,
+      createdAt: 1,
+      updatedAt: 2,
+      deletedAt: 2,
+    }
+    const { service, services } = build({
+      connection: connectionRepo({}),
+      services: serviceRepo([tombstoned]),
+      catalogClient: client({ entries: [entry()] }),
+    })
+
+    // Every field matches the stored row, so only the tombstone makes this a change. Reading it as
+    // `unchanged` would leave the service suppressed while the portal offers it.
+    const result = await service.sync(WORKSPACE)
+
+    expect(result.unchanged).toBe(0)
+    expect(result.upserted).toBe(1)
+    expect(services.rows().find((r) => r.serviceId === 'orders')?.deletedAt).toBeNull()
+  })
+
+  it('counts an interface dropped for a COLLIDING id rather than storing one and staying `ok`', async () => {
+    const api = (id: string, definition: string) => ({
+      id,
+      title: id,
+      format: 'openapi' as const,
+      definition,
+      ref: `api:default/${id}`,
+      revision: null,
+    })
+    const connection = connectionRepo({})
+    const { service, contracts } = build({
+      connection,
+      catalogClient: client({
+        entries: [
+          entry({ apis: [api('orders', 'openapi: 3.0.0'), api('orders', 'openapi: 3.1.0')] }),
+        ],
+      }),
+    })
+
+    const result = await service.sync(WORKSPACE)
+
+    // One row stored, and the loss STATED: a service publishing one interface where the portal
+    // says two, with `skippedApis: 0`, reads to an agent as the whole surface.
+    expect(contracts.rows()).toHaveLength(1)
+    expect(result.contracts).toBe(1)
+    expect(result.skippedApis).toBe(1)
+    expect(result.status).toBe('partial')
+    expect(connection.row()?.lastSyncMessage).toMatch(/1 declared interfaces were not stored/)
+  })
 })
 
 describe('ServiceCatalogSyncService.retireImported', () => {
@@ -459,6 +611,7 @@ describe('describeImport', () => {
     contracts: 3,
     coverage: 'complete' as const,
     skippedServices: 0,
+    skippedConflicts: 0,
     skippedApis: 0,
     status: 'ok' as const,
   }

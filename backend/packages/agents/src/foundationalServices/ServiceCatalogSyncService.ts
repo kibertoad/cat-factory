@@ -12,6 +12,7 @@ import type {
   Logger,
   ResolveServiceCatalogClient,
   ServiceCatalogApi,
+  ServiceCatalogConnectionRecord,
   ServiceCatalogConnectionRepository,
   ServiceCatalogEntry,
   ServiceCatalogFetch,
@@ -81,26 +82,41 @@ export class ServiceCatalogSyncService {
         reason: 'service_catalog_not_connected',
       })
     }
+    try {
+      return await this.runImport(workspaceId, connection)
+    } catch (error) {
+      // EVERY failure past the connection lookup is RECORDED before it propagates, not only a
+      // transport one. `lastSyncedAt` is what the autorefresh sweep orders on and it sorts nulls
+      // first, so a connection whose credential bag will not open (which fails BEFORE the portal
+      // is ever contacted) would otherwise stay permanently at the head of the stale queue and
+      // occupy the whole bounded batch, on every pass, silently starving every other workspace.
+      // The stamp is best-effort so a failing stamp cannot replace the fault it is recording.
+      await runBestEffort(
+        this.log,
+        'serviceCatalog.stampFailure',
+        () => this.stampFailure(workspaceId, error),
+        { workspaceId },
+      )
+      throw error
+    }
+  }
+
+  /** One import, from the resolved client to the stamped verdict. Failures propagate to `sync`. */
+  private async runImport(
+    workspaceId: string,
+    connection: ServiceCatalogConnectionRecord,
+  ): Promise<ServiceCatalogSyncResult> {
     const client = await this.deps.resolveServiceCatalogClient(workspaceId)
     if (!client) {
       throw new NotFoundError('Service catalog connection', workspaceId, {
         reason: 'service_catalog_not_connected',
       })
     }
-    let fetched: ServiceCatalogFetch
-    try {
-      fetched = await client.fetchCatalog({
-        entityFilter: connection.entityFilter,
-        includeApis: connection.includeApis,
-        maxServices: connection.maxServices,
-      })
-    } catch (error) {
-      // The failure is RECORDED before it propagates, so the management surface can say the last
-      // import failed and why. Stamping only on success would leave a workspace whose portal has
-      // been unreachable for a week showing the verdict of the last pass that worked.
-      await this.stampFailure(workspaceId, error)
-      throw error
-    }
+    const fetched: ServiceCatalogFetch = await client.fetchCatalog({
+      entityFilter: connection.entityFilter,
+      includeApis: connection.includeApis,
+      maxServices: connection.maxServices,
+    })
     const result = await this.reconcile(workspaceId, fetched)
     await this.deps.serviceCatalogConnectionRepository.updateSyncState(workspaceId, {
       lastSyncedAt: this.deps.clock.now(),
@@ -148,22 +164,24 @@ export class ServiceCatalogSyncService {
    * than having none because nothing about it says it is stale.
    */
   async retireImported(workspaceId: string): Promise<number> {
-    const existing = await this.importedServices(workspaceId)
-    const now = this.deps.clock.now()
-    for (const service of existing) {
-      await this.tombstone(workspaceId, service.serviceId, now)
-    }
-    if (existing.length > 0) await this.deps.invalidateCatalog?.('workspace', workspaceId)
-    this.log.info('serviceCatalog.retired', { workspaceId, tombstoned: existing.length })
-    return existing.length
+    const owned = await this.ownedServices(workspaceId)
+    const retiring = owned.imported.filter((service) => service.deletedAt === null)
+    await this.tombstone(
+      workspaceId,
+      retiring.map((service) => service.serviceId),
+      this.deps.clock.now(),
+    )
+    if (retiring.length > 0) await this.deps.invalidateCatalog?.('workspace', workspaceId)
+    this.log.info('serviceCatalog.retired', { workspaceId, tombstoned: retiring.length })
+    return retiring.length
   }
 
   private async reconcile(
     workspaceId: string,
     fetched: ServiceCatalogFetch,
   ): Promise<ServiceCatalogSyncResult> {
-    const existing = await this.importedServices(workspaceId)
-    const existingById = new Map(existing.map((service) => [service.serviceId, service] as const))
+    const { imported, foreignIds } = await this.ownedServices(workspaceId)
+    const importedById = new Map(imported.map((service) => [service.serviceId, service] as const))
     // ONE manifest read for the whole tier, indexed per service: the alternative is a contract
     // read per imported service, which is the N+1 the batch ports exist to prevent.
     const manifest = await this.deps.apiContractRepository.listManifestByOwner(
@@ -178,87 +196,92 @@ export class ServiceCatalogSyncService {
     }
     const now = this.deps.clock.now()
     const live = new Set<string>()
-    let upserted = 0
+    const services: FoundationalServiceRecord[] = []
+    const contractSets: { serviceId: string; contracts: ApiContractRecord[] }[] = []
     let unchanged = 0
     let contracts = 0
+    let skippedConflicts = 0
+    let skippedApis = fetched.skippedApis
     for (const entry of fetched.entries) {
+      // A service the workspace registered by ANOTHER route owns that id, and the import yields
+      // to it rather than taking it over. An upsert here would replace a hand-authored row and
+      // delete its uploaded contracts, and would then hand it to `retireImported` to tombstone on
+      // disconnect: the workspace would lose a service it never got from the portal.
+      if (foreignIds.has(entry.id)) {
+        skippedConflicts += 1
+        continue
+      }
       live.add(entry.id)
-      const records = contractRecords(workspaceId, entry, now)
-      contracts += records.length
-      const prior = existingById.get(entry.id)
-      if (prior && !hasChanged(prior, entry, shasByService.get(entry.id) ?? [], records)) {
+      const built = contractRecords(workspaceId, entry, now)
+      contracts += built.records.length
+      skippedApis += built.dropped
+      const prior = importedById.get(entry.id)
+      if (prior && !hasChanged(prior, entry, shasByService.get(entry.id) ?? [], built.records)) {
         unchanged += 1
         continue
       }
-      await this.write(workspaceId, entry, records, prior, now)
-      upserted += 1
+      services.push(serviceRecord(workspaceId, entry, prior, now))
+      contractSets.push({ serviceId: entry.id, contracts: built.records })
     }
-    let tombstoned = 0
-    for (const service of existing) {
-      if (live.has(service.serviceId)) continue
-      await this.tombstone(workspaceId, service.serviceId, now)
-      tombstoned += 1
-    }
+    // Both writes are BATCHED, in the same order one service's pair used to run in: the row
+    // first, then its interfaces. A loop of single-row calls over a thousand-service estate is
+    // the banned N+1, and this path is where an estate arrives whole.
+    await this.deps.foundationalServiceRepository.upsertMany(services)
+    await this.deps.apiContractRepository.replaceForServices('workspace', workspaceId, contractSets)
+    const removed = imported
+      .filter((service) => service.deletedAt === null && !live.has(service.serviceId))
+      .map((service) => service.serviceId)
+    await this.tombstone(workspaceId, removed, now)
     return {
-      upserted,
-      tombstoned,
+      upserted: services.length,
+      tombstoned: removed.length,
       unchanged,
       contracts,
       coverage: fetched.coverage,
       skippedServices: fetched.skippedEntries,
-      skippedApis: fetched.skippedApis,
-      status: importStatus(fetched.coverage, fetched.skippedEntries, fetched.skippedApis),
+      skippedConflicts,
+      skippedApis,
+      status: importStatus(fetched.coverage, fetched.skippedEntries, skippedApis, skippedConflicts),
     }
   }
 
-  private async write(
-    workspaceId: string,
-    entry: ServiceCatalogEntry,
-    records: ApiContractRecord[],
-    prior: FoundationalServiceRecord | undefined,
-    now: number,
-  ): Promise<void> {
-    await this.deps.foundationalServiceRepository.upsert({
-      serviceId: entry.id,
-      ownerKind: 'workspace',
-      ownerId: workspaceId,
-      name: entry.name,
-      summary: entry.summary,
-      description: entry.description,
-      capabilities: entry.capabilities,
-      sourceId: SERVICE_CATALOG_SOURCE_ID,
-      sourcePath: entry.ref,
-      // An imported service pins no commit: it is not repo-sourced, and putting the portal's
-      // entity revision in a field named for a git commit would be a fact stated in the wrong
-      // vocabulary. Whether the service changed is decided by comparing its own fields and its
-      // interfaces' content identities, which is what `hasChanged` does.
-      pinnedCommit: null,
-      createdAt: prior?.createdAt ?? now,
-      updatedAt: now,
-      deletedAt: null,
-    })
-    await this.deps.apiContractRepository.replaceForService(
+  /** Tombstone imported services and drop their contracts, in two batched writes. */
+  private async tombstone(workspaceId: string, serviceIds: string[], now: number): Promise<void> {
+    if (serviceIds.length === 0) return
+    await this.deps.foundationalServiceRepository.softDeleteByIds(
       'workspace',
       workspaceId,
-      entry.id,
-      records,
-    )
-  }
-
-  private async tombstone(workspaceId: string, serviceId: string, now: number): Promise<void> {
-    await this.deps.foundationalServiceRepository.softDelete(
-      'workspace',
-      workspaceId,
-      serviceId,
+      serviceIds,
       now,
     )
-    await this.deps.apiContractRepository.deleteForService('workspace', workspaceId, serviceId)
+    await this.deps.apiContractRepository.deleteForServices('workspace', workspaceId, serviceIds)
   }
 
-  /** The workspace's live services that this connection produced. */
-  private async importedServices(workspaceId: string): Promise<FoundationalServiceRecord[]> {
-    const all = await this.deps.foundationalServiceRepository.listByOwner('workspace', workspaceId)
-    return all.filter((service) => service.sourceId === SERVICE_CATALOG_SOURCE_ID)
+  /**
+   * The workspace tier split by supply route: what this connection produced, and which ids
+   * something else already claims.
+   *
+   * Read with tombstones INCLUDED, because both halves need them and for opposite reasons. An
+   * imported service the portal dropped and later restored must re-import, so its tombstone has to
+   * be visible as a prior. A tombstone on a row this connection did NOT produce is a workspace's
+   * own suppression of that id, which is a positive assertion about it: overwriting one would
+   * silently reinstate what a human removed.
+   */
+  private async ownedServices(
+    workspaceId: string,
+  ): Promise<{ imported: FoundationalServiceRecord[]; foreignIds: Set<string> }> {
+    const all = await this.deps.foundationalServiceRepository.listByOwner(
+      'workspace',
+      workspaceId,
+      true,
+    )
+    const imported: FoundationalServiceRecord[] = []
+    const foreignIds = new Set<string>()
+    for (const service of all) {
+      if (service.sourceId === SERVICE_CATALOG_SOURCE_ID) imported.push(service)
+      else foreignIds.add(service.serviceId)
+    }
+    return { imported, foreignIds }
   }
 
   private async stampFailure(workspaceId: string, error: unknown): Promise<void> {
@@ -274,16 +297,57 @@ export class ServiceCatalogSyncService {
   }
 }
 
-/** Build one entry's contract rows, dropping the interfaces the adapter could not serve. */
+/** One imported service's row, carrying the prior's creation stamp when it had one. */
+function serviceRecord(
+  workspaceId: string,
+  entry: ServiceCatalogEntry,
+  prior: FoundationalServiceRecord | undefined,
+  now: number,
+): FoundationalServiceRecord {
+  return {
+    serviceId: entry.id,
+    ownerKind: 'workspace',
+    ownerId: workspaceId,
+    name: entry.name,
+    summary: entry.summary,
+    description: entry.description,
+    capabilities: entry.capabilities,
+    sourceId: SERVICE_CATALOG_SOURCE_ID,
+    sourcePath: entry.ref,
+    // An imported service pins no commit: it is not repo-sourced, and putting the portal's
+    // entity revision in a field named for a git commit would be a fact stated in the wrong
+    // vocabulary. Whether the service changed is decided by comparing its own fields and its
+    // interfaces' content identities, which is what `hasChanged` does.
+    pinnedCommit: null,
+    createdAt: prior?.createdAt ?? now,
+    updatedAt: now,
+    deletedAt: null,
+  }
+}
+
+/**
+ * Build one entry's contract rows, plus how many of its declared interfaces this drops.
+ *
+ * The count is the point of the return shape. Two interfaces of one service whose ids collide (a
+ * portal that namespaces them where the platform's slug does not, two entities named alike) can
+ * only produce one row, and dropping the second silently would leave the service stored publishing
+ * one interface where the portal says two, with `skippedApis: 0` and a status of `ok` saying
+ * nothing went missing. First one wins, as everywhere else in this import, so the survivor does
+ * not flip between passes.
+ */
 function contractRecords(
   workspaceId: string,
   entry: ServiceCatalogEntry,
   now: number,
-): ApiContractRecord[] {
+): { records: ApiContractRecord[]; dropped: number } {
   const records: ApiContractRecord[] = []
   const claimed = new Set<string>()
+  let dropped = 0
   for (const api of entry.apis) {
-    if (!api.format || claimed.has(api.id)) continue
+    if (!api.format || claimed.has(api.id)) {
+      dropped += 1
+      continue
+    }
     claimed.add(api.id)
     const summary = summarizeContract({
       contractId: api.id,
@@ -308,7 +372,7 @@ function contractRecords(
       updatedAt: now,
     })
   }
-  return records
+  return { records, dropped }
 }
 
 /**
@@ -354,6 +418,9 @@ function hasChanged(
   priorContractKeys: string[],
   records: ApiContractRecord[],
 ): boolean {
+  // A tombstoned prior always rewrites: the portal offers the service again, and the stored row
+  // says the opposite until something clears its `deleted_at`.
+  if (prior.deletedAt !== null) return true
   if (prior.name !== entry.name) return true
   if (prior.summary !== entry.summary) return true
   if (prior.description !== entry.description) return true
@@ -379,8 +446,10 @@ function importStatus(
   coverage: ServiceCatalogCoverage,
   skippedServices: number,
   skippedApis: number,
+  skippedConflicts: number,
 ): ServiceCatalogSyncStatus {
-  if (coverage === 'complete' && skippedServices === 0 && skippedApis === 0) return 'ok'
+  const dropped = skippedServices + skippedApis + skippedConflicts
+  if (coverage === 'complete' && dropped === 0) return 'ok'
   return 'partial'
 }
 
@@ -408,9 +477,14 @@ export function describeImport(result: ServiceCatalogSyncResult): string | null 
       `${result.skippedServices} matching entities could not be imported (no usable name, or a name that collides with another service's).`,
     )
   }
+  if (result.skippedConflicts > 0) {
+    notes.push(
+      `${result.skippedConflicts} portal services were not imported because this workspace already registers a service under the same id (from an upload or a linked repository). The existing service was kept untouched; rename one of the two if you want the portal's version.`,
+    )
+  }
   if (result.skippedApis > 0) {
     notes.push(
-      `${result.skippedApis} declared interfaces were not stored: the portal returned no definition for them, or declared a type this platform serves no contract format for (OpenAPI, AsyncAPI, GraphQL and gRPC are served).`,
+      `${result.skippedApis} declared interfaces were not stored: the portal returned no definition for them, declared a type this platform serves no contract format for (OpenAPI, AsyncAPI, GraphQL and gRPC are served), or named an interface whose id another interface of the same service already uses.`,
     )
   }
   return notes.length > 0 ? notes.join(' ') : null

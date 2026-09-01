@@ -1,6 +1,6 @@
 import {
   FOUNDATIONAL_SOURCE_STALE_MS,
-  SERVICE_CATALOG_STALE_MS,
+  SERVICE_CATALOG_SWEEP_PERIOD_MS,
   sweepFoundationalSources,
   sweepServiceCatalogs,
   type Logger,
@@ -63,7 +63,9 @@ export function startServiceCatalogSweeper(
   if (!container.foundationalServices?.serviceCatalog) return () => {}
   return startSweeper({
     name: 'service-catalog',
-    intervalMs: SERVICE_CATALOG_STALE_MS,
+    // The sweep's own PERIOD, not its staleness window: see `SERVICE_CATALOG_SWEEP_PERIOD_MS` for
+    // why running once per window caps a deployment at one batch per window.
+    intervalMs: SERVICE_CATALOG_SWEEP_PERIOD_MS,
     log,
     health,
     failureMessage: 'service-catalog sweep failed',

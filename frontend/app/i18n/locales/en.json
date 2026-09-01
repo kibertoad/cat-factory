@@ -689,7 +689,8 @@
         "vcs_capability_unsupported": "The source-control provider connected to this workspace does not offer this operation. Nothing is misconfigured and setting something up will not help: it is unavailable for this provider.",
         "service_catalog_unreachable": "This workspace's developer portal did not answer, or answered with something this platform cannot read. Nothing here is misconfigured and no change will help: try again once the portal is reachable.",
         "service_catalog_unauthorized": "The developer portal refused the stored credential. It has most likely been rotated or revoked: open the service-catalog settings and enter a current one.",
-        "service_catalog_filter_missing": "This connection's entity filter could not be read, so there is nothing to import. Re-save the service-catalog connection to restore it."
+        "service_catalog_filter_missing": "This connection's entity filter could not be read, so there is nothing to import. Re-save the service-catalog connection to restore it.",
+        "service_catalog_response_too_large": "The developer portal answered with more data than this platform will hold in one response. Open the service-catalog settings and lower the service cap, or turn off importing interface definitions, then import again."
       }
     },
     "action": {

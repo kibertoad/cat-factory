@@ -1,4 +1,5 @@
 import { createTierInstallationResolvers, LlmFragmentSelector } from '@cat-factory/agents'
+import { SERVICE_CATALOG_CIPHER_INFO } from '@cat-factory/integrations'
 import type {
   GitHubClient,
   GitHubInstallationRepository,
@@ -24,16 +25,6 @@ import {
   DrizzleFoundationalServiceSourceRepository,
 } from './repositories/foundationalServices.js'
 import { DrizzleServiceCatalogConnectionRepository } from './repositories/drizzle/serviceCatalog.js'
-
-/**
- * The HKDF domain the service-catalog credential is sealed under.
- *
- * Its own domain rather than the documents or environments one, so a key rotation or a compromise
- * scoped to one integration cannot open another's rows. The value is what `SEALED_SECRET_SOURCES`
- * declares for `service_catalog_connection`, and a mothership opens the row with it: the two
- * spellings must match or a delegated unseal authenticates against the wrong derived key.
- */
-export const SERVICE_CATALOG_CIPHER_INFO = 'cat-factory:service-catalog'
 
 // The Node facade's content-library dependency selectors (prompt-fragment library + repo-sourced
 // Claude Skills), extracted from `container.ts` for file-size hygiene and symmetric with the shared

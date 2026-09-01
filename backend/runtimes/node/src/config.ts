@@ -180,27 +180,29 @@ function loadTasksConfig(env: NodeJS.ProcessEnv): TasksConfig {
 }
 
 /**
- * The deployment-level system sender for auth emails (password reset), read entirely
- * from env. Present only when the provider, From address, and API key are all set.
- */
-/**
- * SERVICE-CATALOG integration config, mirroring the Worker's `loadServiceCatalogConfig`: always on
- * where the shared ENCRYPTION_KEY is set (the portal credential must be sealable), with its OWN
- * URL allow-list because a self-hosted developer portal is typically on an internal host and
+ * SERVICE-CATALOG integration config, byte-for-byte the rule the Worker's
+ * `loadServiceCatalogConfig` applies: the integration assembles wherever the shared ENCRYPTION_KEY
+ * is set (the portal credential must be sealable) and stays unwired where it is not. It carries its
+ * OWN URL allow-list, because a self-hosted developer portal is typically on an internal host and
  * widening one integration's SSRF guard must never widen another's.
+ *
+ * An absent key is therefore NOT a boot failure here, unlike its document and tracker siblings
+ * above. Those integrations are unconditional, so a missing key really is a misconfiguration they
+ * must refuse; this one is optional, and failing the whole boot over an unwired optional capability
+ * would be a stricter contract than the other facade's for no gain.
  */
 function loadServiceCatalogConfig(env: NodeJS.ProcessEnv): ServiceCatalogConfig {
-  const encryptionKey = env.ENCRYPTION_KEY?.trim()
-  if (!encryptionKey) {
-    throw configProblem({ key: 'ENCRYPTION_KEY', ...ENV_HELP.ENCRYPTION_KEY })
-  }
   return {
-    encryptionKey,
+    encryptionKey: env.ENCRYPTION_KEY?.trim(),
     allowUrlHosts: csv(env.SERVICE_CATALOG_ALLOW_URL_HOSTS),
     allowHttpUrls: env.SERVICE_CATALOG_ALLOW_HTTP_URLS === 'true',
   }
 }
 
+/**
+ * The deployment-level system sender for auth emails (password reset), read entirely
+ * from env. Present only when the provider, From address, and API key are all set.
+ */
 function loadSystemEmailSender(env: NodeJS.ProcessEnv): EmailConfig['system'] {
   const provider = env.EMAIL_SYSTEM_PROVIDER?.trim()
   const from = env.EMAIL_SYSTEM_FROM?.trim()

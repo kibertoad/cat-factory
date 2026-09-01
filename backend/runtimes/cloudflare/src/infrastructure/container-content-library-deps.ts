@@ -1,4 +1,5 @@
 import { createTierInstallationResolvers } from '@cat-factory/agents'
+import { SERVICE_CATALOG_CIPHER_INFO } from '@cat-factory/integrations'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import type { ServiceCatalogConfig } from '@cat-factory/server'
 import { resolveUrlSafetyPolicy } from '@cat-factory/server'
@@ -98,12 +99,12 @@ export function selectSkillLibraryDeps(
  *
  * Deliberately UNGATED, unlike the two libraries above: a service can be registered with its
  * contracts uploaded directly, so the catalog is useful on a deployment that wants neither
- * repo-sourced prompt fragments nor Claude skills. The feature is opt-in by CONTENT — a
+ * repo-sourced prompt fragments nor Claude skills. The feature is opt-in by CONTENT: a
  * deployment that registers nothing gets an empty catalog, and an empty catalog renders as the
  * "none are registered" line, which leaves every design prompt exactly as it was.
  *
  * It reuses the FRAGMENT installation resolver (`resolveFragmentInstallationId`), which already
- * answers for both tiers — the same pair this catalog is keyed by. `selectFragmentLibraryDeps`
+ * answers for both tiers, the same pair this catalog is keyed by. `selectFragmentLibraryDeps`
  * sets the identical resolver when it is enabled; the two agree by construction because both
  * come from `createTierInstallationResolvers`.
  */
@@ -138,13 +139,3 @@ export function selectFoundationalServiceDeps(
       : {}),
   }
 }
-
-/**
- * The HKDF domain the service-catalog credential is sealed under.
- *
- * Its own domain rather than the documents or environments one, so a key rotation or a compromise
- * scoped to one integration cannot open another's rows. It must match what `SEALED_SECRET_SOURCES`
- * declares for `service_catalog_connection`, or a mothership-delegated unseal authenticates against
- * a different derived key.
- */
-export const SERVICE_CATALOG_CIPHER_INFO = 'cat-factory:service-catalog'

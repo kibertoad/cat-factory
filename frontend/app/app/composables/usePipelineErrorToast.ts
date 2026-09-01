@@ -361,6 +361,8 @@ const UNAVAILABLE_DESCRIPTION_KEYS: Record<UnavailableReason, string> = {
   service_catalog_unreachable: 'errors.unavailable.description.service_catalog_unreachable',
   service_catalog_unauthorized: 'errors.unavailable.description.service_catalog_unauthorized',
   service_catalog_filter_missing: 'errors.unavailable.description.service_catalog_filter_missing',
+  service_catalog_response_too_large:
+    'errors.unavailable.description.service_catalog_response_too_large',
 }
 
 /**

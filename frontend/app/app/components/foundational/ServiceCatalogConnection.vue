@@ -52,8 +52,8 @@ const busy = ref<'connect' | 'probe' | 'import' | 'disconnect' | null>(null)
 const connection = computed(() => catalog.serviceCatalog)
 
 // Both vocabularies map to their keys in `~/utils/serviceCatalog`, whose spec asserts every entry
-// against the base catalog: these are reached through a lookup rather than a literal `t('a.b.c')`,
-// so the typed-message-key guard cannot see them.
+// against the base catalog: these are reached through a lookup rather than a literal key written
+// out at the call site, so the typed-message-key guard cannot see them.
 const authModeItems = computed(() =>
   SERVICE_CATALOG_AUTH_ORDER.map((value) => ({
     value,
@@ -140,7 +140,13 @@ async function connect() {
       toast.add({ title: t('serviceCatalog.toast.connected'), color: 'success' })
     } catch (error) {
       present(error, 'serviceCatalog.toast.connectFailed')
+      return
     }
+    // The first import follows the connect, and is REPORTED as its own outcome. The connection is
+    // stored by the time it runs, so a revoked token surfacing here is an import failure with an
+    // import remedy; presenting it under "could not connect" would deny what the panel is already
+    // showing and bury the remedy under a title that says the opposite.
+    await runImport()
   })
 }
 
@@ -162,22 +168,25 @@ async function probe() {
 }
 
 async function importNow() {
-  await withBusy('import', async () => {
-    try {
-      const result = await catalog.importServiceCatalog()
-      toast.add({
-        title: t('serviceCatalog.toast.imported'),
-        description: t('serviceCatalog.toast.importedDetail', {
-          upserted: result.upserted,
-          unchanged: result.unchanged,
-          tombstoned: result.tombstoned,
-        }),
-        color: result.status === 'ok' ? 'success' : 'warning',
-      })
-    } catch (error) {
-      present(error, 'serviceCatalog.toast.importFailed')
-    }
-  })
+  await withBusy('import', runImport)
+}
+
+/** One import and its toast, shared by the Import button and the connect flow's first pass. */
+async function runImport(): Promise<void> {
+  try {
+    const result = await catalog.importServiceCatalog()
+    toast.add({
+      title: t('serviceCatalog.toast.imported'),
+      description: t('serviceCatalog.toast.importedDetail', {
+        upserted: result.upserted,
+        unchanged: result.unchanged,
+        tombstoned: result.tombstoned,
+      }),
+      color: result.status === 'ok' ? 'success' : 'warning',
+    })
+  } catch (error) {
+    present(error, 'serviceCatalog.toast.importFailed')
+  }
 }
 
 async function disconnect() {

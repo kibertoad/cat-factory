@@ -708,6 +708,7 @@ export { AuditService, type AuditServiceDependencies } from './modules/audit/Aud
 // The SERVICE CATALOG connection: a workspace's developer portal (Backstage), whose services are
 // imported into the foundational-services catalog. See backend/docs/service-catalog-import.md.
 export {
+  SERVICE_CATALOG_CIPHER_INFO,
   ServiceCatalogConnectionService,
   type ServiceCatalogConnectionServiceDependencies,
 } from './modules/serviceCatalog/ServiceCatalogConnectionService.js'

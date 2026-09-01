@@ -38,6 +38,153 @@ export interface FoundationalServiceRepos {
   serviceCatalog: ServiceCatalogConnectionRepository
 }
 
+// --- fixtures, shared by the parity blocks below ---------------------------
+
+const service = (
+  ownerId: string,
+  serviceId: string,
+  overrides: Partial<FoundationalServiceRecord> = {},
+): FoundationalServiceRecord => ({
+  serviceId,
+  ownerKind: 'account',
+  ownerId,
+  name: 'File Storage',
+  summary: 'Stores and serves user uploads.',
+  description: 'Use for any binary blob.',
+  capabilities: ['file-storage', 'cdn'],
+  sourceId: null,
+  sourcePath: null,
+  pinnedCommit: null,
+  createdAt: 1_000,
+  updatedAt: 1_000,
+  deletedAt: null,
+  ...overrides,
+})
+
+const contract = (
+  ownerId: string,
+  serviceId: string,
+  contractId: string,
+  overrides: Partial<ApiContractRecord> = {},
+): ApiContractRecord => ({
+  ownerKind: 'account',
+  ownerId,
+  serviceId,
+  contractId,
+  format: 'openapi',
+  title: 'HTTP API',
+  body: 'openapi: 3.0.3\npaths:\n  /files:\n    get: {}\n',
+  operations: ['GET /files'],
+  omittedOperations: 0,
+  sourcePath: 'services/file-storage/openapi.yaml',
+  sourceSha: 'sha-1',
+  createdAt: 1_000,
+  updatedAt: 1_000,
+  ...overrides,
+})
+
+/**
+ * The BATCHED write surface, in its own block.
+ *
+ * Split out of {@link defineFoundationalServicesSuite} because that function had reached its
+ * line budget, and this is the cohesive piece: four methods that exist for one reason (a portal
+ * import reconciles a whole estate, and a row at a time is the banned N+1) and whose per-runtime
+ * traps are their own (a D1 batch versus one Postgres transaction, and the chunking each needs).
+ */
+function defineBatchedWriteParity(
+  name: string,
+  makeRepos: () => FoundationalServiceRepos,
+  scope: () => string,
+): void {
+  describe(`[${name}] foundational-services batched writes`, () => {
+    it('writes MANY services in one pass, without disturbing another tier', async () => {
+      // The portal import's write path: reconciling an estate one row at a time is the banned
+      // N+1, so the batch has to land the same rows the loop did, and only those.
+      const { services } = makeRepos()
+      const ownerId = scope()
+      const otherOwner = scope()
+      await services.upsert(service(otherOwner, 'file-storage', { name: 'Someone else' }))
+      await services.upsert(service(ownerId, 'file-storage', { name: 'Before' }))
+
+      await services.upsertMany([
+        service(ownerId, 'file-storage', { name: 'After', updatedAt: 2_000 }),
+        service(ownerId, 'notifications'),
+      ])
+
+      const written = await services.listByOwner('account', ownerId)
+      expect(written.map((s) => s.serviceId)).toEqual(['file-storage', 'notifications'])
+      expect(written.find((s) => s.serviceId === 'file-storage')?.name).toBe('After')
+      expect((await services.get('account', otherOwner, 'file-storage'))?.name).toBe('Someone else')
+      // An empty batch is a no-op, never a full-tier write.
+      await services.upsertMany([])
+      expect(await services.listByOwner('account', ownerId)).toHaveLength(2)
+    })
+
+    it('tombstones MANY services of ONE tier, leaving the ids it was not given', async () => {
+      const { services } = makeRepos()
+      const ownerId = scope()
+      const otherOwner = scope()
+      await services.upsert(service(otherOwner, 'file-storage'))
+      for (const id of ['file-storage', 'notifications', 'audit']) {
+        await services.upsert(service(ownerId, id))
+      }
+
+      await services.softDeleteByIds('account', ownerId, ['file-storage', 'notifications'], 7_000)
+
+      expect((await services.listByOwner('account', ownerId)).map((s) => s.serviceId)).toEqual([
+        'audit',
+      ])
+      const tombstoned = await services.get('account', ownerId, 'file-storage')
+      expect(tombstoned?.deletedAt).toBe(7_000)
+      // Owner-scoped, unlike `softDeleteBySource`: another tier's same-named service is untouched.
+      expect((await services.get('account', otherOwner, 'file-storage'))?.deletedAt).toBeNull()
+      await services.softDeleteByIds('account', ownerId, [], 8_000)
+      expect(await services.listByOwner('account', ownerId)).toHaveLength(1)
+    })
+
+    it('REPLACES and DELETES the contract sets of many services in one pass', async () => {
+      const { contracts } = makeRepos()
+      const ownerId = scope()
+      const otherOwner = scope()
+      await contracts.replaceForService('account', otherOwner, 'file-storage', [
+        contract(otherOwner, 'file-storage', 'openapi', { title: 'Someone else' }),
+      ])
+      await contracts.replaceForService('account', ownerId, 'file-storage', [
+        contract(ownerId, 'file-storage', 'openapi'),
+        contract(ownerId, 'file-storage', 'legacy', { title: 'Legacy API' }),
+      ])
+
+      await contracts.replaceForServices('account', ownerId, [
+        { serviceId: 'file-storage', contracts: [contract(ownerId, 'file-storage', 'openapi')] },
+        { serviceId: 'notifications', contracts: [contract(ownerId, 'notifications', 'openapi')] },
+        // A service whose portal entry declares no storable interface at all.
+        { serviceId: 'audit', contracts: [] },
+      ])
+
+      const after = await contracts.listByServiceIds('account', ownerId, [
+        'file-storage',
+        'notifications',
+        'audit',
+      ])
+      expect(after.map((c) => `${c.serviceId}/${c.contractId}`)).toEqual([
+        'file-storage/openapi',
+        'notifications/openapi',
+      ])
+      expect(
+        await contracts.listByServiceIds('account', otherOwner, ['file-storage']),
+      ).toHaveLength(1)
+
+      await contracts.deleteForServices('account', ownerId, ['file-storage', 'notifications'])
+      expect(
+        await contracts.listByServiceIds('account', ownerId, ['file-storage', 'notifications']),
+      ).toEqual([])
+      expect(
+        await contracts.listByServiceIds('account', otherOwner, ['file-storage']),
+      ).toHaveLength(1)
+    })
+  })
+}
+
 /** Assert a runtime's foundational-services repositories behave identically to the others. */
 export function defineFoundationalServicesSuite(
   name: string,
@@ -51,50 +198,9 @@ export function defineFoundationalServicesSuite(
     return `${name}-owner-${seq}-${Math.floor(Math.random() * 1e9)}`
   }
 
+  defineBatchedWriteParity(name, makeRepos, scope)
+
   describe(`[${name}] foundational-services repository parity`, () => {
-    const service = (
-      ownerId: string,
-      serviceId: string,
-      overrides: Partial<FoundationalServiceRecord> = {},
-    ): FoundationalServiceRecord => ({
-      serviceId,
-      ownerKind: 'account',
-      ownerId,
-      name: 'File Storage',
-      summary: 'Stores and serves user uploads.',
-      description: 'Use for any binary blob.',
-      capabilities: ['file-storage', 'cdn'],
-      sourceId: null,
-      sourcePath: null,
-      pinnedCommit: null,
-      createdAt: 1_000,
-      updatedAt: 1_000,
-      deletedAt: null,
-      ...overrides,
-    })
-
-    const contract = (
-      ownerId: string,
-      serviceId: string,
-      contractId: string,
-      overrides: Partial<ApiContractRecord> = {},
-    ): ApiContractRecord => ({
-      ownerKind: 'account',
-      ownerId,
-      serviceId,
-      contractId,
-      format: 'openapi',
-      title: 'HTTP API',
-      body: 'openapi: 3.0.3\npaths:\n  /files:\n    get: {}\n',
-      operations: ['GET /files'],
-      omittedOperations: 0,
-      sourcePath: 'services/file-storage/openapi.yaml',
-      sourceSha: 'sha-1',
-      createdAt: 1_000,
-      updatedAt: 1_000,
-      ...overrides,
-    })
-
     it('round-trips a service, lists by owner, and tombstones it', async () => {
       const { services } = makeRepos()
       const ownerId = scope()

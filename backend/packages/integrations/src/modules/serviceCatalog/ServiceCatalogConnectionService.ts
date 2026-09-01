@@ -33,9 +33,20 @@ import { parseServiceCatalogAuth } from './serviceCatalogAuth.js'
 // secret delegation rather than with a key it does not have.
 // ---------------------------------------------------------------------------
 
+/**
+ * The HKDF domain the service-catalog credential is sealed under.
+ *
+ * Its own domain rather than the documents or environments one, so a key rotation or a compromise
+ * scoped to one integration cannot open another's rows. Declared HERE, once, and imported by both
+ * runtime facades and by `SEALED_SECRET_SOURCES`: the value has to be the same in all three or a
+ * mothership-delegated unseal authenticates against a different derived key, and that drift is
+ * both silent and unrecoverable, which is not a property any copied literal should carry.
+ */
+export const SERVICE_CATALOG_CIPHER_INFO = 'cat-factory:service-catalog'
+
 export interface ServiceCatalogConnectionServiceDependencies {
   serviceCatalogConnectionRepository: ServiceCatalogConnectionRepository
-  /** The deployment's `cat-factory:service-catalog` cipher. */
+  /** The deployment's {@link SERVICE_CATALOG_CIPHER_INFO} cipher. */
   secretCipher: SecretCipher
   /** Present ONLY on a mothership-mode node, where the row was sealed under the org's key. */
   secretDelegate?: SecretDelegate
@@ -65,10 +76,18 @@ export class ServiceCatalogConnectionService {
     })
   }
 
-  /** The connection as the management surface sees it, or null when there is none. */
+  /**
+   * The connection as the management surface sees it, or null when there is none.
+   *
+   * A tombstoned row answers NULL, exactly as `resolveClient` and the importer treat one. The
+   * repository's `get` deliberately still returns it, because a re-connect reads the row to keep
+   * the prior verdict and the original `connectedAt`; the disposal of a tombstone is the caller's,
+   * and every caller but that one wants "there is no connection". Returning it here would render a
+   * disconnected workspace as connected, with an "Import now" button that 404s.
+   */
   async get(workspaceId: string): Promise<ServiceCatalogConnection | null> {
     const record = await this.deps.serviceCatalogConnectionRepository.get(workspaceId)
-    return record ? toWire(record) : null
+    return record && record.deletedAt === null ? toWire(record) : null
   }
 
   /**

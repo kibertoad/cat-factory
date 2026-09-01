@@ -173,6 +173,11 @@ export const LIBRARY_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
     get: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
     upsert: { scope: { kind: 'ownerField', arg: 0 } },
+    // The batched twins the PORTAL import writes through: reconciling an estate one row at a time
+    // is the banned N+1, and the two land on the same tier the singular writes do. `upsertMany`
+    // binds EVERY record's declared owner (`ownerFieldList`), never just the first.
+    upsertMany: { scope: { kind: 'ownerFieldList', arg: 0 } },
+    softDeleteByIds: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
     softDelete: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
     // Lifting a board's suppression of an inherited service. Same owner rule as `softDelete` and
     // the same management surface, so it belongs on the same side of the boundary: leaving it off
@@ -191,6 +196,10 @@ export const LIBRARY_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listManifestByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
     listByServiceIds: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
     replaceForService: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+    // The batched twins, on the same owner pair: both carry the tier positionally, so one rule
+    // binds a whole-estate rewrite exactly as it binds a single service's.
+    replaceForServices: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+    deleteForServices: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
     deleteForService: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
   },
   // `upsert` takes `ownerFieldUpsert` for exactly the reason `fragmentSourceRepository.upsert` does:

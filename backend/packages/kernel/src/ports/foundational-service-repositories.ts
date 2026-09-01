@@ -109,11 +109,36 @@ export interface ApiContractRepository {
     serviceId: string,
     contracts: ApiContractRecord[],
   ): Promise<void>
+  /**
+   * The same replacement for MANY services in one bounded set of statements, for a portal import
+   * that rewrites a whole estate in one pass.
+   *
+   * Its own method rather than a loop over the singular one at the call site, because a loop is
+   * the banned N+1: an estate of a thousand services would be two thousand sequential round trips
+   * inside one request, which on the Worker is a subrequest budget and on Node a write storm.
+   * An empty `sets` is a no-op. Each entry's delete and inserts land together, exactly as the
+   * singular method's do.
+   */
+  replaceForServices(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+    sets: { serviceId: string; contracts: ApiContractRecord[] }[],
+  ): Promise<void>
   /** Drop every contract of a service (its row was deleted or tombstoned). */
   deleteForService(
     ownerKind: FoundationalServiceOwnerKind,
     ownerId: string,
     serviceId: string,
+  ): Promise<void>
+  /**
+   * Drop every contract of MANY services, in chunked `IN` deletes. The retirement half of the
+   * batch pair above: disconnecting an imported catalog tombstones every service it produced, and
+   * doing that one id at a time is the same N+1 from the other direction.
+   */
+  deleteForServices(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+    serviceIds: string[],
   ): Promise<void>
 }
 
@@ -154,10 +179,31 @@ export interface FoundationalServiceRepository {
     serviceId: string,
   ): Promise<FoundationalServiceRecord | null>
   upsert(record: FoundationalServiceRecord): Promise<void>
+  /**
+   * Write MANY services in one bounded set of statements, for an import that reconciles a whole
+   * estate against a portal. Records may span services that exist and services that do not; each
+   * is upserted on the same `(owner_kind, owner_id, service_id)` conflict target as the singular
+   * write. An empty list is a no-op.
+   */
+  upsertMany(records: FoundationalServiceRecord[]): Promise<void>
   softDelete(
     ownerKind: FoundationalServiceOwnerKind,
     ownerId: string,
     serviceId: string,
+    at: number,
+  ): Promise<void>
+  /**
+   * Tombstone MANY of one tier's services in chunked `IN` updates.
+   *
+   * Owner-scoped, unlike {@link FoundationalServiceRepository.softDeleteBySource}, which is what
+   * an imported catalog needs: every workspace's import carries the SAME source id, so retiring
+   * one connection through the source-keyed write would tombstone every other workspace's estate
+   * along with it.
+   */
+  softDeleteByIds(
+    ownerKind: FoundationalServiceOwnerKind,
+    ownerId: string,
+    serviceIds: string[],
     at: number,
   ): Promise<void>
   /**

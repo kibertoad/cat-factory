@@ -620,7 +620,8 @@
         "vcs_capability_unsupported": "Bu çalışma alanına bağlı kaynak kontrol sağlayıcısı bu işlemi sunmuyor. Yanlış yapılandırılmış bir şey yok ve ayar değiştirmek işe yaramaz: bu işlem bu sağlayıcıda kullanılamıyor.",
         "service_catalog_unreachable": "Bu çalışma alanının geliştirici portalı yanıt vermedi ya da bu platformun okuyamadığı bir yanıt döndü. Burada yapılandırma hatası yok ve hiçbir değişiklik yardımcı olmaz: portal erişilebilir olduğunda yeniden deneyin.",
         "service_catalog_unauthorized": "Geliştirici portalı kayıtlı kimlik bilgisini reddetti. Büyük olasılıkla yenilenmiş ya da iptal edilmiş: servis kataloğu ayarlarını açıp güncel bir tane girin.",
-        "service_catalog_filter_missing": "Bu bağlantının varlık filtresi okunamadı, dolayısıyla aktarılacak bir şey yok. Geri getirmek için servis kataloğu bağlantısını yeniden kaydedin."
+        "service_catalog_filter_missing": "Bu bağlantının varlık filtresi okunamadı, dolayısıyla aktarılacak bir şey yok. Geri getirmek için servis kataloğu bağlantısını yeniden kaydedin.",
+        "service_catalog_response_too_large": "Geliştirici portalı, bu platformun tek bir yanıtta tutacağından daha fazla veri döndürdü. Servis kataloğu ayarlarını açıp servis sınırını düşürün ya da arayüz tanımlarının aktarımını kapatın, sonra yeniden aktarın."
       }
     },
     "action": {

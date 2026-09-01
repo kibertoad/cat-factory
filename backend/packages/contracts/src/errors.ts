@@ -286,6 +286,11 @@ export type ConflictReason = (typeof CONFLICT_REASONS)[number]
  *                                        so the import has no narrowing to apply and refuses
  *                                        rather than pulling the whole estate. Re-saving the
  *                                        connection restores it.
+ *  - `service_catalog_response_too_large`: the portal answered one request with more than this
+ *                                        platform will buffer. The one portal failure whose remedy
+ *                                        is on THIS side (lower the service cap, or stop importing
+ *                                        interface definitions), so it must not read as the
+ *                                        outage `service_catalog_unreachable` describes.
  *
  * Its sibling `vcs_client_unconfigured` (no client wired for the routed connection's provider) is
  * deliberately NOT here. That one IS a wiring gap, so the generic copy states it correctly, and
@@ -303,6 +308,7 @@ export const UNAVAILABLE_REASONS = [
   'service_catalog_unreachable',
   'service_catalog_unauthorized',
   'service_catalog_filter_missing',
+  'service_catalog_response_too_large',
 ] as const
 
 export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number]

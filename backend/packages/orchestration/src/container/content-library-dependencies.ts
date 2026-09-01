@@ -58,7 +58,7 @@ export interface ContentLibraryDependencies {
   // the module: absent → the deterministic matcher; present → the LLM selector.
   /**
    * The app-owned cache bag (docs/initiatives/caching-layer.md). A facade builds
-   * it once per process via `createAppCaches` — Node threads in the Redis-backed
+   * it once per process via `createAppCaches`: Node threads in the Redis-backed
    * invalidation notifications in multi-node deployments, the Worker passes the
    * isolate-safe profile. Absent (tests / harnesses) ⇒ `createCore` builds bare
    * in-memory defaults, whose coherence the services' own invalidation calls keep.
@@ -70,7 +70,7 @@ export interface ContentLibraryDependencies {
   fragmentSelector?: FragmentSelector
   resolveFragmentInstallationId?: ResolveFragmentInstallationId
   /**
-   * Persisted store for MODEL-GENERATED condensed briefs — the short variant an implementer
+   * Persisted store for MODEL-GENERATED condensed briefs: the short variant an implementer
    * kind folds when a long standard has no linked one. Absent ⇒ only authored/linked briefs
    * are folded and every other long standard is sent in full (the pre-feature behaviour).
    */
@@ -113,7 +113,7 @@ export interface ContentLibraryDependencies {
   skillSourceRepository?: SkillSourceRepository
   resolveSkillInstallationId?: ResolveSkillInstallationId
   /**
-   * Enqueues a targeted skill-source resync onto the runtime's GitHub-sync queue — the
+   * Enqueues a targeted skill-source resync onto the runtime's GitHub-sync queue, for the
    * push-webhook freshness fan-out (slice 4). Facade-provided (Worker Queue / Node pg-boss);
    * absent (no queue, or a pure-logic test) ⇒ no proactive resync, and freshness is guaranteed
    * at dispatch by the resolver's head-commit probe instead.
@@ -153,7 +153,7 @@ export interface ContentLibraryDependencies {
    */
   serviceCatalogUrlSafetyPolicy?: UrlSafetyPolicy
   /**
-   * The app-owned registry of foundational services a DEPLOYMENT ships in CODE — the `builtin`
+   * The app-owned registry of foundational services a DEPLOYMENT ships in CODE: the `builtin`
    * tier of the catalog merge, mirroring `pipelineRegistry` / `taskTypeRegistry`. Optional +
    * defaulted to `defaultFoundationalServiceRegistry()`, which ships exactly ONE service: the
    * platform's own asset storage, so a binary-output step has a target on a deployment that runs
@@ -163,10 +163,10 @@ export interface ContentLibraryDependencies {
    */
   foundationalServiceRegistry?: FoundationalServiceRegistry
   /**
-   * The app-owned registry of GENERATIVE BINARY INTEGRATIONS a DEPLOYMENT ships in CODE — the
+   * The app-owned registry of GENERATIVE BINARY INTEGRATIONS a DEPLOYMENT ships in CODE: the
    * image / music / video generation APIs a binary-generating step may call
    * (`stepOptions.binaryOutput.generatorIds`). Optional + defaulted to
-   * `defaultBinaryGeneratorRegistry()` (EMPTY — the platform ships none, and every one of them is
+   * `defaultBinaryGeneratorRegistry()` (EMPTY, because the platform ships none and every one of them is
    * a metered vendor), so existing construction sites behave exactly as before; a facade injects
    * the SAME instance it registers its integrations on, and boot validation reads it back so a
    * malformed definition or an unusable credential name fails the deployment rather than a
@@ -191,18 +191,18 @@ export interface ContentLibraryDependencies {
   binaryStoreRegistry?: BinaryStoreRegistry
   /**
    * Where those integrations are READ from, when that is not this process's own registry.
-   * Defaulted to `registryBinaryGeneratorSource(binaryGeneratorRegistry)` — i.e. exactly the
-   * behaviour above — and overridden by ONE caller: a MOTHERSHIP-MODE node, which reads the
+   * Defaulted to `registryBinaryGeneratorSource(binaryGeneratorRegistry)`, i.e. exactly the
+   * behaviour above, and overridden by ONE caller: a MOTHERSHIP-MODE node, which reads the
    * mothership's registry over `GET /internal/binary-generators`.
    *
    * The sibling of {@link foundationalBuiltinSource}, and it exists for the same reason with a
    * louder symptom. A mothership deployment is TWO processes, so a deployment had to register
-   * its integrations on both entry points; a node one build behind — the normal state of a local
-   * node — then refuses a step the mothership's own picker offered, with `unknown_generator`
+   * its integrations on both entry points; a node one build behind (the normal state of a local
+   * node) then refuses a step the mothership's own picker offered, with `unknown_generator`
    * naming a configuration that is correct. See `kernel/src/ports/binary-generators.ts`.
    *
    * When it is set, this process's own `binaryGeneratorRegistry` is NOT consulted for a run (the
-   * facade warns at boot if it is non-empty) — the two are alternatives, never a merge: a merge
+   * facade warns at boot if it is non-empty). The two are alternatives, never a merge: a merge
    * would reinstate the drift, since a stale local copy would win by id over the authoritative
    * one. The registry is still read for BOOT VALIDATION and for serving
    * `/internal/binary-generators` when this process is itself a mothership.
@@ -210,19 +210,19 @@ export interface ContentLibraryDependencies {
   binaryGeneratorSource?: BinaryGeneratorSource
   /**
    * Where the `builtin` tier is READ from, when that is not this process's own registry.
-   * Defaulted to `registryBuiltinSource(foundationalServiceRegistry)` — i.e. exactly the
-   * behaviour above — and overridden by ONE caller: a MOTHERSHIP-MODE node, which reads the
+   * Defaulted to `registryBuiltinSource(foundationalServiceRegistry)`, i.e. exactly the
+   * behaviour above, and overridden by ONE caller: a MOTHERSHIP-MODE node, which reads the
    * mothership's registry over `GET /internal/foundational-services`.
    *
    * It exists because a mothership deployment is TWO processes and the estate is org state: with
    * the registry as the only route, a deployment had to register the same estate on both entry
-   * points, and a node one build behind — the normal state of a local node — silently resolved a
+   * points, and a node one build behind (the normal state of a local node) silently resolved a
    * catalog missing whatever the mothership had since added. A run then simply does not consider
    * that service, which is indistinguishable from an Architect judging it irrelevant. See
    * `kernel/src/ports/foundational-builtins.ts`.
    *
    * When it is set, this process's own `foundationalServiceRegistry` is NOT consulted for the
-   * tier (the facade warns at boot if it is non-empty) — the two are alternatives, never a merge:
+   * tier (the facade warns at boot if it is non-empty). The two are alternatives, never a merge:
    * a merge would reinstate the drift, since a stale local copy would win by id over the
    * authoritative one.
    */
@@ -258,13 +258,13 @@ export interface ContentLibraryDependencies {
    * id. Here the halves are different things: a KIND's own declarations belong to the code that
    * implements it (which cannot cross a wire, so the kind CATALOG stays node-local, exactly like
    * task types and pipelines, and a step naming an unknown kind still fails loudly at admission),
-   * while `assignSkills`/`assignToolServers` are the DEPLOYMENT's layer on top — pure data whose
+   * while `assignSkills`/`assignToolServers` are the DEPLOYMENT's layer on top: pure data whose
    * absence on a node one build behind is silent, since the agent simply works without the org's
    * playbook. Absent ⇒ the local registry answers alone.
    */
   agentKindSource?: AgentKindSource
   /**
-   * Enqueues a targeted foundational-source resync onto the runtime's GitHub-sync queue — the
+   * Enqueues a targeted foundational-source resync onto the runtime's GitHub-sync queue, for the
    * push-webhook freshness fan-out, the twin of {@link CoreDependencies.enqueueSkillResync}.
    * Facade-provided (Worker Queue / Node pg-boss); absent (no queue, or a pure-logic test) ⇒ no
    * proactive resync, and the autorefresh sweep bounds staleness instead.
