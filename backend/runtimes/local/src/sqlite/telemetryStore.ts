@@ -127,6 +127,7 @@ const CARRY_COST_SUBQUERY_SQL = `SELECT
 /** The metadata columns a bounded page selects, plus each body's full `length()`. */
 const PAGE_METADATA_COLUMNS = `id, workspace_id, execution_id, agent_kind, provider, model,
   created_at, streaming, phase, turn_index, spend_only, message_count, tool_count, request_max_tokens,
+  reported_cost_usd, upstream_provider,
   prompt_tokens,
   cache_read_tokens, cache_write_tokens, completion_tokens, total_tokens, finish_reason, upstream_ms,
   overhead_ms, total_ms, ok, http_status, error_message, prompt_prefix_count,
@@ -237,6 +238,8 @@ function rowToPage(row: PageRow): LlmCallMetricPage {
     ok: row.ok === 1,
     httpStatus: row.http_status,
     errorMessage: row.error_message,
+    reportedCostUsd: row.reported_cost_usd,
+    upstreamProvider: row.upstream_provider,
     promptPrefixCount: row.prompt_prefix_count,
     prompt: withMatch(
       { text: row.prompt_text, totalChars: row.prompt_chars ?? 0 },
@@ -293,7 +296,14 @@ CREATE TABLE IF NOT EXISTS llm_call_metrics (
   -- leaves when it costs each turn's input but not its output. Real spend, so every token sum keeps
   -- it; not a call, so the call count excludes it. Mirrors D1 telemetry migration 0006. Defaults to
   -- 0 because that is true of every other producer, so a pre-column row reads right, not unset.
-  spend_only INTEGER NOT NULL DEFAULT 0
+  spend_only INTEGER NOT NULL DEFAULT 0,
+  -- What the VENDOR said the call cost (USD) and WHICH upstream a gateway routed it to, reported
+  -- by OpenRouter when usage accounting is on. Mirrors D1 telemetry migration 0007. Both stay
+  -- NULLABLE with no default, and that is the point: every other cost this platform holds is
+  -- DERIVED from the spend price table, so a 0 here would claim a free call rather than a call
+  -- nobody priced. addMissingColumns() brings an existing file up.
+  reported_cost_usd REAL,
+  upstream_provider TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_llm_call_metrics_execution
   ON llm_call_metrics (workspace_id, execution_id, created_at);
@@ -441,8 +451,8 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
             total_tokens, finish_reason,
             upstream_ms, overhead_ms, total_ms, ok, http_status, error_message,
             prompt_text, prompt_prefix_count, prompt_hash, response_text, reasoning_text,
-            phase, turn_index, spend_only)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            phase, turn_index, spend_only, reported_cost_usd, upstream_provider)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO NOTHING`,
       )
       .run(
@@ -477,6 +487,8 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
         metric.phase,
         metric.turnIndex,
         metric.spendOnly ? 1 : 0,
+        metric.reportedCostUsd,
+        metric.upstreamProvider,
       )
   }
 

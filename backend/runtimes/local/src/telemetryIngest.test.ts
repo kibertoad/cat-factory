@@ -57,6 +57,8 @@ function metric(id: string, executionId: string, createdAt: number): LlmCallMetr
     promptHash: '',
     responseText: 'ok',
     reasoningText: '',
+    reportedCostUsd: null,
+    upstreamProvider: null,
   }
 }
 

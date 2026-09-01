@@ -848,6 +848,13 @@ function exportJson() {
                       :title="c.model"
                     >
                       {{ c.provider }}:{{ c.model }}
+                      <!-- Which upstream a GATEWAY routed to. Without it every `openrouter` row
+                           reads alike, and an upstream having a bad day cannot be told from the
+                           gateway having one. Absent for a direct vendor, where `provider`
+                           already names who served the call. -->
+                      <span v-if="c.upstreamProvider" class="text-slate-600">
+                        {{ t('observability.call.viaUpstream', { upstream: c.upstreamProvider }) }}
+                      </span>
                     </span>
                     <div
                       class="ms-auto flex items-center gap-2.5 text-[11px] tabular-nums text-slate-400"
@@ -927,6 +934,18 @@ function exportJson() {
                       <span>{{
                         t('observability.call.total', { duration: formatMs(c.totalMs) })
                       }}</span>
+                      <!-- The one MEASURED cost on the row: what the gateway's own ledger says,
+                           in USD, against the derived estimate every other figure on this panel
+                           is. `!= null` and not truthiness: a reported 0 is a free route saying
+                           so, which is a different fact from a producer that reports nothing and
+                           must not be hidden as if it were. -->
+                      <span v-if="c.reportedCostUsd != null" class="text-slate-400">
+                        {{
+                          t('observability.call.reportedCost', {
+                            cost: formatCost(c.reportedCostUsd, 'USD'),
+                          })
+                        }}
+                      </span>
                     </div>
                     <div>
                       <div

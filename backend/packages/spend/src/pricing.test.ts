@@ -1,4 +1,4 @@
-import { MODEL_CATALOG } from '@cat-factory/kernel'
+import { MODEL_CATALOG, providerCachesPrompts } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   CACHE_READ_MULTIPLIER,
@@ -210,6 +210,48 @@ describe('mergeSpendPricing', () => {
   })
 })
 
+// Two tables state something about the same OpenRouter route: this one pins a cache-READ rate
+// where the vendor departs from the derived floor, and the cache policy answers whether a cache
+// hit HAPPENS on the request this platform sends. A pinned rate is therefore evidence that the
+// route bills the class, and the policy answering `false` for one is either deliberate or the bug
+// that had every `z-ai/*` slug and the Moonshot one reported as cacheless while the table priced
+// their cache reads.
+//
+// The set of deliberate disagreements is named rather than tolerated as a filter, so a NEW pinned
+// slug whose vendor the policy has never been asked about fails here until somebody states the
+// answer. Derived from the table itself, so adding a row cannot make the check vacuous.
+describe('pinned gateway cache rates against the cache policy', () => {
+  /**
+   * A pinned cache-read rate the policy deliberately answers `false` for, with the reason.
+   * The rate is what the vendor bills IF a hit occurs; the policy is whether one occurs here.
+   */
+  const CACHE_HIT_UNREACHABLE: Record<string, string> = {
+    // OpenRouter's Alibaba route requires explicit `cache_control` breakpoints (the same syntax
+    // Anthropic needs) and nothing on the gateway path emits them, so the published rate is real
+    // and unreachable. Emitting the breakpoints is what would let this move.
+    'qwen/qwen3.8-max': 'Alibaba caches only on explicit breakpoints, which this path never sends',
+  }
+
+  const pinnedCacheReadSlugs = Object.entries(DEFAULT_SPEND_PRICING.prices)
+    .filter(
+      ([ref, price]) => ref.startsWith('openrouter:') && price.cacheReadPerMillion !== undefined,
+    )
+    .map(([ref]) => ref.slice('openrouter:'.length))
+
+  it('has rows to check', () => {
+    // A zero here would make the assertion below vacuous, which is the failure mode of a loop
+    // over a filtered table.
+    expect(pinnedCacheReadSlugs.length).toBeGreaterThan(0)
+  })
+
+  it('accounts for every pinned cache rate: the route caches, or the reason it cannot is named', () => {
+    const notCaching = pinnedCacheReadSlugs
+      .filter((slug) => !providerCachesPrompts('openrouter', slug))
+      .sort()
+    expect(notCaching).toEqual(Object.keys(CACHE_HIT_UNREACHABLE).sort())
+  })
+})
+
 describe('withDynamicPrices', () => {
   const meta = (id: string, inputPerMillion: number, outputPerMillion: number) =>
     ({ id, inputPerMillion, outputPerMillion }) as Parameters<typeof withDynamicPrices>[1][number]
@@ -228,6 +270,56 @@ describe('withDynamicPrices', () => {
 
   it('returns the base table untouched for an empty catalog', () => {
     expect(withDynamicPrices(pricing, [])).toBe(pricing)
+  })
+
+  // The two cache classes are priced an order of magnitude apart in OPPOSITE directions, so a
+  // gateway's own published rates beat the derived multipliers wherever it publishes them.
+  it('carries the gateway-published cache rates through', () => {
+    const overlaid = withDynamicPrices(pricing, [
+      {
+        ...meta('vendor/cached', 4, 12),
+        cachedInputPerMillion: 0.25,
+        cacheWritePerMillion: 6,
+      } as Parameters<typeof withDynamicPrices>[1][number],
+    ])
+    expect(priceFor(overlaid, { provider: 'openrouter', model: 'vendor/cached' })).toEqual({
+      inputPerMillion: 4,
+      outputPerMillion: 12,
+      cacheReadPerMillion: 0.25,
+      cacheWritePerMillion: 6,
+    })
+  })
+
+  // Absent must stay absent so `ratesFor` still derives its fallback. Writing a derived multiple
+  // into the overlay instead would freeze today's ratio into every stored row and make the
+  // gateway's own repricing unreachable, which is what the dynamic path exists for.
+  it('leaves an unpublished cache rate to the multiplier fallback', () => {
+    const overlaid = withDynamicPrices(pricing, [meta('vendor/plain', 4, 12)])
+    const price = priceFor(overlaid, { provider: 'openrouter', model: 'vendor/plain' })
+    expect(price).toEqual({ inputPerMillion: 4, outputPerMillion: 12 })
+    expect(price).not.toHaveProperty('cacheReadPerMillion')
+  })
+
+  // A published zero and a missing rate are indistinguishable in the direction that matters: a
+  // gateway that does not bill a class separately lists `"0"` for it, and the catalog's 4-dp
+  // rounding turns any real rate below 0.00005/1M into the same zero. Overlaying either would
+  // meter every cache hit on that model at nothing.
+  it('drops a zero cache rate to the multiplier rather than metering cache hits free', () => {
+    const overlaid = withDynamicPrices(pricing, [
+      {
+        ...meta('vendor/zeroed', 4, 12),
+        cachedInputPerMillion: 0,
+        cacheWritePerMillion: 0,
+      } as Parameters<typeof withDynamicPrices>[1][number],
+    ])
+    const ref = { provider: 'openrouter', model: 'vendor/zeroed' }
+    expect(priceFor(overlaid, ref)).toEqual({ inputPerMillion: 4, outputPerMillion: 12 })
+    expect(ratesFor(overlaid, ref)).toEqual({
+      inputPerMillion: 4,
+      outputPerMillion: 12,
+      cacheReadPerMillion: 4 * CACHE_READ_MULTIPLIER,
+      cacheWritePerMillion: 4 * CACHE_WRITE_MULTIPLIER,
+    })
   })
 
   it('keeps every base entry beside the overlay rather than replacing the table', () => {

@@ -139,6 +139,149 @@ describe('llm proxy /v1/chat/completions', () => {
     })
   })
 
+  // The CONTAINER half of gateway attribution: what the proxy ASKS for. The inline path asks for
+  // the same two things through `openRouterResolver`, and a path that stopped asking keeps working
+  // and simply records nothing, which downstream is indistinguishable from a gateway that reports
+  // nothing. What is done with the ANSWER is pinned next door (`gateway-attribution` unit tests
+  // for the read, the conformance suite for the column mapping), for the reason the cached-classes
+  // test below records: both sinks are composed from one pass, so what can drift is the
+  // derivation, not the write.
+  it('asks OpenRouter for usage accounting and parameter-aware routing', async () => {
+    const workspaceId = `ws-${crypto.randomUUID()}`
+    const token = await mint({
+      workspaceId,
+      provider: 'openrouter',
+      model: 'anthropic/claude-opus-5',
+    })
+    const c = buildContainer(env, { agentExecutor: new FakeAgentExecutor() })
+    await c.apiKeys!.addKey('workspace', workspaceId, {
+      provider: 'openrouter',
+      label: 'gateway',
+      key: 'sk-or',
+    })
+
+    let forwarded: Record<string, unknown> = {}
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: { body: string }) => {
+        forwarded = JSON.parse(init.body) as Record<string, unknown>
+        return new Response(
+          JSON.stringify({
+            provider: 'anthropic',
+            choices: [{ message: { role: 'assistant', content: 'ok' } }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, cost: 0.0421 },
+          }),
+          { headers: { 'content-type': 'application/json' } },
+        )
+      }),
+    )
+
+    const app = createApp({ overrides: { agentExecutor: new FakeAgentExecutor() } })
+    expect((await app.fetch(chatRequest(token), testEnv())).status).toBe(200)
+
+    expect(forwarded.usage).toEqual({ include: true })
+    expect(forwarded.provider).toMatchObject({ require_parameters: true, data_collection: 'deny' })
+    // The locked model still wins over whatever the container asked for, gateway params or not.
+    expect(forwarded.model).toBe('anthropic/claude-opus-5')
+  })
+
+  // The other side of asking: a constraint that empties the routing pool turns a model everyone
+  // else can reach into a 404 for this deployment alone, and the gateway's own body cannot say
+  // which allow-list excluded what, because only the sender knows what it applied. Relayed
+  // verbatim to the container either way; what gains the explanation is the RECORDED failure,
+  // which is where an operator looks.
+  it('reports which routing constraint can have caused a gateway refusal', async () => {
+    const workspaceId = `ws-${crypto.randomUUID()}`
+    const token = await mint({
+      workspaceId,
+      provider: 'openrouter',
+      model: 'z-ai/glm-5.2',
+    })
+    const c = buildContainer(env, { agentExecutor: new FakeAgentExecutor() })
+    await c.apiKeys!.addKey('workspace', workspaceId, {
+      provider: 'openrouter',
+      label: 'gateway',
+      key: 'sk-or',
+    })
+
+    const upstreamBody = JSON.stringify({
+      error: { message: 'No allowed providers are available for the selected model.', code: 404 },
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(upstreamBody, {
+            status: 404,
+            headers: { 'content-type': 'application/json' },
+          }),
+      ),
+    )
+
+    const recorder = new RecordingEventPublisher()
+    const app = createApp({
+      overrides: { agentExecutor: new FakeAgentExecutor(), executionEventPublisher: recorder },
+    })
+    const res = await app.fetch(chatRequest(token), testEnv())
+    expect(res.status).toBe(404)
+    // The container agent still reads exactly what the gateway said, byte for byte.
+    expect(await res.text()).toBe(upstreamBody)
+
+    const activity = recorder.llmCalls[0]!
+    expect(activity.ok).toBe(false)
+    expect(activity.httpStatus).toBe(404)
+    expect(activity.errorMessage).toContain('OPENROUTER_DATA_COLLECTION=allow')
+    expect(activity.errorMessage).toContain('OPENROUTER_REQUIRE_PARAMETERS=false')
+  })
+
+  it('relays an unrelated upstream failure without inventing a remedy', async () => {
+    // A 429 from the same gateway is not ours to explain, and naming a setting that cannot have
+    // caused it would send an operator after a change that changes nothing.
+    const workspaceId = `ws-${crypto.randomUUID()}`
+    const token = await mint({ workspaceId })
+    await seedQwenKey(workspaceId)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{"error":"slow down"}', { status: 429 })),
+    )
+
+    const recorder = new RecordingEventPublisher()
+    const app = createApp({
+      overrides: { agentExecutor: new FakeAgentExecutor(), executionEventPublisher: recorder },
+    })
+    expect((await app.fetch(chatRequest(token), testEnv())).status).toBe(429)
+    expect(recorder.llmCalls[0]!.errorMessage).toBe('Upstream returned 429')
+  })
+
+  it('sends no gateway params to a provider that has none', async () => {
+    // An unknown key in the body of a strict endpoint buys nothing and can be refused, so the
+    // params are gateway-only rather than merged for everyone.
+    const workspaceId = `ws-${crypto.randomUUID()}`
+    const token = await mint({ workspaceId })
+    await seedQwenKey(workspaceId)
+
+    let forwarded: Record<string, unknown> = {}
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: { body: string }) => {
+        forwarded = JSON.parse(init.body) as Record<string, unknown>
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { role: 'assistant', content: 'ok' } }],
+            usage: { prompt_tokens: 10, completion_tokens: 5 },
+          }),
+          { headers: { 'content-type': 'application/json' } },
+        )
+      }),
+    )
+
+    const app = createApp({ overrides: { agentExecutor: new FakeAgentExecutor() } })
+    expect((await app.fetch(chatRequest(token), testEnv())).status).toBe(200)
+
+    expect(forwarded.usage).toBeUndefined()
+    expect(forwarded.provider).toBeUndefined()
+  })
+
   it('pushes a compact llmCall activity event per proxied call (no prompt/response bodies)', async () => {
     const workspaceId = `ws-${crypto.randomUUID()}`
     const executionId = `ex-${crypto.randomUUID()}`

@@ -227,6 +227,14 @@ const CLASSIFICATION = [
     vendors: ['openrouter'],
   },
   {
+    // The pin checker: it re-reads the same `/models` catalogue the service does, from a plain
+    // Node script on the weekly cadence rather than from a request path, so the vendor page that
+    // settles the service settles this too.
+    path: 'scripts/check-openrouter-pins.mjs',
+    kind: 'vendor',
+    vendors: ['openrouter'],
+  },
+  {
     path: 'backend/packages/integrations/src/modules/providers/githubPatCapability.ts',
     kind: 'vendor',
     vendors: ['github'],

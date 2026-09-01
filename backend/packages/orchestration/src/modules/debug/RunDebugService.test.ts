@@ -61,6 +61,8 @@ function call(id: string, createdAt: number): LlmCallMetricPage {
     prompt: { text: '', totalChars: 10 },
     response: { text: '', totalChars: 10 },
     reasoning: { text: '', totalChars: 0 },
+    reportedCostUsd: null,
+    upstreamProvider: null,
   }
 }
 

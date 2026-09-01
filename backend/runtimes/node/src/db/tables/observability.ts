@@ -83,6 +83,19 @@ export const llmCallMetrics = telemetry.table(
     // reasoning model can spend its whole output budget here and return empty
     // response_text). Mirrors D1 migration 0002_llm_reasoning_text.
     reasoning_text: text('reasoning_text').notNull().default(''),
+    // What the VENDOR said this call cost, in USD, for the one provider class that says: an
+    // OpenRouter call with usage accounting on reports its own ledger figure. NULL everywhere
+    // else, and NULL is the load-bearing value: every other row's cost is DERIVED from the
+    // spend price table, and a 0 here would claim a free call rather than an unreported one.
+    // Stored in the vendor's own currency rather than converted, because the USD→spend-currency
+    // rate is this platform's assumption and the reported figure is not. Mirrors D1 telemetry
+    // migration 0007_llm_call_gateway_attribution.
+    reported_cost_usd: doublePrecision('reported_cost_usd'),
+    // WHICH upstream a gateway routed this call to (OpenRouter's `provider`), e.g. `anthropic`
+    // or `deepinfra`. NULL for a direct vendor, where `provider` above already names it. A
+    // gateway resells many upstreams at different rates and reliabilities, so without this a
+    // slow or failing upstream is invisible: every row just reads `openrouter`.
+    upstream_provider: text('upstream_provider'),
   },
   (t) => [
     index('idx_llm_call_metrics_execution').on(t.workspace_id, t.execution_id, t.created_at),

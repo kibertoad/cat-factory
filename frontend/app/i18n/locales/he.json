@@ -1790,6 +1790,8 @@
       "cacheRead": "{tokens} נקראו מהמטמון",
       "cacheWrite": "{tokens} נכתבו למטמון",
       "total": "סך הכל {duration}",
+      "viaUpstream": "דרך {upstream}",
+      "reportedCost": "חויב {cost}",
       "prompt": "פרומפט",
       "promptPrefixOmitted": "(הודעות חדשות בלבד: {count} מוקדמות יותר הושמטו)",
       "response": "תגובה",
@@ -3754,6 +3756,7 @@
       "context": "{value} ctx",
       "contextThousands": "{value}K ctx",
       "price": "{input}/{output} לכל Mtok",
+      "retiresOn": "יוצא משימוש ב-{date}",
       "toast": {
         "connected": "מפתח OpenRouter מחובר",
         "connectFailed": "לא ניתן היה לחבר מפתח",

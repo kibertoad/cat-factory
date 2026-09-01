@@ -1,4 +1,4 @@
-import type { InputTokenClasses } from '@cat-factory/agents'
+import type { GatewayCallReport, InputTokenClasses } from '@cat-factory/agents'
 import type { WebSearchProvider } from '@cat-factory/contracts'
 import type { TrackerWebhookEvent } from '@cat-factory/kernel'
 import type { Logger } from '../observability/logger.js'
@@ -116,6 +116,14 @@ export interface ProxyCallObservation {
   errorMessage: string | null
   /** Time spent waiting on the model (ms) — measured by the path that made the call. */
   upstreamMs: number
+  /**
+   * What a GATEWAY reported about the call: its own USD ledger cost and the upstream it routed
+   * to. Absent for every provider that reports neither, which is NOT the same as zero: a reader
+   * falls back to the derived price-table estimate for the first and takes the exact figure for
+   * the second. Read off the completion with `readCompletionGatewayReport`; why it is asked for
+   * at all is in `@cat-factory/agents`' `gateway-attribution.ts`.
+   */
+  gateway?: GatewayCallReport
 }
 
 /**

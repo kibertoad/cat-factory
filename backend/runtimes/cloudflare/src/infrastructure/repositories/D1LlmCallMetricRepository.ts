@@ -143,6 +143,8 @@ interface MetricRow {
   prompt_hash: string
   response_text: string
   reasoning_text: string
+  reported_cost_usd: number | null
+  upstream_provider: string | null
 }
 
 function rowToMetric(row: MetricRow): LlmCallMetric {
@@ -178,6 +180,8 @@ function rowToMetric(row: MetricRow): LlmCallMetric {
     promptHash: row.prompt_hash,
     responseText: row.response_text,
     reasoningText: row.reasoning_text,
+    reportedCostUsd: row.reported_cost_usd,
+    upstreamProvider: row.upstream_provider,
   }
 }
 
@@ -190,6 +194,7 @@ const PAGE_METADATA_COLUMNS = `id, workspace_id, execution_id, agent_kind, provi
   prompt_tokens,
   cache_read_tokens, cache_write_tokens, completion_tokens, total_tokens, finish_reason, upstream_ms,
   overhead_ms, total_ms, ok, http_status, error_message, prompt_prefix_count,
+  reported_cost_usd, upstream_provider,
   length(prompt_text)    AS prompt_chars,
   length(response_text)  AS response_chars,
   length(reasoning_text) AS reasoning_chars`
@@ -318,6 +323,8 @@ function rowToPage(row: PageRow): LlmCallMetricPage {
     ok: row.ok === 1,
     httpStatus: row.http_status,
     errorMessage: row.error_message,
+    reportedCostUsd: row.reported_cost_usd,
+    upstreamProvider: row.upstream_provider,
     promptPrefixCount: row.prompt_prefix_count,
     prompt: withMatch(
       { text: row.prompt_text, totalChars: row.prompt_chars ?? 0 },
@@ -383,8 +390,8 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
             total_tokens, finish_reason,
             upstream_ms, overhead_ms, total_ms, ok, http_status, error_message,
             prompt_text, prompt_prefix_count, prompt_hash, response_text, reasoning_text,
-            spend_only)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            spend_only, reported_cost_usd, upstream_provider)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO NOTHING`,
       )
       .bind(
@@ -419,6 +426,8 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
         metric.responseText,
         metric.reasoningText,
         metric.spendOnly ? 1 : 0,
+        metric.reportedCostUsd,
+        metric.upstreamProvider,
       )
   }
 

@@ -1790,6 +1790,8 @@
       "cacheRead": "{tokens} önbellekten okundu",
       "cacheWrite": "{tokens} önbelleğe yazıldı",
       "total": "toplam {duration}",
+      "viaUpstream": "{upstream} üzerinden",
+      "reportedCost": "faturalanan {cost}",
       "prompt": "İstem",
       "promptPrefixOmitted": "(yalnızca yeni mesajlar: {count} öncekisi atlandı)",
       "response": "Yanıt",
@@ -3754,6 +3756,7 @@
       "context": "{value} bağlam",
       "contextThousands": "{value}K bağlam",
       "price": "Mtok başına {input}/{output}",
+      "retiresOn": "{date} tarihinde kaldırılıyor",
       "toast": {
         "connected": "OpenRouter anahtarı bağlandı",
         "connectFailed": "Anahtar bağlanamadı",

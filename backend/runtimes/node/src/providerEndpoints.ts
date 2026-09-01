@@ -1,4 +1,9 @@
-import { cloudflareRestBaseUrl, resolveOpenAiCompatibleBaseUrl } from '@cat-factory/agents'
+import {
+  cloudflareRestBaseUrl,
+  openRouterRoutingFrom,
+  resolveOpenAiCompatibleBaseUrl,
+  type OpenRouterRouting,
+} from '@cat-factory/agents'
 
 // The Node facade's env plumbing for the shared provider table, and NOTHING else: this module is
 // deliberately a LEAF over @cat-factory/agents.
@@ -26,6 +31,16 @@ import { cloudflareRestBaseUrl, resolveOpenAiCompatibleBaseUrl } from '@cat-fact
  */
 export function baseUrlForNode(provider: string, env: NodeJS.ProcessEnv): string | undefined {
   return resolveOpenAiCompatibleBaseUrl(provider, env[`${provider.toUpperCase()}_BASE_URL`])
+}
+
+/**
+ * This deployment's OpenRouter routing constraints: what it will let the gateway route to.
+ * Strict on both axes unless the operator says otherwise; the parse and its reasoning are shared
+ * with the Worker facade so one deployment cannot be permissive on one runtime and strict on the
+ * other.
+ */
+export function openRouterRoutingForNode(env: NodeJS.ProcessEnv): OpenRouterRouting {
+  return openRouterRoutingFrom(env)
 }
 
 /** A deployment's Cloudflare account credentials for reaching Workers AI over REST. */

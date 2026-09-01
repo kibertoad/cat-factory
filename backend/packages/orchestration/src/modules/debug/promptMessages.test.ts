@@ -112,6 +112,8 @@ describe('toDebugLlmCallMessagesView', () => {
     prompt: { text: promptText, totalChars: promptText.length },
     response: { text: 'the visible reply', totalChars: 17 },
     reasoning: { text: '', totalChars: 0 },
+    reportedCostUsd: null,
+    upstreamProvider: null,
   })
 
   it('returns parsed messages with the raw prompt as sizes only (same bytes, one presentation)', () => {

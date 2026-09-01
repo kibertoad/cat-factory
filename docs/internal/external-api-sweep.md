@@ -98,7 +98,7 @@ the same collapse the verdict exists to refuse.
 | Alibaba DashScope         | `compatible-mode/v1` on the `-intl` host            | `endpoints.ts:9`                                                          | Drifting                  | Low      |
 | DeepSeek                  | `/v1` (plus `/anthropic`)                           | `endpoints.ts:10`, `models.ts:116`                                        | Drifting                  | Low      |
 | Notion                    | `notion-version: 2022-06-28`                        | `NotionProvider.ts:20-22,208,261`                                         | Drifting                  | Low      |
-| OpenRouter                | `/api/v1/models`                                    | `OpenRouterCatalogService.ts:30,126`                                      | Drifting                  | Low      |
+| OpenRouter                | `/api/v1/models`                                    | `OpenRouterCatalogService.ts:30`, `openRouterModels.ts`                   | Current                   | Low      |
 | Brave Search              | `/res/v1/web/search`                                | `upstreams.ts:57`                                                         | Current                   | Low      |
 | GitLab                    | REST **v4**                                         | `FetchGitLabClient.ts` + 4 siblings                                       | Current                   | High     |
 | Jira                      | Cloud REST **v3**                                   | `JiraProvider.ts`, `TicketTrackerService.ts:125`, `jira.writeback.ts:88`  | Current                   | High     |
@@ -117,7 +117,7 @@ the same collapse the verdict exists to refuse.
 | Z.ai                      | `/api/anthropic`                                    | `models.ts:105`                                                           | Current                   | Low      |
 | Zeplin                    | `/v1`                                               | `ZeplinProvider.ts:38,98-184`                                             | Current                   | Low      |
 
-Counts: 3 Broken, 2 Deprecated-with-a-date, 1 Unverifiable, 11 Drifting, 17 Current.
+Counts: 3 Broken, 2 Deprecated-with-a-date, 1 Unverifiable, 10 Drifting, 18 Current.
 
 Severity is ours, not the vendor's: breaks a run path with no fallback is High, an optional
 integration degrading is Medium, ergonomics is Low. A **Current** row can still carry High
@@ -638,12 +638,13 @@ header" (529 is named alongside 429, which our path does not distinguish). Read 
 [block children](https://developers.notion.com/reference/get-block-children),
 [search](https://developers.notion.com/reference/post-search).
 
-### OpenRouter: Drifting (Low)
+### OpenRouter: Current (Low)
 
 **What we call.** `OpenRouterCatalogService.ts:30` sets
-`OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'`; `:126` probes `/models` with a leased pooled
-key as `Bearer`, reading `id`, `name`, `context_length`, `pricing.prompt` and `pricing.completion`
-and converting USD per token to per-million.
+`OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'`; `refresh` probes `/models` with a leased
+pooled key as `Bearer` and `openRouterModels.ts` reads the payload, converting USD per token to
+per-million. `/api/v1/chat/completions` is reached two ways: inline through
+`@openrouter/ai-sdk-provider`, and from a container agent through the LLM proxy's forward path.
 
 **Verdict.** Path, auth, field names and the unit are all unchanged. The unit was verified
 explicitly because getting it wrong is a 1,000,000x cost-display error: pricing is "in USD per
@@ -652,15 +653,39 @@ free). No per-million conversion has crept in. Read 2026-08-18:
 [models list](https://openrouter.ai/docs/api/api-reference/models/list-all-models-and-their-properties),
 [models overview](https://openrouter.ai/docs/guides/overview/models).
 
-**The drift is what we drop.** The endpoint has grown fields our catalog silently discards:
-`supported_parameters`, `architecture.{input_modalities, output_modalities, tokenizer,
-instruct_type}`, `canonical_slug` (permanent, unlike `id`), `created`, `top_provider`,
-`per_request_limits`, `default_parameters`, `benchmarks`, and **`expiration_date`** (a model
-endpoint's deprecation date, null if none). Pricing has grown well past prompt and completion:
-`request`, `image`, `image_output`, `image_token`, `audio`, `audio_output`, `web_search`,
-`internal_reasoning`, `input_cache_read`, `input_cache_write`, `input_cache_write_1h`,
-`input_audio_cache`, `overrides`. `/models` also now takes `offset`/`limit` (max 1000; omitting both
-returns the full list) plus `category`, `q`, `sort`, `min_price`/`max_price` and more.
+**The drift was what we dropped, and most of it is now read** (2026-09-01, this sweep's
+follow-up): `parseOpenRouterModels` takes `canonical_slug`, `expiration_date` and the full pricing
+shape: `input_cache_read`, `input_cache_write` / `input_cache_write_1h`, and the conditional
+`overrides` bands, folded to their MAXIMUM because which band applies depends on the prompt length
+and the wall clock at call time and a budget may only be wrong upward. **There is no `discount`
+field**, contrary to an earlier draft of this entry: a fresh read of the full list on 2026-09-01
+found the key on none of the 420 models, so nothing multiplies the listed rates down. If it ever
+appears, note that an account discount is the one pricing field a budget must NOT apply blind,
+since the listed rate is the conservative reading and the discounted one under-meters. The cache
+rates reach the spend table through `withDynamicPrices`; `expiration_date` reaches the catalog
+picker, because a withdrawn pin fails silently (the route stops answering and the run takes the
+next one). `scripts/check-openrouter-pins.mjs` re-reads the live catalogue against the ~20
+`openrouter:<slug>` rows in the spend table; its first run found three pins understating the live
+rate, one of them (`deepseek/deepseek-v4-pro`) by nearly 3x.
+
+Still dropped, deliberately: `supported_parameters`, `architecture.*`, `created`, `top_provider`,
+`per_request_limits`, `default_parameters`, `benchmarks`, and the non-text pricing classes
+(`request`, `image*`, `audio*`, `web_search`, `internal_reasoning`, `input_audio_cache`). Nothing
+here meters them yet. `/models` also takes `offset`/`limit` (max 1000; omitting both returns the
+full list) plus `category`, `q`, `sort`, `min_price`/`max_price`; we read the full list, which is
+what the pin check and the browse picker both want.
+
+**We now also SEND two things we did not.** `usage: { include: true }` turns on usage accounting,
+so a reply carries the gateway's own `cost` and the `provider` it routed to (recorded on
+`llm_call_metrics`; see [`llm-telemetry.md`](../../backend/docs/llm-telemetry.md)), and
+`provider: { require_parameters, data_collection }` constrains routing. Both ride the inline path
+(`openRouterResolver`) and the container proxy through one module, `gateway-attribution.ts`.
+
+Both routing constraints NARROW the upstream pool, and a pool narrowed to nothing is a 404
+(`No allowed providers are available for the selected model`), not a degraded call. Each therefore
+has a deployment override (`OPENROUTER_DATA_COLLECTION`, `OPENROUTER_REQUIRE_PARAMETERS`), and the
+proxy recognises that refusal and records which constraint could have caused it: the gateway
+cannot say, because our request is the only place both are stated.
 
 ### GitLab REST v4: Current (High)
 

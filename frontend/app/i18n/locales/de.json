@@ -1021,6 +1021,7 @@
       "context": "{value} Ktx",
       "contextThousands": "{value}K Ktx",
       "price": "{input}/{output} pro Mtok",
+      "retiresOn": "Auslauf am {date}",
       "toast": {
         "connected": "OpenRouter-Schlüssel verbunden",
         "connectFailed": "Schlüssel konnte nicht verbunden werden",
@@ -3843,6 +3844,8 @@
       "cacheRead": "{tokens} aus dem Cache gelesen",
       "cacheWrite": "{tokens} in den Cache geschrieben",
       "total": "gesamt {duration}",
+      "viaUpstream": "über {upstream}",
+      "reportedCost": "abgerechnet {cost}",
       "prompt": "Prompt",
       "promptPrefixOmitted": "(nur neue Nachrichten: {count} frühere ausgelassen)",
       "response": "Antwort",

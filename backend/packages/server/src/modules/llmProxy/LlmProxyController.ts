@@ -1,8 +1,14 @@
 import { type Context, Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import {
+  DEFAULT_OPENROUTER_ROUTING,
+  type GatewayCallReport,
   type InputTokenClasses,
+  type OpenRouterRouting,
+  gatewayRequestParams,
+  gatewayRoutingRefusal,
   promptCacheParams,
+  readCompletionGatewayReport,
   readInputTokenClasses,
 } from '@cat-factory/agents'
 import { isLocalRunner } from '@cat-factory/contracts'
@@ -160,6 +166,13 @@ interface ProxyCallContext {
   session: ContainerSession
   payload: Record<string, unknown>
   streaming: boolean
+  /**
+   * The routing constraints this deployment put on the request, carried to the relay because a
+   * gateway's refusal names none of them: only the sender knows which allow-lists it applied,
+   * and {@link gatewayRoutingRefusal} is what turns "no allowed providers" into the variable an
+   * operator can change.
+   */
+  openRouterRouting: OpenRouterRouting
   promptText: string
   log: typeof logger
   gateways: RuntimeGateways
@@ -512,19 +525,34 @@ async function relayUpstream(
     upstreamRes = await fetch(upstreamUrl, upstreamInit)
   }
 
-  // Non-2xx: pass the upstream error straight back, nothing to meter.
+  // Non-2xx: pass the upstream error straight back, nothing to meter. The body is read to a
+  // string first (an error body, so small) rather than streamed through, because one class of
+  // failure is OURS to explain: a gateway refusing to route because the deployment's own
+  // constraints left no upstream. Relayed byte-for-byte either way; only what is RECORDED and
+  // LOGGED gains the explanation, since that is where an operator looks and the container agent
+  // can do nothing with it.
   if (!upstreamRes.ok || !upstreamRes.body) {
-    log.error('llm proxy: upstream returned non-2xx', { status: upstreamRes.status })
+    const body = await upstreamRes.text()
+    const refusal = gatewayRoutingRefusal({
+      provider: ctx.session.provider,
+      status: upstreamRes.status,
+      body,
+      routing: ctx.openRouterRouting,
+    })
+    if (refusal) log.error('llm proxy: gateway refused to route', { status: upstreamRes.status })
+    else log.error('llm proxy: upstream returned non-2xx', { status: upstreamRes.status })
     observe({
       usage: null,
       finishReason: null,
       responseText: '',
       ok: false,
       httpStatus: upstreamRes.status,
-      errorMessage: `Upstream returned ${upstreamRes.status}`,
+      errorMessage: refusal ?? `Upstream returned ${upstreamRes.status}`,
       upstreamMs: Date.now() - dispatchAt,
     })
-    return new Response(upstreamRes.body, {
+    // `|| null` because this branch also catches a 2xx with NO body: a null-body status (204,
+    // 304) refuses to be constructed with one, even the empty string `text()` yields.
+    return new Response(body || null, {
       status: upstreamRes.status,
       headers: { 'content-type': upstreamRes.headers.get('content-type') ?? 'application/json' },
     })
@@ -559,6 +587,7 @@ async function relayUpstream(
     httpStatus: upstreamRes.status,
     errorMessage: null,
     upstreamMs,
+    gateway: readCompletionGatewayReport(json),
   })
   return c.json(json as Record<string, unknown>)
 }
@@ -711,6 +740,11 @@ function makeCallObserver(
           promptText,
           responseText: obs.responseText,
           reasoningText: obs.reasoningText ?? '',
+          // Persisted only where a gateway actually said, so the column stays NULL for every
+          // producer that reports nothing. `?? null` and not a truthiness test: a free route
+          // reports 0, which is a measured fact and not the same as silence.
+          reportedCostUsd: obs.gateway?.cost ?? null,
+          upstreamProvider: obs.gateway?.upstream ?? null,
         })
         // Observability must never break the proxy.
         .catch((err) =>
@@ -774,6 +808,14 @@ async function handleChatCompletion(c: Context<AppEnv>): Promise<Response> {
   // turns). A no-op for providers that cache automatically on the prefix or not at
   // all — see `promptCacheParams`.
   Object.assign(payload, promptCacheParams(session.provider, session.executionId))
+
+  // Gateway reporting: ask OpenRouter for its own ledger cost and the upstream it routes to, and
+  // keep the request off an upstream that would ignore the tools this call offers. A no-op for
+  // every other provider, so it merges unconditionally, exactly like the cache params above. The
+  // INLINE path asks for the same two through `openRouterResolver`; both read the answer back
+  // through the same module, which is what stops one path quietly ceasing to ask.
+  const openRouterRouting = config.openRouterRouting ?? DEFAULT_OPENROUTER_ROUTING
+  Object.assign(payload, gatewayRequestParams(session.provider, openRouterRouting))
 
   // The run phase this call belongs to, off the (optional) path segment the caller was
   // pointed at. Read through the untyped `param()` map because the SAME handler serves the
@@ -916,6 +958,7 @@ async function handleChatCompletion(c: Context<AppEnv>): Promise<Response> {
     session,
     payload,
     streaming,
+    openRouterRouting,
     promptText,
     log,
     gateways,
@@ -967,6 +1010,8 @@ export function llmProxyController(): Hono<AppEnv> {
 /** Shape of a buffered OpenAI completion the proxy reads (usage + first choice). */
 interface BufferedCompletion {
   usage?: LlmTokenUsage
+  /** The upstream a GATEWAY routed to, when it names one (OpenRouter). */
+  provider?: string
   choices?: Array<{
     message?: {
       content?: string | null
@@ -998,6 +1043,8 @@ function reasoningTextFromCompletion(json: BufferedCompletion): string {
 /** One OpenAI SSE chunk shape the observation scanner reads. */
 interface StreamChunk {
   usage?: LlmTokenUsage | null
+  /** The upstream a GATEWAY routed to, when it names one (OpenRouter). */
+  provider?: string
   choices?: Array<{
     delta?: {
       content?: string | null
@@ -1042,6 +1089,11 @@ function observationStream(
   let finishReason: string | null = null
   let text = ''
   let reasoning = ''
+  // The gateway's own account of the call, folded across chunks the same way `lastUsage` is: a
+  // streamed reply names its upstream on the FIRST chunk and carries the cost on the LAST, so a
+  // single-chunk read would always lose one of the two. Merged rather than replaced, so a later
+  // chunk that reports only one field cannot blank the other.
+  let gateway: GatewayCallReport = {}
 
   const scan = (input: string) => {
     buffer += input
@@ -1055,6 +1107,7 @@ function observationStream(
       try {
         const parsed = JSON.parse(data) as StreamChunk
         if (parsed.usage) lastUsage = parsed.usage
+        gateway = { ...gateway, ...readCompletionGatewayReport(parsed) }
         const choice = parsed.choices?.[0]
         if (choice) {
           const delta = choice.delta?.content
@@ -1085,6 +1138,7 @@ function observationStream(
         httpStatus: 200,
         errorMessage: null,
         upstreamMs: Date.now() - dispatchAt,
+        gateway,
       })
     },
   })

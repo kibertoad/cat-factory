@@ -31,6 +31,86 @@ export const XAI_BASE_URL = 'https://api.x.ai/v1'
 // itself, so it has a public endpoint to default to.
 export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 
+/** Whether OpenRouter may route a request to an upstream that retains prompts. */
+export type OpenRouterDataCollection = 'allow' | 'deny'
+
+/**
+ * How a deployment constrains OpenRouter's per-request provider routing.
+ *
+ * BOTH members narrow the pool of upstreams the gateway may pick from, and a pool narrowed to
+ * nothing is not a degraded call but a refused one (OpenRouter answers 404 `No allowed providers
+ * are available for the selected model`). That is why neither is a bare constant in the request
+ * builder: a deployment whose chosen model is served only by upstreams a constraint excludes has
+ * to be able to relax it without forking, and {@link gatewayRoutingRefusal} is what tells the
+ * operator which one to relax.
+ */
+export interface OpenRouterRouting {
+  /**
+   * Whether OpenRouter may route to an upstream that RETAINS prompts. `deny` by default, which
+   * is stricter than the vendor's own `allow`: an agent's prompt carries the customer's
+   * checkout, so opting in is a decision an operator makes on the record.
+   */
+  dataCollection: OpenRouterDataCollection
+  /**
+   * Whether to keep the request off an upstream that does not advertise every parameter it
+   * carries. True by default, because an upstream that silently ignores a tool definition or a
+   * response schema is the failure mode a gateway ADDS over talking to a vendor directly, and it
+   * is invisible: the call succeeds and answers the wrong shape.
+   *
+   * The cost of the default is the pool it can empty, which is the case for turning it off:
+   * routing to an upstream that ignores one sampling knob beats not routing at all.
+   */
+  requireParameters: boolean
+}
+
+/** The routing this platform applies when a deployment says nothing: strict on both axes. */
+export const DEFAULT_OPENROUTER_ROUTING: OpenRouterRouting = {
+  dataCollection: 'deny',
+  requireParameters: true,
+}
+
+/**
+ * Read `OPENROUTER_DATA_COLLECTION` into the routing policy OpenRouter is given.
+ *
+ * OpenRouter's own default is `allow`, and this platform's is not, which is why the value is
+ * parsed rather than passed through: an agent prompt carries the customer's checkout, so
+ * routing it to a prompt-retaining upstream is a decision an operator makes on the record.
+ *
+ * Only the exact string `allow` opts in. A typo, a `true`, a `yes` and an empty override all
+ * stay denied, because the direction a misread must fail in is the private one. Shared by both
+ * facades so a deployment cannot be permissive on one and strict on the other.
+ */
+export function openRouterDataCollectionFrom(
+  value: string | null | undefined,
+): OpenRouterDataCollection {
+  return value?.trim().toLowerCase() === 'allow' ? 'allow' : 'deny'
+}
+
+/**
+ * Read `OPENROUTER_REQUIRE_PARAMETERS` into the routing policy.
+ *
+ * The mirror image of {@link openRouterDataCollectionFrom}: only the exact string `false` opts
+ * OUT, so a typo keeps the strict default. The two fail in opposite directions on purpose,
+ * because each default is the safe end of its own axis (private, and shape-honest).
+ */
+export function openRouterRequireParametersFrom(value: string | null | undefined): boolean {
+  return value?.trim().toLowerCase() !== 'false'
+}
+
+/**
+ * Read both routing knobs out of a deployment's environment. ONE reader, so a facade cannot
+ * wire one axis and forget the other, and both facades read the same two names.
+ */
+export function openRouterRoutingFrom(env: {
+  OPENROUTER_DATA_COLLECTION?: string | null | undefined
+  OPENROUTER_REQUIRE_PARAMETERS?: string | null | undefined
+}): OpenRouterRouting {
+  return {
+    dataCollection: openRouterDataCollectionFrom(env.OPENROUTER_DATA_COLLECTION),
+    requireParameters: openRouterRequireParametersFrom(env.OPENROUTER_REQUIRE_PARAMETERS),
+  }
+}
+
 /**
  * Every provider reached over the shared OpenAI-compatible `/chat/completions` path, mapped
  * to the endpoint it defaults to. `null` marks an **operator-hosted** gateway (Bifrost,

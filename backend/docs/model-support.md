@@ -64,6 +64,45 @@ below every route a key or account grant unlocks. `subscription` sits last **onl
 the "subscriptions always win" rule is applied separately, one layer up**; see §4, which
 also explains why moving it is its own piece of work.
 
+### OpenRouter is reached through its OWN client, not the generic OpenAI-compatible one
+
+Every other member of `OPENAI_COMPATIBLE_PROVIDERS` resolves through `openAiCompatibleResolver`;
+`openrouter` resolves through `openRouterResolver` (`@openrouter/ai-sdk-provider`), because a
+gateway can answer three things the generic client cannot ask. It reports **what the call actually
+cost** and **which upstream served it** (`usage: { include: true }` → `reported_cost_usd` /
+`upstream_provider`; see [`llm-telemetry.md`](./llm-telemetry.md)), which matters because every
+other cost figure here is derived from a price table and against a passthrough gateway that is a
+guess. And it routes per request, under two constraints a deployment sets:
+`OPENROUTER_REQUIRE_PARAMETERS` (default on) keeps the call off an upstream that would silently
+ignore a tool definition or a response schema, and `OPENROUTER_DATA_COLLECTION` (default `deny`,
+stricter than the vendor's own) keeps it off one that retains prompts, because an agent prompt is
+the customer's checkout.
+
+Both constraints NARROW the pool of upstreams, and a pool narrowed to nothing is a refused call
+(HTTP 404, `No allowed providers are available for the selected model`) rather than a degraded
+one. That is why each has an override and why the proxy recognises that refusal and records which
+constraint could have caused it: the gateway cannot say, since our request is the only place both
+are stated.
+
+Both entry points that build a direct provider from a leased key go through
+`directOpenAiCompatibleResolver`, which is where that dispatch is made once. A call site choosing
+for itself is silent when wrong: OpenRouter still answers, it just stops reporting.
+
+The generic client is told `supportsStructuredOutputs: true` for the cloud VENDORS, and that flag
+is load-bearing in both directions. Without it `@ai-sdk/openai-compatible` rewrites a
+schema-carrying request to `{ type: 'json_object' }`, DROPS the schema and records an SDK warning
+nothing here reads, so a caller gets free-form JSON against a shape nobody enforced. With it
+against an upstream that does not serve `json_schema`, the call fails outright. So it is withheld
+from the two upstream classes nobody here can vouch for: a per-user LOCAL runner (Ollama, LM
+Studio), and the operator-hosted gateways `bifrost` and `litellm`, whose model ids are the
+operator's own aliases and routinely point at exactly such a runner. That set is derived from the
+endpoint table's `null` entries rather than re-listed, so a gateway added there cannot be
+forgotten here.
+
+`openRouterResolver` sets no `structuredOutputs.strict`, deliberately: that client already
+defaults it to true, and the option exists to opt OUT for a model whose upstream does not
+advertise strict mode. Writing the default in would read as an opt-in nobody may remove.
+
 `effectiveVariant` walks that order twice: first over what the capabilities make USABLE,
 then over what the entry merely DECLARES, so a caller always gets a ref to display even
 when nothing is configured (`available: false` is what says it can't run). Both walks

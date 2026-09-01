@@ -12,7 +12,11 @@ import {
   bedrockRegionFromEnv,
   createScopedModelProviderResolver,
 } from '@cat-factory/server'
-import { baseUrlForNode, cloudflareRestCredentials } from './providerEndpoints.js'
+import {
+  baseUrlForNode,
+  cloudflareRestCredentials,
+  openRouterRoutingForNode,
+} from './providerEndpoints.js'
 
 // The Node deployment's BASE ModelProvider RESOLVER: builds a per-scope provider from the
 // DB-backed API-key pool (account/workspace/user), plus opt-in registries that need no
@@ -119,6 +123,7 @@ export function createNodeModelProviderResolver(
     apiKeys,
     baseUrlFor: (provider) => baseUrlForNode(provider, env),
     extraRegistries,
+    openRouterRouting: openRouterRoutingForNode(env),
     // The service itself, so the endpoint read and the transport carrying the deployment's
     // loopback/LAN policy (re-validated on every redirect hop, SEC-2/SEC-3) cannot come from
     // two different places.

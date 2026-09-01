@@ -58,6 +58,8 @@ async function seed(store: LocalTelemetryStore, createdAt: number, id: string): 
     promptHash: id,
     responseText: '',
     reasoningText: '',
+    reportedCostUsd: null,
+    upstreamProvider: null,
   })
   await store.agentContextSnapshotRepository.record({
     id,

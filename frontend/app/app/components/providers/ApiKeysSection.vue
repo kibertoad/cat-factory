@@ -16,6 +16,7 @@
 //  - With `accountId`: manage ACCOUNT-wide keys (shared by every workspace in the
 //    account); admin-only, enforced server-side. Surfaced from account/team settings.
 import { computed, ref, watch } from 'vue'
+import { providerCachesPrompts } from '@cat-factory/contracts'
 import type { ApiKey, ApiKeyProvider } from '~/types/domain'
 import SecretInput from '~/components/common/SecretInput.vue'
 
@@ -48,18 +49,29 @@ interface ProviderMeta {
   label: string
   url: string
   steps: string[]
-  /**
-   * Whether this provider caches the re-sent prompt prefix. Connecting a key here
-   * upgrades its models to the caching `direct` flavour, so a long agentic run stops
-   * re-billing its whole growing prompt every turn. Mirrors the backend
-   * `providerCachePolicy`; the gateways are pass-through (no caching we rely on yet).
-   */
-  caches?: boolean
+}
+
+/**
+ * Whether connecting a key here upgrades its models to the caching flavour, so a long agentic
+ * run stops re-billing its whole growing prompt every turn.
+ *
+ * READ from the shared rule rather than kept as a flag beside each entry. A hand-kept copy was
+ * already stale: the backend answers per (provider, MODEL) for a gateway, so it now reports
+ * caching for several OpenRouter routes while a boolean here still said the gateways cache
+ * nothing. A per-provider question is the one this page can ask, and asking the same function
+ * the picker and the call paths ask is what keeps the three answers from diverging again.
+ *
+ * A GATEWAY therefore answers false here, honestly: whether an OpenRouter key caches depends on
+ * which model the run picks, which is a per-model badge in the picker rather than a promise this
+ * page can make about a key.
+ */
+function cachesPrompts(provider: ApiKeyProvider): boolean {
+  return providerCachesPrompts(provider)
 }
 
 // Provider metadata. Labels + step instructions resolve through i18n (reactive to the
 // locale), so each `t(...)` uses a literal key (kept tier-1 typed-key checkable); only the
-// `value`/`url`/`caches` differentiators stay inline.
+// `value`/`url` differentiators stay inline.
 /** Direct vendors: the key reaches that one vendor's own endpoint. */
 const DIRECT_PROVIDERS = computed<ProviderMeta[]>(() => [
   {
@@ -70,7 +82,6 @@ const DIRECT_PROVIDERS = computed<ProviderMeta[]>(() => [
       t('providers.apiKeys.providers.openai.step1'),
       t('providers.apiKeys.providers.openai.step2'),
     ],
-    caches: true,
   },
   {
     value: 'anthropic',
@@ -80,7 +91,6 @@ const DIRECT_PROVIDERS = computed<ProviderMeta[]>(() => [
       t('providers.apiKeys.providers.anthropic.step1'),
       t('providers.apiKeys.providers.anthropic.step2'),
     ],
-    caches: true,
   },
   {
     value: 'qwen',
@@ -90,7 +100,6 @@ const DIRECT_PROVIDERS = computed<ProviderMeta[]>(() => [
       t('providers.apiKeys.providers.qwen.step1'),
       t('providers.apiKeys.providers.qwen.step2'),
     ],
-    caches: true,
   },
   {
     value: 'deepseek',
@@ -100,7 +109,6 @@ const DIRECT_PROVIDERS = computed<ProviderMeta[]>(() => [
       t('providers.apiKeys.providers.deepseek.step1'),
       t('providers.apiKeys.providers.deepseek.step2'),
     ],
-    caches: true,
   },
   {
     value: 'moonshot',
@@ -116,7 +124,6 @@ const DIRECT_PROVIDERS = computed<ProviderMeta[]>(() => [
     label: t('providers.apiKeys.providers.xai.label'),
     url: 'https://console.x.ai/',
     steps: [t('providers.apiKeys.providers.xai.step1'), t('providers.apiKeys.providers.xai.step2')],
-    caches: true,
   },
 ])
 
@@ -334,7 +341,10 @@ async function remove(k: ApiKey) {
 
     <!-- caching capability: connecting a direct key that caches upgrades its models to
          the caching flavour, so long agentic runs stop re-billing the whole prompt. -->
-    <p v-if="selected.caches" class="flex items-center gap-1.5 text-[12px] text-emerald-400/90">
+    <p
+      v-if="cachesPrompts(selected.value)"
+      class="flex items-center gap-1.5 text-[12px] text-emerald-400/90"
+    >
       <UIcon name="i-lucide-zap" class="h-3.5 w-3.5 shrink-0" />
       {{ t('providers.apiKeys.cachingNote', { provider: selected.label }) }}
     </p>

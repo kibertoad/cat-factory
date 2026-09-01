@@ -160,6 +160,14 @@ export interface RecordLlmCallInput {
    * producer with no shortfall concept files calls.
    */
   spendOnly?: boolean
+  /**
+   * The gateway's own USD cost for this call, when the provider reports one (OpenRouter with
+   * usage accounting on). Absent from every producer that does not report a cost, and absent is
+   * NOT zero: see {@link LlmCallMetric.reportedCostUsd}.
+   */
+  reportedCostUsd?: number | null
+  /** The upstream a gateway routed to; see {@link LlmCallMetric.upstreamProvider}. */
+  upstreamProvider?: string | null
   messageCount: number
   toolCount: number
   requestMaxTokens: number | null
@@ -298,6 +306,12 @@ export class LlmObservabilityService {
       // rather than being spread in as `undefined`.
       id: input.id ?? this.idGenerator.next('llm'),
       overheadMs,
+      // Normalised to null rather than left as `undefined`: the row is persisted by two
+      // repositories whose column is nullable, and an absent key would bind as SQL NULL on one
+      // and be rejected on the other. `??` and not a truthiness test, because a genuinely free
+      // call reports 0 and that is a fact worth keeping apart from "nobody said".
+      reportedCostUsd: input.reportedCostUsd ?? null,
+      upstreamProvider: input.upstreamProvider ?? null,
       phase: normalizeCallPhase(input.phase),
       turnIndex: input.turnIndex ?? null,
       spendOnly: input.spendOnly === true,
@@ -613,6 +627,8 @@ export function makeInlineCallRecorder(
       streaming: false,
       turnIndex: call.turnIndex ?? null,
       spendOnly: call.spendOnly === true,
+      reportedCostUsd: call.reportedCostUsd ?? null,
+      upstreamProvider: call.upstreamProvider ?? null,
       messageCount: call.messageCount,
       toolCount: call.toolCount,
       requestMaxTokens: call.requestMaxTokens,

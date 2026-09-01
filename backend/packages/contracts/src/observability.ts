@@ -91,6 +91,25 @@ export const llmCallMetricSchema = v.object({
    * capture still parse.
    */
   reasoningText: v.optional(v.string(), ''),
+  /**
+   * What the VENDOR said this call cost, in USD, or null where nobody said.
+   *
+   * The only MEASURED cost on the row: every other figure the product shows is derived from the
+   * spend price table. A gateway that resells hundreds of models at the upstream's own rates
+   * reports its ledger instead (OpenRouter with usage accounting on), and that beats any table.
+   *
+   * `null` is not `0`. Null means this producer reports no cost, so a reader falls back to the
+   * derived estimate; 0 means the vendor charged nothing. Defaulted to null so an export
+   * predating the column still parses AS unreported rather than as free.
+   */
+  reportedCostUsd: v.optional(v.nullable(v.number()), null),
+  /**
+   * Which UPSTREAM a gateway routed the call to (`anthropic`, `deepinfra`, …), or null when
+   * `provider` already names who served it. One `openrouter` value covers many upstreams that
+   * differ in price and reliability, so without this an upstream having a bad day and the
+   * gateway having a bad day look identical.
+   */
+  upstreamProvider: v.optional(v.nullable(v.string()), null),
 })
 export type LlmCallMetric = v.InferOutput<typeof llmCallMetricSchema>
 

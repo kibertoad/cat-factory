@@ -8,9 +8,9 @@ import {
   type SubscriptionVendor,
   isLocalRunner,
   orderedModelFlavorPreference,
+  providerCachesPrompts,
 } from '@cat-factory/contracts'
 import type { HarnessKind, ModelRef } from '../ports/model-provider.js'
-import { providerCachesPrompts } from './cache-policy.js'
 import { MODEL_CATALOG } from './model-catalog.js'
 import {
   type LocalModelDeclarations,
@@ -623,7 +623,10 @@ function toOption(
     // false on a Cloudflare/Workers-AI flavour, true once a direct key upgrades the
     // same model to its caching `direct` flavour. The UI surfaces this so a user can
     // see (and act on) the hot path running cache-less.
-    cachesPrompts: providerCachesPrompts(variant.ref.provider),
+    // The MODEL is passed, not just the provider: on a gateway the provider id names the
+    // reseller and only the slug names who serves the call, so without it every OpenRouter
+    // option claimed to cache nothing (see `providerCachePolicy`).
+    cachesPrompts: providerCachesPrompts(variant.ref.provider, variant.ref.model),
     ...(variant.vendor ? { vendor: variant.vendor } : {}),
     ...(cost ? { cost } : {}),
     ...(variant.ref.contextTokens ? { contextTokens: variant.ref.contextTokens } : {}),
@@ -640,7 +643,7 @@ function toOption(
       providerLabel: SUBSCRIPTION_VENDORS[model.subscription.vendor].label,
       provider: subRef.provider,
       model: subRef.model,
-      cachesPrompts: providerCachesPrompts(subRef.provider),
+      cachesPrompts: providerCachesPrompts(subRef.provider, subRef.model),
       ...(subCost ? { cost: subCost } : {}),
       ...(subRef.contextTokens ? { contextTokens: subRef.contextTokens } : {}),
     }

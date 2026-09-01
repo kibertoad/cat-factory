@@ -1790,6 +1790,8 @@
       "cacheRead": "{tokens} lus depuis le cache",
       "cacheWrite": "{tokens} écrits dans le cache",
       "total": "total {duration}",
+      "viaUpstream": "via {upstream}",
+      "reportedCost": "facturé {cost}",
       "prompt": "Prompt",
       "promptPrefixOmitted": "(nouveaux messages uniquement : {count} antérieurs omis)",
       "response": "Réponse",
@@ -3612,6 +3614,7 @@
       "context": "{value} ctx",
       "contextThousands": "{value}K ctx",
       "price": "{input}/{output} par Mtok",
+      "retiresOn": "Retiré le {date}",
       "toast": {
         "connected": "Clé OpenRouter connectée",
         "connectFailed": "Impossible de connecter la clé",

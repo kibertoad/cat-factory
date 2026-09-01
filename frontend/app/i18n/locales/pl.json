@@ -1790,6 +1790,8 @@
       "cacheRead": "{tokens} odczytane z pamięci podręcznej",
       "cacheWrite": "{tokens} zapisane do pamięci podręcznej",
       "total": "łącznie {duration}",
+      "viaUpstream": "przez {upstream}",
+      "reportedCost": "naliczono {cost}",
       "prompt": "Prompt",
       "promptPrefixOmitted": "(tylko nowe wiadomości: {count} wcześniejszych pominięto)",
       "response": "Odpowiedź",
@@ -3612,6 +3614,7 @@
       "context": "{value} ctx",
       "contextThousands": "{value}K ctx",
       "price": "{input}/{output} za Mtok",
+      "retiresOn": "Wycofanie {date}",
       "toast": {
         "connected": "Klucz OpenRouter połączony",
         "connectFailed": "Nie udało się połączyć klucza",

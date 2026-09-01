@@ -6,8 +6,10 @@ import {
   QWEN_BASE_URL,
   isDirectProvider,
   isOpenAiCompatibleProvider,
+  openRouterRoutingFrom,
   resolveOpenAiCompatibleBaseUrl,
   type DirectProvider,
+  type OpenRouterRouting,
 } from '@cat-factory/agents'
 import type { Env } from '../env'
 
@@ -88,4 +90,14 @@ export function resolveOpenAiCompatibleUpstream(
   const baseURL = baseUrlFor(provider, env)
   if (!baseURL) return null
   return { baseURL }
+}
+
+/**
+ * This deployment's OpenRouter routing constraints: what it will let the gateway route to.
+ * Strict on both axes unless the operator says otherwise; the parse and its reasoning are shared
+ * with the Node facade so one deployment cannot be permissive on one runtime and strict on the
+ * other.
+ */
+export function openRouterRoutingFor(env: Env): OpenRouterRouting {
+  return openRouterRoutingFrom(env)
 }

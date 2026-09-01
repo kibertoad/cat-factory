@@ -599,3 +599,116 @@ describe('InstrumentedModelProvider — the trace-sink exit', () => {
     ).toBe(true)
   })
 })
+
+describe('InstrumentedModelProvider: gateway attribution', () => {
+  /** A model that answers with OpenRouter's usage-accounting metadata attached. */
+  function gatewayProvider(openrouter: Record<string, unknown>): ModelProvider {
+    // `providerMetadata` is typed as a JSON-value bag, so the fixture states the shape a real
+    // provider stamps and asserts it fits rather than being cast past.
+    const providerMetadata = { openrouter } as unknown as Record<string, Record<string, never>>
+    return {
+      resolve: () =>
+        new MockLanguageModelV3({
+          doGenerate: async () => ({
+            content: [{ type: 'text' as const, text: 'done' }],
+            finishReason: { unified: 'stop' as const, raw: 'stop' },
+            usage: USAGE,
+            providerMetadata,
+            warnings: [],
+          }),
+        }),
+    }
+  }
+
+  /** Drive one tagged inline call through `provider` and return the row it filed. */
+  async function recordOne(provider: ModelProvider): Promise<InlineLlmCall | undefined> {
+    const c = collectors()
+    const instrumented = new InstrumentedModelProvider({
+      inner: provider,
+      recordCall: c.recordCall,
+      workspaceBodiesEnabled: allowBodies,
+    })
+    await generateText({
+      model: instrumented.resolve({ provider: 'openrouter', model: 'anthropic/claude-opus-5' }),
+      prompt: 'hi',
+      providerOptions: catFactoryObservability({ agentKind: 'judge', workspaceId: 'ws1' }),
+    })
+    await flushEmit()
+    return c.recorded[0]
+  }
+
+  // The point of the whole slice: against a passthrough gateway the DERIVED price-table cost is a
+  // guess, and this is the one provider that hands over its own ledger figure and the upstream it
+  // routed to.
+  it('records the cost and upstream a gateway reported', async () => {
+    const call = await recordOne(
+      gatewayProvider({ provider: 'anthropic', usage: { cost: 0.0421, promptTokens: 150 } }),
+    )
+    expect(call).toMatchObject({ reportedCostUsd: 0.0421, upstreamProvider: 'anthropic' })
+  })
+
+  // A free route really does cost nothing, and reading that as "unreported" would send the reader
+  // back to a table estimate for the one call whose price is certain.
+  it('keeps a reported zero as a reported zero', async () => {
+    const call = await recordOne(gatewayProvider({ provider: 'chutes', usage: { cost: 0 } }))
+    expect(call?.reportedCostUsd).toBe(0)
+  })
+
+  // Absent is not zero. A provider that reports nothing must leave the field off entirely, so the
+  // row stores NULL and every reader falls back to the derived estimate rather than to "free".
+  it('omits both fields for a provider that reports neither', async () => {
+    const call = await recordOne(mockProvider('done'))
+    expect(call).not.toHaveProperty('reportedCostUsd')
+    expect(call).not.toHaveProperty('upstreamProvider')
+  })
+
+  it('refuses a malformed cost rather than storing a coerced one', async () => {
+    for (const cost of ['0.04', Number.NaN, -1, null]) {
+      const call = await recordOne(gatewayProvider({ provider: 'anthropic', usage: { cost } }))
+      expect(call).not.toHaveProperty('reportedCostUsd')
+      // The upstream is independent of the cost, so a garbled cost must not lose it too.
+      expect(call?.upstreamProvider).toBe('anthropic')
+    }
+  })
+
+  // The invariant that keeps every inline row honest: nothing here streams, and a streamed call
+  // would pass the wrap, reach no sink and record nothing. Downstream that is indistinguishable
+  // from a step that spent nothing, and it under-meters the budget the spend gate reads, so it
+  // refuses instead. If this ever starts failing, the fix is a real `wrapStream` plus a
+  // `streaming` flag through the inline recorder, not a deletion.
+  it('refuses to stream rather than passing an unrecorded call through', async () => {
+    const c = collectors()
+    const instrumented = new InstrumentedModelProvider({
+      inner: mockProvider('done'),
+      recordCall: c.recordCall,
+      workspaceBodiesEnabled: allowBodies,
+    })
+    const model = instrumented.resolve({ provider: 'openrouter', model: 'a/b' })
+    if (typeof model === 'string') throw new Error('expected a model instance')
+    await expect(
+      model.doStream({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }),
+    ).rejects.toThrow(/does not record streamed calls/)
+    expect(c.recorded).toEqual([])
+  })
+
+  it('files nothing from a failed call, which has no result to read', async () => {
+    const c = collectors()
+    const instrumented = new InstrumentedModelProvider({
+      inner: failingProvider(new Error('upstream exploded')),
+      recordCall: c.recordCall,
+      workspaceBodiesEnabled: allowBodies,
+    })
+    await expect(
+      generateText({
+        model: instrumented.resolve({ provider: 'openrouter', model: 'a/b' }),
+        prompt: 'hi',
+        maxRetries: 0,
+        providerOptions: catFactoryObservability({ agentKind: 'judge', workspaceId: 'ws1' }),
+      }),
+    ).rejects.toThrow(/upstream exploded/)
+    await flushEmit()
+
+    expect(c.recorded[0]).toMatchObject({ ok: false })
+    expect(c.recorded[0]).not.toHaveProperty('reportedCostUsd')
+  })
+})

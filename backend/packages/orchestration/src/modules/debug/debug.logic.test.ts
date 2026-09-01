@@ -284,6 +284,8 @@ describe('toDebugLlmCall', () => {
     prompt: { text: '[{"role"', totalChars: 4_000 },
     response: { text: '', totalChars: 20 },
     reasoning: { text: '', totalChars: 0 },
+    reportedCostUsd: null,
+    upstreamProvider: null,
   }
 
   it('classifies a truncated-but-successful call as a warning', () => {
