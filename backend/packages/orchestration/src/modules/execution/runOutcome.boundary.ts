@@ -198,6 +198,10 @@ function boundEnvironments(
         environmentId: entry.environmentId,
         // The provider's verbatim stderr, which is where a leaked credential comes from.
         detail: text(entry.detail),
+        // Which claim that text is, from a closed pair the platform assigns: nothing to scrub, and
+        // it travels WITH the text because a detail whose kind was dropped in scrubbing would be
+        // rendered unlabelled, which is what the field exists to stop.
+        detailKind: entry.detailKind,
       }),
     ),
   }

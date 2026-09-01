@@ -83,6 +83,9 @@ export class PreviewService {
       // expiry cron (which keys off `expiresAt`).
       expiresAt: null,
       lastError: null,
+      // A preview has no provider to poll for a non-terminal account: the transport either
+      // serves it or reports it failed, so there is never a note to carry.
+      statusNote: null,
       deletedAt: null,
       provisionType: PREVIEW_PROVISION_TYPE,
       engine: PREVIEW_PROVISION_TYPE,

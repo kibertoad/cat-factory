@@ -1025,3 +1025,18 @@ Present only when true, so a step that ran carries no flag rather than a `false`
 would have to read as "false, or this run predates the field". A boolean rather than the engine's
 internal skip REASON: which axis skipped a step is a vocabulary the engine grows as it grows new
 gating, and publishing it here would be a promise to keep that vocabulary still.
+
+## 1.63.0
+
+`OutcomeEnvironment` gains `detailKind`, saying which of two claims its `detail` carries: a
+recorded `fault`, or the provider's own `note` about a state the environment has not left yet.
+
+Additive, and the field arrived with the reason for it. `detail` used to be the producer's cause
+and nothing else; it now also carries a provider's note, which is the only account a row about a
+still-building environment has (the commonest row on a live run's card). Both land in one slot and
+read identically as prose, so without the label "the deploy job is queued behind 3 others" sits
+where "quota exceeded" sits and a reader cannot tell "wait for it" from "fix it".
+
+Stated rather than derivable: a recorded fault survives onto a reclaimed environment, so `state`
+does not imply the kind. Null exactly when `detail` is null, and required-nullable like `detail`
+itself rather than optional, so the pair can never disagree about whether the row said anything.

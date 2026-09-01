@@ -6293,6 +6293,7 @@
     "empty": "No hay entorno efímero para esta ejecución.",
     "provisionTypeLabel": "Tipo de aprovisionamiento:",
     "engineLabel": "Motor:",
+    "statusNote": "Nota del proveedor: {note}",
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",

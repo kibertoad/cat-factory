@@ -6874,6 +6874,7 @@
     "empty": "Nessun ambiente effimero per questa esecuzione.",
     "provisionTypeLabel": "Tipo di provisioning:",
     "engineLabel": "Motore:",
+    "statusNote": "Nota del provider: {note}",
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",

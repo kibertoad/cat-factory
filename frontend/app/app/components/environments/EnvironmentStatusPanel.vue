@@ -5,6 +5,10 @@
 // shows whether the env is spinning up / running / shut down / errored, with the error.
 import type { InfraEngine, ProvisionType } from '@cat-factory/contracts'
 import type { RunEnvironment, HumanTestEnvironmentStatus } from '~/types/execution'
+import {
+  readStatusNote,
+  showsProviderFailure,
+} from '~/components/environments/EnvironmentStatusPanel.logic'
 
 const props = defineProps<{
   environment: RunEnvironment | null
@@ -86,6 +90,12 @@ const ENV_STATUS_META = computed<
   },
 }))
 
+// Which of the environment's two prose channels this panel shows. Both predicates live in
+// `EnvironmentStatusPanel.logic.ts`, where the precedence between a recorded fault and a
+// still-coming-up note is stated once and asserted without mounting the panel.
+const failureShown = computed(() => showsProviderFailure(props.environment))
+const statusNote = computed(() => readStatusNote(props.environment))
+
 // The two statuses that describe a transition IN FLIGHT. Only these ever animate, and only
 // while the run driving the transition is still being driven itself.
 const envInTransition = computed(
@@ -140,12 +150,19 @@ const envInTransition = computed(
       </dl>
       <!-- The verbatim provider error when the environment failed/expired. -->
       <pre
-        v-if="
-          environment.lastError &&
-          (environment.status === 'failed' || environment.status === 'expired')
-        "
+        v-if="failureShown"
         class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded border border-rose-900/60 bg-rose-950/40 p-1.5 text-[11px] text-rose-200/90"
         >{{ environment.lastError }}</pre>
+      <!-- What the provider says it is still waiting on. Muted rather than alarming: an
+           environment mid-rollout is healthy, and styling this like the error above would report
+           a fault every deploy. Bounded like the error block, because the text is provider
+           prose. -->
+      <p
+        v-if="statusNote"
+        class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-words text-[11px] text-slate-400"
+      >
+        {{ t('environments.statusNote', { note: statusNote }) }}
+      </p>
     </div>
     <p v-else class="text-[12px] text-slate-500">
       {{ degradedReason ?? t('environments.empty') }}

@@ -43,6 +43,7 @@ const RECORD: EnvironmentRecord = {
   createdAt: 1_000,
   expiresAt: null,
   lastError: null,
+  statusNote: null,
   deletedAt: null,
   provisionType: null,
   engine: null,

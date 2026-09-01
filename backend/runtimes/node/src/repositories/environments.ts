@@ -143,6 +143,7 @@ function rowToEnvironment(row: EnvironmentRow): EnvironmentRecord {
     createdAt: row.created_at,
     expiresAt: row.expires_at,
     lastError: row.last_error,
+    statusNote: row.status_note,
     deletedAt: row.deleted_at,
     provisionType: row.provision_type ?? null,
     engine: row.engine ?? null,
@@ -158,6 +159,7 @@ const PATCH_COLUMNS = {
   provisionFieldsCipher: 'provision_fields_cipher',
   expiresAt: 'expires_at',
   lastError: 'last_error',
+  statusNote: 'status_note',
   provisionType: 'provision_type',
   engine: 'engine',
 } as const satisfies Record<keyof EnvironmentRecordPatch, string>
@@ -182,6 +184,7 @@ export class DrizzleEnvironmentRegistryRepository implements EnvironmentRegistry
       created_at: record.createdAt,
       expires_at: record.expiresAt,
       last_error: record.lastError,
+      status_note: record.statusNote,
       deleted_at: null,
       provision_type: record.provisionType,
       engine: record.engine,

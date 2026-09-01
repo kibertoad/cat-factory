@@ -289,6 +289,29 @@ export interface ProvisionedEnvironment {
    * this absent, and absent means unclassified, which is never repo-fixable.
    */
   reason?: EnvironmentFailureReason | null
+  /**
+   * One sentence saying WHERE the environment is, for a report that is NOT a failure: the
+   * channel a provider answering `provisioning` has and {@link error} is not.
+   *
+   * `error` is read only on `failed`, and the two persistence sites null it on anything else, so
+   * before this field a provider that knew exactly why an environment was not ready yet had
+   * nowhere to put it. Within one readiness wait every poll that keeps the wait alive is a
+   * `provisioning` one, so the platform's whole account of a 20-minute wait was how long it
+   * waited. The one workaround left was to report `failed` early, purely because `failed` was the
+   * only status whose reason survived persistence: a truthful lifecycle state traded for an
+   * explainable one.
+   *
+   * Deliberately NOT `error` widened to every status. The name would then be wrong for the case
+   * it exists for, and the value is rendered: a healthy environment mid-rollout would show an
+   * operator a "last error" it does not have.
+   *
+   * It is the CURRENT account and never a log: like `error` it is re-read from the provider and
+   * rewritten on every poll, so a note a provider stops saying stops being persisted. Say what
+   * distinguishes this poll from the last one ("the deploy job has not started", "the deploy
+   * succeeded and no target is healthy yet"). Both are `provisioning`, and which one it is
+   * decides who fixes it. Absent ⇒ nothing to add, which is byte-for-byte the prior behaviour.
+   */
+  statusNote?: string | null
 }
 
 /**

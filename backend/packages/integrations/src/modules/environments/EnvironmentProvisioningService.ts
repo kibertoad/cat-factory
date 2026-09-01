@@ -43,6 +43,7 @@ import {
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
 import {
   assertSafeEnvironmentUrl,
+  boundStatusNote,
   describeMisresolvingEnvironmentUrl,
   type EnvironmentIdentity,
   recordToHandle,
@@ -828,6 +829,13 @@ export class EnvironmentProvisioningService {
       // provider gave none.
       lastError:
         provisioned.status === 'failed' ? provisioned.error?.trim() || 'Provisioning failed' : null,
+      // The non-failure counterpart, and the one field here NOT gated on a status: a provider
+      // reporting `provisioning` is exactly the case that has something to explain and no
+      // `error` to explain it with (see {@link ProvisionedEnvironment.statusNote}). No fallback
+      // literal either: a provider with nothing to add says nothing, which is the prior
+      // behaviour byte for byte. Bounded, because it is prose a third-party adapter authored:
+      // {@link boundStatusNote}.
+      statusNote: boundStatusNote(provisioned.statusNote),
       // The resolved provision type + engine (the per-type path); null on the legacy connection.
       provisionType,
       engine,
@@ -958,6 +966,12 @@ export class EnvironmentProvisioningService {
       // for the ref …" pointing at a project↔repo mismatch).
       lastError:
         provisioned.status === 'failed' ? provisioned.error?.trim() || 'Provisioning failed' : null,
+      // Rewritten from THIS poll on every poll, whatever the status: it is the provider's current
+      // account of where the environment is, so a note it has stopped saying stops being stored
+      // (the same clear-unless-restated rule as `lastError`, applied to every status rather than
+      // to `failed` alone). This is the write that makes the readiness ceiling able to name the
+      // state a run was stuck in, because every poll that KEEPS a readiness wait alive lands here.
+      statusNote: boundStatusNote(provisioned.statusNote),
     }
     await this.deps.environmentRegistryRepository.update(workspaceId, id, patch)
 
@@ -1225,6 +1239,9 @@ export class EnvironmentProvisioningService {
         createdAt: this.deps.clock.now(),
         expiresAt: null,
         lastError,
+        // Nothing to add: the thrown error IS the account, and this row is born terminal, so
+        // there is no non-terminal state left to describe.
+        statusNote: null,
         provisionType,
         engine,
       })

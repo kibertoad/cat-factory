@@ -191,6 +191,15 @@ export interface EnvironmentRecord {
   createdAt: number
   expiresAt: number | null
   lastError: string | null
+  /**
+   * The provider's own account of a NON-terminal state: why this environment is not ready yet.
+   *
+   * A sibling of `lastError` rather than a widening of it, because the two are read by different
+   * readers for opposite reasons and only one of them is a fault. Persisted on every provision and
+   * every poll REGARDLESS of status (where `lastError` is written only on `failed`), which is what
+   * makes it reachable during a readiness wait. See `ProvisionedEnvironment.statusNote`.
+   */
+  statusNote: string | null
   deletedAt: number | null
   /** The service's declared provision type this env was stood up for; null for legacy rows. */
   provisionType: string | null
@@ -208,6 +217,7 @@ export type EnvironmentRecordPatch = Partial<
     | 'provisionFieldsCipher'
     | 'expiresAt'
     | 'lastError'
+    | 'statusNote'
     | 'provisionType'
     | 'engine'
   >

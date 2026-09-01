@@ -745,6 +745,7 @@ describe('composeRunOutcome: where to go and look', () => {
         frameId: 'frm_own',
         environmentId: 'env_1',
         detail: null,
+        detailKind: null,
       },
       {
         url: null,
@@ -755,6 +756,7 @@ describe('composeRunOutcome: where to go and look', () => {
         frameId: 'frm_peer',
         environmentId: null,
         detail: 'helm release timed out',
+        detailKind: 'fault',
       },
     ])
   })
@@ -832,6 +834,7 @@ describe('composeRunOutcome: where to go and look', () => {
         frameId: null,
         environmentId: 'env_1',
         detail: null,
+        detailKind: null,
       },
     ])
   })
@@ -979,6 +982,48 @@ describe('composeRunOutcome: where to go and look', () => {
     expect(rows[1]).toMatchObject({ state: 'failed', environmentId: 'env_1' })
   })
 
+  // The row for the environment a run is standing up RIGHT NOW has no fault to report, so before
+  // the provider's note reached here it was a status and a URL and nothing else, for exactly as
+  // long as the spin-up took, which is when the card is most worth reading.
+  it('reports what a still-provisioning environment says it is waiting on', () => {
+    const rows = entries(
+      run([
+        projecting({
+          id: 'env_1',
+          url: null,
+          status: 'provisioning',
+          statusNote: 'the deploy job is queued behind 3 others',
+        }),
+      ]),
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      origin: 'projected',
+      environmentId: 'env_1',
+      detail: 'the deploy job is queued behind 3 others',
+      // LABELLED as a note. The card renders one detail slot for both channels, so without this
+      // a reader cannot tell "wait for it" from "fix it", and the two read identically as prose.
+      detailKind: 'note',
+    })
+  })
+
+  it('lets a recorded fault outrank the note on the same environment', () => {
+    // Both channels can carry text at once (a provider that failed after saying what it was
+    // waiting on). The fault is the more specific claim about the same environment.
+    const rows = entries(
+      run([
+        projecting({
+          id: 'env_1',
+          url: null,
+          status: 'failed',
+          lastError: 'quota exceeded',
+          statusNote: 'the deploy job is queued behind 3 others',
+        }),
+      ]),
+    )
+    expect(rows[0]).toMatchObject({ detail: 'quota exceeded', detailKind: 'fault' })
+  })
+
   it('reports a gate’s own environment, which no deployer frame keys', () => {
     const rows = entries(
       run([
@@ -998,6 +1043,7 @@ describe('composeRunOutcome: where to go and look', () => {
         frameId: null,
         environmentId: 'env_h',
         detail: null,
+        detailKind: null,
       },
     ])
   })
