@@ -31,7 +31,7 @@
   "dependencies": {
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
-    "ai": "^7.0.84",
+    "ai": "^7.0.85",
     "workers-ai-provider": "^4.0.0"
   },
   "devDependencies": {
