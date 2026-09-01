@@ -30,11 +30,13 @@ export {
   type RecognisedDataIntegrityError,
 } from './domain/data-integrity.js'
 export { sameSubtasks, sameSubtaskItems, parseSubtasks } from './domain/subtasks.logic.js'
+// The prompt-caching policy lives in `@cat-factory/contracts` (the SPA has to agree about it
+// too); re-exported here so kernel's own consumers keep one import.
 export {
   type CachePolicy,
   providerCachePolicy,
   providerCachesPrompts,
-} from './domain/cache-policy.js'
+} from '@cat-factory/contracts'
 export { resolveWritebackFlag } from './domain/writeback.js'
 export {
   AUDIT_PAGE_LIMIT_DEFAULT,

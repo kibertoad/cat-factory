@@ -185,6 +185,74 @@ describe('llm proxy /v1/chat/completions', () => {
     expect(forwarded.model).toBe('anthropic/claude-opus-5')
   })
 
+  // The other side of asking: a constraint that empties the routing pool turns a model everyone
+  // else can reach into a 404 for this deployment alone, and the gateway's own body cannot say
+  // which allow-list excluded what, because only the sender knows what it applied. Relayed
+  // verbatim to the container either way; what gains the explanation is the RECORDED failure,
+  // which is where an operator looks.
+  it('reports which routing constraint can have caused a gateway refusal', async () => {
+    const workspaceId = `ws-${crypto.randomUUID()}`
+    const token = await mint({
+      workspaceId,
+      provider: 'openrouter',
+      model: 'z-ai/glm-5.2',
+    })
+    const c = buildContainer(env, { agentExecutor: new FakeAgentExecutor() })
+    await c.apiKeys!.addKey('workspace', workspaceId, {
+      provider: 'openrouter',
+      label: 'gateway',
+      key: 'sk-or',
+    })
+
+    const upstreamBody = JSON.stringify({
+      error: { message: 'No allowed providers are available for the selected model.', code: 404 },
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(upstreamBody, {
+            status: 404,
+            headers: { 'content-type': 'application/json' },
+          }),
+      ),
+    )
+
+    const recorder = new RecordingEventPublisher()
+    const app = createApp({
+      overrides: { agentExecutor: new FakeAgentExecutor(), executionEventPublisher: recorder },
+    })
+    const res = await app.fetch(chatRequest(token), testEnv())
+    expect(res.status).toBe(404)
+    // The container agent still reads exactly what the gateway said, byte for byte.
+    expect(await res.text()).toBe(upstreamBody)
+
+    const activity = recorder.llmCalls[0]!
+    expect(activity.ok).toBe(false)
+    expect(activity.httpStatus).toBe(404)
+    expect(activity.errorMessage).toContain('OPENROUTER_DATA_COLLECTION=allow')
+    expect(activity.errorMessage).toContain('OPENROUTER_REQUIRE_PARAMETERS=false')
+  })
+
+  it('relays an unrelated upstream failure without inventing a remedy', async () => {
+    // A 429 from the same gateway is not ours to explain, and naming a setting that cannot have
+    // caused it would send an operator after a change that changes nothing.
+    const workspaceId = `ws-${crypto.randomUUID()}`
+    const token = await mint({ workspaceId })
+    await seedQwenKey(workspaceId)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{"error":"slow down"}', { status: 429 })),
+    )
+
+    const recorder = new RecordingEventPublisher()
+    const app = createApp({
+      overrides: { agentExecutor: new FakeAgentExecutor(), executionEventPublisher: recorder },
+    })
+    expect((await app.fetch(chatRequest(token), testEnv())).status).toBe(429)
+    expect(recorder.llmCalls[0]!.errorMessage).toBe('Upstream returned 429')
+  })
+
   it('sends no gateway params to a provider that has none', async () => {
     // An unknown key in the body of a strict endpoint buys nothing and can be refused, so the
     // params are gateway-only rather than merged for everyone.

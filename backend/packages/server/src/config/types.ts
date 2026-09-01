@@ -1,4 +1,4 @@
-import type { AgentRouting, OpenRouterDataCollection } from '@cat-factory/agents'
+import type { AgentRouting, OpenRouterRouting } from '@cat-factory/agents'
 import type {
   InfrastructureCapabilities,
   LocalModeConfig,
@@ -647,12 +647,14 @@ export interface AppConfig {
   /** LLM observability config (e.g. whether complete prompts are recorded). */
   observability: ObservabilityConfig
   /**
-   * Whether OpenRouter may route a call to an upstream that RETAINS prompts
-   * (`OPENROUTER_DATA_COLLECTION`). Absent ⇒ `deny`, which is this platform's default rather
-   * than the vendor's: an agent prompt carries the customer's checkout. The INLINE path reads
-   * the same env through its own facade wiring; this is the CONTAINER-proxy half.
+   * How this deployment constrains OpenRouter's provider routing
+   * (`OPENROUTER_DATA_COLLECTION`, `OPENROUTER_REQUIRE_PARAMETERS`). Absent ⇒
+   * `DEFAULT_OPENROUTER_ROUTING`, strict on both axes, which is this platform's default rather
+   * than the vendor's: an agent prompt carries the customer's checkout, and an upstream that
+   * ignores a tool definition answers the wrong shape without saying so. The INLINE path reads
+   * the same two env vars through its own facade wiring; this is the CONTAINER-proxy half.
    */
-  openRouterDataCollection?: OpenRouterDataCollection
+  openRouterRouting?: OpenRouterRouting
   /** Optional Langfuse trace-sink config; `enabled` is false unless opted in. */
   langfuse: LangfuseConfig
   /** Optional OpenTelemetry (OTLP) trace + metrics config; `enabled` is false unless opted in. */

@@ -371,11 +371,13 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   'openrouter:moonshotai/kimi-k3': { inputPerMillion: 2.76, outputPerMillion: 13.8 },
   // $1.19 in / $0.221 cached / $3.74 out per 1M, roughly double the $0.63 / $1.98 this row
   // held: OpenRouter's GLM-5.2 route has converged on Z.ai's own $1.40 / $4.40 list as the
-  // cheap open-weight providers behind the slug dropped out of the blend.
+  // cheap open-weight providers behind the slug dropped out of the blend. The cached rate is
+  // rounded UP: at 0.2 it sat under the live 0.2033, which the pin checker now reports because
+  // it compares this class too.
   'openrouter:z-ai/glm-5.2': {
     inputPerMillion: 1.09,
     outputPerMillion: 3.44,
-    cacheReadPerMillion: 0.2,
+    cacheReadPerMillion: 0.21,
   },
   // The same Z.ai list rates as the `zai:` row above: OpenRouter passes the upstream vendor's
   // price through, and the launch promotion the slug is served at today is the half-rate this
@@ -453,10 +455,17 @@ export const DEFAULT_SPEND_PRICING: SpendPricing = {
  * must never undercount, so such a model keeps the more conservative bare-`openrouter` (or
  * curated) fallback instead of being metered at zero.
  *
- * The two CACHE classes are carried through ONLY when OpenRouter published them, so an absent
- * rate still falls to {@link CACHE_READ_MULTIPLIER} / {@link CACHE_WRITE_MULTIPLIER}. Copying a
- * derived multiple into the overlay instead would freeze today's ratio into every stored row and
- * make a gateway's own repricing unreachable, which is the whole reason the dynamic path exists.
+ * The two CACHE classes are carried through ONLY when OpenRouter published a POSITIVE rate, so an
+ * absent one still falls to {@link CACHE_READ_MULTIPLIER} / {@link CACHE_WRITE_MULTIPLIER}.
+ * Copying a derived multiple into the overlay instead would freeze today's ratio into every
+ * stored row and make a gateway's own repricing unreachable, which is the whole reason the
+ * dynamic path exists.
+ *
+ * A published zero is dropped for the same reason the base pair is: it cannot be told apart from
+ * a placeholder for a class the gateway does not bill separately, and it is also what the
+ * catalog's 4-dp rounding makes of any real rate below 0.00005/1M. Overlaid, it would meter every
+ * cache hit on that model at nothing, which is the one direction a budget safeguard may never be
+ * wrong in. The multiplier over-states instead, which is the direction that keeps safeguarding.
  */
 export function withDynamicPrices(
   pricing: SpendPricing,
@@ -469,12 +478,12 @@ export function withDynamicPrices(
     prices[`openrouter:${m.id}`] = {
       inputPerMillion: m.inputPerMillion,
       outputPerMillion: m.outputPerMillion,
-      ...(m.cachedInputPerMillion === undefined
-        ? {}
-        : { cacheReadPerMillion: m.cachedInputPerMillion }),
-      ...(m.cacheWritePerMillion === undefined
-        ? {}
-        : { cacheWritePerMillion: m.cacheWritePerMillion }),
+      ...(m.cachedInputPerMillion !== undefined && m.cachedInputPerMillion > 0
+        ? { cacheReadPerMillion: m.cachedInputPerMillion }
+        : {}),
+      ...(m.cacheWritePerMillion !== undefined && m.cacheWritePerMillion > 0
+        ? { cacheWritePerMillion: m.cacheWritePerMillion }
+        : {}),
     }
   }
   return { ...pricing, prices }

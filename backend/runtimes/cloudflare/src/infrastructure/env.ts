@@ -303,6 +303,16 @@ export interface Env {
    * `openRouterDataCollectionFrom`, shared with the Node facade.
    */
   OPENROUTER_DATA_COLLECTION?: string
+  /**
+   * Whether OpenRouter must keep the request off an upstream that does not advertise every
+   * parameter it carries. `false` opts out; anything else (unset included) requires them.
+   *
+   * The escape hatch for the pool this narrowing can empty: a model whose only upstreams
+   * advertise a subset of the body's parameters is refused outright rather than routed with one
+   * knob ignored, and a deployment that would rather have the call is the one that sets this.
+   * Parsed by `openRouterRequireParametersFrom`, shared with the Node facade.
+   */
+  OPENROUTER_REQUIRE_PARAMETERS?: string
   BIFROST_BASE_URL?: string
   LITELLM_BASE_URL?: string
 

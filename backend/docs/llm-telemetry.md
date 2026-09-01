@@ -175,6 +175,12 @@ working and simply records nothing, which downstream is indistinguishable from a
 reports nothing. `upstream_provider` is what makes a slow or failing UPSTREAM tellable from a slow
 or failing gateway, since one `provider` column otherwise covers them all.
 
+Both are READ where a human debugs one call: the observability panel's call list names the
+upstream beside `provider:model` and shows the reported figure in the expanded row. They are
+deliberately NOT folded into the spend rollups, which stay derived end to end: a rollup mixing a
+measured figure for the gateway's calls with an estimate for everyone else's would answer a
+different question per row while looking like one number.
+
 ## Every row is stamped with the PHASE that spent it, by whoever OWNS the boundary
 
 Never reconstructed downstream: the harness stamps at EMIT time (not drain time), and the Pi path

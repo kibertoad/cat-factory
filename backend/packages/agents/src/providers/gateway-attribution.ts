@@ -1,4 +1,4 @@
-import type { OpenRouterDataCollection } from './endpoints.js'
+import { DEFAULT_OPENROUTER_ROUTING, type OpenRouterRouting } from './endpoints.js'
 
 // What a GATEWAY reports about a call, and how to ask for it, in ONE module, because the same
 // two facts are requested and read on BOTH model paths and the paths speak different dialects.
@@ -43,27 +43,72 @@ export function reportsGatewayAttribution(provider: string): boolean {
 }
 
 /**
- * The extra OpenAI Chat Completions body fields that turn a gateway's reporting on, for the
- * CONTAINER path. Empty for every provider that has none, so the proxy can merge it
- * unconditionally (the shape `promptCacheParams` already established).
+ * The extra OpenAI Chat Completions body fields that turn a gateway's reporting on and state the
+ * deployment's routing policy, for the CONTAINER path. Empty for every provider that has none, so
+ * the proxy can merge it unconditionally (the shape `promptCacheParams` already established).
  *
- * `require_parameters` keeps the request off an upstream that would silently ignore a tool
- * definition, which is the failure mode a gateway adds over talking to a vendor directly.
- * `data_collection` is a deployment decision rather than a default to inherit: an agent's prompt
- * is the customer's checkout, and OpenRouter's own default is permissive.
+ * Both members of {@link OpenRouterRouting} narrow the upstream pool, so both are the
+ * deployment's to set rather than constants here; see that type for what each buys and costs, and
+ * {@link gatewayRoutingRefusal} for what a caller says when the narrowing empties the pool.
  */
 export function gatewayRequestParams(
   provider: string,
-  opts?: { dataCollection?: OpenRouterDataCollection },
+  routing: OpenRouterRouting = DEFAULT_OPENROUTER_ROUTING,
 ): Record<string, unknown> {
   if (!reportsGatewayAttribution(provider)) return {}
   return {
     usage: { include: true },
     provider: {
-      require_parameters: true,
-      data_collection: opts?.dataCollection ?? 'deny',
+      require_parameters: routing.requireParameters,
+      data_collection: routing.dataCollection,
     },
   }
+}
+
+/**
+ * OpenRouter's wording when provider routing leaves no upstream to serve the model. Matched on
+ * the stable half of the sentence (`no allowed providers`), never the whole of it: the tail names
+ * the model and the head has already been reworded once.
+ */
+const NO_ALLOWED_PROVIDERS = /no allowed providers?/i
+
+/**
+ * Name the routing constraint that can have caused a gateway's refusal, or undefined when this
+ * failure is not one of ours to explain.
+ *
+ * Why it exists: the two constraints above are the only reason a model that resolves for everyone
+ * else fails for one deployment, and the gateway's own 404 says only that no provider was
+ * allowed. It cannot know WHICH allow-list did the excluding, because the platform's request is
+ * the only place both are stated. Left unexplained, the operator sees a run fail with an opaque
+ * upstream error and nothing anywhere connects it to a variable they set (or, worse, never set:
+ * `deny` is stricter than the vendor's own default, so the deployment that hits this hardest is
+ * the one that configured nothing).
+ *
+ * Only the constraints actually IN FORCE are named, so relaxing what it names is always a step
+ * forward; when neither is on, the refusal is the gateway's own and this answers undefined
+ * rather than sending the operator after a setting that changed nothing.
+ */
+export function gatewayRoutingRefusal(opts: {
+  provider: string
+  status: number
+  body: string
+  routing: OpenRouterRouting
+}): string | undefined {
+  if (!reportsGatewayAttribution(opts.provider)) return undefined
+  if (opts.status < 400 || !NO_ALLOWED_PROVIDERS.test(opts.body)) return undefined
+  const relaxable: string[] = []
+  if (opts.routing.dataCollection === 'deny') {
+    relaxable.push(
+      'OPENROUTER_DATA_COLLECTION=allow (this deployment denies prompt-retaining upstreams)',
+    )
+  }
+  if (opts.routing.requireParameters) {
+    relaxable.push(
+      'OPENROUTER_REQUIRE_PARAMETERS=false (this deployment requires an upstream to advertise every request parameter)',
+    )
+  }
+  if (relaxable.length === 0) return undefined
+  return `OpenRouter had no upstream left to route to. This deployment's provider routing is what narrows the pool; relax one of: ${relaxable.join('; ')}.`
 }
 
 /** A finite, non-negative number, else undefined. Zero passes: a free route reports one. */
@@ -99,9 +144,12 @@ export function readCompletionGatewayReport(body: unknown): GatewayCallReport {
 /**
  * Read the report off an AI SDK generate result: the INLINE path's reader.
  *
- * Keyed on the `openrouter` metadata namespace the client itself stamps rather than on the
- * caller's `ref.provider`: the provider id is a deployment's own label and a deployment may
- * register the gateway under another one, so reading the metadata is what keeps the two in step.
+ * Keyed on the `openrouter` metadata namespace because that is where the CLIENT puts it, not
+ * because the provider id is unreliable: the id is the closed {@link OPENAI_COMPATIBLE_PROVIDERS}
+ * table's own member, and {@link reportsGatewayAttribution} keys the request half on that same
+ * literal. Whoever adds the second gateway adds a namespace here beside a provider id there, and
+ * the pairing is what has to stay in step. Reading one off the other would not help: the two
+ * vocabularies are the vendor's and ours.
  */
 export function readMetadataGatewayReport(result: unknown): GatewayCallReport {
   const metadata = (result as { providerMetadata?: unknown })?.providerMetadata

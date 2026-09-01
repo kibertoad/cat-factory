@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_OPENROUTER_ROUTING, type OpenRouterRouting } from './endpoints.js'
 import {
   gatewayRequestParams,
+  gatewayRoutingRefusal,
   readCompletionGatewayReport,
   readMetadataGatewayReport,
   reportsGatewayAttribution,
 } from './gateway-attribution.js'
+
+/** The deployment routing under test, defaults unless the case is about one of the knobs. */
+function routing(over: Partial<OpenRouterRouting> = {}): OpenRouterRouting {
+  return { ...DEFAULT_OPENROUTER_ROUTING, ...over }
+}
 
 // The one module both model paths ask and read through. Splitting the rule across the inline SDK
 // path and the container proxy would be silent when it drifted: a path that stopped asking keeps
@@ -22,10 +29,18 @@ describe('gatewayRequestParams', () => {
   it('denies prompt-retaining upstreams unless the deployment opts in', () => {
     // OpenRouter's own default is permissive and this platform's is not: an agent prompt is the
     // customer's checkout, so the opt-in is an operator decision on the record.
-    const allowed = gatewayRequestParams('openrouter', { dataCollection: 'allow' })
+    const allowed = gatewayRequestParams('openrouter', routing({ dataCollection: 'allow' }))
     expect((allowed.provider as { data_collection: string }).data_collection).toBe('allow')
-    const denied = gatewayRequestParams('openrouter', { dataCollection: 'deny' })
+    const denied = gatewayRequestParams('openrouter', routing({ dataCollection: 'deny' }))
     expect((denied.provider as { data_collection: string }).data_collection).toBe('deny')
+  })
+
+  it('lets a deployment drop the parameter requirement, which is what can empty the pool', () => {
+    // The escape hatch. `require_parameters` is right by default (an upstream that ignores a tool
+    // definition answers the wrong shape silently) and wrong for a model whose only upstreams
+    // advertise a subset, where it turns a routable call into a refused one.
+    const relaxed = gatewayRequestParams('openrouter', routing({ requireParameters: false }))
+    expect((relaxed.provider as { require_parameters: boolean }).require_parameters).toBe(false)
   })
 
   it('sends nothing to a provider that reports nothing', () => {
@@ -36,6 +51,67 @@ describe('gatewayRequestParams', () => {
       expect(reportsGatewayAttribution(provider)).toBe(false)
     }
     expect(reportsGatewayAttribution('openrouter')).toBe(true)
+  })
+})
+
+describe('gatewayRoutingRefusal', () => {
+  const body = JSON.stringify({
+    error: { message: 'No allowed providers are available for the selected model.', code: 404 },
+  })
+
+  it('names both constraints in force, so relaxing what it names always helps', () => {
+    const message = gatewayRoutingRefusal({
+      provider: 'openrouter',
+      status: 404,
+      body,
+      routing: routing(),
+    })
+    expect(message).toContain('OPENROUTER_DATA_COLLECTION=allow')
+    expect(message).toContain('OPENROUTER_REQUIRE_PARAMETERS=false')
+  })
+
+  it('names only the constraint still on', () => {
+    // Naming a setting the deployment already relaxed sends an operator after a change that
+    // cannot help, on a failure whose whole difficulty is that the gateway will not say which
+    // allow-list excluded what.
+    const message = gatewayRoutingRefusal({
+      provider: 'openrouter',
+      status: 404,
+      body,
+      routing: routing({ dataCollection: 'allow' }),
+    })
+    expect(message).not.toContain('OPENROUTER_DATA_COLLECTION')
+    expect(message).toContain('OPENROUTER_REQUIRE_PARAMETERS=false')
+  })
+
+  it('says nothing when this deployment constrained nothing', () => {
+    // Then the refusal is the gateway's own (a withdrawn model, a suspended account) and there is
+    // no setting to point at. Answering anyway would be a guess wearing a remedy's clothes.
+    expect(
+      gatewayRoutingRefusal({
+        provider: 'openrouter',
+        status: 404,
+        body,
+        routing: { dataCollection: 'allow', requireParameters: false },
+      }),
+    ).toBeUndefined()
+  })
+
+  it('says nothing about another failure, another provider, or a success', () => {
+    expect(
+      gatewayRoutingRefusal({
+        provider: 'openrouter',
+        status: 429,
+        body: 'rate limited',
+        routing: routing(),
+      }),
+    ).toBeUndefined()
+    expect(
+      gatewayRoutingRefusal({ provider: 'deepseek', status: 404, body, routing: routing() }),
+    ).toBeUndefined()
+    expect(
+      gatewayRoutingRefusal({ provider: 'openrouter', status: 200, body, routing: routing() }),
+    ).toBeUndefined()
   })
 })
 
@@ -94,8 +170,8 @@ describe('readMetadataGatewayReport', () => {
     ).toEqual({ cost: 0.0421, upstream: 'anthropic' })
   })
 
-  // Keyed on the metadata namespace the client stamps rather than on the caller's provider id: a
-  // deployment may register the gateway under its own label, and the metadata is what stays true.
+  // Keyed on the namespace the CLIENT stamps, which is the vendor's vocabulary; the request half
+  // keys on our own provider id. Adding a second gateway means adding both, paired.
   it('reports nothing for a result with no gateway metadata', () => {
     expect(readMetadataGatewayReport({ providerMetadata: { anthropic: { usage: {} } } })).toEqual(
       {},

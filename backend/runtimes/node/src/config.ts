@@ -46,7 +46,7 @@ import {
   parsePlatformMetricsWindow,
 } from '@cat-factory/observability-otel'
 import { DEFAULT_SPEND_PRICING, budgetCapsOverlay, modelCostResolver } from '@cat-factory/spend'
-import { cloudflareRestCredentials, openRouterDataCollectionForNode } from './providerEndpoints.js'
+import { cloudflareRestCredentials, openRouterRoutingForNode } from './providerEndpoints.js'
 
 // Translate the Node process environment into the shared AppConfig contract. This is
 // the Node analogue of the Worker's `loadConfig(env)`: same SHAPE, different source.
@@ -820,7 +820,7 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     // The CONTAINER-proxy half of the OpenRouter prompt-retention policy; the inline half reads
     // the same value in `modelProvider`. Both go through the shared parse so a deployment cannot
     // be strict on one path and permissive on the other.
-    openRouterDataCollection: openRouterDataCollectionForNode(env),
+    openRouterRouting: openRouterRoutingForNode(env),
     langfuse: buildLangfuseConfig(env),
     otel: buildOtelConfig(env),
     // Platform-health alerting: a periodic sweep raises a `platform_health` notification when

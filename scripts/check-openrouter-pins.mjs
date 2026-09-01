@@ -12,10 +12,12 @@
 //
 // It also reports PRICE DRIFT, because the pinned numbers are a second thing that rots: OpenRouter
 // passes the upstream vendor's rates through, and a vendor repricing a model leaves our table
-// stating the old one. Drift is advisory (see the exit code below): the table is deliberately
-// conservative (a fixed 0.92 EUR/USD margin, `CACHE_*_MULTIPLIER` fallbacks), so being ABOVE the
-// live rate is the intended state and only a pin that now UNDERSTATES the live price is worth
-// acting on. Enabling a model in the per-workspace OpenRouter catalog overrides the table entirely
+// stating the old one. All three pinned classes are compared (input, output and the cache READ
+// rate a row names only where the vendor departs from the derived floor), because a class nobody
+// checks is the one that silently under-meters. Drift is advisory (see the exit code below): the
+// table is deliberately conservative (a fixed 0.92 EUR/USD margin, `CACHE_*_MULTIPLIER`
+// fallbacks), so being ABOVE the live rate is the intended state and only a pin that now
+// UNDERSTATES the live price is worth acting on. Enabling a model in the per-workspace OpenRouter catalog overrides the table entirely
 // (`withDynamicPrices`), so drift is a default-quality problem, not a correctness one.
 //
 // NOT a per-PR guard: it makes a network call, so it belongs on the same weekly cadence as the
@@ -48,6 +50,21 @@ const DEFAULT_TIMEOUT_MS = 30_000
  */
 const USD_TO_EUR = 0.92
 
+/**
+ * The pinned rate fields, mapped to the `/models` pricing key each is read against.
+ *
+ * `cacheReadPerMillion` is in here because a row only NAMES it where the vendor departs from the
+ * 0.1x floor the table would otherwise derive, which makes it the class most likely to move and
+ * the one whose drift nothing else would catch: an unnamed cache rate follows its input rate
+ * automatically, a named one does not follow anything. A pinned row that keeps understating it
+ * under-meters every cached token of a container run, which is most of them.
+ */
+const RATE_FIELDS = [
+  { field: 'inputPerMillion', priceKey: 'prompt' },
+  { field: 'outputPerMillion', priceKey: 'completion' },
+  { field: 'cacheReadPerMillion', priceKey: 'input_cache_read' },
+]
+
 /** Pull the pinned `openrouter:<slug>` rows and their per-million rates out of the price table. */
 export function readPinnedSlugs(source) {
   const pins = []
@@ -58,11 +75,9 @@ export function readPinnedSlugs(source) {
   let match
   while ((match = rowRe.exec(source)) !== null) {
     const [, slug, body] = match
-    pins.push({
-      slug,
-      inputPerMillion: readNumber(body, 'inputPerMillion'),
-      outputPerMillion: readNumber(body, 'outputPerMillion'),
-    })
+    const pin = { slug }
+    for (const { field } of RATE_FIELDS) pin[field] = readNumber(body, field)
+    pins.push(pin)
   }
   return pins
 }
@@ -116,16 +131,14 @@ export function comparePins(pins, catalogue) {
       continue
     }
     served.push(pin.slug)
-    const liveInput = eurPerMillion(model.pricing?.prompt)
-    const liveOutput = eurPerMillion(model.pricing?.completion)
     // Only a pin materially BELOW the live rate is reported: a budget metering less than the call
-    // costs. Above it is the table's intended margin and says nothing.
+    // costs. Above it is the table's intended margin and says nothing. A field the row does not
+    // pin is skipped rather than compared against 0: the table DERIVES it, so there is no pinned
+    // number to have drifted.
     const under = []
-    if (understates(pin.inputPerMillion, liveInput)) {
-      under.push({ field: 'inputPerMillion', pinned: pin.inputPerMillion, live: liveInput })
-    }
-    if (understates(pin.outputPerMillion, liveOutput)) {
-      under.push({ field: 'outputPerMillion', pinned: pin.outputPerMillion, live: liveOutput })
+    for (const { field, priceKey } of RATE_FIELDS) {
+      const live = eurPerMillion(model.pricing?.[priceKey])
+      if (understates(pin[field], live)) under.push({ field, pinned: pin[field], live })
     }
     if (under.length > 0) understated.push({ slug: pin.slug, fields: under })
   }

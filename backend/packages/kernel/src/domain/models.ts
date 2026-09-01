@@ -8,9 +8,9 @@ import {
   type SubscriptionVendor,
   isLocalRunner,
   orderedModelFlavorPreference,
+  providerCachesPrompts,
 } from '@cat-factory/contracts'
 import type { HarnessKind, ModelRef } from '../ports/model-provider.js'
-import { providerCachesPrompts } from './cache-policy.js'
 import { MODEL_CATALOG } from './model-catalog.js'
 import {
   type LocalModelDeclarations,

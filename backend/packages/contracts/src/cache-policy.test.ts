@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { providerCachePolicy, providerCachesPrompts } from './cache-policy.js'
 
-// The one source of truth two unrelated readers CONCLUDE from: the model catalog projects
-// `cachesPrompts` onto the SPA's vendor pickers, and the call paths use the policy to decide
-// which routing hint a request carries. Getting a provider's bucket wrong is silent and
+// The one source of truth three unrelated readers CONCLUDE from: the model catalog projects
+// `cachesPrompts` onto the SPA's vendor pickers, the call paths use the policy to decide which
+// routing hint a request carries, and the SPA's API-key page reads it directly. Getting a provider's bucket wrong is silent and
 // expensive: a container agent re-sends its whole growing prompt every turn, so a stable prefix
 // that should have been a cache hit is re-billed as input on every one of them.
 
@@ -53,14 +53,29 @@ describe('providerCachePolicy: gateways', () => {
   // Reading the provider alone answered `none` for all 300+ OpenRouter models, which is wrong in
   // the expensive direction: the picker told a user the hot path ran cache-less on a route that
   // rides the upstream's automatic prefix cache exactly as the direct flavour does.
-  it('resolves an openrouter slug to its upstream vendor policy', () => {
+  it('resolves an openrouter slug to the policy stated for its vendor prefix', () => {
     expect(providerCachePolicy('openrouter', 'openai/gpt-5.6-terra')).toBe('auto-prefix')
     expect(providerCachePolicy('openrouter', 'deepseek/deepseek-v4')).toBe('auto-prefix')
-    expect(providerCachePolicy('openrouter', 'qwen/qwen3.8-max')).toBe('auto-prefix')
     // The gateway spells two vendors differently from our own provider ids, which is why the
     // prefix map is stated rather than assumed to be an identity.
     expect(providerCachePolicy('openrouter', 'x-ai/grok-4.6')).toBe('auto-prefix')
-    expect(providerCachePolicy('openrouter', 'moonshotai/kimi-k3')).toBe('none')
+    // Neither has a direct provider id here at all, so no indirection through one could have
+    // stated them; both are automatic on the gateway and both publish a cache-read rate.
+    expect(providerCachePolicy('openrouter', 'z-ai/glm-5.2')).toBe('auto-prefix')
+    expect(providerCachePolicy('openrouter', 'google/gemini-3.1-pro')).toBe('auto-prefix')
+  })
+
+  // The two prefixes whose gateway answer DISAGREES with the direct provider of the same name.
+  // Borrowing the direct policy got each wrong in the opposite direction, and the spend table
+  // already knew: it pins a cache-read rate for the Moonshot route it was answering `none` for.
+  it('states a prefix whose gateway behaviour differs from the direct provider of that name', () => {
+    expect(providerCachePolicy('moonshot')).toBe('none')
+    expect(providerCachePolicy('openrouter', 'moonshotai/kimi-k2.7-code')).toBe('auto-prefix')
+    // Alibaba's gateway route needs the same explicit breakpoints Anthropic does, and nothing
+    // on this path emits them, so the direct provider's `auto-prefix` would be a claim to a
+    // cache the picker never gets.
+    expect(providerCachePolicy('qwen')).toBe('auto-prefix')
+    expect(providerCachePolicy('openrouter', 'qwen/qwen3.8-max')).toBe('none')
   })
 
   // The deliberate asymmetry. `explicit-anthropic` is a claim about a request WE build, and
@@ -72,7 +87,9 @@ describe('providerCachePolicy: gateways', () => {
   })
 
   it('answers none for a slug it cannot read a vendor off', () => {
-    expect(providerCachePolicy('openrouter', 'google/gemini-3.1-pro')).toBe('none')
+    // A vendor that publishes a cache-read rate but whose cache-entry rule OpenRouter does not
+    // document stays out of the table: a rate alone does not tell a caller a hit will happen.
+    expect(providerCachePolicy('openrouter', 'mistralai/mistral-large')).toBe('none')
     expect(providerCachePolicy('openrouter', 'no-slash-here')).toBe('none')
     expect(providerCachePolicy('openrouter', '/leading-slash')).toBe('none')
     // No model in hand: the request-building helpers only ever ask about a DIRECT provider, so
@@ -92,5 +109,6 @@ describe('providerCachePolicy: gateways', () => {
     expect(providerCachePolicy('anthropic', 'claude-opus-5')).toBe('explicit-anthropic')
     expect(providerCachesPrompts('openrouter', 'deepseek/deepseek-v4')).toBe(true)
     expect(providerCachesPrompts('openrouter', 'anthropic/claude-opus-5')).toBe(false)
+    expect(providerCachesPrompts('openrouter', 'z-ai/glm-5.2')).toBe(true)
   })
 })

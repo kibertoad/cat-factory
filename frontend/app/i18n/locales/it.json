@@ -3844,6 +3844,8 @@
       "cacheRead": "{tokens} letti dalla cache",
       "cacheWrite": "{tokens} scritti nella cache",
       "total": "totale {duration}",
+      "viaUpstream": "tramite {upstream}",
+      "reportedCost": "addebitato {cost}",
       "prompt": "Prompt",
       "promptPrefixOmitted": "(solo nuovi messaggi: {count} precedenti omessi)",
       "response": "Risposta",

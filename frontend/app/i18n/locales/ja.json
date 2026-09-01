@@ -1790,6 +1790,8 @@
       "cacheRead": "{tokens} キャッシュ読み取り",
       "cacheWrite": "{tokens} キャッシュ書き込み",
       "total": "合計 {duration}",
+      "viaUpstream": "{upstream} 経由",
+      "reportedCost": "請求額 {cost}",
       "prompt": "プロンプト",
       "promptPrefixOmitted": "(新規メッセージのみ: 以前の {count} 件を省略)",
       "response": "レスポンス",

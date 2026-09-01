@@ -671,6 +671,26 @@ describe('InstrumentedModelProvider: gateway attribution', () => {
     }
   })
 
+  // The invariant that keeps every inline row honest: nothing here streams, and a streamed call
+  // would pass the wrap, reach no sink and record nothing. Downstream that is indistinguishable
+  // from a step that spent nothing, and it under-meters the budget the spend gate reads, so it
+  // refuses instead. If this ever starts failing, the fix is a real `wrapStream` plus a
+  // `streaming` flag through the inline recorder, not a deletion.
+  it('refuses to stream rather than passing an unrecorded call through', async () => {
+    const c = collectors()
+    const instrumented = new InstrumentedModelProvider({
+      inner: mockProvider('done'),
+      recordCall: c.recordCall,
+      workspaceBodiesEnabled: allowBodies,
+    })
+    const model = instrumented.resolve({ provider: 'openrouter', model: 'a/b' })
+    if (typeof model === 'string') throw new Error('expected a model instance')
+    await expect(
+      model.doStream({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }),
+    ).rejects.toThrow(/does not record streamed calls/)
+    expect(c.recorded).toEqual([])
+  })
+
   it('files nothing from a failed call, which has no result to read', async () => {
     const c = collectors()
     const instrumented = new InstrumentedModelProvider({

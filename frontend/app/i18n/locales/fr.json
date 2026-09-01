@@ -1790,6 +1790,8 @@
       "cacheRead": "{tokens} lus depuis le cache",
       "cacheWrite": "{tokens} écrits dans le cache",
       "total": "total {duration}",
+      "viaUpstream": "via {upstream}",
+      "reportedCost": "facturé {cost}",
       "prompt": "Prompt",
       "promptPrefixOmitted": "(nouveaux messages uniquement : {count} antérieurs omis)",
       "response": "Réponse",

@@ -1,8 +1,8 @@
 import {
   cloudflareRestBaseUrl,
-  openRouterDataCollectionFrom,
+  openRouterRoutingFrom,
   resolveOpenAiCompatibleBaseUrl,
-  type OpenRouterDataCollection,
+  type OpenRouterRouting,
 } from '@cat-factory/agents'
 
 // The Node facade's env plumbing for the shared provider table, and NOTHING else: this module is
@@ -34,12 +34,13 @@ export function baseUrlForNode(provider: string, env: NodeJS.ProcessEnv): string
 }
 
 /**
- * This deployment's OpenRouter prompt-retention policy. Denied unless the operator says
- * otherwise; the parse and its reasoning are shared with the Worker facade so one deployment
- * cannot be permissive on one runtime and strict on the other.
+ * This deployment's OpenRouter routing constraints: what it will let the gateway route to.
+ * Strict on both axes unless the operator says otherwise; the parse and its reasoning are shared
+ * with the Worker facade so one deployment cannot be permissive on one runtime and strict on the
+ * other.
  */
-export function openRouterDataCollectionForNode(env: NodeJS.ProcessEnv): OpenRouterDataCollection {
-  return openRouterDataCollectionFrom(env.OPENROUTER_DATA_COLLECTION)
+export function openRouterRoutingForNode(env: NodeJS.ProcessEnv): OpenRouterRouting {
+  return openRouterRoutingFrom(env)
 }
 
 /** A deployment's Cloudflare account credentials for reaching Workers AI over REST. */

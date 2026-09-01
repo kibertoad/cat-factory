@@ -1894,6 +1894,8 @@
       "cacheRead": "{tokens} cache read",
       "cacheWrite": "{tokens} cache write",
       "total": "total {duration}",
+      "viaUpstream": "via {upstream}",
+      "reportedCost": "billed {cost}",
       "prompt": "Prompt",
       "promptPrefixOmitted": "(new messages only: {count} earlier omitted)",
       "response": "Response",

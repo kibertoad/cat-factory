@@ -3844,6 +3844,8 @@
       "cacheRead": "{tokens} aus dem Cache gelesen",
       "cacheWrite": "{tokens} in den Cache geschrieben",
       "total": "gesamt {duration}",
+      "viaUpstream": "über {upstream}",
+      "reportedCost": "abgerechnet {cost}",
       "prompt": "Prompt",
       "promptPrefixOmitted": "(nur neue Nachrichten: {count} frühere ausgelassen)",
       "response": "Antwort",

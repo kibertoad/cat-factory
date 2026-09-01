@@ -1,3 +1,4 @@
+import { OPENROUTER_DATE_TEXT_MAX } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import { parseOpenRouterModels } from './openRouterModels.js'
 
@@ -94,29 +95,30 @@ describe('parseOpenRouterModels', () => {
       USD,
     )
     expect(longOnly).toMatchObject({ cacheWritePerMillion: 6 })
-  })
 
-  it('applies an account discount to every rate', () => {
-    const [model] = parseOpenRouterModels(
+    // The fallback reads the conditional BANDS too, which is where OpenRouter's own override
+    // objects carry the key. Off the base price alone this model would state no write rate at
+    // all and fall back to the spend table's multiplier, while the declared field read as if the
+    // case were covered.
+    const [bandOnly] = parseOpenRouterModels(
       [
         entry({
-          prompt: '0.000004',
-          completion: '0.00002',
-          input_cache_read: '0.0000004',
-          discount: 0.25,
+          prompt: '0.000003',
+          completion: '0.000015',
+          overrides: [{ min_prompt_tokens: 128_000, input_cache_write_1h: '0.000008' }],
         }),
       ],
       USD,
     )
-    expect(model).toMatchObject({
-      inputPerMillion: 3,
-      outputPerMillion: 15,
-      cachedInputPerMillion: 0.3,
-    })
+    expect(bandOnly).toMatchObject({ cacheWritePerMillion: 8 })
   })
 
-  it('ignores a discount outside the 0..1 fraction it is documented as', () => {
-    for (const discount of [1.5, -0.2, 'half', null]) {
+  it('meters the LISTED rate, never a rate discounted by a field the payload does not publish', () => {
+    // `/models` publishes no account discount (read 2026-09-01: 420 models, no `discount` key on
+    // any `pricing` object), so an unknown field of that name is a stranger's number and applying
+    // it would under-meter a budget by exactly its fraction. The listed rate is the conservative
+    // reading either way, which is the only direction a safeguard may be wrong in.
+    for (const discount of [0.25, 1.5, -0.2, 'half', null]) {
       const [model] = parseOpenRouterModels(
         [entry({ prompt: '0.000004', completion: '0.00002', discount })],
         USD,
@@ -161,6 +163,23 @@ describe('parseOpenRouterModels', () => {
       USD,
     )
     expect(same).not.toHaveProperty('canonicalSlug')
+  })
+
+  it('drops a withdrawal date the wire schema would reject rather than failing the whole list', () => {
+    // The catalog schema bounds this string, and the same payload is the browse response for
+    // every model at once. Emitting a value the schema refuses would cost a workspace its whole
+    // refresh over one odd row, so the field is dropped and the model still browses.
+    const [model] = parseOpenRouterModels(
+      [
+        entry(
+          { prompt: '0.000001', completion: '0.000002' },
+          { expiration_date: 'x'.repeat(OPENROUTER_DATE_TEXT_MAX + 1) },
+        ),
+      ],
+      USD,
+    )
+    expect(model).not.toHaveProperty('expirationDate')
+    expect(model?.id).toBe('vendor/model')
   })
 
   it('drops an entry with no usable id and tolerates a non-array payload', () => {

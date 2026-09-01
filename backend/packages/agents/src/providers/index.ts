@@ -48,10 +48,14 @@ export {
   MOONSHOT_BASE_URL,
   OPENAI_BASE_URL,
   OPENAI_COMPATIBLE_PROVIDERS,
+  DEFAULT_OPENROUTER_ROUTING,
   OPENROUTER_BASE_URL,
   openRouterDataCollectionFrom,
+  openRouterRequireParametersFrom,
+  openRouterRoutingFrom,
   OPERATOR_HOSTED_GATEWAYS,
   type OpenRouterDataCollection,
+  type OpenRouterRouting,
   QWEN_BASE_URL,
   resolveOpenAiCompatibleBaseUrl,
   type DirectProvider,
@@ -62,6 +66,7 @@ export {
 } from './endpoints.js'
 export {
   gatewayRequestParams,
+  gatewayRoutingRefusal,
   readCompletionGatewayReport,
   readMetadataGatewayReport,
   reportsGatewayAttribution,

@@ -6,10 +6,10 @@ import {
   QWEN_BASE_URL,
   isDirectProvider,
   isOpenAiCompatibleProvider,
-  openRouterDataCollectionFrom,
+  openRouterRoutingFrom,
   resolveOpenAiCompatibleBaseUrl,
   type DirectProvider,
-  type OpenRouterDataCollection,
+  type OpenRouterRouting,
 } from '@cat-factory/agents'
 import type { Env } from '../env'
 
@@ -93,10 +93,11 @@ export function resolveOpenAiCompatibleUpstream(
 }
 
 /**
- * This deployment's OpenRouter prompt-retention policy. Denied unless the operator says
- * otherwise; the parse and its reasoning are shared with the Node facade so one deployment
- * cannot be permissive on one runtime and strict on the other.
+ * This deployment's OpenRouter routing constraints: what it will let the gateway route to.
+ * Strict on both axes unless the operator says otherwise; the parse and its reasoning are shared
+ * with the Node facade so one deployment cannot be permissive on one runtime and strict on the
+ * other.
  */
-export function openRouterDataCollectionFor(env: Env): OpenRouterDataCollection {
-  return openRouterDataCollectionFrom(env.OPENROUTER_DATA_COLLECTION)
+export function openRouterRoutingFor(env: Env): OpenRouterRouting {
+  return openRouterRoutingFrom(env)
 }

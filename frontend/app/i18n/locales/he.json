@@ -1790,6 +1790,8 @@
       "cacheRead": "{tokens} נקראו מהמטמון",
       "cacheWrite": "{tokens} נכתבו למטמון",
       "total": "סך הכל {duration}",
+      "viaUpstream": "דרך {upstream}",
+      "reportedCost": "חויב {cost}",
       "prompt": "פרומפט",
       "promptPrefixOmitted": "(הודעות חדשות בלבד: {count} מוקדמות יותר הושמטו)",
       "response": "תגובה",

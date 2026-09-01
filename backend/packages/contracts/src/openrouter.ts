@@ -15,6 +15,25 @@ import * as v from 'valibot'
 
 const slugSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))
 const nameSchema = v.pipe(v.string(), v.maxLength(200))
+/**
+ * The bound on a vendor-stated date. Exported because the PARSER has to honour the same number:
+ * a value this schema would reject must be dropped where the payload is read, or one odd model
+ * fails the whole browse response and a workspace cannot refresh its catalog at all.
+ * OpenRouter states these as `YYYY-MM-DD`; 40 leaves room for a full timestamp.
+ */
+export const OPENROUTER_DATE_TEXT_MAX = 40
+
+/**
+ * A vendor-stated date, kept VERBATIM rather than parsed, but bounded like every other string on
+ * this object: the schema is also the client-supplied body of the catalog upsert, so an unbounded
+ * member is an unbounded row a workspace admin's client can post 200 of.
+ */
+const dateTextSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(OPENROUTER_DATE_TEXT_MAX),
+)
 
 /**
  * Metadata for one OpenRouter model, in the spend pricing's terms (per-1M-token
@@ -51,7 +70,7 @@ export const openRouterModelMetaSchema = v.object({
    * fails SILENTLY (the route just answers something else), so the one place that fact exists
    * has to keep it.
    */
-  expirationDate: v.optional(v.string()),
+  expirationDate: v.optional(dateTextSchema),
   /**
    * OpenRouter's permanent slug for this model (`canonical_slug`), when it differs from `id`.
    * `id` is the addressable route and may be re-pointed; this is what survives.

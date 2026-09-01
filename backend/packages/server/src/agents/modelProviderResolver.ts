@@ -2,6 +2,7 @@ import {
   CompositeModelProvider,
   InstrumentedModelProvider,
   type ModelResolver,
+  type OpenRouterRouting,
   type ProviderRegistry,
   type VendorConcurrencyLimiter,
   type WorkspaceBodiesGate,
@@ -45,11 +46,11 @@ export interface ScopedModelProviderOptions {
   /** Opt-in registries that need no DB key — the Cloudflare lib + Bedrock. */
   extraRegistries?: ProviderRegistry[]
   /**
-   * Whether OpenRouter may route to an upstream that retains prompts
-   * (`OPENROUTER_DATA_COLLECTION`). Absent ⇒ `deny`, the platform's default rather than the
-   * vendor's; see `openRouterResolver`.
+   * How this deployment constrains OpenRouter's provider routing (`OPENROUTER_DATA_COLLECTION`,
+   * `OPENROUTER_REQUIRE_PARAMETERS`). Absent ⇒ `DEFAULT_OPENROUTER_ROUTING`, strict on both
+   * axes; see `openRouterResolver`.
    */
-  openRouterDataCollection?: 'allow' | 'deny'
+  openRouterRouting?: OpenRouterRouting
   /**
    * The initiating user's locally-run model endpoints (Ollama / LM Studio / …) so inline
    * LLM calls reach them like the proxied path. Keyless by design (the endpoint carries an
@@ -111,9 +112,7 @@ export function createScopedModelProviderResolver(
             const leased = await opts.apiKeys.lease(scope.workspaceId, provider, poolOpts)
             registry[provider] = buildDirectResolver(provider, leased.secret, {
               baseURL: opts.baseUrlFor(provider),
-              ...(opts.openRouterDataCollection
-                ? { openRouterDataCollection: opts.openRouterDataCollection }
-                : {}),
+              ...(opts.openRouterRouting ? { openRouterRouting: opts.openRouterRouting } : {}),
             })
           } catch (e) {
             // One provider's key failing to lease/decrypt (e.g. sealed under a rotated
@@ -268,7 +267,7 @@ function unusableProviderResolver(error: unknown): ModelResolver {
 function buildDirectResolver(
   provider: string,
   apiKey: string,
-  opts: { baseURL: string | undefined; openRouterDataCollection?: 'allow' | 'deny' },
+  opts: { baseURL: string | undefined; openRouterRouting?: OpenRouterRouting },
 ): ModelResolver {
   const { baseURL } = opts
   if (provider === 'openai') return openAiResolver({ apiKey, baseURL })
@@ -282,8 +281,6 @@ function buildDirectResolver(
   }
   return directOpenAiCompatibleResolver(provider, apiKey, {
     baseURL,
-    ...(opts.openRouterDataCollection
-      ? { openRouterDataCollection: opts.openRouterDataCollection }
-      : {}),
+    ...(opts.openRouterRouting ? { openRouterRouting: opts.openRouterRouting } : {}),
   })
 }

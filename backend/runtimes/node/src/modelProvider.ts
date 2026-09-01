@@ -15,7 +15,7 @@ import {
 import {
   baseUrlForNode,
   cloudflareRestCredentials,
-  openRouterDataCollectionForNode,
+  openRouterRoutingForNode,
 } from './providerEndpoints.js'
 
 // The Node deployment's BASE ModelProvider RESOLVER: builds a per-scope provider from the
@@ -123,7 +123,7 @@ export function createNodeModelProviderResolver(
     apiKeys,
     baseUrlFor: (provider) => baseUrlForNode(provider, env),
     extraRegistries,
-    openRouterDataCollection: openRouterDataCollectionForNode(env),
+    openRouterRouting: openRouterRoutingForNode(env),
     // The service itself, so the endpoint read and the transport carrying the deployment's
     // loopback/LAN policy (re-validated on every redirect hop, SEC-2/SEC-3) cannot come from
     // two different places.

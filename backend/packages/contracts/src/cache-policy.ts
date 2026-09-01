@@ -1,14 +1,15 @@
 // Prompt-caching policy — the single source of truth for how a provider caches a
-// growing prompt prefix. It lives in the kernel (not the agents facade) because BOTH
-// the AI-call paths AND the model catalog need it: the catalog projects a per-model
-// `cachesPrompts` capability the SPA's vendor pickers surface, and the proxy/inline
-// paths give the provider the routing hint it needs (those request-building helpers
-// stay in `@cat-factory/agents`, which re-exports `providerCachePolicy` from here).
+// growing prompt prefix. It lives in contracts (not the kernel) because THREE readers have to
+// agree about it: the model catalog projects a per-model `cachesPrompts` capability, the
+// proxy/inline call paths give the provider the routing hint it needs, and the SPA's API-key
+// page tells a user whether connecting a key upgrades its models to the caching flavour. The
+// SPA cannot see the kernel, so a rule kept there becomes a hand-written copy in a Vue constant
+// the moment the third reader appears, and the two then drift.
 //
 // A container agent re-sends its whole growing prompt every turn, so on the providers
 // that cache it the stable prefix is a cache hit rather than re-billed input — but
 // only with a stable prefix and the provider-specific hint. Keeping the classification
-// here means neither the catalog nor the call paths hard-code provider ids twice.
+// here means no reader hard-codes provider ids twice.
 
 export type CachePolicy =
   // Caches automatically on an exact prefix match; some accept a routing key to pin
@@ -32,21 +33,43 @@ export type CachePolicy =
 const GATEWAY_PROVIDERS = new Set(['openrouter'])
 
 /**
- * Which direct provider a gateway slug's vendor prefix corresponds to.
+ * What a gateway slug's VENDOR PREFIX caches, stated per prefix rather than borrowed from the
+ * direct provider of the same name.
  *
- * OpenRouter addresses a model as `vendor/model`, and the vendor half is the same set of vendors
- * this platform already reaches directly under its own provider ids. The names differ in a few
- * places (`x-ai` against our `xai`, `moonshotai` against our `moonshot`, `google` and `z-ai`
- * having no direct id here at all), so the mapping is stated rather than assumed: a prefix left
- * out simply answers `none`, which is what an unrecognised vendor should say.
+ * The two are genuinely different facts and they disagree in both directions, which is why an
+ * indirection through the direct provider ids was wrong twice over:
+ *
+ *  - **`moonshotai`**: Moonshot's own API is `none` here, but OpenRouter documents its Moonshot
+ *    route as automatic ("does not require any additional configuration"), and the spend table
+ *    pins a cache-read rate for `openrouter:moonshotai/kimi-k2.7-code` precisely because that
+ *    route bills the class. Reading the direct id answered `none` for a route we already meter.
+ *  - **`qwen`**: DashScope is `auto-prefix` direct, but OpenRouter's Alibaba route "requires
+ *    explicit cache breakpoints" with the same `cache_control` syntax Anthropic uses, and
+ *    nothing on the gateway path emits them. Reading the direct id claimed a cache the picker
+ *    would never get.
+ *
+ * `z-ai` and `google` have no direct provider id here at all, so an indirection could not state
+ * them however it was written; both are automatic on the gateway (Gemini 2.5 and newer cache
+ * implicitly) and both publish a cache-read rate.
+ *
+ * A prefix left out answers `none`, which is what an unrecognised vendor should say: several
+ * vendors publish a cache-read rate without OpenRouter documenting how the cache is entered, and
+ * a rate alone does not tell a caller a hit will happen.
+ *
+ * Read 2026-09-01: https://openrouter.ai/docs/features/prompt-caching
  */
-const GATEWAY_VENDOR_PREFIX: Readonly<Record<string, string>> = {
-  openai: 'openai',
-  anthropic: 'anthropic',
-  deepseek: 'deepseek',
-  qwen: 'qwen',
-  'x-ai': 'xai',
-  moonshotai: 'moonshot',
+const GATEWAY_PREFIX_POLICY: Readonly<Record<string, CachePolicy>> = {
+  // Automatic on the gateway, no per-request opt-in.
+  openai: 'auto-prefix',
+  deepseek: 'auto-prefix',
+  moonshotai: 'auto-prefix',
+  'x-ai': 'auto-prefix',
+  'z-ai': 'auto-prefix',
+  google: 'auto-prefix',
+  // Explicit `cache_control` breakpoints, which nothing on this path emits; see
+  // {@link providerCachePolicy} for why that becomes `none` rather than `explicit-anthropic`.
+  anthropic: 'explicit-anthropic',
+  qwen: 'explicit-anthropic',
 }
 
 /**
@@ -60,11 +83,11 @@ const GATEWAY_VENDOR_PREFIX: Readonly<Record<string, string>> = {
  * nothing. Callers with no model in hand (the two request-building helpers, which only ever act
  * on a DIRECT provider) may omit it.
  *
- * A gateway slug resolves to its UPSTREAM's policy, with one deliberate asymmetry:
+ * A gateway slug resolves through {@link GATEWAY_PREFIX_POLICY}, with one deliberate asymmetry:
  * `explicit-anthropic` is downgraded to `none`, because that policy is a claim about a request
  * this platform builds, and nothing on the gateway path emits `cache_control` breakpoints.
- * Reporting `explicit-anthropic` there would tell the picker a prefix is cached that nobody asked
- * to cache. Adding the breakpoints is what would let that answer change.
+ * Reporting it there would tell the picker a prefix is cached that nobody asked to cache.
+ * Adding the breakpoints is what would let that answer change.
  */
 export function providerCachePolicy(provider: string, model?: string): CachePolicy {
   if (GATEWAY_PROVIDERS.has(provider)) return gatewayCachePolicy(model)
@@ -84,14 +107,13 @@ export function providerCachePolicy(provider: string, model?: string): CachePoli
   }
 }
 
-/** The upstream's policy for a `vendor/model` gateway slug; see {@link providerCachePolicy}. */
+/** The policy for a `vendor/model` gateway slug; see {@link providerCachePolicy}. */
 function gatewayCachePolicy(model: string | undefined): CachePolicy {
   const slash = model?.indexOf('/') ?? -1
   if (slash <= 0) return 'none'
-  const direct = GATEWAY_VENDOR_PREFIX[model!.slice(0, slash).toLowerCase()]
-  if (!direct) return 'none'
-  const upstream = providerCachePolicy(direct)
-  return upstream === 'explicit-anthropic' ? 'none' : upstream
+  const policy = GATEWAY_PREFIX_POLICY[model!.slice(0, slash).toLowerCase()]
+  if (!policy) return 'none'
+  return policy === 'explicit-anthropic' ? 'none' : policy
 }
 
 /** Whether `provider` caches prompt prefixes at all (any policy other than `none`). */

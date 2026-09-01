@@ -655,9 +655,13 @@ free). No per-million conversion has crept in. Read 2026-08-18:
 
 **The drift was what we dropped, and most of it is now read** (2026-09-01, this sweep's
 follow-up): `parseOpenRouterModels` takes `canonical_slug`, `expiration_date` and the full pricing
-shape: `discount`, `input_cache_read`, `input_cache_write` / `input_cache_write_1h`, and the
-conditional `overrides` bands, folded to their MAXIMUM because which band applies depends on the
-prompt length and the wall clock at call time and a budget may only be wrong upward. The cache
+shape: `input_cache_read`, `input_cache_write` / `input_cache_write_1h`, and the conditional
+`overrides` bands, folded to their MAXIMUM because which band applies depends on the prompt length
+and the wall clock at call time and a budget may only be wrong upward. **There is no `discount`
+field**, contrary to an earlier draft of this entry: a fresh read of the full list on 2026-09-01
+found the key on none of the 420 models, so nothing multiplies the listed rates down. If it ever
+appears, note that an account discount is the one pricing field a budget must NOT apply blind,
+since the listed rate is the conservative reading and the discounted one under-meters. The cache
 rates reach the spend table through `withDynamicPrices`; `expiration_date` reaches the catalog
 picker, because a withdrawn pin fails silently (the route stops answering and the run takes the
 next one). `scripts/check-openrouter-pins.mjs` re-reads the live catalogue against the ~20
@@ -676,6 +680,12 @@ so a reply carries the gateway's own `cost` and the `provider` it routed to (rec
 `llm_call_metrics`; see [`llm-telemetry.md`](../../backend/docs/llm-telemetry.md)), and
 `provider: { require_parameters, data_collection }` constrains routing. Both ride the inline path
 (`openRouterResolver`) and the container proxy through one module, `gateway-attribution.ts`.
+
+Both routing constraints NARROW the upstream pool, and a pool narrowed to nothing is a 404
+(`No allowed providers are available for the selected model`), not a degraded call. Each therefore
+has a deployment override (`OPENROUTER_DATA_COLLECTION`, `OPENROUTER_REQUIRE_PARAMETERS`), and the
+proxy recognises that refusal and records which constraint could have caused it: the gateway
+cannot say, because our request is the only place both are stated.
 
 ### GitLab REST v4: Current (High)
 

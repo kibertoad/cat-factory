@@ -1,14 +1,20 @@
-import type { OpenRouterModelMeta } from '@cat-factory/contracts'
+import { OPENROUTER_DATE_TEXT_MAX, type OpenRouterModelMeta } from '@cat-factory/contracts'
 
 // Reading OpenRouter's `/models` payload into the metadata a workspace stores.
 //
 // Its own module rather than a helper inside `OpenRouterCatalogService`, because the PRICE fold
 // is the intricate part and the service is about leasing a key and persisting a subset. What
 // makes it intricate is that OpenRouter does not publish one rate per model: a model carries a
-// base rate, an optional account-wide `discount`, up to three cache classes, and a list of
-// conditional `overrides` that re-price it by prompt length and time of day. Reading only
-// `prompt`/`completion` (which is what this repo did until now) meters a long-context call at
-// the cheap band and every cache hit at a derived guess.
+// base rate, up to three cache classes, and a list of conditional `overrides` that re-price it
+// by prompt length and time of day. Reading only `prompt`/`completion` (which is what this repo
+// did until now) meters a long-context call at the cheap band and every cache hit at a derived
+// guess.
+//
+// What is deliberately NOT read: an account-level discount. `/models` publishes none (read
+// 2026-09-01: 420 models, no `discount` key on any `pricing` object), and a rate this cannot see
+// is one it must not model. Multiplying the listed rates down by a fraction read from somewhere
+// else would under-meter a budget by exactly that fraction, and the listed rate is the
+// conservative reading either way.
 //
 // Everything here is USD per TOKEN as OpenRouter states it (as STRINGS, deliberately, to avoid
 // float precision loss; `"0"` means free), converted once to spend-currency per MILLION tokens.
@@ -28,8 +34,6 @@ interface RawPricingOverride {
 interface RawPricing {
   prompt?: unknown
   completion?: unknown
-  /** Fraction (0..1) taken off every listed rate for this account. */
-  discount?: unknown
   input_cache_read?: unknown
   input_cache_write?: unknown
   input_cache_write_1h?: unknown
@@ -47,7 +51,12 @@ interface RawModel {
 }
 
 /** The per-rate keys shared by a base price and a conditional override. */
-type RateKey = 'prompt' | 'completion' | 'input_cache_read' | 'input_cache_write'
+type RateKey =
+  | 'prompt'
+  | 'completion'
+  | 'input_cache_read'
+  | 'input_cache_write'
+  | 'input_cache_write_1h'
 
 /**
  * USD-per-token (a string or number) → spend-currency per 1M tokens, rounded to 4 dp.
@@ -91,7 +100,12 @@ function dearestRate(
  * platform requests is not, because the harnesses ask for the default 5-minute one. That is the
  * same reasoning behind `CACHE_WRITE_MULTIPLIER`'s 1.25 in the spend table, so budgeting the
  * 1-hour rate here would make the dynamic path contradict the static one for no gain.
- * `input_cache_write_1h` is the fallback for a model that publishes only the long TTL.
+ *
+ * `input_cache_write_1h` is the fallback for a model that publishes only the long TTL, and it is
+ * folded across the conditional bands exactly like the 5-minute rate: the bands carry the key
+ * (OpenRouter's own override objects list it), so reading it off the base price alone would leave
+ * a model that states it only inside a band falling back to the derived multiplier while the
+ * declared field read as if the case were covered.
  */
 function cacheWriteRate(
   pricing: RawPricing,
@@ -100,20 +114,13 @@ function cacheWriteRate(
 ): number | undefined {
   return (
     dearestRate(pricing, overrides, 'input_cache_write', rate) ??
-    perMillion(pricing.input_cache_write_1h, rate)
+    dearestRate(pricing, overrides, 'input_cache_write_1h', rate)
   )
 }
 
-/**
- * The multiplier an account-wide `discount` applies to every listed rate.
- *
- * Ignored unless it is a fraction in [0, 1]: a garbled value must not silently multiply a
- * budget, and 1 (no discount) is the safe reading of one.
- */
-function discountFactor(discount: unknown): number {
-  return typeof discount === 'number' && Number.isFinite(discount) && discount >= 0 && discount <= 1
-    ? 1 - discount
-    : 1
+/** `value` when it fits the wire schema's bound for its field, else undefined. */
+function withinLength(value: string | undefined, max: number): string | undefined {
+  return value !== undefined && value.length <= max ? value : undefined
 }
 
 /** A trimmed non-empty string, or undefined. Keeps `''` out of the persisted metadata. */
@@ -142,17 +149,15 @@ export function parseOpenRouterModels(data: unknown, rate: number): OpenRouterMo
     const overrides = Array.isArray(pricing.overrides)
       ? (pricing.overrides as RawPricingOverride[])
       : []
-    const factor = discountFactor(pricing.discount)
-    const discounted = (value: number | undefined): number | undefined =>
-      value === undefined ? undefined : Math.round(value * factor * 10_000) / 10_000
-
-    const input = discounted(dearestRate(pricing, overrides, 'prompt', rate))
-    const output = discounted(dearestRate(pricing, overrides, 'completion', rate))
-    const cachedInput = discounted(dearestRate(pricing, overrides, 'input_cache_read', rate))
-    const cacheWrite = discounted(cacheWriteRate(pricing, overrides, rate))
+    const input = dearestRate(pricing, overrides, 'prompt', rate)
+    const output = dearestRate(pricing, overrides, 'completion', rate)
+    const cachedInput = dearestRate(pricing, overrides, 'input_cache_read', rate)
+    const cacheWrite = cacheWriteRate(pricing, overrides, rate)
     const contextLength = typeof raw?.context_length === 'number' ? raw.context_length : undefined
     const canonicalSlug = text(raw?.canonical_slug)
-    const expirationDate = text(raw?.expiration_date)
+    // Dropped rather than truncated past the wire bound: a half a date is worse than no date,
+    // and letting it through would fail the schema for the whole browse list over one model.
+    const expirationDate = withinLength(text(raw?.expiration_date), OPENROUTER_DATE_TEXT_MAX)
 
     out.push({
       id,

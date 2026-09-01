@@ -35,7 +35,11 @@ test('reads every pinned openrouter slug, across single- and multi-line rows', (
     slug: 'deepseek/deepseek-v4-flash',
     inputPerMillion: 0.25,
     outputPerMillion: 1,
+    cacheReadPerMillion: 0.025,
   })
+  // A row that names no cache rate leaves it undefined rather than 0: the table DERIVES that
+  // class, so there is no pinned number for the drift report to compare.
+  assert.equal(pins[0].cacheReadPerMillion, undefined)
 })
 
 test('ignores the bare per-provider fallback row and other providers entirely', () => {
@@ -63,7 +67,17 @@ test('converts USD per token to EUR per million at the factor the table bakes in
 /** A live catalogue in the shape `/models` returns, keyed by slug. */
 function catalogue(entries) {
   return new Map(
-    entries.map(([id, prompt, completion]) => [id, { id, pricing: { prompt, completion } }]),
+    entries.map(([id, prompt, completion, inputCacheRead]) => [
+      id,
+      {
+        id,
+        pricing: {
+          prompt,
+          completion,
+          ...(inputCacheRead === undefined ? {} : { input_cache_read: inputCacheRead }),
+        },
+      },
+    ]),
   )
 }
 
@@ -119,6 +133,28 @@ test('reports a pin that meters BELOW the live rate and stays quiet about one ab
   ])
 })
 
+test('reports a pinned CACHE READ rate that has drifted under the live one', () => {
+  // The class this check exists for. A row names `cacheReadPerMillion` only where the vendor
+  // departs from the derived 0.1x floor, so nothing else follows it when the vendor moves: the
+  // input rate can be perfectly current while every cached token meters under. Most of a
+  // container run's input tokens are cache reads, so this is the drift with the largest bill.
+  const pins = readPinnedSlugs(`
+    'openrouter:vendor/model': {
+      inputPerMillion: 1.09,
+      outputPerMillion: 3.44,
+      cacheReadPerMillion: 0.2,
+    },
+  `)
+  const live = catalogue([['vendor/model', '0.00000118', '0.00000374', '0.00000022']])
+  const { understated } = comparePins(pins, live)
+  assert.deepEqual(understated, [
+    {
+      slug: 'vendor/model',
+      fields: [{ field: 'cacheReadPerMillion', pinned: 0.2, live: 0.2024 }],
+    },
+  ])
+})
+
 test('says nothing about a class the catalogue does not price', () => {
   // A model with no published rate must not be reported as understating everything: an absent
   // live figure is not a zero to compare against.
@@ -129,4 +165,15 @@ test('says nothing about a class the catalogue does not price', () => {
   const result = comparePins(pins, live)
   assert.deepEqual(result.served, ['vendor/model'])
   assert.deepEqual(result.understated, [])
+})
+
+test('says nothing about a cache rate the ROW does not pin', () => {
+  // The mirror of the case above. The live catalogue prices the class and the table derives it,
+  // so there is nothing pinned to have drifted; reporting it would put every derived row in a
+  // report whose whole value is that it is short.
+  const pins = readPinnedSlugs(
+    "'openrouter:vendor/model': { inputPerMillion: 1, outputPerMillion: 2 },",
+  )
+  const live = catalogue([['vendor/model', '0.000001', '0.000002', '0.0000005']])
+  assert.deepEqual(comparePins(pins, live).understated, [])
 })

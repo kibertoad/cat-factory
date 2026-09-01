@@ -1790,6 +1790,8 @@
       "cacheRead": "{tokens} önbellekten okundu",
       "cacheWrite": "{tokens} önbelleğe yazıldı",
       "total": "toplam {duration}",
+      "viaUpstream": "{upstream} üzerinden",
+      "reportedCost": "faturalanan {cost}",
       "prompt": "İstem",
       "promptPrefixOmitted": "(yalnızca yeni mesajlar: {count} öncekisi atlandı)",
       "response": "Yanıt",

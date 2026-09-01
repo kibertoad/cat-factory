@@ -325,6 +325,19 @@ export class InstrumentedModelProvider implements ModelProvider {
           throw err
         }
       },
+      // Every inline site calls `generateText`, never `streamText`, an invariant the recorder
+      // states too by hard-coding `streaming: false` on the row it writes. This is what keeps
+      // the invariant from being a comment: a streamed call would pass through the wrap with no
+      // `wrapStream` and reach no sink, so its tokens would be spent, its OpenRouter usage
+      // accounting paid for, and nothing written anywhere. That is invisible downstream, where
+      // an unrecorded call and a step that spent nothing are the same absence, and it undercounts
+      // the budget the spend gate reads. Refusing costs nothing today and names the two things a
+      // streaming caller has to build.
+      wrapStream: async () => {
+        throw new Error(
+          'InstrumentedModelProvider does not record streamed calls: implement wrapStream (fold the final stream part into `emit`) and thread `streaming` through the inline recorder before calling streamText.',
+        )
+      },
     }
   }
 

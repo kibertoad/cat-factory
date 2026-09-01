@@ -1,9 +1,12 @@
 import { type Context, Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import {
+  DEFAULT_OPENROUTER_ROUTING,
   type GatewayCallReport,
   type InputTokenClasses,
+  type OpenRouterRouting,
   gatewayRequestParams,
+  gatewayRoutingRefusal,
   promptCacheParams,
   readCompletionGatewayReport,
   readInputTokenClasses,
@@ -163,6 +166,13 @@ interface ProxyCallContext {
   session: ContainerSession
   payload: Record<string, unknown>
   streaming: boolean
+  /**
+   * The routing constraints this deployment put on the request, carried to the relay because a
+   * gateway's refusal names none of them: only the sender knows which allow-lists it applied,
+   * and {@link gatewayRoutingRefusal} is what turns "no allowed providers" into the variable an
+   * operator can change.
+   */
+  openRouterRouting: OpenRouterRouting
   promptText: string
   log: typeof logger
   gateways: RuntimeGateways
@@ -515,19 +525,34 @@ async function relayUpstream(
     upstreamRes = await fetch(upstreamUrl, upstreamInit)
   }
 
-  // Non-2xx: pass the upstream error straight back, nothing to meter.
+  // Non-2xx: pass the upstream error straight back, nothing to meter. The body is read to a
+  // string first (an error body, so small) rather than streamed through, because one class of
+  // failure is OURS to explain: a gateway refusing to route because the deployment's own
+  // constraints left no upstream. Relayed byte-for-byte either way; only what is RECORDED and
+  // LOGGED gains the explanation, since that is where an operator looks and the container agent
+  // can do nothing with it.
   if (!upstreamRes.ok || !upstreamRes.body) {
-    log.error('llm proxy: upstream returned non-2xx', { status: upstreamRes.status })
+    const body = await upstreamRes.text()
+    const refusal = gatewayRoutingRefusal({
+      provider: ctx.session.provider,
+      status: upstreamRes.status,
+      body,
+      routing: ctx.openRouterRouting,
+    })
+    if (refusal) log.error('llm proxy: gateway refused to route', { status: upstreamRes.status })
+    else log.error('llm proxy: upstream returned non-2xx', { status: upstreamRes.status })
     observe({
       usage: null,
       finishReason: null,
       responseText: '',
       ok: false,
       httpStatus: upstreamRes.status,
-      errorMessage: `Upstream returned ${upstreamRes.status}`,
+      errorMessage: refusal ?? `Upstream returned ${upstreamRes.status}`,
       upstreamMs: Date.now() - dispatchAt,
     })
-    return new Response(upstreamRes.body, {
+    // `|| null` because this branch also catches a 2xx with NO body: a null-body status (204,
+    // 304) refuses to be constructed with one, even the empty string `text()` yields.
+    return new Response(body || null, {
       status: upstreamRes.status,
       headers: { 'content-type': upstreamRes.headers.get('content-type') ?? 'application/json' },
     })
@@ -789,13 +814,8 @@ async function handleChatCompletion(c: Context<AppEnv>): Promise<Response> {
   // every other provider, so it merges unconditionally, exactly like the cache params above. The
   // INLINE path asks for the same two through `openRouterResolver`; both read the answer back
   // through the same module, which is what stops one path quietly ceasing to ask.
-  Object.assign(
-    payload,
-    gatewayRequestParams(
-      session.provider,
-      config.openRouterDataCollection ? { dataCollection: config.openRouterDataCollection } : {},
-    ),
-  )
+  const openRouterRouting = config.openRouterRouting ?? DEFAULT_OPENROUTER_ROUTING
+  Object.assign(payload, gatewayRequestParams(session.provider, openRouterRouting))
 
   // The run phase this call belongs to, off the (optional) path segment the caller was
   // pointed at. Read through the untyped `param()` map because the SAME handler serves the
@@ -938,6 +958,7 @@ async function handleChatCompletion(c: Context<AppEnv>): Promise<Response> {
     session,
     payload,
     streaming,
+    openRouterRouting,
     promptText,
     log,
     gateways,

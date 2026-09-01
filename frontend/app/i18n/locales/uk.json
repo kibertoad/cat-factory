@@ -1790,6 +1790,8 @@
       "cacheRead": "{tokens} прочитано з кешу",
       "cacheWrite": "{tokens} записано в кеш",
       "total": "усього {duration}",
+      "viaUpstream": "через {upstream}",
+      "reportedCost": "нараховано {cost}",
       "prompt": "Запит",
       "promptPrefixOmitted": "(лише нові повідомлення: {count} раніших пропущено)",
       "response": "Відповідь",
