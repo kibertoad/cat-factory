@@ -1025,3 +1025,20 @@ Present only when true, so a step that ran carries no flag rather than a `false`
 would have to read as "false, or this run predates the field". A boolean rather than the engine's
 internal skip REASON: which axis skipped a step is a vocabulary the engine grows as it grows new
 gating, and publishing it here would be a promise to keep that vocabulary still.
+
+## 1.63.0
+
+The provisioning-log `operation` vocabulary gains `remediate`: a row the platform appends when it
+asks a provider to repair an environment in place, for the environment investigation's `restart`
+remedy.
+
+Additive, and the same shape `teardown-verify` took for the same reason: a distinct ACTOR gets its
+own verb rather than being folded into an existing one. A restart is the one investigation action
+that mutates a live cluster, and folding it under `status` (a read) or `provision` (a stand-up)
+would report an operation that did not happen. The clients tolerate unknown enum values by design,
+so a consumer built against 1.62.0 keeps parsing; one that maps `operation` through an exhaustive
+table gains a member to name, which is what the vocabulary being closed is for.
+
+What a consumer NOTICES beyond the new value: the environment rows for a run that hit the
+investigation loop are no longer a complete account of what touched the environment unless
+`remediate` is read. Before this, they silently were not.

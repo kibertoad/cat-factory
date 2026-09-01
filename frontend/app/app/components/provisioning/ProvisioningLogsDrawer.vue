@@ -96,6 +96,7 @@ const OPERATION_LABEL = computed<Record<ProvisioningOperation, string>>(() => ({
   teardown: t('provisioning.operation.teardown'),
   'teardown-verify': t('provisioning.operation.teardown-verify'),
   status: t('provisioning.operation.status'),
+  remediate: t('provisioning.operation.remediate'),
   dispatch: t('provisioning.operation.dispatch'),
   release: t('provisioning.operation.release'),
   'poll-failure': t('provisioning.operation.poll-failure'),

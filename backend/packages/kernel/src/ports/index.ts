@@ -569,8 +569,10 @@ export type {
 } from './environment-diagnostics.js'
 export type {
   EnvironmentEvidenceBundle,
+  EnvironmentFailureFacts,
   EnvironmentInvestigationSubject,
   EnvironmentInvestigator,
+  EnvironmentReadinessWaitKind,
   EnvironmentRecordFacts,
   EnvironmentTimelineEntry,
 } from './environment-investigation.js'

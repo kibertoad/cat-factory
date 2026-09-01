@@ -32,7 +32,10 @@ import { deployDispatchEpoch, deployJobId, orderProvisionTargets } from './deplo
 import { type ContainerFailureView, containerShutdownFailure } from './job.logic.js'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import type { DeployFixController } from './DeployFixController.js'
-import type { EnvironmentInvestigationController } from './EnvironmentInvestigationController.js'
+import type {
+  EnvironmentInvestigationController,
+  EnvironmentReadinessWait,
+} from './EnvironmentInvestigationController.js'
 import { TESTER_AGENT_KIND, UI_TESTER_AGENT_KIND } from './ci.logic.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
@@ -576,9 +579,9 @@ export class DeployerStepController {
     return this.settleDeployerFailure(ctx, target, {
       url: handle.url,
       environmentId: handle.id,
-      // Only when something actually waited: the initial settle passes zero, and "the readiness
-      // wait ran for 0 seconds" is a different (and false) statement from "nothing waited".
-      ...(waitedMs > 0 ? { waitedMs } : {}),
+      // The initial settle passes zero, and "the readiness wait ran for 0 seconds" is a different
+      // (and false) statement from "there was a live verdict and nothing waited on it".
+      wait: waitedMs > 0 ? { kind: 'waited', waitedMs } : { kind: 'verdict_without_wait' },
       error: verdict.error,
       // The two are different faults and the vocabulary keeps them apart: `timeout` is OUR
       // deadline expiring on a provider still answering `provisioning`, `environment_not_ready`
@@ -746,12 +749,14 @@ export class DeployerStepController {
       /** Machine-readable cause (e.g. `deploy_runner_unwired`) carried to the failure record. */
       reason?: string
       /**
-       * How long the readiness wait ran before it was given up on, when this failure came out of
-       * one. Evidence for the investigation rather than for the record: a ceiling that expired
-       * seconds after the provider's own work began and one that expired after twenty minutes of
-       * silence are different faults, and nothing else on the failure says which happened.
+       * What the readiness wait contributed to this failure. Evidence for the investigation
+       * rather than for the record: a ceiling that expired seconds after the provider's own work
+       * began, one that expired after twenty minutes of silence, and a failure that never reached
+       * a readiness judgement at all are three different faults, and nothing else on the failure
+       * says which happened. Defaults to `not_reached`, which is what every route that is not the
+       * readiness judge is: a caller that forgets it states no wait rather than inventing one.
        */
-      waitedMs?: number
+      wait?: EnvironmentReadinessWait
       /**
        * The kind a PRIMARY frame's failure is reported under, when this failure is not the
        * provisioning itself going wrong. Defaults to `environment`, which is what a provider
@@ -763,7 +768,8 @@ export class DeployerStepController {
     },
   ): Promise<AdvanceResult> {
     const { workspaceId, instance, step } = ctx
-    const { url, environmentId, error, reason, failureKind, waitedMs } = failure
+    const { url, environmentId, error, reason, failureKind } = failure
+    const wait = failure.wait ?? { kind: 'not_reached' }
     const done = step.deployEnvs ?? {}
     step.deployEnvs = {
       ...done,
@@ -810,7 +816,7 @@ export class DeployerStepController {
           environmentId: environmentId ?? null,
           error,
           reason,
-          ...(waitedMs === undefined ? {} : { waitedMs }),
+          wait,
         },
       })
       if (investigated?.kind === 'retrying') return investigated.advance

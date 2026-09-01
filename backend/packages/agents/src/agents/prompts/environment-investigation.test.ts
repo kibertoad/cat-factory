@@ -21,7 +21,11 @@ function bundle(overrides: Partial<EnvironmentEvidenceBundle> = {}): Environment
     },
     provisionFields: {},
     timeline: [],
-    failure: { error: 'Environment was still provisioning after 20 minutes', reason: 'timeout' },
+    failure: {
+      error: 'Environment was still provisioning after 20 minutes',
+      reason: 'timeout',
+      readinessWait: 'verdict_without_wait',
+    },
     ...overrides,
   }
 }
@@ -39,7 +43,12 @@ function render(overrides: Partial<EnvironmentEvidenceBundle> = {}, offered = ['
 describe('renderEnvironmentInvestigationPrompt', () => {
   it("leads with the run's failure, its classification and how long anything waited", () => {
     const prompt = render({
-      failure: { error: 'boom', reason: 'timeout', waitedMs: 1_200_000 },
+      failure: {
+        error: 'boom',
+        reason: 'timeout',
+        readinessWait: 'waited',
+        waitedMs: 1_200_000,
+      },
     })
     expect(prompt).toContain('boom')
     expect(prompt).toContain('classified the cause as: timeout')
@@ -50,8 +59,31 @@ describe('renderEnvironmentInvestigationPrompt', () => {
     expect(render()).toContain('Nothing waited on this environment')
   })
 
+  it('refuses to claim a live verdict for a failure that never reached one', () => {
+    // The three readiness stories are distinct facts. A deploy container shut down mid-run has no
+    // readiness verdict AND no wait, and reporting it as "there was a live verdict and nothing
+    // waited" is a claim, made directly above the directive telling the model to line the
+    // timestamps up.
+    const prompt = render({
+      failure: { error: 'the deploy container was stopped', readinessWait: 'not_reached' },
+    })
+    expect(prompt).toContain('BEFORE any readiness judgement')
+    expect(prompt).not.toContain('Nothing waited on this environment')
+  })
+
   it('says the platform could not classify the cause rather than omitting the line', () => {
-    expect(render({ failure: { error: 'boom' } })).toContain('could not classify the cause')
+    expect(render({ failure: { error: 'boom', readinessWait: 'not_reached' } })).toContain(
+      'could not classify the cause',
+    )
+  })
+
+  it('states what the PLATFORM held back, apart from what the provider could not read', () => {
+    const prompt = render({
+      evidenceCaps: ['The provider reported 400 facts; only the first 120 are below.'],
+    })
+    expect(prompt).toContain('What the platform did NOT pass on')
+    expect(prompt).toContain('only the first 120 are below')
+    expect(prompt).toContain('held back by the platform for size, not refused by the provider')
   })
 
   it('renders the whole provision-field bag, sorted', () => {

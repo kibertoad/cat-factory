@@ -253,6 +253,25 @@ export function redactSecretsDeep<T>(value: T): T {
 }
 
 /**
+ * Rewrite a field NAME so a secret word buried inside it starts at a regex word boundary.
+ *
+ * Every {@link RULES} entry that keys off a name opens with `\b`, and `_` is a word character, so
+ * `apiToken` matches while `kargoApiToken`, `provider_api_key` and `deployPassword` do not: there
+ * is no boundary between `o` and `A`, nor between `r` and `a`. Compound names are the NORMAL shape
+ * of a provider's captured field bag, which is the one thing {@link redactSecretFields} exists for,
+ * so the names it probes are split on their own case and separator changes first. `-` rather than
+ * a space because the rules already accept it as an internal separator (`api[_-]?`), so
+ * `provider-api-key` matches the same `api-key` rule `api_key` does.
+ */
+function boundaryFieldName(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+    .replace(/_/g, '-')
+    .toLowerCase()
+}
+
+/**
  * Scrub a flat `key -> value` bag, giving each value its OWN KEY as scrubbing context.
  *
  * {@link redactSecretsDeep} is the wrong tool for one: it walks to the string LEAF and scrubs it
@@ -261,18 +280,24 @@ export function redactSecretsDeep<T>(value: T): T {
  * how a provider's captured provision fields arrive, and that bag is now read by something other
  * than teardown, so the gap became reachable.
  *
- * Implemented by scrubbing the rendered `key=value` pair and slicing the key back off, so there is
- * ONE rule set rather than a second list of secret-ish names to drift from the first. Every rule
- * that matches a name preserves the name and separator it matched, so the prefix is stable.
+ * Implemented by scrubbing a rendered `name=value` pair and slicing the name back off, so there is
+ * ONE rule set rather than a second list of secret-ish names to drift from the first. The name
+ * probed is {@link boundaryFieldName}'s, not the caller's, because the rules are boundary-anchored;
+ * the OUTPUT bag keeps the caller's keys untouched, since they are read by a human and by the
+ * teardown path.
+ *
+ * A pair whose scrubbed form no longer opens with the probed prefix means a rule consumed part of
+ * the NAME, so there is no value to slice back out; that answers {@link REPLACEMENT} rather than
+ * the mangled remainder, which would otherwise splice the field name into its own value.
  */
 export function redactSecretFields(
   fields: Readonly<Record<string, string>>,
 ): Record<string, string> {
   const out: Record<string, string> = {}
   for (const [key, value] of Object.entries(fields)) {
-    const prefix = `${key}=`
+    const prefix = `${boundaryFieldName(key)}=`
     const scrubbed = redactSecrets(`${prefix}${value}`) ?? ''
-    out[key] = scrubbed.startsWith(prefix) ? scrubbed.slice(prefix.length) : scrubbed
+    out[key] = scrubbed.startsWith(prefix) ? scrubbed.slice(prefix.length) : REPLACEMENT
   }
   return out
 }

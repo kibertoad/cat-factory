@@ -6622,6 +6622,7 @@
       "teardown": "Tear down",
       "teardown-verify": "Teardown check",
       "status": "Status check",
+      "remediate": "Repair in place",
       "dispatch": "Spin up",
       "release": "Tear down",
       "poll-failure": "Health check"

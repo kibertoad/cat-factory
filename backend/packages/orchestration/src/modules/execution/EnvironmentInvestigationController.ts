@@ -6,6 +6,7 @@ import type {
   ExecutionInstance,
   Logger,
   PipelineStep,
+  TeardownConfirmation,
 } from '@cat-factory/kernel'
 import { describeError, getErrorMessage, noopLogger } from '@cat-factory/kernel'
 import {
@@ -63,9 +64,30 @@ export interface EnvironmentInvestigationFailure {
   error: string
   /** The machine-readable cause, when the provider classified one. */
   reason: string | undefined
-  /** How long the readiness wait ran, when this failure came out of one. */
-  waitedMs?: number
+  /** What the readiness wait contributed to this failure. See {@link EnvironmentReadinessWait}. */
+  wait: EnvironmentReadinessWait
 }
+
+/**
+ * Which of the three readiness stories this failure has, because "no elapsed time" is not one
+ * fact.
+ *
+ * A nullable `waitedMs` collapsed them, and the missing case then rendered as a claim: every
+ * failure route that is not the readiness ceiling (a deploy container shut down mid-run, a
+ * `startProvision` throw, a `finalizeProvision` throw) told the investigator there had been a live
+ * verdict and nothing had waited on it, directly above the directive telling it to line the
+ * timestamps up. Two of those had no readiness verdict at all and one of them ran for twenty
+ * minutes.
+ *
+ *  - `waited`: a readiness wait ran and was given up on. `waitedMs` says how long.
+ *  - `verdict_without_wait`: the provider DECLARED the environment failed, so nothing waited.
+ *  - `not_reached`: the failure happened before any readiness judgement, so the wait says nothing
+ *    about it either way.
+ */
+export type EnvironmentReadinessWait =
+  | { kind: 'waited'; waitedMs: number }
+  | { kind: 'verdict_without_wait' }
+  | { kind: 'not_reached' }
 
 /**
  * What the loop decided. `null` (not a member) is "does not apply", and the caller then takes its
@@ -89,8 +111,18 @@ export interface EnvironmentInvestigationControllerDeps {
    * Tear an environment down, for the `recreate` remedy. Typed structurally (not the concrete
    * `EnvironmentTeardownService`) exactly as the provisioning service types its own. Absent ⇒
    * `recreate` is not offered and the model is never asked to pick it.
+   *
+   * The RESULT is part of the structural type, not `unknown`: a teardown returns the independent
+   * probe's verdict, and `recreate` re-provisions over whatever it left behind. Only a `confirmed`
+   * probe is a reclaim (the disposal rule), so the shape has to carry the verdict for the caller
+   * to be able to refuse a namespace still wedged in `Terminating`.
    */
-  environmentTeardown?: { teardown(workspaceId: string, id: string): Promise<unknown> }
+  environmentTeardown?: {
+    teardown(
+      workspaceId: string,
+      id: string,
+    ): Promise<{ confirmation: TeardownConfirmation; reason: string | null }>
+  }
   runStateMachine: RunStateMachine
   clock: Clock
   logger?: Logger
@@ -142,30 +174,45 @@ export class EnvironmentInvestigationController {
       // of this failure, so it is reported rather than discarded: reporting is the point, and a
       // spent budget removes only the ability to act on it.
       const last = lastVerdict(step)
-      return last ? { kind: 'reported', message: describeFinding(failure, last, true) } : null
+      return last
+        ? { kind: 'reported', message: describeFinding(failure, last, { kind: 'budget_spent' }) }
+        : null
     }
 
-    const offered = await this.offeredActions(workspaceId, step, failure)
-    const subject: EnvironmentInvestigationSubject = {
-      workspaceId,
-      executionId: instance.id,
-      block,
-      evidence: await provisioning.collectEnvironmentEvidence({
+    let verdict: EnvironmentInvestigationVerdict | null = null
+    let investigationFailure: string | undefined
+    let offered: readonly EnvironmentRemediationAction[] = []
+    // GATHERING is inside the guard, not just the asking. The evidence walk is a chain of
+    // repository and provider reads, and one of them throwing here does not merely cost the
+    // diagnosis: it propagates out of the caller's own terminal-failure path, where the durable
+    // driver counts it as an unreadable poll and fast-fails the run as a `timeout`. The loop
+    // exists to EXPLAIN a failed provision, so it must never be able to replace one with a
+    // misattributed failure of its own.
+    try {
+      const evidence = await provisioning.collectEnvironmentEvidence({
         workspaceId,
         environmentId: failure.environmentId,
         executionId: instance.id,
         failure: {
           error: failure.error,
           ...(failure.reason ? { reason: failure.reason } : {}),
-          ...(failure.waitedMs === undefined ? {} : { waitedMs: failure.waitedMs }),
+          ...(failure.wait.kind === 'waited' ? { waitedMs: failure.wait.waitedMs } : {}),
+          readinessWait: failure.wait.kind,
         },
-      }),
-      offeredActions: offered,
-    }
-
-    let verdict: EnvironmentInvestigationVerdict | null = null
-    let investigationFailure: string | undefined
-    try {
+      })
+      offered = offeredActions(
+        step,
+        failure,
+        evidence.providerActions,
+        !!this.deps.environmentTeardown,
+      )
+      const subject: EnvironmentInvestigationSubject = {
+        workspaceId,
+        executionId: instance.id,
+        block,
+        evidence: evidence.bundle,
+        offeredActions: offered,
+      }
       const answer = await investigator.investigate(subject)
       verdict = coerceEnvironmentInvestigationVerdict(answer.verdict)
       if (!verdict) investigationFailure = 'The investigation returned no readable verdict.'
@@ -196,7 +243,7 @@ export class EnvironmentInvestigationController {
       return null
     }
 
-    const chosen = this.chooseAction(verdict, offered)
+    const chosen = chooseAction(verdict, offered)
     if (!chosen.action) {
       appendRound(step, failure, budget, {
         ...round,
@@ -207,7 +254,18 @@ export class EnvironmentInvestigationController {
         ...(chosen.withheld ? { withheld: chosen.withheld } : {}),
       })
       await this.deps.runStateMachine.casPersist(workspaceId, instance)
-      return { kind: 'reported', message: describeFinding(failure, verdict, false) }
+      return {
+        kind: 'reported',
+        // The WITHHELD reason, never the verdict's own recommendation: the action was refused
+        // before it was taken, so printing `Recommended: restart` would tell the operator about a
+        // decision that never existed. That is the exact outcome `offeredActions` narrows to
+        // prevent, and it survives only if the message it produces says so too.
+        message: describeFinding(
+          failure,
+          verdict,
+          chosen.withheld ? { kind: 'withheld', detail: chosen.withheld } : { kind: 'recommended' },
+        ),
+      }
     }
 
     const applied = await this.applyAction(provisioning, workspaceId, failure, chosen.action)
@@ -223,108 +281,17 @@ export class EnvironmentInvestigationController {
       await this.deps.runStateMachine.casPersist(workspaceId, instance)
       return {
         kind: 'reported',
-        message: [
-          describeFinding(failure, verdict, false),
-          '',
-          'The platform tried to ' +
-            describeRemediationAction(chosen.action) +
-            ' and could not: ' +
-            applied.detail,
-        ].join('\n'),
+        message: describeFinding(failure, verdict, {
+          kind: 'attempt_failed',
+          action: chosen.action,
+          detail: applied.detail,
+        }),
       }
     }
     return {
       kind: 'retrying',
       advance: await this.resume(workspaceId, instance, step, chosen.action, failure),
     }
-  }
-
-  /**
-   * The actions the engine will honour THIS round, narrowed before the model is asked.
-   *
-   * Narrowing here rather than filtering the verdict afterwards is what stops a report naming a
-   * remedy nobody tried: an operator reading "the platform should have restarted the workload"
-   * against a provider that cannot restart anything has been told about a decision that never
-   * existed. The filter runs over the vocabulary's OWN options, so a new action is unreachable
-   * until it is decided about here as well as in the contracts' support `Record`.
-   */
-  private async offeredActions(
-    workspaceId: string,
-    step: PipelineStep,
-    failure: EnvironmentInvestigationFailure,
-  ): Promise<EnvironmentRemediationAction[]> {
-    const config = step.stepOptions?.environmentInvestigation
-    const extensions = step.environmentInvestigation?.waitExtensions ?? 0
-    // Not asked at all when the deployment has forbidden acting: the answer could only narrow a
-    // set that is already down to `stop`, and it is a live call to somebody's control plane.
-    const supported: readonly string[] =
-      failure.environmentId && config?.allowRemediation !== false
-        ? await this.providerActions(workspaceId, failure.environmentId)
-        : []
-    return environmentRemediationActionSchema.options.filter((action) => {
-      // Refusing is always available.
-      if (action === 'stop') return true
-      // A deployment may keep the whole diagnosis and forbid everything that touches infrastructure.
-      if (config?.allowRemediation === false) return false
-      // Only the provider's own in-place remedies need it to have implemented anything.
-      if (remediationNeedsProviderSupport(action) && !supported.includes(action)) return false
-      // Waiting longer answers OUR deadline expiring on an environment the provider still said was
-      // coming. A provider that has DECLARED the environment failed answers identically forever,
-      // so a wait there is an offer to postpone the same verdict.
-      if (action === 'wait') {
-        return (
-          !!failure.environmentId &&
-          failure.reason === 'timeout' &&
-          extensions < MAX_ENVIRONMENT_WAIT_EXTENSIONS
-        )
-      }
-      // Tearing down needs both something to tear down and a teardown seam to do it with.
-      if (action === 'recreate') return !!failure.environmentId && !!this.deps.environmentTeardown
-      // `restart` acts ON an environment; `reprovision` stands one up, and is therefore the one
-      // remedy still available when the provision died before recording an environment at all.
-      if (action === 'restart') return !!failure.environmentId
-      return true
-    })
-  }
-
-  /** The provider's declared in-place remediations; a read failure degrades to "none offered". */
-  private async providerActions(workspaceId: string, environmentId: string): Promise<string[]> {
-    try {
-      return [
-        ...((await this.deps.environmentProvisioning?.providerRemediations(
-          workspaceId,
-          environmentId,
-        )) ?? []),
-      ]
-    } catch (error) {
-      this.log.warn('could not read the provider remediations for an environment', {
-        workspaceId,
-        environmentId,
-        ...describeError(error),
-      })
-      return []
-    }
-  }
-
-  /**
-   * Resolve the verdict's action against what was offered. An action outside the offered set is
-   * treated as `stop` with the divergence NAMED: the model was told the list, so picking outside
-   * it is a contract violation, and quietly substituting a neighbouring action would be the engine
-   * choosing a remedy nobody asked for.
-   */
-  private chooseAction(
-    verdict: EnvironmentInvestigationVerdict,
-    offered: readonly EnvironmentRemediationAction[],
-  ): { action?: EnvironmentRemediationAction; withheld?: string } {
-    if (verdict.action === 'stop') return {}
-    if (!offered.includes(verdict.action)) {
-      return {
-        withheld:
-          `The investigation asked the platform to ${describeRemediationAction(verdict.action)}, ` +
-          'which was not offered this round.',
-      }
-    }
-    return { action: verdict.action }
   }
 
   /**
@@ -362,7 +329,19 @@ export class EnvironmentInvestigationController {
         if (!environmentId || !teardown) {
           return { ok: false, detail: 'there is no environment this deployment can tear down' }
         }
-        await teardown.teardown(workspaceId, environmentId)
+        const result = await teardown.teardown(workspaceId, environmentId)
+        // Only a CONFIRMED probe is a reclaim. A teardown that returns without throwing says the
+        // provider accepted the destroy call, which is a different fact from the environment being
+        // gone: a namespace wedged in `Terminating` behind a stuck finalizer answers exactly that
+        // way, and re-provisioning into it reproduces the fault and burns the remaining round.
+        if (result.confirmation !== 'confirmed') {
+          return {
+            ok: false,
+            detail:
+              `the provider accepted the teardown but the environment could not be confirmed ` +
+              `gone (${result.confirmation}${result.reason ? `: ${result.reason}` : ''})`,
+          }
+        }
         return { ok: true, detail: 'the environment was torn down before being stood up again' }
       }
       // `wait` and `reprovision` are entirely engine-side: nothing is asked of the provider here,
@@ -370,8 +349,9 @@ export class EnvironmentInvestigationController {
       return { ok: true, detail: '' }
     } catch (error) {
       // Deliberately NOT swallowed as best-effort: `recreate` re-provisions over whatever the
-      // teardown left behind, so a teardown that failed has to stop the retry rather than
-      // reproduce the fault against half-removed infrastructure.
+      // teardown left behind, so a teardown that threw (like one whose probe found the
+      // environment still standing, above) has to stop the retry rather than reproduce the fault
+      // against half-removed infrastructure.
       this.log.warn('an environment remediation could not be applied', {
         workspaceId,
         environmentId,
@@ -435,6 +415,73 @@ export class EnvironmentInvestigationController {
 }
 
 /**
+ * The actions the engine will honour THIS round, narrowed before the model is asked.
+ *
+ * Narrowing here rather than filtering the verdict afterwards is what stops a report naming a
+ * remedy nobody tried: an operator reading "the platform should have restarted the workload"
+ * against a provider that cannot restart anything has been told about a decision that never
+ * existed. The filter runs over the vocabulary's OWN options, so a new action is unreachable
+ * until it is decided about here as well as in the contracts' support `Record`.
+ *
+ * `supported` comes from the SAME provider resolve the evidence was gathered through, so a round
+ * costs one registry read and one connection open rather than two of each.
+ */
+export function offeredActions(
+  step: Pick<PipelineStep, 'stepOptions' | 'environmentInvestigation'>,
+  failure: Pick<EnvironmentInvestigationFailure, 'environmentId' | 'reason'>,
+  supported: readonly string[],
+  canTearDown: boolean,
+): EnvironmentRemediationAction[] {
+  const config = step.stepOptions?.environmentInvestigation
+  const extensions = step.environmentInvestigation?.waitExtensions ?? 0
+  return environmentRemediationActionSchema.options.filter((action) => {
+    // Refusing is always available.
+    if (action === 'stop') return true
+    // A deployment may keep the whole diagnosis and forbid everything that touches infrastructure.
+    if (config?.allowRemediation === false) return false
+    // Only the provider's own in-place remedies need it to have implemented anything.
+    if (remediationNeedsProviderSupport(action) && !supported.includes(action)) return false
+    // Waiting longer answers OUR deadline expiring on an environment the provider still said was
+    // coming. A provider that has DECLARED the environment failed answers identically forever,
+    // so a wait there is an offer to postpone the same verdict.
+    if (action === 'wait') {
+      return (
+        !!failure.environmentId &&
+        failure.reason === 'timeout' &&
+        extensions < MAX_ENVIRONMENT_WAIT_EXTENSIONS
+      )
+    }
+    // Tearing down needs both something to tear down and a teardown seam to do it with.
+    if (action === 'recreate') return !!failure.environmentId && canTearDown
+    // `restart` acts ON an environment; `reprovision` stands one up, and is therefore the one
+    // remedy still available when the provision died before recording an environment at all.
+    if (action === 'restart') return !!failure.environmentId
+    return true
+  })
+}
+
+/**
+ * Resolve the verdict's action against what was offered. An action outside the offered set is
+ * treated as `stop` with the divergence NAMED: the model was told the list, so picking outside
+ * it is a contract violation, and quietly substituting a neighbouring action would be the engine
+ * choosing a remedy nobody asked for.
+ */
+function chooseAction(
+  verdict: EnvironmentInvestigationVerdict,
+  offered: readonly EnvironmentRemediationAction[],
+): { action?: EnvironmentRemediationAction; withheld?: string } {
+  if (verdict.action === 'stop') return {}
+  if (!offered.includes(verdict.action)) {
+    return {
+      withheld:
+        `The investigation asked the platform to ${describeRemediationAction(verdict.action)}, ` +
+        'which was not offered this round.',
+    }
+  }
+  return { action: verdict.action }
+}
+
+/**
  * Append one round to the step's investigation state. A pure mutation: every exit path persists
  * exactly once, so the acting path does not write the run twice for one decision.
  */
@@ -486,6 +533,26 @@ function lastVerdict(step: PipelineStep): EnvironmentInvestigationVerdict | unde
 }
 
 /**
+ * How the round ENDED, which decides the closing line of the operator's message.
+ *
+ * A discriminated union rather than a `budgetSpent` boolean, because three of these four
+ * outcomes are not a recommendation and printing one as if it were is the misattribution the
+ * whole narrow-before-you-ask design exists to prevent. `withheld` in particular: the engine
+ * refused the action before it was taken, so `Recommended: restart the workload in place` would
+ * name a decision that never existed, with the reason it was refused left in an attempt log
+ * nothing surfaces.
+ */
+export type EnvironmentFindingClosing =
+  /** The verdict's action was offered and is what the operator should consider. */
+  | { kind: 'recommended' }
+  /** The engine did not offer the action the verdict asked for; `detail` says why. */
+  | { kind: 'withheld'; detail: string }
+  /** The action ran and could not be completed. */
+  | { kind: 'attempt_failed'; action: EnvironmentRemediationAction; detail: string }
+  /** The budget was already spent, so this verdict is the last round's, reported unacted-on. */
+  | { kind: 'budget_spent' }
+
+/**
  * The terminal failure message a reported verdict replaces the bare provider error with. The
  * provider error is kept and LEADS, because it is still the primary fact; the finding is stated
  * under it so a reader gets the cause without losing what was actually observed.
@@ -493,7 +560,7 @@ function lastVerdict(step: PipelineStep): EnvironmentInvestigationVerdict | unde
 export function describeFinding(
   failure: EnvironmentInvestigationFailure,
   verdict: EnvironmentInvestigationVerdict,
-  budgetSpent: boolean,
+  closing: EnvironmentFindingClosing,
 ): string {
   const lines = [
     failure.error,
@@ -506,13 +573,38 @@ export function describeFinding(
     lines.push('', 'Evidence:')
     for (const item of verdict.evidence) lines.push(`- [${item.source}] ${item.statement}`)
   }
-  lines.push(
-    '',
-    budgetSpent
-      ? 'The investigation budget for this step is spent; nothing further was attempted.'
-      : `Recommended: ${describeRemediationAction(verdict.action)}${
-          verdict.actionRationale ? `. ${verdict.actionRationale}` : ''
-        }`,
-  )
+  lines.push('', describeClosing(verdict, closing))
   return lines.join('\n')
+}
+
+/** Compile-time totality guard for {@link describeClosing}. */
+function unhandledClosing(closing: never): string {
+  return `The investigation ended in an unrecognised state (${JSON.stringify(closing)}).`
+}
+
+function describeClosing(
+  verdict: EnvironmentInvestigationVerdict,
+  closing: EnvironmentFindingClosing,
+): string {
+  // The verdict's reasoning is kept in the two cases where the action did NOT happen, because it
+  // is what a person picking the action up by hand needs; it rides its own line so it can never
+  // read as part of the platform's account of what it did.
+  const because = verdict.actionRationale ? `\nIts reasoning was: ${verdict.actionRationale}` : ''
+  switch (closing.kind) {
+    case 'budget_spent':
+      return 'The investigation budget for this step is spent; nothing further was attempted.'
+    case 'withheld':
+      return `${closing.detail}${because}`
+    case 'attempt_failed':
+      return (
+        `The platform tried to ${describeRemediationAction(closing.action)} and could not: ` +
+        `${closing.detail}${because}`
+      )
+    case 'recommended':
+      return `Recommended: ${describeRemediationAction(verdict.action)}${
+        verdict.actionRationale ? `. ${verdict.actionRationale}` : ''
+      }`
+    default:
+      return unhandledClosing(closing)
+  }
 }

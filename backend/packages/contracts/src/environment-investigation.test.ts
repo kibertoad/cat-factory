@@ -1,7 +1,9 @@
+import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
 import {
   coerceEnvironmentInvestigationVerdict,
   describeRemediationAction,
+  environmentInvestigationVerdictSchema,
   environmentRemediationActionSchema,
   isEnvironmentRemediationAction,
   remediationNeedsProviderSupport,
@@ -93,8 +95,22 @@ describe('coerceEnvironmentInvestigationVerdict', () => {
       summary: 'x'.repeat(5000),
       action: 'stop',
     })
-    expect(verdict?.summary).toHaveLength(4001)
+    expect(verdict?.summary).toHaveLength(4000)
     expect(verdict?.summary.endsWith('…')).toBe(true)
+  })
+
+  it('caps every prose field to a length its OWN schema accepts', () => {
+    // The relation, not the four numbers: the coercion and the schema declare the same budgets,
+    // and a coerced verdict that its own validator rejects is persisted on a step and served
+    // through `executionInstanceSchema`, whose lengths are published into the spec and the SDKs.
+    const verdict = coerceEnvironmentInvestigationVerdict({
+      faultLayer: 'provider',
+      summary: 'x'.repeat(9000),
+      evidence: [{ source: 's'.repeat(500), statement: 'y'.repeat(5000) }],
+      action: 'stop',
+      actionRationale: 'z'.repeat(5000),
+    })
+    expect(v.safeParse(environmentInvestigationVerdictSchema, verdict).success).toBe(true)
   })
 })
 

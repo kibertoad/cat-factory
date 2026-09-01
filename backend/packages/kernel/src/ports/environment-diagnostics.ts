@@ -41,9 +41,14 @@ export interface EnvironmentDiagnosticFact {
 }
 
 /**
- * A log excerpt the provider could fetch, already capped and redacted BY THE PROVIDER: it is the
- * only party that knows which of its own fields carry credentials, and the excerpt reaches a model
- * prompt.
+ * A log excerpt the provider could fetch, capped and redacted BY THE PROVIDER for whatever it
+ * knows to be a credential: it is the only party that knows which of its OWN fields carry one.
+ *
+ * That is an obligation, not a guarantee the caller may rely on. Most of an excerpt is text the
+ * provider never authored (a container's own log, a scheduler's event message), which is exactly
+ * where a bad DSN or an echoed `Authorization` header shows up, so the gatherer scrubs and re-caps
+ * everything here on the way to a prompt. Both, deliberately: the provider knows its fields and
+ * the gatherer owns the boundary.
  */
 export interface EnvironmentDiagnosticLog {
   /** What produced it (`deploy-job/build`, `pod/api-7d9`, …). */

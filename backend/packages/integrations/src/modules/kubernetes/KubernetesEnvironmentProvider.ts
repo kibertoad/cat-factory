@@ -201,7 +201,12 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
    */
   readonly diagnostics = {
     describe: async (req: EnvironmentStatusRequest): Promise<EnvironmentDiagnosis> => {
-      const config = this.parseConfig(req.manifest)
+      // The CONNECTION, like every other path that reaches an existing cluster rather than
+      // building in one: diagnosing a namespace needs the apiserver and nothing else, and parsing
+      // the provisioning half would refuse to look at exactly the environments whose stored
+      // `manifestSource` or `url` no longer validates. That is the failure class this could name
+      // outright, and it would instead degrade to platform-only evidence.
+      const config = this.parseConnection(req.manifest)
       const namespace = req.provisionFields.namespace ?? req.externalId
       if (!namespace) {
         return {
@@ -227,7 +232,9 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     remediate: async (
       req: EnvironmentRemediationRequest,
     ): Promise<EnvironmentRemediationOutcome> => {
-      const config = this.parseConfig(req.manifest)
+      // Same reason as `describe` above: rolling a Deployment reaches the cluster, it does not
+      // build in one.
+      const config = this.parseConnection(req.manifest)
       const namespace = req.provisionFields.namespace ?? req.externalId
       if (!namespace) {
         return { applied: false, detail: 'no namespace was recorded for this environment' }

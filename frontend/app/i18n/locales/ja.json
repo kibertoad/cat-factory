@@ -6318,6 +6318,7 @@
       "teardown": "破棄",
       "teardown-verify": "破棄の確認",
       "status": "ステータスチェック",
+      "remediate": "その場で修復",
       "dispatch": "起動",
       "release": "破棄",
       "poll-failure": "ヘルスチェック"

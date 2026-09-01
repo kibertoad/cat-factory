@@ -327,6 +327,32 @@ describe('redactSecretFields', () => {
     expect(note?.startsWith('deployed with ')).toBe(true)
   })
 
+  it('scrubs a COMPOUND field name, which is the shape a real provision bag uses', () => {
+    // The rules are boundary-anchored and `_` is a word character, so `apiToken` matched while
+    // every prefixed spelling of the same field did not. Those are the normal shape of a
+    // provider's captured bag, and the values reach a model prompt and the telemetry store.
+    const out = redactSecretFields({
+      kargoApiToken: '9f2c8b7a6e5d4c3b2a19',
+      deployPassword: 'hunter2xyzzy',
+      provider_api_key: '9f2c8b7a6e5d4c3b2a19',
+      registryToken: 'abcd1234efgh5678ijkl',
+      'provider.clientSecret': 'sh-4f7a2b9c1d8e6f0a3b5c',
+    })
+    expect(out.kargoApiToken).not.toContain('9f2c8b7a6e5d4c3b2a19')
+    expect(out.deployPassword).not.toContain('hunter2xyzzy')
+    expect(out.provider_api_key).not.toContain('9f2c8b7a6e5d4c3b2a19')
+    expect(out.registryToken).not.toContain('abcd1234efgh5678ijkl')
+    expect(out['provider.clientSecret']).not.toContain('sh-4f7a2b9c1d8e6f0a3b5c')
+  })
+
+  it('leaves a name that merely ENDS in a secret-ish substring alone', () => {
+    // The boundary split is on the name's own case/separator changes, so it never invents a word
+    // break inside one: `monkey` is not a key, and `namespace` is not a `space`.
+    const out = redactSecretFields({ monkey: 'business-as-usual', namespace: 'pr-42' })
+    expect(out.monkey).toBe('business-as-usual')
+    expect(out.namespace).toBe('pr-42')
+  })
+
   it('keeps a value containing an equals sign intact', () => {
     const out = redactSecretFields({ selector: 'app=web,tier=frontend' })
     expect(out.selector).toBe('app=web,tier=frontend')

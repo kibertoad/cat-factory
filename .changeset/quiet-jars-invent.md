@@ -4,6 +4,11 @@
 '@cat-factory/integrations': minor
 '@cat-factory/agents': minor
 '@cat-factory/orchestration': minor
+'@cat-factory/server': minor
+'@cat-factory/app': minor
+'@cat-factory/sdk': minor
+'@cat-factory/mcp-server': minor
+'@cat-factory/gatekeeper-bindings': minor
 ---
 
 Diagnose an environment that never became usable, instead of ending the run at the tester
@@ -31,3 +36,10 @@ own evidence, which it states rather than presenting as an absence of problems.
 Internal break: `EnvironmentProvisioningServiceDependencies` gains an optional
 `readProvisioningLog` and an optional `logger`; both facades wire them through the shared
 container, so nothing outside a hand-built instance is affected.
+
+The provisioning-log operation vocabulary gains `remediate`, and the platform appends one such row
+whenever it asks a provider to repair an environment in place. It is a distinct actor, the way
+`teardown-verify` is: the investigation's own second round rebuilds its timeline from that log, so
+an unlogged restart leaves the next round reasoning about an environment it believes nothing has
+touched. Additive on `/api/v1` (spec `info.version` 1.63.0); the clients tolerate unknown enum
+values, and a consumer that maps `operation` through an exhaustive table gains a member to name.

@@ -34,7 +34,12 @@ const EVIDENCE = {
   },
   provisionFields: { urlHostResolves: 'false' },
   timeline: [],
-  failure: { error: TIMEOUT_ERROR, reason: 'timeout' },
+  failure: {
+    error: TIMEOUT_ERROR,
+    reason: 'timeout',
+    readinessWait: 'waited',
+    waitedMs: 1_200_000,
+  },
 } satisfies EnvironmentEvidenceBundle
 
 function step(overrides: Partial<PipelineStep> = {}): PipelineStep {
@@ -61,7 +66,7 @@ function failure(overrides: Record<string, unknown> = {}) {
     environmentId: 'env_1',
     error: TIMEOUT_ERROR,
     reason: 'timeout',
-    waitedMs: 1_200_000,
+    wait: { kind: 'waited', waitedMs: 1_200_000 },
     ...overrides,
   } as never
 }
@@ -70,11 +75,14 @@ function controller(
   options: {
     verdict?: unknown
     investigateError?: Error
+    collectError?: Error
     enabled?: boolean
     providerRemediations?: string[]
     remediateOutcome?: { applied: boolean; detail: string }
     remediateError?: Error
     teardown?: boolean
+    teardownConfirmation?: 'confirmed' | 'still_standing' | 'unverifiable' | 'unconfirmed'
+    teardownReason?: string
     provisioning?: boolean
   } = {},
 ) {
@@ -89,18 +97,19 @@ function controller(
     if (options.remediateError) throw options.remediateError
     return options.remediateOutcome ?? { applied: true, detail: 'rolled 1 Deployment' }
   })
-  const teardown = vi.fn(async () => {})
+  const teardown = vi.fn(async () => ({
+    confirmation: options.teardownConfirmation ?? ('confirmed' as const),
+    reason: options.teardownReason ?? null,
+  }))
+  const collectEnvironmentEvidence = vi.fn(async () => {
+    if (options.collectError) throw options.collectError
+    return { bundle: EVIDENCE, providerActions: options.providerRemediations ?? [] }
+  })
   const deps = {
     investigator: { enabled: options.enabled ?? true, investigate },
     ...(options.provisioning === false
       ? {}
-      : {
-          environmentProvisioning: {
-            collectEnvironmentEvidence: vi.fn(async () => EVIDENCE),
-            providerRemediations: vi.fn(async () => options.providerRemediations ?? []),
-            remediateEnvironment,
-          },
-        }),
+      : { environmentProvisioning: { collectEnvironmentEvidence, remediateEnvironment } }),
     ...(options.teardown ? { environmentTeardown: { teardown } } : {}),
     runStateMachine: { casPersist: vi.fn(async () => {}), persistAndEmit: vi.fn(async () => {}) },
     clock: { now: () => 1_700_000_000_000 },
@@ -284,7 +293,7 @@ describe('investigate: dispositions', () => {
     expect(outcome).toEqual({ kind: 'retrying', advance: { kind: 'continue' } })
   })
 
-  it('does NOT re-provision when the teardown a `recreate` depends on failed', async () => {
+  it('does NOT re-provision when the teardown a `recreate` depends on threw', async () => {
     // Re-applying over half-removed infrastructure reproduces the fault the recreate was for.
     const c = controller({
       teardown: true,
@@ -292,10 +301,30 @@ describe('investigate: dispositions', () => {
     })
     c.deps.environmentTeardown!.teardown = vi.fn(async () => {
       throw new Error('namespace stuck Terminating')
-    })
+    }) as never
     const outcome = await investigate(c, step())
     expect(outcome?.kind).toBe('reported')
     expect(outcome?.kind === 'reported' && outcome.message).toContain('namespace stuck Terminating')
+  })
+
+  it('does NOT re-provision when the teardown PROBE could not confirm the environment gone', async () => {
+    // Only a `confirmed` probe is a reclaim. A namespace wedged in `Terminating` behind a stuck
+    // finalizer makes `teardown()` return without complaint, and re-provisioning into it
+    // reproduces the fault and burns the remaining round.
+    const c = controller({
+      teardown: true,
+      teardownConfirmation: 'still_standing',
+      teardownReason: 'namespace cf-env-42 is still Terminating',
+      verdict: { faultLayer: 'provider', summary: 's', action: 'recreate' },
+    })
+    const s = step()
+    const outcome = await investigate(c, s)
+    expect(outcome?.kind).toBe('reported')
+    const message = outcome?.kind === 'reported' ? outcome.message : ''
+    expect(message).toContain('could not be confirmed gone')
+    expect(message).toContain('still Terminating')
+    expect(s.deployEnvs).toBeUndefined()
+    expect(s.environmentInvestigation?.attemptLog?.[0]?.outcome).toBe('reported')
   })
 
   it('treats a provider that found nothing to restart as a remedy that did not run', async () => {
@@ -338,6 +367,38 @@ describe('investigate: dispositions', () => {
     expect(c.remediateEnvironment).not.toHaveBeenCalled()
     expect(s.environmentInvestigation?.attemptLog?.[0]?.withheld).toContain('not offered')
   })
+
+  it('never RECOMMENDS an action it withheld, which would name a decision that never existed', async () => {
+    // Narrowing before the model is asked is the safety argument; it survives only if the one
+    // operator-facing message says so too. `Recommended: restart` against a provider that cannot
+    // restart anything sends a person to look for a remedy nobody offered.
+    const c = controller({
+      verdict: {
+        faultLayer: 'provider',
+        summary: 's',
+        action: 'restart',
+        actionRationale: 'The workload is wedged.',
+      },
+    })
+    const outcome = await investigate(c, step())
+    const message = outcome?.kind === 'reported' ? outcome.message : ''
+    expect(message).not.toContain('Recommended:')
+    expect(message).toContain('not offered this round')
+    expect(message).toContain('The workload is wedged.')
+  })
+
+  it('says what it TRIED and could not do, rather than recommending it after the fact', async () => {
+    const c = controller({
+      providerRemediations: ['restart'],
+      remediateError: new Error('the apiserver refused the patch'),
+      verdict: { faultLayer: 'provider', summary: 's', action: 'restart' },
+    })
+    const outcome = await investigate(c, step())
+    const message = outcome?.kind === 'reported' ? outcome.message : ''
+    expect(message).toContain('The platform tried to restart the workload in place and could not')
+    expect(message).toContain('the apiserver refused the patch')
+    expect(message).not.toContain('Recommended:')
+  })
 })
 
 describe('investigate: when the investigation itself fails', () => {
@@ -356,6 +417,21 @@ describe('investigate: when the investigation itself fails', () => {
     const s = step()
     expect(await investigate(c, s)).toBeNull()
     expect(s.environmentInvestigation?.attemptLog?.[0]?.outcome).toBe('failed')
+  })
+
+  it('records a failed round when GATHERING throws, rather than failing the caller with it', async () => {
+    // The gather is a chain of repository and provider reads, and it runs INSIDE the caller's own
+    // terminal-failure path. A throw escaping here reaches the durable driver as an unreadable
+    // poll, which fast-fails the run as a `timeout`: the loop replacing the failure it exists to
+    // explain with a misattributed one of its own.
+    const c = controller({ collectError: new Error('the environment store is unreachable') })
+    const s = step()
+    expect(await investigate(c, s)).toBeNull()
+    expect(c.investigate).not.toHaveBeenCalled()
+    expect(s.environmentInvestigation?.attemptLog?.[0]).toMatchObject({
+      outcome: 'failed',
+      failure: 'the environment store is unreachable',
+    })
   })
 })
 
@@ -440,7 +516,7 @@ describe('describeFinding', () => {
         action: 'wait',
         actionRationale: 'It was still converging.',
       },
-      false,
+      { kind: 'recommended' },
     )
     expect(message.startsWith(TIMEOUT_ERROR)).toBe(true)
     expect(message).toContain('- [timeline] deploy started 98s after readiness settled')

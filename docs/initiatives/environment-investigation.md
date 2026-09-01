@@ -101,6 +101,53 @@ encrypted as TEARDOWN state, and `resolveForBlock` projects four fields. The bun
 whole bag, redacted. That is why a deployment whose provider implements no diagnostics still gets
 most of the value.
 
+### The GATHERER owns the boundary onto the prompt, not the provider
+
+A provider is asked to cap and redact what it knows to be a credential, because it is the only party
+that knows which of its own fields carry one. That is an obligation and it cannot be the only line
+of defence: most of a diagnosis is control-plane text the provider never authored (a container's own
+log, a scheduler's event message), and that is exactly where a bad DSN or an echoed `Authorization`
+header shows up. So `createEnvironmentDiagnostics` scrubs and re-caps everything on the way out.
+
+The cap is the same argument in the other direction. The prompt is ONE string, so an unbounded
+section does not merely degrade the diagnosis: `generateText` rejects on context length, the round
+records `failed`, and the budget is spent with nothing to show. Every section therefore has a
+budget, and what a budget cut is STATED, in the value where it is one value and in the bundle's
+`evidenceCaps` where it is a whole entry. `evidenceCaps` is its own member rather than extra
+`diagnosis.gaps`, because a gap is the PROVIDER's list of reads it could not make: attributing a
+platform cap to the provider has the investigator reasoning about a control plane that answered fine.
+
+### The loop must never be able to fail a run on its own
+
+It runs INSIDE the caller's terminal-failure path, and that path's next move is to record the
+failure. So a throw escaping the investigation does not cost the diagnosis, it reaches the durable
+driver as an unreadable poll and fast-fails the run as a `timeout`: the loop replacing the failure
+it exists to explain with a misattributed one of its own. GATHERING is inside the guard, not just
+the asking, and every read in the gatherer degrades to a NAMED absence rather than propagating,
+including the registry read the whole walk starts from.
+
+The same rule shapes what the loop refuses to accept as success. A `recreate` re-provisions over
+whatever the teardown left behind, so only a `confirmed` teardown probe counts as a reclaim: a
+namespace wedged in `Terminating` behind a stuck finalizer makes `teardown()` return without
+complaint, and re-provisioning into it reproduces the fault and burns the remaining round.
+
+### A REPORT names what happened, never what was refused
+
+The narrowing above is the safety argument, and it survives only if the one operator-facing message
+says so too. A verdict asking for an action the engine did not offer produces the WITHHELD reason,
+not `Recommended: <that action>`, which would tell an operator about a decision that never existed
+with the refusal left in an attempt log nothing surfaces. Same for an action that ran and failed:
+the message says what was tried and could not be done. `EnvironmentFindingClosing` makes the four
+endings a closed union, so a new one has to be decided about rather than inheriting a default.
+
+### A mutation gets its own provisioning-log row
+
+`restart` is the one investigation action that changes a live cluster, and the investigation's own
+second round rebuilds its timeline from the provisioning log. Unlogged, round 2 reasons about an
+environment it believes nothing has touched, and the operator's provisioning drawer never shows the
+mutation either. So `remediate` is a member of the operation vocabulary, for the reason
+`teardown-verify` is one: a distinct ACTOR gets its own verb rather than being folded into another.
+
 ## Slice 1: the loop, the port and the first provider (landed)
 
 - [x] Contracts: the fault-layer and remediation vocabularies, the verdict + its lenient coercion,
@@ -121,10 +168,14 @@ most of the value.
       prompt override) and `EnvironmentInvestigationController` (the loop), hooked into
       `settleDeployerFailure` immediately after the deploy fixer declines.
 - [x] Kubernetes: `describe` reads the namespace phase, the Deployments' unsatisfied conditions,
-      every pod through `analyzePodStatus`, the namespace's warning events and a log tail from each
-      unhealthy pod; `remediate` rolls every Deployment the `kubectl rollout restart` way. This is
-      also where `analyzePodStatus` finally reaches a reader on the environment path: an
-      `ImagePullBackOff` arrived at the run as a generic timeout.
+      every pod through `analyzePodStatus` (plus its `phase`, which that walk cannot give and which
+      is the whole diagnosis for a pod that was never scheduled), the namespace's warning events and
+      a log tail from each unhealthy pod; `remediate` rolls every Deployment the
+      `kubectl rollout restart` way. This is also where `analyzePodStatus` finally reaches a reader
+      on the environment path: an `ImagePullBackOff` arrived at the run as a generic timeout. Both
+      diagnostic entry points parse the CONNECTION half of the stored config, like every other path
+      that reaches an existing cluster rather than building in one, so a manifest whose provisioning
+      half stopped validating is still the one failure class the diagnosis can name outright.
 
 ## Slice 2: a proved route, and telling the two failures apart
 

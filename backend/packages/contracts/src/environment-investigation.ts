@@ -212,11 +212,20 @@ function isFaultLayer(value: unknown): value is EnvironmentFaultLayer {
   )
 }
 
+/**
+ * Trim a prose field to `max` characters INCLUSIVE of the ellipsis that states the drop.
+ *
+ * The ellipsis counts against the budget rather than riding on top of it, because `max` is the
+ * same number the schema beside it declares as `v.maxLength`: a coercion that answered `max + 1`
+ * produced a value its own validator then rejected, on a field persisted to `step
+ * .environmentInvestigation` and served through `executionInstanceSchema`, whose lengths are
+ * published into the OpenAPI spec and the four SDKs.
+ */
 function coerceText(value: unknown, max: number): string | undefined {
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
   if (!trimmed) return undefined
-  return trimmed.length <= max ? trimmed : `${trimmed.slice(0, max)}…`
+  return trimmed.length <= max ? trimmed : `${trimmed.slice(0, max - 1)}…`
 }
 
 function coerceEvidence(value: unknown): EnvironmentEvidenceItem[] {

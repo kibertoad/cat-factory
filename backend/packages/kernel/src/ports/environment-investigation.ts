@@ -70,15 +70,42 @@ export interface EnvironmentEvidenceBundle {
   diagnosis?: EnvironmentDiagnosis
   /** Why there is none: the provider offers no diagnostics, or the describe call failed. */
   diagnosisUnavailable?: string
+  /**
+   * What the PLATFORM cut out of this bundle before handing it on, one sentence each.
+   *
+   * Its own member rather than extra `diagnosis.gaps`, because a gap is the PROVIDER's list of
+   * reads it could not make: attributing a cap to the provider would have the investigator reason
+   * about a control plane that in fact answered fine. Absent ⇒ nothing was cut, which is a
+   * different fact from a cut nobody recorded (CLAUDE.md's "every cap records what it dropped").
+   */
+  evidenceCaps?: string[]
   /** The failure the run recorded, which is what the investigation is about. */
-  failure: {
-    /** The verbatim provisioning error. */
-    error: string
-    /** The classified cause, when the provider stated one. */
-    reason?: string
-    /** How long the readiness wait ran before it was given up on, when there was one. */
-    waitedMs?: number
-  }
+  failure: EnvironmentFailureFacts
+}
+
+/**
+ * What the readiness wait contributed to a failure, as three distinct facts rather than a
+ * nullable duration.
+ *
+ * A missing `waitedMs` is not one story: the provider may have DECLARED the environment failed
+ * (so there was a verdict and nothing waited), or the failure may have happened before any
+ * readiness judgement existed (a deploy container shut down mid-run, a provision call that threw),
+ * in which case the wait says nothing about it at all. Collapsed into one absence, the second
+ * rendered as the first, telling an investigator there had been a live verdict on a deploy that
+ * had in fact run for twenty minutes and produced none.
+ */
+export type EnvironmentReadinessWaitKind = 'waited' | 'verdict_without_wait' | 'not_reached'
+
+/** The failure the run recorded, which is what an investigation is about. */
+export interface EnvironmentFailureFacts {
+  /** The verbatim provisioning error. */
+  error: string
+  /** The classified cause, when the provider stated one. */
+  reason?: string
+  /** Which readiness story this failure has. See {@link EnvironmentReadinessWaitKind}. */
+  readinessWait: EnvironmentReadinessWaitKind
+  /** How long the readiness wait ran before it was given up on; set iff `readinessWait` is `waited`. */
+  waitedMs?: number
 }
 
 /** The subject of one investigation: the evidence, plus what the engine will honour if asked. */

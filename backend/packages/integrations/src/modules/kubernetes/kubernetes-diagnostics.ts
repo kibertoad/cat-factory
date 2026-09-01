@@ -4,7 +4,7 @@ import type {
   EnvironmentDiagnosticGap,
   EnvironmentDiagnosticLog,
   EnvironmentRemediationOutcome,
-  KubernetesEnvironmentConfig,
+  KubernetesConnectionConfig,
   ProviderRemediationAction,
 } from '@cat-factory/kernel'
 import { getErrorMessage } from '@cat-factory/kernel'
@@ -68,7 +68,7 @@ interface DiagnosisAccumulator {
  */
 export async function describeKubernetesEnvironment(args: {
   client: KubernetesApiClient
-  config: KubernetesEnvironmentConfig
+  config: KubernetesConnectionConfig
   namespace: string
 }): Promise<EnvironmentDiagnosis> {
   const acc: DiagnosisAccumulator = { facts: [], logs: [], gaps: [] }
@@ -95,7 +95,7 @@ export async function describeKubernetesEnvironment(args: {
  */
 export async function restartKubernetesWorkloads(args: {
   client: KubernetesApiClient
-  config: KubernetesEnvironmentConfig
+  config: KubernetesConnectionConfig
   namespace: string
 }): Promise<EnvironmentRemediationOutcome> {
   const { client, config, namespace } = args
@@ -126,7 +126,7 @@ export async function restartKubernetesWorkloads(args: {
 
 async function listDeploymentNames(
   client: KubernetesApiClient,
-  config: KubernetesEnvironmentConfig,
+  config: KubernetesConnectionConfig,
   namespace: string,
 ): Promise<string[]> {
   const res = await client.fetch(
@@ -147,7 +147,7 @@ async function listDeploymentNames(
 }
 
 async function readNamespace(
-  args: { client: KubernetesApiClient; config: KubernetesEnvironmentConfig; namespace: string },
+  args: { client: KubernetesApiClient; config: KubernetesConnectionConfig; namespace: string },
   acc: DiagnosisAccumulator,
 ): Promise<void> {
   await attempt(acc, 'namespace', async () => {
@@ -172,7 +172,7 @@ async function readNamespace(
 }
 
 async function readDeployments(
-  args: { client: KubernetesApiClient; config: KubernetesEnvironmentConfig; namespace: string },
+  args: { client: KubernetesApiClient; config: KubernetesConnectionConfig; namespace: string },
   acc: DiagnosisAccumulator,
 ): Promise<void> {
   await attempt(acc, 'deployments', async () => {
@@ -195,9 +195,17 @@ async function readDeployments(
         healthy: readiness === 'ready',
       })
       const status = (item as { status?: Record<string, unknown> }).status ?? {}
+      const spec = (item as { spec?: Record<string, unknown> }).spec ?? {}
+      // The DESIRED count comes off `spec`, as `classifyDeploymentReadiness` reads it, not off
+      // `status.replicas`: a Deployment whose ReplicaSet never created a pod (a ResourceQuota or
+      // an admission webhook refusing it) has no `status.replicas` at all, and `0/0 ready` reads
+      // byte-for-byte like one deliberately scaled to zero. Absent `spec.replicas` means 1, which
+      // is the apiserver's own default.
+      const desired = numberOr(spec.replicas, 1)
       acc.facts.push({
         key: `deployments.${name}.replicas`,
-        value: `${numberOr(status.readyReplicas, 0)}/${numberOr(status.replicas, 0)} ready`,
+        value: `${numberOr(status.readyReplicas, 0)}/${desired} desired ready`,
+        healthy: numberOr(status.readyReplicas, 0) >= desired,
       })
       for (const condition of conditionsOf(status)) {
         // Only the conditions that are NOT satisfied: a Deployment carries `Available=True` on
@@ -217,7 +225,7 @@ async function readDeployments(
 
 /** Reads every pod, records what is wrong with each, and returns the ones worth reading logs from. */
 async function readPods(
-  args: { client: KubernetesApiClient; config: KubernetesEnvironmentConfig; namespace: string },
+  args: { client: KubernetesApiClient; config: KubernetesConnectionConfig; namespace: string },
   acc: DiagnosisAccumulator,
 ): Promise<{ pod: string; container?: string }[]> {
   const unhealthy: { pod: string; container?: string }[] = []
@@ -234,12 +242,27 @@ async function readPods(
     acc.facts.push({ key: 'pods.count', value: String(items.length) })
     for (const item of items) {
       const name = metaName(item) ?? '(unnamed)'
+      // The PHASE first, unconditionally. It is the single most diagnostic field on a pod and it
+      // is the one `analyzePodStatus` cannot give: that walk reads container statuses, and an
+      // unschedulable pod has none, so `Pending` with a `PodScheduled=False` condition used to
+      // reach the bundle as an empty string and nothing else.
+      const phase = podPhase(item)
+      acc.facts.push({
+        key: `pods.${name}.phase`,
+        value: phase,
+        // No verdict on a `Running` pod: readiness is the next fact's job, and a phase alone
+        // cannot say a workload is healthy. Anything else IS a finding.
+        ...(phase === 'Running' ? {} : { healthy: false }),
+      })
       // The walk the runner transport has always done for executor pods, reused verbatim: it is
       // what turns `phase: Pending` into `ImagePullBackOff` with the image named.
       const analysis = analyzePodStatus(item)
       acc.facts.push({
         key: `pods.${name}.status`,
-        value: analysis.detail,
+        // Its own words when there are none, never ''. An empty value renders as a fact that
+        // announces an account and gives none, and the reader cannot tell it from a read that
+        // came back clean.
+        value: analysis.detail || unreadyConditionOf(item) || 'the pod reports no reason',
         healthy: analysis.terminal === null ? undefined : false,
       })
       if (analysis.terminal) {
@@ -258,7 +281,7 @@ async function readPods(
 }
 
 async function readEvents(
-  args: { client: KubernetesApiClient; config: KubernetesEnvironmentConfig; namespace: string },
+  args: { client: KubernetesApiClient; config: KubernetesConnectionConfig; namespace: string },
   acc: DiagnosisAccumulator,
 ): Promise<void> {
   await attempt(acc, 'warning events', async () => {
@@ -271,8 +294,20 @@ async function readEvents(
     const res = await args.client.fetch('GET', url, undefined, DIAGNOSTIC_TIMEOUT_MS)
     if (!res.ok) throw new HttpReadError(res.status, await safeText(res))
     const body = (await res.json()) as { items?: unknown[] }
-    const items = (Array.isArray(body.items) ? body.items : []).slice(0, EVENT_LIMIT)
-    acc.facts.push({ key: 'events.warnings', value: String(items.length) })
+    const all = Array.isArray(body.items) ? body.items : []
+    const items = all.slice(0, EVENT_LIMIT)
+    // The count is of what the apiserver RETURNED, taken before the cap: reporting the capped
+    // length states the cap and reads as the real number, and a namespace with 200 `FailedScheduling`
+    // events then looks like one with 20.
+    acc.facts.push({ key: 'events.warnings', value: String(all.length), healthy: all.length === 0 })
+    if (all.length > items.length) {
+      acc.facts.push({
+        key: 'events.listed',
+        value:
+          `${items.length} of ${all.length}; the apiserver returns warning events unordered, so ` +
+          `the ${all.length - items.length} not listed are an arbitrary subset, not the oldest`,
+      })
+    }
     for (const [index, item] of items.entries()) {
       const event = item as { reason?: unknown; message?: unknown; count?: unknown }
       acc.facts.push({
@@ -287,14 +322,19 @@ async function readEvents(
 }
 
 async function readLogs(
-  args: { client: KubernetesApiClient; config: KubernetesEnvironmentConfig; namespace: string },
+  args: { client: KubernetesApiClient; config: KubernetesConnectionConfig; namespace: string },
   unhealthy: { pod: string; container?: string }[],
   acc: DiagnosisAccumulator,
 ): Promise<void> {
   if (unhealthy.length === 0) return
   for (const target of unhealthy.slice(0, LOG_POD_LIMIT)) {
     await attempt(acc, `logs of pod ${target.pod}`, async () => {
-      const query = new URLSearchParams({ tailLines: String(LOG_TAIL_LINES) })
+      // ONE line more than we intend to keep, so the answer says whether there WAS a start to
+      // drop. `tailLines` is line-based, so a response of exactly the probe size means the log had
+      // at least that many lines and the excerpt genuinely is a tail; anything shorter is the
+      // whole log, and marking that one truncated tells the investigator the start was hidden
+      // when it is right there (which the role prompt's DISTRUST ABSENCE directive then acts on).
+      const query = new URLSearchParams({ tailLines: String(LOG_TAIL_LINES + 1) })
       if (target.container) query.set('container', target.container)
       const url =
         `${apiBase(args.config)}/api/v1/namespaces/${encodeURIComponent(args.namespace)}` +
@@ -312,9 +352,13 @@ async function readLogs(
         })
         return
       }
-      // `tailLines` means the response IS the tail whenever the log was longer, and the reader has
-      // to be told, or it will conclude the start of the run was never logged.
-      acc.logs.push({ source: `pod/${target.pod}`, text, truncated: true })
+      const lines = text.split('\n')
+      const truncated = lines.length > LOG_TAIL_LINES
+      acc.logs.push({
+        source: `pod/${target.pod}`,
+        text: truncated ? lines.slice(lines.length - LOG_TAIL_LINES).join('\n') : text,
+        ...(truncated ? { truncated: true } : {}),
+      })
     })
   }
 }
@@ -381,6 +425,26 @@ function conditionsOf(
 function isPodReady(item: unknown): boolean {
   const status = (item as { status?: Record<string, unknown> })?.status ?? {}
   return conditionsOf(status).some((c) => c.type === 'Ready' && c.status === 'True')
+}
+
+/** The pod's own `status.phase`, or a NAMED absence: a missing phase is not a `Running` one. */
+function podPhase(item: unknown): string {
+  const phase = (item as { status?: { phase?: unknown } })?.status?.phase
+  return typeof phase === 'string' && phase ? phase : '(the pod reports no phase)'
+}
+
+/**
+ * The first unsatisfied pod condition, as `Type=Status (Reason)`. The fallback for a pod with no
+ * container statuses to walk, which is the shape of every pod that was never scheduled:
+ * `PodScheduled=False (Unschedulable)` is the whole diagnosis there and lives nowhere else.
+ */
+function unreadyConditionOf(item: unknown): string {
+  const status = (item as { status?: Record<string, unknown> })?.status ?? {}
+  const failing = conditionsOf(status).find((c) => c.status !== 'True')
+  if (!failing) return ''
+  return `${failing.type}=${failing.status}${failing.reason ? ` (${failing.reason})` : ''}${
+    failing.message ? `: ${failing.message}` : ''
+  }`
 }
 
 /** The first container to read logs from: the one that is not ready, else the first declared. */

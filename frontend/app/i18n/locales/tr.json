@@ -6318,6 +6318,7 @@
       "teardown": "Kapat",
       "teardown-verify": "Kapatma kontrolü",
       "status": "Durum kontrolü",
+      "remediate": "Yerinde onarım",
       "dispatch": "Başlat",
       "release": "Kapat",
       "poll-failure": "Sağlık kontrolü"

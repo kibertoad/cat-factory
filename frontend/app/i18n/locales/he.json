@@ -6318,6 +6318,7 @@
       "teardown": "פירוק",
       "teardown-verify": "בדיקת פירוק",
       "status": "בדיקת מצב",
+      "remediate": "תיקון במקום",
       "dispatch": "הקמה",
       "release": "פירוק",
       "poll-failure": "בדיקת תקינות"

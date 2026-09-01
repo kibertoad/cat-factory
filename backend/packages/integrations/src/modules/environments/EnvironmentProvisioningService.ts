@@ -34,11 +34,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { OrgSecretCipher, SecretCipher, SecretDelegate } from '@cat-factory/kernel'
 import { createOrgSecretCipher } from '@cat-factory/kernel'
-import type {
-  EnvironmentAccessHandle,
-  EnvironmentEvidenceBundle,
-  EnvironmentHandle,
-} from '@cat-factory/kernel'
+import type { EnvironmentAccessHandle, EnvironmentHandle } from '@cat-factory/kernel'
 import {
   assertFound,
   getErrorMessage,
@@ -59,6 +55,7 @@ import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningL
 import {
   createEnvironmentDiagnostics,
   type EnvironmentDiagnostics,
+  type EnvironmentEvidence,
   type EnvironmentFailureFacts,
 } from './environmentDiagnostics.js'
 
@@ -304,6 +301,22 @@ export class EnvironmentProvisioningService {
       readRecord: (workspaceId, id) => deps.environmentRegistryRepository.get(workspaceId, id),
       resolveProvider: (record) => deps.connectionService.resolveProviderForRecord(record),
       decryptFields: (record) => this.decryptFields(record),
+      // The `remediate` row rides the same write seam every other environment verb uses, mapped
+      // here rather than in the collaborator so the log's shape stays known in one place.
+      recordRemediation: async (row) => {
+        await deps.provisioningLog?.record({
+          workspaceId: row.workspaceId,
+          subsystem: 'environment',
+          operation: 'remediate',
+          targetId: row.environmentId,
+          providerId: row.providerId,
+          blockId: row.blockId,
+          executionId: row.executionId,
+          outcome: row.outcome,
+          error: row.error,
+          detail: row.detail,
+        })
+      },
       ...(deps.readProvisioningLog ? { listProvisioningLog: deps.readProvisioningLog } : {}),
       ...(deps.logger ? { logger: deps.logger } : {}),
     })
@@ -1306,24 +1319,16 @@ export class EnvironmentProvisioningService {
   /**
    * Gather the forensic evidence about an environment that never became usable: the registry
    * row, the WHOLE captured provision-field bag, the run's provisioning attempts, and the
-   * provider's own diagnosis where it implements one. Thin delegate; the reads live in
-   * {@link createEnvironmentDiagnostics}.
+   * provider's own diagnosis where it implements one, plus what that same resolved provider says
+   * it will remediate. Thin delegate; the reads live in {@link createEnvironmentDiagnostics}.
    */
   async collectEnvironmentEvidence(args: {
     workspaceId: string
     environmentId: string | null
     executionId?: string
     failure: EnvironmentFailureFacts
-  }): Promise<EnvironmentEvidenceBundle> {
+  }): Promise<EnvironmentEvidence> {
     return this.diagnostics.collect(args)
-  }
-
-  /** The in-place remediations this environment's provider will actually perform. Thin delegate. */
-  async providerRemediations(
-    workspaceId: string,
-    environmentId: string | null,
-  ): Promise<readonly ProviderRemediationAction[]> {
-    return this.diagnostics.providerActions(workspaceId, environmentId)
   }
 
   /** Ask the provider to remediate an environment in place. Thin delegate. */

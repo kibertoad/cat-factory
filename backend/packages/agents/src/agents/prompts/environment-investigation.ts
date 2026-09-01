@@ -140,6 +140,38 @@ function renderTimeline(bundle: EnvironmentEvidenceBundle): string {
   return section("The run's provisioning timeline (oldest first)", body)
 }
 
+/** Compile-time totality guard for {@link renderReadinessWait}. */
+function unhandledReadinessWait(kind: never): string {
+  return `The platform recorded an unrecognised readiness state (${JSON.stringify(kind)}).`
+}
+
+/**
+ * What the readiness wait says about this failure, in the three ways it can say something.
+ *
+ * The distinction is load-bearing right above the role's "LINE THE TIMESTAMPS UP" directive: an
+ * absent duration used to render as "there was a live verdict and nothing waited", which is a
+ * CLAIM, and it was false on every failure route except the provider's own declared failure.
+ */
+function renderReadinessWait(failure: EnvironmentEvidenceBundle['failure']): string {
+  switch (failure.readinessWait) {
+    case 'waited':
+      return (
+        `The readiness wait ran for ${Math.round((failure.waitedMs ?? 0) / 1000)} seconds before ` +
+        'it was given up on.'
+      )
+    case 'verdict_without_wait':
+      return 'Nothing waited on this environment: there was a live verdict and it was not ready.'
+    case 'not_reached':
+      return (
+        'This failure happened BEFORE any readiness judgement, so there is no readiness verdict ' +
+        'and no wait duration. Draw no conclusion from either; the provisioning timeline below is ' +
+        'the only account of how long the attempt ran.'
+      )
+    default:
+      return unhandledReadinessWait(failure.readinessWait)
+  }
+}
+
 function renderDiagnosis(diagnosis: EnvironmentDiagnosis): string {
   const parts: string[] = []
   parts.push(
@@ -196,9 +228,7 @@ export function renderEnvironmentInvestigationPrompt(
         evidence.failure.reason
           ? `The platform classified the cause as: ${evidence.failure.reason}`
           : 'The platform could not classify the cause.',
-        evidence.failure.waitedMs === undefined
-          ? 'Nothing waited on this environment: there was a live verdict and it was not ready.'
-          : `The readiness wait ran for ${Math.round(evidence.failure.waitedMs / 1000)} seconds before it was given up on.`,
+        renderReadinessWait(evidence.failure),
       ].join('\n\n'),
     ),
     renderRecord(evidence),
@@ -208,6 +238,15 @@ export function renderEnvironmentInvestigationPrompt(
   if (evidence.diagnosis) parts.push(renderDiagnosis(evidence.diagnosis))
   if (evidence.diagnosisUnavailable) {
     parts.push(section("The provider's own account is unavailable", evidence.diagnosisUnavailable))
+  }
+  if (evidence.evidenceCaps?.length) {
+    parts.push(
+      section(
+        'What the platform did NOT pass on',
+        `${evidence.evidenceCaps.map((cap) => `- ${cap}`).join('\n')}\n\nThese were held back by ` +
+          'the platform for size, not refused by the provider. Treat each as UNKNOWN.',
+      ),
+    )
   }
   parts.push(
     section(

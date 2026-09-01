@@ -137,7 +137,35 @@ describe('describeKubernetesEnvironment', () => {
     expect(diagnosis.facts.find((f) => f.key === 'pods.web-abc.terminalReason')?.value).toContain(
       'ImagePullBackOff',
     )
-    expect(diagnosis.logs?.[0]).toMatchObject({ source: 'pod/web-abc', truncated: true })
+    // A two-line log is the WHOLE log, so it is not marked a tail: claiming a drop that did not
+    // happen makes the role prompt's DISTRUST ABSENCE directive discount output it actually has.
+    expect(diagnosis.logs?.[0]).toEqual({ source: 'pod/web-abc', text: 'boom\nstack trace here' })
+  })
+
+  it('marks a log a TAIL only when the response says the log had more lines', async () => {
+    const long = Array.from({ length: 200 }, (_, i) => `line ${i}`).join('\n')
+    stubFetch([
+      NAMESPACE_ACTIVE,
+      NO_DEPLOYMENTS,
+      {
+        match: (url) => url.includes('/api/v1/namespaces/cf-env-42/pods') && !url.includes('/log'),
+        body: {
+          items: [
+            {
+              metadata: { name: 'web-abc' },
+              status: { phase: 'Pending', conditions: [{ type: 'Ready', status: 'False' }] },
+            },
+          ],
+        },
+      },
+      NO_EVENTS,
+      { match: (url) => url.includes('/pods/web-abc/log'), text: long },
+    ])
+    const diagnosis = await describeNs()
+    expect(diagnosis.logs?.[0]?.truncated).toBe(true)
+    // The extra probe line is dropped, and the END is kept: that is where the cause is.
+    expect(diagnosis.logs?.[0]?.text.split('\n')).toHaveLength(120)
+    expect(diagnosis.logs?.[0]?.text.endsWith('line 199')).toBe(true)
   })
 
   it('reads the failing container by name so a sidecar does not shadow it', async () => {
@@ -267,8 +295,86 @@ describe('describeKubernetesEnvironment', () => {
     // A healthy object carries `Progressing=True`; listing it buries the one that says why.
     expect(keys).not.toContain('deployments.web.condition.Progressing')
     expect(diagnosis.facts.find((f) => f.key === 'deployments.web.replicas')?.value).toBe(
-      '0/2 ready',
+      '0/2 desired ready',
     )
+  })
+
+  it('counts DESIRED replicas off `spec`, so a Deployment with no pods is not `0/0`', async () => {
+    // A ResourceQuota or an admission webhook refusing pod creation leaves no `status.replicas` at
+    // all, and `0/0 ready` reads byte-for-byte like a Deployment deliberately scaled to zero.
+    stubFetch([
+      NAMESPACE_ACTIVE,
+      {
+        match: (url) => url.includes('/deployments'),
+        body: { items: [{ metadata: { name: 'web' }, spec: { replicas: 3 }, status: {} }] },
+      },
+      NO_PODS,
+      NO_EVENTS,
+    ])
+    const diagnosis = await describeNs()
+    const replicas = diagnosis.facts.find((f) => f.key === 'deployments.web.replicas')
+    expect(replicas?.value).toBe('0/3 desired ready')
+    expect(replicas?.healthy).toBe(false)
+  })
+
+  it("states an unschedulable pod's phase and condition, which no container status carries", async () => {
+    // The shape of every pod that was never scheduled: no container statuses to walk, so the
+    // status walk answers '' and the phase is the whole diagnosis.
+    stubFetch([
+      NAMESPACE_ACTIVE,
+      NO_DEPLOYMENTS,
+      {
+        match: (url) => url.includes('/api/v1/namespaces/cf-env-42/pods') && !url.includes('/log'),
+        body: {
+          items: [
+            {
+              metadata: { name: 'web-abc' },
+              status: {
+                phase: 'Pending',
+                conditions: [
+                  {
+                    type: 'PodScheduled',
+                    status: 'False',
+                    reason: 'Unschedulable',
+                    message: '0/3 nodes are available: insufficient cpu.',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      NO_EVENTS,
+      { match: (url) => url.includes('/pods/web-abc/log'), text: '' },
+    ])
+    const diagnosis = await describeNs()
+    const phase = diagnosis.facts.find((f) => f.key === 'pods.web-abc.phase')
+    expect(phase?.value).toBe('Pending')
+    expect(phase?.healthy).toBe(false)
+    const status = diagnosis.facts.find((f) => f.key === 'pods.web-abc.status')
+    expect(status?.value).toContain('Unschedulable')
+    expect(status?.value).toContain('insufficient cpu')
+  })
+
+  it('reports the REAL warning-event count, not the capped one, and says the list was cut', async () => {
+    stubFetch([
+      NAMESPACE_ACTIVE,
+      NO_DEPLOYMENTS,
+      NO_PODS,
+      {
+        match: (url) => url.includes('/events'),
+        body: {
+          items: Array.from({ length: 200 }, (_, i) => ({
+            reason: 'FailedScheduling',
+            message: `attempt ${i}`,
+          })),
+        },
+      },
+    ])
+    const diagnosis = await describeNs()
+    expect(diagnosis.facts.find((f) => f.key === 'events.warnings')?.value).toBe('200')
+    expect(diagnosis.facts.find((f) => f.key === 'events.listed')?.value).toContain('20 of 200')
+    expect(diagnosis.facts.filter((f) => f.key.startsWith('events['))).toHaveLength(20)
   })
 })
 

@@ -23,8 +23,8 @@ export const provisioningSubsystemSchema = v.picklist(['environment', 'runner-po
 export type ProvisioningSubsystem = v.InferOutput<typeof provisioningSubsystemSchema>
 
 /**
- * The lifecycle operation an event records. `provision`/`teardown`/`teardown-verify`/`status`
- * are the ephemeral-environment verbs; `dispatch`/`release` are the runner-pool /
+ * The lifecycle operation an event records. `provision`/`teardown`/`teardown-verify`/`status`/
+ * `remediate` are the ephemeral-environment verbs; `dispatch`/`release` are the runner-pool /
  * container spin-up / spin-down verbs; `poll-failure` captures a failure (an
  * eviction / crash) detected while polling a running job — routine successful
  * polls are deliberately NOT logged (they would swamp the store).
@@ -36,12 +36,20 @@ export type ProvisioningSubsystem = v.InferOutput<typeof provisioningSubsystemSc
  * teardown is a declared no-op (the manifest omits a `teardown:` template, so
  * `HttpEnvironmentProvider` returns `torn_down` having called nothing) returns success, and a
  * single row would report a reclaimed environment that is still running and still billing.
+ *
+ * `remediate` is its own verb for the mirror-image reason: it is a distinct ACTOR (the
+ * environment investigation asking a provider to restart a workload in place), and a mutation
+ * with no row of its own is invisible to the two readers that most need it. The investigation's
+ * own second round rebuilds its timeline from this log, so a restart folded under another verb
+ * (or omitted) leaves the next round reasoning about an environment it believes nothing has
+ * touched.
  */
 export const provisioningOperationSchema = v.picklist([
   'provision',
   'teardown',
   'teardown-verify',
   'status',
+  'remediate',
   'dispatch',
   'release',
   'poll-failure',
