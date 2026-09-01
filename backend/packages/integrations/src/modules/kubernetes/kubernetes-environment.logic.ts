@@ -309,10 +309,16 @@ export type IngressClassCatalog =
  * `unrouted` carries prose because the three causes need three different fixes and only one of
  * them is in anybody's checkout; `pending` and `unknown` are deliberately NOT failures (see
  * {@link classifyIngressAdmission}).
+ *
+ * `pending` carries prose too, for a reason that is not about fixing anything: it is the verdict
+ * that keeps an environment provisioning, so it is what an operator watching a readiness wait is
+ * owed. Its two causes look identical from outside (no Ingress at all, versus one whose class
+ * resolves and whose address has not arrived) and the first says a Gateway is probably serving
+ * the host while the second says an ingress controller has not got to it yet.
  */
 export type IngressAdmission =
   | { status: 'admitted' }
-  | { status: 'pending' }
+  | { status: 'pending'; detail: string }
   | { status: 'unknown'; detail: string }
   | { status: 'unrouted'; problem: string }
 
@@ -403,7 +409,14 @@ export function classifyIngressAdmission(
 ): IngressAdmission {
   if (ingresses.some((ingress) => ingress.hasAddress)) return { status: 'admitted' }
   if (!catalog.read) return { status: 'unknown', detail: catalog.detail }
-  if (ingresses.length === 0) return { status: 'pending' }
+  if (ingresses.length === 0) {
+    return {
+      status: 'pending',
+      detail:
+        'the namespace declares no Ingress, so whatever serves this environment URL (a Gateway ' +
+        'or an HTTPRoute) has not published an address yet',
+    }
+  }
   const available = catalog.names.length
     ? `the cluster publishes ${catalog.names.map((name) => `'${name}'`).join(', ')}`
     : 'the cluster publishes none'
@@ -452,7 +465,12 @@ export function classifyIngressAdmission(
         'ingressClassName in the manifests to one of the classes above.',
     }
   }
-  return { status: 'pending' }
+  return {
+    status: 'pending',
+    detail:
+      'the Ingress class resolves against this cluster, but no controller has written an ' +
+      'address onto its status yet',
+  }
 }
 
 /** A concrete, resolvable host — a wildcard listener/route hostname (`*.example.com`) is not. */

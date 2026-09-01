@@ -815,6 +815,12 @@ export const environmentHandleSchema = v.object({
   expiresAt: v.nullable(v.number()),
   lastError: v.nullable(v.string()),
   /**
+   * The provider's own account of a state it has not left yet: why this environment is not
+   * ready. Written on every provision and poll regardless of status, so unlike `lastError` it
+   * is present WHILE an environment is still coming up. Null when the provider said nothing.
+   */
+  statusNote: v.optional(v.nullable(v.string())),
+  /**
    * The service's declared provision type this environment was stood up for
    * (`kubernetes` | `docker-compose` | `custom` | `infraless`). Recorded at provision
    * time so run details can show exactly what was provisioned. Null for legacy rows.

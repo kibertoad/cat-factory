@@ -495,9 +495,39 @@ export function recordToHandle(
     createdAt: record.createdAt,
     expiresAt: record.expiresAt,
     lastError: record.lastError,
+    statusNote: record.statusNote,
     provisionType: record.provisionType as EnvironmentHandle['provisionType'],
     engine: record.engine as EnvironmentHandle['engine'],
   }
+}
+
+/**
+ * How much of a provider's status note is persisted. The note is provider-authored prose that
+ * lands in three places a sentence has to stay readable in: the step's Environment panel, the
+ * readiness ceiling's run-failure message, and the outcome card's environment row.
+ *
+ * `lastError` is deliberately uncapped beside it, and the asymmetry is the point: a fault is
+ * something a person opens and scrolls (the panel gives it its own scrollable block), while the
+ * note is one muted line beside an environment that is doing fine. A code adapter answering with
+ * a controller dump or an event list would otherwise push everything under it off the surface.
+ */
+const STATUS_NOTE_CAP = 400
+
+/**
+ * A provider's status note as it is stored: trimmed, blank-as-null, and bounded.
+ *
+ * A capped note SAYS it was capped rather than trailing off, so a reader never takes the prefix
+ * for the whole account (the same rule every other cap in the environment path follows).
+ */
+export function boundStatusNote(note: string | null | undefined): string | null {
+  const trimmed = note?.trim()
+  if (!trimmed) return null
+  if (trimmed.length <= STATUS_NOTE_CAP) return trimmed
+  const dropped = trimmed.length - STATUS_NOTE_CAP
+  return (
+    `${trimmed.slice(0, STATUS_NOTE_CAP)} ` +
+    `[note truncated: ${dropped} of ${trimmed.length} characters dropped]`
+  )
 }
 
 /** Coerce an extracted expiry (epoch-ms number, numeric string, or ISO) to ms. */

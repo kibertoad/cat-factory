@@ -10,6 +10,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code GetPublicRunOutcomeResponseEnvironmentsVariant1Entry} wire model.
  * @param detail Always present; {@code null} when the server has no value for it.
+ * @param detailKind Always present; {@code null} when the server has no value for it.
  * @param environmentId Always present; {@code null} when the server has no value for it.
  * @param expiresAt Always present; {@code null} when the server has no value for it.
  * @param frameId Always present; {@code null} when the server has no value for it.
@@ -22,6 +23,9 @@ import org.jspecify.annotations.Nullable;
 public record GetPublicRunOutcomeResponseEnvironmentsVariant1Entry(
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("detail") @Nullable String detail,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("detailKind") @Nullable GetPublicRunOutcomeResponseEnvironmentsVariant1EntryDetailKind detailKind,
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("environmentId") @Nullable String environmentId,
@@ -55,6 +59,7 @@ public record GetPublicRunOutcomeResponseEnvironmentsVariant1Entry(
      */
     public static final class Builder {
         private @Nullable String detail;
+        private @Nullable GetPublicRunOutcomeResponseEnvironmentsVariant1EntryDetailKind detailKind;
         private @Nullable String environmentId;
         private @Nullable Double expiresAt;
         private @Nullable String frameId;
@@ -66,6 +71,12 @@ public record GetPublicRunOutcomeResponseEnvironmentsVariant1Entry(
         /** Set {@code detail}. */
         public Builder detail(@Nullable String detail) {
             this.detail = detail;
+            return this;
+        }
+
+        /** Set {@code detailKind}. */
+        public Builder detailKind(@Nullable GetPublicRunOutcomeResponseEnvironmentsVariant1EntryDetailKind detailKind) {
+            this.detailKind = detailKind;
             return this;
         }
 
@@ -113,7 +124,7 @@ public record GetPublicRunOutcomeResponseEnvironmentsVariant1Entry(
 
         /** Build the {@link GetPublicRunOutcomeResponseEnvironmentsVariant1Entry}. */
         public GetPublicRunOutcomeResponseEnvironmentsVariant1Entry build() {
-            return new GetPublicRunOutcomeResponseEnvironmentsVariant1Entry(detail, environmentId, expiresAt, frameId, origin, retained, state, url);
+            return new GetPublicRunOutcomeResponseEnvironmentsVariant1Entry(detail, detailKind, environmentId, expiresAt, frameId, origin, retained, state, url);
         }
     }
 }

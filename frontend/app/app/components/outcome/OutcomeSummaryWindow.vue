@@ -803,12 +803,21 @@ function openTestReport() {
                   : t('outcome.environments.expires', { date: d(new Date(row.expiresAt), 'long') })
               }}
             </p>
+            <!-- One slot, two kinds of claim. A provider's note about a spin-up in progress is
+                 labelled as one; a recorded fault is the row's own prose. Unlabelled they read
+                 identically, and "the deploy job is queued behind 3 others" in the slot that
+                 otherwise holds "quota exceeded" reports a fault the environment does not have. -->
             <p
               v-if="row.detail"
               class="mt-1 break-words text-[12px] leading-relaxed text-slate-500"
               data-testid="outcome-environment-detail"
+              :data-detail-kind="row.detailKind"
             >
-              {{ row.detail }}
+              {{
+                row.detailKind === 'note'
+                  ? t('environments.statusNote', { note: row.detail })
+                  : row.detail
+              }}
             </p>
           </div>
         </template>

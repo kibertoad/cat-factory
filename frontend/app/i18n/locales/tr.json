@@ -6293,6 +6293,7 @@
     "empty": "Bu çalışma için geçici ortam yok.",
     "provisionTypeLabel": "Sağlama türü:",
     "engineLabel": "Motor:",
+    "statusNote": "Sağlayıcı notu: {note}",
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",

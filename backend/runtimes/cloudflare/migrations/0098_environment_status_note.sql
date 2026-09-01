@@ -1,0 +1,17 @@
+-- A provisioned environment's NON-terminal account of itself: why it is not ready yet.
+--
+-- `last_error` is written only when the provider reports `failed`, and both persistence sites
+-- null it on every other status. So within one readiness wait (where every poll that keeps the
+-- wait alive is a `provisioning` poll) the column is structurally always NULL, and the 20-minute
+-- readiness ceiling could report nothing but how long it had waited. A provider that knew exactly
+-- which stage an environment was stuck at had nowhere to put it, and the only workaround was to
+-- report `failed` early, trading a truthful lifecycle state for an explainable one.
+--
+-- A sibling column rather than a widening of `last_error`: the two are read by different readers
+-- for opposite reasons, and only one of them is a fault. A note persisted under the error's name
+-- would render a healthy environment mid-rollout a "last error" it does not have.
+--
+-- Nullable and rewritten from the current poll every time (including back to NULL), so a
+-- deployment whose providers say nothing keeps exactly today's behaviour and no stale note can
+-- outlive the state it described.
+ALTER TABLE environments ADD COLUMN status_note TEXT;

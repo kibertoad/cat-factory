@@ -21,6 +21,7 @@ import type {
 import {
   assertFound,
   ConflictError,
+  describeTerminalEnvironment,
   getErrorMessage,
   NotFoundError,
   requireWorkspace,
@@ -400,11 +401,12 @@ export class EnvironmentTestService {
         }
         return { state: 'running' }
       }
-      // `failed` / `expired` / `torn_down` / `tearing_down` — it will never become ready.
-      throw new Error(
-        handle.lastError ??
-          `Environment provisioning did not become ready (status: ${handle.status}).`,
-      )
+      // `failed` / `expired` / `torn_down` / `tearing_down`: it will never become ready. The
+      // message is kernel's, so this reader cannot disagree with the readiness ceiling about the
+      // same environment: the provider's error where it recorded one, otherwise the STATE named
+      // with the last note appended rather than standing in for it (a bare note would report the
+      // spin-up this environment was in the middle of as the reason it ended up terminal).
+      throw new Error(describeTerminalEnvironment(handle))
     }
     const view = await this.deps.provisioning.pollProvisionJob(
       record.workspaceId,

@@ -6293,6 +6293,7 @@
     "empty": "Для цього запуску немає ефемерного середовища.",
     "provisionTypeLabel": "Тип провіженінгу:",
     "engineLabel": "Рушій:",
+    "statusNote": "Примітка провайдера: {note}",
     "provisionType": {
       "kubernetes": "Kubernetes",
       "docker-compose": "Docker Compose",

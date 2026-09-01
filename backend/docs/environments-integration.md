@@ -76,6 +76,12 @@ does not say, and a change on this path has to hold:
    handle's URL and access creds come off the `response` dot-paths, not off any fixed response
    shape. The TTL sweep below reclaims environments, it does not reconcile their status: nothing
    else polls a provisioning environment, which is why the wait lives on the step that made it.
+   **What that wait can SAY is `statusNote`**, persisted from every poll whatever the status, where
+   `lastError` is written on `failed` alone: it is the only channel a `provisioning` provider has,
+   and without it the 20-minute ceiling could report nothing but its own duration. A code adapter
+   sets it ([`native-environment-adapter.md`](./native-environment-adapter.md#saying-why-an-environment-is-not-ready-yet-statusnote));
+   the generic manifest path maps no error or note, so a manifest-authored provider keeps today's
+   behaviour exactly.
 3. The tester job's `test.environmentUrl` is wired straight from the persisted handle, so nothing
    downstream re-derives the address the environment was actually reached at. A step whose run mode
    IS the ephemeral environment (`runsAgainstEphemeralEnvironment`, the predicate its own prompt
