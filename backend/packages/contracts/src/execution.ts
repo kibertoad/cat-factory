@@ -23,6 +23,7 @@ import { stepContextDocumentSchema } from './documents.js'
 // module (the `forkDecision.ts` / `judge.ts` shape); `PipelineStep` composes them back in below.
 import { gateStepStateSchema } from './gate.js'
 import { deployFixStateSchema } from './deploy-fix.js'
+import { environmentInvestigationStateSchema } from './environment-investigation.js'
 import { deployEnvsSchema, deployWaitStateSchema, disposeEnvsSchema } from './deploy-envs.js'
 import { humanTestStepStateSchema, visualConfirmStepStateSchema } from './human-verdict-gates.js'
 import {
@@ -1233,6 +1234,13 @@ export const pipelineStepSchema = v.object({
    * See {@link deployFixStateSchema}.
    */
   deployFix: v.optional(deployFixStateSchema),
+  /**
+   * The live state of a deployer step INVESTIGATION loop: the rounds run against a provisioning
+   * failure no checkout edit can address, each carrying what was concluded and what (if anything)
+   * the platform did about it. Absent on a deployer that never failed that way. See
+   * {@link environmentInvestigationStateSchema}.
+   */
+  environmentInvestigation: v.optional(environmentInvestigationStateSchema),
   /**
    * A `disposer` step records each service frame's TERMINAL reclaim outcome here, keyed by frame
    * block id — the mirror of {@link deployEnvs} at the other end of the lifecycle, and, like it,

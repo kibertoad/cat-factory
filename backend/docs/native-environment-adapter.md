@@ -41,8 +41,9 @@ interface EnvironmentProvider {
 }
 ```
 
-There is intentionally **no `reboot`** (YAGNI: nothing in the engine drives one). If a
-provider supports rebooting, that is an out-of-band operation; the port stays minimal.
+Restarting a workload in place is the one further verb the engine drives, and it is opt-in rather
+than part of this interface: see [`diagnostics`](#diagnostics-explaining-and-repairing-an-environment-that-never-came-up)
+below. Nothing else has been added on request, so the base port stays these three.
 
 A native adapter MAY additionally implement three optional methods so the SPA can render
 a first-class **connect form** instead of making operators hand-author a manifest:
@@ -89,6 +90,30 @@ is bounded in wall-clock time by the service (awaited inline on an on-demand tea
 sweep), so an unresponsive one costs the confirmation and never the teardown. Which paths record
 which verdict, and what a `disposer` step does with them:
 [`environment-disposal-and-teardown-proof.md`](../../docs/initiatives/environment-disposal-and-teardown-proof.md).
+
+### `diagnostics`: explaining, and repairing, an environment that never came up
+
+A fifth optional member, and the one the engine reads when a provision fails for a cause no edit in
+the repository could address. `describe` returns named control-plane facts, log excerpts and the
+reads the adapter could NOT make; `supportedActions` declares what it will perform (today only
+`restart`); `remediate` performs one. The shape, and the four rules a first implementation gets
+wrong, are on the website's
+[diagnostics capability](https://www.catfactory.ai/extend/custom-providers.html#diagnosing-an-environment-that-never-came-up).
+
+Separate from `status()` for the reason `confirmTeardown` is: `status()` answers a readiness
+question in one word, so every implementation reduces a rich answer to a member of
+`EnvironmentStatus` and drops the rest, and a provider that cannot answer the NEW question must be
+able to say so rather than have an answer inferred from a call meant for something else.
+
+What stays here is where the answer goes. The evidence is assembled with the platform's own (the
+environment record, the whole captured provision-field bag, the run's provisioning timeline) and
+read by an INLINE model call, never a container: the credentials that produced it must not ride a
+job body. The model picks one action from a list the engine narrowed first, the engine performs it,
+and the deployer then re-enters its own path, so what settles the frame is the provider's next
+verdict rather than the verdict about it. Standing an environment up again and tearing one down are
+driven through the methods above and never asked of `remediate`. Omitting the whole member is a
+supported choice: the investigation runs on the platform's evidence alone and STATES that it did.
+Full model: [`environment-investigation.md`](../../docs/initiatives/environment-investigation.md).
 
 ### `frontendOrigins`: wiring a bound frontend's CORS
 

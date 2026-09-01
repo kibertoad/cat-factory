@@ -1,4 +1,5 @@
 import type { AgentKind } from '@cat-factory/kernel'
+import { ENVIRONMENT_INVESTIGATOR_AGENT_KIND } from '@cat-factory/contracts'
 import { TASK_ESTIMATOR_AGENT_KIND } from '../prompts/roles.js'
 import type { AgentKindRegistry } from './registry.js'
 
@@ -32,6 +33,11 @@ const INLINE_ENGINE_KINDS = new Set<string>([
   REQUIREMENTS_BRAINSTORM_AGENT_KIND,
   ARCHITECTURE_BRAINSTORM_AGENT_KIND,
   TASK_ESTIMATOR_AGENT_KIND,
+  // Never authored into a pipeline (the deployer's failure path drives it), so the start guard
+  // never grades it. Listed anyway because the taxonomy is what "does this kind run a model
+  // inline" means, and a kind that answers yes and is not listed here is a latent
+  // mis-classification the moment anything else asks the question.
+  ENVIRONMENT_INVESTIGATOR_AGENT_KIND,
 ])
 
 /**

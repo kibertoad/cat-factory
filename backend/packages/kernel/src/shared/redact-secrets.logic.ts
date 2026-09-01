@@ -251,3 +251,28 @@ export function redactSecretsDeep<T>(value: T): T {
   }
   return value
 }
+
+/**
+ * Scrub a flat `key -> value` bag, giving each value its OWN KEY as scrubbing context.
+ *
+ * {@link redactSecretsDeep} is the wrong tool for one: it walks to the string LEAF and scrubs it
+ * alone, so a bag whose secret is `{ apiToken: "9f2c…" }` keeps it: every field-name rule needs
+ * the name, and by the time the walk reaches the value the name is gone. The bag shape is exactly
+ * how a provider's captured provision fields arrive, and that bag is now read by something other
+ * than teardown, so the gap became reachable.
+ *
+ * Implemented by scrubbing the rendered `key=value` pair and slicing the key back off, so there is
+ * ONE rule set rather than a second list of secret-ish names to drift from the first. Every rule
+ * that matches a name preserves the name and separator it matched, so the prefix is stable.
+ */
+export function redactSecretFields(
+  fields: Readonly<Record<string, string>>,
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(fields)) {
+    const prefix = `${key}=`
+    const scrubbed = redactSecrets(`${prefix}${value}`) ?? ''
+    out[key] = scrubbed.startsWith(prefix) ? scrubbed.slice(prefix.length) : scrubbed
+  }
+  return out
+}

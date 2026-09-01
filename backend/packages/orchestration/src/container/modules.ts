@@ -17,6 +17,7 @@ import type {
   AppCaches,
   BugHuntAssessor,
   ExecutionEventPublisher,
+  EnvironmentInvestigator,
   JudgeAssessor,
   TrackerIssueEvent,
 } from '@cat-factory/kernel'
@@ -69,6 +70,7 @@ import { resolveBlockRunContext } from './blockRunContext.js'
 import { DocInterviewService } from '../modules/docInterview/DocInterviewService.js'
 import { ForkChatService } from '../modules/execution/ForkChatService.js'
 import { JudgeService } from '../modules/execution/JudgeService.js'
+import { EnvironmentInvestigationService } from '../modules/execution/EnvironmentInvestigationService.js'
 import { BugHuntAssessorService } from '../modules/bugHunt/BugHuntAssessorService.js'
 import { TesterQualityReviewService } from '../modules/execution/TesterQualityReviewService.js'
 import { KaizenService } from '../modules/kaizen/KaizenService.js'
@@ -485,7 +487,7 @@ function createBugHuntAssessor(deps: CoreDependencies): BugHuntAssessor | undefi
     modelProviderResolver: deps.modelProviderResolver,
     modelProvider: deps.modelProvider,
     // The routing default, the block-model resolver, the local-mode inline predicate, and the
-    // preset's per-kind default model + route order — wired as ONE slice (see the factory).
+    // preset's per-kind default model + route order, wired as ONE slice (see the factory).
     ...inlineModelResolutionDeps(deps),
     ...(deps.logger ? { logger: deps.logger } : {}),
   })
@@ -702,7 +704,7 @@ export function createTesterQualityReviewer(
     modelProviderResolver: deps.modelProviderResolver,
     modelProvider: deps.modelProvider,
     // The routing default, the block-model resolver, the local-mode inline predicate, and the
-    // preset's per-kind default model + route order — wired as ONE slice (see the factory).
+    // preset's per-kind default model + route order, wired as ONE slice (see the factory).
     ...inlineModelResolutionDeps(deps),
     resolveRunContext: resolveBlockRunContext(deps),
   })
@@ -726,7 +728,7 @@ export function createDocInterviewService(deps: CoreDependencies): DocInterviewS
     modelProviderResolver: deps.modelProviderResolver,
     modelProvider: deps.modelProvider,
     // The routing default, the block-model resolver, the local-mode inline predicate, and the
-    // preset's per-kind default model + route order — wired as ONE slice (see the factory).
+    // preset's per-kind default model + route order, wired as ONE slice (see the factory).
     ...inlineModelResolutionDeps(deps),
     resolveRunContext: resolveBlockRunContext(deps),
   })
@@ -754,9 +756,44 @@ export function createJudgeAssessor(deps: CoreDependencies): JudgeAssessor | und
     modelProviderResolver: deps.modelProviderResolver,
     modelProvider: deps.modelProvider,
     // The routing default, the block-model resolver, the local-mode inline predicate, and the
-    // preset's per-kind default model + route order — wired as ONE slice (see the factory).
+    // preset's per-kind default model + route order, wired as ONE slice (see the factory).
     ...inlineModelResolutionDeps(deps),
     resolveRunContext: resolveBlockRunContext(deps),
+  })
+}
+
+/**
+ * The default {@link EnvironmentInvestigator}: the inline diagnosis behind the deployer's
+ * environment-investigation loop. Built from the SAME model-provider dependencies the inline
+ * reviewers and judges use, so a facade that can run a requirements review can investigate a
+ * failed environment with no investigation-specific wiring at all.
+ *
+ * Returns undefined when no provider is wired, and a facade or harness may inject its own
+ * `environmentInvestigator` (the conformance harness does, for a deterministic verdict); either
+ * way an absent or disabled investigator makes the loop a pass-through, and a failed provision is
+ * terminal and unexplained exactly as it was before.
+ */
+export function createEnvironmentInvestigator(
+  deps: CoreDependencies,
+): EnvironmentInvestigator | undefined {
+  if (deps.environmentInvestigator) return deps.environmentInvestigator
+  if (!deps.modelProviderResolver && !deps.modelProvider) return undefined
+  return new EnvironmentInvestigationService({
+    modelProviderResolver: deps.modelProviderResolver,
+    modelProvider: deps.modelProvider,
+    // The routing default, the block-model resolver, the local-mode inline predicate, and the
+    // preset's per-kind default model + route order, wired as ONE slice (see the factory).
+    ...inlineModelResolutionDeps(deps),
+    resolveRunContext: resolveBlockRunContext(deps),
+    // Its prompt is a member of `INLINE_ENGINE_SYSTEM_PROMPTS`, so the prompt editor offers it and
+    // an edit saved there has to reach the call. Without this the editor would show a baseline no
+    // code path sends and silently discard what a workspace wrote.
+    ...(deps.agentPromptRepository
+      ? {
+          resolveSystemPromptOverride: async (workspaceId: string, agentKind: string) =>
+            (await deps.agentPromptRepository!.head(workspaceId, agentKind))?.text ?? undefined,
+        }
+      : {}),
   })
 }
 
@@ -766,7 +803,7 @@ export function createForkChatService(deps: CoreDependencies): ForkChatService |
     modelProviderResolver: deps.modelProviderResolver,
     modelProvider: deps.modelProvider,
     // The routing default, the block-model resolver, the local-mode inline predicate, and the
-    // preset's per-kind default model + route order — wired as ONE slice (see the factory).
+    // preset's per-kind default model + route order, wired as ONE slice (see the factory).
     ...inlineModelResolutionDeps(deps),
     resolveRunContext: resolveBlockRunContext(deps),
   })
@@ -809,7 +846,7 @@ export function createKaizenModule(deps: CoreDependencies): KaizenModule | undef
     modelProviderResolver: deps.modelProviderResolver,
     modelProvider: deps.modelProvider,
     // The routing default, the block-model resolver, the local-mode inline predicate, and the
-    // preset's per-kind default model + route order — wired as ONE slice (see the factory).
+    // preset's per-kind default model + route order, wired as ONE slice (see the factory).
     ...inlineModelResolutionDeps(deps),
   })
   return { service }

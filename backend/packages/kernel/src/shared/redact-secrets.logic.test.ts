@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { isSecretShapedFilename, redactSecrets, redactSecretsDeep } from './redact-secrets.logic.js'
+import {
+  isSecretShapedFilename,
+  redactSecretFields,
+  redactSecrets,
+  redactSecretsDeep,
+} from './redact-secrets.logic.js'
 
 describe('redactSecrets', () => {
   it('passes null/empty through unchanged', () => {
@@ -298,5 +303,36 @@ describe('redactSecretsDeep', () => {
     expect(out.count).toBe(3)
     expect(out.enabled).toBe(false)
     expect(out.repo).toEqual({ owner: 'acme', name: 'widgets' })
+  })
+})
+
+describe('redactSecretFields', () => {
+  it('gives each value its own KEY as scrubbing context, which the deep walk cannot', () => {
+    // A bare value has no field-name scaffolding for the pattern rules to latch onto, so the deep
+    // walk keeps it. This is the shape a provider's captured provision fields arrive in.
+    const fields = { namespace: 'pr-42', apiToken: '9f2c8b7a6e5d4c3b2a19', region: 'eu-west-1' }
+    expect(redactSecretsDeep(fields).apiToken).toBe('9f2c8b7a6e5d4c3b2a19')
+
+    const out = redactSecretFields(fields)
+    expect(out.apiToken).not.toContain('9f2c8b7a6e5d4c3b2a19')
+    expect(out.namespace).toBe('pr-42')
+    expect(out.region).toBe('eu-west-1')
+  })
+
+  it('still scrubs a recognisable token shape under an innocuous key', () => {
+    const note = redactSecretFields({
+      note: 'deployed with ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345',
+    }).note
+    expect(note).not.toContain('ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345')
+    expect(note?.startsWith('deployed with ')).toBe(true)
+  })
+
+  it('keeps a value containing an equals sign intact', () => {
+    const out = redactSecretFields({ selector: 'app=web,tier=frontend' })
+    expect(out.selector).toBe('app=web,tier=frontend')
+  })
+
+  it('returns an empty bag unchanged', () => {
+    expect(redactSecretFields({})).toEqual({})
   })
 })

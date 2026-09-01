@@ -11,6 +11,7 @@ import {
   REQUIREMENTS_BRAINSTORM_REWORK_SYSTEM_PROMPT,
   REQUIREMENTS_BRAINSTORM_SYSTEM_PROMPT,
 } from '../prompts/brainstorm.js'
+import { ENVIRONMENT_INVESTIGATION_SYSTEM_PROMPT } from '../prompts/environment-investigation.js'
 import { KAIZEN_SYSTEM_PROMPT } from '../prompts/kaizen.js'
 import { FORK_PROPOSER_SYSTEM_PROMPT } from './fork-proposer.js'
 import { FORK_CHAT_SYSTEM_PROMPT } from '../prompts/fork-decision.js'
@@ -112,6 +113,12 @@ export const PROMPT_VERSIONS = {
   // label attribute an outcome to); it does not re-key a Kaizen combo, because a judge is attached
   // to a step and is never a step's own `agentKind`, which is what `promptVersionForKind` reads.
   judge: { id: 'judge', version: 2, text: JUDGE_SYSTEM_PROMPT },
+  // Numbering starts at 1: there is no earlier RECORDED version to succeed.
+  'environment-investigation': {
+    id: 'environment-investigation',
+    version: 1,
+    text: ENVIRONMENT_INVESTIGATION_SYSTEM_PROMPT,
+  },
 } as const satisfies Record<string, VersionedPrompt>
 
 /** Ids of the prompts currently under version control. */

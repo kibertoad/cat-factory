@@ -422,6 +422,11 @@ export {
 } from './agents/prompts/fork-decision.js'
 export { JUDGE_SYSTEM_PROMPT, renderJudgePrompt } from './agents/prompts/judge.js'
 export {
+  ENVIRONMENT_INVESTIGATION_PROMPT,
+  ENVIRONMENT_INVESTIGATION_SYSTEM_PROMPT,
+  renderEnvironmentInvestigationPrompt,
+} from './agents/prompts/environment-investigation.js'
+export {
   BUG_HUNT_AGENT_KIND,
   BUG_HUNT_SYSTEM_PROMPT,
   renderBugHuntPrompt,

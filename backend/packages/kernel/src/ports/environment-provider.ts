@@ -8,6 +8,7 @@ import type {
   PreflightResult,
   ProviderConfigField,
 } from '../domain/types.js'
+import type { EnvironmentDiagnosticsCapability } from './environment-diagnostics.js'
 import type { RunRepoContext } from './repo-files.js'
 import type { RunnerDispatchOptions, RunnerJobRef, RunnerJobView } from './runner-transport.js'
 
@@ -477,6 +478,14 @@ export interface EnvironmentProvider {
    * {@link ConfirmTeardown} for why this is not `status()`.
    */
   confirmTeardown?: ConfirmTeardown
+  /**
+   * OPTIONALLY describe what is wrong with an environment, and act on it in place. Present ⇒ the
+   * platform's environment investigation is handed the provider's own account of the environment
+   * (its control-plane facts, its logs, and the reads it could not make) beside the evidence the
+   * platform holds itself; absent ⇒ the investigation runs on the platform's evidence alone, which
+   * is byte-for-byte what it would have had anyway. See {@link EnvironmentDiagnosticsCapability}.
+   */
+  diagnostics?: EnvironmentDiagnosticsCapability
   /**
    * Optional asynchronous, container-backed provisioning. Present ⇒ the provider stands
    * environments up in a deploy container ({@link AsyncProvisionCapability}); absent ⇒ it is
