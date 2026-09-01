@@ -296,6 +296,13 @@ export interface Env {
   // operator-hosted, so their base URL is REQUIRED to enable the `bifrost` / `litellm` provider
   // at all (self-hosted software, no public default).
   OPENROUTER_BASE_URL?: string
+  /**
+   * Whether OpenRouter may route to an upstream that RETAINS prompts. `allow` opts in; anything
+   * else (unset included) denies, which is the opposite of OpenRouter's own default and
+   * deliberate: an agent prompt is the customer's source tree. Parsed by
+   * `openRouterDataCollectionFrom`, shared with the Node facade.
+   */
+  OPENROUTER_DATA_COLLECTION?: string
   BIFROST_BASE_URL?: string
   LITELLM_BASE_URL?: string
 

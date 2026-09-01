@@ -1021,6 +1021,7 @@
       "context": "{value} Ktx",
       "contextThousands": "{value}K Ktx",
       "price": "{input}/{output} pro Mtok",
+      "retiresOn": "Auslauf am {date}",
       "toast": {
         "connected": "OpenRouter-Schlüssel verbunden",
         "connectFailed": "Schlüssel konnte nicht verbunden werden",

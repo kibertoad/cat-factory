@@ -31,6 +31,26 @@ export const XAI_BASE_URL = 'https://api.x.ai/v1'
 // itself, so it has a public endpoint to default to.
 export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 
+/** Whether OpenRouter may route a request to an upstream that retains prompts. */
+export type OpenRouterDataCollection = 'allow' | 'deny'
+
+/**
+ * Read `OPENROUTER_DATA_COLLECTION` into the routing policy OpenRouter is given.
+ *
+ * OpenRouter's own default is `allow`, and this platform's is not, which is why the value is
+ * parsed rather than passed through: an agent prompt carries the customer's checkout, so
+ * routing it to a prompt-retaining upstream is a decision an operator makes on the record.
+ *
+ * Only the exact string `allow` opts in. A typo, a `true`, a `yes` and an empty override all
+ * stay denied, because the direction a misread must fail in is the private one. Shared by both
+ * facades so a deployment cannot be permissive on one and strict on the other.
+ */
+export function openRouterDataCollectionFrom(
+  value: string | null | undefined,
+): OpenRouterDataCollection {
+  return value?.trim().toLowerCase() === 'allow' ? 'allow' : 'deny'
+}
+
 /**
  * Every provider reached over the shared OpenAI-compatible `/chat/completions` path, mapped
  * to the endpoint it defaults to. `null` marks an **operator-hosted** gateway (Bifrost,

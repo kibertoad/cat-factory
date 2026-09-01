@@ -64,6 +64,30 @@ below every route a key or account grant unlocks. `subscription` sits last **onl
 the "subscriptions always win" rule is applied separately, one layer up**; see §4, which
 also explains why moving it is its own piece of work.
 
+### OpenRouter is reached through its OWN client, not the generic OpenAI-compatible one
+
+Every other member of `OPENAI_COMPATIBLE_PROVIDERS` resolves through `openAiCompatibleResolver`;
+`openrouter` resolves through `openRouterResolver` (`@openrouter/ai-sdk-provider`), because a
+gateway can answer three things the generic client cannot ask. It reports **what the call actually
+cost** and **which upstream served it** (`usage: { include: true }` → `reported_cost_usd` /
+`upstream_provider`; see [`llm-telemetry.md`](./llm-telemetry.md)), which matters because every
+other cost figure here is derived from a price table and against a passthrough gateway that is a
+guess. It routes per request: `require_parameters` keeps the call off an upstream that would
+silently ignore a tool definition or a response schema. And it carries a retention policy worth
+stating: `OPENROUTER_DATA_COLLECTION` defaults to `deny`, stricter than the vendor's own default,
+because an agent prompt is the customer's checkout.
+
+Both entry points that build a direct provider from a leased key go through
+`directOpenAiCompatibleResolver`, which is where that dispatch is made once. A call site choosing
+for itself is silent when wrong: OpenRouter still answers, it just stops reporting.
+
+The generic client is told `supportsStructuredOutputs: true` for every cloud vendor, and that flag
+is load-bearing in one direction only. Without it `@ai-sdk/openai-compatible` rewrites a
+schema-carrying request to `{ type: 'json_object' }`, DROPS the schema and records an SDK warning
+nothing here reads, so a caller gets free-form JSON against a shape nobody enforced. A per-user
+LOCAL runner is deliberately left on the SDK's own default: it is the one upstream class that may
+genuinely not serve `json_schema`.
+
 `effectiveVariant` walks that order twice: first over what the capabilities make USABLE,
 then over what the entry merely DECLARES, so a caller always gets a ref to display even
 when nothing is configured (`available: false` is what says it can't run). Both walks

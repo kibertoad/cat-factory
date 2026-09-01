@@ -52,6 +52,14 @@ prerequisites are configured.
   `startNode`/`startLocal`'s `seedSharedStacks` flows through it, idempotently by NAME.
 - `datadog/` + `observability/`: release-health providers; `pagerduty/`, `incidentio/`,
   `incident/`, `incidentEnrichment/`: incident enrichment.
+- `providers/`: the direct-vendor key pool (`ApiKeyService`) plus the per-workspace OpenRouter
+  catalog. `OpenRouterCatalogService.ts` leases the key and persists the enabled subset;
+  `openRouterModels.ts` is the PRICE fold, split out because it is the intricate half: OpenRouter
+  publishes a base rate, an account `discount`, up to three cache classes and conditional
+  `overrides` bands, and the bands are folded to their MAXIMUM (which one applies depends on the
+  prompt length and the wall clock, neither known at refresh time, and a budget may only be wrong
+  upward). `scripts/check-openrouter-pins.mjs` re-reads the live catalogue against the spend
+  table's pinned slugs.
 - `mcpOAuth/`: the per-workspace OAuth grants a remote (`http`) MCP tool server needs.
   `McpOAuthService.ts` owns the lifecycle (start → sealed state → exchange → refresh → disconnect)
   and `mcpOAuthClient.ts` is the wire half (RFC 9728/8414 endpoint discovery plus the three token

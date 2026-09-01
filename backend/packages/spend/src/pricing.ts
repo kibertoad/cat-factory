@@ -336,7 +336,7 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // stays on the vendor list price this passthrough gateway bills at.
   'openrouter:openai/gpt-5.6-sol': { inputPerMillion: 4.6, outputPerMillion: 27.6 },
   'openrouter:openai/gpt-5.6-terra': { inputPerMillion: 1.84, outputPerMillion: 11.04 },
-  'openrouter:openai/gpt-5.6-luna': { inputPerMillion: 0.18, outputPerMillion: 1.1 },
+  'openrouter:openai/gpt-5.6-luna': { inputPerMillion: 0.19, outputPerMillion: 1.11 },
   'openrouter:openai/gpt-5.5': { inputPerMillion: 4.6, outputPerMillion: 27.6 },
   'openrouter:openai/gpt-oss-120b': { inputPerMillion: 0.034, outputPerMillion: 0.16 },
   // Both DeepSeek slugs are unpinned MOVING ALIASES, and the catalog routes to them
@@ -346,19 +346,20 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // OpenRouter models API actually reported when it was last read, and why re-reading it is
   // part of every pricing sweep rather than something to infer from the vendor's own page.
   //
-  // Observed 2026-08-26: Flash $0.077 in / $0.0154 cached / $0.154 out, Pro $0.556 in /
-  // $0.0463 cached / $1.112 out per 1M. Both had drifted DOWN by roughly half from the
-  // figures these rows carried, which were read while the Pro alias blend sat above
-  // DeepSeek's first-party list rather than below it as it does now.
+  // Observed 2026-09-01 by `scripts/check-openrouter-pins.mjs`: Flash $0.0809 in / $0.0162
+  // cached / $0.1618 out, Pro $1.60 in / $0.135 cached / $3.20 out per 1M. Pro has moved back
+  // UP, and by nearly 3x: the rows below it carried ($0.556 / $1.112, read 2026-08-26) metered a
+  // budget at roughly a third of what the alias now bills. That swing in five days is the case
+  // for the checker rather than for a sweep nobody schedules.
   'openrouter:deepseek/deepseek-v4-flash': {
-    inputPerMillion: 0.07,
-    outputPerMillion: 0.14,
-    cacheReadPerMillion: 0.014,
+    inputPerMillion: 0.075,
+    outputPerMillion: 0.15,
+    cacheReadPerMillion: 0.015,
   },
   'openrouter:deepseek/deepseek-v4-pro': {
-    inputPerMillion: 0.51,
-    outputPerMillion: 1.02,
-    cacheReadPerMillion: 0.043,
+    inputPerMillion: 1.48,
+    outputPerMillion: 2.95,
+    cacheReadPerMillion: 0.125,
   },
   // K2.7 Code's cache-read rate ($0.19/M) is ~2.8x the 0.1x floor its input implies, so it is
   // named; K3's ($0.30/M) IS the floor, so it derives.
@@ -448,9 +449,14 @@ export const DEFAULT_SPEND_PRICING: SpendPricing = {
  * fallback guess. Returns a new {@link SpendPricing}; the input is not mutated.
  *
  * A model whose cached price is entirely non-positive (OpenRouter reported no pricing, so
- * `parseModels` zeroed it) is SKIPPED rather than overlaid as free: a budget safeguard must
- * never undercount, so such a model keeps the more conservative bare-`openrouter` (or curated)
- * fallback instead of being metered at zero.
+ * `parseOpenRouterModels` zeroed it) is SKIPPED rather than overlaid as free: a budget safeguard
+ * must never undercount, so such a model keeps the more conservative bare-`openrouter` (or
+ * curated) fallback instead of being metered at zero.
+ *
+ * The two CACHE classes are carried through ONLY when OpenRouter published them, so an absent
+ * rate still falls to {@link CACHE_READ_MULTIPLIER} / {@link CACHE_WRITE_MULTIPLIER}. Copying a
+ * derived multiple into the overlay instead would freeze today's ratio into every stored row and
+ * make a gateway's own repricing unreachable, which is the whole reason the dynamic path exists.
  */
 export function withDynamicPrices(
   pricing: SpendPricing,
@@ -463,6 +469,12 @@ export function withDynamicPrices(
     prices[`openrouter:${m.id}`] = {
       inputPerMillion: m.inputPerMillion,
       outputPerMillion: m.outputPerMillion,
+      ...(m.cachedInputPerMillion === undefined
+        ? {}
+        : { cacheReadPerMillion: m.cachedInputPerMillion }),
+      ...(m.cacheWritePerMillion === undefined
+        ? {}
+        : { cacheWritePerMillion: m.cacheWritePerMillion }),
     }
   }
   return { ...pricing, prices }

@@ -113,7 +113,12 @@
   user prompt gets. A new prompt-assembly site owes it the same emit, or an operation's parameters
   silently vanish for that path. See `backend/docs/reusable-operations.md`.
 - `providers/`, the **AI provisioning facade**: `registry.ts` (`CompositeModelProvider`),
-  `resolvers.ts` (the runtime-neutral single-provider resolvers), `endpoints.ts`
+  `resolvers.ts` (the runtime-neutral single-provider resolvers, where `openrouter` alone gets its
+  own client via `openRouterResolver` and everything else the generic OpenAI-compatible one; the
+  dispatch is made ONCE in `directOpenAiCompatibleResolver`, which both entry points that build a
+  provider from a leased key route through), `gateway-attribution.ts` (what a GATEWAY reports about
+  a call and how to ask for it, for BOTH model paths: a path that stopped asking would keep working
+  and simply record nothing), `endpoints.ts`
   (`OPENAI_COMPATIBLE_ENDPOINTS`, the ONE table naming every OpenAI-compatible provider and the
   endpoint it defaults to (`null` for a self-hosted gateway that has none); the built-in base URLs,
   the UI-configurable key-pool list, the LLM proxy's `isProxyableProvider` and each facade's env

@@ -153,6 +153,12 @@ export const useObservabilityStore = defineStore('observability', () => {
       // HTTP call at a time and files it. Only a harness CLI's step-level remainder is spend-only,
       // and that arrives through the stored row, never here.
       spendOnly: false,
+      // The live event is the COMPACT wire shape, which carries no gateway report: the cost a
+      // gateway states and the upstream it routed to arrive with the stored row. Null rather than
+      // 0, because absent and free are different facts everywhere else on this type and a
+      // placeholder zero here would render this run's live rows as free until the panel reloads.
+      reportedCostUsd: null,
+      upstreamProvider: null,
       promptText: '',
       promptPrefixCount: 0,
       promptHash: '',

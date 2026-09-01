@@ -157,6 +157,31 @@ export interface LlmCallMetric {
    * (otherwise those tokens look like they vanished).
    */
   reasoningText: string
+  /**
+   * What the VENDOR said this call cost, in USD, or null where nobody said.
+   *
+   * The ONE measured cost on this table. Everything else downstream is DERIVED: the spend price
+   * table times the token classes, which is the best available answer against a direct vendor and
+   * a guess against a passthrough gateway reselling hundreds of models. OpenRouter
+   * with usage accounting on reports its own ledger figure, and this is where it lands.
+   *
+   * `null` and `0` are DIFFERENT facts and must stay so: null is "this producer reports no
+   * cost", 0 is "the vendor charged nothing". A reader that wants one number picks the derived
+   * estimate when this is null rather than reading the absence as free.
+   *
+   * USD, unconverted. The USD→spend-currency rate is this platform's fixed assumption; folding
+   * it in here would put an estimate inside the only measured figure on the row.
+   */
+  reportedCostUsd: number | null
+  /**
+   * Which UPSTREAM a gateway routed this call to (`anthropic`, `deepinfra`, …), or null when
+   * {@link provider} already names who served it.
+   *
+   * A gateway is one `provider` value covering many upstreams that differ in price, latency and
+   * reliability, so without this every OpenRouter row reads alike and an upstream that is slow
+   * or failing cannot be told from the gateway being slow or failing.
+   */
+  upstreamProvider: string | null
 }
 
 /**
@@ -494,6 +519,14 @@ export interface InlineLlmCall {
   responseText: InlineLlmCallBody
   /** The model's reasoning trace when it arrived on a separate channel, else ''. */
   reasoningText: InlineLlmCallBody
+  /**
+   * The gateway's own cost figure for this call, in USD, when the provider reports one. Omitted
+   * by every producer that does not; see {@link LlmCallMetric.reportedCostUsd} for why absent
+   * may never be read as free.
+   */
+  reportedCostUsd?: number
+  /** The upstream a gateway routed to; see {@link LlmCallMetric.upstreamProvider}. */
+  upstreamProvider?: string
 }
 
 /**

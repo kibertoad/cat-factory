@@ -157,6 +157,24 @@ LENIENTLY, since a runner pool runs whatever image its workspace pinned. **On ev
 the headline `↑` is the TOTAL of the three, with the classes as the breakdown.** Doc:
 [`token-telemetry-per-class-and-cost.md`](../../docs/initiatives/token-telemetry-per-class-and-cost.md).
 
+## A REPORTED cost and a DERIVED one are different facts, and only one of them is measured
+
+Every cost this platform shows is computed: the spend price table times the token classes. Against
+a direct vendor that is the best available answer. Against a passthrough GATEWAY reselling hundreds
+of models at the upstream's own rates it is a guess, and OpenRouter will simply tell us. Asked for
+usage accounting it answers with its own ledger `cost` AND the `provider` it routed to, and those
+land on `reported_cost_usd` / `upstream_provider`.
+
+Three rules bind them. **Absent is not zero**: a null cost means this producer reports none, so a
+reader falls back to the estimate, while a reported `0` is a measured free route; collapsing the
+two re-prices the one call whose price is certain. **The figure stays in the vendor's USD**,
+unconverted, because the USD→spend-currency rate is our fixed assumption and folding it in would
+put an estimate inside the only measured number on the row. **Both model paths ask and read through
+ONE module** (`gateway-attribution.ts` in `@cat-factory/agents`): a path that stopped asking keeps
+working and simply records nothing, which downstream is indistinguishable from a gateway that
+reports nothing. `upstream_provider` is what makes a slow or failing UPSTREAM tellable from a slow
+or failing gateway, since one `provider` column otherwise covers them all.
+
 ## Every row is stamped with the PHASE that spent it, by whoever OWNS the boundary
 
 Never reconstructed downstream: the harness stamps at EMIT time (not drain time), and the Pi path

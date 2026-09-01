@@ -3612,6 +3612,7 @@
       "context": "{value} ctx",
       "contextThousands": "{value}K ctx",
       "price": "{input}/{output} za Mtok",
+      "retiresOn": "Wycofanie {date}",
       "toast": {
         "connected": "Klucz OpenRouter połączony",
         "connectFailed": "Nie udało się połączyć klucza",

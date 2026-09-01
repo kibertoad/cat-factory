@@ -48,6 +48,8 @@ function metric(overrides: Partial<LlmCallMetric> = {}): LlmCallMetric {
     promptHash: 'hash-1',
     responseText: 'done',
     reasoningText: '',
+    reportedCostUsd: null,
+    upstreamProvider: null,
     ...overrides,
   }
 }

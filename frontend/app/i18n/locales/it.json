@@ -1021,6 +1021,7 @@
       "context": "{value} ctx",
       "contextThousands": "{value}K ctx",
       "price": "{input}/{output} per Mtok",
+      "retiresOn": "Ritirato il {date}",
       "toast": {
         "connected": "Chiave OpenRouter connessa",
         "connectFailed": "Impossibile connettere la chiave",

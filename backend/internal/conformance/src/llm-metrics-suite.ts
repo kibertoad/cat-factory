@@ -52,6 +52,8 @@ function metric(overrides: Partial<LlmCallMetric> & Pick<LlmCallMetric, 'id'>): 
     promptHash: '',
     responseText: 'ok',
     reasoningText: '',
+    reportedCostUsd: null,
+    upstreamProvider: null,
     ...overrides,
   }
 }
@@ -452,6 +454,54 @@ function registerMetricProducerTests(
   makeRepo: () => LlmCallMetricRepository,
   ids: () => MetricIds,
 ): void {
+  // A gateway's OWN cost + upstream are the only measured attribution on this table, so they have
+  // to survive the round trip on every store. What makes this worth a conformance case rather
+  // than a unit test is the NULL: three stores map the column (D1 REAL, Postgres double
+  // precision, local SQLite REAL) and a store that coerced an absent cost to 0 would report every
+  // unreported call as free, which reads as a plausible number rather than as a bug.
+  it('round-trips a gateway-reported cost and upstream, keeping absent apart from zero', async () => {
+    const repo = makeRepo()
+    const { ws, e1 } = ids()
+    await repo.record(
+      metric({
+        id: `${ws}-reported`,
+        workspaceId: ws,
+        executionId: e1,
+        createdAt: 30,
+        provider: 'openrouter',
+        model: 'anthropic/claude-opus-5',
+        reportedCostUsd: 0.0421,
+        upstreamProvider: 'anthropic',
+      }),
+    )
+    await repo.record(
+      metric({
+        id: `${ws}-free`,
+        workspaceId: ws,
+        executionId: e1,
+        createdAt: 20,
+        provider: 'openrouter',
+        model: 'vendor/free',
+        reportedCostUsd: 0,
+        upstreamProvider: 'chutes',
+      }),
+    )
+    // A direct vendor reports neither; its cost stays derived.
+    await repo.record(
+      metric({ id: `${ws}-silent`, workspaceId: ws, executionId: e1, createdAt: 10 }),
+    )
+
+    const byId = new Map((await repo.listByExecution(ws, e1)).map((c) => [c.id, c]))
+    expect(byId.get(`${ws}-reported`)).toMatchObject({
+      reportedCostUsd: 0.0421,
+      upstreamProvider: 'anthropic',
+    })
+    // A reported zero is a MEASURED free call and must not read as "nobody said".
+    expect(byId.get(`${ws}-free`)?.reportedCostUsd).toBe(0)
+    expect(byId.get(`${ws}-silent`)?.reportedCostUsd).toBeNull()
+    expect(byId.get(`${ws}-silent`)?.upstreamProvider).toBeNull()
+  })
+
   it("records a subscription harness's per-call telemetry through the observability sink", async () => {
     // The proxy-bypassing path: Claude Code / Codex report per-call metrics off their CLI
     // stream, which the executor feeds through the SAME LlmObservabilityService the proxy

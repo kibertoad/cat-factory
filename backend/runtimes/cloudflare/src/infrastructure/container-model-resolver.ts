@@ -31,7 +31,7 @@ import { loadObservabilityConfig } from './config/observability'
 import { loadOtelConfig } from './config/otel'
 import type { Env } from './env'
 import { envVar, requireTelemetryDb } from './env'
-import { baseUrlFor } from './ai/providerEndpoints'
+import { baseUrlFor, openRouterDataCollectionFor } from './ai/providerEndpoints'
 import { resolveExtraRegistries } from './ai/registries'
 import { D1LlmCallMetricRepository } from './repositories/D1LlmCallMetricRepository'
 import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
@@ -93,6 +93,7 @@ export function buildModelProviderResolver(env: Env, db: D1Database): ModelProvi
     apiKeys: buildApiKeyService(env, db, { now: () => Date.now() }),
     baseUrlFor: (provider) => baseUrlFor(provider, env) ?? undefined,
     extraRegistries,
+    openRouterDataCollection: openRouterDataCollectionFor(env),
     // The service itself, so the endpoint read and the transport carrying the deployment's
     // loopback/LAN policy (re-validated on every redirect hop, SEC-2/SEC-3) cannot come from
     // two different places.

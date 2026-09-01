@@ -1,4 +1,4 @@
-import type { AgentRouting } from '@cat-factory/agents'
+import type { AgentRouting, OpenRouterDataCollection } from '@cat-factory/agents'
 import type {
   InfrastructureCapabilities,
   LocalModeConfig,
@@ -646,6 +646,13 @@ export interface AppConfig {
   fragmentLibrary: FragmentLibraryConfig
   /** LLM observability config (e.g. whether complete prompts are recorded). */
   observability: ObservabilityConfig
+  /**
+   * Whether OpenRouter may route a call to an upstream that RETAINS prompts
+   * (`OPENROUTER_DATA_COLLECTION`). Absent ⇒ `deny`, which is this platform's default rather
+   * than the vendor's: an agent prompt carries the customer's checkout. The INLINE path reads
+   * the same env through its own facade wiring; this is the CONTAINER-proxy half.
+   */
+  openRouterDataCollection?: OpenRouterDataCollection
   /** Optional Langfuse trace-sink config; `enabled` is false unless opted in. */
   langfuse: LangfuseConfig
   /** Optional OpenTelemetry (OTLP) trace + metrics config; `enabled` is false unless opted in. */

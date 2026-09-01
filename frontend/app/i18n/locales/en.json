@@ -3897,6 +3897,7 @@
       "context": "{value} ctx",
       "contextThousands": "{value}K ctx",
       "price": "{input}/{output} per Mtok",
+      "retiresOn": "Retires {date}",
       "toast": {
         "connected": "OpenRouter key connected",
         "connectFailed": "Could not connect key",

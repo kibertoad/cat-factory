@@ -47,3 +47,50 @@ describe('providerCachesPrompts', () => {
     expect(providerCachesPrompts('unknown-vendor')).toBe(false)
   })
 })
+
+describe('providerCachePolicy: gateways', () => {
+  // On a gateway the provider id names the RESELLER; only the slug names who serves the call.
+  // Reading the provider alone answered `none` for all 300+ OpenRouter models, which is wrong in
+  // the expensive direction: the picker told a user the hot path ran cache-less on a route that
+  // rides the upstream's automatic prefix cache exactly as the direct flavour does.
+  it('resolves an openrouter slug to its upstream vendor policy', () => {
+    expect(providerCachePolicy('openrouter', 'openai/gpt-5.6-terra')).toBe('auto-prefix')
+    expect(providerCachePolicy('openrouter', 'deepseek/deepseek-v4')).toBe('auto-prefix')
+    expect(providerCachePolicy('openrouter', 'qwen/qwen3.8-max')).toBe('auto-prefix')
+    // The gateway spells two vendors differently from our own provider ids, which is why the
+    // prefix map is stated rather than assumed to be an identity.
+    expect(providerCachePolicy('openrouter', 'x-ai/grok-4.6')).toBe('auto-prefix')
+    expect(providerCachePolicy('openrouter', 'moonshotai/kimi-k3')).toBe('none')
+  })
+
+  // The deliberate asymmetry. `explicit-anthropic` is a claim about a request WE build, and
+  // nothing on the gateway path emits `cache_control` breakpoints, so reporting it would tell the
+  // picker a prefix is cached that nobody asked to cache.
+  it('downgrades anthropic-behind-a-gateway to none, because nothing sends the breakpoints', () => {
+    expect(providerCachePolicy('anthropic')).toBe('explicit-anthropic')
+    expect(providerCachePolicy('openrouter', 'anthropic/claude-opus-5')).toBe('none')
+  })
+
+  it('answers none for a slug it cannot read a vendor off', () => {
+    expect(providerCachePolicy('openrouter', 'google/gemini-3.1-pro')).toBe('none')
+    expect(providerCachePolicy('openrouter', 'no-slash-here')).toBe('none')
+    expect(providerCachePolicy('openrouter', '/leading-slash')).toBe('none')
+    // No model in hand: the request-building helpers only ever ask about a DIRECT provider, so
+    // the honest answer for a gateway with no slug is that nothing is known.
+    expect(providerCachePolicy('openrouter')).toBe('none')
+  })
+
+  // The operator-hosted gateways front many vendors too, but their model ids are the operator's
+  // own aliases, so there is nothing in the id to read a vendor off.
+  it('does not read a vendor off an operator-aliased gateway id', () => {
+    expect(providerCachePolicy('litellm', 'openai/gpt-5.6-terra')).toBe('none')
+    expect(providerCachePolicy('bifrost', 'anthropic/claude-opus-5')).toBe('none')
+  })
+
+  it('leaves a direct provider unchanged when a model is supplied', () => {
+    expect(providerCachePolicy('openai', 'gpt-5.6-terra')).toBe('auto-prefix')
+    expect(providerCachePolicy('anthropic', 'claude-opus-5')).toBe('explicit-anthropic')
+    expect(providerCachesPrompts('openrouter', 'deepseek/deepseek-v4')).toBe(true)
+    expect(providerCachesPrompts('openrouter', 'anthropic/claude-opus-5')).toBe(false)
+  })
+})

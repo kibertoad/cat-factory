@@ -12,6 +12,7 @@ import {
 import { modelCostResolver } from '@cat-factory/spend'
 import type { Env } from '../env'
 import { bedrockModelsCapability } from '../ai/registries'
+import { openRouterDataCollectionFor } from '../ai/providerEndpoints'
 import { type AgentsConfig, loadAgentsConfig } from './agents'
 import { type ExecutionConfig, loadExecutionConfig } from './execution'
 import { loadSpendPricing } from './spending'
@@ -108,6 +109,10 @@ export function loadConfig(env: Env): AppConfig {
     retention: loadRetentionConfig(env),
     fragmentLibrary: loadFragmentLibraryConfig(env),
     observability: loadObservabilityConfig(env),
+    // The CONTAINER-proxy half of the OpenRouter prompt-retention policy; the inline half reads
+    // the same value in `container-model-resolver`. Both go through the shared parse so a
+    // deployment cannot be strict on one path and permissive on the other.
+    openRouterDataCollection: openRouterDataCollectionFor(env),
     langfuse: loadLangfuseConfig(env),
     otel: loadOtelConfig(env),
     // Platform-health alerting: opt-in (`PLATFORM_ALERTS=true`), independent of the OTel

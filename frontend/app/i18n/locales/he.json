@@ -3754,6 +3754,7 @@
       "context": "{value} ctx",
       "contextThousands": "{value}K ctx",
       "price": "{input}/{output} לכל Mtok",
+      "retiresOn": "יוצא משימוש ב-{date}",
       "toast": {
         "connected": "מפתח OpenRouter מחובר",
         "connectFailed": "לא ניתן היה לחבר מפתח",

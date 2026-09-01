@@ -102,6 +102,8 @@ function rowToLlmMetric(row: typeof llmCallMetrics.$inferSelect): LlmCallMetric 
     promptHash: row.prompt_hash,
     responseText: row.response_text,
     reasoningText: row.reasoning_text,
+    reportedCostUsd: row.reported_cost_usd,
+    upstreamProvider: row.upstream_provider,
   }
 }
 
@@ -200,6 +202,8 @@ function llmPageColumns(bodyChars: number | undefined, offsetChars = 0, contains
     http_status: llmCallMetrics.http_status,
     error_message: llmCallMetrics.error_message,
     prompt_prefix_count: llmCallMetrics.prompt_prefix_count,
+    reported_cost_usd: llmCallMetrics.reported_cost_usd,
+    upstream_provider: llmCallMetrics.upstream_provider,
     prompt_text: slice(llmCallMetrics.prompt_text),
     prompt_chars: sql<number>`length(${llmCallMetrics.prompt_text})::int`,
     response_text: slice(llmCallMetrics.response_text),
@@ -243,6 +247,8 @@ function rowToLlmCallPage(row: LlmPageRow, searched = false): LlmCallMetricPage 
     http_status: number | null
     error_message: string | null
     prompt_prefix_count: number
+    reported_cost_usd: number | null
+    upstream_provider: string | null
     prompt_text: string
     prompt_chars: number
     response_text: string
@@ -277,6 +283,8 @@ function rowToLlmCallPage(row: LlmPageRow, searched = false): LlmCallMetricPage 
     ok: r.ok === 1,
     httpStatus: r.http_status,
     errorMessage: r.error_message,
+    reportedCostUsd: r.reported_cost_usd,
+    upstreamProvider: r.upstream_provider,
     promptPrefixCount: r.prompt_prefix_count,
     // A searched row attaches each body's first-match offset (null = the term occurs only in
     // a sibling body); an unsearched row carries none, so the two states stay distinct.
@@ -329,6 +337,8 @@ function metricValues(metric: LlmCallMetric) {
     phase: metric.phase,
     turn_index: metric.turnIndex,
     spend_only: metric.spendOnly ? 1 : 0,
+    reported_cost_usd: metric.reportedCostUsd,
+    upstream_provider: metric.upstreamProvider,
     message_count: metric.messageCount,
     tool_count: metric.toolCount,
     request_max_tokens: metric.requestMaxTokens,

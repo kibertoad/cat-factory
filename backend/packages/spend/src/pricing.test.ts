@@ -230,6 +230,34 @@ describe('withDynamicPrices', () => {
     expect(withDynamicPrices(pricing, [])).toBe(pricing)
   })
 
+  // The two cache classes are priced an order of magnitude apart in OPPOSITE directions, so a
+  // gateway's own published rates beat the derived multipliers wherever it publishes them.
+  it('carries the gateway-published cache rates through', () => {
+    const overlaid = withDynamicPrices(pricing, [
+      {
+        ...meta('vendor/cached', 4, 12),
+        cachedInputPerMillion: 0.25,
+        cacheWritePerMillion: 6,
+      } as Parameters<typeof withDynamicPrices>[1][number],
+    ])
+    expect(priceFor(overlaid, { provider: 'openrouter', model: 'vendor/cached' })).toEqual({
+      inputPerMillion: 4,
+      outputPerMillion: 12,
+      cacheReadPerMillion: 0.25,
+      cacheWritePerMillion: 6,
+    })
+  })
+
+  // Absent must stay absent so `ratesFor` still derives its fallback. Writing a derived multiple
+  // into the overlay instead would freeze today's ratio into every stored row and make the
+  // gateway's own repricing unreachable, which is what the dynamic path exists for.
+  it('leaves an unpublished cache rate to the multiplier fallback', () => {
+    const overlaid = withDynamicPrices(pricing, [meta('vendor/plain', 4, 12)])
+    const price = priceFor(overlaid, { provider: 'openrouter', model: 'vendor/plain' })
+    expect(price).toEqual({ inputPerMillion: 4, outputPerMillion: 12 })
+    expect(price).not.toHaveProperty('cacheReadPerMillion')
+  })
+
   it('keeps every base entry beside the overlay rather than replacing the table', () => {
     // The dynamic catalog ADDS OpenRouter slugs; a curated price the deployment already had must
     // still resolve, or every non-OpenRouter model silently falls back to the default price.

@@ -6,8 +6,10 @@ import {
   QWEN_BASE_URL,
   isDirectProvider,
   isOpenAiCompatibleProvider,
+  openRouterDataCollectionFrom,
   resolveOpenAiCompatibleBaseUrl,
   type DirectProvider,
+  type OpenRouterDataCollection,
 } from '@cat-factory/agents'
 import type { Env } from '../env'
 
@@ -88,4 +90,13 @@ export function resolveOpenAiCompatibleUpstream(
   const baseURL = baseUrlFor(provider, env)
   if (!baseURL) return null
   return { baseURL }
+}
+
+/**
+ * This deployment's OpenRouter prompt-retention policy. Denied unless the operator says
+ * otherwise; the parse and its reasoning are shared with the Node facade so one deployment
+ * cannot be permissive on one runtime and strict on the other.
+ */
+export function openRouterDataCollectionFor(env: Env): OpenRouterDataCollection {
+  return openRouterDataCollectionFrom(env.OPENROUTER_DATA_COLLECTION)
 }

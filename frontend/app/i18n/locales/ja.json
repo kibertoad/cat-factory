@@ -3754,6 +3754,7 @@
       "context": "{value} ctx",
       "contextThousands": "{value}K ctx",
       "price": "{input}/{output} (Mtok あたり)",
+      "retiresOn": "{date} に提供終了",
       "toast": {
         "connected": "OpenRouter キーを接続しました",
         "connectFailed": "キーを接続できませんでした",

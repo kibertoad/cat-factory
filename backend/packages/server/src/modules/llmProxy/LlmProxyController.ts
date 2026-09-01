@@ -1,8 +1,11 @@
 import { type Context, Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import {
+  type GatewayCallReport,
   type InputTokenClasses,
+  gatewayRequestParams,
   promptCacheParams,
+  readCompletionGatewayReport,
   readInputTokenClasses,
 } from '@cat-factory/agents'
 import { isLocalRunner } from '@cat-factory/contracts'
@@ -559,6 +562,7 @@ async function relayUpstream(
     httpStatus: upstreamRes.status,
     errorMessage: null,
     upstreamMs,
+    gateway: readCompletionGatewayReport(json),
   })
   return c.json(json as Record<string, unknown>)
 }
@@ -711,6 +715,11 @@ function makeCallObserver(
           promptText,
           responseText: obs.responseText,
           reasoningText: obs.reasoningText ?? '',
+          // Persisted only where a gateway actually said, so the column stays NULL for every
+          // producer that reports nothing. `?? null` and not a truthiness test: a free route
+          // reports 0, which is a measured fact and not the same as silence.
+          reportedCostUsd: obs.gateway?.cost ?? null,
+          upstreamProvider: obs.gateway?.upstream ?? null,
         })
         // Observability must never break the proxy.
         .catch((err) =>
@@ -774,6 +783,19 @@ async function handleChatCompletion(c: Context<AppEnv>): Promise<Response> {
   // turns). A no-op for providers that cache automatically on the prefix or not at
   // all — see `promptCacheParams`.
   Object.assign(payload, promptCacheParams(session.provider, session.executionId))
+
+  // Gateway reporting: ask OpenRouter for its own ledger cost and the upstream it routes to, and
+  // keep the request off an upstream that would ignore the tools this call offers. A no-op for
+  // every other provider, so it merges unconditionally, exactly like the cache params above. The
+  // INLINE path asks for the same two through `openRouterResolver`; both read the answer back
+  // through the same module, which is what stops one path quietly ceasing to ask.
+  Object.assign(
+    payload,
+    gatewayRequestParams(
+      session.provider,
+      config.openRouterDataCollection ? { dataCollection: config.openRouterDataCollection } : {},
+    ),
+  )
 
   // The run phase this call belongs to, off the (optional) path segment the caller was
   // pointed at. Read through the untyped `param()` map because the SAME handler serves the
@@ -967,6 +989,8 @@ export function llmProxyController(): Hono<AppEnv> {
 /** Shape of a buffered OpenAI completion the proxy reads (usage + first choice). */
 interface BufferedCompletion {
   usage?: LlmTokenUsage
+  /** The upstream a GATEWAY routed to, when it names one (OpenRouter). */
+  provider?: string
   choices?: Array<{
     message?: {
       content?: string | null
@@ -998,6 +1022,8 @@ function reasoningTextFromCompletion(json: BufferedCompletion): string {
 /** One OpenAI SSE chunk shape the observation scanner reads. */
 interface StreamChunk {
   usage?: LlmTokenUsage | null
+  /** The upstream a GATEWAY routed to, when it names one (OpenRouter). */
+  provider?: string
   choices?: Array<{
     delta?: {
       content?: string | null
@@ -1042,6 +1068,11 @@ function observationStream(
   let finishReason: string | null = null
   let text = ''
   let reasoning = ''
+  // The gateway's own account of the call, folded across chunks the same way `lastUsage` is: a
+  // streamed reply names its upstream on the FIRST chunk and carries the cost on the LAST, so a
+  // single-chunk read would always lose one of the two. Merged rather than replaced, so a later
+  // chunk that reports only one field cannot blank the other.
+  let gateway: GatewayCallReport = {}
 
   const scan = (input: string) => {
     buffer += input
@@ -1055,6 +1086,7 @@ function observationStream(
       try {
         const parsed = JSON.parse(data) as StreamChunk
         if (parsed.usage) lastUsage = parsed.usage
+        gateway = { ...gateway, ...readCompletionGatewayReport(parsed) }
         const choice = parsed.choices?.[0]
         if (choice) {
           const delta = choice.delta?.content
@@ -1085,6 +1117,7 @@ function observationStream(
         httpStatus: 200,
         errorMessage: null,
         upstreamMs: Date.now() - dispatchAt,
+        gateway,
       })
     },
   })

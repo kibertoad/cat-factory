@@ -32,8 +32,10 @@ export {
   anthropicResolver,
   baseProviderRegistry,
   cloudflareRestResolver,
+  directOpenAiCompatibleResolver,
   openAiCompatibleResolver,
   openAiResolver,
+  openRouterResolver,
 } from './resolvers.js'
 export {
   cloudflareRestBaseUrl,
@@ -47,7 +49,9 @@ export {
   OPENAI_BASE_URL,
   OPENAI_COMPATIBLE_PROVIDERS,
   OPENROUTER_BASE_URL,
+  openRouterDataCollectionFrom,
   OPERATOR_HOSTED_GATEWAYS,
+  type OpenRouterDataCollection,
   QWEN_BASE_URL,
   resolveOpenAiCompatibleBaseUrl,
   type DirectProvider,
@@ -56,6 +60,13 @@ export {
   UI_CONFIGURABLE_DIRECT_PROVIDERS,
   XAI_BASE_URL,
 } from './endpoints.js'
+export {
+  gatewayRequestParams,
+  readCompletionGatewayReport,
+  readMetadataGatewayReport,
+  reportsGatewayAttribution,
+  type GatewayCallReport,
+} from './gateway-attribution.js'
 export {
   type CachePolicy,
   type InputTokenClasses,

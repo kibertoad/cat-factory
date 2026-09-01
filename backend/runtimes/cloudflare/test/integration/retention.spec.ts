@@ -108,6 +108,8 @@ function llmMetric(id: string, createdAt: number, ws: string) {
     promptHash: '',
     responseText: 'ok',
     reasoningText: '',
+    reportedCostUsd: null,
+    upstreamProvider: null,
   }
 }
 

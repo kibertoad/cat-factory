@@ -20,6 +20,7 @@ import {
   runBestEffort,
 } from '@cat-factory/kernel'
 import { reportsOwnLlmCalls } from './cli-inline.js'
+import { readMetadataGatewayReport, type GatewayCallReport } from './gateway-attribution.js'
 import { wrapModelPreservingMarkers } from './model-markers.js'
 
 /**
@@ -346,6 +347,8 @@ export class InstrumentedModelProvider implements ModelProvider {
       this.scopeExecutionId ? { executionId: this.scopeExecutionId } : {},
     )
     const usage = readUsage((result as { usage?: unknown })?.usage)
+    // Only a SETTLED call can carry a gateway report; a throw has no result to read one off.
+    const gateway = ok ? readMetadataGatewayReport(result) : {}
     const finishReason = ok ? readFinishReason(result) : null
     // The recorder is the richer exit AND owns the sink fan-out, so a workspace-scoped call
     // takes it and stops. An un-tagged call (`workspaceId: null`) has no workspace to file a
@@ -360,6 +363,7 @@ export class InstrumentedModelProvider implements ModelProvider {
         params,
         result,
         usage,
+        gateway,
         durationMs: Math.max(0, endedAt - startedAt),
         finishReason,
         ok,
@@ -430,6 +434,7 @@ export class InstrumentedModelProvider implements ModelProvider {
       params: unknown
       result: unknown
       usage: ReturnType<typeof readUsage>
+      gateway: GatewayCallReport
       durationMs: number
       finishReason: string | null
       ok: boolean
@@ -459,6 +464,10 @@ export class InstrumentedModelProvider implements ModelProvider {
           durationMs: call.durationMs,
           ok,
           errorMessage: call.errMessage,
+          ...(call.gateway.cost === undefined ? {} : { reportedCostUsd: call.gateway.cost }),
+          ...(call.gateway.upstream === undefined
+            ? {}
+            : { upstreamProvider: call.gateway.upstream }),
           // Thunks: the service resolves a body only after its gate says it will be stored,
           // so a prompts-off deployment never serialises a prompt array it then drops.
           promptText: () => safeJson((params as { prompt?: unknown })?.prompt),

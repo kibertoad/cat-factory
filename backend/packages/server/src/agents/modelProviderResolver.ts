@@ -6,6 +6,7 @@ import {
   type VendorConcurrencyLimiter,
   type WorkspaceBodiesGate,
   anthropicResolver,
+  directOpenAiCompatibleResolver,
   limitModelProvider,
   openAiCompatibleResolver,
   openAiResolver,
@@ -43,6 +44,12 @@ export interface ScopedModelProviderOptions {
   baseUrlFor: (provider: string) => string | undefined
   /** Opt-in registries that need no DB key — the Cloudflare lib + Bedrock. */
   extraRegistries?: ProviderRegistry[]
+  /**
+   * Whether OpenRouter may route to an upstream that retains prompts
+   * (`OPENROUTER_DATA_COLLECTION`). Absent ⇒ `deny`, the platform's default rather than the
+   * vendor's; see `openRouterResolver`.
+   */
+  openRouterDataCollection?: 'allow' | 'deny'
   /**
    * The initiating user's locally-run model endpoints (Ollama / LM Studio / …) so inline
    * LLM calls reach them like the proxied path. Keyless by design (the endpoint carries an
@@ -102,11 +109,12 @@ export function createScopedModelProviderResolver(
         for (const provider of providers) {
           try {
             const leased = await opts.apiKeys.lease(scope.workspaceId, provider, poolOpts)
-            registry[provider] = buildDirectResolver(
-              provider,
-              leased.secret,
-              opts.baseUrlFor(provider),
-            )
+            registry[provider] = buildDirectResolver(provider, leased.secret, {
+              baseURL: opts.baseUrlFor(provider),
+              ...(opts.openRouterDataCollection
+                ? { openRouterDataCollection: opts.openRouterDataCollection }
+                : {}),
+            })
           } catch (e) {
             // One provider's key failing to lease/decrypt (e.g. sealed under a rotated
             // ENCRYPTION_KEY, or missing a base URL) must NOT sink the whole scoped provider:
@@ -248,12 +256,21 @@ function unusableProviderResolver(error: unknown): ModelResolver {
   }
 }
 
-/** Build the AI-SDK resolver for one direct provider given a leased key + base URL. */
+/**
+ * Build the AI-SDK resolver for one direct provider given a leased key + base URL.
+ *
+ * The OpenAI-compatible half DELEGATES to `directOpenAiCompatibleResolver` rather than calling
+ * `openAiCompatibleResolver` itself, so this path and the deployment-level `baseProviderRegistry`
+ * make the same OpenRouter-vs-generic decision. Two call sites choosing separately is how one
+ * of them would keep the generic client, and the symptom of that is not an error: OpenRouter
+ * answers fine, it just stops reporting its own cost and upstream on whichever path missed out.
+ */
 function buildDirectResolver(
   provider: string,
   apiKey: string,
-  baseURL: string | undefined,
+  opts: { baseURL: string | undefined; openRouterDataCollection?: 'allow' | 'deny' },
 ): ModelResolver {
+  const { baseURL } = opts
   if (provider === 'openai') return openAiResolver({ apiKey, baseURL })
   if (provider === 'anthropic') return anthropicResolver({ apiKey, baseURL })
   // qwen / deepseek / moonshot / xai / openrouter / bifrost / litellm expose an OpenAI-compatible
@@ -263,5 +280,10 @@ function buildDirectResolver(
   if (!baseURL) {
     throw new Error(openAiCompatibleBaseUrlError(provider))
   }
-  return openAiCompatibleResolver({ name: provider, apiKey, baseURL })
+  return directOpenAiCompatibleResolver(provider, apiKey, {
+    baseURL,
+    ...(opts.openRouterDataCollection
+      ? { openRouterDataCollection: opts.openRouterDataCollection }
+      : {}),
+  })
 }

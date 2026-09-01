@@ -28,10 +28,35 @@ export const openRouterModelMetaSchema = v.object({
   name: nameSchema,
   /** Total context window (input + output tokens), when reported. */
   contextLength: v.optional(v.number()),
-  /** Input price per 1M tokens, in the spend currency. */
+  /** Input price per 1M FRESH (uncached) tokens, in the spend currency. */
   inputPerMillion: v.number(),
   /** Output price per 1M tokens, in the spend currency. */
   outputPerMillion: v.number(),
+  /**
+   * Price per 1M input tokens served from the upstream's prompt cache, when OpenRouter
+   * publishes one (`pricing.input_cache_read`).
+   *
+   * Optional and MEANINGFUL when absent: the spend table's `CACHE_READ_MULTIPLIER` derives a
+   * 0.1x fallback, so an omitted rate is "estimate it" while a present one is "this is what the
+   * gateway charges". A cache read and a cache write are priced an order of magnitude apart in
+   * opposite directions, so folding either into {@link inputPerMillion} would make a run riding
+   * a warm cache and one thrashing it cost the same on paper.
+   */
+  cachedInputPerMillion: v.optional(v.number()),
+  /** Price per 1M input tokens WRITTEN into the upstream's cache, when published. */
+  cacheWritePerMillion: v.optional(v.number()),
+  /**
+   * The date this model endpoint is withdrawn (`pricing`-adjacent `expiration_date`), verbatim
+   * as OpenRouter states it. Carried rather than acted on: a pinned slug that stops being served
+   * fails SILENTLY (the route just answers something else), so the one place that fact exists
+   * has to keep it.
+   */
+  expirationDate: v.optional(v.string()),
+  /**
+   * OpenRouter's permanent slug for this model (`canonical_slug`), when it differs from `id`.
+   * `id` is the addressable route and may be re-pointed; this is what survives.
+   */
+  canonicalSlug: v.optional(slugSchema),
 })
 export type OpenRouterModelMeta = v.InferOutput<typeof openRouterModelMetaSchema>
 

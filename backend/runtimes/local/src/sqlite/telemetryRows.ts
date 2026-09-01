@@ -51,6 +51,8 @@ export interface MetricRow {
   phase: string
   turn_index: number | null
   spend_only: number
+  reported_cost_usd: number | null
+  upstream_provider: string | null
 }
 
 export function rowToMetric(row: MetricRow): LlmCallMetric {
@@ -86,6 +88,8 @@ export function rowToMetric(row: MetricRow): LlmCallMetric {
     phase: row.phase,
     turnIndex: row.turn_index,
     spendOnly: row.spend_only === 1,
+    reportedCostUsd: row.reported_cost_usd,
+    upstreamProvider: row.upstream_provider,
   }
 }
 
