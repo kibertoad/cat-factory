@@ -24,6 +24,7 @@ import {
   createClarityModule,
   createDocInterviewService,
   createForkChatService,
+  createEnvironmentInvestigator,
   createJudgeAssessor,
   createKaizenModule,
   createRequirementsModule,
@@ -137,6 +138,9 @@ export function createEngineCollaborators(input: EngineCollaboratorsInput) {
   // The judge assessor rides the same inline model deps as the reviewers, so a facade that
   // wired a model gets working judges with no judge-specific wiring (see the tracker's D-notes).
   const judgeAssessor = createJudgeAssessor(dependencies)
+  // Same deal for the environment investigation, and for the same reason: a facade that wired a
+  // model gets a working diagnosis of a failed provision with no investigation-specific wiring.
+  const environmentInvestigator = createEnvironmentInvestigator(dependencies)
   const clarity = modules.build('clarity', () =>
     createClarityModule(dependencies, notifications?.service),
   )
@@ -171,6 +175,7 @@ export function createEngineCollaborators(input: EngineCollaboratorsInput) {
     docInterview,
     forkChat,
     judgeAssessor,
+    environmentInvestigator,
     clarity,
     brainstorm,
     kaizen,

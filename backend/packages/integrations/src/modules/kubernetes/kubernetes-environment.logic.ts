@@ -185,7 +185,11 @@ export function namespaceUrl(config: KubernetesConnectionConfig, name?: string):
  * group/version; the kind's plural comes from the built-in allow-list.
  */
 export function resourceUrl(
-  config: KubernetesEnvironmentConfig,
+  // The CONNECTION shape, like {@link namespaceUrl}: this only ever reads `apiServerUrl`, and
+  // typing it against the full config would keep the diagnostic + reclaim paths (which parse only
+  // what it takes to REACH a cluster, so a stale provisioning half cannot strand them) from
+  // addressing a resource at all.
+  config: KubernetesConnectionConfig,
   apiVersion: string,
   kind: string,
   namespace: string,

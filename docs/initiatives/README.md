@@ -70,6 +70,7 @@ a tracker document](../../CLAUDE.md).
 - [Connections between services](./service-connections.md)
 - [Custom test-infrastructure provider autodetection](./custom-provider-autodetection.md)
 - [Descriptor-driven infrastructure connect forms](./descriptor-driven-infra-forms.md)
+- [Environment investigation (diagnose a provision no checkout edit can fix)](./environment-investigation.md)
 - [Inline harness execution + preset satisfiability gate](./inline-harness-and-preset-satisfiability.md)
 - [Mothership mode for local mode](./mothership-mode.md) ·
   [against a Cloudflare mothership](./mothership-cloudflare-host-gaps.md)

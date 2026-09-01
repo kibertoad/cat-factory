@@ -9,6 +9,7 @@ import { agentMaxOutputTokensSchema } from './agent-settings.js'
 import { binaryOutputConfigSchema } from './binary-outputs.js'
 import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from './consensus.js'
 import { deployFixConfigSchema } from './deploy-fix.js'
+import { environmentInvestigationConfigSchema } from './environment-investigation.js'
 import { cloudProviderSchema, instanceSizeSchema } from './compute-provisioning.js'
 import { serviceProvisioningSchema } from './environments.js'
 import { documentSourceKindSchema } from './documents.js'
@@ -882,6 +883,13 @@ export const stepOptionsSchema = v.object({
    * with DEFAULT_DEPLOY_FIX_MAX_ATTEMPTS. Ignored on every other kind.
    */
   deployFix: v.optional(deployFixConfigSchema),
+  /**
+   * deployer steps only. How a provisioning failure NO checkout edit can address is investigated:
+   * whether the platform diagnoses it at all, how many rounds it gets, and whether a verdict may
+   * act on the environment or only report. Absent means the loop runs with
+   * DEFAULT_ENVIRONMENT_INVESTIGATION_MAX_ATTEMPTS and may act. Ignored on every other kind.
+   */
+  environmentInvestigation: v.optional(environmentInvestigationConfigSchema),
   /**
    * This step's GATE configuration: who may resolve its human approval gate and how many of
    * them must, plus the parameters of the registered gate its kind runs (see

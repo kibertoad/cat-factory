@@ -77,6 +77,7 @@ import type {
   InitiativeRepository,
   IssueProjectionRepository,
   IssueWritebackProvider,
+  EnvironmentInvestigator,
   JudgeAssessor,
   JudgeRegistry,
   KaizenGradingRepository,
@@ -337,6 +338,14 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    * deterministic verdict. Absent/disabled ⇒ every judge step is a pass-through.
    */
   judgeAssessor?: JudgeAssessor
+  /**
+   * Override for the inline environment investigation, the seam beside
+   * {@link CoreDependencies.judgeAssessor}: `createCore` builds
+   * `EnvironmentInvestigationService` from the model-provider dependencies the facade already
+   * wires, so an investigation needs no per-facade wiring; a harness injects a deterministic
+   * verdict through this instead.
+   */
+  environmentInvestigator?: EnvironmentInvestigator
   /**
    * The ranking producer behind the interactive bug hunt. Optional for the same reason as
    * {@link CoreDependencies.judgeAssessor}: `createCore` builds the inline

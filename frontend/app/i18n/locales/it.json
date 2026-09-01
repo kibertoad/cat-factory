@@ -6900,6 +6900,7 @@
       "teardown": "Smantellamento",
       "teardown-verify": "Verifica dello smantellamento",
       "status": "Controllo dello stato",
+      "remediate": "Riparazione sul posto",
       "dispatch": "Avvio",
       "release": "Smantellamento",
       "poll-failure": "Controllo dello stato di salute"

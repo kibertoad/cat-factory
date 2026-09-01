@@ -375,8 +375,10 @@ function assertComparableCandidates(kind: string, config: BinaryOutputConfig): v
  * role, so the step would run a Coder told to be a reviewer and the output would look like a model
  * failure rather than a configuration error.
  *
- * The third is {@link INLINE_ENGINE_SYSTEM_PROMPTS} — the requirements + clarity reviewers, both
- * brainstorm stages and their rework editors. `IterativeReviewService` drives those as bare inline
+ * The third is {@link INLINE_ENGINE_SYSTEM_PROMPTS}: the requirements + clarity reviewers, both
+ * brainstorm stages, their rework editors, and the environment investigator (which is not
+ * authorable as a step at all, so the refusal is vacuous for it and stated for the same reason the
+ * taxonomy lists it). `IterativeReviewService` drives those as bare inline
  * calls and composes their prompt from (workspace, kind) with no STEP in hand, so a variant
  * selected on one of them cannot reach the model at all. Refusing it is the honest disposition
  * until that path can resolve a step: a per-workspace prompt override is what varies those kinds

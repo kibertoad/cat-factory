@@ -6900,6 +6900,7 @@
       "teardown": "Abbauen",
       "teardown-verify": "Abbau-Prüfung",
       "status": "Statusprüfung",
+      "remediate": "Reparatur vor Ort",
       "dispatch": "Hochfahren",
       "release": "Abbauen",
       "poll-failure": "Health-Check"

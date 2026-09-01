@@ -1,4 +1,4 @@
-import type { Clock, ConnectionTestResult, IdGenerator } from '@cat-factory/kernel'
+import type { Clock, ConnectionTestResult, IdGenerator, Logger } from '@cat-factory/kernel'
 import type {
   EnvironmentConnectionRecord,
   EnvironmentRecord,
@@ -22,6 +22,8 @@ import type {
   ResolveRunRepoContext,
   RunnerDispatchKind,
   RunnerDispatchOptions,
+  ProvisioningLogRecord,
+  ProviderRemediationAction,
   RunnerJobRef,
   RunnerJobView,
   RunRepoContext,
@@ -51,6 +53,12 @@ import {
   stringifyProviderConfig,
 } from './environments.logic.js'
 import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningLogService.js'
+import {
+  createEnvironmentDiagnostics,
+  type EnvironmentDiagnostics,
+  type EnvironmentEvidence,
+  type EnvironmentFailureFacts,
+} from './environmentDiagnostics.js'
 
 // EnvironmentProvisioningService: orchestrates provisioning an environment from a
 // workspace's registered provider. Deterministic and side-effecting via the
@@ -74,6 +82,19 @@ export interface EnvironmentProvisioningServiceDependencies {
   urlPolicy?: UrlSafetyPolicy
   /** Best-effort provisioning-event log; absent ⇒ provisioning is unchanged. */
   provisioningLog?: ProvisioningLogRecorder
+  /** Kernel logger for the diagnostic reads' best-effort degradations; absent ⇒ silent. */
+  logger?: Logger
+  /**
+   * READ side of that same log, for the environment investigation's timeline: the one place a
+   * failed provision's own history can be lined up against the provider's timestamps, which is how
+   * the motivating incident was diagnosed by hand. Separate from {@link provisioningLog} because
+   * the write seam is deliberately best-effort and write-only. Absent ⇒ the timeline carries the
+   * registry row's dates alone.
+   */
+  readProvisioningLog?: (
+    workspaceId: string,
+    executionId: string,
+  ) => Promise<ProvisioningLogRecord[]>
   /**
    * Resolve the VCS-neutral, run-repo-bound RepoFiles for a block, so provisioning can
    * pre-flight `provider.validateRepo` BEFORE calling the provider — failing fast with a
@@ -269,10 +290,36 @@ export class EnvironmentProvisioningService {
   /** Seals/opens the environment ciphers, through the mothership when this node holds no org key. */
   private readonly orgSecrets: OrgSecretCipher
 
+  /** The forensic reads, behind the thin delegates at the bottom of this class. */
+  private readonly diagnostics: EnvironmentDiagnostics
+
   constructor(private readonly deps: EnvironmentProvisioningServiceDependencies) {
     this.orgSecrets = createOrgSecretCipher({
       cipher: deps.secretCipher,
       ...(deps.secretDelegate ? { delegate: deps.secretDelegate } : {}),
+    })
+    this.diagnostics = createEnvironmentDiagnostics({
+      readRecord: (workspaceId, id) => deps.environmentRegistryRepository.get(workspaceId, id),
+      resolveProvider: (record) => deps.connectionService.resolveProviderForRecord(record),
+      decryptFields: (record) => this.decryptFields(record),
+      // The `remediate` row rides the same write seam every other environment verb uses, mapped
+      // here rather than in the collaborator so the log's shape stays known in one place.
+      recordRemediation: async (row) => {
+        await deps.provisioningLog?.record({
+          workspaceId: row.workspaceId,
+          subsystem: 'environment',
+          operation: 'remediate',
+          targetId: row.environmentId,
+          providerId: row.providerId,
+          blockId: row.blockId,
+          executionId: row.executionId,
+          outcome: row.outcome,
+          error: row.error,
+          detail: row.detail,
+        })
+      },
+      ...(deps.readProvisioningLog ? { listProvisioningLog: deps.readProvisioningLog } : {}),
+      ...(deps.logger ? { logger: deps.logger } : {}),
     })
   }
 
@@ -1284,6 +1331,30 @@ export class EnvironmentProvisioningService {
       record.accessCipher,
     )
     return JSON.parse(plaintext) as EnvironmentAccessHandle
+  }
+
+  /**
+   * Gather the forensic evidence about an environment that never became usable: the registry
+   * row, the WHOLE captured provision-field bag, the run's provisioning attempts, and the
+   * provider's own diagnosis where it implements one, plus what that same resolved provider says
+   * it will remediate. Thin delegate; the reads live in {@link createEnvironmentDiagnostics}.
+   */
+  async collectEnvironmentEvidence(args: {
+    workspaceId: string
+    environmentId: string | null
+    executionId?: string
+    failure: EnvironmentFailureFacts
+  }): Promise<EnvironmentEvidence> {
+    return this.diagnostics.collect(args)
+  }
+
+  /** Ask the provider to remediate an environment in place. Thin delegate. */
+  async remediateEnvironment(args: {
+    workspaceId: string
+    environmentId: string
+    action: ProviderRemediationAction
+  }): Promise<{ applied: boolean; detail: string }> {
+    return this.diagnostics.remediate(args)
   }
 
   /** Open a stored environment's provision fields: the row-addressed sibling of the above. */

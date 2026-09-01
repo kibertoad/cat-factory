@@ -23,6 +23,7 @@ import type {
   InitiativePresetRegistry,
   InitiativeRepository,
   IssueWritebackProvider,
+  EnvironmentInvestigator,
   JudgeAssessor,
   JudgeRegistry,
   LocalModelDeclarationsCacheValue,
@@ -160,6 +161,11 @@ export interface ExecutionServiceDependencies {
    */
   judgeRegistry: JudgeRegistry
   judgeAssessor?: JudgeAssessor
+  /**
+   * The inline diagnosis behind the deployer's environment-investigation loop; see
+   * {@link RunDispatcherDependencies.environmentInvestigator}.
+   */
+  environmentInvestigator?: EnvironmentInvestigator
   /**
    * The app-owned step-completion-resolver registry (deployment-registered resolvers),
    * threaded to the dispatcher. `createCore` defaults it to `defaultStepResolverRegistry()`.

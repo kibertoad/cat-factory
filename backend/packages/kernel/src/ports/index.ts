@@ -557,6 +557,25 @@ export type {
   RepairAgentRequest,
   RepairAgentSpec,
 } from './environment-provider.js'
+export type {
+  EnvironmentDiagnosis,
+  EnvironmentDiagnosticFact,
+  EnvironmentDiagnosticGap,
+  EnvironmentDiagnosticLog,
+  EnvironmentDiagnosticsCapability,
+  EnvironmentRemediationOutcome,
+  EnvironmentRemediationRequest,
+  ProviderRemediationAction,
+} from './environment-diagnostics.js'
+export type {
+  EnvironmentEvidenceBundle,
+  EnvironmentFailureFacts,
+  EnvironmentInvestigationSubject,
+  EnvironmentInvestigator,
+  EnvironmentReadinessWaitKind,
+  EnvironmentRecordFacts,
+  EnvironmentTimelineEntry,
+} from './environment-investigation.js'
 export type { PreflightProbeOutcome, PreflightHostProbes } from './preflight.js'
 export { type UrlSafetyPolicy, STRICT_URL_SAFETY_POLICY } from './url-safety-policy.js'
 export type {

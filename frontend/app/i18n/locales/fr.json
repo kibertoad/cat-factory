@@ -6319,6 +6319,7 @@
       "teardown": "Démanteler",
       "teardown-verify": "Vérification du démantèlement",
       "status": "Vérification de l'état",
+      "remediate": "Réparation sur place",
       "dispatch": "Démarrer",
       "release": "Démanteler",
       "poll-failure": "Contrôle de santé"

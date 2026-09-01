@@ -1,6 +1,8 @@
+import { ENVIRONMENT_INVESTIGATOR_AGENT_KIND } from '@cat-factory/contracts'
 import type { BespokeSystemPrompt } from './bespoke.js'
 import { REVIEW_PROMPT, REWORK_PROMPT, WRITER_PROMPT } from './requirements.js'
 import { CLARITY_REVIEW_PROMPT, CLARITY_REWORK_PROMPT } from './clarity.js'
+import { ENVIRONMENT_INVESTIGATION_PROMPT } from './environment-investigation.js'
 import {
   ARCHITECTURE_BRAINSTORM_PROMPT,
   ARCHITECTURE_BRAINSTORM_REWORK_PROMPT,
@@ -43,4 +45,10 @@ export const INLINE_ENGINE_SYSTEM_PROMPTS: Readonly<Record<string, BespokeSystem
   [REQUIREMENTS_BRAINSTORM_REWORK_AGENT_KIND]: REQUIREMENTS_BRAINSTORM_REWORK_PROMPT,
   'architecture-brainstorm': ARCHITECTURE_BRAINSTORM_PROMPT,
   [ARCHITECTURE_BRAINSTORM_REWORK_AGENT_KIND]: ARCHITECTURE_BRAINSTORM_REWORK_PROMPT,
+  // Not a pipeline STEP: the deployer's failure path drives it, exactly as it drives the
+  // `deploy-fixer`. It belongs here all the same, because what makes a kind a member of this map
+  // is that its prompt is sent by a SERVICE rather than composed by `systemPromptFor`, which is
+  // the seam that both applies a workspace override and re-appends what an override may not
+  // delete.
+  [ENVIRONMENT_INVESTIGATOR_AGENT_KIND]: ENVIRONMENT_INVESTIGATION_PROMPT,
 }
