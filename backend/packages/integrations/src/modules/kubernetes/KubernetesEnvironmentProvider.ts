@@ -237,6 +237,9 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     const config = this.parseConfig(req.manifest)
     const namespace = req.provisionFields.namespace ?? req.externalId
     if (!namespace) {
+      // Nothing to read a status FROM, and it says that rather than leaving the caller to record
+      // its generic fallback: an environment with no namespace on it is a provision that never
+      // got far enough to make one, which is a different thing from a namespace that failed.
       return {
         externalId: null,
         url: null,
@@ -244,6 +247,9 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
         expiresAt: null,
         access: null,
         fields: {},
+        error:
+          'this environment record carries no namespace, so there is nothing in the cluster to ' +
+          'read its status from: the provision never got as far as creating one.',
       }
     }
     const client = this.makeClient(config, req.resolveSecret)
@@ -305,6 +311,10 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
       // Present only while the rollout is outstanding, and re-derived from THIS read every poll,
       // so it can never outlive the state it describes.
       ...(rollout.note ? { statusNote: rollout.note } : {}),
+      // The other half of the same rule, for the verdict that is a fault: without it a rollout
+      // that gave up on a NAMED workload was persisted as the generic 'Provisioning failed'
+      // fallback, which is the defect the note exists to fix, one status over.
+      ...(rollout.error ? { error: rollout.error } : {}),
     }
   }
 
@@ -774,14 +784,25 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     client: KubernetesApiClient,
     config: KubernetesEnvironmentConfig,
     namespace: string,
-  ): Promise<{ status: EnvironmentStatus; note?: string }> {
+  ): Promise<{ status: EnvironmentStatus; note?: string; error?: string }> {
     const res = await client.fetch(
       'GET',
       resourceUrl(config, 'apps/v1', 'Deployment', namespace),
       undefined,
       READ_TIMEOUT_MS,
     )
-    if (res.status === 404) return { status: 'failed' }
+    // A 404 on the namespace's own collection means the namespace is gone. It SAYS so, because
+    // the alternative is what the caller records with nothing to record: the literal
+    // 'Provisioning failed' on an environment that was in fact deleted out from under the run.
+    if (res.status === 404) {
+      return {
+        status: 'failed',
+        error:
+          `namespace '${namespace}' no longer exists: the apiserver answered 404 for its ` +
+          'Deployment list, so whatever stood this environment up has been deleted (a TTL ' +
+          'reclaim, a manual cleanup, or a provision that never created it).',
+      }
+    }
     // A credential / permission error (the apiserver rejecting the token, or the
     // ServiceAccount lacking RBAC to read Deployments) will NEVER self-heal — so surface it as a
     // hard failure (the caller's `refreshStatus` logs it to the provisioning log and the gate

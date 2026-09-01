@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Block, KubernetesEnvironmentConfig, KubernetesUrlSource } from '@cat-factory/kernel'
 import { describeWildcardDnsShift, frontendOriginsForService } from '@cat-factory/contracts'
-import { classifyDeploymentReadiness, reduceRolloutProgress } from './kubernetes.logic.js'
+import { reduceRolloutProgress } from './kubernetes.logic.js'
 import {
   deriveUrl,
   describeUnreachableIngressHost,
@@ -218,32 +218,6 @@ describe('isManifestFile', () => {
   })
 })
 
-describe('classifyDeploymentReadiness', () => {
-  it('is ready when availableReplicas meets the desired count', () => {
-    expect(
-      classifyDeploymentReadiness({ spec: { replicas: 2 }, status: { availableReplicas: 2 } }),
-    ).toBe('ready')
-  })
-  it('is pending while rolling out', () => {
-    expect(
-      classifyDeploymentReadiness({ spec: { replicas: 2 }, status: { availableReplicas: 1 } }),
-    ).toBe('pending')
-  })
-  it('is gone on a terminal ProgressDeadlineExceeded', () => {
-    expect(
-      classifyDeploymentReadiness({
-        spec: { replicas: 1 },
-        status: {
-          availableReplicas: 0,
-          conditions: [
-            { type: 'Progressing', status: 'False', reason: 'ProgressDeadlineExceeded' },
-          ],
-        },
-      }),
-    ).toBe('gone')
-  })
-})
-
 describe('reduceRolloutProgress', () => {
   const rolling = (name: string) => ({
     metadata: { name },
@@ -254,6 +228,22 @@ describe('reduceRolloutProgress', () => {
     metadata: { name },
     spec: { replicas: 2 },
     status: { availableReplicas: 2 },
+  })
+
+  it('reads each Deployment as landed, rolling out, or given up on', () => {
+    // The per-Deployment classification, asserted through the reduction that owns it rather than
+    // through the classifier directly: the aggregation and the prose belong to this function, and
+    // a caller that reached past it for the raw verdict is what left a failed rollout unnamed.
+    expect(reduceRolloutProgress([landed('web')]).status).toBe('ready')
+    expect(reduceRolloutProgress([rolling('api')]).status).toBe('provisioning')
+    // Intentionally scaled to nothing: there is no replica to wait for.
+    expect(
+      reduceRolloutProgress([
+        { metadata: { name: 'cron' }, spec: { replicas: 0 }, status: { availableReplicas: 0 } },
+      ]).status,
+    ).toBe('ready')
+    // A Deployment the controller has not written a status onto yet is still coming, not failed.
+    expect(reduceRolloutProgress([{ metadata: { name: 'api' } }]).status).toBe('provisioning')
   })
 
   it('says WHICH workloads a provisioning verdict is waiting on', () => {
@@ -288,24 +278,31 @@ describe('reduceRolloutProgress', () => {
   })
 
   it('carries no note on a verdict that is not a wait', () => {
-    // A note is for the state that has something outstanding. `ready` has nothing left to say,
-    // and a `failed` rollout's account is the error channel's job, not this one's.
+    // A note is for the state that has something outstanding, and `ready` has nothing left to say.
     expect(reduceRolloutProgress([])).toEqual({ status: 'ready' })
     expect(reduceRolloutProgress([landed('web')])).toEqual({ status: 'ready' })
-    expect(
-      reduceRolloutProgress([
-        {
-          metadata: { name: 'api' },
-          spec: { replicas: 1 },
-          status: {
-            availableReplicas: 0,
-            conditions: [
-              { type: 'Progressing', status: 'False', reason: 'ProgressDeadlineExceeded' },
-            ],
-          },
+  })
+
+  it('names the workload a failed rollout gave up on, in the error channel', () => {
+    // The fault half of the same argument as the note: this reduction is the only reader holding
+    // the failed Deployment's identity, and its caller records `lastError` with a generic
+    // 'Provisioning failed' fallback. Dropped here, the name is unrecoverable downstream.
+    const verdict = reduceRolloutProgress([
+      {
+        metadata: { name: 'api' },
+        spec: { replicas: 1 },
+        status: {
+          availableReplicas: 0,
+          conditions: [
+            { type: 'Progressing', status: 'False', reason: 'ProgressDeadlineExceeded' },
+          ],
         },
-      ]),
-    ).toEqual({ status: 'failed' })
+      },
+    ])
+    expect(verdict.status).toBe('failed')
+    expect(verdict.note).toBeUndefined()
+    expect(verdict.error).toContain("'api'")
+    expect(verdict.error).toContain('progress deadline')
   })
 })
 
@@ -540,7 +537,13 @@ describe('ingress admission', () => {
       const facts = [{ requestedClass: 'nginx', hasAddress: false }]
       expect(
         classifyIngressAdmission(facts, { read: true, names: ['nginx'], defaultName: null }),
-      ).toMatchObject({ status: 'pending' })
+      ).toEqual({
+        status: 'pending',
+        // The detail is asserted, not merely tolerated: this branch and the no-Ingress one both
+        // answer `pending` and mean different waits, and the note is what a person watching the
+        // wait is shown.
+        detail: expect.stringContaining('no controller has written'),
+      })
     })
 
     it('still refuses the CLASSLESS Ingress in a chain whose sibling names a real class', () => {
@@ -575,7 +578,10 @@ describe('ingress admission', () => {
 
     it('is PENDING for a classless Ingress the default class will claim', () => {
       const facts = [{ requestedClass: null, hasAddress: false }]
-      expect(classifyIngressAdmission(facts, traefik)).toMatchObject({ status: 'pending' })
+      expect(classifyIngressAdmission(facts, traefik)).toEqual({
+        status: 'pending',
+        detail: expect.stringContaining('no controller has written'),
+      })
     })
 
     it('is PENDING when the namespace declares no Ingress, since a Gateway may serve the host', () => {

@@ -745,6 +745,7 @@ describe('composeRunOutcome: where to go and look', () => {
         frameId: 'frm_own',
         environmentId: 'env_1',
         detail: null,
+        detailKind: null,
       },
       {
         url: null,
@@ -755,6 +756,7 @@ describe('composeRunOutcome: where to go and look', () => {
         frameId: 'frm_peer',
         environmentId: null,
         detail: 'helm release timed out',
+        detailKind: 'fault',
       },
     ])
   })
@@ -832,6 +834,7 @@ describe('composeRunOutcome: where to go and look', () => {
         frameId: null,
         environmentId: 'env_1',
         detail: null,
+        detailKind: null,
       },
     ])
   })
@@ -998,6 +1001,9 @@ describe('composeRunOutcome: where to go and look', () => {
       origin: 'projected',
       environmentId: 'env_1',
       detail: 'the deploy job is queued behind 3 others',
+      // LABELLED as a note. The card renders one detail slot for both channels, so without this
+      // a reader cannot tell "wait for it" from "fix it", and the two read identically as prose.
+      detailKind: 'note',
     })
   })
 
@@ -1015,7 +1021,7 @@ describe('composeRunOutcome: where to go and look', () => {
         }),
       ]),
     )
-    expect(rows[0]).toMatchObject({ detail: 'quota exceeded' })
+    expect(rows[0]).toMatchObject({ detail: 'quota exceeded', detailKind: 'fault' })
   })
 
   it('reports a gate’s own environment, which no deployer frame keys', () => {
@@ -1037,6 +1043,7 @@ describe('composeRunOutcome: where to go and look', () => {
         frameId: null,
         environmentId: 'env_h',
         detail: null,
+        detailKind: null,
       },
     ])
   })

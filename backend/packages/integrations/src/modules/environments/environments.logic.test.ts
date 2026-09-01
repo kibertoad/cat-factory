@@ -5,6 +5,7 @@ import { assertSafeAtlassianBaseUrl } from '@cat-factory/kernel'
 import { frontendOriginsForService } from '@cat-factory/contracts'
 import {
   assertSafeEnvironmentUrl,
+  boundStatusNote,
   describeMisresolvingEnvironmentUrl,
   type EnvironmentIdentity,
   interpolateTemplate,
@@ -266,5 +267,31 @@ describe('describeMisresolvingEnvironmentUrl', () => {
   it('leaves an unparseable URL to the policy that already refuses it', () => {
     // Answering here would put a DNS note in front of a failure that is not about DNS.
     expect(describeMisresolvingEnvironmentUrl('not a url')).toBeNull()
+  })
+})
+
+describe('boundStatusNote', () => {
+  it('trims, and reads a blank note as nothing said', () => {
+    expect(boundStatusNote('  the deploy job is queued  ')).toBe('the deploy job is queued')
+    expect(boundStatusNote('   ')).toBeNull()
+    expect(boundStatusNote(null)).toBeNull()
+    expect(boundStatusNote(undefined)).toBeNull()
+  })
+
+  it('leaves an ordinary note byte-for-byte alone', () => {
+    // The built-in notes are one sentence; the cap exists for a third-party adapter, and it may
+    // not touch the shape a provider actually writes.
+    const note = "2 of 3 Deployments are still rolling out: 'api', 'worker'"
+    expect(boundStatusNote(note)).toBe(note)
+  })
+
+  it('bounds a provider that answers with a dump, and SAYS it was cut', () => {
+    // A code adapter can return a controller dump or an event list. Stored whole it rides into
+    // the run-failure message, the outcome card and a panel line beside a healthy environment.
+    const bounded = boundStatusNote('x'.repeat(1200))!
+    expect(bounded.length).toBeLessThan(500)
+    // A capped value that trailed off would read as the provider's whole account.
+    expect(bounded).toContain('note truncated: 800 of 1200 characters dropped')
+    expect(bounded.startsWith('x'.repeat(400))).toBe(true)
   })
 })

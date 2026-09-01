@@ -289,6 +289,19 @@ describe('EnvironmentProvisioningService — refreshStatus', () => {
     expect((await service.refreshStatus('ws1', id)).statusNote).toBeNull()
     expect(registry.records[0]!.statusNote).toBeNull()
   })
+
+  it('bounds the note at the write boundary, whatever the adapter answered with', async () => {
+    // The note is provider-authored prose, and a code adapter can answer with a controller dump.
+    // Bounding it HERE covers every reader at once (the panel line, the readiness ceiling's
+    // failure message, the outcome row), which is why the cap is not a rendering concern.
+    const registry = fakeRegistry()
+    const service = makeService(narratesItsProgress(['n'.repeat(900)]), registry)
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+
+    const stored = registry.records[0]!.statusNote!
+    expect(stored.length).toBeLessThan(500)
+    expect(stored).toContain('note truncated')
+  })
 })
 
 describe('EnvironmentProvisioningService — repo-config pre-flight gate', () => {

@@ -381,8 +381,14 @@ export function classifyPodReadiness(pod: unknown): PodReadiness {
   return ready?.status === 'True' ? 'ready' : 'pending'
 }
 
-/** Classify a Deployment's status JSON: rolled out, still progressing, or failed. */
-export function classifyDeploymentReadiness(deployment: unknown): PodReadiness {
+/**
+ * Classify a Deployment's status JSON: rolled out, still progressing, or failed.
+ *
+ * Module-private on purpose: {@link reduceRolloutProgress} owns the aggregation AND the prose a
+ * caller needs, and a caller reaching for the raw per-Deployment verdict is how a note-less
+ * `provisioning` answer got re-derived beside it.
+ */
+function classifyDeploymentReadiness(deployment: unknown): PodReadiness {
   const obj = deployment as
     | { spec?: { replicas?: number }; status?: Record<string, unknown> }
     | null
@@ -424,22 +430,45 @@ const ROLLOUT_NOTE_NAME_CAP = 5
  *
  * The verdict itself is unchanged from the reduction this replaces: no Deployment is `ready`
  * (nothing to roll out), one terminally-failed rollout is `failed`, anything else outstanding is
- * `provisioning`. Only the `provisioning` answer gained prose, because it is the only one whose
- * caller had nowhere to put a cause.
+ * `provisioning`. Both non-`ready` answers carry prose, on the same argument and through the two
+ * channels their caller has: a `provisioning` verdict says what it is WAITING ON (`note`), and a
+ * `failed` one says WHICH workload gave up (`error`). The failed half had the workload's identity
+ * in hand and dropped it, so the environment recorded the literal 'Provisioning failed' for a
+ * failure whose exact name was computed here.
  */
 export function reduceRolloutProgress(items: readonly unknown[]): {
   status: 'ready' | 'provisioning' | 'failed'
   note?: string
+  error?: string
 } {
   if (items.length === 0) return { status: 'ready' } // nothing to roll out (e.g. a static Service)
   const pending: string[] = []
   for (const item of items) {
     const readiness = classifyDeploymentReadiness(item)
-    if (readiness === 'gone') return { status: 'failed' }
+    if (readiness === 'gone') {
+      return { status: 'failed', error: describeFailedRollout(deploymentName(item)) }
+    }
     if (readiness !== 'ready') pending.push(deploymentName(item))
   }
   if (pending.length === 0) return { status: 'ready' }
   return { status: 'provisioning', note: describeRolloutNote(pending, items.length) }
+}
+
+/**
+ * The account of a rollout that gave up: WHICH workload, and where its cause is readable.
+ *
+ * A terminal rollout is the one verdict here whose caller records a `lastError`, and that column
+ * falls back to the literal 'Provisioning failed' when a provider hands it nothing. Naming the
+ * Deployment is what turns the run's failure card, the Environment panel and the outcome row from
+ * "something did not happen" into one workload an operator can open.
+ */
+function describeFailedRollout(name: string): string {
+  return (
+    `the Deployment '${name}' exceeded its rollout progress deadline: its pods never became ` +
+    'available, so the cluster stopped waiting for them. That workload is where the cause is (an ' +
+    'image that cannot be pulled, a container crash-looping, a pod nothing can schedule), not the ' +
+    'namespace as a whole.'
+  )
 }
 
 /** A Deployment's own name, or a stand-in saying the payload carried none. */

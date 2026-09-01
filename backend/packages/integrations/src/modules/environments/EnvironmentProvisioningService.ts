@@ -43,6 +43,7 @@ import {
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
 import {
   assertSafeEnvironmentUrl,
+  boundStatusNote,
   describeMisresolvingEnvironmentUrl,
   type EnvironmentIdentity,
   recordToHandle,
@@ -832,8 +833,9 @@ export class EnvironmentProvisioningService {
       // reporting `provisioning` is exactly the case that has something to explain and no
       // `error` to explain it with (see {@link ProvisionedEnvironment.statusNote}). No fallback
       // literal either: a provider with nothing to add says nothing, which is the prior
-      // behaviour byte for byte.
-      statusNote: provisioned.statusNote?.trim() || null,
+      // behaviour byte for byte. Bounded, because it is prose a third-party adapter authored:
+      // {@link boundStatusNote}.
+      statusNote: boundStatusNote(provisioned.statusNote),
       // The resolved provision type + engine (the per-type path); null on the legacy connection.
       provisionType,
       engine,
@@ -969,7 +971,7 @@ export class EnvironmentProvisioningService {
       // (the same clear-unless-restated rule as `lastError`, applied to every status rather than
       // to `failed` alone). This is the write that makes the readiness ceiling able to name the
       // state a run was stuck in, because every poll that KEEPS a readiness wait alive lands here.
-      statusNote: provisioned.statusNote?.trim() || null,
+      statusNote: boundStatusNote(provisioned.statusNote),
     }
     await this.deps.environmentRegistryRepository.update(workspaceId, id, patch)
 

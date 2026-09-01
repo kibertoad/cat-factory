@@ -81,6 +81,24 @@ describe('judgeEnvironmentReadiness', () => {
     )
   })
 
+  it('states BOTH channels on a timeout that carries both, fault first', () => {
+    // The precedence rule, on the one branch where both can be present: a recorded fault outranks
+    // a note everywhere, and neither may be dropped. Ranking the note first hid `lastError`, and
+    // it is the more specific claim of the two and the only one that is a fault.
+    const verdict = judgeEnvironmentReadiness(
+      {
+        status: 'provisioning',
+        lastError: 'quota exceeded',
+        statusNote: 'the deploy job is queued',
+      },
+      ENVIRONMENT_READY_TIMEOUT_MS,
+    )
+    expect(verdict.kind === 'timed_out' && verdict.error).toBe(
+      'Environment was still provisioning after 20 minutes (readiness ceiling 20 minutes). ' +
+        'Last provider error: quota exceeded Last provider note: the deploy job is queued',
+    )
+  })
+
   it('appends the note to a terminal state rather than letting it stand in for the cause', () => {
     // A note describes the spin-up the environment was in the middle of, so on a state it will
     // never leave it may not become the whole message: nothing here knows that the note is why

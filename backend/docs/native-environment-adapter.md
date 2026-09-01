@@ -113,12 +113,22 @@ Three rules:
   cannot outlive the state it described.
 - **Absent means nothing to add**, which is byte-for-byte the prior behaviour. A provider that
   never sets it keeps exactly today's messages.
+- **It is bounded.** A note is stored capped at 400 characters, with a marker saying how much was
+  dropped, because it renders as one muted line beside an environment that is doing fine (the
+  fault beside it gets its own scrollable block). Write the sentence, not the controller dump.
 
 Where it surfaces: the step's Environment panel while the run is parked, the run outcome's
 environment row, and the `timed_out` failure detail (`Last provider note: …`), which is the message
 a human reads when the ceiling is spent. The built-in Kubernetes adapter is the worked example: it
 names the Deployments that have not finished rolling out, and distinguishes a workload that is still
 coming up from one that is healthy behind an Ingress nothing has routed yet.
+
+**A recorded fault outranks a note on every one of those readers**, so you may set both without
+deciding which wins: where a `failed` status carries an `error`, that error is what a person is
+shown. Which is also the obligation on the other half of the pair. `error` unset on a `failed`
+status is persisted as the literal `Provisioning failed`, and a reader given that sentence learns
+only that something did not happen, so a failure your adapter can NAME should name it (the built-in
+Kubernetes adapter names the workload whose rollout gave up, and says when the namespace is gone).
 
 ### `frontendOrigins`: wiring a bound frontend's CORS
 

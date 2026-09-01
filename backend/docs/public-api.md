@@ -2065,6 +2065,15 @@ applies: a `live` row whose `expiresAt` has passed is one the TTL sweep has recl
 to, so it is not a URL to hand anyone, whatever the row still claims. `retained` does not exempt a
 row from it, since retention is a statement about outliving the RUN, not about outliving the TTL.
 
+**`detail` carries one of two claims, and `detailKind` says which** (`fault` or `note`; both null
+together). A fault is a recorded cause: the provider refused, the deploy broke, the reclaim failed.
+A note is the provider's own account of a state the environment has not left yet, which is the only
+thing a row about a still-building environment has to say, and the commonest row on a live run's
+card. They read identically as prose and a reader acts on the difference, so a client that renders
+`detail` without the kind reports "the deploy job is queued behind 3 others" in the same voice as
+"quota exceeded". Do not derive the kind from `state`: a fault survives onto a `reclaimed` row.
+Added in 1.63.0.
+
 `sources` is the outcome's half of the report's `context`, reduced from the same per-dispatch
 records by the same code, so the card, this endpoint and the pull request cannot disagree about
 which revision a run built from. One row per linked page, carrying the LAST verdict the run

@@ -50,6 +50,32 @@ const ENV_PROJECTION_KINDS = new Set<string>([
   'playwright',
 ])
 
+/**
+ * Whether the environment projection is unchanged, compared over EVERY field it carries.
+ *
+ * Derived from the objects rather than a hand-listed subset, because the list is what went wrong:
+ * a field the projection carried but the comparison did not was projected onto the step and never
+ * emitted, so the panel showed the value from whichever poll last differed on something else. The
+ * note (the one field that moves while an environment comes up), the TTL and the resolved
+ * provision type were each in that position. A field added above now joins the comparison with no
+ * second edit.
+ *
+ * Every field is a primitive (`runEnvironmentSchema` carries no nested object), so identity is
+ * the right comparison; `?? null` folds the absent/null pair, which the two write paths differ on.
+ */
+function sameEnvironmentProjection(
+  a: PipelineStep['environment'] | null,
+  b: PipelineStep['environment'] | null,
+): boolean {
+  if (!a || !b) return !a && !b
+  const left = a as Record<string, unknown>
+  const right = b as Record<string, unknown>
+  for (const key of new Set([...Object.keys(left), ...Object.keys(right)])) {
+    if ((left[key] ?? null) !== (right[key] ?? null)) return false
+  }
+  return true
+}
+
 /** One service frame a `deployer` step provisions an environment for (own or an involved peer). */
 interface DeployTarget {
   frameId: string
@@ -246,19 +272,7 @@ export class DeployerStepController {
           }
         : null
       const prev = step.environment ?? null
-      if (
-        prev?.id === next?.id &&
-        prev?.status === next?.status &&
-        prev?.url === next?.url &&
-        (prev?.lastError ?? null) === (next?.lastError ?? null) &&
-        // The note has to be in the comparison, not merely in the projection. Every poll of a
-        // readiness wait leaves the id, the status and the (absent) URL identical, so the note is
-        // the ONLY field that moves while an environment is coming up. Omit it here and the one
-        // change this projection exists to deliver is the one it never emits.
-        (prev?.statusNote ?? null) === (next?.statusNote ?? null)
-      ) {
-        return false
-      }
+      if (sameEnvironmentProjection(prev, next)) return false
       step.environment = next
       return true
     } catch {

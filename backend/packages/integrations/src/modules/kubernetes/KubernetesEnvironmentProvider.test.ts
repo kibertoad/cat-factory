@@ -1081,6 +1081,53 @@ describe('KubernetesEnvironmentProvider.status: ingress admission', () => {
     expect(result.statusNote).toBe("1 of 2 Deployments is still rolling out: 'worker'")
   })
 
+  it('names the workload a failed rollout gave up on, as the provider error', async () => {
+    // The fault channel, end to end through the provider: `EnvironmentProvisioningService` writes
+    // `provisioned.error?.trim() || 'Provisioning failed'`, so a rollout that gave up on a NAMED
+    // Deployment was persisted, rendered and reported as that generic literal.
+    stubFetch((c) => {
+      if (c.method !== 'GET') return { status: 200 }
+      if (c.url.includes('/deployments')) {
+        return {
+          body: {
+            items: [
+              {
+                metadata: { name: 'api' },
+                spec: { replicas: 1 },
+                status: {
+                  availableReplicas: 0,
+                  conditions: [
+                    { type: 'Progressing', status: 'False', reason: 'ProgressDeadlineExceeded' },
+                  ],
+                },
+              },
+            ],
+          },
+        }
+      }
+      return { status: 200 }
+    })
+    const result = await statusOf()
+    expect(result.status).toBe('failed')
+    expect(result.error).toContain("'api'")
+    // A fault, not a wait: the note channel stays empty so the two never read as two problems.
+    expect(result.statusNote).toBeUndefined()
+  })
+
+  it('says the namespace is GONE rather than leaving a bare failed status', async () => {
+    // The sibling branch: a 404 on the namespace's own Deployment collection. Silent, it recorded
+    // the same 'Provisioning failed' literal for an environment that was in fact deleted.
+    stubFetch((c) => {
+      if (c.method !== 'GET') return { status: 200 }
+      if (c.url.includes('/deployments')) return { status: 404, body: { message: 'not found' } }
+      return { status: 200 }
+    })
+    const result = await statusOf()
+    expect(result.status).toBe('failed')
+    expect(result.error).toContain('no longer exists')
+    expect(result.error).toContain('cf-env-42')
+  })
+
   it('publishes exactly as before when the catalog read is REFUSED', async () => {
     // The pass-through that keeps this check from breaking any cluster whose ServiceAccount holds
     // no cluster-scoped `ingressclasses` grant. A 403 establishes nothing, so it may not refuse.

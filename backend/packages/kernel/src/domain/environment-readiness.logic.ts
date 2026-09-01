@@ -73,6 +73,30 @@ export function describeWaitedFor(ms: number): string {
 }
 
 /**
+ * How an environment that has stopped at a status it will never leave for `ready` is explained to
+ * a person: `failed` / `expired` / `tearing_down` / `torn_down`. Shared, because every reader that
+ * has to give up on such an environment owes the same account, and the two that stated it
+ * separately disagreed about it.
+ *
+ * The provider's own error is the whole message where it recorded one, because on these statuses
+ * that error IS the verdict. With none, the state is NAMED and the last note is APPENDED rather
+ * than substituted, and both halves of that matter. Naming the state is what separates "the
+ * provider refused it" from "something tore it down under the run", which send an operator to
+ * different places. Appending rather than substituting is because a bare note reads as the reason
+ * the environment ended up here, which nothing here knows: a `torn_down` row's note describes the
+ * spin-up it was in the middle of, not who tore it down.
+ */
+export function describeTerminalEnvironment(env: EnvironmentReadinessInput): string {
+  const failure = env.lastError?.trim()
+  if (failure) return failure
+  const note = env.statusNote?.trim()
+  return (
+    `Environment provisioning did not complete (status: ${env.status}).` +
+    (note ? ` Last provider note: ${note}` : '')
+  )
+}
+
+/**
  * Judge one readiness poll: the environment as the provider just reported it, against how long
  * the step has been waiting.
  *
@@ -90,24 +114,10 @@ export function judgeEnvironmentReadiness(
   if (env.status === 'ready') return { kind: 'ready' }
   const failure = env.lastError?.trim()
   const note = env.statusNote?.trim()
+  // `failed` / `expired` / `tearing_down` / `torn_down`: none of these becomes `ready` on its own,
+  // so waiting out the deadline would only delay the same answer.
   if (env.status !== 'provisioning') {
-    // `failed` / `expired` / `tearing_down` / `torn_down`: none of these becomes `ready` on its
-    // own, so waiting out the deadline would only delay the same answer. Name the state, because
-    // "the provider refused it" and "something tore it down under the run" send an operator to
-    // different places.
-    //
-    // The provider's own error is the whole message where it recorded one, because on these
-    // statuses that error IS the verdict. With none, the state is named and the last note is
-    // appended rather than substituted: a bare note would read as the reason the environment
-    // ended up here, which nothing here knows (a `torn_down` row's note describes the spin-up
-    // it was in the middle of, not who tore it down).
-    if (failure) return { kind: 'failed', error: failure }
-    return {
-      kind: 'failed',
-      error:
-        `Environment provisioning did not complete (status: ${env.status}).` +
-        (note ? ` Last provider note: ${note}` : ''),
-    }
+    return { kind: 'failed', error: describeTerminalEnvironment(env) }
   }
   if (waitedMs >= timeoutMs) {
     return {
@@ -115,12 +125,14 @@ export function judgeEnvironmentReadiness(
       error:
         `Environment was still provisioning after ${describeWaitedFor(waitedMs)}` +
         ` (readiness ceiling ${describeWaitedFor(timeoutMs)}).` +
-        // The note first, and labelled as what it is: this branch is reached only on a
-        // `provisioning` status, which is exactly the status `lastError` is nulled on, so the
-        // note is the one channel a provider had to explain the wait. `lastError` stays as the
-        // fallback for a caller that carries one anyway, under its own label: the two are
-        // different claims and a reader acts on which one it was.
-        (note ? ` Last provider note: ${note}` : failure ? ` Last provider error: ${failure}` : ''),
+        // BOTH, where a caller carries both, each under its own label and the fault FIRST. A
+        // recorded fault outranks a note on every reader (it is the more specific claim, and the
+        // only one of the two that is a fault), and dropping either would be the misattribution
+        // this pair exists to avoid: the note is the one channel a `provisioning` provider had,
+        // since that is exactly the status `lastError` is nulled on, so a caller reaching here
+        // with a fault as well carries it from an earlier poll and it is not superseded.
+        (failure ? ` Last provider error: ${failure}` : '') +
+        (note ? ` Last provider note: ${note}` : ''),
     }
   }
   return { kind: 'waiting', elapsedMs: waitedMs }

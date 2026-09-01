@@ -97,11 +97,11 @@ export function registerDeployLifecycleTests(harness: ConformanceHarness): void 
     // Parity for the deployer spin-up surfacing (PR #446): when a `deployer` step's
     // EnvironmentProvider fails to provision, the engine must record an `environment`
     // run failure carrying the provider's verbatim error AND persist a `failed`
-    // EnvironmentRecord that projects back onto the step (`step.environment.lastError`)
-    // — not a green step with the error buried in prose. The failed-record round-trip
+    // EnvironmentRecord that projects back onto the step (`step.environment.lastError`),
+    // never a green step with the error buried in prose. The failed-record round-trip
     // crosses each facade's own registry repo (D1 ⇄ Drizzle), so a runtime that maps
-    // the `failed`/`lastError` columns differently — or forgot to wire the failed-record
-    // persistence — diverges here instead of shipping silently.
+    // the `failed`/`lastError` columns differently, or forgot to wire the failed-record
+    // persistence, diverges here instead of shipping silently.
     const provider = {
       provision: async () => {
         throw new Error('env API unreachable: ECONNREFUSED')
@@ -137,7 +137,7 @@ export function registerDeployLifecycleTests(harness: ConformanceHarness): void 
     expect(start.status).toBe(201)
 
     const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
-    // A real, classified `environment` failure carrying the provider's verbatim error —
+    // A real, classified `environment` failure carrying the provider's verbatim error:
     // not a generic run failure, and not a falsely-green step.
     expect(exec.status).toBe('failed')
     expect(exec.failure?.kind).toBe('environment')
@@ -145,24 +145,24 @@ export function registerDeployLifecycleTests(harness: ConformanceHarness): void 
     const deployStep = exec.steps.find((s) => s.agentKind === 'deployer')!
     expect(deployStep.state).not.toBe('done')
     // The failure is attributed to the in-flight step (the deployer), so the step-detail
-    // overlay can filter its per-step execution history — and it round-trips through the facade.
+    // overlay can filter its per-step execution history, and it round-trips through the facade.
     expect(exec.failure?.stepIndex).toBe(exec.steps.indexOf(deployStep))
     // The failed EnvironmentRecord round-tripped through the facade's registry repo and
-    // projects onto the step — the cross-runtime persistence + column-mapping assertion.
+    // projects onto the step: the cross-runtime persistence + column-mapping assertion.
     expect(deployStep.environment?.status).toBe('failed')
     expect(deployStep.environment?.lastError).toContain('ECONNREFUSED')
   })
 
   it('drives the async container-backed deploy lifecycle to an identical environment on every facade', async () => {
     // Per-service provision types (Phase 2, slice 10): a `deployer` step whose provider needs
-    // RENDERING (kustomize/helm) stands the env up in a deploy CONTAINER — dispatch a `deploy`
-    // job, park, poll, finalize — instead of the synchronous in-Worker REST path.
+    // RENDERING (kustomize/helm) stands the env up in a deploy CONTAINER (dispatch a `deploy`
+    // job, park, poll, finalize) instead of the synchronous in-Worker REST path.
     //
     // SCOPE: this injects a FAKE `deployJobClient` + `resolveDeployCloneTarget` as core
-    // overrides, which each facade harness spreads LAST — so they win over the real wiring
+    // overrides, which each facade harness spreads LAST, so they win over the real wiring
     // (`selectDeployDeps` on the Worker, the pool-backed default on Node, `NativeCliDeployTransport`
     // locally). It therefore does NOT exercise that per-facade transport selection (a
-    // wrong-namespace / wrong-image-tag wiring would not be caught here — that is out of this
+    // wrong-namespace / wrong-image-tag wiring would not be caught here: that is out of this
     // runtime-neutral suite's scope; only local's selection has a dedicated unit test today). What
     // this asserts cross-runtime is two runtime-NEUTRAL things that must hold
     // identically on D1 and Postgres: (1) the engine drives the async lifecycle and forwards the
@@ -243,16 +243,8 @@ export function registerDeployLifecycleTests(harness: ConformanceHarness): void 
 
     // A registered connection gives the provider its manifest (the legacy single-connection
     // path the deployer resolves through when the service declares no per-type provisioning).
-    const manifest = {
-      providerId: 'acme-k8s',
-      label: 'Acme Kubernetes',
-      baseUrl: 'https://k8s.test/api',
-      auth: { type: 'bearer', secretRef: { key: 'API_TOKEN' } },
-      provision: { method: 'POST', pathTemplate: '/environments' },
-      response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
-    }
     const registered = await app.call('POST', `/workspaces/${wsId}/environments/connection`, {
-      config: { kind: 'manifest', manifest },
+      config: { kind: 'manifest', manifest: MANIFEST },
       secrets: { API_TOKEN: 'super-secret-env-token' },
     })
     expect(registered.status).toBe(201)
@@ -274,12 +266,12 @@ export function registerDeployLifecycleTests(harness: ConformanceHarness): void 
 
     const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
     // The engine dispatched a `deploy`-kind job (carrying the `image: 'deploy'` variant) through
-    // the wired client — the slice-10 transport-acceptance assertion.
+    // the wired client: the slice-10 transport-acceptance assertion.
     expect(dispatched).toHaveLength(1)
     expect(dispatched[0]!.kind).toBe('deploy')
     expect(dispatched[0]!.image).toBe('deploy')
     // The stubbed terminal view finalized into the env record, which round-tripped through the
-    // facade's registry repo (D1 ⇄ Drizzle) and projects onto the step — identical on both runtimes.
+    // facade's registry repo (D1 ⇄ Drizzle) and projects onto the step, identical on both runtimes.
     const deployStep = exec.steps.find((s) => s.agentKind === 'deployer')!
     expect(deployStep.state).toBe('done')
     expect(deployStep.environment?.status).toBe('ready')

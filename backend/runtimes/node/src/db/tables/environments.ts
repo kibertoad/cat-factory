@@ -11,7 +11,7 @@ import { bigint, index, pgTable, primaryKey, text } from 'drizzle-orm/pg-core'
 // Ephemeral-environment integration (mirror of D1 migration 0025). A workspace's per-
 // provision-type infra HANDLERS (how a service's declared provision type is stood up) and
 // the registry of environments provisioned from them. Keyed by (workspace_id,
-// provision_type, manifest_id) — one handler per type, plus one per pinned custom manifest
+// provision_type, manifest_id): one handler per type, plus one per pinned custom manifest
 // id ('' for non-custom). `handler_json` carries the engine connection (sans secrets); the
 // manifests to apply come from the service at provision time. Credentials are opaque
 // ciphertext (SecretCipher envelopes), never plaintext. See
@@ -51,7 +51,7 @@ export const environments = pgTable(
     workspace_id: text('workspace_id').notNull(),
     block_id: text('block_id'),
     // The service FRAME this env belongs to (the deployer block walked up to its frame). The
-    // cross-frame discovery key — a `frontend` frame's `service` binding resolves the live env
+    // cross-frame discovery key: a `frontend` frame's `service` binding resolves the live env
     // by the bound service FRAME id, not the task the deployer ran on (`block_id`).
     frame_id: text('frame_id'),
     execution_id: text('execution_id'),
@@ -97,7 +97,7 @@ export const environmentTestRuns = pgTable(
     status: text('status').notNull(),
     stage: text('stage').notNull(),
     initiated_by: text('initiated_by'),
-    // The frame's provisioning config, pinned at dispatch (JSON) — see the kernel port.
+    // The frame's provisioning config, pinned at dispatch (JSON); see the kernel port.
     provisioning: text('provisioning').notNull(),
     branch: text('branch'),
     environment_id: text('environment_id'),

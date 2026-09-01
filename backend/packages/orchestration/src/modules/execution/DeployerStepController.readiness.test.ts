@@ -239,6 +239,25 @@ describe('DeployerStepController: environment readiness', () => {
     expect(s.environment?.statusNote).toBe('the deploy job is running')
   })
 
+  it('emits a projection for any field it carries, not a listed subset', async () => {
+    // The same argument as the note, for the fields beside it. A TTL a provider publishes only
+    // once the environment is scheduled arrives mid-wait with the id, status and URL unchanged,
+    // and a comparison that did not look at it projected the value and never pushed it: the
+    // panel's "expires" line stayed absent for the rest of the run.
+    const s = step()
+    let expiresAt: number | null = null
+    const { controller: c } = controller(handle(), [], () =>
+      handle({ status: 'provisioning', url: null, expiresAt }),
+    )
+
+    expect(await c.attachEnvironmentProjection('ws-1', 'frame-1', s)).toBe(true)
+    expect(s.environment?.expiresAt).toBeNull()
+
+    expiresAt = START + 3_600_000
+    expect(await c.attachEnvironmentProjection('ws-1', 'frame-1', s)).toBe(true)
+    expect(s.environment?.expiresAt).toBe(expiresAt)
+  })
+
   it('refuses a state the environment will never leave without waiting it out', async () => {
     const s = step()
     const { controller: c, calls } = controller(
