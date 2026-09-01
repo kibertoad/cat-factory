@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Block, KubernetesEnvironmentConfig, KubernetesUrlSource } from '@cat-factory/kernel'
 import { describeWildcardDnsShift, frontendOriginsForService } from '@cat-factory/contracts'
-import { classifyDeploymentReadiness } from './kubernetes.logic.js'
+import { classifyDeploymentReadiness, reduceRolloutProgress } from './kubernetes.logic.js'
 import {
   deriveUrl,
   describeUnreachableIngressHost,
@@ -244,6 +244,71 @@ describe('classifyDeploymentReadiness', () => {
   })
 })
 
+describe('reduceRolloutProgress', () => {
+  const rolling = (name: string) => ({
+    metadata: { name },
+    spec: { replicas: 2 },
+    status: { availableReplicas: 1 },
+  })
+  const landed = (name: string) => ({
+    metadata: { name },
+    spec: { replicas: 2 },
+    status: { availableReplicas: 2 },
+  })
+
+  it('says WHICH workloads a provisioning verdict is waiting on', () => {
+    // The verdict alone is what the readiness ceiling had to work with, and "provisioning" for
+    // twenty minutes names nothing an operator can act on. One workload stuck out of five sends
+    // them to that workload; all five sends them to the namespace, the quota, or the node.
+    const progress = reduceRolloutProgress([landed('web'), rolling('api'), rolling('worker')])
+    expect(progress.status).toBe('provisioning')
+    expect(progress.note).toBe("2 of 3 Deployments are still rolling out: 'api', 'worker'")
+  })
+
+  it('reads the whole namespace as the scope when nothing has landed', () => {
+    expect(reduceRolloutProgress([rolling('api')]).note).toBe(
+      "the namespace's only Deployment is still rolling out: 'api'",
+    )
+    expect(reduceRolloutProgress([rolling('api'), rolling('worker')]).note).toBe(
+      "all 2 Deployments are still rolling out: 'api', 'worker'",
+    )
+  })
+
+  it('says a capped list is capped, rather than trailing off', () => {
+    const many = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map(rolling)
+    const note = reduceRolloutProgress(many).note!
+    expect(note).toContain('all 7 Deployments')
+    expect(note).toContain('and 2 more')
+  })
+
+  it('names a workload the payload did not name, rather than an empty quote', () => {
+    expect(reduceRolloutProgress([{ spec: { replicas: 1 }, status: {} }]).note).toContain(
+      "'(unnamed)'",
+    )
+  })
+
+  it('carries no note on a verdict that is not a wait', () => {
+    // A note is for the state that has something outstanding. `ready` has nothing left to say,
+    // and a `failed` rollout's account is the error channel's job, not this one's.
+    expect(reduceRolloutProgress([])).toEqual({ status: 'ready' })
+    expect(reduceRolloutProgress([landed('web')])).toEqual({ status: 'ready' })
+    expect(
+      reduceRolloutProgress([
+        {
+          metadata: { name: 'api' },
+          spec: { replicas: 1 },
+          status: {
+            availableReplicas: 0,
+            conditions: [
+              { type: 'Progressing', status: 'False', reason: 'ProgressDeadlineExceeded' },
+            ],
+          },
+        },
+      ]),
+    ).toEqual({ status: 'failed' })
+  })
+})
+
 describe('describeUnreachableIngressHost', () => {
   const ingress = (hostTemplate: string): KubernetesUrlSource => ({
     source: 'ingressTemplate',
@@ -475,7 +540,7 @@ describe('ingress admission', () => {
       const facts = [{ requestedClass: 'nginx', hasAddress: false }]
       expect(
         classifyIngressAdmission(facts, { read: true, names: ['nginx'], defaultName: null }),
-      ).toEqual({ status: 'pending' })
+      ).toMatchObject({ status: 'pending' })
     })
 
     it('still refuses the CLASSLESS Ingress in a chain whose sibling names a real class', () => {
@@ -500,18 +565,25 @@ describe('ingress admission', () => {
       // guarantee, so an absent address may never be evidence of a broken route: it only
       // withholds `ready` until the provision's own deadline reports a timeout.
       const facts = [{ requestedClass: 'traefik', hasAddress: false }]
-      expect(classifyIngressAdmission(facts, traefik)).toEqual({ status: 'pending' })
+      const verdict = classifyIngressAdmission(facts, traefik)
+      expect(verdict.status).toBe('pending')
+      // And it SAYS which pending it is: this one means an ingress controller has not got to the
+      // Ingress yet, which is a different wait from the namespace declaring no Ingress at all,
+      // and the note is what a person watching a readiness wait is shown.
+      expect(verdict.status === 'pending' && verdict.detail).toContain('no controller has written')
     })
 
     it('is PENDING for a classless Ingress the default class will claim', () => {
       const facts = [{ requestedClass: null, hasAddress: false }]
-      expect(classifyIngressAdmission(facts, traefik)).toEqual({ status: 'pending' })
+      expect(classifyIngressAdmission(facts, traefik)).toMatchObject({ status: 'pending' })
     })
 
     it('is PENDING when the namespace declares no Ingress, since a Gateway may serve the host', () => {
       // An `ingressTemplate` URL says where the URL comes FROM, not what routes it. Refusing here
       // would fail a Gateway/HTTPRoute deployment on an assumption about how it was built.
-      expect(classifyIngressAdmission([], traefik)).toEqual({ status: 'pending' })
+      const verdict = classifyIngressAdmission([], traefik)
+      expect(verdict.status).toBe('pending')
+      expect(verdict.status === 'pending' && verdict.detail).toContain('declares no Ingress')
     })
 
     it('is UNKNOWN when the catalog could not be read, so the check stands down', () => {

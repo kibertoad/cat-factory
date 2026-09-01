@@ -979,6 +979,45 @@ describe('composeRunOutcome: where to go and look', () => {
     expect(rows[1]).toMatchObject({ state: 'failed', environmentId: 'env_1' })
   })
 
+  // The row for the environment a run is standing up RIGHT NOW has no fault to report, so before
+  // the provider's note reached here it was a status and a URL and nothing else, for exactly as
+  // long as the spin-up took, which is when the card is most worth reading.
+  it('reports what a still-provisioning environment says it is waiting on', () => {
+    const rows = entries(
+      run([
+        projecting({
+          id: 'env_1',
+          url: null,
+          status: 'provisioning',
+          statusNote: 'the deploy job is queued behind 3 others',
+        }),
+      ]),
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      origin: 'projected',
+      environmentId: 'env_1',
+      detail: 'the deploy job is queued behind 3 others',
+    })
+  })
+
+  it('lets a recorded fault outrank the note on the same environment', () => {
+    // Both channels can carry text at once (a provider that failed after saying what it was
+    // waiting on). The fault is the more specific claim about the same environment.
+    const rows = entries(
+      run([
+        projecting({
+          id: 'env_1',
+          url: null,
+          status: 'failed',
+          lastError: 'quota exceeded',
+          statusNote: 'the deploy job is queued behind 3 others',
+        }),
+      ]),
+    )
+    expect(rows[0]).toMatchObject({ detail: 'quota exceeded' })
+  })
+
   it('reports a gate’s own environment, which no deployer frame keys', () => {
     const rows = entries(
       run([

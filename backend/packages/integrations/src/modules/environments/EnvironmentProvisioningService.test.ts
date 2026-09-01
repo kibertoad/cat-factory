@@ -233,6 +233,62 @@ describe('EnvironmentProvisioningService — refreshStatus', () => {
     expect(handle.lastError).toBe(FAILED_REASON)
     expect(registry.records[0]!.lastError).toBe(FAILED_REASON)
   })
+
+  /** Stays `provisioning`, saying something different about it on each poll. */
+  function narratesItsProgress(notes: readonly (string | undefined)[]): EnvironmentProvider {
+    const base: ProvisionedEnvironment = {
+      externalId: 'ext-1',
+      url: null,
+      status: 'provisioning',
+      expiresAt: null,
+      access: null,
+      fields: { externalId: 'ext-1' },
+    }
+    let poll = 0
+    return {
+      async provision() {
+        return { ...base, statusNote: notes[0] }
+      },
+      async status() {
+        poll += 1
+        return { ...base, statusNote: notes[poll] }
+      },
+      async teardown() {
+        return { status: 'torn_down' }
+      },
+    }
+  }
+
+  it("persists a provisioning provider's note, which is the status lastError is nulled on", async () => {
+    // Issue #2153: `lastError` is written on `failed` alone, so a provider that knew exactly why
+    // an environment was not ready yet had no column to say it in and the readiness ceiling could
+    // only report its own duration.
+    const registry = fakeRegistry()
+    const service = makeService(narratesItsProgress(['  the deploy job is queued  ']), registry)
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+
+    expect(registry.records[0]!.status).toBe('provisioning')
+    expect(registry.records[0]!.statusNote).toBe('the deploy job is queued')
+    // And it is not smuggled in under the error's name, which would report a fault on a healthy
+    // spin-up everywhere `lastError` is rendered.
+    expect(registry.records[0]!.lastError).toBeNull()
+  })
+
+  it('rewrites the note from the current poll, so a stale one cannot outlive its state', async () => {
+    const registry = fakeRegistry()
+    const service = makeService(
+      narratesItsProgress(['the deploy job is queued', 'the deploy job is running', undefined]),
+      registry,
+    )
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    const id = registry.records[0]!.id
+
+    expect((await service.refreshStatus('ws1', id)).statusNote).toBe('the deploy job is running')
+    // A provider that stops saying anything clears it: the note is the CURRENT account, never a
+    // log, so the last thing said does not linger over a state that has moved on.
+    expect((await service.refreshStatus('ws1', id)).statusNote).toBeNull()
+    expect(registry.records[0]!.statusNote).toBeNull()
+  })
 })
 
 describe('EnvironmentProvisioningService — repo-config pre-flight gate', () => {
@@ -598,6 +654,7 @@ describe('EnvironmentProvisioningService — supersedeForBlock (infraless flip)'
       createdAt: 1,
       expiresAt: null,
       lastError: null,
+      statusNote: null,
       provisionType: 'kubernetes',
       engine: 'remote-kubernetes',
       deletedAt: null,

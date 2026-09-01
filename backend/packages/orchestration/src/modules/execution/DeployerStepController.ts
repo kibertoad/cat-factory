@@ -240,6 +240,7 @@ export class DeployerStepController {
             status: handle.status,
             expiresAt: handle.expiresAt,
             lastError: handle.lastError,
+            statusNote: handle.statusNote ?? null,
             provisionType: handle.provisionType ?? null,
             engine: handle.engine ?? null,
           }
@@ -249,7 +250,12 @@ export class DeployerStepController {
         prev?.id === next?.id &&
         prev?.status === next?.status &&
         prev?.url === next?.url &&
-        (prev?.lastError ?? null) === (next?.lastError ?? null)
+        (prev?.lastError ?? null) === (next?.lastError ?? null) &&
+        // The note has to be in the comparison, not merely in the projection. Every poll of a
+        // readiness wait leaves the id, the status and the (absent) URL identical, so the note is
+        // the ONLY field that moves while an environment is coming up. Omit it here and the one
+        // change this projection exists to deliver is the one it never emits.
+        (prev?.statusNote ?? null) === (next?.statusNote ?? null)
       ) {
         return false
       }

@@ -832,7 +832,10 @@ function deployedEnvironments(
       // is about it, and is then listed a second time as an environment no frame accounts for.
       frameId,
       environmentId: deployed.environmentId ?? observed?.id ?? null,
-      detail: deployed.error ?? disposal?.error ?? observed?.lastError ?? null,
+      // The provider's own note is the LAST fallback, after every recorded fault: it is the only
+      // thing a frame settled against a still-building environment has, and a fault outranks it.
+      detail:
+        deployed.error ?? disposal?.error ?? observed?.lastError ?? observed?.statusNote ?? null,
     })
   }
   return { entries, skipped }
@@ -868,7 +871,10 @@ function unclaimedEnvironments(
       retained: false,
       frameId: null,
       environmentId: observed.id,
-      detail: observed.lastError,
+      // These are the rows for environments no settled frame accounts for, and the commonest one
+      // is the environment the run is standing up RIGHT NOW: it has no fault to report, and the
+      // provider's note is the only thing that keeps the row from being a status and a URL.
+      detail: observed.lastError ?? observed.statusNote,
     })
   }
   return entries

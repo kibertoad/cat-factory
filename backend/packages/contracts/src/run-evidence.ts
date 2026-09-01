@@ -425,6 +425,14 @@ export interface RunEnvironmentObservation {
   expiresAt: number | null
   /** The provider's own cause, where the observing producer recorded one. */
   lastError: string | null
+  /**
+   * The provider's own account of a state it has not left yet, where the observing producer
+   * recorded one. Carried beside `lastError` rather than folded into it because the live
+   * environment a run is still standing up is precisely the one with no cause to state: without
+   * this, the row on the card that is about a spin-up in progress has nothing to say for exactly
+   * as long as the spin-up takes.
+   */
+  statusNote: string | null
   source: 'projection' | 'human_test'
   /**
    * True when a LATER deploy of the same service frame replaced this environment.
@@ -476,7 +484,10 @@ function supersededEnvironmentKeys(steps: readonly PipelineStep[]): Set<string> 
   return superseded
 }
 
-/** Narrow a producer's optional `expiresAt` / `lastError` to the observation's nullable shape. */
+/**
+ * Narrow a producer's optional `expiresAt` / `lastError` / `statusNote` to the observation's
+ * nullable shape.
+ */
 function observation(
   fields: {
     id: string
@@ -484,6 +495,7 @@ function observation(
     status: EnvironmentStatus
     expiresAt?: number | null
     lastError?: string | null
+    statusNote?: string | null
   },
   source: RunEnvironmentObservation['source'],
   superseded: ReadonlySet<string>,
@@ -494,6 +506,7 @@ function observation(
     status: fields.status,
     expiresAt: fields.expiresAt ?? null,
     lastError: fields.lastError ?? null,
+    statusNote: fields.statusNote ?? null,
     source,
     superseded: superseded.has(fields.id) || (fields.url != null && superseded.has(fields.url)),
   }

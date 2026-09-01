@@ -429,6 +429,7 @@ export function recordToHandle(
     createdAt: record.createdAt,
     expiresAt: record.expiresAt,
     lastError: record.lastError,
+    statusNote: record.statusNote,
     provisionType: record.provisionType as EnvironmentHandle['provisionType'],
     engine: record.engine as EnvironmentHandle['engine'],
   }

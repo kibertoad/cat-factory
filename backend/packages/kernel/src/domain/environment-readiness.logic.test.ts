@@ -53,6 +53,73 @@ describe('judgeEnvironmentReadiness', () => {
     expect(spent.kind === 'timed_out' && spent.error).toContain('20 minutes')
   })
 
+  it('names the state a timed-out environment was stuck in, from the note', () => {
+    // The gap issue #2153 reported: the ceiling formatted `lastError` into this message, and
+    // `lastError` is structurally NULL on the only status that can reach it, so the platform's
+    // whole account of a 20-minute wait was that it had waited 20 minutes. The note is the
+    // channel a `provisioning` provider actually has.
+    const spent = judgeEnvironmentReadiness(
+      { status: 'provisioning', statusNote: '  the deploy succeeded and no target went healthy  ' },
+      ENVIRONMENT_READY_TIMEOUT_MS,
+    )
+    expect(spent.kind).toBe('timed_out')
+    expect(spent.kind === 'timed_out' && spent.error).toContain(
+      'Last provider note: the deploy succeeded and no target went healthy',
+    )
+  })
+
+  it('labels a timeout fallback by which channel it came from', () => {
+    // A caller carrying a `lastError` on a provisioning row is not how the persistence sites
+    // write today, but the two claims are different and the message says which it is rather than
+    // presenting an error as a note.
+    const verdict = judgeEnvironmentReadiness(
+      { status: 'provisioning', lastError: 'quota exceeded' },
+      ENVIRONMENT_READY_TIMEOUT_MS,
+    )
+    expect(verdict.kind === 'timed_out' && verdict.error).toContain(
+      'Last provider error: quota exceeded',
+    )
+  })
+
+  it('appends the note to a terminal state rather than letting it stand in for the cause', () => {
+    // A note describes the spin-up the environment was in the middle of, so on a state it will
+    // never leave it may not become the whole message: nothing here knows that the note is why
+    // the environment ended up torn down.
+    const verdict = judgeEnvironmentReadiness(
+      { status: 'torn_down', statusNote: 'waiting for the load balancer' },
+      0,
+    )
+    expect(verdict.kind).toBe('failed')
+    expect(verdict.kind === 'failed' && verdict.error).toBe(
+      'Environment provisioning did not complete (status: torn_down). ' +
+        'Last provider note: waiting for the load balancer',
+    )
+  })
+
+  it('lets the provider’s error outrank its note on a terminal state', () => {
+    const verdict = judgeEnvironmentReadiness(
+      { status: 'failed', lastError: 'quota exceeded', statusNote: 'waiting for the balancer' },
+      0,
+    )
+    expect(verdict).toEqual({ kind: 'failed', error: 'quota exceeded' })
+  })
+
+  it('is byte-for-byte the old wording when the provider says nothing', () => {
+    // The whole channel is opt-in: a deployment whose providers never set a note keeps exactly
+    // the messages it had.
+    const spent = judgeEnvironmentReadiness(
+      { status: 'provisioning' },
+      ENVIRONMENT_READY_TIMEOUT_MS,
+    )
+    expect(spent.kind === 'timed_out' && spent.error).toBe(
+      'Environment was still provisioning after 20 minutes (readiness ceiling 20 minutes).',
+    )
+    expect(judgeEnvironmentReadiness({ status: 'expired' }, 0)).toEqual({
+      kind: 'failed',
+      error: 'Environment provisioning did not complete (status: expired).',
+    })
+  })
+
   it('leaves the ceiling generous enough for a real per-PR backend', () => {
     // The run this bound was written for took 5m36s from create to online. A ceiling under that
     // fails healthy environments, which is the more expensive mistake of the two.

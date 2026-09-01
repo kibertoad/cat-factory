@@ -406,6 +406,69 @@ export function classifyDeploymentReadiness(deployment: unknown): PodReadiness {
 }
 
 /**
+ * How many workload names a rollout note lists before it stops naming them. A note is read in a
+ * step panel and a run-failure message, so an unbounded list of a large namespace's Deployments
+ * would push the sentence that matters off the surface.
+ */
+const ROLLOUT_NOTE_NAME_CAP = 5
+
+/**
+ * One namespace's Deployments reduced to a lifecycle verdict, plus (while it is still coming up)
+ * WHICH workloads have not landed.
+ *
+ * The note exists because `provisioning` is the answer that keeps a readiness wait alive, and
+ * before it the wait could only report its own duration: the deployer's 20-minute ceiling said
+ * that it had waited 20 minutes and nothing about what it had waited on. Naming the workloads
+ * separates the two cases an operator acts on differently: one Deployment of five stuck (look at
+ * that workload) versus all five (look at the namespace, the quota, the node).
+ *
+ * The verdict itself is unchanged from the reduction this replaces: no Deployment is `ready`
+ * (nothing to roll out), one terminally-failed rollout is `failed`, anything else outstanding is
+ * `provisioning`. Only the `provisioning` answer gained prose, because it is the only one whose
+ * caller had nowhere to put a cause.
+ */
+export function reduceRolloutProgress(items: readonly unknown[]): {
+  status: 'ready' | 'provisioning' | 'failed'
+  note?: string
+} {
+  if (items.length === 0) return { status: 'ready' } // nothing to roll out (e.g. a static Service)
+  const pending: string[] = []
+  for (const item of items) {
+    const readiness = classifyDeploymentReadiness(item)
+    if (readiness === 'gone') return { status: 'failed' }
+    if (readiness !== 'ready') pending.push(deploymentName(item))
+  }
+  if (pending.length === 0) return { status: 'ready' }
+  return { status: 'provisioning', note: describeRolloutNote(pending, items.length) }
+}
+
+/** A Deployment's own name, or a stand-in saying the payload carried none. */
+function deploymentName(item: unknown): string {
+  const name = (item as { metadata?: { name?: unknown } } | null)?.metadata?.name
+  return typeof name === 'string' && name.trim() ? name.trim() : '(unnamed)'
+}
+
+/**
+ * The rollout note: how much of the namespace is outstanding, and which parts of it.
+ *
+ * A capped list SAYS it is capped rather than trailing off, so a reader never takes the names as
+ * the whole set (the same rule every other cap here follows).
+ */
+function describeRolloutNote(pending: readonly string[], total: number): string {
+  const listed = pending.slice(0, ROLLOUT_NOTE_NAME_CAP)
+  const dropped = pending.length - listed.length
+  const names =
+    listed.map((name) => `'${name}'`).join(', ') + (dropped > 0 ? `, and ${dropped} more` : '')
+  const scope =
+    pending.length < total
+      ? `${pending.length} of ${total} Deployments`
+      : total === 1
+        ? "the namespace's only Deployment"
+        : `all ${total} Deployments`
+  return `${scope} ${pending.length === 1 ? 'is' : 'are'} still rolling out: ${names}`
+}
+
+/**
  * Container `state.waiting.reason`s that will NOT self-heal within the readiness window:
  * a bad/unpullable image, a malformed container config, a failed lifecycle hook, or a
  * container that keeps crashing on boot. These are deterministic — re-driving the same pod

@@ -49,7 +49,15 @@ function handle(over: Partial<EnvironmentHandle> = {}): EnvironmentHandle {
  * readiness poll from `statuses` (the last entry repeats). `now` is advanced explicitly so a test
  * can cross the readiness ceiling without waiting through it.
  */
-function controller(provisioned: EnvironmentHandle, statuses: EnvironmentHandle[] = []) {
+function controller(
+  provisioned: EnvironmentHandle,
+  statuses: EnvironmentHandle[] = [],
+  /**
+   * What the block's live environment reads back as, for the projection the parked step renders.
+   * Defaults to nothing: most tests here assert the WAIT, and a projection is a separate claim.
+   */
+  projected?: () => EnvironmentHandle | undefined,
+) {
   const calls = { provisioned: 0, refreshed: 0, recorded: [] as { output: string }[] }
   let now = START
   const deps = {
@@ -65,7 +73,7 @@ function controller(provisioned: EnvironmentHandle, statuses: EnvironmentHandle[
       canProvision: async () => ({ ok: true }),
       hasLegacyConnection: async () => false,
       supersedeForBlock: async () => undefined,
-      getHandleForBlock: async () => undefined,
+      getHandleForBlock: async () => projected?.(),
       startProvision: async () => {
         calls.provisioned += 1
         return { kind: 'completed' as const, handle: provisioned, reason: null }
@@ -187,6 +195,48 @@ describe('DeployerStepController: environment readiness', () => {
     expect(result).toMatchObject({ detail: expect.stringContaining('20 minutes') })
     expect(s.deployEnvs?.[FRAME.id]).toMatchObject({ status: 'failed', environmentId: 'env-1' })
     expect(s.deployWait).toBeUndefined()
+  })
+
+  it('names what the provider said it was waiting on when the ceiling is spent', async () => {
+    // The gap issue #2153 filed: the ceiling formatted `lastError` into its message and
+    // `lastError` is nulled on `provisioning`, so a 20-minute wait could only report that it had
+    // waited 20 minutes. The note is the channel a provisioning provider actually has, and this
+    // is where the run's failure detail picks it up.
+    const s = step()
+    const { controller: c, advanceClock } = controller(handle(), [
+      handle({ statusNote: 'the deploy succeeded and no target went healthy' }),
+    ])
+    await c.runDeployerStep('ws-1', instance(), s, FRAME, false)
+    advanceClock(ENVIRONMENT_READY_TIMEOUT_MS)
+
+    const result = await c.pollDeployerEnvironment('ws-1', instance(), s)
+
+    expect(result).toMatchObject({
+      reason: 'timeout',
+      detail: expect.stringContaining(
+        'Last provider note: the deploy succeeded and no target went healthy',
+      ),
+    })
+  })
+
+  it('emits a projection when the note is the only thing that moved', async () => {
+    // Every poll of a readiness wait leaves the id, the status and the (absent) URL identical, so
+    // the note is the ONLY field that changes while an environment comes up. Left out of the
+    // change comparison, the one update this projection exists to deliver is the one it never
+    // pushes, and the panel sits on the first note for the whole wait.
+    const s = step()
+    let note = 'the deploy job is queued'
+    const { controller: c } = controller(handle(), [], () => handle({ statusNote: note }))
+
+    expect(await c.attachEnvironmentProjection('ws-1', 'frame-1', s)).toBe(true)
+    expect(s.environment?.statusNote).toBe('the deploy job is queued')
+    // The same answer twice is not a change: the projection stays off the emit path when the
+    // provider is repeating itself.
+    expect(await c.attachEnvironmentProjection('ws-1', 'frame-1', s)).toBe(false)
+
+    note = 'the deploy job is running'
+    expect(await c.attachEnvironmentProjection('ws-1', 'frame-1', s)).toBe(true)
+    expect(s.environment?.statusNote).toBe('the deploy job is running')
   })
 
   it('refuses a state the environment will never leave without waiting it out', async () => {

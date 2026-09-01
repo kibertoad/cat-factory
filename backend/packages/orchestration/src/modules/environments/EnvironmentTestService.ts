@@ -400,9 +400,12 @@ export class EnvironmentTestService {
         }
         return { state: 'running' }
       }
-      // `failed` / `expired` / `torn_down` / `tearing_down` — it will never become ready.
+      // `failed` / `expired` / `torn_down` / `tearing_down`: it will never become ready. The
+      // provider's own note is the last resort behind its error, because a status the provider
+      // moved to without recording a fault still leaves whatever it last said about the spin-up.
       throw new Error(
         handle.lastError ??
+          handle.statusNote ??
           `Environment provisioning did not become ready (status: ${handle.status}).`,
       )
     }

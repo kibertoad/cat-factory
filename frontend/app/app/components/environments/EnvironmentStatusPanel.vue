@@ -86,6 +86,26 @@ const ENV_STATUS_META = computed<
   },
 }))
 
+// Whether the verbatim provider error is on screen. Both the error block and the note below key
+// off this one predicate, so they can never render together.
+const failureShown = computed(
+  () =>
+    !!props.environment?.lastError &&
+    (props.environment.status === 'failed' || props.environment.status === 'expired'),
+)
+
+/**
+ * The provider's own account of a state it has not left yet: what a still-coming-up environment
+ * is waiting on. This is the surface a person watches through a readiness wait, and until the
+ * note existed it could only show a spinner and a status word for up to twenty minutes.
+ *
+ * Withheld while an error is shown, because the error is the more specific claim about the same
+ * environment and two accounts side by side read as two problems.
+ */
+const statusNote = computed(() =>
+  failureShown.value ? null : props.environment?.statusNote?.trim() || null,
+)
+
 // The two statuses that describe a transition IN FLIGHT. Only these ever animate, and only
 // while the run driving the transition is still being driven itself.
 const envInTransition = computed(
@@ -140,12 +160,18 @@ const envInTransition = computed(
       </dl>
       <!-- The verbatim provider error when the environment failed/expired. -->
       <pre
-        v-if="
-          environment.lastError &&
-          (environment.status === 'failed' || environment.status === 'expired')
-        "
+        v-if="failureShown"
         class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded border border-rose-900/60 bg-rose-950/40 p-1.5 text-[11px] text-rose-200/90"
         >{{ environment.lastError }}</pre>
+      <!-- What the provider says it is still waiting on. Muted rather than alarming: an
+           environment mid-rollout is healthy, and styling this like the error above would report
+           a fault every deploy. -->
+      <p
+        v-else-if="statusNote"
+        class="mt-1 whitespace-pre-wrap break-words text-[11px] text-slate-400"
+      >
+        {{ t('environments.statusNote', { note: statusNote }) }}
+      </p>
     </div>
     <p v-else class="text-[12px] text-slate-500">
       {{ degradedReason ?? t('environments.empty') }}

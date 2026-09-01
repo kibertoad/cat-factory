@@ -49,6 +49,13 @@ export interface EnvironmentReadinessInput {
   status: EnvironmentStatus
   /** The provider's own last error, when it recorded one; used verbatim in a `failed` verdict. */
   lastError?: string | null
+  /**
+   * The provider's own account of a state it has not left yet, when it gave one. It is the only
+   * channel that survives a `provisioning` poll, because `lastError` is persisted on `failed`
+   * alone (see `ProvisionedEnvironment.statusNote`). It is what lets a `timed_out` verdict name
+   * the state the environment was stuck in rather than only how long it was stuck.
+   */
+  statusNote?: string | null
 }
 
 /**
@@ -81,16 +88,25 @@ export function judgeEnvironmentReadiness(
   timeoutMs: number = ENVIRONMENT_READY_TIMEOUT_MS,
 ): EnvironmentReadiness {
   if (env.status === 'ready') return { kind: 'ready' }
+  const failure = env.lastError?.trim()
+  const note = env.statusNote?.trim()
   if (env.status !== 'provisioning') {
     // `failed` / `expired` / `tearing_down` / `torn_down`: none of these becomes `ready` on its
     // own, so waiting out the deadline would only delay the same answer. Name the state, because
     // "the provider refused it" and "something tore it down under the run" send an operator to
     // different places.
+    //
+    // The provider's own error is the whole message where it recorded one, because on these
+    // statuses that error IS the verdict. With none, the state is named and the last note is
+    // appended rather than substituted: a bare note would read as the reason the environment
+    // ended up here, which nothing here knows (a `torn_down` row's note describes the spin-up
+    // it was in the middle of, not who tore it down).
+    if (failure) return { kind: 'failed', error: failure }
     return {
       kind: 'failed',
       error:
-        env.lastError?.trim() ||
-        `Environment provisioning did not complete (status: ${env.status}).`,
+        `Environment provisioning did not complete (status: ${env.status}).` +
+        (note ? ` Last provider note: ${note}` : ''),
     }
   }
   if (waitedMs >= timeoutMs) {
@@ -99,7 +115,12 @@ export function judgeEnvironmentReadiness(
       error:
         `Environment was still provisioning after ${describeWaitedFor(waitedMs)}` +
         ` (readiness ceiling ${describeWaitedFor(timeoutMs)}).` +
-        (env.lastError?.trim() ? ` Last provider error: ${env.lastError.trim()}` : ''),
+        // The note first, and labelled as what it is: this branch is reached only on a
+        // `provisioning` status, which is exactly the status `lastError` is nulled on, so the
+        // note is the one channel a provider had to explain the wait. `lastError` stays as the
+        // fallback for a caller that carries one anyway, under its own label: the two are
+        // different claims and a reader acts on which one it was.
+        (note ? ` Last provider note: ${note}` : failure ? ` Last provider error: ${failure}` : ''),
     }
   }
   return { kind: 'waiting', elapsedMs: waitedMs }
