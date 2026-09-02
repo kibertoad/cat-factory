@@ -1,8 +1,10 @@
+import type { EnvironmentAddress, EnvironmentRouteProof } from '@cat-factory/contracts'
 import type {
   EnvironmentDiagnosis,
   EnvironmentEvidenceBundle,
   EnvironmentFailureFacts,
   EnvironmentRecord,
+  EnvironmentRouteEvidence,
   EnvironmentTimelineEntry,
   ProviderRemediationAction,
   ProvisionFields,
@@ -20,6 +22,7 @@ import {
   type EnvironmentRemediatorDeps,
   type ResolvedEnvironmentProvider,
 } from './environmentRemediation.js'
+import { parseReachability } from './environments.logic.js'
 
 // ---------------------------------------------------------------------------
 // The environment module's DIAGNOSTIC READS, answering "what is actually wrong with this
@@ -180,7 +183,8 @@ export function createEnvironmentDiagnostics(deps: EnvironmentDiagnosticsDeps) {
     const { workspaceId, environmentId, executionId, failure } = args
     const read = await readRecordSafely(workspaceId, environmentId)
     const record = read.record
-    const timeline = await readTimeline(workspaceId, executionId, record)
+    const route = readRoute(record)
+    const timeline = await readTimeline(workspaceId, executionId, record, route)
     if (!record) {
       return {
         providerActions: [],
@@ -198,6 +202,7 @@ export function createEnvironmentDiagnostics(deps: EnvironmentDiagnosticsDeps) {
           },
           provisionFields: {},
           timeline,
+          route,
           diagnosisUnavailable: describeUnreadableEnvironment(environmentId, read.error),
           failure,
         },
@@ -234,6 +239,7 @@ export function createEnvironmentDiagnostics(deps: EnvironmentDiagnosticsDeps) {
         },
         provisionFields: prepareFields(fields.values, caps),
         timeline,
+        route,
         ...(prepared ? { diagnosis: prepared } : {}),
         ...(diagnosis?.unavailable ? { diagnosisUnavailable: diagnosis.unavailable } : {}),
         ...(provider ? {} : { diagnosisUnavailable: PROVIDER_UNRESOLVED }),
@@ -325,18 +331,31 @@ export function createEnvironmentDiagnostics(deps: EnvironmentDiagnosticsDeps) {
     }
   }
 
+  /**
+   * The ONE derived timeline: the record's own dates, the run's provisioning attempts, the route
+   * proof, and the marker saying status polls happened at all, sorted into one order.
+   *
+   * The proof and the poll marker are folded in rather than left beside the log for a reader to
+   * reconcile, and that is the whole point of the shape. An investigation asked to line the
+   * timestamps up against a two-entry log said the reachability verdict "settled roughly at the
+   * moment of the create request, with no wait", while `proof.checkedAt` in the same bundle put it
+   * 4m18s later, and built its headline on the contradiction.
+   */
   async function readTimeline(
     workspaceId: string,
     executionId: string | undefined,
     record: EnvironmentRecord | null,
+    route: EnvironmentRouteEvidence,
   ): Promise<EnvironmentTimelineEntry[]> {
     const entries: EnvironmentTimelineEntry[] = []
     if (record) {
       entries.push({ at: record.createdAt, label: 'environment record created' })
+      entries.push(describePollMarker(record))
       if (record.deletedAt) {
         entries.push({ at: record.deletedAt, label: 'environment record tombstoned' })
       }
     }
+    if (route.proof) entries.push(describeRouteProof(route.proof, route.candidates))
     const rows = await readLogRows(workspaceId, executionId ?? record?.executionId ?? undefined)
     if (rows.failure) {
       entries.push({ at: null, label: 'provisioning log could not be read', detail: rows.failure })
@@ -381,6 +400,94 @@ export function createEnvironmentDiagnostics(deps: EnvironmentDiagnosticsDeps) {
   }
 
   return { collect, remediate: createEnvironmentRemediator(deps) }
+}
+
+/**
+ * What the platform knows about reaching this environment, or the reason it knows nothing.
+ *
+ * An unreadable stored value is NAMED rather than folded into the empty case, for the reason
+ * every other degradation in here is: "the provider stated no addresses" is a determinate cause
+ * with a named owner that the investigation is meant to rank first, and a parse failure
+ * masquerading as it would have a reader send someone to fix a mapping that is fine.
+ */
+function readRoute(record: EnvironmentRecord | null): EnvironmentRouteEvidence {
+  if (!record?.reachability) return { candidates: [], proof: null }
+  const parsed = parseReachability(record.reachability)
+  if (!parsed) {
+    return {
+      candidates: [],
+      proof: null,
+      unreadable:
+        "This environment's stored reachability value could not be parsed, so neither the " +
+        'addresses its provider stated nor what dialling them proved could be read. Treat both ' +
+        'as UNKNOWN: this is a platform read failure, NOT a provider that stated no addresses.',
+    }
+  }
+  return { candidates: parsed.candidates, proof: parsed.proof }
+}
+
+/**
+ * The timeline entry for the platform's own status polling: WHEN it last got a clean answer, and
+ * how many it has had.
+ *
+ * Always present for a record that was read, including the case where the answer is none. An
+ * absent marker and a marker saying zero are the two readings the failure that filed this could
+ * not tell apart, and it picked the one that supported a fault: "there is no later poll of any
+ * kind" against an environment that had been polled successfully for nearly four minutes.
+ */
+function describePollMarker(record: EnvironmentRecord): EnvironmentTimelineEntry {
+  if (!record.lastPolledAt || record.pollCount <= 0) {
+    return {
+      at: null,
+      label: 'no successful provider status poll is RECORDED for this environment',
+      detail:
+        'The platform records the last successful poll and a count of them on the environment ' +
+        'row. Neither is set here, so either nothing polled it or it was created before this ' +
+        'marker existed. A successful poll writes no log row of its own at any cadence, so the ' +
+        'provisioning entries below are not a record of polling either way.',
+    }
+  }
+  const polls =
+    record.pollCount === 1 ? '1 successful poll' : `${record.pollCount} successful polls`
+  return {
+    at: record.lastPolledAt,
+    label: `last successful provider status poll (${polls} recorded)`,
+    detail:
+      'Successful polls write this marker rather than one log row each. The count is a FLOOR: ' +
+      'concurrent polls can cost it an increment, so it never over-reports. The stamp is exact, ' +
+      'and the span from the record being created to here is how long the platform was actively ' +
+      'asking the provider about this environment.',
+  }
+}
+
+/**
+ * The timeline entry for the route proof: WHEN the platform dialled, and what came back.
+ *
+ * Dated from `proof.checkedAt`, which is a required field on the stored proof and was populated
+ * and contradicted in the incident this exists for. Every target is listed, because an attempt
+ * list holding exactly one entry, the URL's own name, beside no stated candidates is the
+ * determinate cause the prompt then ranks first.
+ */
+function describeRouteProof(
+  proof: EnvironmentRouteProof,
+  candidates: readonly EnvironmentAddress[],
+): EnvironmentTimelineEntry {
+  const tried = proof.attempts
+    .map((a) => `${a.target} (${a.outcome}${a.detail ? `: ${scrub(a.detail)}` : ''})`)
+    .join(', ')
+  const stated = candidates.length
+    ? candidates.map((c) => c.address).join(', ')
+    : "none (the URL's own name was the only target that existed)"
+  return {
+    at: proof.checkedAt,
+    label: `route proof: ${proof.state}${proof.reason ? ` (${proof.reason})` : ''}`,
+    detail:
+      `Addresses the provider stated for this URL: ${stated}. ` +
+      `${proof.via ? `Carried via ${proof.via}. ` : ''}` +
+      `${tried ? `Tried, in order: ${tried}.` : 'Nothing was tried.'} ` +
+      'This is when the platform DIALLED the environment, which is a different moment from when ' +
+      'the environment was created and from when a step failed.',
+  }
 }
 
 /**

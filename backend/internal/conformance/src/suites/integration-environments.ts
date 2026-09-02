@@ -5,6 +5,7 @@ import {
 } from '@cat-factory/integrations'
 import type {
   Block,
+  EnvironmentHandle,
   EnvironmentProvider,
   ExecutionInstance,
   Pipeline,
@@ -152,6 +153,74 @@ function registerDisposerTests(harness: ConformanceHarness): void {
     })
     // The run's own summary names the address it published, not "(pending)".
     expect(deployStep.output).toContain('https://preview.example')
+  })
+
+  it('records that a status poll SUCCEEDED, on every facade', async () => {
+    // Issue #2163. The provisioning log records a poll that THREW and one that turned an
+    // environment `failed`; a clean answer wrote nothing anywhere, so a readiness wait that
+    // polled for four minutes left two log rows a second apart at the create and nothing after
+    // them. An investigation read that absence as the absence of polling and stated it as
+    // established fact, against an environment that had been polled twenty-odd times.
+    //
+    // Cross-runtime because the marker is two NEW columns each facade maps itself (a D1 INTEGER
+    // against the Drizzle bigint, in the insert list and in the patch map): a facade that dropped
+    // either would read back a never-polled environment after a wait that did poll.
+    let reads = 0
+    const slow = {
+      provision: async () =>
+        ({
+          externalId: 'env-1',
+          status: 'provisioning',
+          url: null,
+          expiresAt: null,
+          access: null,
+          fields: { externalId: 'env-1' },
+        }) as never,
+      status: async () => {
+        reads += 1
+        return (
+          reads < 2
+            ? { externalId: 'env-1', status: 'provisioning', url: null, fields: null }
+            : {
+                externalId: 'env-1',
+                status: 'ready',
+                url: 'https://preview.example',
+                fields: { externalId: 'env-1', deployJob: 'succeeded' },
+              }
+        ) as never
+      },
+      teardown: async () => ({ status: 'torn_down' }) as never,
+    } as unknown as EnvironmentProvider
+
+    // Deploy ONLY, seeded as the legacy shape the authoring rules refuse: a disposer would
+    // tombstone the very row the marker is read off, and an environment that outlives its run is
+    // exactly the case a later poll exists for.
+    const app = harness.makeApp(undefined, { environmentProvider: slow })
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+    const registered = await app.call('POST', `/workspaces/${wsId}/environments/connection`, {
+      config: { kind: 'manifest', manifest: MANIFEST },
+      secrets: { API_TOKEN: 'super-secret-env-token' },
+    })
+    expect(registered.status).toBe(201)
+    const pipelineId = await seedLegacyPipeline(app, wsId, {
+      id: 'pl_deploy_marker',
+      name: 'Deploy only',
+      purpose: 'build',
+      agentKinds: ['deployer'],
+    })
+    await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, { pipelineId })
+    const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    expect(exec.steps.find((s) => s.agentKind === 'deployer')?.state).toBe('done')
+
+    const envs = await app.call<EnvironmentHandle[]>('GET', `/workspaces/${wsId}/environments`)
+    const env = envs.body!.find((e) => e.url === 'https://preview.example')!
+    // Derived from the provider's own call count rather than pinned: how many polls a readiness
+    // wait takes is the engine's business and not this test's, and every poll here succeeds, so
+    // the RELATION worth asserting is that each one was recorded.
+    expect(env.pollCount).toBe(reads)
+    expect(env.pollCount).toBeGreaterThan(1)
+    expect(env.lastPolledAt).toBeGreaterThanOrEqual(env.createdAt)
   })
 
   it('never fails the run when the reclaim cannot be confirmed', async () => {

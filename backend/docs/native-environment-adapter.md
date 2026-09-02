@@ -155,6 +155,37 @@ status is persisted as the literal `Provisioning failed`, and a reader given tha
 only that something did not happen, so a failure your adapter can NAME should name it (the built-in
 Kubernetes adapter names the workload whose rollout gave up, and says when the namespace is gone).
 
+### What `fields` is for, and what a POLL does to it
+
+`ProvisionedEnvironment.fields` is your own bag: whatever your adapter needs to interpolate the
+later status and teardown calls, sealed on the environment row and never exposed on a handle. It is
+also the evidence the environment investigation reasons from, and that second reader is why the
+write rule matters.
+
+- **A stated bag REPLACES the stored one, whole.** It is what THIS response captured, not an
+  accumulator, so a key you stop stating stops being stored. The same clear-unless-restated rule as
+  `error` and `statusNote`.
+- **`null` states nothing and keeps what is stored.** Return it from a call that read nothing (the
+  generic provider's no-`status`-template fallback does; so does the built-in Kubernetes adapter
+  when the row carries no namespace to read a status from). Absent is not empty, and the difference
+  is load-bearing: an empty bag from a status endpoint answering a narrower shape than your create
+  endpoint would erase the teardown state the create response supplied.
+- **Write what a poll LEARNS, not just what the create knew.** For an async provider the create
+  response is the least informative answer you will ever give: no finished deploy job, no load
+  balancers, no readiness detail. Everything worth capturing arrives on a later poll, so state the
+  balancer FQDNs, the upstream's own status word and any readiness detail on every poll that has
+  them. Until [#2162](https://github.com/kibertoad/cat-factory/issues/2162) the platform handed the
+  bag back to the provider and then persisted a patch that omitted it, so an adapter doing exactly
+  this was writing into a field nothing ever read: the fields were frozen at create time for the
+  life of the environment, and an investigation later read a create-time `pending` sitting beside a
+  `ready` row as the platform contradicting itself.
+- **An ADDRESS is not a field.** Addresses go on `ProvisionedEnvironment.addresses`, which is
+  proved and reaches a container bridge; a bag entry reaches nobody who could dial it. See
+  [ADR 0062](./adr/0062-environment-address-bridge-and-route-proof.md).
+- **Secrets are redacted on the way to a prompt, not before.** The bag is sealed at rest, and the
+  investigation's gatherer scrubs it by key and value. That is a net, not permission: keep a
+  credential out of it if the later calls do not need one.
+
 ### `frontendOrigins`: wiring a bound frontend's CORS
 
 When a `deployer` step provisions a service that one or more `frontend` frames bind (via the
@@ -443,6 +474,8 @@ export class AcmeEnvsEnvironmentProvider implements EnvironmentProvider {
       status,
       expiresAt: env.online_until ? Date.parse(env.online_until) : null,
       access: null,
+      // The whole bag THIS response captured; it replaces the stored one. Return `null` from a
+      // call that read nothing rather than `{}`, which would erase it. See `fields` above.
       fields: { project: env.project },
       // Why it is not ready YET, in the provider's own words: this is what the deployer's
       // readiness ceiling quotes instead of reporting only how long it waited. Absent on a

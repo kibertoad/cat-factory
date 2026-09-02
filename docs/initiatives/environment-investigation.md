@@ -179,14 +179,41 @@ mutation either. So `remediate` is a member of the operation vocabulary, for the
 
 ## Slice 2: a proved route, and telling the two failures apart
 
-- [ ] **[#2148](https://github.com/kibertoad/cat-factory/issues/2148) is the prerequisite for the
+- [x] **[#2148](https://github.com/kibertoad/cat-factory/issues/2148) is the prerequisite for the
       second trigger.** Today the loop fires when the environment itself never became usable. The
       other half (a `ready` environment a STEP could not reach) needs a proved route first, or an
       investigator cannot tell "the environment is dead" from "this container cannot reach a live
-      environment" and would confidently repair the wrong layer.
-- [ ] **[#2153](https://github.com/kibertoad/cat-factory/issues/2153)**: a provider that reports
+      environment" and would confidently repair the wrong layer. Landed as
+      [ADR 0062](../../backend/docs/adr/0062-environment-address-bridge-and-route-proof.md).
+- [x] **[#2153](https://github.com/kibertoad/cat-factory/issues/2153)**: a provider that reports
       `provisioning` has no way to say why, so `lastError` is structurally always null on the
-      readiness-ceiling path. Sharper input for the same diagnosis.
+      readiness-ceiling path. Sharper input for the same diagnosis. Landed as
+      `ProvisionedEnvironment.statusNote`.
+
+## Slice 2b: the first shipped verdict was confidently wrong, and the inputs were why
+
+The first real investigation blamed a platform readiness gate that had worked correctly, told a
+human to go change three behaviours that already behave as asked, and subordinated the actual cause
+to one bullet. Three separate defects, filed together, all landed:
+
+- [x] **[#2162](https://github.com/kibertoad/cat-factory/issues/2162)**: `refreshStatus` handed the
+      whole captured field bag back to the provider and then persisted a patch that omitted it, so
+      a provider's fields were frozen at CREATE time for the life of an environment. For an async
+      provider the create response is the least informative answer it will ever give, so the most
+      load-bearing input in the bundle was stale by construction. Fields are now re-sealed from
+      every poll that states them, `null` states nothing and keeps what is stored, and the port
+      docstring says which.
+- [x] **[#2163](https://github.com/kibertoad/cat-factory/issues/2163)**: the ordering half. The
+      bundle now carries the route evidence and folds the proof into ONE derived timeline dated
+      from `proof.checkedAt`, so an ordering claim contradicted by a timestamp the platform held is
+      structurally hard to state; a successful status poll leaves a marker on the row, so "nothing
+      polled" and "polling is not logged" stop being the same data; and the platform COMPUTES the
+      determinate cause (`determinateRouteCause`) and tells the model it outranks anything inferred
+      from apparent ordering. Prompt bumped to `environment-investigation@v2`.
+- [x] **[#2165](https://github.com/kibertoad/cat-factory/issues/2165)**: a stored route proof was
+      dropped by any later poll whose candidate list merely REORDERED, and nothing re-took one.
+      Survival is now decided on what the proof established, and `refreshStatus` re-proves a
+      `ready` environment whose proof it had to drop.
 
 ## Slice 3: more providers, more evidence
 
@@ -196,9 +223,10 @@ mutation either. So `remediate` is a member of the operation vocabulary, for the
 - [ ] The generic HTTP (`remote-custom`) provider: a manifest-declared `diagnose:` template, so a
       deployment's own management API can answer without a code change. This is the one that would
       have covered the motivating incident directly.
-- [ ] The platform's own reachability probe as bundle evidence (a DNS resolution and a TCP connect
-      from the backend), for the environments whose provider says nothing useful. Note the facade
-      split: a Worker has neither.
+- [ ] A FRESH probe as bundle evidence (a DNS resolution and a TCP connect taken at investigation
+      time), for the environments whose provider says nothing useful. The STORED route proof is
+      already in the bundle (slice 2b), which is the cheap half; this is the half that costs I/O on
+      the failure path. Note the facade split: a Worker has neither.
 
 ## Slice 4: surfacing
 

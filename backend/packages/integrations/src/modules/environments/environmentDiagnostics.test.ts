@@ -27,6 +27,9 @@ function record(overrides: Partial<EnvironmentRecord> = {}): EnvironmentRecord {
     expiresAt: null,
     lastError: null,
     statusNote: null,
+    reachability: null,
+    lastPolledAt: null,
+    pollCount: 0,
     deletedAt: null,
     provisionType: 'preview',
     engine: 'remote-custom',
@@ -227,8 +230,73 @@ describe('createEnvironmentDiagnostics.collect', () => {
       environmentId: 'env_1',
       executionId: 'exec_1',
     })
-    expect(bundle.timeline.map((entry) => entry.at)).toEqual([1_000, 2_000, 3_000])
-    expect(bundle.timeline[2]?.label).toContain('environment.status failure')
+    const dated = bundle.timeline.filter((entry) => entry.at !== null)
+    expect(dated.map((entry) => entry.at)).toEqual([1_000, 2_000, 3_000])
+    expect(dated[2]?.label).toContain('environment.status failure')
+    // The poll marker rides the same list, undated here because this environment records no
+    // successful poll. An undated entry sorts ahead of every stamp, which is the honest place for
+    // a fact with no time of its own.
+    expect(bundle.timeline[0]?.label).toContain('no successful provider status poll')
+  })
+
+  it("folds the route proof into the timeline, dated from the proof's OWN checkedAt", async () => {
+    // Issue #2163. An investigation asked to line the timestamps up against a two-entry log said
+    // the reachability verdict "settled roughly at the moment of the create request, with no
+    // wait", while `checkedAt` in the same stored value put it 4m18s later. The fix is structural:
+    // there is one derived list and the proof is in it, so the ordering cannot be reconciled wrong.
+    const diagnostics = createEnvironmentDiagnostics(
+      deps({
+        found: record({
+          reachability: JSON.stringify({
+            candidates: [],
+            proof: {
+              state: 'not_reached',
+              via: null,
+              reason: 'name_unresolved',
+              attempts: [{ target: 'pr-42.example.test:443', outcome: 'name_unresolved' }],
+              checkedAt: 259_000,
+            },
+          }),
+        }),
+      }),
+    )
+    const bundle = await collectBundle(diagnostics, { environmentId: 'env_1' })
+
+    const proofEntry = bundle.timeline.find((e) => e.label.startsWith('route proof'))
+    expect(proofEntry?.at).toBe(259_000)
+    expect(proofEntry?.label).toBe('route proof: not_reached (name_unresolved)')
+    expect(proofEntry?.detail).toContain('pr-42.example.test:443 (name_unresolved)')
+    // And it is carried as facts too, because the timeline answers WHEN the platform dialled
+    // while this answers what it had to dial.
+    expect(bundle.route).toMatchObject({ candidates: [], proof: { checkedAt: 259_000 } })
+  })
+
+  it('states how much successful POLLING is recorded, which no log row says', async () => {
+    const diagnostics = createEnvironmentDiagnostics(
+      deps({ found: record({ lastPolledAt: 225_000, pollCount: 22 }) }),
+    )
+    const bundle = await collectBundle(diagnostics, { environmentId: 'env_1' })
+
+    const marker = bundle.timeline.find((e) => e.label.includes('status poll'))
+    expect(marker?.at).toBe(225_000)
+    expect(marker?.label).toBe(
+      'last successful provider status poll (22 successful polls recorded)',
+    )
+    // The count is stated as a FLOOR: concurrent polls can cost it an increment, so a reader must
+    // not treat it as a ledger.
+    expect(marker?.detail).toContain('FLOOR')
+  })
+
+  it('NAMES an unreadable reachability value rather than reporting no stated addresses', async () => {
+    // The two are opposite facts and only one of them is a determinate cause with an owner: "the
+    // provider stated no addresses" sends someone to a response mapping, a parse failure sends
+    // them to the platform.
+    const diagnostics = createEnvironmentDiagnostics(
+      deps({ found: record({ reachability: '{not json' }) }),
+    )
+    const bundle = await collectBundle(diagnostics, { environmentId: 'env_1' })
+    expect(bundle.route.unreadable).toContain('could not be parsed')
+    expect(bundle.route).toMatchObject({ candidates: [], proof: null })
   })
 
   it('names a provisioning log it could not read rather than reporting an empty history', async () => {

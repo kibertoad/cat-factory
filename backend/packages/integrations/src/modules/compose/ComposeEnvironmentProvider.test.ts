@@ -119,7 +119,7 @@ describe('ComposeEnvironmentProvider', () => {
     expect(env.status).toBe('ready')
     expect(env.url).toBe('http://localhost:49153')
     expect(env.externalId).toBe('cf-env-shop-42')
-    expect(env.fields.project).toBe('cf-env-shop-42')
+    expect(env.fields?.project).toBe('cf-env-shop-42')
     // Project-scoped + a SINGLE rewritten compose file passed to `up` (no additive override).
     const up = calls.find((a) => a.includes('up'))!
     expect(up).toContain('-p')

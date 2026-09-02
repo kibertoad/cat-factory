@@ -21,6 +21,7 @@ function bundle(overrides: Partial<EnvironmentEvidenceBundle> = {}): Environment
     },
     provisionFields: {},
     timeline: [],
+    route: { candidates: [], proof: null },
     failure: {
       error: 'Environment was still provisioning after 20 minutes',
       reason: 'timeout',
@@ -99,6 +100,54 @@ describe('renderEnvironmentInvestigationPrompt', () => {
     const prompt = render()
     expect(prompt).toContain('Provision fields captured from the provider')
     expect(prompt).toContain('This is an ABSENCE, not a clean result')
+  })
+
+  it('states the addresses there were to dial, and calls an empty list what it is', () => {
+    // Issue #2163's third half. `no address was captured at all` was the entire cause of the
+    // motivating failure and the investigation found it, as one bullet subordinated to a headline
+    // blaming a platform gate that had worked. So the platform COMPUTES the determinate cause and
+    // says it ranks first, rather than asking the model to rank it.
+    const prompt = render({
+      route: {
+        candidates: [],
+        proof: {
+          state: 'not_reached',
+          via: null,
+          reason: 'name_unresolved',
+          attempts: [{ target: 'pr-42.example.test:443', outcome: 'name_unresolved' }],
+          checkedAt: 1_788_347_753_453,
+        },
+      },
+    })
+    expect(prompt).toContain('Reaching this environment')
+    expect(prompt).toContain('addresses the provider stated for this environment')
+    expect(prompt).toContain('2026-09-02T11:15:53.453Z')
+    expect(prompt).toContain('A DETERMINATE CAUSE the platform already computed')
+    expect(prompt).toContain('the provider stated no addresses for it')
+    expect(prompt).toContain('make it the headline')
+  })
+
+  it('offers no determinate cause when the evidence does not settle one', () => {
+    // `inconclusive` is an admission about the PLATFORM, and dressing it as a determinate cause is
+    // how "we could not tell" comes to read as a verdict about the environment.
+    const prompt = render({
+      route: {
+        candidates: [{ address: '10.4.19.22', label: 'internal ALB' }],
+        proof: {
+          state: 'inconclusive',
+          via: null,
+          reason: 'probe_failed',
+          attempts: [],
+          checkedAt: 1_788_347_753_453,
+        },
+      },
+    })
+    expect(prompt).toContain('10.4.19.22 (internal ALB)')
+    expect(prompt).not.toContain('A DETERMINATE CAUSE')
+  })
+
+  it('calls an unprobed route an absence of a check, never a passed one', () => {
+    expect(render()).toContain('That is an ABSENCE of a check, never a passed one')
   })
 
   it('refuses to let an empty timeline read as a quiet run', () => {

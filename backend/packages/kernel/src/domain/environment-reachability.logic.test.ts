@@ -3,6 +3,7 @@ import {
   MAX_PROBED_ADDRESSES,
   describeInconclusiveRoute,
   describeUnreachableEnvironment,
+  determinateRouteCause,
   planRouteProbes,
   recordRefusedAttempt,
   recordRouteAttempt,
@@ -318,5 +319,50 @@ describe('describeInconclusiveRoute', () => {
     expect(message).toContain('could not be established either way')
     expect(message).toContain('env.example:443 (probe_failed)')
     expect(message).not.toContain('is unreachable')
+  })
+})
+
+describe('determinateRouteCause', () => {
+  const notReached = {
+    state: 'not_reached' as const,
+    via: null,
+    reason: 'name_unresolved',
+    attempts: [{ target: 'pr-42.example.test:443', outcome: 'name_unresolved' }],
+    checkedAt: 1,
+  }
+
+  it('names the cause when the environment name was the only target that ever existed', () => {
+    // The whole cause of the motivating failure, and the one the investigation subordinated to a
+    // wrong headline: the provider populated no addresses, so the proof had only a name that does
+    // not resolve outside an internal DNS view to try.
+    const cause = determinateRouteCause([], notReached)
+    expect(cause).toContain('stated no addresses')
+    expect(cause).toContain('never STATED, not that stated addresses were tried and failed')
+  })
+
+  it('settles nothing once there were addresses to try', () => {
+    // Then the finding is a verdict about the environment or its network, which is exactly the
+    // judgement this function must not pre-empt.
+    expect(determinateRouteCause([{ address: '10.4.19.22' }], notReached)).toBeNull()
+  })
+
+  it('settles nothing for a proof that CARRIED, or for one that established nothing', () => {
+    expect(determinateRouteCause([], { ...notReached, state: 'reached', reason: null })).toBeNull()
+    expect(
+      determinateRouteCause([], { ...notReached, state: 'inconclusive', reason: 'probe_failed' }),
+    ).toBeNull()
+    expect(determinateRouteCause([], null)).toBeNull()
+  })
+
+  it('names `no_candidate` whatever state carries it, because nothing was published to dial', () => {
+    // `reduceRouteProof` files it as `inconclusive` (nothing was tried, so nothing was
+    // established), and it is still determinate: the environment published no host and port.
+    const cause = determinateRouteCause([], {
+      ...notReached,
+      state: 'inconclusive',
+      reason: 'no_candidate',
+      attempts: [],
+    })
+    expect(cause).toContain('no address to dial at all')
   })
 })

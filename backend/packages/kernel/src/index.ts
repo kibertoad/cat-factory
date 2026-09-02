@@ -717,6 +717,7 @@ export {
   ROUTE_PROBE_TIMEOUT_MS,
   describeInconclusiveRoute,
   describeUnreachableEnvironment,
+  determinateRouteCause,
   planRouteProbes,
   recordRefusedAttempt,
   recordRouteAttempt,

@@ -97,7 +97,11 @@ export class HttpEnvironmentProvider implements EnvironmentProvider {
         status: 'ready',
         expiresAt: null,
         access: null,
-        fields: req.provisionFields,
+        // `null`, not the bag it was handed: nothing was ASKED, so this response states nothing
+        // about what the provider has captured, and the stored bag stays as it is. Echoing it back
+        // would be indistinguishable from a statement, which is the distinction that keeps a
+        // narrower answer from erasing teardown state (see `ProvisionedEnvironment.fields`).
+        fields: null,
       }
     }
     const json = await this.execute(

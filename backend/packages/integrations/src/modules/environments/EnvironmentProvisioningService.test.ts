@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ValidationError } from '@cat-factory/kernel'
 import type {
+  Clock,
   DeployProvisionJob,
   EnvironmentProvider,
   EnvironmentRecord,
@@ -9,6 +10,7 @@ import type {
   ProvisionedEnvironment,
   RepoValidationResult,
   ResolveRunRepoContext,
+  RouteProbe,
   RunnerJobRef,
   RunnerJobView,
   SecretCipher,
@@ -106,6 +108,8 @@ function makeService(
   provider: EnvironmentProvider,
   registry: EnvironmentRegistryRepository,
   urlPolicy?: UrlSafetyPolicy,
+  /** What a poll needs beyond the lifecycle: a socket to re-prove a route with, and a clock. */
+  extras: { routeProbe?: RouteProbe; clock?: Clock } = {},
 ) {
   const connectionService = {
     resolveProvider: async () => ({ provider, manifest: MANIFEST }),
@@ -122,8 +126,9 @@ function makeService(
     environmentRegistryRepository: registry,
     secretCipher: fakeCipher,
     idGenerator: { next: (prefix: string) => `${prefix}_${++n}` },
-    clock: { now: () => 1_700_000_000_000 },
+    clock: extras.clock ?? { now: () => 1_700_000_000_000 },
     ...(urlPolicy ? { urlPolicy } : {}),
+    ...(extras.routeProbe ? { routeProbe: extras.routeProbe } : {}),
   })
 }
 
@@ -232,6 +237,242 @@ describe('EnvironmentProvisioningService — refreshStatus', () => {
     // poll-time failure carried a stale/empty reason).
     expect(handle.lastError).toBe(FAILED_REASON)
     expect(registry.records[0]!.lastError).toBe(FAILED_REASON)
+  })
+
+  /**
+   * Comes up `provisioning` with the thin bag a create response carries, then answers each poll
+   * with the richer one the same provider only learns later. The shape every asynchronous
+   * provider has: the create response is the least informative answer it will ever give.
+   */
+  function capturesMoreOnEachPoll(polls: readonly ProvisionedEnvironment['fields'][]) {
+    const base: ProvisionedEnvironment = {
+      externalId: 'ext-1',
+      url: 'https://pr-9.preview.test',
+      status: 'ready',
+      expiresAt: null,
+      access: null,
+      fields: { externalId: 'ext-1', kargoStatus: 'pending' },
+    }
+    let poll = 0
+    return {
+      async provision() {
+        return { ...base, status: 'provisioning' as const, url: null }
+      },
+      async status() {
+        return { ...base, fields: polls[Math.min(poll++, polls.length - 1)] ?? null }
+      },
+      async teardown() {
+        return { status: 'torn_down' as const }
+      },
+    } satisfies EnvironmentProvider
+  }
+
+  /** The stored field bag, as the passthrough cipher leaves it. */
+  function storedFields(record: EnvironmentRecord): unknown {
+    return JSON.parse((record.provisionFieldsCipher ?? 'enc:null').replace(/^enc:/, ''))
+  }
+
+  it('persists what a status poll captured, so a later observation is not thrown away', async () => {
+    // Issue #2162. `refreshStatus` handed the whole bag back to the provider and then persisted a
+    // patch that omitted it, so a provider's fields were frozen at create time for the life of the
+    // environment: the readiness detail, the balancer FQDNs and the provider's own status message
+    // all arrive on a poll, and every one of them was discarded. The environment investigation
+    // then read a create-time `kargoStatus: pending` sitting beside a `ready` row and built its
+    // headline on the platform contradicting itself.
+    const registry = fakeRegistry()
+    const service = makeService(
+      capturesMoreOnEachPoll([
+        { externalId: 'ext-1', kargoStatus: 'ready', kargoServing: 'pr-9', balancer: '10.4.19.22' },
+      ]),
+      registry,
+    )
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    const id = registry.records[0]!.id
+    expect(storedFields(registry.records[0]!)).toEqual({
+      externalId: 'ext-1',
+      kargoStatus: 'pending',
+    })
+
+    await service.refreshStatus('ws1', id)
+
+    // REPLACED, not merged: the bag is what THIS response captured, so a key the provider has
+    // stopped stating has stopped being stored. A bag nothing can clear is the trap the
+    // clear-unless-restated rule on `lastError` and `statusNote` exists to avoid.
+    expect(storedFields(registry.records[0]!)).toEqual({
+      externalId: 'ext-1',
+      kargoStatus: 'ready',
+      kargoServing: 'pr-9',
+      balancer: '10.4.19.22',
+    })
+  })
+
+  it('KEEPS the stored bag when a poll states nothing about the fields at all', async () => {
+    // Absent is not empty, the same rule the addresses beside it follow. A status endpoint
+    // answering a narrower shape than the create endpoint (or the no-`status`-template fallback)
+    // states nothing, and erasing teardown state on its say-so is how a reclaim breaks.
+    const registry = fakeRegistry()
+    const service = makeService(capturesMoreOnEachPoll([null]), registry)
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    const id = registry.records[0]!.id
+
+    await service.refreshStatus('ws1', id)
+
+    expect(storedFields(registry.records[0]!)).toEqual({
+      externalId: 'ext-1',
+      kargoStatus: 'pending',
+    })
+  })
+
+  it('leaves a trail for a poll that SUCCEEDS, which nothing else on this path records', async () => {
+    // Issue #2163. The provisioning log records a poll that throws and a poll that turns the env
+    // `failed`; a clean answer wrote nothing, so a readiness wait that polled successfully for
+    // four minutes left two rows a second apart at the create and nothing after them. An
+    // investigation read that absence as the absence of polling and stated it as fact.
+    const registry = fakeRegistry()
+    let now = 1_700_000_000_000
+    const service = makeService(capturesMoreOnEachPoll([null]), registry, undefined, {
+      clock: { now: () => now },
+    })
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    const id = registry.records[0]!.id
+    // A freshly recorded environment has by construction never been polled, and says so rather
+    // than carrying a stamp nobody earned.
+    expect(registry.records[0]!.lastPolledAt).toBeNull()
+    expect(registry.records[0]!.pollCount).toBe(0)
+
+    now += 225_000
+    await service.refreshStatus('ws1', id)
+    now += 10_000
+    await service.refreshStatus('ws1', id)
+
+    expect(registry.records[0]!.pollCount).toBe(2)
+    expect(registry.records[0]!.lastPolledAt).toBe(1_700_000_235_000)
+  })
+
+  it('RE-PROVES a route the poll invalidated, instead of leaving the row with no proof', async () => {
+    // Issue #2165's other half. `proveEnvironmentRoute` is otherwise reached from exactly one
+    // place, the deployer's frame settle, which never runs again for a frame that already settled.
+    // So a proof a later poll legitimately invalidated (here: the provider re-points the
+    // environment at a different balancer) was dropped and never re-taken, and everything built on
+    // it stopped silently, because a dropped proof and a proof never taken are the same value.
+    const dialled: string[] = []
+    const registry = fakeRegistry()
+    const moved: ProvisionedEnvironment = {
+      externalId: 'ext-1',
+      url: 'https://pr-9.preview.test',
+      status: 'ready',
+      expiresAt: null,
+      access: null,
+      fields: null,
+      addresses: [{ address: '10.4.19.30', label: 'replacement ALB' }],
+    }
+    const service = makeService(
+      {
+        async provision() {
+          return { ...moved, addresses: [{ address: '10.4.19.22' }] }
+        },
+        async status() {
+          return moved
+        },
+        async teardown() {
+          return { status: 'torn_down' as const }
+        },
+      } satisfies EnvironmentProvider,
+      registry,
+      undefined,
+      {
+        routeProbe: async (req) => {
+          dialled.push(req.address ?? req.host)
+          return req.address ? { state: 'carried' } : { state: 'unresolved' }
+        },
+      },
+    )
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    const id = registry.records[0]!.id
+    const proved = await service.proveReachability('ws1', id)
+    expect(proved.reachability?.proof).toMatchObject({ state: 'reached', via: '10.4.19.22' })
+
+    const refreshed = await service.refreshStatus('ws1', id)
+
+    // The stored verdict really was stale: the address it vouched for is not on offer any more.
+    // What matters is that a NEW one was taken against what is, rather than the row being left
+    // with the same value it would carry if nothing had ever looked.
+    expect(refreshed.reachability?.candidates.map((c) => c.address)).toEqual(['10.4.19.30'])
+    expect(refreshed.reachability?.proof).toMatchObject({ state: 'reached', via: '10.4.19.30' })
+    expect(dialled).toEqual(['pr-9.preview.test', '10.4.19.22', 'pr-9.preview.test', '10.4.19.30'])
+  })
+
+  it('takes no FIRST proof on a poll: only one the poll itself invalidated is re-taken', async () => {
+    // The narrowing that keeps a socket off the hot path. Nothing has proved a `provisioning`
+    // environment yet, and probing here would dial on every poll of every environment whose
+    // deployer has not settled it; the settle path owns the first proof.
+    const dialled: string[] = []
+    const registry = fakeRegistry()
+    const service = makeService(capturesMoreOnEachPoll([null]), registry, undefined, {
+      routeProbe: async (req) => {
+        dialled.push(req.address ?? req.host)
+        return { state: 'carried' }
+      },
+    })
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    await service.refreshStatus('ws1', registry.records[0]!.id)
+    expect(dialled).toEqual([])
+  })
+
+  it('leaves a dropped proof alone while the environment is not ready again', async () => {
+    // The other half of the same narrowing: an environment that has gone back to `provisioning`
+    // is one whose route is not worth dialling yet, and its own settle path will prove it when it
+    // comes up. Re-taking here would record a `not_reached` about an environment mid-rollout.
+    const dialled: string[] = []
+    const registry = fakeRegistry()
+    let poll = 0
+    const service = makeService(
+      {
+        async provision() {
+          return {
+            externalId: 'ext-1',
+            url: 'https://pr-9.preview.test',
+            status: 'ready' as const,
+            expiresAt: null,
+            access: null,
+            fields: null,
+            addresses: [{ address: '10.4.19.22' }],
+          }
+        },
+        async status() {
+          poll += 1
+          return {
+            externalId: 'ext-1',
+            url: 'https://pr-9.preview.test',
+            status: 'provisioning' as const,
+            expiresAt: null,
+            access: null,
+            fields: null,
+            addresses: [{ address: `10.4.19.${30 + poll}` }],
+          }
+        },
+        async teardown() {
+          return { status: 'torn_down' as const }
+        },
+      } satisfies EnvironmentProvider,
+      registry,
+      undefined,
+      {
+        routeProbe: async (req) => {
+          dialled.push(req.address ?? req.host)
+          return req.address ? { state: 'carried' } : { state: 'unresolved' }
+        },
+      },
+    )
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    const id = registry.records[0]!.id
+    await service.proveReachability('ws1', id)
+    dialled.length = 0
+
+    const refreshed = await service.refreshStatus('ws1', id)
+
+    expect(refreshed.reachability?.proof ?? null).toBeNull()
+    expect(dialled).toEqual([])
   })
 
   /** Stays `provisioning`, saying something different about it on each poll. */
@@ -669,6 +910,8 @@ describe('EnvironmentProvisioningService — supersedeForBlock (infraless flip)'
       expiresAt: null,
       lastError: null,
       statusNote: null,
+      lastPolledAt: null,
+      pollCount: 0,
       provisionType: 'kubernetes',
       engine: 'remote-kubernetes',
       deletedAt: null,

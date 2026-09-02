@@ -105,7 +105,7 @@ describe('KubernetesEnvironmentProvider.provision', () => {
     expect(result.status).toBe('provisioning')
     expect(result.externalId).toBe('cf-env-42')
     expect(result.url).toBe('https://feat.preview.example.com')
-    expect(result.fields.namespace).toBe('cf-env-42')
+    expect(result.fields?.namespace).toBe('cf-env-42')
 
     // Namespace created (idempotent POST), then the Deployment applied via SSA.
     const nsCreate = calls.find((c) => c.method === 'POST' && c.url.endsWith('/api/v1/namespaces'))
@@ -348,7 +348,7 @@ describe('KubernetesEnvironmentProvider.status', () => {
     const refreshed = await provider.status({
       manifest: m,
       externalId: provisioned.externalId,
-      provisionFields: provisioned.fields,
+      provisionFields: provisioned.fields ?? {},
       resolveSecret,
     })
     expect(refreshed.url).toBe('https://pr-42.preview.example.com')

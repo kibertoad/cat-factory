@@ -136,6 +136,77 @@ describe('foldStatedAddresses', () => {
     ).toBeNull()
   })
 
+  it('keeps a `reached` proof when the same addresses come back in a different ORDER', () => {
+    // The latent trap this rule replaced. A provider stating addresses from a live DNS answer is
+    // stating a value whose order it does not control: `getaddrinfo` sorts destinations against
+    // the local interface set, and resolvers rotate records between answers. A sequence
+    // comparison dropped the proof on a network change, months later, on someone else's machine,
+    // and nothing took another one, so the address a container bridge is built from just stopped.
+    expect(
+      foldStatedAddresses(
+        { candidates: [{ address: '10.4.19.22' }, { address: '10.4.19.23' }], proof },
+        'https://env.example',
+        [{ address: '10.4.19.23' }, { address: '10.4.19.22' }],
+        'https://env.example',
+      ),
+    ).toEqual({
+      // The FRESH order is kept for the next probe: it is the provider's current preference about
+      // what to try first. It is just not evidence.
+      candidates: [{ address: '10.4.19.23' }, { address: '10.4.19.22' }],
+      proof,
+    })
+  })
+
+  it('keeps a `reached` proof when the provider ADDS a candidate it never touched', () => {
+    // Strictly more information cannot invalidate a finding about one address. A balancer gaining
+    // a zone is a routine event and says nothing about whether the proved address still carries.
+    expect(
+      foldStatedAddresses(
+        { candidates: [{ address: '10.4.19.22' }], proof },
+        'https://env.example',
+        [{ address: '10.4.19.22' }, { address: '10.4.19.30', label: 'new AZ' }],
+        'https://env.example',
+      )?.proof,
+    ).toEqual(proof)
+  })
+
+  it('keeps a `reached` proof taken on the NAME itself whatever the candidates do', () => {
+    // `via: null` on a `reached` proof means the name carried, so the candidate list was never
+    // part of the finding; the URL is what it was about and the URL is checked above.
+    const byName = { ...proof, via: null }
+    expect(
+      foldStatedAddresses(
+        { candidates: [{ address: '10.4.19.22' }], proof: byName },
+        'https://env.example',
+        [{ address: '10.4.19.30' }],
+        'https://env.example',
+      )?.proof,
+    ).toEqual(byName)
+  })
+
+  it('DROPS a negative proof once a candidate it never dialled appears', () => {
+    // The asymmetry is the point: "nothing reaches this environment" is a finding about the whole
+    // list that was tried, so it stops being established the moment there is a target nothing
+    // tried. A reorder of the same SET leaves it standing (below).
+    const negative = { ...proof, state: 'not_reached' as const, via: null, reason: 'no_route' }
+    expect(
+      foldStatedAddresses(
+        { candidates: [{ address: '10.4.19.22' }], proof: negative },
+        'https://env.example',
+        [{ address: '10.4.19.22' }, { address: '10.4.19.30' }],
+        'https://env.example',
+      )?.proof,
+    ).toBeNull()
+    expect(
+      foldStatedAddresses(
+        { candidates: [{ address: '10.4.19.22' }, { address: '10.4.19.30' }], proof: negative },
+        'https://env.example',
+        [{ address: '10.4.19.30' }, { address: '10.4.19.22' }],
+        'https://env.example',
+      )?.proof,
+    ).toEqual(negative)
+  })
+
   it('is null when there is nothing worth a column', () => {
     expect(foldStatedAddresses(null, null, [], 'https://env.example')).toBeNull()
     expect(foldStatedAddresses(null, null, undefined, null)).toBeNull()

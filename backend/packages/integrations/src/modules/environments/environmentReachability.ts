@@ -82,10 +82,30 @@ export async function proveEnvironmentRoute(
  * is stored; a statement replaces it. The same rule as everywhere else in this tree: absent is not
  * empty.
  *
- * The proof survives only while BOTH inputs it was derived from are unchanged: the URL it dialled
- * and the candidate list it drew from. Either moving means the stored verdict is about a target
- * that no longer exists, and keeping it there is how a stale `reached` comes to vouch for an
- * address the provider has since replaced. Dropping it costs one re-probe on the next settle.
+ * The proof survives on what it ESTABLISHED, never on the shape of the list it was handed.
+ *
+ * Order is not part of any finding. A provider stating addresses from a live DNS answer is stating
+ * a value whose order it does not control (`getaddrinfo` applies RFC 6724 destination sorting
+ * against the local interface set, and recursive resolvers rotate records between answers), so a
+ * sequence comparison drops a good proof on a network change, months later, on someone else's
+ * machine. The stated ORDER is still kept for the next probe, because it is the provider's current
+ * preference about what to try first; it is just not evidence.
+ *
+ * So the URL has to be unchanged (every finding was about that name), and then:
+ *
+ *   - a `reached` proof is a finding about ONE target: the address in `via`, or the name itself
+ *     when `via` is null. It survives while that target is still on offer, which for `via` means
+ *     still being among the stated candidates and for the name means nothing further, the URL
+ *     having already been checked. A provider adding a fallback candidate is strictly MORE
+ *     information and cannot invalidate a proof about an address it did not touch.
+ *   - every other proof is a finding about the whole list that was TRIED, so it survives only
+ *     while the candidate SET is unchanged. A new candidate is a target nothing ever dialled, and
+ *     "nothing reaches this environment" is no longer established once one exists.
+ *
+ * A dropped proof costs a re-probe, and {@link EnvironmentProvisioningService.refreshStatus} takes
+ * one for a `ready` environment rather than leaving the row to be re-proved by a deployer settle
+ * that will not run again for that frame: a dropped proof and a proof never taken are the same
+ * value, so nothing downstream could tell that the feature had stopped working.
  */
 export function foldStatedAddresses(
   previous: EnvironmentReachability | null,
@@ -95,17 +115,31 @@ export function foldStatedAddresses(
 ): EnvironmentReachability | null {
   const stored = previous?.candidates ?? []
   const candidates = addresses ? [...addresses] : [...stored]
-  const unchanged = previousUrl === url && sameAddresses(stored, candidates)
-  const proof = unchanged ? (previous?.proof ?? null) : null
+  const proof =
+    previousUrl === url ? survivingProof(previous?.proof ?? null, stored, candidates) : null
   if (candidates.length === 0 && !proof) return null
   return { candidates, proof }
 }
 
-/** Whether two candidate lists name the same addresses in the same order (labels are cosmetic). */
-function sameAddresses(
+/** A stored proof that still says something about the freshly stated candidates, or null. */
+function survivingProof(
+  proof: EnvironmentRouteProof | null,
+  stored: readonly EnvironmentAddress[],
+  candidates: readonly EnvironmentAddress[],
+): EnvironmentRouteProof | null {
+  if (!proof) return null
+  if (proof.state === 'reached') {
+    return !proof.via || candidates.some((entry) => entry.address === proof.via) ? proof : null
+  }
+  return sameAddressSet(stored, candidates) ? proof : null
+}
+
+/** Whether two candidate lists name the same SET of addresses (order and labels are cosmetic). */
+function sameAddressSet(
   a: readonly EnvironmentAddress[],
   b: readonly EnvironmentAddress[],
 ): boolean {
-  if (a.length !== b.length) return false
-  return a.every((entry, index) => entry.address === b[index]?.address)
+  const left = new Set(a.map((entry) => entry.address))
+  const right = new Set(b.map((entry) => entry.address))
+  return left.size === right.size && [...left].every((address) => right.has(address))
 }

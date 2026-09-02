@@ -496,6 +496,8 @@ export function recordToHandle(
     expiresAt: record.expiresAt,
     lastError: record.lastError,
     statusNote: record.statusNote,
+    lastPolledAt: record.lastPolledAt,
+    pollCount: record.pollCount,
     provisionType: record.provisionType as EnvironmentHandle['provisionType'],
     engine: record.engine as EnvironmentHandle['engine'],
   }

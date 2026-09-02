@@ -216,6 +216,25 @@ export interface EnvironmentRecord {
    * addresses for a host already published in plaintext beside it is neither.
    */
   reachability: string | null
+  /**
+   * When the provider last answered a status poll for this environment WITHOUT failing, and how
+   * many such answers have been recorded.
+   *
+   * The trail a successful poll used to leave nowhere. The provisioning log records a poll that
+   * THROWS and a poll that transitions the environment to `failed`, so a readiness wait that
+   * polled cleanly for four minutes left two log rows a second apart at the create and nothing
+   * afterwards. Nothing in the data then distinguished "nothing polled" from "polling is not
+   * logged", and the environment investigation read that absence as the absence of polling and
+   * said so as established fact. A row per poll is the wrong shape at a ten-second cadence; this
+   * pair is what makes the claim CHECKABLE.
+   *
+   * `pollCount` is a FLOOR rather than a ledger: it is written from the count the poll read at its
+   * start, so two polls racing each other can cost it an increment. `lastPolledAt` is exact,
+   * because a lost race there still leaves the later of the two stamps. Null / 0 means no
+   * successful poll is RECORDED, which is what a reader may conclude and no more.
+   */
+  lastPolledAt: number | null
+  pollCount: number
   /** The service's declared provision type this env was stood up for; null for legacy rows. */
   provisionType: string | null
   /** The resolved engine that handled the provisioning; null for legacy rows. */
@@ -234,6 +253,8 @@ export type EnvironmentRecordPatch = Partial<
     | 'lastError'
     | 'statusNote'
     | 'reachability'
+    | 'lastPolledAt'
+    | 'pollCount'
     | 'provisionType'
     | 'engine'
   >

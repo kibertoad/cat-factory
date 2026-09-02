@@ -90,6 +90,10 @@ export class PreviewService {
       // serves it or reports it failed, so there is never a note to carry.
       statusNote: null,
       deletedAt: null,
+      // Nor a provider to poll at all: a preview is never refreshed through `refreshStatus`, so
+      // the poll marker stays at its never-polled value for the row's whole life.
+      lastPolledAt: null,
+      pollCount: 0,
       provisionType: PREVIEW_PROVISION_TYPE,
       engine: PREVIEW_PROVISION_TYPE,
     }

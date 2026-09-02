@@ -3,6 +3,7 @@ import type {
   EnvironmentEvidenceBundle,
   EnvironmentInvestigationSubject,
 } from '@cat-factory/kernel'
+import { determinateRouteCause } from '@cat-factory/kernel'
 import { type BespokeSystemPrompt, composeBespokePrompt } from './bespoke.js'
 import { FINAL_ANSWER_IN_REPLY, NO_ASSUMED_PRODUCT } from './shared.js'
 
@@ -41,8 +42,18 @@ export const ENVIRONMENT_INVESTIGATION_PROMPT: BespokeSystemPrompt = {
     '- READ PAST THE SUMMARY FIELD. A provider that reports one healthy top-level status while ' +
     'its own sub-resources report otherwise is the single most common shape of this failure. Two ' +
     'named sources disagreeing IS the finding; say which said what.\n' +
-    '- LINE THE TIMESTAMPS UP. A readiness verdict that settled before the work that produces ' +
-    'readiness even started is a platform fault, not an infrastructure one.\n' +
+    '- LINE THE TIMESTAMPS UP, off the timeline you are given. A readiness verdict that settled ' +
+    'before the work that produces readiness even started is a platform fault, not an ' +
+    'infrastructure one. The timeline is ONE derived list with every timestamp the platform holds ' +
+    'folded into it, so an ordering claim that contradicts an entry in it is simply wrong.\n' +
+    '- NEVER INFER THAT SOMETHING DID NOT HAPPEN from its absence in a record that does not log ' +
+    'it. The provisioning entries record ATTEMPTS and failures, not each successful status poll; ' +
+    'how much polling happened is stated by the poll marker and nowhere else. "There is no entry ' +
+    'for it" is a fact about the record, not about the environment. Say that, or say nothing.\n' +
+    '- PREFER A DETERMINATE CAUSE TO AN INFERRED ONE. A cause the platform computed from its own ' +
+    'inputs (an address it never had, a field it never captured) names an owner and a concrete ' +
+    'fix; a fault inferred from the ORDER things appear to have happened in names neither, and ' +
+    'ranks below it. Both can be in the answer; only one can be the headline.\n' +
     '- SEPARATE THE LAYERS. The environment being unreachable from where the test ran, the ' +
     'workload being unhealthy, and the infrastructure under it being absent are three different ' +
     'faults with three different owners.\n' +
@@ -137,7 +148,67 @@ function renderTimeline(bundle: EnvironmentEvidenceBundle): string {
       return `${stamp}  ${entry.label}${entry.detail ? `\n    ${entry.detail}` : ''}`
     })
     .join('\n')
-  return section("The run's provisioning timeline (oldest first)", body)
+  return section(
+    "This environment's timeline (oldest first)",
+    `${body}\n\nEvery timestamp the platform holds is already folded into this one list: the ` +
+      "record's own dates, the run's provisioning attempts, when the route was dialled, and the " +
+      'marker for how much status polling happened. It is the whole dated record, and it is NOT a ' +
+      'log of everything that happened: a successful status poll appears in the poll marker and ' +
+      'nowhere else.',
+  )
+}
+
+/**
+ * What the platform knows about REACHING this environment, and the cause that evidence settles on
+ * its own.
+ *
+ * Rendered as its own section as well as being folded into the timeline, because the two answer
+ * different questions: the timeline answers WHEN the platform dialled, this answers what it had to
+ * dial. The determinate cause is COMPUTED by the platform (kernel's `determinateRouteCause`) and
+ * never inferred here: a ranking the model is asked to derive is a ranking its own rationale does
+ * not have to explain, and the failure this section exists for subordinated exactly this fact
+ * ("no balancer or address field was captured at all") to a headline blaming a platform gate that
+ * had worked correctly.
+ */
+function renderRoute(bundle: EnvironmentEvidenceBundle): string {
+  const { candidates, proof, unreadable } = bundle.route
+  if (unreadable) return section('Reaching this environment', unreadable)
+  const lines = [
+    candidates.length === 0
+      ? "addresses the provider stated for this environment's URL: NONE. Its own name was the " +
+        'only target that could be tried.'
+      : `addresses the provider stated, in ITS order: ${candidates
+          .map((c) => (c.label ? `${c.address} (${c.label})` : c.address))
+          .join(', ')}`,
+  ]
+  if (!proof) {
+    lines.push(
+      'Nothing has dialled this environment, so nothing is known about whether it can be ' +
+        'reached. That is an ABSENCE of a check, never a passed one.',
+    )
+  } else {
+    lines.push(
+      `proof: ${proof.state}${proof.reason ? ` (${proof.reason})` : ''}, taken at ` +
+        `${new Date(proof.checkedAt).toISOString()}` +
+        `${proof.via ? `, carried via ${proof.via}` : ''}.`,
+      proof.attempts.length === 0
+        ? 'No target was tried.'
+        : `Targets tried, in order: ${proof.attempts
+            .map((a) => `${a.target} (${a.outcome}${a.detail ? `: ${a.detail}` : ''})`)
+            .join(', ')}.`,
+      'A `not_reached` proof is a verdict about the environment; `inconclusive` and `unproved` ' +
+        'are admissions about the platform and settle nothing about it.',
+    )
+  }
+  const cause = determinateRouteCause(candidates, proof)
+  if (cause) {
+    lines.push(
+      `\nA DETERMINATE CAUSE the platform already computed from this evidence: ${cause}\nThis ` +
+        'ranks ahead of anything inferred, so make it the headline unless something else here ' +
+        'contradicts it.',
+    )
+  }
+  return section('Reaching this environment', lines.join('\n'))
 }
 
 /** Compile-time totality guard for {@link renderReadinessWait}. */
@@ -233,6 +304,7 @@ export function renderEnvironmentInvestigationPrompt(
     ),
     renderRecord(evidence),
     renderProvisionFields(evidence),
+    renderRoute(evidence),
     renderTimeline(evidence),
   ]
   if (evidence.diagnosis) parts.push(renderDiagnosis(evidence.diagnosis))

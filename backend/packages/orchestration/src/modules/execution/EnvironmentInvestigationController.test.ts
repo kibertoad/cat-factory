@@ -40,6 +40,7 @@ const EVIDENCE = {
     readinessWait: 'waited',
     waitedMs: 1_200_000,
   },
+  route: { candidates: [], proof: null },
 } satisfies EnvironmentEvidenceBundle
 
 function step(overrides: Partial<PipelineStep> = {}): PipelineStep {

@@ -139,6 +139,16 @@ assumed. Four facts about that interpretation belong to this repository:
   **A field present on the response mapping is present only when the manifest DECLARES it**, empty
   list included, because "the provider stated none" and "this response said nothing" are different
   facts and conflating them erases a stored candidate list on the first status poll.
+- **A STATUS POLL is a write, not just a read.** Everything the response mapping captures is
+  persisted on every poll and replaces what the previous one captured, so an asynchronous provider's
+  later facts (the finished deploy job, the balancer FQDNs, its own status word) are the ones stored
+  rather than the thin create response's. A response that states nothing about the captured bag
+  keeps it, by the same absent-is-not-empty rule as the addresses above; the contract an adapter
+  author writes against is
+  [`native-environment-adapter.md`](./native-environment-adapter.md#what-fields-is-for-and-what-a-poll-does-to-it).
+  The poll also stamps the row with the fact that it SUCCEEDED (`lastPolledAt` plus a count), which
+  is the only record a clean poll leaves: the provisioning log carries attempts and failures, so
+  without it a four-minute readiness wait and no polling at all are the same data.
 
 ### Auth schemes (calling the management API)
 

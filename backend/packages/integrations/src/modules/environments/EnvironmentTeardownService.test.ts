@@ -45,6 +45,8 @@ const RECORD: EnvironmentRecord = {
   expiresAt: null,
   lastError: null,
   statusNote: null,
+  lastPolledAt: null,
+  pollCount: 0,
   deletedAt: null,
   provisionType: null,
   engine: null,
