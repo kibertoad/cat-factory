@@ -20,7 +20,8 @@
 import * as v from 'valibot'
 
 /**
- * One address a provider states will carry traffic for its environment's URL host.
+ * One place a provider states traffic for its environment's URL host goes: an ADDRESS the platform
+ * dials as written, or a NAME it resolves when it dials.
  *
  * The motivating shape is an org running per-PR preview environments whose per-environment DNS
  * record lives in an internal view while the load balancers fronting it are ordinary names and
@@ -28,16 +29,87 @@ import * as v from 'valibot'
  * it. The only missing thing is a name-to-address mapping, which is exactly what a hosts-file
  * entry (or a Kubernetes `hostAliases` entry) is.
  *
+ * **Exactly one of {@link EnvironmentRouteCandidate.address} and
+ * {@link EnvironmentRouteCandidate.host} is set, and which one is the PROVIDER'S statement**, never
+ * something the platform reads off the spelling. Guessing would rest the security rule on a parse:
+ * `isBridgeableAddress` refuses a non-canonical literal precisely so `2130706433` cannot become
+ * loopback, and a resolver handed that same string answers loopback happily. A candidate stating
+ * neither (or both, which is two claims with no way to tell which was meant) therefore names no
+ * target at all and is RECORDED as one, on the same rule as an address no bridge may name.
+ *
  * `label` is for the human reading a diagnostic ("internal ALB", "public ALB"), never for
  * matching: the platform picks by PROBING, never by name.
  */
-export const environmentAddressSchema = v.object({
-  /** An IP literal. Never a name: a name would just be the lookup that already failed. */
-  address: v.string(),
-  /** What this address IS, for the diagnostic. Never load-bearing. */
+export const environmentRouteCandidateSchema = v.object({
+  /** An IP literal, dialled as written. Never a name: see {@link EnvironmentRouteCandidate.host}. */
+  address: v.optional(v.string()),
+  /**
+   * A NAME the platform RESOLVES at proof time, expanding it in place into the addresses it
+   * answers with.
+   *
+   * For the provider whose stable identity IS a name, which is the ordinary shape of a managed
+   * load balancer: an ALB's addresses change as it scales or gains a zone, and its DNS name is
+   * what the vendor documents a client should use. A provider stating the resolved literals
+   * instead re-pins a snapshot of that set on every poll, and owes bounded resolution, stable
+   * ordering and partial-failure handling of its own.
+   *
+   * Deliberately NOT the URL's own host, which is the lookup that already failed. This is a
+   * DIFFERENT name in a different zone, and its whole point is resolving when that one does not.
+   * Nothing downstream ever sees it: every address it resolves to is graded by
+   * `isBridgeableAddress` exactly as a stated address is, and the proof publishes the ADDRESS that
+   * carried with the name it came from beside it, so a bridge is still built from a literal the
+   * platform itself proved.
+   */
+  host: v.optional(v.string()),
+  /** What this candidate IS, for the diagnostic. Never load-bearing. */
   label: v.optional(v.string()),
 })
-export type EnvironmentAddress = v.InferOutput<typeof environmentAddressSchema>
+export type EnvironmentRouteCandidate = v.InferOutput<typeof environmentRouteCandidateSchema>
+
+/**
+ * What one candidate actually names, or that it names nothing usable.
+ *
+ * A discriminated result rather than two optional reads at every site, because the three cases
+ * want three different reactions and the third is the one a nullable read renders as absent. Read
+ * through this rather than off the fields, so "which kind is this" is answered once.
+ */
+export type StatedRouteTarget =
+  | { kind: 'address'; address: string }
+  | { kind: 'host'; host: string }
+  | { kind: 'unusable' }
+
+/**
+ * Read a stated candidate as the one thing it names.
+ *
+ * A host is lower-cased because DNS is case-insensitive and this value is both a map key and a
+ * comparison target: two spellings of one balancer name must not resolve twice, nor invalidate a
+ * proof by failing to match themselves.
+ */
+export function statedRouteTarget(candidate: EnvironmentRouteCandidate): StatedRouteTarget {
+  const address = candidate.address?.trim() ?? ''
+  const host = candidate.host?.trim().toLowerCase() ?? ''
+  if (address && host) return { kind: 'unusable' }
+  if (address) return { kind: 'address', address }
+  if (host) return { kind: 'host', host }
+  return { kind: 'unusable' }
+}
+
+/**
+ * One candidate as a reader sees it: its value, its label, and a NAME marked as one.
+ *
+ * ONE renderer, because three surfaces print this list (the environment investigation's route
+ * section, its timeline entry and the diagnostics bundle) and a name printed into a sentence about
+ * "the addresses the provider stated" reads as an address somebody typed wrong.
+ */
+export function describeRouteCandidate(candidate: EnvironmentRouteCandidate): string {
+  const stated = statedRouteTarget(candidate)
+  const label = candidate.label?.trim()
+  if (stated.kind === 'address') return label ? `${stated.address} (${label})` : stated.address
+  if (stated.kind === 'host') return `${stated.host} (name${label ? `, ${label}` : ''})`
+  return label
+    ? `an entry stating no usable target (${label})`
+    : 'an entry stating no usable target'
+}
 
 /**
  * Why a `ready` environment could not be reached, at the layer the platform can observe.
@@ -50,15 +122,28 @@ export type EnvironmentAddress = v.InferOutput<typeof environmentAddressSchema>
  *
  *  - `no_candidate`       the environment carries no URL, or one with no host to probe. There
  *                         was nothing to try, which is not the same as trying and failing.
- *  - `name_unresolved`    the URL's host resolved nowhere, and no stated address carried either.
+ *  - `name_unresolved`    a name resolved nowhere: the URL's own host, with no stated candidate
+ *                         carrying either, or one stated NAME whose own lookup answered nothing.
  *  - `no_route`           something resolved and the connect never completed (timeout,
  *                         host/network unreachable). The expensive failure: a lookup that
  *                         worked followed by a connect that hangs.
  *  - `connection_refused` the route carries and nothing is listening on the port.
- *  - `address_refused`    the provider stated an address the platform will not dial: loopback,
- *                         link-local/vendor metadata, or a non-canonical literal. Recorded as an
- *                         attempt rather than dropped, because a refused input is an omission the
- *                         operator has to be able to see.
+ *  - `address_refused`    the provider stated a target the platform will not dial: a loopback,
+ *                         link-local/vendor-metadata or non-canonical address (whether stated or
+ *                         resolved from a stated name), or a candidate naming no single target at
+ *                         all. Recorded as an attempt rather than dropped, because a refused input
+ *                         is an omission the operator has to be able to see.
+ *  - `resolver_unavailable` the provider stated a NAME and nothing in this deployment can turn one
+ *                         into an address. An admission about the PLATFORM, never a verdict about
+ *                         the environment, so it leaves the route unruled-out exactly as
+ *                         `probe_failed` does.
+ *  - `not_attempted`      the platform stopped short of the list its provider stated: it looks up
+ *                         a bounded number of names and dials a bounded number of addresses, so a
+ *                         longer list is a PREFIX. Recorded ONCE, naming how many were passed
+ *                         over, because a reader who assumes a prefix concludes the tail was
+ *                         never stated. Another admission about the PLATFORM: a candidate nothing
+ *                         looked at cannot be part of a verdict that nothing reaches the
+ *                         environment.
  *  - `probe_failed`       the probe itself errored in a way it could not classify. Kept apart
  *                         from the three above so "we could not tell" never renders as a
  *                         verdict about the environment.
@@ -69,6 +154,8 @@ export const environmentUnreachableReasonSchema = v.picklist([
   'no_route',
   'connection_refused',
   'address_refused',
+  'resolver_unavailable',
+  'not_attempted',
   'probe_failed',
 ])
 export type EnvironmentUnreachableReason = v.InferOutput<typeof environmentUnreachableReasonSchema>
@@ -124,6 +211,21 @@ export const environmentRouteProofSchema = v.object({
    */
   via: v.nullable(v.string()),
   /**
+   * The stated NAME {@link via} was resolved from, when the candidate that carried was a host
+   * rather than an address. Absent when `via` is itself a stated address, when the URL's own name
+   * carried, and when nothing carried.
+   *
+   * Recorded because the fold decides a `reached` proof's survival on whether the target it names
+   * is still on offer, and for a resolved name that target is the NAME. The address is a snapshot
+   * of a set that rotates (a balancer scaling or gaining a zone changes it, and tells the platform
+   * nothing about whether the proved route still carries), so matching `via` against the candidate
+   * list would drop a good proof on every such event and pay a fresh probe sequence for it.
+   *
+   * Optional so a proof written before this existed still parses, where its absence reads as the
+   * address case, which is what it was.
+   */
+  viaHost: v.optional(v.string()),
+  /**
    * The {@link EnvironmentUnreachableReason} when `state` is `not_reached` or `inconclusive`,
    * else null. An open string on the wire so a stored proof written by an older build never fails
    * to parse; readers that branch on it treat an unknown value as "not one of the cases I handle".
@@ -146,8 +248,11 @@ export type EnvironmentRouteProof = v.InferOutput<typeof environmentRouteProofSc
  * offered as well as which were reached, and a re-probe on a later poll re-reads the same claim.
  */
 export const environmentReachabilitySchema = v.object({
-  /** Addresses the provider states carry traffic for the URL's host, in ITS preference order. */
-  candidates: v.array(environmentAddressSchema),
+  /**
+   * The addresses and names the provider states carry traffic for the URL's host, in ITS
+   * preference order.
+   */
+  candidates: v.array(environmentRouteCandidateSchema),
   /** What proving found, or null when nothing has probed this environment yet. */
   proof: v.nullable(environmentRouteProofSchema),
   /**

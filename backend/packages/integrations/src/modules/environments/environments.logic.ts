@@ -10,7 +10,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { EnvironmentRecord, UrlSafetyPolicy } from '@cat-factory/kernel'
 import { connectionFailureResult, STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
-import type { EnvironmentAddress, EnvironmentReachability } from '@cat-factory/contracts'
+import type { EnvironmentRouteCandidate, EnvironmentReachability } from '@cat-factory/contracts'
 import { environmentReachabilitySchema } from '@cat-factory/contracts'
 import * as v from 'valibot'
 import { safeFetch } from '../shared/safe-fetch.js'
@@ -414,36 +414,50 @@ export function mapStatus(
 }
 
 /**
- * Read a manifest's `addressesPath` off an arbitrary provider response.
+ * Read a manifest's `addressesPath` (or `hostsPath`) off an arbitrary provider response.
  *
  * Three shapes are accepted because a self-rolled management API can reasonably return any of
- * them, and refusing two would push an org into reshaping its API for us: a single address string,
- * an array of strings, or an array of `{ address, label }` objects. Anything else in the array is
- * SKIPPED rather than coerced, so an unexpected element cannot become the literal `[object
- * Object]` in an `--add-host` argument.
+ * them, and refusing two would push an org into reshaping its API for us: a single string, an array
+ * of strings, or an array of objects. Anything else in the array is SKIPPED rather than coerced, so
+ * an unexpected element cannot become the literal `[object Object]` in an `--add-host` argument.
  *
- * Nothing here validates the addresses. Which ones a bridge may name is kernel's rule
- * (`isBridgeableAddress`), applied where the bridge is built, and what actually carries is the
- * proof's answer; a provider stating a useless address gets a recorded failed attempt, which is
- * the honest outcome.
+ * `bare` is what a plain string in that path MEANS, and it comes from which manifest key was
+ * declared rather than from reading the value: a bare string is unlabelled, so nothing about it
+ * says whether `10.4.19.22` is an address or a name someone is about to resolve. An object entry
+ * states its own kind and is read as it is written, which is what lets ONE path interleave the two
+ * in a provider's preference order.
+ *
+ * Nothing here validates the values. Which addresses a bridge may name is kernel's rule
+ * (`isBridgeableAddress`), applied at plan time and again where the bridge is built, and what
+ * actually carries is the proof's answer; a provider stating a useless candidate gets a recorded
+ * failed attempt, which is the honest outcome.
  */
-export function extractAddresses(json: unknown, path: string | undefined): EnvironmentAddress[] {
+export function extractAddresses(
+  json: unknown,
+  path: string | undefined,
+  bare: 'address' | 'host' = 'address',
+): EnvironmentRouteCandidate[] {
   if (!path) return []
   const raw = extractByPath(json, path)
-  if (typeof raw === 'string') return raw.trim() ? [{ address: raw.trim() }] : []
+  if (typeof raw === 'string') return raw.trim() ? [{ [bare]: raw.trim() }] : []
   if (!Array.isArray(raw)) return []
-  const out: EnvironmentAddress[] = []
+  const out: EnvironmentRouteCandidate[] = []
   for (const entry of raw) {
     if (typeof entry === 'string') {
-      if (entry.trim()) out.push({ address: entry.trim() })
+      if (entry.trim()) out.push({ [bare]: entry.trim() })
       continue
     }
     if (!entry || typeof entry !== 'object') continue
     const record = entry as Record<string, unknown>
     const address = typeof record.address === 'string' ? record.address.trim() : ''
-    if (!address) continue
+    const host = typeof record.host === 'string' ? record.host.trim() : ''
+    // Exactly one, on the schema's own rule: an entry stating both names two things with no way to
+    // tell which was meant, and is dropped here rather than carried to the plan as a candidate that
+    // could only ever be refused.
+    if ((address && host) || (!address && !host)) continue
     const label = typeof record.label === 'string' ? record.label.trim() : ''
-    out.push(label ? { address, label } : { address })
+    const target = address ? { address } : { host }
+    out.push(label ? { ...target, label } : target)
   }
   return out
 }

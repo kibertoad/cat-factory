@@ -177,6 +177,20 @@ export const environmentResponseMappingSchema = v.object({
    * is the only thing to try.
    */
   addressesPath: v.optional(v.string()),
+  /**
+   * The same, for a management API that identifies those balancers by NAME: a string, an array of
+   * strings, or an array of `{ host, label }` objects. The platform resolves each name when it
+   * dials, and grades every address it answers with exactly as a stated address is graded.
+   *
+   * A second path rather than more shapes on {@link addressesPath}, because a bare string there
+   * already means an address and cannot be re-read as a name without guessing: a manifest saying
+   * which kind it publishes is the whole difference between resolving a balancer FQDN and handing
+   * a resolver a non-canonical literal that answers loopback. Declaring both is fine, and the
+   * addresses are then tried ahead of the names; a provider that wants a different order between
+   * the two states them all through `addressesPath` as `{ address }` / `{ host }` objects, which
+   * is the one shape that can interleave them.
+   */
+  hostsPath: v.optional(v.string()),
   statusPath: v.optional(v.string()),
   statusMap: v.optional(v.array(v.object({ from: v.string(), to: environmentStatusSchema }))),
   expiresAtPath: v.optional(v.string()),

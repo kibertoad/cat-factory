@@ -141,6 +141,96 @@ export function registerEnvironmentReachabilityTests(harness: ConformanceHarness
       detail: 'connect blocked by the runtime',
     })
   })
+  it('resolves a stated NAME at proof time and stores the address it carried on, with the name', async () => {
+    // The shape a provider fronted by a managed load balancer actually has: its stable identity is
+    // a DNS name, and the addresses behind it rotate as the balancer scales. Resolving here rather
+    // than in the provider is what stops a stored candidate being a snapshot re-pinned on every
+    // poll, and it is what lets the fold keep a proof across a scale event.
+    //
+    // Cross-runtime because the whole round trip is: the candidate is stored as a `host` on each
+    // facade's own reachability column, and `viaHost` beside `via` is a new field on that same
+    // blob. A facade mapping either differently diverges here.
+    const dialled: string[] = []
+    const looked: string[] = []
+    const app = harness.makeApp(undefined, {
+      environmentProvider: statedHostProvider() as unknown as EnvironmentProvider,
+      hostResolver: async (req) => {
+        looked.push(req.host)
+        return { state: 'resolved', addresses: ['10.4.19.22', '10.4.19.23'] }
+      },
+      routeProbe: async (req) => {
+        dialled.push(req.address ?? req.host)
+        return req.address === '10.4.19.23' ? { state: 'carried' } : { state: 'unresolved' }
+      },
+    })
+    const { wsId, exec } = await driveDeployOnly(app)
+    expect(exec.steps.find((s) => s.agentKind === 'deployer')?.state).toBe('done')
+    expect(looked).toEqual(['alb-4.elb.preview.test'])
+    // The URL's own name first, then the addresses the stated NAME resolved to, in order.
+    expect(dialled).toEqual(['pr-9.preview.test', '10.4.19.22', '10.4.19.23'])
+
+    const envs = await app.call<EnvironmentHandle[]>('GET', `/workspaces/${wsId}/environments`)
+    const env = envs.body!.find((e) => e.url === 'https://pr-9.preview.test')!
+    // The stored candidate is the NAME, never the addresses it happened to answer with today.
+    expect(env.reachability?.candidates).toEqual([
+      { host: 'alb-4.elb.preview.test', label: 'public ALB' },
+    ])
+    expect(env.reachability?.proof).toMatchObject({
+      state: 'reached',
+      via: '10.4.19.23',
+      viaHost: 'alb-4.elb.preview.test',
+    })
+  })
+
+  it('rules a stated name OUT when it resolves nowhere, and keeps the name as the candidate', async () => {
+    // A retired balancer is a dead end for that candidate and a verdict the proof may settle on,
+    // so this environment really is unreachable and the frame fails naming the layer. What the
+    // facades can get wrong is the round trip either side of it: the stored candidate stays the
+    // NAME (never the addresses it did not answer with), and the attempt names the name it looked
+    // up rather than reporting an environment whose provider stated nothing.
+    const app = harness.makeApp(undefined, {
+      environmentProvider: statedHostProvider() as unknown as EnvironmentProvider,
+      hostResolver: async () => ({ state: 'unresolved' }),
+      routeProbe: async () => ({ state: 'unresolved' }),
+    })
+    const { wsId, exec } = await driveDeployOnly(app)
+    expect(exec.status).toBe('failed')
+    expect(exec.failure?.reason).toBe('environment_unreachable')
+
+    const envs = await app.call<EnvironmentHandle[]>('GET', `/workspaces/${wsId}/environments`)
+    const env = envs.body!.find((e) => e.url === 'https://pr-9.preview.test')!
+    expect(env.reachability?.candidates).toEqual([
+      { host: 'alb-4.elb.preview.test', label: 'public ALB' },
+    ])
+    expect(env.reachability?.proof).toMatchObject({ state: 'not_reached' })
+    expect(env.reachability?.proof?.attempts.map((a) => a.target)).toEqual([
+      'pr-9.preview.test:443',
+      'pr-9.preview.test@alb-4.elb.preview.test:443',
+    ])
+  })
+}
+
+/**
+ * A synchronous provider whose environment comes up `ready` on a name whose per-environment record
+ * resolves nowhere, fronted by a balancer the provider identifies by NAME. The half of the
+ * motivating shape an address list cannot express: the balancer's addresses rotate and its name is
+ * the stable identity its vendor documents.
+ */
+function statedHostProvider() {
+  const provisioned = {
+    externalId: 'pr-9',
+    url: 'https://pr-9.preview.test',
+    addresses: [{ host: 'alb-4.elb.preview.test', label: 'public ALB' }],
+    status: 'ready',
+    expiresAt: null,
+    access: null,
+    fields: {},
+  }
+  return {
+    provision: async () => provisioned,
+    status: async () => provisioned,
+    teardown: async () => ({ status: 'torn_down' }),
+  }
 }
 
 /**

@@ -1,4 +1,5 @@
-import type { EnvironmentAddress, EnvironmentRouteProof } from '@cat-factory/contracts'
+import type { EnvironmentRouteCandidate, EnvironmentRouteProof } from '@cat-factory/contracts'
+import { describeRouteCandidate } from '@cat-factory/contracts'
 import type {
   EnvironmentDiagnosis,
   EnvironmentEvidenceBundle,
@@ -508,8 +509,9 @@ function readRoute(record: EnvironmentRecord | null, caps: string[]): Environmen
       proof: null,
       unreadable:
         "This environment's stored reachability value could not be parsed, so neither the " +
-        'addresses its provider stated nor what dialling them proved could be read. Treat both ' +
-        'as UNKNOWN: this is a platform read failure, NOT a provider that stated no addresses.',
+        'addresses and names its provider stated nor what dialling them proved could be read. ' +
+        'Treat both as UNKNOWN: this is a platform read failure, NOT a provider that stated no ' +
+        'targets.',
     }
   }
   return prepareRoute(parsed.candidates, parsed.proof, caps)
@@ -529,19 +531,25 @@ function readRoute(record: EnvironmentRecord | null, caps: string[]): Environmen
  * left alone: two are closed vocabularies and the third is a number.
  */
 function prepareRoute(
-  candidates: readonly EnvironmentAddress[],
+  candidates: readonly EnvironmentRouteCandidate[],
   proof: EnvironmentRouteProof | null,
   caps: string[],
 ): EnvironmentRouteEvidence {
+  // Every string field, because a candidate carries EITHER an address or a name and both are
+  // provider-authored: scrubbing only the one this deployment happens to use is how the other
+  // ships a credential-bearing value into a prompt the first time a manifest starts stating it.
   const kept = candidates.slice(0, ROUTE_CANDIDATE_CAP).map((entry) => ({
-    address: capText(scrub(entry.address), ROUTE_TEXT_CAP),
+    ...(entry.address === undefined
+      ? {}
+      : { address: capText(scrub(entry.address), ROUTE_TEXT_CAP) }),
+    ...(entry.host === undefined ? {} : { host: capText(scrub(entry.host), ROUTE_TEXT_CAP) }),
     ...(entry.label ? { label: capText(scrub(entry.label), ROUTE_TEXT_CAP) } : {}),
   }))
   if (candidates.length > kept.length) {
     caps.push(
-      `The provider stated ${candidates.length} addresses for this environment; only the first ` +
+      `The provider stated ${candidates.length} targets for this environment; only the first ` +
         `${kept.length} are below. The rest are UNKNOWN, not absent, and the proof below was ` +
-        'taken against the addresses the platform actually dialled, which it lists itself.',
+        'taken against the targets the platform actually dialled, which it lists itself.',
     )
   }
   if (!proof) return { candidates: kept, proof: null }
@@ -561,6 +569,14 @@ function prepareRoute(
     proof: {
       ...proof,
       via: proof.via === null ? null : capText(scrub(proof.via), ROUTE_TEXT_CAP),
+      // The same treatment as `via`, and for a stronger reason: `viaHost` is a NAME a manifest's
+      // `hostsPath` pointed at, so it is provider-authored text of no declared length, where
+      // `via` at least came back from a resolver. Riding out on the spread above it reached the
+      // investigation prompt and the telemetry store unscrubbed and uncapped, which is the hole
+      // the candidate loop's own comment guards against for the field it was read from.
+      ...(proof.viaHost === undefined
+        ? {}
+        : { viaHost: capText(scrub(proof.viaHost), ROUTE_TEXT_CAP) }),
       attempts,
     },
   }
@@ -618,21 +634,24 @@ function describePollMarker(record: EnvironmentRecord): EnvironmentTimelineEntry
  */
 function describeRouteProof(
   proof: EnvironmentRouteProof,
-  candidates: readonly EnvironmentAddress[],
+  candidates: readonly EnvironmentRouteCandidate[],
 ): EnvironmentTimelineEntry {
   // Kernel's renderer, which the two operator sentences and the investigation prompt also use:
   // one template for one field. Already scrubbed and capped by `prepareRoute`, which owns this
   // bundle's boundary onto a prompt.
   const tried = describeRouteTargets(proof.attempts)
+  // Kernel's candidate renderer, so a stated NAME is marked as one here exactly as it is in the
+  // investigation's own route section: printed bare into a sentence about addresses it reads as an
+  // address somebody typed wrong.
   const stated = candidates.length
-    ? candidates.map((c) => c.address).join(', ')
+    ? candidates.map(describeRouteCandidate).join(', ')
     : "none (the URL's own name was the only target that existed)"
   return {
     at: proof.checkedAt,
     label: `route proof: ${proof.state}${proof.reason ? ` (${proof.reason})` : ''}`,
     detail:
-      `Addresses the provider stated for this URL: ${stated}. ` +
-      `${proof.via ? `Carried via ${proof.via}. ` : ''}` +
+      `Targets the provider stated for this URL: ${stated}. ` +
+      `${proof.via ? `Carried via ${proof.via}${proof.viaHost ? ` (resolved from ${proof.viaHost})` : ''}. ` : ''}` +
       `${tried ? `Tried, in order: ${tried}.` : 'Nothing was tried.'} ` +
       'This is when the platform DIALLED the environment, which is a different moment from when ' +
       'the environment was created and from when a step failed.',

@@ -1,18 +1,24 @@
+import type { HostResolveOutcome } from '../ports/host-resolver.js'
 import { describe, expect, it } from 'vitest'
 import {
   MAX_PROBED_ADDRESSES,
+  MAX_RESOLVED_HOSTS,
   describeInconclusiveRoute,
   describeRouteTargets,
   describeUnreachableEnvironment,
   determinateRouteCause,
+  planHostResolutions,
   planRouteProbes,
-  recordRefusedAttempt,
   recordRouteAttempt,
+  recordUndialledAttempt,
   reduceRouteProof,
   unprovedRoute,
 } from './environment-reachability.logic.js'
 
 const candidates = (...addresses: string[]) => addresses.map((address) => ({ address }))
+const hosts = (...names: string[]) => names.map((host) => ({ host }))
+const resolved = (...pairs: [string, string[]][]): Map<string, HostResolveOutcome> =>
+  new Map(pairs.map(([host, addresses]) => [host, { state: 'resolved', addresses }]))
 
 describe('planRouteProbes', () => {
   it('tries the NAME first, then each stated address in the provider order', () => {
@@ -57,6 +63,30 @@ describe('planRouteProbes', () => {
     expect(planRouteProbes('env.example', null)).toEqual([])
   })
 
+  it('SAYS the plan is a prefix, once, whichever cap shortened it', () => {
+    // Every cap here ends the list early, and a prefix nobody is told about is not a cosmetic
+    // omission: `reduceRouteProof` grades `not_reached` only when every attempt established
+    // something, so a silently shortened list is how the deployer comes to fail a frame on a
+    // verdict about candidates the platform never looked at. One entry naming the count, because
+    // the reader's question is whether anything was left unlooked-at and N copies of the same
+    // admission would crowd the attempt log the real evidence lives in.
+    const passedOver = (targets: ReturnType<typeof planRouteProbes>) =>
+      targets.filter((t) => t.kind === 'undialled' && t.reason === 'not_attempted')
+    // Names beyond the resolution bound: two of the six, and neither was ever looked up.
+    const names = planRouteProbes('env.example', 443, hosts('a', 'b', 'c', 'd', 'e', 'f'))
+    expect(passedOver(names).map((t) => t.label)).toEqual(['2 further targets the provider stated'])
+    // Addresses beyond the dial bound, counted the same way.
+    const many = candidates('10.0.0.1', '10.0.0.2', '10.0.0.3', '10.0.0.4', '10.0.0.5')
+    expect(passedOver(planRouteProbes('env.example', 443, many)).map((t) => t.label)).toEqual([
+      '1 further target the provider stated',
+    ])
+    // And it is LAST, which keeps the reason a determinate proof reports the FIRST attempt's: the
+    // URL's own name, rather than a note about the platform's bounds.
+    expect(names.at(-1)).toMatchObject({ reason: 'not_attempted' })
+    // A list inside every bound says nothing, because there is nothing to say.
+    expect(passedOver(planRouteProbes('env.example', 443, candidates('10.0.0.1')))).toEqual([])
+  })
+
   it('REFUSES to dial an address a bridge may not name, and says so instead of dropping it', () => {
     // The safety property of the whole probe. `addresses` is provider-authored data, so with no
     // rule here the orchestrator opens sockets wherever a manifest points and records the answers
@@ -68,18 +98,165 @@ describe('planRouteProbes', () => {
       443,
       candidates('127.0.0.1', '169.254.169.254', '0:0:0:0:0:0:0:1', '10.4.19.22'),
     )
-    expect(targets.filter((t) => t.kind === 'refused').map((t) => t.address)).toEqual([
-      '127.0.0.1',
-      '169.254.169.254',
-      '0:0:0:0:0:0:0:1',
+    expect(targets.filter((t) => t.kind === 'undialled').map((t) => t.label)).toEqual([
+      'env.example@127.0.0.1:443',
+      'env.example@169.254.169.254:443',
+      'env.example@0:0:0:0:0:0:0:1:443',
     ])
     // A refused target carries NO request, so nothing that iterates the plan can dial it.
-    expect(targets.filter((t) => t.kind === 'refused').every((t) => !('request' in t))).toBe(true)
+    expect(targets.filter((t) => t.kind === 'undialled').every((t) => !('request' in t))).toBe(true)
     // And a dialable address behind four refused ones is still dialled: the refusals cost no I/O,
     // so they may not consume the dial budget.
     expect(targets.filter((t) => t.kind === 'dial').map((t) => t.address)).toEqual([
       null,
       '10.4.19.22',
+    ])
+  })
+})
+
+describe('planHostResolutions', () => {
+  it('names the stated HOSTS in the provider order, deduplicated and bounded', () => {
+    // Read twice (the caller does the I/O, the plan consumes the answers), so it is stated once
+    // here: two copies of this bound is how a name beyond it comes to be reported as a name
+    // nothing could resolve.
+    expect(
+      planHostResolutions([
+        { host: 'B.elb.example' },
+        { address: '10.4.19.22' },
+        { host: 'b.elb.example' },
+        { host: 'a.elb.example' },
+      ]),
+    ).toEqual(['b.elb.example', 'a.elb.example'])
+    expect(planHostResolutions(hosts('a', 'b', 'c', 'd', 'e', 'f'))).toHaveLength(
+      MAX_RESOLVED_HOSTS,
+    )
+  })
+
+  it('names nothing for a list of addresses, so nothing is looked up for the ordinary case', () => {
+    expect(planHostResolutions(candidates('10.4.19.22'))).toEqual([])
+    expect(planHostResolutions()).toEqual([])
+  })
+})
+
+describe('planRouteProbes with stated NAMES', () => {
+  it('expands a name IN PLACE, keeping the provider order across both kinds', () => {
+    // In place rather than appended, because the order is the provider's statement about which
+    // balancer it wants used and a name is one of the things being ordered.
+    const targets = planRouteProbes(
+      'env.example',
+      443,
+      [{ host: 'alb.example' }, { address: '10.4.19.30' }],
+      { resolutions: resolved(['alb.example', ['10.4.19.22', '10.4.19.23']]) },
+    )
+    expect(targets.map((t) => t.label)).toEqual([
+      'env.example:443',
+      'env.example@10.4.19.22:443 (alb.example)',
+      'env.example@10.4.19.23:443 (alb.example)',
+      'env.example@10.4.19.30:443',
+    ])
+  })
+
+  it('carries the stated NAME on the dial target, so a proof can publish which candidate carried', () => {
+    // The address is a snapshot of a set that rotates; the name is the target. Without this the
+    // fold has nothing to match a REACHED proof against but a literal the next scale event moves.
+    const [, first] = planRouteProbes('env.example', 443, hosts('alb.example'), {
+      resolutions: resolved(['alb.example', ['10.4.19.22']]),
+    })
+    expect(first).toMatchObject({ kind: 'dial', address: '10.4.19.22', statedHost: 'alb.example' })
+  })
+
+  it('grades a RESOLVED address exactly as a stated one, so a name cannot smuggle a refused target', () => {
+    // The safety property, restated for the resolution path: the destination a bridge is built
+    // from is still an address the platform itself graded and proved. A name answering with
+    // loopback would otherwise re-point a container's own namespace.
+    const targets = planRouteProbes('env.example', 443, hosts('evil.example'), {
+      resolutions: resolved(['evil.example', ['127.0.0.1', '169.254.169.254', '10.4.19.22']]),
+    })
+    expect(targets.filter((t) => t.kind === 'undialled').map((t) => t.reason)).toEqual([
+      'address_refused',
+      'address_refused',
+    ])
+    expect(targets.filter((t) => t.kind === 'dial').map((t) => t.address)).toEqual([
+      null,
+      '10.4.19.22',
+    ])
+  })
+
+  it('dials one literal ONCE, however many names answered with it', () => {
+    // Two balancers in one zone routinely answer with an overlapping set, and the dial budget is
+    // what the deployer's settle path waits on.
+    const targets = planRouteProbes('env.example', 443, hosts('a.example', 'b.example'), {
+      resolutions: resolved(['a.example', ['10.4.19.22']], ['b.example', ['10.4.19.22']]),
+    })
+    expect(targets.filter((t) => t.kind === 'dial').map((t) => t.address)).toEqual([
+      null,
+      '10.4.19.22',
+    ])
+  })
+
+  it('records a name that resolved nowhere as a fact about the NAME', () => {
+    // Establishes something: that candidate is a dead end, so a proof may settle on it.
+    const targets = planRouteProbes('env.example', 443, hosts('alb.example'), {
+      resolutions: new Map([['alb.example', { state: 'unresolved' as const }]]),
+    })
+    expect(targets.filter((t) => t.kind === 'undialled')).toEqual([
+      { kind: 'undialled', label: 'env.example@alb.example:443', reason: 'name_unresolved' },
+    ])
+  })
+
+  it('reads an EMPTY address list as the same fact, never as a lookup that failed', () => {
+    const targets = planRouteProbes('env.example', 443, hosts('alb.example'), {
+      resolutions: resolved(['alb.example', []]),
+    })
+    expect(targets.filter((t) => t.kind === 'undialled').map((t) => t.reason)).toEqual([
+      'name_unresolved',
+    ])
+  })
+
+  it('keeps a lookup that FAILED apart from one that answered nothing, with its detail', () => {
+    // A resolver outage is "we could not tell", and grading it as a name that does not exist is
+    // how a DNS blip becomes a recorded verdict about somebody's environment.
+    const targets = planRouteProbes('env.example', 443, hosts('alb.example'), {
+      resolutions: new Map([['alb.example', { state: 'failed' as const, detail: 'EAI_AGAIN' }]]),
+    })
+    expect(targets.filter((t) => t.kind === 'undialled')).toEqual([
+      {
+        kind: 'undialled',
+        label: 'env.example@alb.example:443',
+        reason: 'probe_failed',
+        detail: 'EAI_AGAIN',
+      },
+    ])
+  })
+
+  it('says a name went unresolved because nothing was WIRED to resolve it', () => {
+    // An admission about the deployment, and it must leave the route unruled-out: a facade with no
+    // resolver may not start failing deploys for environments it never dialled.
+    const targets = planRouteProbes('env.example', 443, hosts('alb.example'))
+    const undialled = targets.filter((t) => t.kind === 'undialled')
+    expect(undialled.map((t) => t.reason)).toEqual(['resolver_unavailable'])
+    expect(
+      reduceRouteProof(
+        [
+          { target: 'env.example:443', outcome: 'name_unresolved' },
+          ...undialled.map(recordUndialledAttempt),
+        ],
+        null,
+        1,
+      ),
+    ).toMatchObject({ state: 'inconclusive', reason: 'resolver_unavailable' })
+  })
+
+  it('records a candidate that names NEITHER an address nor a host, rather than dropping it', () => {
+    // A shortened list nobody is told about is how a provider's bad candidate becomes an
+    // unexplained failure somewhere else.
+    const targets = planRouteProbes('env.example', 443, [{ label: 'internal ALB' }])
+    expect(targets.filter((t) => t.kind === 'undialled')).toEqual([
+      {
+        kind: 'undialled',
+        label: 'env.example@(no target stated):443',
+        reason: 'address_refused',
+      },
     ])
   })
 })
@@ -98,7 +275,7 @@ describe('reduceRouteProof', () => {
       recordRouteAttempt(target('env.example:443', null), { state: 'unresolved' }),
       recordRouteAttempt(target('env.example@10.4.19.22:443', '10.4.19.22'), { state: 'carried' }),
     ]
-    expect(reduceRouteProof(attempts, '10.4.19.22', 5)).toEqual({
+    expect(reduceRouteProof(attempts, { address: '10.4.19.22' }, 5)).toEqual({
       state: 'reached',
       via: '10.4.19.22',
       reason: null,
@@ -184,9 +361,8 @@ describe('reduceRouteProof', () => {
     const proof = reduceRouteProof(
       [
         recordRouteAttempt(target('env.example:443', null), { state: 'unresolved' }),
-        recordRefusedAttempt({
-          kind: 'refused',
-          address: '127.0.0.1',
+        recordUndialledAttempt({
+          kind: 'undialled',
           label: 'env.example@127.0.0.1:443',
           reason: 'address_refused',
         }),
@@ -217,6 +393,32 @@ describe('reduceRouteProof', () => {
       state: 'inconclusive',
       reason: 'no_candidate',
     })
+  })
+})
+
+describe('reduceRouteProof for a resolved NAME', () => {
+  it('publishes the address that carried AND the stated name it came from', () => {
+    const carried = {
+      kind: 'dial' as const,
+      request: { host: 'env.example', address: '10.4.19.22', port: 443, timeoutMs: 1 },
+      address: '10.4.19.22',
+      statedHost: 'alb.example',
+      label: 'env.example@10.4.19.22:443 (alb.example)',
+    }
+    expect(
+      reduceRouteProof([recordRouteAttempt(carried, { state: 'carried' })], carried, 5),
+    ).toMatchObject({ state: 'reached', via: '10.4.19.22', viaHost: 'alb.example' })
+  })
+
+  it('carries no `viaHost` for a stated address, so an old proof reads exactly as it did', () => {
+    const carried = {
+      kind: 'dial' as const,
+      request: { host: 'env.example', address: '10.4.19.22', port: 443, timeoutMs: 1 },
+      address: '10.4.19.22',
+      label: 'env.example@10.4.19.22:443',
+    }
+    const proof = reduceRouteProof([recordRouteAttempt(carried, { state: 'carried' })], carried, 5)
+    expect('viaHost' in proof).toBe(false)
   })
 })
 
@@ -356,8 +558,8 @@ describe('determinateRouteCause', () => {
     // wrong headline: the provider populated no addresses, so the proof had only a name that does
     // not resolve outside an internal DNS view to try.
     const cause = determinateRouteCause([], notReached)
-    expect(cause).toContain('stated no addresses')
-    expect(cause).toContain('never STATED, not that stated addresses were tried and failed')
+    expect(cause).toContain('stated no addresses and no balancer names')
+    expect(cause).toContain('never STATED, not that stated ones were tried and failed')
   })
 
   it('settles nothing once there were addresses to try', () => {
@@ -379,8 +581,8 @@ describe('determinateRouteCause', () => {
       attempts: [],
     })
     expect(cause).toContain('published no URL with a host and port')
-    expect(cause).toContain('2 addresses its provider DID state')
-    expect(cause).not.toContain('no address stated for one')
+    expect(cause).toContain('2 candidates its provider DID state')
+    expect(cause).not.toContain('no address or name stated for one')
   })
 
   it('settles nothing for a proof that CARRIED, or for one that established nothing', () => {

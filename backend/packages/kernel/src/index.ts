@@ -730,17 +730,22 @@ export {
 // this one: the deployer settles a frame on the verdict and the container transports bridge to the
 // address it publishes.
 export {
+  HOST_RESOLVE_TIMEOUT_MS,
   MAX_PROBED_ADDRESSES,
-  ROUTE_PROBE_TIMEOUT_MS,
+  MAX_RESOLVED_HOSTS,
   describeInconclusiveRoute,
   describeRouteTargets,
   describeUnreachableEnvironment,
   determinateRouteCause,
+  planHostResolutions,
   planRouteProbes,
-  recordRefusedAttempt,
   recordRouteAttempt,
+  recordUndialledAttempt,
   reduceRouteProof,
+  ROUTE_PROBE_TIMEOUT_MS,
   unprovedRoute,
+  type CarryingTarget,
+  type RouteProbePlan,
   type RouteProbeTarget,
 } from './domain/environment-reachability.logic.js'
 

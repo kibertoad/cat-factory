@@ -638,6 +638,10 @@ export { NoopEnvironmentTestRunner } from './environment-test.js'
 // Proving a route to a provisioned environment: one bounded TCP connect, per facade. See
 // `ports/route-probe.ts` for why it is a connect rather than a request.
 export type { RouteProbe, RouteProbeOutcome, RouteProbeRequest } from './route-probe.js'
+// Turning a stated NAME into addresses, for a provider whose stable identity is a name rather
+// than a literal. See `ports/host-resolver.ts` for why the platform resolves rather than the
+// provider.
+export type { HostResolveOutcome, HostResolveRequest, HostResolver } from './host-resolver.js'
 export type {
   ContainerEvictionKind,
   DispatchEnvironment,

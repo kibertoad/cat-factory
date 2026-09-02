@@ -305,6 +305,14 @@ const CLASSIFICATION = [
     kind: 'vendor',
     vendors: ['brave-search', 'searxng'],
   },
+  {
+    // The Worker facade's host resolver. workerd exposes no resolver API, so a stated balancer
+    // NAME is resolved over Cloudflare's public DNS-over-HTTPS endpoint, whose JSON dialect is a
+    // vendor shape read by hand: the status codes, the numeric record types and the field names.
+    path: 'backend/runtimes/cloudflare/src/infrastructure/hostResolver.ts',
+    kind: 'vendor',
+    vendors: ['cloudflare'],
+  },
   { path: 'backend/runtimes/local/src/github.ts', kind: 'vendor', vendors: ['github'] },
   { path: 'backend/runtimes/local/src/linkRepo.ts', kind: 'vendor', vendors: ['github'] },
   { path: 'scripts/check-release-versions.mjs', kind: 'vendor', vendors: ['npm-registry'] },

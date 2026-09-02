@@ -185,6 +185,11 @@ write rule matters.
 - **An ADDRESS is not a field.** Addresses go on `ProvisionedEnvironment.addresses`, which is
   proved and reaches a container bridge; a bag entry reaches nobody who could dial it. See
   [ADR 0062](./adr/0062-environment-address-bridge-and-route-proof.md).
+- **State a balancer by NAME where a name is its stable identity**, as `{ host }` on that same
+  list. The platform resolves it at proof time, so an adapter does not resolve inside its own
+  response mapping and re-pin a rotating address set on every poll. Exactly one of `address` and
+  `host` per entry: the platform never reads the kind off the value. See
+  [ADR 0064](./adr/0064-environment-route-candidate-names.md).
 - **Secrets are redacted on the way to a prompt, not before.** The bag is sealed at rest, and the
   investigation's gatherer scrubs it by key and value. That is a net, not permission: keep a
   credential out of it if the later calls do not need one.

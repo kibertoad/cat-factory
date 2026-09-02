@@ -6,6 +6,7 @@ import type {
   EnvironmentRecord,
   EnvironmentRecordPatch,
   EnvironmentRegistryRepository,
+  HostResolver,
   Logger,
   ProvisionedEnvironment,
   ProvisionFields,
@@ -74,6 +75,11 @@ export interface EnvironmentStatusPollerDeps {
    * Absent ⇒ this deployment probes nothing at all and the poll behaves exactly as it did.
    */
   probe?: RouteProbe
+  /**
+   * Resolves a stated balancer NAME for that re-take. Absent ⇒ a name candidate settles nothing,
+   * exactly as it does on the settle path, and an address candidate is unaffected.
+   */
+  resolveHost?: HostResolver
   /** Best-effort provisioning-event log; absent ⇒ polling is unchanged. */
   provisioningLog?: ProvisioningLogRecorder
   logger?: Logger
@@ -216,6 +222,10 @@ export function createEnvironmentStatusPoller(deps: EnvironmentStatusPollerDeps)
       stored,
       folded,
       ready: provisioned.status === 'ready',
+      // The capability, not a preference: a proof recording that this deployment could not
+      // resolve a stated NAME is re-taken once one is wired and left alone while none is, which
+      // is the same rule the `unproved` case gets from `deps.probe` one line up.
+      canResolveHosts: Boolean(deps.resolveHost),
       now,
     })
     if (decision === 'keep') return folded
@@ -236,6 +246,7 @@ export function createEnvironmentStatusPoller(deps: EnvironmentStatusPollerDeps)
     const candidates = folded?.candidates ?? []
     const proof = await proveEnvironmentRoute(provisioned.url, candidates, {
       probe: deps.probe,
+      ...(deps.resolveHost ? { resolveHost: deps.resolveHost } : {}),
       clock: deps.clock,
     })
     log.debug('re-proved an environment route the status poll invalidated', {

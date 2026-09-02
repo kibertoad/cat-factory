@@ -128,14 +128,24 @@ assumed. Four facts about that interpretation belong to this repository:
   widen. The response mapping is deliberately a set of dot-paths rather than an expression
   language: a platform whose URL is only reachable through a computed structure has outgrown the
   manifest, and the answer is the code-adapter seam below.
-- **`addressesPath` is a CLAIM the platform then proves**, and the proving is the part that lives
-  here. What an author writes is the website's
+- **`addressesPath` and `hostsPath` are a CLAIM the platform then proves**, and the proving is the
+  part that lives here. What an author writes is the website's
   ([Addresses](https://www.catfactory.ai/extend/manifests.html#addresses-the-half-a-url-cannot-express));
   what this repo owns is which addresses are dialled at all (kernel's `isBridgeableAddress`, at
   PLAN time, so a provider-authored list cannot aim the platform's own socket at loopback or a
   metadata endpoint), what the verdict may be (`EnvironmentRouteProof`, whose `inconclusive` state
   never fails a frame), and how the address reaches a container. Design:
   [ADR 0062](./adr/0062-environment-address-bridge-and-route-proof.md).
+  **A `hostsPath` candidate is a NAME the platform RESOLVES when it dials**, expanded in place into
+  the addresses it answered with, each graded by the same rule as a stated one; the proof publishes
+  the address that carried with the name beside it, so the stored candidate stays the stable
+  identity a managed balancer is addressed by while the proved value stays a literal. Which kind a
+  bare string is comes from the declared KEY and is never sniffed off the value, because the
+  address rule refuses a disguised loopback literal that a resolver would answer for. The plan
+  looks up and dials a BOUNDED number per environment and states in the proof (as
+  `not_attempted`) when a stated list ran past that, which is also what stops a verdict of
+  unreachable being graded against a candidate nothing looked at. Design:
+  [ADR 0064](./adr/0064-environment-route-candidate-names.md).
   **A field present on the response mapping is present only when the manifest DECLARES it**, empty
   list included, because "the provider stated none" and "this response said nothing" are different
   facts and conflating them erases a stored candidate list on the first status poll.

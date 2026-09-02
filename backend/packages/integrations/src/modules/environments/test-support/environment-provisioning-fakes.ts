@@ -3,6 +3,7 @@ import type {
   EnvironmentProvider,
   EnvironmentRecord,
   EnvironmentRegistryRepository,
+  HostResolver,
   Logger,
   ProvisionEnvironmentRequest,
   ProvisionedEnvironment,
@@ -110,6 +111,8 @@ export function makeService(
   /** What a poll needs beyond the lifecycle: a socket to re-prove a route with, and a clock. */
   extras: {
     routeProbe?: RouteProbe
+    /** A resolver for a provider that states its balancer by NAME. */
+    hostResolver?: HostResolver
     clock?: Clock
     provisioningLog?: ProvisioningLogRecorder
     secretCipher?: SecretCipher
@@ -134,6 +137,7 @@ export function makeService(
     clock: extras.clock ?? { now: () => 1_700_000_000_000 },
     ...(urlPolicy ? { urlPolicy } : {}),
     ...(extras.routeProbe ? { routeProbe: extras.routeProbe } : {}),
+    ...(extras.hostResolver ? { hostResolver: extras.hostResolver } : {}),
     ...(extras.provisioningLog ? { provisioningLog: extras.provisioningLog } : {}),
     ...(extras.logger ? { logger: extras.logger } : {}),
   })

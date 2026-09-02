@@ -95,6 +95,9 @@ export function buildEnvironmentProvisioningService(args: {
     // Proving a route to a provisioned environment. Absent ⇒ every proof records `unproved`, which
     // is a statement about the DEPLOYMENT and never fails a frame.
     ...(deps.routeProbe ? { routeProbe: deps.routeProbe } : {}),
+    // Resolving a stated balancer NAME at proof time. Absent ⇒ a name candidate is recorded
+    // `resolver_unavailable` and nothing is dialled for it, which settles nothing either way.
+    ...(deps.hostResolver ? { hostResolver: deps.hostResolver } : {}),
     ...(deps.resolveRunRepoContext ? { resolveRunRepoContext: deps.resolveRunRepoContext } : {}),
     ...(deps.resolveRepoFilesForCoords
       ? { resolveRepoFilesForWorkspace: deps.resolveRepoFilesForCoords }

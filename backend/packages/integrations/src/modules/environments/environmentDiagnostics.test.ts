@@ -405,12 +405,40 @@ describe('createEnvironmentDiagnostics.collect: the derived timeline and route e
     const bundle = await collectBundle(diagnostics, { environmentId: 'env_1' })
 
     expect(bundle.route.candidates).toHaveLength(20)
-    expect(bundle.evidenceCaps?.join(' ')).toContain('stated 25 addresses')
+    expect(bundle.evidenceCaps?.join(' ')).toContain('stated 25 targets')
     const detail = bundle.route.proof?.attempts[0]?.detail ?? ''
     expect(detail).not.toContain('hunter2')
     expect(detail).toContain('[REDACTED]')
     // And the timeline entry rendering the same proof is the same string, because both go through
     // kernel's one renderer over the already-prepared evidence.
+    const proofEntry = bundle.timeline.find((e) => e.label.startsWith('route proof'))
+    expect(proofEntry?.detail).not.toContain('hunter2')
+  })
+
+  it('scrubs the NAME a proof carried on, which rode out on the spread beside `via`', async () => {
+    // `viaHost` is a name a manifest's `hostsPath` pointed at, so it is provider-authored text of
+    // no declared length: strictly more exposed than `via`, which at least came back from a
+    // resolver. Both the investigation prompt and the timeline entry print it.
+    const diagnostics = createEnvironmentDiagnostics(
+      deps({
+        found: record({
+          reachability: JSON.stringify({
+            candidates: [{ host: 'alb-4.internal.example' }],
+            proof: {
+              state: 'reached',
+              via: '10.4.19.23',
+              viaHost: 'alb-4.internal.example?token=hunter2',
+              reason: null,
+              attempts: [],
+              checkedAt: 259_000,
+            },
+          }),
+        }),
+      }),
+    )
+    const bundle = await collectBundle(diagnostics, { environmentId: 'env_1' })
+    expect(bundle.route.proof?.viaHost).not.toContain('hunter2')
+    expect(bundle.route.proof?.viaHost).toContain('[REDACTED]')
     const proofEntry = bundle.timeline.find((e) => e.label.startsWith('route proof'))
     expect(proofEntry?.detail).not.toContain('hunter2')
   })

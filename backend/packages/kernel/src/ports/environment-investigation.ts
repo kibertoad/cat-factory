@@ -1,4 +1,4 @@
-import type { EnvironmentAddress, EnvironmentRouteProof } from '@cat-factory/contracts'
+import type { EnvironmentRouteCandidate, EnvironmentRouteProof } from '@cat-factory/contracts'
 import type { Block } from '../domain/types.js'
 import type { EnvironmentDiagnosis } from './environment-diagnostics.js'
 
@@ -36,8 +36,8 @@ export interface EnvironmentRecordFacts {
 }
 
 /**
- * What the platform knows about REACHING this environment: the addresses its provider stated to
- * dial, and what dialling them proved.
+ * What the platform knows about REACHING this environment: the addresses and names its provider
+ * stated to dial, and what dialling them proved.
  *
  * In the bundle because it is the one evidence source carrying its OWN timestamp for something
  * the platform did, and an ordering claim made without it is a claim made against data the
@@ -53,15 +53,15 @@ export interface EnvironmentRecordFacts {
  */
 export interface EnvironmentRouteEvidence {
   /**
-   * The addresses the provider stated carry traffic for the URL's host, in ITS order. Empty means
-   * it stated none, so the URL's own name was the only target that existed.
+   * The addresses and names the provider stated carry traffic for the URL's host, in ITS order.
+   * Empty means it stated none, so the URL's own name was the only target that existed.
    *
    * Provider-authored, so already redacted and bounded by whoever gathered this bundle, exactly
    * like {@link EnvironmentTimelineEntry.detail} and a diagnosis's facts. Anything cut is named in
    * {@link EnvironmentEvidenceBundle.evidenceCaps}; a reader RENDERS these, it does not re-scrub
    * them.
    */
-  candidates: readonly EnvironmentAddress[]
+  candidates: readonly EnvironmentRouteCandidate[]
   /**
    * What dialling established, or null when nothing has dialled this environment. Its attempts'
    * `target` and `detail` are redacted and capped on the same terms as `candidates` above.

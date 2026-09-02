@@ -175,6 +175,7 @@ type ConformanceAppOpts = {
   gateProviders?: GateProviderOverrides
   environmentProvider?: CoreDependencies['environmentProvider']
   routeProbe?: CoreDependencies['routeProbe']
+  hostResolver?: CoreDependencies['hostResolver']
   resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
   deployJobClient?: CoreDependencies['deployJobClient']
   resolveDeployCloneTarget?: CoreDependencies['resolveDeployCloneTarget']
@@ -280,6 +281,8 @@ function buildConformanceOverrides(
     // instead of on anything the suite asserts. A case driving the unreachable path supplies its
     // own probe.
     routeProbe: o.routeProbe ?? (async () => ({ state: 'carried' as const })),
+    // Resolving a stated balancer NAME, injected on the same terms and for the same reason.
+    hostResolver: o.hostResolver ?? (async () => ({ state: 'unresolved' as const })),
     // Each override below lands only when the suite supplies it (mirrors the prior
     // `...(v ? { k: v } : {})` spreads): the engine's run-repo resolver, the binary-artifact
     // store resolver, a native env provider + block-less coords resolver, detection-convention

@@ -20,6 +20,7 @@ import type {
   ProvisionedEnvironment,
   RecipeStepLog,
   ResolveRunRepoContext,
+  HostResolver,
   RouteProbe,
   RunnerDispatchKind,
   RunnerDispatchOptions,
@@ -99,6 +100,15 @@ export interface EnvironmentProvisioningServiceDependencies {
    * nothing downstream changes, which is what a facade with no socket API is owed.
    */
   routeProbe?: RouteProbe
+  /**
+   * Turns a stated NAME into the addresses it answers with, for the provider that identifies its
+   * balancers by name rather than by a literal it would have to re-snapshot on every poll.
+   *
+   * Absent means a candidate stating a name is recorded `resolver_unavailable` and dialled by
+   * nobody, which leaves the route unruled-out rather than failing a frame. Addresses stated
+   * directly are unaffected.
+   */
+  hostResolver?: HostResolver
   /** Best-effort provisioning-event log; absent ⇒ provisioning is unchanged. */
   provisioningLog?: ProvisioningLogRecorder
   /** Kernel logger for the diagnostic reads' best-effort degradations; absent ⇒ silent. */
@@ -359,6 +369,7 @@ export class EnvironmentProvisioningService {
         this.resolveExpiry(provisioned, defaultTtlMs, base),
       clock: deps.clock,
       ...(deps.routeProbe ? { probe: deps.routeProbe } : {}),
+      ...(deps.hostResolver ? { resolveHost: deps.hostResolver } : {}),
       ...(deps.provisioningLog ? { provisioningLog: deps.provisioningLog } : {}),
       ...(deps.logger ? { logger: deps.logger } : {}),
     })
@@ -1097,6 +1108,7 @@ export class EnvironmentProvisioningService {
     const stored = parseReachability(record.reachability)
     const proof = await proveEnvironmentRoute(record.url, stored?.candidates ?? [], {
       ...(this.deps.routeProbe ? { probe: this.deps.routeProbe } : {}),
+      ...(this.deps.hostResolver ? { resolveHost: this.deps.hostResolver } : {}),
       clock: this.deps.clock,
     })
     const patch = {

@@ -51,6 +51,13 @@ it only reaches the logger the Worker writes through while both imports resolve 
   each fed its own provider's client). The
   executor and vcs-identity modules never import the root back (what they need from it arrives
   through `WorkerExecutorDeps`), so the module graph stays one-way.
+- `routeProbe.ts`, `hostResolver.ts`: what this facade can find out about REACHING a provisioned
+  environment, the twins of Node's `net` probe and `dns.lookup`. The probe is one bounded
+  `cloudflare:sockets` connect; the resolver is DNS-over-HTTPS, because workerd exposes no resolver
+  API and `connect()` will not say which address it reached. Cloudflare's own resolver rather than
+  any other is deliberate: it is the view this facade's outbound `connect()` already goes through,
+  so a name it answers for is a name this facade could dial. See
+  [ADR 0064](../../docs/adr/0064-environment-route-candidate-names.md).
 - `ai/`, `gateways/`, `github/`: the CF gateway impls (realtime, GitHub, LLM upstream) + the
   container agent-executor **wiring** (same class names as `@cat-factory/server`'s `agents/`;
   those are the shared abstraction, these are the runtime wiring; see `docs/glossary.md`).
