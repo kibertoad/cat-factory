@@ -83,6 +83,12 @@ function buildWorkerConformanceDeps(recorder: RecordingEventPublisher, opts: Wor
     // dispatch→poll→re-validate lifecycle against D1 without a real container (driven via
     // driveEnvConfigRepair); the module only builds when an env provider is also wired.
     envConfigRepairer: new FakeEnvConfigRepairer(),
+    // Proving a provisioned environment's route. Injected on every conformance app rather than
+    // left to the facade's real probe: the suite's environment URLs are fixtures on reserved TLDs
+    // that resolve nowhere, so a real probe would fail every deploy here on the machine's DNS
+    // instead of on anything the suite asserts. A case driving the unreachable path supplies its
+    // own probe.
+    routeProbe: o.routeProbe ?? (async () => ({ state: 'carried' as const })),
     // Each override below lands only when the suite supplies it:
     // - resolveRunRepoContext: the engine's run-repo resolver (a fake) so a registered custom
     //   kind's pre/post-op hooks run + commit identically to a real GitHub-wired facade.

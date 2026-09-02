@@ -5,6 +5,7 @@ import {
   nonEmpty,
   urlString,
 } from './primitives.js'
+import { environmentReachabilitySchema } from './environment-reachability.js'
 import { stackRecipeSchema } from './stack-recipes.js'
 import {
   eksProvisionConfigSchema,
@@ -165,6 +166,17 @@ export type EnvironmentAccessMapping = v.InferOutput<typeof environmentAccessMap
  */
 export const environmentResponseMappingSchema = v.object({
   urlPath: v.optional(v.string()),
+  /**
+   * Where the response states the ADDRESSES that carry traffic for `urlPath`'s host: a string, or
+   * an array of strings, or an array of `{ address, label }` objects.
+   *
+   * The half of addressing a URL cannot express. An org whose per-environment DNS record lives in
+   * an internal view publishes a name that resolves nowhere from the deployment while the
+   * balancers fronting it are perfectly reachable, and this is how such a provider says so
+   * without the platform having to know its topology. Absent (the ordinary case) means the name
+   * is the only thing to try.
+   */
+  addressesPath: v.optional(v.string()),
   statusPath: v.optional(v.string()),
   statusMap: v.optional(v.array(v.object({ from: v.string(), to: environmentStatusSchema }))),
   expiresAtPath: v.optional(v.string()),
@@ -274,6 +286,12 @@ export type ProvisionType = v.InferOutput<typeof provisionTypeSchema>
  *  - `environment_missing` — a service whose steps run against an ephemeral environment has
  *    none at all. The fix is the CHAIN (a tester with no `deployer` ahead of it) rather than the
  *    provider, which is why it does not share `environment_not_ready`'s code.
+ *  - `environment_unreachable`: the provider called it `ready`, and neither the URL's own name
+ *    nor any address the provider stated for it carried. The one member of this vocabulary that
+ *    is about REACHING rather than provisioning, and it is here rather than in
+ *    `EnvironmentUnreachableReason` because this is the vocabulary the deployer settles a frame
+ *    in. Which LAYER failed is the sibling vocabulary's answer and rides the environment's own
+ *    `reachability.proof.reason`.
  */
 export const environmentFailureReasonSchema = v.picklist([
   'deploy_runner_unwired',
@@ -286,6 +304,7 @@ export const environmentFailureReasonSchema = v.picklist([
   'timeout',
   'environment_not_ready',
   'environment_missing',
+  'environment_unreachable',
 ])
 export type EnvironmentFailureReason = v.InferOutput<typeof environmentFailureReasonSchema>
 
@@ -322,6 +341,11 @@ const REPO_FIXABLE_ENVIRONMENT_FAILURES: Record<EnvironmentFailureReason, boolea
   timeout: false,
   environment_not_ready: false,
   environment_missing: false,
+  // A route that does not carry is a DNS zone, a security group or a load balancer, none of
+  // which is in the checkout. An agent handed "nothing could reach it" and a repo has exactly
+  // one move, which is to change the address the manifest publishes, and that is the fact the
+  // failure was reporting rather than the fault.
+  environment_unreachable: false,
 }
 
 /** See {@link REPO_FIXABLE_ENVIRONMENT_FAILURES}. An absent/unknown reason is never fixable. */
@@ -773,6 +797,17 @@ export const environmentHandleSchema = v.object({
   providerId: v.string(),
   externalId: v.nullable(v.string()),
   url: v.nullable(v.string()),
+  /**
+   * What the platform knows about ADDRESSING this environment, beside the name in `url`: the
+   * addresses its provider states carry traffic for that name, and what dialling them proved.
+   *
+   * Beside `url` rather than folded into it because they answer different questions and only one
+   * of them is a claim. `url` is what a browser opens and what an ingress routes on, and it stays
+   * exactly as the provider published it; this is whether anything can actually get there, which
+   * before it existed nothing had ever asked. Null for an environment provisioned before this
+   * field, and for a provider that states no addresses and has not been probed.
+   */
+  reachability: v.optional(v.nullable(environmentReachabilitySchema)),
   status: environmentStatusSchema,
   /** Present only on the dedicated access endpoint / in agent context. */
   access: v.optional(environmentAccessHandleSchema),

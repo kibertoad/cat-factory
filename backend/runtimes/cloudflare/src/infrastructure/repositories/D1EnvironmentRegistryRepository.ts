@@ -17,6 +17,7 @@ interface EnvironmentRow {
   status: string
   access_cipher: string | null
   provision_fields_cipher: string | null
+  reachability: string | null
   created_at: number
   expires_at: number | null
   last_error: string | null
@@ -39,6 +40,7 @@ function rowToRecord(row: EnvironmentRow): EnvironmentRecord {
     status: row.status as EnvironmentRecord['status'],
     accessCipher: row.access_cipher,
     provisionFieldsCipher: row.provision_fields_cipher,
+    reachability: row.reachability ?? null,
     createdAt: row.created_at,
     expiresAt: row.expires_at,
     lastError: row.last_error,
@@ -56,6 +58,7 @@ const PATCH_COLUMNS: Record<keyof EnvironmentRecordPatch, string> = {
   status: 'status',
   accessCipher: 'access_cipher',
   provisionFieldsCipher: 'provision_fields_cipher',
+  reachability: 'reachability',
   expiresAt: 'expires_at',
   lastError: 'last_error',
   statusNote: 'status_note',
@@ -76,9 +79,9 @@ export class D1EnvironmentRegistryRepository implements EnvironmentRegistryRepos
       .prepare(
         `INSERT INTO environments
           (id, workspace_id, block_id, frame_id, execution_id, provider_id, external_id, url, status,
-           access_cipher, provision_fields_cipher, created_at, expires_at, last_error, status_note,
-           deleted_at, provision_type, engine)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+           access_cipher, provision_fields_cipher, reachability, created_at, expires_at, last_error,
+           status_note, deleted_at, provision_type, engine)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
       )
       .bind(
         record.id,
@@ -92,6 +95,7 @@ export class D1EnvironmentRegistryRepository implements EnvironmentRegistryRepos
         record.status,
         record.accessCipher,
         record.provisionFieldsCipher,
+        record.reachability,
         record.createdAt,
         record.expiresAt,
         record.lastError,

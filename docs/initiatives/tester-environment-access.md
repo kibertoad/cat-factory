@@ -8,6 +8,12 @@
 > human-intervention park loop). Slice C is the SEALED counterpart of Slice B and shares its
 > per-service-frame model; Slice D consumes BOTH cred stores.
 
+> **What this tracker does NOT cover.** Slice A standardized the coordinates by RE-PARSING the
+> environment's one URL, which answers "where do I aim" and never "can anything get there". The
+> address a container must be given when that name resolves nowhere, and the proof that anything
+> carries at all, are
+> [ADR 0062](../../backend/docs/adr/0062-environment-address-bridge-and-route-proof.md).
+
 ## Goal & rationale
 
 A Tester run aborted with _"Ephemeral environment not provided/reachable: searched process
@@ -40,11 +46,13 @@ nobody enters real/production secrets.
 
 ## Target pattern (reference implementations)
 
-- **Coordinate derivation** (Slice A): `deriveEnvironmentCoordinates(url)` in
-  `backend/packages/agents/src/agents/prompts/standard.ts`; a pure URL→`{host,port,scheme}`
-  parser with scheme-default ports. Lives in `agents` (not `kernel`) because `kernel`'s TS lib
-  is ES2022-only and has no `URL` global; `agents` carries the DOM lib. Rendered by
-  `environmentSection()`, unit-tested in `environment-section.test.ts`.
+- **Coordinate derivation** (Slice A): `deriveEnvironmentCoordinates(url)`, a pure
+  URL→`{host,port,scheme}` parser with scheme-default ports, rendered by `environmentSection()`.
+  It has since moved to `@cat-factory/contracts` (`environment-reachability.ts`), because ADR 0062's
+  route proof DIALS what the prompt states and a second parser meant an agent told to dial
+  coordinates the platform never probed. Contracts is the one package both readers can see, and it
+  is ES2022-only with no `URL` global, so the authority parse is hand-rolled there and tested
+  directly.
 - **Per-service config** (Slice B): mirror the release-health per-block config;
   `ReleaseHealthService` + `ServiceReleaseHealthConfig.vue` + `stores/releaseHealth.ts`, resolved
   up the frame chain via `AgentContextBuilder.resolveServiceFrame`. **Difference:** the pools are

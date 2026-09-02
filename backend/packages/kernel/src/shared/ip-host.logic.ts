@@ -73,6 +73,53 @@ export function decodeIpv4(host: string): [number, number, number, number] | nul
 }
 
 /**
+ * Decode an IPv6 literal to its eight 16-bit groups, or null when it is not one.
+ *
+ * Exists because an IPv6 address has MANY spellings of one value and a rule that pattern-matches
+ * the canonical one is not a rule: `::1`, `0::1` and `0:0:0:0:0:0:0:1` are the same loopback
+ * address, and a check comparing against the literal `'::1'` admits the other two. Same for
+ * `fe80::/10`, where a `startsWith('fe80:')` test covers an eighth of the range and passes
+ * `fe90::1`. Callers that must classify an IPv6 target (link-local, multicast, loopback) decode
+ * first and judge the NUMBER, exactly as {@link decodeIpv4} exists so a guard never judges a v4
+ * spelling.
+ *
+ * Refused rather than decoded: a zone id (`fe80::1%eth0`), which names a local interface and can
+ * never be a routable target, and any group that is not 1-4 hex digits. A trailing dotted-quad is
+ * accepted, being the ordinary spelling of a mapped or translated address.
+ */
+export function decodeIpv6(hostname: string): number[] | null {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  if (!host.includes(':') || host.includes('%')) return null
+  const halves = host.split('::')
+  if (halves.length > 2) return null
+  const head = expandIpv6Groups(halves[0] ?? '')
+  const tail = halves.length === 2 ? expandIpv6Groups(halves[1] ?? '') : []
+  if (!head || !tail) return null
+  if (halves.length === 1) return head.length === 8 ? head : null
+  // `::` stands for at least one all-zero group, so a compression that saves nothing is malformed.
+  const filled = 8 - head.length - tail.length
+  return filled >= 1 ? [...head, ...Array.from({ length: filled }, () => 0), ...tail] : null
+}
+
+/** One colon-separated run of an IPv6 literal as 16-bit groups, or null when it is malformed. */
+function expandIpv6Groups(part: string): number[] | null {
+  if (part === '') return []
+  const chunks = part.split(':')
+  const groups: number[] = []
+  for (const [index, chunk] of chunks.entries()) {
+    if (index === chunks.length - 1 && chunk.includes('.')) {
+      const v4 = decimalV4(chunk)
+      if (!v4) return null
+      groups.push((v4[0] << 8) | v4[1], (v4[2] << 8) | v4[3])
+      continue
+    }
+    if (!/^[0-9a-f]{1,4}$/.test(chunk)) return null
+    groups.push(parseInt(chunk, 16))
+  }
+  return groups
+}
+
+/**
  * Whether a host resolves to a known cloud-metadata / link-local target — the endpoint
  * an SSRF would aim at for instance credentials. Covers the metadata hostnames plus the
  * whole link-local range (169.254.0.0/16, incl. 169.254.169.254 IMDS) and the per-vendor

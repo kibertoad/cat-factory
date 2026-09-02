@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   decimalV4,
   decodeIpv4,
+  decodeIpv6,
   isBlockedPrivateHost,
   isCloudMetadataHost,
   isLocalMachineHost,
@@ -115,6 +116,46 @@ describe('decodeIpv4', () => {
     expect(decodeIpv4('example.com')).toBeNull()
     expect(decodeIpv4('::1')).toBeNull()
     expect(decodeIpv4('')).toBeNull()
+  })
+})
+
+describe('decodeIpv6', () => {
+  it('expands every spelling of one address to the same eight groups', () => {
+    // The reason this exists. A guard that compares against the canonical spelling is not a guard:
+    // these are all loopback, and a `host === '::1'` test admits three of the four.
+    const loopback = [0, 0, 0, 0, 0, 0, 0, 1]
+    for (const host of [
+      '::1',
+      '0::1',
+      '0:0:0:0:0:0:0:1',
+      '0000:0000:0000:0000:0000:0000:0000:0001',
+      '[::1]',
+      '::1',
+    ]) {
+      expect(decodeIpv6(host), host).toEqual(loopback)
+    }
+    expect(decodeIpv6('::')).toEqual([0, 0, 0, 0, 0, 0, 0, 0])
+    expect(decodeIpv6('2001:db8::1')).toEqual([0x2001, 0xdb8, 0, 0, 0, 0, 0, 1])
+  })
+
+  it('reads a trailing dotted quad, the ordinary spelling of a mapped address', () => {
+    expect(decodeIpv6('::ffff:127.0.0.1')).toEqual([0, 0, 0, 0, 0, 0xffff, 0x7f00, 1])
+  })
+
+  it('refuses what is not an IPv6 literal, rather than decoding it partially', () => {
+    for (const host of [
+      '127.0.0.1', // no colon: a v4 literal is `decodeIpv4`'s job
+      'fe80::1%eth0', // a zone id names a local interface, never a routable target
+      '2001:db8::1::2', // two compressions
+      'gggg::1',
+      '1:2:3:4:5:6:7', // seven groups, uncompressed
+      '1:2:3:4:5:6:7:8:9',
+      '1:2:3:4:5:6:7:8::', // a compression that stands for nothing
+      '::99999',
+      '',
+    ]) {
+      expect(decodeIpv6(host), host).toBeNull()
+    }
   })
 })
 

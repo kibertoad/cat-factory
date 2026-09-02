@@ -707,6 +707,24 @@ export {
   type EnvironmentReadinessInput,
 } from './domain/environment-readiness.logic.js'
 
+// Environment REACHABILITY: what a proof tries and what the answers add up to. Beside readiness
+// rather than folded into it because they are different questions about the same row (readiness is
+// about the environment, reachability about anyone getting to it), and because two layers act on
+// this one: the deployer settles a frame on the verdict and the container transports bridge to the
+// address it publishes.
+export {
+  MAX_PROBED_ADDRESSES,
+  ROUTE_PROBE_TIMEOUT_MS,
+  describeInconclusiveRoute,
+  describeUnreachableEnvironment,
+  planRouteProbes,
+  recordRefusedAttempt,
+  recordRouteAttempt,
+  reduceRouteProof,
+  unprovedRoute,
+  type RouteProbeTarget,
+} from './domain/environment-reachability.logic.js'
+
 // Per-step human-gate approval: who may resolve a gate and when a quorum is met. The rule lives in
 // `@cat-factory/contracts` because the SPA must agree about the answer (it disables the approve
 // button and renders the tally), and is re-exported here so the engine reaches it alongside the
@@ -936,6 +954,7 @@ export {
   decimalV4,
   mappedV4,
   decodeIpv4,
+  decodeIpv6,
   isCloudMetadataHost,
   isBlockedPrivateHost,
   isLoopbackHost,
@@ -943,9 +962,15 @@ export {
 } from './shared/ip-host.logic.js'
 export {
   classifyLocalMachineHostBridge,
+  hostBridgeKey,
+  isBridgeableAddress,
   resolvesToLocalMachine,
 } from './shared/environment-host-bridge.logic.js'
-export type { LocalMachineHostBridge } from './shared/environment-host-bridge.logic.js'
+export type {
+  HostBridgeTarget,
+  LocalMachineHostBridge,
+  UnbridgeableCause,
+} from './shared/environment-host-bridge.logic.js'
 export {
   isSecretShapedFilename,
   redactSecretFields,

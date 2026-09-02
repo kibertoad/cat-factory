@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest'
 import type { ConformanceApp, ConformanceHarness } from '../harness.js'
 import { registerDeployLifecycleTests } from './integration-environments-deploy.js'
 import { seedLegacyPipeline } from '../legacyPipeline.js'
+import { registerEnvironmentReachabilityTests } from './integration-environment-reachability.js'
 
 export function defineEnvironmentsConformance(harness: ConformanceHarness): void {
   describe('ephemeral environments', () => {
@@ -23,6 +24,7 @@ export function defineEnvironmentsConformance(harness: ConformanceHarness): void
     registerInfraHandlerTests(harness)
     registerProvisioningDetectionTests(harness)
     registerDisposerTests(harness)
+    registerEnvironmentReachabilityTests(harness)
   })
 
   registerBoardMutationTests(harness)

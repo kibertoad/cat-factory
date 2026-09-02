@@ -55,6 +55,9 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
   // Docker/Podman/OrbStack/Colima all forward published ports to the host loopback, so a
   // preview's served-app port is reachable (and pinnable) on localhost.
   readonly publishesToLocalhost = true
+  // `--add-host` takes both target forms: the `host-gateway` token this family resolves itself,
+  // and a plain address.
+  readonly honoursHostBridges = true
   private readonly addHostGateway: boolean
   private readonly installId: string
 
@@ -102,8 +105,14 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
     // Per-job host bridges (the ephemeral-environment host). Emitted whether or not the standing
     // `hostAlias` add-host is: `addHostGateway` is false where a runtime resolves its OWN alias
     // natively (Colima's `host.lima.internal`), which says nothing about a name the runtime has
-    // never heard of. `host-gateway` is a Docker-family token and this is the Docker-family adapter.
-    for (const host of spec.extraHosts ?? []) args.push(`--add-host=${host}:host-gateway`)
+    // never heard of. `host-gateway` is a Docker-family token and this is the Docker-family adapter;
+    // the address form is ordinary `--add-host` and is what a remote environment whose name lives
+    // in a DNS view we cannot see takes. The target is NEVER interpolated raw from a provider: it
+    // arrives already graded by kernel's `isBridgeableAddress`.
+    for (const bridge of spec.extraHosts ?? []) {
+      const target = bridge.target === 'host-gateway' ? 'host-gateway' : bridge.target.ip
+      args.push(`--add-host=${bridge.host}:${target}`)
+    }
     if (spec.network) args.push('--network', spec.network)
     for (const [k, v] of Object.entries(spec.env)) args.push('-e', `${k}=${v}`)
     // The port the harness must BIND, stated rather than left to whatever the image defaults to,

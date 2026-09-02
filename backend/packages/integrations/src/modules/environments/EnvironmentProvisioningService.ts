@@ -20,6 +20,7 @@ import type {
   ProvisionedEnvironment,
   RecipeStepLog,
   ResolveRunRepoContext,
+  RouteProbe,
   RunnerDispatchKind,
   RunnerDispatchOptions,
   ProvisioningLogRecord,
@@ -34,7 +35,12 @@ import type {
 } from '@cat-factory/kernel'
 import type { OrgSecretCipher, SecretCipher, SecretDelegate } from '@cat-factory/kernel'
 import { createOrgSecretCipher } from '@cat-factory/kernel'
-import type { EnvironmentAccessHandle, EnvironmentHandle } from '@cat-factory/kernel'
+import type {
+  EnvironmentAccessHandle,
+  EnvironmentHandle,
+  EnvironmentReachabilityNote,
+} from '@cat-factory/kernel'
+import { reachabilityNote } from '@cat-factory/contracts'
 import {
   assertFound,
   getErrorMessage,
@@ -48,10 +54,13 @@ import {
   boundStatusNote,
   describeMisresolvingEnvironmentUrl,
   type EnvironmentIdentity,
+  parseReachability,
   recordToHandle,
+  serializeReachability,
   shouldTeardownSuperseded,
   stringifyProviderConfig,
 } from './environments.logic.js'
+import { foldStatedAddresses, proveEnvironmentRoute } from './environmentReachability.js'
 import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningLogService.js'
 import {
   createEnvironmentDiagnostics,
@@ -80,6 +89,12 @@ export interface EnvironmentProvisioningServiceDependencies {
   clock: Clock
   /** URL/host safety policy applied to the URL a provider returns. Defaults to strict. */
   urlPolicy?: UrlSafetyPolicy
+  /**
+   * Opens one bounded TCP connection, so {@link EnvironmentProvisioningService.proveReachability}
+   * can prove a route instead of asserting one. Absent means every proof records `unproved` and
+   * nothing downstream changes, which is what a facade with no socket API is owed.
+   */
+  routeProbe?: RouteProbe
   /** Best-effort provisioning-event log; absent ⇒ provisioning is unchanged. */
   provisioningLog?: ProvisioningLogRecorder
   /** Kernel logger for the diagnostic reads' best-effort degradations; absent ⇒ silent. */
@@ -284,6 +299,11 @@ export interface ResolvedEnvironment {
   status: EnvironmentHandle['status']
   access: EnvironmentAccessHandle | null
   expiresAt: number | null
+  /**
+   * What the platform proved about reaching this environment, flattened to what a consumer needs:
+   * the address it may dial and the layer that failed. Absent when nothing has probed it.
+   */
+  reachability?: EnvironmentReachabilityNote
 }
 
 export class EnvironmentProvisioningService {
@@ -868,6 +888,13 @@ export class EnvironmentProvisioningService {
       status: provisioned.status,
       accessCipher: await this.encryptAccess(workspaceId, provisioned.access),
       provisionFieldsCipher: await this.encryptProvisionFields(workspaceId, provisioned.fields),
+      // The provider's CLAIM about where this URL is reachable, stored with no proof beside it.
+      // Nothing has dialled anything yet: the proof runs once the environment is `ready`, in the
+      // deployer's settle path, and publishing an unproved address before then is precisely the
+      // failure mode that makes an address bridge worse than no bridge.
+      reachability: serializeReachability(
+        foldStatedAddresses(null, null, provisioned.addresses, provisioned.url),
+      ),
       createdAt: now,
       expiresAt: this.resolveExpiry(provisioned, manifest.defaultTtlMs, now),
       // A provider that reports `status:'failed'` without throwing still carries its real
@@ -1005,6 +1032,17 @@ export class EnvironmentProvisioningService {
       externalId: provisioned.externalId ?? record.externalId,
       expiresAt: this.resolveExpiry(provisioned, manifest.defaultTtlMs, record.createdAt),
       accessCipher: await this.encryptAccess(record.workspaceId, provisioned.access),
+      // Re-read the provider's stated addresses, and keep the proof beside them only while both
+      // of its inputs are unchanged (see `foldStatedAddresses`): a moved URL or a re-stated
+      // candidate list makes the stored verdict a claim about a target that no longer exists.
+      reachability: serializeReachability(
+        foldStatedAddresses(
+          parseReachability(record.reachability),
+          record.url,
+          provisioned.addresses,
+          provisioned.url,
+        ),
+      ),
       // Persist the provider's failure reason on a poll-time transition to `failed` (cleared once
       // not failed), mirroring the provisionSync path — WITHOUT this, a reconcile that flips an env
       // to `failed` (a provider reporting the verdict on `provisioned.error` rather than throwing)
@@ -1093,12 +1131,47 @@ export class EnvironmentProvisioningService {
     // A browsable-preview row is not a provisioned environment — never resolve it as a block's
     // live env (e.g. for tester context enrichment); it is owned solely by the PreviewService.
     if (!record || record.provisionType === PREVIEW_PROVISION_TYPE) return null
+    const note = reachabilityNote(parseReachability(record.reachability))
     return {
       url: record.url,
       status: record.status,
       access: await this.decryptAccess(record),
       expiresAt: record.expiresAt,
+      ...(note ? { reachability: note } : {}),
     }
+  }
+
+  /**
+   * Dial this environment once and record what carried: its own name first, then each address its
+   * provider stated for that name, in the provider's order.
+   *
+   * Called by the `deployer` at the moment a frame settles `ready`, which is the one place in the
+   * lifecycle where the I/O is free and the answer is still worth acting on. Deliberately NOT a
+   * gate: `docs/initiatives/deployment-failure-remediation.md` withdrew a `deploy-health` gate that
+   * would have probed the environment handle, on the grounds that the deployer owns provisioning
+   * through to a terminal verdict.
+   *
+   * Returns the updated handle so the caller reads the verdict off the same object it will record,
+   * rather than re-reading the row it just wrote. A probe never throws (see the `RouteProbe` port),
+   * so the only failure this can propagate is the persistence write, which is the caller's to
+   * handle exactly as every other settle write is.
+   */
+  async proveReachability(workspaceId: string, id: string): Promise<EnvironmentHandle> {
+    const record = assertFound(
+      await this.deps.environmentRegistryRepository.get(workspaceId, id),
+      'Environment',
+      id,
+    )
+    const stored = parseReachability(record.reachability)
+    const proof = await proveEnvironmentRoute(record.url, stored?.candidates ?? [], {
+      ...(this.deps.routeProbe ? { probe: this.deps.routeProbe } : {}),
+      clock: this.deps.clock,
+    })
+    const patch = {
+      reachability: serializeReachability({ candidates: stored?.candidates ?? [], proof }),
+    }
+    await this.deps.environmentRegistryRepository.update(workspaceId, id, patch)
+    return recordToHandle({ ...record, ...patch })
   }
 
   /**
@@ -1283,6 +1356,8 @@ export class EnvironmentProvisioningService {
         status: 'failed',
         accessCipher: null,
         provisionFieldsCipher: null,
+        // A provision that never produced a URL has no host anyone could have named an address for.
+        reachability: null,
         createdAt: this.deps.clock.now(),
         expiresAt: null,
         lastError,

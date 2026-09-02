@@ -871,7 +871,7 @@ describe('LocalContainerRunnerTransport: ephemeral-environment host bridge', () 
   // this feature read `spec.environmentUrl` — a path the engine has never emitted (it emits
   // `body.infra.environmentUrl`), so the bridge could not fire in production while tests that
   // hand-wrote the spec passed. `containerAgentJobBody.spec.ts` pins the engine's half.
-  const withEnvs = (...urls: string[]) => ({ environmentUrls: urls })
+  const withEnvs = (...urls: string[]) => ({ environments: urls.map((url) => ({ url })) })
 
   function harnessFetch() {
     return vi.fn(async (input: string | URL | Request) => {
@@ -982,6 +982,34 @@ describe('LocalContainerRunnerTransport: ephemeral-environment host bridge', () 
     await transport.dispatch(ref, {}, 'agent', withEnvs(ENV_URL, PEER_URL))
     await transport.dispatch({ ...ref, jobId: 'j2' }, {}, 'agent', withEnvs(PEER_URL, ENV_URL))
     expect(runArgs(calls)).toHaveLength(1)
+  })
+
+  it('maps a remote name onto the address PROVED to carry for it', async () => {
+    // The Kargo shape: the per-environment DNS record lives in an internal view, so the name
+    // resolves nowhere while the balancer fronting it routes on the Host header perfectly well.
+    // The hosts entry keeps the name, which is what makes the ingress routing keep working.
+    const { transport, calls } = mk()
+    await transport.dispatch({ runId: 'r9', jobId: 'j1' }, {}, 'agent', {
+      environments: [{ url: 'https://pr-14.test.example.cloud', address: '10.4.19.22' }],
+    })
+    expect(runArgs(calls)[0]).toContain('--add-host=pr-14.test.example.cloud:10.4.19.22')
+  })
+
+  it('REPLACES a container whose bridge points at a stale address', async () => {
+    // Same host, different target, which is a different container: the entry is fixed at create
+    // time, so a run whose environment moved balancers would otherwise stay wedged against an
+    // address nothing answers on, with nothing left to notice it.
+    const { transport, calls } = mk()
+    const ref = { runId: 'r10', jobId: 'j1' }
+    await transport.dispatch(ref, {}, 'agent', {
+      environments: [{ url: 'https://pr-14.test.example.cloud', address: '10.4.19.22' }],
+    })
+    await transport.dispatch({ ...ref, jobId: 'j2' }, {}, 'agent', {
+      environments: [{ url: 'https://pr-14.test.example.cloud', address: '10.4.19.23' }],
+    })
+    const runs = runArgs(calls)
+    expect(runs).toHaveLength(2)
+    expect(runs[1]).toContain('--add-host=pr-14.test.example.cloud:10.4.19.23')
   })
 
   it('leaves a bridged container alone for a later step that needs no bridge', async () => {

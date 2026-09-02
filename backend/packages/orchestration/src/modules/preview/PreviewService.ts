@@ -78,6 +78,9 @@ export class PreviewService {
       status: 'provisioning',
       accessCipher: null,
       provisionFieldsCipher: null,
+      // A browsable preview is reached through the transport's own published origin, never through
+      // a provider-published name, so there is no route for anyone to prove.
+      reachability: null,
       createdAt: now,
       // A preview has no TTL — it lives until an explicit stop, so it is never swept by the
       // expiry cron (which keys off `expiresAt`).

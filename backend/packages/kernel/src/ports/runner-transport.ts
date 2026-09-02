@@ -408,7 +408,7 @@ export interface RunnerDispatchOptions {
    */
   image?: RunnerImageVariant
   /**
-   * Every ephemeral-environment URL this job is being handed: the frame's own provisioned
+   * Every ephemeral environment this job is being handed: the frame's own provisioned
    * environment, a live peer service's environment for a cross-service test, and a frontend
    * flow's resolved backend bindings. Empty/absent for a job handed none.
    *
@@ -420,12 +420,33 @@ export interface RunnerDispatchOptions {
    * engine has never emitted (it emits `body.infra.environmentUrl`), so the bridge could not fire
    * in production while its tests passed against a hand-written spec.
    *
-   * Only the LOCAL container transport acts on it, because the bridge it feeds is a container-
-   * runtime `--add-host`; every other transport ignores it. It is a list of URLs rather than
-   * hostnames because deciding which host needs what is the reader's rule, not the dispatcher's,
-   * and a URL keeps the scheme and port a diagnostic needs to quote.
+   * Only the container transports act on it, because what it feeds is a hosts entry inside the
+   * container (`--add-host`, or a pod's `hostAliases`); every other transport ignores it.
    */
-  environmentUrls?: readonly string[]
+  environments?: readonly DispatchEnvironment[]
+}
+
+/**
+ * One environment a dispatch hands a job: where it is, and (when the platform proved one) the
+ * address that carries traffic for it.
+ *
+ * A PAIR rather than two parallel lists, and that pairing is a security property rather than an
+ * ergonomic one. A bridge re-points a NAME inside the container, so the host side has to be a host
+ * the job was actually handed; carrying the address beside the URL it belongs to makes that
+ * structural, where a free-form `Record<host, address>` would let a provider name any host it
+ * liked, including the harness's own alias for reaching back to its host.
+ *
+ * A URL rather than a hostname because deciding which host needs what is the reader's rule, not
+ * the dispatcher's, and a URL keeps the scheme and port a diagnostic needs to quote.
+ */
+export interface DispatchEnvironment {
+  url: string
+  /**
+   * The address PROVED to carry traffic for `url`'s host, when the name itself did not. Absent for
+   * the ordinary case where the name resolves and for an environment nothing has probed; never a
+   * provider's unverified claim (see `EnvironmentRouteProof.via`).
+   */
+  address?: string
 }
 
 /**

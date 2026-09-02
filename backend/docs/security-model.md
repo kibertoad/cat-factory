@@ -609,6 +609,27 @@ Do not lean on any of these; the codebase explicitly refuses to:
   secrets ride the job body only, resolved by name through `ToolSecretResolver`), but anything the
   agent can read, assume it can also try to exfiltrate through text it writes, which is why
   Layer 5 scrubs at every exit.
+- **The host bridge a run container is started with.** An environment whose name a deployment
+  cannot resolve is reached by re-pointing that name inside the container (`--add-host`, or a pod
+  `hostAliases` entry), so a PROVIDER now influences name resolution in the container for the first
+  time. Two structural limits keep that from being a lever: the address must be one kernel's
+  `isBridgeableAddress` allows, which refuses loopback (the container's own namespace, where the
+  harness listens), link-local and vendor metadata, judging the DECODED address so no alternative
+  spelling of a refused class gets through; and the HOST side comes from a URL the job was already
+  handed, because a dispatch pairs each address with its URL rather than carrying a map a provider
+  could key by any name (including the harness's own alias for reaching back to its host). It is
+  not an egress control: what the container can reach is unchanged, only what a name resolves to.
+  See [ADR 0062](./adr/0062-environment-address-bridge-and-route-proof.md).
+- **What the ROUTE PROOF dials, which is the platform's own outbound socket rather than the
+  container's.** `isBridgeableAddress` is applied at PLAN time (`planRouteProbes`), not only when a
+  bridge is built, and that placement is the control: a provider-authored address list otherwise
+  makes the orchestrator open TCP connections wherever a manifest points and record the answers on
+  a row the workspace reads back, which is a liveness oracle against the deployment's own private
+  network. RFC1918 stays allowed on purpose (an internal balancer on `10.x` is the whole population
+  the feature exists for), so this narrows the target set rather than closing it; what it removes
+  is the set an address could only ever be pointed at to probe something the run has no business
+  reaching. A refused address is RECORDED as an attempt (`address_refused`), never silently
+  dropped.
 - **The provenance of a wired MCP tool server.** A server's RESULTS are untrusted input like
   everything else the agent reads (the threat model above), so wiring one extends the set of
   parties who can attempt injection to that server's operator and its upstreams; and the run

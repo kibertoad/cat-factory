@@ -13,6 +13,7 @@ import type {
 import {
   composePostMortem,
   containerKeyForRef,
+  hostBridgeKey,
   deploymentImageVariantMessage,
   describeError,
   getErrorMessage,
@@ -24,8 +25,9 @@ import {
   unservablePlatformImageVariant,
 } from '@cat-factory/kernel'
 import { resolveDockerResources } from '@cat-factory/contracts'
-import { planEnvironmentBridges } from './environmentBridge.js'
 import type { LocalSettings } from '@cat-factory/contracts'
+import { planEnvironmentBridges } from '@cat-factory/integrations'
+import type { HostBridge } from '@cat-factory/integrations'
 import { logger } from '@cat-factory/server'
 import {
   EVICTION_ERROR,
@@ -238,6 +240,11 @@ export interface InlineContainerRequest {
  * readable back off a container in any portable way, and it is optional because a handle rebuilt
  * from the runtime after a process restart genuinely does not know (see `containerMissingBridges`,
  * which treats not-knowing as none).
+ *
+ * Stored as {@link hostBridgeKey} strings rather than as the bridges themselves, because what this
+ * field is for is COMPARISON: a host mapped to the gateway and the same host mapped to an address
+ * are two different containers, and a key that folded them together would leave a run wedged
+ * against a stale address in a container nothing will replace.
  */
 interface ResolvedContainer extends ContainerEndpoint {
   containerId: string
@@ -485,21 +492,20 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
    * Off the OPTIONS rather than the job body, which is the other half: the body is an untyped bag
    * whose environment URLs sit at three depths under a wire shape the harness owns, so reading
    * them here is one renamed field away from bridging nothing and saying nothing about it. See
-   * `RunnerDispatchOptions.environmentUrls`.
+   * `RunnerDispatchOptions.environments`.
    *
-   * Only a host whose own answer is this machine AND that a hosts-file entry can re-point is
-   * bridged; kernel's `classifyLocalMachineHostBridge` owns that rule, so a real remote
-   * environment is never re-pointed at the host gateway and a `localhost` URL never costs the job
-   * its warm-pool member for an entry the container would ignore.
+   * Kernel's `classifyLocalMachineHostBridge` owns which names are bridged and what each is
+   * mapped to, so a real remote environment is never re-pointed at the host gateway, a `localhost`
+   * URL never costs the job its warm-pool member for an entry the container would ignore, and an
+   * address a provider stated is only ever installed when it was PROVED to carry.
    */
-  private bridgesFor(options?: RunnerDispatchOptions): readonly string[] {
-    return planEnvironmentBridges(options?.environmentUrls ?? []).hosts
+  private bridgesFor(options?: RunnerDispatchOptions): readonly HostBridge[] {
+    return planEnvironmentBridges(options?.environments ?? []).bridges
   }
 
   /**
-   * Say once, per dispatch, which of this job's environments name this machine by an address NO
-   * bridge can reach: a compose stack published on `http://localhost:<port>`, or a bare loopback
-   * address (see kernel's `classifyLocalMachineHostBridge`).
+   * Say once, per dispatch, which of this job's environments NO bridge can make reachable, and
+   * which of the two causes it is (see kernel's `classifyLocalMachineHostBridge`).
    *
    * Reported rather than dropped because the two silent outcomes are indistinguishable and mean
    * opposite things: a job with nothing to bridge is fine, and a job whose environment is
@@ -507,16 +513,45 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
    * conclude the environment is dead. That misreading is what this whole mechanism exists to stop,
    * and here the platform genuinely cannot fix it, so the least it owes is to name it.
    *
+   * One message per cause, never one message for both, because the remedies are different and a
+   * shared sentence sends an operator to the wrong one. `unusable_address` is the worse case: the
+   * platform PROVED the name does not carry and an address does, so the run record vouches for a
+   * route this container never got.
+   *
    * At the top of {@link dispatch} because that is the one door every path enters through; the
    * bridge computation itself is pure so the several places that ask for it do not each log.
    */
   private reportUnbridgeableEnvironments(options?: RunnerDispatchOptions): void {
-    for (const url of planEnvironmentBridges(options?.environmentUrls ?? []).unbridgeable) {
+    const plan = planEnvironmentBridges(options?.environments ?? [])
+    for (const { url, cause } of plan.unbridgeable) {
+      if (cause === 'local_machine') {
+        logger.warn(
+          'Environment URL names this machine by an address no container can be given, so the ' +
+            'agent will not reach it. Publish the environment on a name that resolves to the ' +
+            'host (a wildcard-DNS name such as <name>.127.0.0.1.nip.io), or run this step ' +
+            'natively.',
+          { url },
+        )
+        continue
+      }
       logger.warn(
-        'Environment URL names this machine by an address no container can be given, so the ' +
-          'agent will not reach it. Publish the environment on a name that resolves to the host ' +
-          '(a wildcard-DNS name such as <name>.127.0.0.1.nip.io), or run this step natively.',
+        'The platform reached this environment only at an address no host bridge may name ' +
+          '(loopback, link-local or vendor metadata, or a non-canonical literal), or at a URL ' +
+          'whose own host is an IP literal nothing looks up. The container gets no mapping, so ' +
+          'the agent will not reach it: publish an ordinary hostname and a routable address for ' +
+          'it.',
         { url },
+      )
+    }
+    // A bridge this runtime cannot install is the same class of loss as one that cannot exist, and
+    // it is the one the transport would otherwise pass over in silence: `run()` takes the spec
+    // field either way, and an adapter with no `--add-host` simply never emits it.
+    if (plan.bridges.length > 0 && !this.adapter.honoursHostBridges) {
+      logger.warn(
+        `The ${this.adapter.id} runtime cannot re-point a hostname inside a container, so this ` +
+          'job will not reach the environment it was handed. Run this step natively, or use a ' +
+          'Docker-family runtime.',
+        { hosts: plan.bridges.map((bridge) => bridge.host) },
       )
     }
   }
@@ -538,10 +573,10 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
    */
   private containerMissingBridges(
     resolved: ResolvedContainer,
-    needed: readonly string[],
+    needed: readonly HostBridge[],
   ): readonly string[] {
     const present = new Set(resolved.bridgedHosts ?? [])
-    return needed.filter((host) => !present.has(host))
+    return needed.map(hostBridgeKey).filter((key) => !present.has(key))
   }
 
   async dispatch(
@@ -629,7 +664,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
           : undefined,
       })
       const endpoint = await this.waitForEndpoint(containerId)
-      resolved = { containerId, ...endpoint, bridgedHosts: bridges }
+      resolved = { containerId, ...endpoint, bridgedHosts: bridges.map(hostBridgeKey) }
       this.cache.set(containerKey, resolved)
       await this.waitForHealth(endpoint, containerId)
     }

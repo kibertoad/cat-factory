@@ -21,6 +21,7 @@ function fakeAdapter(overrides: Partial<ContainerRuntimeAdapter> = {}): {
     capabilities: { localDind: true, pooling: true },
     hostAlias: 'host.docker.internal',
     publishesToLocalhost: true,
+    honoursHostBridges: true,
     async run(_exec, spec) {
       runs.push({ containerKey: spec.containerKey, publishPorts: spec.publishPorts })
       return `cid-${spec.containerKey}`
@@ -133,6 +134,7 @@ describe('LocalPreviewTransport', () => {
     // transport reads the endpoint (container IP + serve port) rather than pinning a localhost port.
     const { adapter, runs } = fakeAdapter({
       publishesToLocalhost: false,
+      honoursHostBridges: true,
       async endpoint(_exec, _id, port = HARNESS_PORT) {
         return port === HARNESS_PORT
           ? { host: '192.168.64.7', port: HARNESS_PORT }

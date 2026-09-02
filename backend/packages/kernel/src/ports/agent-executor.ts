@@ -7,6 +7,7 @@ import type {
   DesignImageSet,
   DocumentOrigin,
   EnvironmentAccessHandle,
+  EnvironmentReachabilityNote,
   EnvironmentStatus,
   FrontendConfig,
   InjectedContextFile,
@@ -609,6 +610,19 @@ export interface AgentRunContext {
     status: EnvironmentStatus
     access: EnvironmentAccessHandle | null
     expiresAt: number | null
+    /**
+     * What the platform proved about REACHING this environment, when it proved anything.
+     *
+     * Beside the URL because the two are different claims and only one of them was ever backed by
+     * evidence. An agent handed a name it cannot resolve has no way to tell a DNS gap from a dead
+     * environment, and the hypothesis its own task makes salient is the wrong one; this is the
+     * platform saying which layer it already checked, and naming the address that carried so the
+     * agent can dial it directly where its container was not given the mapping.
+     *
+     * Absent when nothing has probed, which is the ordinary state mid-provision. Never a
+     * provider's unverified claim.
+     */
+    reachability?: EnvironmentReachabilityNote
   }
   /**
    * Service-level (frame) configuration resolved by the engine from this run's
@@ -654,7 +668,13 @@ export interface AgentRunContext {
    */
   frontend?: {
     config: FrontendConfig
-    bindings: { envVar: string; serviceUrl?: string }[]
+    /**
+     * `serviceAddress` is the address PROVED to carry for `serviceUrl`'s host, when its name did
+     * not: a bound peer whose per-environment DNS record lives in an internal view fails the UI
+     * test on name resolution exactly as the run's own environment would, and the proof is on the
+     * handle this resolution already read.
+     */
+    bindings: { envVar: string; serviceUrl?: string; serviceAddress?: string }[]
   }
   /**
    * The connected services "directly involved" in this task beyond its own (see the service
@@ -671,6 +691,20 @@ export interface AgentRunContext {
     title: string
     description?: string
     envUrl?: string
+    /**
+     * What the platform proved about REACHING {@link envUrl}, when it proved anything.
+     *
+     * The whole note rather than the carrying address alone, and that is the point: a peer's
+     * environment fails in exactly the same way the run's own does and reads as exactly the same
+     * "the environment is down", so the peer leg owes the same evidence. Carrying only the address
+     * kept the ONE case where there is nothing to carry (the platform could not reach the peer at
+     * all) silent, handing a cross-service tester a URL that looks healthy and letting it spend
+     * its step concluding the peer was down: the misdiagnosis this all exists to retire, arriving
+     * one service over.
+     *
+     * Absent when nothing has probed the peer. Never a provider's unverified claim.
+     */
+    envReachability?: EnvironmentReachabilityNote
   }[]
   /**
    * The service the work itself belongs to — the enclosing service FRAME's title and description,

@@ -1,6 +1,7 @@
 import type {
   ConnectionTestResult,
   EnvironmentAccessHandle,
+  EnvironmentAddress,
   EnvironmentFailureReason,
   EnvironmentManifest,
   EnvironmentStatus,
@@ -264,6 +265,20 @@ export type RecipeStepRecorder = (log: RecipeStepLog) => Promise<void>
 export interface ProvisionedEnvironment {
   externalId: string | null
   url: string | null
+  /**
+   * Addresses this provider states carry traffic for {@link url}'s host, in ITS preference order.
+   *
+   * The half of addressing a URL cannot express, and the reason it is a first-class field rather
+   * than a {@link ProvisionFields} key. `fields` is free-form and a provider can already write an
+   * address there, but it buys nothing: the fields are persisted encrypted as teardown state, they
+   * are absent from `EnvironmentHandle`, and the engine projects a fixed handful of keys into agent
+   * context. An address that reaches nobody is not an address.
+   *
+   * Absent (the ordinary case) means the name in `url` is the only thing anyone has to try. Stating
+   * one is a CLAIM, never a conclusion: what the platform publishes downstream is the candidate
+   * that was PROVED to carry (see `EnvironmentRouteProof`).
+   */
+  addresses?: readonly EnvironmentAddress[] | null
   status: EnvironmentStatus
   expiresAt: number | null
   access: EnvironmentAccessHandle | null

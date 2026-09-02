@@ -176,6 +176,12 @@ export function makeApp(
     // env-config-repair run in the test pool (the binding is present). Specs drive the
     // repair poll loop deterministically via `driveEnvConfigRepair`.
     envConfigRepairRunner: new NoopEnvConfigRepairRunner(),
+    // A probe that always carries, so proving a provisioned environment's route never leaves this
+    // pool. The suite's environment URLs are fixtures on reserved TLDs that resolve nowhere, so the
+    // real probe would answer from the runner's DNS rather than from anything a spec asserts, and
+    // an unreachable environment settles its deployer frame FAILED. A spec driving that path passes
+    // its own probe, exactly as the conformance harnesses do.
+    routeProbe: async () => ({ state: 'carried' as const }),
     ...overrides,
   }
   // One env for the whole app: the request path and every direct `buildContainer` below must see

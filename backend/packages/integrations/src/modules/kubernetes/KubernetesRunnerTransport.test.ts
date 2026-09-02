@@ -247,6 +247,79 @@ describe('KubernetesRunnerTransport.poll', () => {
   })
 })
 
+describe('KubernetesRunnerTransport pod replacement', () => {
+  // A run's pod is created by its FIRST step, and the environment it must reach does not exist
+  // until the `deployer` several steps later, so a pod that predates a needed host alias is the
+  // ordinary case rather than an edge. `hostAliases` is fixed at creation, so the pod is replaced.
+  const withEnvironment = {
+    environments: [{ url: 'https://pr-14.test.example.cloud', address: '10.4.19.22' }],
+  }
+
+  /** A live pod that is READY and carries no host aliases: the state a replacement is needed in. */
+  const readyPodWithoutAliases = () =>
+    new Response(
+      JSON.stringify({
+        spec: {},
+        status: { phase: 'Running', conditions: [{ type: 'Ready', status: 'True' }] },
+      }),
+      { status: 200 },
+    )
+
+  it('deletes and recreates a pod created without a host alias the job now needs', async () => {
+    let created = 0
+    const { calls } = stubFetch((method, url) => {
+      if (method === 'POST' && url.endsWith('/pods')) {
+        created += 1
+        // The first create 409s (the run's pod is already up from an earlier step); the recreate
+        // after the delete succeeds.
+        return created === 1
+          ? new Response('AlreadyExists', { status: 409 })
+          : new Response('{}', { status: 201 })
+      }
+      if (method === 'GET' && url.includes('/pods/cf-run-1') && !url.includes('/proxy')) {
+        return readyPodWithoutAliases()
+      }
+      if (method === 'DELETE' && url.includes('/pods/cf-run-1')) {
+        return new Response('', { status: 200 })
+      }
+      if (method === 'POST' && url.includes('/proxy/jobs')) {
+        return new Response(JSON.stringify({ jobId: ref.jobId, state: 'running' }), { status: 202 })
+      }
+      return undefined
+    })
+    const transport = new KubernetesRunnerTransport(config, resolveSecret)
+    await transport.dispatch(ref, { mode: 'coding' }, 'agent', withEnvironment)
+
+    expect(calls.some((c) => c.method === 'DELETE' && c.url.includes('/pods/cf-run-1'))).toBe(true)
+    expect(created).toBe(2)
+  })
+
+  it('FAILS on a refused delete instead of retrying the create for the whole window', async () => {
+    // The delete's result has to be read. Unchecked, a refusal (a ServiceAccount with `create` but
+    // not `delete`, an admission webhook) leaves the pod running and the recreate spends the whole
+    // 90-second replacement window collecting 409s before throwing an error naming the CREATE: a
+    // minute and a half of the driver's budget, and an operator sent to the wrong permission.
+    const { calls } = stubFetch((method, url) => {
+      if (method === 'POST' && url.endsWith('/pods')) {
+        return new Response('AlreadyExists', { status: 409 })
+      }
+      if (method === 'GET' && url.includes('/pods/cf-run-1') && !url.includes('/proxy')) {
+        return readyPodWithoutAliases()
+      }
+      if (method === 'DELETE' && url.includes('/pods/cf-run-1')) {
+        return new Response('pods is forbidden: cannot delete', { status: 403 })
+      }
+      return undefined
+    })
+    const transport = new KubernetesRunnerTransport(config, resolveSecret)
+    await expect(
+      transport.dispatch(ref, { mode: 'coding' }, 'agent', withEnvironment),
+    ).rejects.toThrow(/Could not delete runner pod/)
+    // ONE create attempt, not a window of them: the failure is the delete, and it is named as such.
+    expect(calls.filter((c) => c.method === 'POST' && c.url.endsWith('/pods'))).toHaveLength(1)
+  })
+})
+
 describe('KubernetesRunnerTransport.release', () => {
   it('deletes the run pod and tolerates a 404', async () => {
     const seen: string[] = []

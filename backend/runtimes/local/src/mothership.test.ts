@@ -1048,6 +1048,7 @@ describe('composeMothership secret delegation', () => {
               status: 'ready',
               accessCipher: 'v1.mothership.sealed',
               provisionFieldsCipher: null,
+              reachability: null,
               provisionType: 'docker-compose',
               engine: 'local-docker',
               createdAt: 1,

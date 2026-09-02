@@ -78,6 +78,7 @@ import {
 // executor + bootstrapper + env-config repairer, GitHub-issue filer, trace-sink builder), lifted
 // into a sibling module so this composition root stays within the file-size budget.
 import { RUNNERS_CIPHER_INFO, buildTraceSink } from './container-executor-deps.js'
+import { nodeRouteProbe } from './routeProbe.js'
 import { selectNodeLocalModelEndpointRepository } from './wireCredentialServices.js'
 
 import type { NodeAppRegistriesResult, NodeContainerFoundation } from './container-foundation.js'
@@ -990,6 +991,9 @@ function selectNodeEnvironmentsDeps(config: AppConfig, db: DrizzleDb): Partial<C
       masterKeyBase64: config.environments.encryptionKey,
     }),
     ...(urlPolicy ? { environmentUrlSafetyPolicy: urlPolicy } : {}),
+    // Proving a route to a provisioned environment before a tester is pointed at it. Node opens a
+    // plain socket; the Worker's symmetric wiring goes through `cloudflare:sockets`.
+    routeProbe: nodeRouteProbe,
     // Deployment-level, additive extensions to the built-in provisioning-detection conventions.
     ...(config.environments.detectionConventions
       ? { detectionConventions: config.environments.detectionConventions }

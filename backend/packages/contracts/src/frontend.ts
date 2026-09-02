@@ -1,4 +1,6 @@
 import * as v from 'valibot'
+import type { EnvironmentReachability } from './environment-reachability.js'
+import { reachabilityNote } from './environment-reachability.js'
 import { HARNESS_JOB_PORT } from './harness.js'
 
 // ---------------------------------------------------------------------------
@@ -223,6 +225,18 @@ export const resolvedFrontendBindingSchema = v.object({
   envVar: v.string(),
   /** The bound service's live ephemeral env URL (the service under test); absent ⇒ mocked. */
   serviceUrl: v.optional(v.string()),
+  /**
+   * The address the platform PROVED carries traffic for {@link serviceUrl}'s host, when the name
+   * itself did not.
+   *
+   * Here because a `frontend` flow's bound peer fails in exactly the way the run's own environment
+   * does: a per-environment DNS record living in an internal view resolves nowhere from the
+   * container, and the UI test then fails on name resolution and reports the backend as down. The
+   * proof is on the handle this resolution already read, so omitting it would drop a fact the
+   * platform holds rather than decline to guess one. Absent for a mocked binding, for an
+   * environment whose name resolved, and for one nothing probed.
+   */
+  serviceAddress: v.optional(v.string()),
 })
 export type ResolvedFrontendBinding = v.InferOutput<typeof resolvedFrontendBindingSchema>
 
@@ -232,6 +246,18 @@ export interface LiveEnvHandle {
   url?: string | null
   status: string
   createdAt: number
+}
+
+/**
+ * A live-environment handle plus what the platform proved about reaching it: what
+ * {@link indexLiveServiceEnvRoutes} needs, and exactly what an `EnvironmentHandle` already is.
+ *
+ * Named rather than written inline so the backend collaborator that reads a list of these can
+ * declare the shape it depends on instead of the whole handle, which is most of the environments
+ * contract.
+ */
+export interface LiveEnvRouteHandle extends LiveEnvHandle {
+  reachability?: EnvironmentReachability | null
 }
 
 /** The distinct service FRAME ids a frontend config binds via a `service` source. */
@@ -257,8 +283,56 @@ export function indexLiveServiceEnvUrls(
   handles: Iterable<LiveEnvHandle>,
   serviceFrameIds: ReadonlySet<string>,
 ): Map<string, string> {
-  const liveServiceEnvUrls = new Map<string, string>()
-  if (serviceFrameIds.size === 0) return liveServiceEnvUrls
+  const urls = new Map<string, string>()
+  for (const [frameId, handle] of indexLiveServiceEnvs(handles, serviceFrameIds)) {
+    if (handle.url) urls.set(frameId, handle.url)
+  }
+  return urls
+}
+
+/**
+ * The same newest-wins index, keeping the whole handle.
+ *
+ * Generic in the handle so a caller reading a field this contract does not model (the address
+ * proved to carry for a peer's environment, which lives on `EnvironmentHandle` and not on the
+ * binding-resolution shape) gets it back typed.
+ *
+ * The rule is stated ONCE here and {@link indexLiveServiceEnvUrls} derives from it, because a
+ * consumer that needs more than the URL would otherwise re-implement "newest ready env per frame"
+ * and the two would settle on different environments for the same frame.
+ */
+/**
+ * The same newest-wins index, projected onto the two things a run needs from a bound peer's live
+ * environment: its URL, and the address the platform proved carries traffic for that URL's host.
+ *
+ * One function returning both rather than two indexers, because they must answer about the SAME
+ * environment: a frame can hold several live envs and a second independent pass could settle on a
+ * different one, pairing one environment's URL with another's proved address. That would be a
+ * bridge pointing a real name at a real but wrong address, which is worse than no bridge.
+ *
+ * `addresses` holds only the frames whose name did NOT carry, so it is empty in the ordinary case.
+ */
+export function indexLiveServiceEnvRoutes(
+  handles: Iterable<LiveEnvRouteHandle>,
+  serviceFrameIds: ReadonlySet<string>,
+): { urls: Map<string, string>; addresses: Map<string, string> } {
+  const urls = new Map<string, string>()
+  const addresses = new Map<string, string>()
+  for (const [frameId, handle] of indexLiveServiceEnvs(handles, serviceFrameIds)) {
+    if (!handle.url) continue
+    urls.set(frameId, handle.url)
+    const address = reachabilityNote(handle.reachability)?.address
+    if (address) addresses.set(frameId, address)
+  }
+  return { urls, addresses }
+}
+
+export function indexLiveServiceEnvs<T extends LiveEnvHandle>(
+  handles: Iterable<T>,
+  serviceFrameIds: ReadonlySet<string>,
+): Map<string, T> {
+  const live = new Map<string, T>()
+  if (serviceFrameIds.size === 0) return live
   const newestAt = new Map<string, number>()
   for (const handle of handles) {
     if (
@@ -269,10 +343,10 @@ export function indexLiveServiceEnvUrls(
       handle.createdAt >= (newestAt.get(handle.frameId) ?? Number.NEGATIVE_INFINITY)
     ) {
       newestAt.set(handle.frameId, handle.createdAt)
-      liveServiceEnvUrls.set(handle.frameId, handle.url)
+      live.set(handle.frameId, handle)
     }
   }
-  return liveServiceEnvUrls
+  return live
 }
 
 /**
@@ -292,16 +366,23 @@ export function indexLiveServiceEnvUrls(
 export function resolveFrontendBindings(
   config: Pick<FrontendConfig, 'backendBindings'>,
   liveServiceEnvUrls: ReadonlyMap<string, string>,
+  liveServiceEnvAddresses?: ReadonlyMap<string, string>,
 ): ResolvedFrontendBinding[] {
   const byEnvVar = new Map<string, ResolvedFrontendBinding>()
   for (const binding of config.backendBindings) {
     const envVar = binding.envVar.trim()
     if (!envVar) continue
-    const serviceUrl =
-      binding.source.kind === 'service'
-        ? liveServiceEnvUrls.get(binding.source.serviceBlockId)
-        : undefined
-    byEnvVar.set(envVar, serviceUrl ? { envVar, serviceUrl } : { envVar })
+    const frameId = binding.source.kind === 'service' ? binding.source.serviceBlockId : undefined
+    const serviceUrl = frameId ? liveServiceEnvUrls.get(frameId) : undefined
+    // Optional, so a caller that has no proof to offer (the SPA's inspector view, which reads
+    // URLs alone) resolves exactly as before rather than being made to pass an empty map.
+    const serviceAddress = frameId ? liveServiceEnvAddresses?.get(frameId) : undefined
+    byEnvVar.set(
+      envVar,
+      serviceUrl
+        ? { envVar, serviceUrl, ...(serviceAddress ? { serviceAddress } : {}) }
+        : { envVar },
+    )
   }
   return [...byEnvVar.values()]
 }

@@ -13,6 +13,7 @@ import {
   ValidationError,
 } from '@cat-factory/kernel'
 import { HARNESS_JOB_PORT, KUBERNETES_RUNNER_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
+import { addressBridges, planEnvironmentBridges } from '../shared/environmentBridge.js'
 
 // Pure helpers for the native Kubernetes runner backend. No I/O here — URL
 // building, the per-run pod-name derivation, the pod manifest, and the readiness
@@ -334,9 +335,11 @@ export function buildPodManifest(
     },
     ...(resources ? { resources } : {}),
   }
+  const hostAliases = podHostAliases(options)
   const spec: Record<string, unknown> = {
     restartPolicy: 'Never',
     containers: [container],
+    ...(hostAliases.length ? { hostAliases } : {}),
     ...(config.serviceAccountName ? { serviceAccountName: config.serviceAccountName } : {}),
     ...(config.imagePullSecretName
       ? { imagePullSecrets: [{ name: config.imagePullSecretName }] }
@@ -355,6 +358,33 @@ export function buildPodManifest(
     },
     spec,
   }
+}
+
+/**
+ * The pod's `hostAliases`: the name-to-address mappings a job needs to reach the environments it
+ * was handed, grouped by address the way the API shape wants them.
+ *
+ * The Kubernetes half of the host bridge, and the reason the bridge target is a discriminated
+ * value rather than a Docker-only literal. `host-gateway` is a Docker-family token with no
+ * Kubernetes equivalent and is dropped here; a name-to-ADDRESS mapping is native
+ * (`{ ip, hostnames[] }`) and is exactly what a remote environment whose per-environment DNS
+ * record lives in a view this cluster cannot see needs. `addressBridges` owns that split so this
+ * transport and the local one cannot disagree about what they dropped.
+ *
+ * Grouped rather than one entry per host because the API takes a list of addresses each carrying
+ * its hostnames, and two names behind one balancer are the ordinary case.
+ */
+export function podHostAliases(
+  options?: RunnerDispatchOptions,
+): { ip: string; hostnames: string[] }[] {
+  const plan = planEnvironmentBridges(options?.environments ?? [])
+  const byIp = new Map<string, string[]>()
+  for (const bridge of addressBridges(plan.bridges)) {
+    const hostnames = byIp.get(bridge.ip)
+    if (hostnames) hostnames.push(bridge.host)
+    else byIp.set(bridge.ip, [bridge.host])
+  }
+  return [...byIp.entries()].map(([ip, hostnames]) => ({ ip, hostnames }))
 }
 
 /** Coerce an arbitrary id into a valid label value (<=63 chars, alnum/._-). */

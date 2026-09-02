@@ -14,8 +14,8 @@ import type {
   DocInterviewRepository,
   DocKind,
   DocumentRepository,
+  EnvironmentHandle,
   ExecutionInstance,
-  FrontendConfig,
   Initiative,
   GroupCacheHandle,
   InitiativePresetRegistry,
@@ -58,14 +58,14 @@ import {
 } from '@cat-factory/agents'
 import type { AgentKindRegistry, AgentKindSource } from '@cat-factory/agents'
 import { resolveDispatchSettings } from './dispatchPromptSettings.js'
+import { indexLiveServiceEnvs, type ResolvedFrontendBinding } from './frontend-infra.logic.js'
 import {
-  boundServiceFrameIds,
-  buildFrontendRunNotes,
-  indexLiveServiceEnvUrls,
-  resolveFrontendBindings,
-  type ResolvedFrontendBinding,
-} from './frontend-infra.logic.js'
-import { connectionDescription } from '@cat-factory/contracts'
+  frontendAgentContext,
+  frontendRunInfo,
+  resolveFrontendFrame,
+  type FrontendResolution,
+} from './builder-frontend-resolution.js'
+import { connectionDescription, reachabilityNote } from '@cat-factory/contracts'
 import type { ResolvedValidationChecks } from '@cat-factory/contracts'
 import { reproductionFor, validationChecksFor } from './builder-validation-context.js'
 import { stepObservations, type StepObservations } from './builder-step-observations.js'
@@ -917,7 +917,7 @@ export class AgentContextBuilder {
   }
 
   /**
-   * {@link resolveFrontendConfig} against an ALREADY-resolved service frame — the shape
+   * {@link resolveFrontendConfig} against an ALREADY-resolved service frame: the shape
    * {@link buildContext} calls with the shared frame so the ancestry walk isn't repeated.
    */
   private async frontendConfigFrom(
@@ -925,75 +925,34 @@ export class AgentContextBuilder {
     frame: Block | null,
   ): Promise<AgentRunContext['frontend'] | undefined> {
     const resolution = await this.frontendResolutionFrom(workspaceId, frame)
-    if (!resolution) return undefined
-    const { config, liveServiceEnvUrls } = resolution
-    return { config, bindings: resolveFrontendBindings(config, liveServiceEnvUrls) }
+    return resolution && frontendAgentContext(resolution)
   }
 
   /**
-   * The run-start binding snapshot + soft notes for a frontend UI-test / preview run: the
-   * resolved bindings (env-var → live URL | mocked) plus the non-fatal advisories
-   * ({@link buildFrontendRunNotes}). Shares the SAME single-read resolution as
-   * {@link resolveFrontendConfig}. The engine stamps BOTH results on the run (`frontendBindings`
-   * + `notes`) at start, so the SPA's run/step detail projects the frozen start-time resolution
-   * with no extra live-env read at view time (and it stays truthful after the envs are torn down).
-   * Returns undefined for a non-frontend frame (nothing to project), exactly like
-   * {@link resolveFrontendConfig}.
+   * The run-start binding snapshot + soft notes for a frontend UI-test / preview run, off the SAME
+   * single-read resolution as {@link resolveFrontendConfig}. Undefined for a non-frontend frame
+   * (nothing to project). See `builder-frontend-resolution.ts` for both projections.
    */
   async resolveFrontendRunInfo(
     workspaceId: string,
     block: Block,
   ): Promise<{ bindings: ResolvedFrontendBinding[]; notes: string[] } | undefined> {
-    const resolution = await this.resolveFrontendResolution(workspaceId, block)
-    if (!resolution) return undefined
-    const { config, liveServiceEnvUrls } = resolution
-    return {
-      bindings: resolveFrontendBindings(config, liveServiceEnvUrls),
-      notes: buildFrontendRunNotes(config, liveServiceEnvUrls),
-    }
+    const frame = await this.serviceFrameFor(workspaceId, block)
+    const resolution = await this.frontendResolutionFrom(workspaceId, frame)
+    return resolution && frontendRunInfo(resolution)
   }
 
-  /**
-   * The one IO step ({@link EnvironmentProvisioningService.listHandles}) shared by the frontend
-   * agent-context resolution and the run-info projection, against an ALREADY-resolved service
-   * frame. Only a `type: 'frontend'` frame carrying a `frontendConfig` yields a result; every
-   * other frame returns undefined. The live env URLs are read ONCE and indexed by service-frame
-   * id (no per-binding point read), so this is a single query regardless of binding count.
-   */
-  private async frontendResolutionFrom(
+  /** The frontend collaborator's one IO step, bound to this builder's environment module. */
+  private frontendResolutionFrom(
     workspaceId: string,
     frame: Block | null,
-  ): Promise<{ config: FrontendConfig; liveServiceEnvUrls: Map<string, string> } | undefined> {
-    if (!frame || frame.type !== 'frontend' || !frame.frontendConfig) return undefined
-    const config = frame.frontendConfig
-    // The distinct service FRAMES this frontend binds — the only envs whose live URLs matter.
-    const serviceFrameIds = boundServiceFrameIds(config)
-    // One list read, then index the ready-with-URL handles for the bound services — never a
-    // per-binding `getByBlock` loop (the N+1 the "reuse an already-fetched list" rule bans). The
-    // frame-keyed newest-wins indexing is shared with the preview job builder (see the helper).
-    const liveServiceEnvUrls =
-      this.deps.environmentProvisioning && serviceFrameIds.size > 0
-        ? indexLiveServiceEnvUrls(
-            await this.deps.environmentProvisioning.listHandles(workspaceId),
-            serviceFrameIds,
-          )
-        : new Map<string, string>()
-    return { config, liveServiceEnvUrls }
-  }
-
-  /**
-   * Resolve a frontend frame's config plus the live env URLs of the services it binds — the one
-   * IO step ({@link EnvironmentProvisioningService.listHandles}) shared by both the agent-context
-   * resolution and the run-info projection. Only a `type: 'frontend'` frame carrying a
-   * `frontendConfig` yields a result; every other frame returns undefined. The live env URLs are
-   * read ONCE and indexed by the service-frame id (no per-binding point read), so this is a single
-   * query regardless of binding count.
-   */
-  private async resolveFrontendResolution(
-    workspaceId: string,
-    block: Block,
-  ): Promise<{ config: FrontendConfig; liveServiceEnvUrls: Map<string, string> } | undefined> {
-    return this.frontendResolutionFrom(workspaceId, await this.serviceFrameFor(workspaceId, block))
+  ): Promise<FrontendResolution | undefined> {
+    const provisioning = this.deps.environmentProvisioning
+    return resolveFrontendFrame(
+      provisioning ? { listLiveEnvHandles: (ws: string) => provisioning.listHandles(ws) } : {},
+      workspaceId,
+      frame,
+    )
   }
 
   /**
@@ -1455,21 +1414,28 @@ export class AgentContextBuilder {
     const valid = validInvolvedServiceFrames(blocks, block, ownFrameId)
     if (valid.length === 0) return undefined
     const frameIds = new Set(valid.map((b) => b.id))
-    const liveEnvUrls =
+    // The whole handle rather than the URL alone: a cross-service tester dials the PEER's
+    // environment and fails on an unresolvable name exactly as it used to fail on its own, so the
+    // address proved to carry travels with it. Same newest-wins index either way.
+    const liveEnvs =
       this.deps.environmentProvisioning && frameIds.size > 0
-        ? indexLiveServiceEnvUrls(
+        ? indexLiveServiceEnvs(
             await this.deps.environmentProvisioning.listHandles(workspaceId),
             frameIds,
           )
-        : new Map<string, string>()
+        : new Map<string, EnvironmentHandle>()
     return valid.map((frame) => {
       const description = connectionDescription(blocks, ownFrameId, frame.id)
-      const envUrl = liveEnvUrls.get(frame.id)
+      const live = liveEnvs.get(frame.id)
+      // The whole note, never just the address: a peer the platform could NOT reach has no address
+      // to carry, and passing only the address left that case indistinguishable from a healthy one.
+      const envReachability = reachabilityNote(live?.reachability)
       return {
         frameId: frame.id,
         title: frame.title,
         ...(description ? { description } : {}),
-        ...(envUrl ? { envUrl } : {}),
+        ...(live?.url ? { envUrl: live.url } : {}),
+        ...(envReachability ? { envReachability } : {}),
       }
     })
   }

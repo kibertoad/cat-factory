@@ -18,6 +18,8 @@ import type { FrontendConfig, ResolvedFrontendBinding } from '@cat-factory/kerne
 export {
   boundServiceFrameIds,
   buildFrontendRunNotes,
+  indexLiveServiceEnvRoutes,
+  indexLiveServiceEnvs,
   indexLiveServiceEnvUrls,
   resolveFrontendBindings,
 } from '@cat-factory/contracts'

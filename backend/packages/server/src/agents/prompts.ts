@@ -1,4 +1,4 @@
-import { type AgentRunContext, hostMarkdown } from '@cat-factory/kernel'
+import { type AgentRunContext, type DispatchEnvironment, hostMarkdown } from '@cat-factory/kernel'
 import {
   frameProfile,
   FRONTEND_WIREMOCK_PORT,
@@ -73,34 +73,57 @@ function isReservedEnvName(key: string): boolean {
 }
 
 /**
- * Every ephemeral-environment URL a dispatch hands this job, in no particular order.
+ * Every ephemeral environment a dispatch hands this job, in no particular order.
  *
- * The three legs are the three places an environment URL reaches an agent, and they are listed
- * here TOGETHER because a transport acting on them has no reason to care which leg a URL came
- * from: it is the tester's own provisioned environment ({@link AgentRunContext.environment}), a
- * live peer service's environment for a cross-service integration test, or the service-under-test
- * behind a `frontend` flow's resolved binding. All three are equally unreachable from inside a
- * container when the deployment is local, and all three fail identically: connection refused,
- * reported by the agent as a dead environment.
+ * The three legs are the three places an environment reaches an agent, and they are listed here
+ * TOGETHER because a transport acting on them has no reason to care which leg one came from: it is
+ * the tester's own provisioned environment ({@link AgentRunContext.environment}), a live peer
+ * service's environment for a cross-service integration test, or the service-under-test behind a
+ * `frontend` flow's resolved binding. All three are equally unreachable from inside a container
+ * when the deployment is local, and all three fail identically: connection refused, reported by the
+ * agent as a dead environment.
+ *
+ * Each of the three carries the address PROVED to carry traffic for its host, where one was needed
+ * and found, so a transport can install the mapping rather than the job discovering the gap. That
+ * includes the frontend leg, whose binding resolution reads the address off the very handle it
+ * takes the URL from (`indexLiveServiceEnvRoutes`); nothing here invents one, and an environment
+ * whose name resolved or that nothing probed carries none.
  *
  * A URL that is only a MOCK is deliberately absent: an unresolved frontend binding is served by
  * the harness's own in-container WireMock, which the job reaches exactly as written and which a
  * bridge would break. That is why this reads the BINDINGS rather than the rendered infra spec,
  * where the two are already indistinguishable.
  *
- * Rides `RunnerDispatchOptions.environmentUrls` (see that field for why it is declared rather
- * than re-read from the job body). Kept beside {@link testerInfraSpec} because the two derive from
- * the same context fields, and `prompts.spec.ts` pins that every URL the spec
- * carries appears here.
+ * Rides `RunnerDispatchOptions.environments` (see that field for why it is declared rather than
+ * re-read from the job body). Kept beside {@link testerInfraSpec} because the two derive from the
+ * same context fields, and `prompts.spec.ts` pins that every URL the spec carries appears here.
  */
-export function dispatchEnvironmentUrls(context: AgentRunContext): string[] {
+export function dispatchEnvironments(context: AgentRunContext): DispatchEnvironment[] {
   const frontend = context.frontend
-  const urls = [
-    context.environment?.url,
-    ...(context.involvedServices ?? []).map((involved) => involved.envUrl),
-    ...(frontend ? injectedFrontendBindings(frontend) : []).map((binding) => binding.serviceUrl),
+  const candidates: DispatchEnvironment[] = [
+    {
+      url: context.environment?.url ?? '',
+      ...(context.environment?.reachability?.address
+        ? { address: context.environment.reachability.address }
+        : {}),
+    },
+    ...(context.involvedServices ?? []).map((involved) => ({
+      url: involved.envUrl ?? '',
+      ...(involved.envReachability?.address ? { address: involved.envReachability.address } : {}),
+    })),
+    ...(frontend ? injectedFrontendBindings(frontend) : []).map((binding) => ({
+      url: binding.serviceUrl ?? '',
+      ...(binding.serviceAddress ? { address: binding.serviceAddress } : {}),
+    })),
   ]
-  return [...new Set(urls.filter((url): url is string => typeof url === 'string' && url !== ''))]
+  const seen = new Set<string>()
+  const out: DispatchEnvironment[] = []
+  for (const candidate of candidates) {
+    if (!candidate.url || seen.has(candidate.url)) continue
+    seen.add(candidate.url)
+    out.push(candidate)
+  }
+  return out
 }
 
 /**
