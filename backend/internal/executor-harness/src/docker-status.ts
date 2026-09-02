@@ -59,7 +59,17 @@ export type DockerSource =
 export interface DockerStatus {
   available: boolean | undefined
   source: DockerSource
-  /** Why, in the entrypoint's own closed vocabulary (`serving`/`failed`/`missing`/…). */
+  /**
+   * Why, in the entrypoint's own closed vocabulary (`serving`, `serving-without-nat`, `failed`,
+   * `missing`, `unreachable`, `probing`).
+   *
+   * Reported and never branched on, which is what lets the entrypoint add a word without anything
+   * here having to know it. `serving-without-nat` is the one worth knowing about: the rootless
+   * daemon would not start with its own firewall rules and runs with `--iptables=false`, so it
+   * serves while its NESTED containers have no egress. That is a CAUSE, and the only place one
+   * exists; what MEASURES the consequence is the egress half of the workload check
+   * (docker-capability.ts), from inside a container, with no way to learn why.
+   */
   reason: string
   /** A human detail for the failing cases: the dockerd log tail, or what was unreachable. */
   detail?: string

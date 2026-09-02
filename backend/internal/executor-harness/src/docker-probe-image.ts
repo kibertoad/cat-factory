@@ -45,6 +45,127 @@ export const PROBE_SENTINEL = 'cat-factory-docker-probe-ok'
 /** The argv the probe container runs. `busybox` dispatches on its own name, so this is an echo. */
 export const PROBE_COMMAND: readonly string[] = [`/${PROBE_BINARY_PATH}`, 'echo', PROBE_SENTINEL]
 
+// ---------------------------------------------------------------------------
+// The second thing the same image is asked, and the one the marker run above structurally cannot
+// answer: whether a container started on this daemon can reach the NETWORK.
+//
+// Loading and running a local image needs no network at all, so a daemon whose nested containers
+// are cut off passes the marker run exactly as a working one does. That is not hypothetical: the
+// published executor image ran its rootless daemon with `--iptables=false`, which drops the
+// MASQUERADE rule for the bridge, and every nested container on it had no egress whatsoever
+// (issue #2173). The harness reported `dockerDaemon: "usable"` throughout, and each agent
+// discovered otherwise about seven minutes into an `npm ci` inside a `docker build` (issue
+// #2174). An agent TOLD it has no egress can plan around it; an agent told docker works cannot.
+//
+// It runs as its own container rather than as one more command in the marker run, because the
+// marker run is deliberately `--network none`. The two need opposite networking, so they cannot
+// be the same `docker run`, and keeping them apart has a second payoff: a failure of anything
+// below can only ever produce an EGRESS verdict, never a verdict about the daemon.
+// ---------------------------------------------------------------------------
+
+/**
+ * What the egress container prints for each observation: the marker, then the exit STATUS of the
+ * command that made it.
+ *
+ * The status rather than a pass/fail marker, because the two failures need different answers.
+ * A refused connection is evidence about the network; a 127 is busybox saying it has no such
+ * applet, which is evidence about the platform's own probe image and may never be reported as a
+ * network that is not there.
+ */
+export const EGRESS_TCP_MARKER = 'cat-factory-egress-tcp='
+export const EGRESS_DNS_MARKER = 'cat-factory-egress-dns='
+
+/** How long the in-container connect may take. Short: a blocked route is silent, not slow. */
+const EGRESS_CONNECT_TIMEOUT_SECONDS = 3
+
+/**
+ * How long the in-container lookup may take. Its own ceiling because busybox's `nslookup` retries
+ * on its own schedule, and an unbounded one would spend the whole check's budget on the half that
+ * is the diagnostic rather than the verdict.
+ */
+const EGRESS_LOOKUP_TIMEOUT_SECONDS = 6
+
+/** Where the egress check aims: a raw address, plus a name to resolve. */
+export interface EgressTarget {
+  host: string
+  port: number
+  dnsName: string
+}
+
+/** An IPv4 literal. Names are refused on purpose: a target that needs DNS cannot TEST DNS. */
+const IPV4 =
+  /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$/
+
+/** A hostname, in the narrow shape a DNS lookup can be aimed at. */
+const HOSTNAME = /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i
+
+/**
+ * Read the configured target, or say why it cannot be used.
+ *
+ * Validated rather than trusted, and strictly, for two reasons that both matter. The host and the
+ * name are interpolated into a `sh -c` script INSIDE the probe container, so anything else there
+ * would be running whatever a deployment's environment happened to hold; and a target that is
+ * quietly wrong produces a confident `blocked` about a daemon that is fine, which is the exact
+ * class of lie this whole module exists to remove. A rejected setting is REPORTED as a check that
+ * could not be carried out, never silently swapped for the default: an operator who pointed this
+ * at an address their network permits is entitled to find out that it was ignored.
+ */
+export function parseEgressTarget(
+  target: string,
+  dnsName: string,
+): { target: EgressTarget } | { invalid: string } {
+  const [host = '', port = '', ...rest] = target.split(':')
+  if (rest.length > 0 || !IPV4.test(host)) {
+    return {
+      invalid: `the platform's egress check is configured with \`${bounded(target)}\`, which is not an \`IPv4:port\` address`,
+    }
+  }
+  const parsed = Number(port)
+  if (!/^[0-9]{1,5}$/.test(port) || parsed < 1 || parsed > 65535) {
+    return {
+      invalid: `the platform's egress check is configured with \`${bounded(target)}\`, whose port is not a number between 1 and 65535`,
+    }
+  }
+  if (!HOSTNAME.test(dnsName)) {
+    return {
+      invalid: `the platform's egress check is configured to resolve \`${bounded(dnsName)}\`, which is not a hostname`,
+    }
+  }
+  return { target: { host, port: parsed, dnsName } }
+}
+
+/** Keep a rejected setting quotable in a system prompt without letting it be the whole prompt. */
+function bounded(value: string): string {
+  return value.length > 60 ? `${value.slice(0, 60)}…` : value
+}
+
+/**
+ * The argv the egress container runs: connect, say what that returned, resolve, say the same.
+ *
+ * Both observations are made and BOTH are reported, because they fail for different reasons and
+ * have different fixes. A connect to a raw address needs only a route; a lookup needs the
+ * daemon's embedded resolver to be reachable and to forward. Reporting only the first would call
+ * a container with a working route and broken DNS "reachable", and nothing an agent fetches by
+ * name would work there.
+ *
+ * Every applet is called by its full path (`/busybox nc`) rather than by name. The image holds
+ * one file and no PATH, and busybox's standalone-shell dispatch is a build-time option nothing
+ * here may assume.
+ */
+export function buildEgressCommand(target: EgressTarget): readonly string[] {
+  const busybox = `/${PROBE_BINARY_PATH}`
+  const connect = `${busybox} nc -w ${EGRESS_CONNECT_TIMEOUT_SECONDS} ${target.host} ${target.port} </dev/null >/dev/null 2>&1`
+  const resolve = `${busybox} timeout ${EGRESS_LOOKUP_TIMEOUT_SECONDS} ${busybox} nslookup ${target.dnsName} >/dev/null 2>&1`
+  return [
+    busybox,
+    'sh',
+    '-c',
+    [`${connect}; echo "${EGRESS_TCP_MARKER}$?"`, `${resolve}; echo "${EGRESS_DNS_MARKER}$?"`].join(
+      '\n',
+    ),
+  ]
+}
+
 /**
  * Node's architecture names mapped onto the docker name for the same machine.
  *
