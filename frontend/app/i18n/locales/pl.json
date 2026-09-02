@@ -7047,6 +7047,22 @@
         "budget_exhausted": "Ten obszar roboczy przekroczył budżet modeli, więc platforma nie opłaciła propozycji adopcji. Decyzje nadal należą do Ciebie: opisz swoje oczekiwania w notatkach poniżej albo zwiększ budżet i ponów uruchomienie.",
         "analysis_unusable": "Analiza nie zwróciła użytecznej propozycji. Nadal możesz opisać w notatkach, czego oczekujesz."
       },
+      "survey": {
+        "summary": "Ta sugestia powstała z {read} plików i list katalogów; {byModel} z nich model poprosił sam.",
+        "missed": "Odczyty, które nic nie zwróciły: {count}. Rozwiń, aby zobaczyć które.",
+        "truncated": "Odczyty, których zapis nie pomieścił: {count}. Badanie je wykonało; poniższej liście brakuje końcówki.",
+        "show": "Pokaż wszystkie odczyty wykonane przez przegląd",
+        "exhausted": {
+          "calls": "Przeglądowi skończyły się odczyty, zanim zakończył pracę, więc mógł nie sprawdzić wszystkich obszarów. Uruchom bieg ponownie, aby uzyskać pełniejszy odczyt.",
+          "chars": "Przeglądowi skończył się budżet treści, zanim zakończył pracę, więc mógł nie sprawdzić wszystkich obszarów. Uruchom bieg ponownie, aby uzyskać pełniejszy odczyt."
+        },
+        "outcome": {
+          "read": "odczytano",
+          "absent": "brak",
+          "unreadable": "niepowodzenie",
+          "refused": "odrzucono"
+        }
+      },
       "notes": {
         "label": "Uwagi do całej usługi",
         "description": "Przekazywane agentowi dosłownie, razem z Twoimi decyzjami.",

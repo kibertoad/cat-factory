@@ -22,7 +22,18 @@ import * as v from 'valibot'
 // ---------------------------------------------------------------------------
 
 const shortText = v.pipe(v.string(), v.maxLength(600))
-const pathText = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(400))
+
+/**
+ * The longest a transcript key or an evidence citation may be.
+ *
+ * Exported because the producer has to respect it rather than discover it: a transcript key is
+ * the raw repository path PREFIXED with its side (and suffixed with `/` for a listing), so the
+ * survey caps what it accepts by deriving from this instead of restating 400 and quietly
+ * emitting a row the contract says is too long.
+ */
+export const MAX_ADOPTION_READ_PATH = 400
+
+const pathText = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_ADOPTION_READ_PATH))
 
 /**
  * How many drop lines one plan may carry, plus one slot for the "and N more" summary.
@@ -100,30 +111,127 @@ export const adoptionDecisionSchema = v.object({
 export type AdoptionDecision = v.InferOutput<typeof adoptionDecisionSchema>
 
 /**
- * What the survey actually managed to read, reported beside the plan.
+ * How many reads one survey's transcript may record.
  *
- * "Absent" and "zero" must not render the same: a plan built without the monorepo's CI
- * workflows (unreadable, or simply not there) is a materially weaker plan than one built with
- * them, and only this section says which. `unreadable` therefore lists paths the survey TRIED
- * and failed on, distinct from paths it never looked for.
+ * The exploration budget bounds what the MODEL may ask for, but a single model turn can emit any
+ * number of tool calls, and a call refused for a bad path is still a call. So the transcript has
+ * a cap of its own, and what the cap CUT rides on `AdoptionExploration.recordsDropped`: the gap
+ * between `calls` and `reads.length` cannot state it, since the seed's own reads add rows without
+ * adding calls and a call answered from what was already read adds a call without a row.
+ */
+export const MAX_ADOPTION_READS = 96
+
+/** Who asked for one read: the platform's opening context, or the model itself. */
+export const adoptionReadOriginSchema = v.picklist(['seed', 'model'])
+export type AdoptionReadOrigin = v.InferOutput<typeof adoptionReadOriginSchema>
+
+/**
+ * What one read produced. Four outcomes, because they send a reader to four different places.
+ *
+ * `absent` is the repository answering "there is no such file", which is EVIDENCE. `unreadable`
+ * is the provider failing (a revoked token, a rate limit, an outage), which is the absence of
+ * evidence and must never render as the first. `refused` is the PLATFORM declining: an exhausted
+ * budget or a path it will not fetch, which is a ceiling to raise rather than anything about the
+ * repository at all.
+ */
+export const adoptionReadOutcomeSchema = v.picklist(['read', 'absent', 'unreadable', 'refused'])
+export type AdoptionReadOutcome = v.InferOutput<typeof adoptionReadOutcomeSchema>
+
+/**
+ * One read the survey performed, in the order it happened.
+ *
+ * The transcript is the survey: what the plan carries is what was actually fetched, not a list
+ * the platform predicted it would need. That is what makes the evidence check upstream
+ * (`parseAdoptionDecisions`) meaningful rather than circular, because a citation is checked
+ * against a record of reads that already happened.
+ */
+export const adoptionReadSchema = v.object({
+  /**
+   * The `monorepo:`/`template:`-prefixed path, exactly the key a decision's `evidence` cites. A
+   * trailing `/` marks a directory LISTING rather than a file, so a reader can tell the two apart
+   * without a second field.
+   */
+  path: pathText,
+  origin: adoptionReadOriginSchema,
+  outcome: adoptionReadOutcomeSchema,
+  /** Characters this read contributed to the content budget; 0 when it produced nothing. */
+  chars: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /** Why a read was refused or failed; null when it succeeded. */
+  note: v.nullable(shortText),
+})
+export type AdoptionRead = v.InferOutput<typeof adoptionReadSchema>
+
+/**
+ * What the survey's bounded exploration spent, and whether it ran out.
+ *
+ * `exhausted` is the load-bearing field. A survey that stopped because the model had seen enough
+ * and one that stopped because it hit a ceiling produce the same-looking transcript, and only the
+ * second means the plan is missing areas nobody decided not to look at. It is reported to the
+ * model DURING the loop (so the recommendations can say which areas ran short) and to the human
+ * reviewer beside the plan.
+ */
+export const adoptionExplorationSchema = v.object({
+  /** Every read the MODEL asked for: refused ones and re-requests of a known file included. */
+  calls: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  maxCalls: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /**
+   * Characters the model's OWN reads spent. The seed's spend is not folded in: it answers to a
+   * separate per-side reservation, and one number over two budgets could not say which ran out.
+   * What the seed spent is on the transcript, per read.
+   */
+  chars: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  maxChars: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /** Which budget ran out, or null when the loop ended with room to spare. */
+  exhausted: v.nullable(v.picklist(['calls', 'chars'])),
+  /**
+   * Reads the transcript could not hold, because `reads` is capped at
+   * {@link MAX_ADOPTION_READS}.
+   *
+   * Carried as its own number rather than left to be inferred from a length, because the only
+   * surface that renders the transcript summarises the ARRAY: a survey that recorded 140 reads
+   * and kept 96 would otherwise read to a reviewer as a survey that made 96, which is the
+   * "absent and zero must not render the same" failure this whole shape exists to avoid.
+   */
+  recordsDropped: v.pipe(v.number(), v.integer(), v.minValue(0)),
+})
+export type AdoptionExploration = v.InferOutput<typeof adoptionExplorationSchema>
+
+/**
+ * What the survey actually read, reported beside the plan.
+ *
+ * "Absent" and "zero" must not render the same: a plan built without the monorepo's CI workflows
+ * (unreadable, or simply not there) is a materially weaker plan than one built with them, and
+ * only this section says which. The transcript therefore records the reads that FAILED and the
+ * ones the platform REFUSED beside the ones that succeeded, and `exploration` says whether the
+ * read stopped because there was nothing left worth fetching or because a ceiling was hit.
  */
 export const adoptionSurveySchema = v.object({
-  /** Monorepo paths read into the survey. */
-  monorepoPaths: v.array(pathText),
-  /** Reference-template paths read into the survey. */
-  templatePaths: v.array(pathText),
-  /** Paths the survey tried to read and could not (a provider failure, not an absence). */
-  unreadablePaths: v.array(pathText),
   /**
-   * The existing sibling service the survey used as the monorepo's worked example (the
-   * directory it read a real service's own config and shape from), or null when nothing beside
-   * the target qualified, in which case the survey saw the ROOT conventions only. That is a
-   * materially thinner read and says so here rather than by omission, and it is reported rather
-   * than filled with the first directory found: naming a CI or tooling folder as "what a service
-   * here looks like" is a claim the survey cannot support, and a wrong worked example is worse
-   * than none because the reviewer has no way to tell it was a guess.
+   * Every read, in order, or `null` where the projection did not carry the transcript at all.
+   *
+   * Bounded by {@link MAX_ADOPTION_READS}, with `exploration.recordsDropped` stating what the cap
+   * cut, so a truncated transcript states itself rather than reading as a shorter survey.
+   *
+   * NULLABLE for the same reason, one level up. The transcript is reviewer detail: the only
+   * surface that renders it is the review a parked run waits on, while the LIST projection that
+   * feeds every workspace snapshot carries every bootstrap run the workspace has ever made,
+   * forever. So the list withholds it once the run is past review, and says so HERE rather than
+   * sending `[]`, which is the shape of a survey that read nothing.
    */
-  siblingService: v.nullable(pathText),
+  reads: v.nullable(v.pipe(v.array(adoptionReadSchema), v.maxLength(MAX_ADOPTION_READS))),
+  /**
+   * The existing sibling services the survey offered as worked examples: directories beside the
+   * new one that hold a convention file of their own.
+   *
+   * A LIST rather than one pick, because one sibling is a sample of size one. A monorepo with a
+   * six-year-old Java service beside three new TypeScript ones has no single house convention,
+   * and a survey that names whichever directory it probed first reports a disagreement as though
+   * it were the answer. Empty means nothing beside the target qualified, so the survey saw the
+   * ROOT conventions only, which is a materially thinner read and says so here rather than by
+   * omission.
+   */
+  siblingServices: v.array(pathText),
+  exploration: adoptionExplorationSchema,
 })
 export type AdoptionSurvey = v.InferOutput<typeof adoptionSurveySchema>
 

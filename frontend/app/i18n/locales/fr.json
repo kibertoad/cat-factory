@@ -7047,6 +7047,22 @@
         "budget_exhausted": "Cet espace de travail a dépassé son budget de modèles, la plateforme n'a donc pas payé de suggestion d'adoption. Les décisions vous appartiennent toujours : décrivez ce que vous voulez dans les notes ci-dessous, ou augmentez le budget et relancez l'exécution.",
         "analysis_unusable": "L’analyse n’a pas renvoyé de suggestion exploitable. Vous pouvez tout de même décrire ce que vous voulez dans les notes."
       },
+      "survey": {
+        "summary": "Cette suggestion s’appuie sur {read} fichiers et listes de répertoires ; le modèle en a demandé {byModel} lui-même.",
+        "missed": "Lectures sans résultat : {count}. Déplie pour voir lesquelles.",
+        "truncated": "Lectures que le relevé n’a pas pu conserver : {count}. L’étude les a faites ; la fin de la liste ci-dessous manque.",
+        "show": "Afficher toutes les lectures effectuées",
+        "exhausted": {
+          "calls": "L’étude a épuisé ses lectures avant d’avoir fini, elle n’a donc peut-être pas vérifié toutes les zones. Relance l’exécution pour une lecture plus complète.",
+          "chars": "L’étude a épuisé son budget de contenu avant d’avoir fini, elle n’a donc peut-être pas vérifié toutes les zones. Relance l’exécution pour une lecture plus complète."
+        },
+        "outcome": {
+          "read": "lu",
+          "absent": "absent",
+          "unreadable": "échec",
+          "refused": "refusé"
+        }
+      },
       "notes": {
         "label": "Notes pour l’ensemble du service",
         "description": "Transmises telles quelles à l’agent, avec vos décisions.",

@@ -1,6 +1,12 @@
-import type { RepoFiles } from '@cat-factory/kernel'
+import type { AdoptionSurvey, RepoFiles } from '@cat-factory/kernel'
 import { describe, expect, it, vi } from 'vitest'
-import { parentDirectoryOf, surveyMonorepo, type SurveySide } from './monorepoSurvey.js'
+import {
+  normalizeSurveyPath,
+  parentDirectoryOf,
+  surveyMonorepo,
+  type MonorepoSurveyRequest,
+  type SurveySide,
+} from './monorepoSurvey.js'
 
 /** A `RepoFiles` over a fixed map; a path listed in `failing` throws instead of answering. */
 function files(map: Record<string, string>, failing: string[] = []): RepoFiles {
@@ -39,9 +45,34 @@ const MONOREPO = {
   'package.json': '{"workspaces":["services/*"]}',
   'vitest.config.ts': 'export default {}',
   '.github/workflows/ci.yml': 'name: ci',
+  '.github/workflows/release.yml': 'name: release',
   'services/billing/package.json': '{"name":"@acme/billing"}',
   'services/billing/Dockerfile': 'FROM node:24',
+  'services/billing/src/index.ts': 'export {}',
 }
+
+/** The transcript a live session always carries (only a list projection withholds one). */
+function reads(survey: AdoptionSurvey) {
+  return survey.reads ?? []
+}
+
+/** Every path the transcript holds as READ, which is exactly what a decision may cite. */
+function citable(survey: AdoptionSurvey): string[] {
+  return reads(survey)
+    .filter((read) => read.outcome === 'read')
+    .map((read) => read.path)
+}
+
+/** One transcript entry by key, so an assertion can name its outcome and origin. */
+function entry(survey: AdoptionSurvey, path: string) {
+  return reads(survey).find((read) => read.path === path)
+}
+
+const request = (overrides: Partial<MonorepoSurveyRequest> = {}): MonorepoSurveyRequest => ({
+  monorepo: side(MONOREPO),
+  directory: 'services/payments',
+  ...overrides,
+})
 
 describe('parentDirectoryOf', () => {
   it('names where a new service’s siblings live, and the root for a top-level one', () => {
@@ -51,136 +82,402 @@ describe('parentDirectoryOf', () => {
   })
 })
 
-describe('surveyMonorepo', () => {
-  it('reads the root conventions, the CI, and the nearest EXISTING sibling service', () => {
-    // The sibling is the read that matters most and the one no root file can stand in for: it is
-    // what a service in this repository actually looks like.
-    return surveyMonorepo({
-      monorepo: side(MONOREPO),
-      template: side({ 'package.json': '{}', 'jest.config.js': '{}' }),
-      directory: 'services/payments',
-    }).then(({ survey, files: read }) => {
-      expect(survey.siblingService).toBe('services/billing')
-      expect(survey.monorepoPaths).toContain('package.json')
-      expect(survey.monorepoPaths).toContain('.github/workflows/ci.yml')
-      expect(survey.monorepoPaths).toContain('services/billing/package.json')
-      expect(survey.monorepoPaths).toContain('services/billing/Dockerfile')
-      expect(survey.templatePaths).toContain('jest.config.js')
-      // The read contents are keyed by the SAME prefixed path a decision's evidence cites, which
-      // is what lets an unevidenced claim be dropped without knowing which side a path came from.
-      expect(read['monorepo:package.json']).toBe(MONOREPO['package.json'])
-      expect(read['template:jest.config.js']).toBe('{}')
-      expect(survey.unreadablePaths).toEqual([])
+describe('normalizeSurveyPath', () => {
+  it('accepts a repository path however the model spelled it', () => {
+    expect(normalizeSurveyPath('  ./services/billing/ ')).toEqual({ path: 'services/billing' })
+    expect(normalizeSurveyPath('/package.json')).toEqual({ path: 'package.json' })
+    expect(normalizeSurveyPath('')).toEqual({ path: '' })
+  })
+
+  it('refuses magic rather than only traversal, and NAMES the refusal', () => {
+    // The path becomes a URL segment on the contents API. A backslash or a control character
+    // means the model is guessing at a shell or a Windows path, and answering "not found" would
+    // tell it the repository lacks a file it never actually asked for.
+    expect(normalizeSurveyPath('../../etc/passwd')).toMatchObject({
+      refused: expect.stringContaining('leaves the repository'),
+    })
+    expect(normalizeSurveyPath('services\\billing')).toMatchObject({
+      refused: expect.stringContaining('not part of a repository path'),
+    })
+    expect(normalizeSurveyPath(`services/${'a'.repeat(500)}`)).toMatchObject({
+      refused: expect.stringContaining('too long'),
+    })
+  })
+
+  it('refuses the URL’s own syntax, which the contents API would act on', () => {
+    // The path is interpolated into the contents URL ahead of the `?ref=` the caller appends. A
+    // `#` truncates the request to a DIFFERENT file while the transcript records the whole string
+    // as read; a `?ref=` of the model's own is honoured over the branch the survey believes it is
+    // reading; a percent escape decodes on the HOST, past the traversal check below.
+    for (const raw of ['pkg.json#notes', 'pkg.json?ref=other-branch', 'services/%2e%2e/secrets']) {
+      expect(normalizeSurveyPath(raw)).toMatchObject({
+        refused: expect.stringContaining('URL syntax'),
+      })
+    }
+  })
+
+  it('caps the path so the PREFIXED key still fits what the contract stores', () => {
+    // The transcript records `monorepo:`/`template:` plus the path, plus a trailing `/` on a
+    // listing, and the schema caps that at 400. A path accepted at 400 produced a 410-character
+    // row the contract calls too long.
+    expect(normalizeSurveyPath('a'.repeat(390))).toEqual({ path: 'a'.repeat(390) })
+    expect(normalizeSurveyPath('a'.repeat(391))).toMatchObject({
+      refused: expect.stringContaining('too long'),
+    })
+  })
+})
+
+describe('the seeded opening context', () => {
+  it('reads the root conventions and lists the CI directory rather than picking workflows', async () => {
+    // Reading an arbitrary two workflows was the old shape's fourth gap: a monorepo with thirty
+    // per-service pipelines contributed whichever two sorted first, and what a new directory is
+    // actually REQUIRED to satisfy was likely in one of the twenty-eight nobody read. The listing
+    // is the menu; the model spends a read on the one that matters.
+    const session = await surveyMonorepo(request({ template: side({ 'jest.config.js': '{}' }) }))
+    const survey = session.survey()
+    expect(citable(survey)).toContain('monorepo:package.json')
+    expect(citable(survey)).toContain('monorepo:.github/workflows/')
+    expect(citable(survey)).not.toContain('monorepo:.github/workflows/ci.yml')
+    expect(session.seedFiles()['monorepo:.github/workflows/']).toContain('ci.yml')
+    expect(citable(survey)).toContain('template:jest.config.js')
+  })
+
+  it('offers EVERY qualifying sibling, so a monorepo that disagrees with itself can say so', async () => {
+    // One sibling is a sample of size one. A six-year-old Java service beside three TypeScript
+    // ones has no house convention, and naming whichever directory sorted first reports the
+    // disagreement as though it were the answer.
+    const session = await surveyMonorepo(
+      request({
+        monorepo: side({
+          'package.json': '{}',
+          'services/billing/package.json': '{}',
+          'services/ledger/pom.xml': '<project/>',
+          'services/assets/logo.svg': '<svg/>',
+        }),
+      }),
+    )
+    const survey = session.survey()
+    // `assets` holds no convention file of its own, so it is not a worked example: a bad sibling
+    // is worse than none, because "no sibling" is a fact the plan REPORTS.
+    expect(survey.siblingServices).toEqual(['services/billing', 'services/ledger'])
+    expect(citable(survey)).toContain('monorepo:services/billing/')
+    expect(citable(survey)).toContain('monorepo:services/ledger/')
+  })
+
+  it('seeds whichever provider’s CI the monorepo actually uses, not GitHub’s alone', async () => {
+    // A GitLab-hosted monorepo has no `.github` at all, so a GitHub-only seed hands the model an
+    // opening context with NO CI in it and leaves the `ci` area with nothing to cite.
+    const session = await surveyMonorepo(
+      request({
+        monorepo: side({
+          'package.json': '{}',
+          '.gitlab-ci.yml': 'stages: [test]',
+          '.circleci/config.yml': 'version: 2.1',
+          'services/billing/package.json': '{}',
+        }),
+      }),
+    )
+    const survey = session.survey()
+    expect(citable(survey)).toContain('monorepo:.gitlab-ci.yml')
+    expect(citable(survey)).toContain('monorepo:.circleci/')
+    // The CircleCI directory is LISTED, never read: the listing is the menu the model picks off.
+    expect(citable(survey)).not.toContain('monorepo:.circleci/config.yml')
+  })
+
+  it('records a sibling probe that FAILED, so an outage cannot report no siblings', async () => {
+    // "No sibling service" is the strongest claim the opening context makes about a monorepo, and
+    // a probe blinded by a revoked token would otherwise produce exactly the sentence a genuinely
+    // flat repository produces.
+    const session = await surveyMonorepo(
+      request({
+        monorepo: side(
+          {
+            'package.json': '{}',
+            'services/billing/package.json': '{}',
+            'services/ledger/pom.xml': '<project/>',
+          },
+          ['services/billing'],
+        ),
+      }),
+    )
+    const survey = session.survey()
+    expect(survey.siblingServices).toEqual(['services/ledger'])
+    expect(entry(survey, 'monorepo:services/billing/')).toMatchObject({
+      outcome: 'unreadable',
+      origin: 'seed',
     })
   })
 
   it('never reads the target directory itself as its own worked example', async () => {
     // The new service does not exist yet, but a retry surveying after a partial run must not
     // treat whatever it left behind as the monorepo's established convention.
-    const { survey } = await surveyMonorepo({
-      monorepo: side({ ...MONOREPO, 'services/payments/package.json': '{}' }),
-      directory: 'services/payments',
-    })
-    expect(survey.siblingService).toBe('services/billing')
-    expect(survey.monorepoPaths).not.toContain('services/payments/package.json')
+    const session = await surveyMonorepo(
+      request({ monorepo: side({ ...MONOREPO, 'services/payments/package.json': '{}' }) }),
+    )
+    expect(session.survey().siblingServices).toEqual(['services/billing'])
   })
 
   it('reports NO sibling rather than implying a root-only survey saw one', async () => {
-    const { survey } = await surveyMonorepo({
-      monorepo: side({ 'package.json': '{}' }),
-      directory: 'apps/web',
-    })
-    // A plan built from root conventions alone is materially weaker, and only this says which.
-    expect(survey.siblingService).toBeNull()
+    const session = await surveyMonorepo(
+      request({ monorepo: side({ 'package.json': '{}' }), directory: 'apps/web' }),
+    )
+    expect(session.survey().siblingServices).toEqual([])
   })
 
-  it('never names a dot-directory or a CI folder as the monorepo’s worked example', async () => {
+  it('never names a dot-directory or a CI folder as a worked example', async () => {
     // `.` sorts below every letter, so the alphabetically first entry of a root listing is
-    // `.changeset`/`.github` in any repository that keeps tooling there. Naming one as the
-    // sibling told the reviewer that a workflows folder is "the best available statement of what
-    // a service in this monorepo looks like", and the model then cited CI config as a service's
-    // conventions.
-    const { survey } = await surveyMonorepo({
-      monorepo: side({
-        'package.json': '{}',
-        '.changeset/config.json': '{}',
-        '.github/workflows/ci.yml': 'name: ci',
-        'billing/package.json': '{"name":"billing"}',
+    // `.changeset`/`.github` in any repository that keeps tooling there.
+    const session = await surveyMonorepo(
+      request({
+        monorepo: side({
+          'package.json': '{}',
+          '.changeset/config.json': '{}',
+          '.github/workflows/ci.yml': 'name: ci',
+          'billing/package.json': '{"name":"billing"}',
+        }),
+        directory: 'payments',
       }),
-      directory: 'payments',
-    })
-    expect(survey.siblingService).toBe('billing')
-  })
-
-  it('skips a candidate that holds no convention file of its own', async () => {
-    // A directory that says nothing about how a service here is built is worse than no example,
-    // because "no sibling" is a fact the plan REPORTS while a bad sibling is one it asserts.
-    const { survey } = await surveyMonorepo({
-      monorepo: side({
-        'package.json': '{}',
-        'services/assets/logo.svg': '<svg/>',
-        'services/billing/package.json': '{"name":"@acme/billing"}',
-      }),
-      directory: 'services/payments',
-    })
-    expect(survey.siblingService).toBe('services/billing')
+    )
+    expect(session.survey().siblingServices).toEqual(['billing'])
   })
 
   it('records each side’s SHAPE, which is the only evidence either offers about layout', async () => {
-    // No root manifest states where a service puts its code, its tests or its entry point, and
-    // the sibling's own config files do not either. Without a citable listing, a `source-layout`
-    // recommendation has nothing behind it and is dropped upstream as invention, so the model
-    // could only ever answer `template` for one of the twelve areas it is asked about.
-    const { survey, files: read } = await surveyMonorepo({
-      monorepo: side({
-        'package.json': '{}',
-        'services/billing/package.json': '{}',
-        'services/billing/src/index.ts': 'export {}',
-        'services/billing/test/index.test.ts': 'export {}',
-      }),
-      template: side({ 'package.json': '{}', 'lib/main.ts': 'export {}' }),
-      directory: 'services/payments',
-    })
-    expect(survey.monorepoPaths).toContain('services/billing/')
-    expect(read['monorepo:services/billing/']).toContain('src/')
-    expect(read['monorepo:services/billing/']).toContain('test/')
-    // Both sides, or the one that has any evidence wins the area by default.
-    expect(survey.templatePaths).toContain('./')
-    expect(read['template:./']).toContain('lib/')
+    // No root manifest states where a service puts its code, its tests or its entry point.
+    // Without a citable listing a `source-layout` recommendation has nothing behind it and is
+    // dropped upstream as invention, so `template` was the only answer for that area.
+    const session = await surveyMonorepo(
+      request({ template: side({ 'package.json': '{}', 'lib/main.ts': 'export {}' }) }),
+    )
+    const seeded = session.seedFiles()
+    expect(seeded['monorepo:services/billing/']).toContain('src/')
+    expect(seeded['template:./']).toContain('lib/')
   })
 
   it('separates a read that FAILED from a file that is simply absent', async () => {
     // Collapsing the two lets a survey blinded by an expired token present itself as a monorepo
     // with no conventions, which is the opposite conclusion.
-    const { survey } = await surveyMonorepo({
-      monorepo: side(MONOREPO, ['package.json']),
-      directory: 'services/payments',
-    })
-    expect(survey.unreadablePaths).toContain('monorepo:package.json')
-    expect(survey.monorepoPaths).not.toContain('package.json')
-    // A file that was never there contributes to neither list.
-    expect(survey.unreadablePaths).not.toContain('monorepo:Cargo.toml')
+    const session = await surveyMonorepo(request({ monorepo: side(MONOREPO, ['package.json']) }))
+    const survey = session.survey()
+    expect(entry(survey, 'monorepo:package.json')?.outcome).toBe('unreadable')
+    expect(citable(survey)).not.toContain('monorepo:package.json')
+    // A file that was never there contributes no entry at all.
+    expect(entry(survey, 'monorepo:Cargo.toml')).toBeUndefined()
+  })
+
+  it('names a body that did not fit the reserved budget instead of dropping it silently', async () => {
+    const session = await surveyMonorepo(
+      request({
+        monorepo: side({ 'package.json': 'x'.repeat(400), 'README.md': 'y'.repeat(400) }),
+        limits: { maxSeedChars: 420, maxFileChars: 1_000 },
+      }),
+    )
+    const survey = session.survey()
+    const refused = reads(survey).filter((read) => read.outcome === 'refused')
+    expect(refused.length).toBeGreaterThan(0)
+    expect(refused[0]?.note).toContain('ask for it if you need it')
+  })
+
+  it('reserves the budget PER SIDE, so a fat monorepo cannot crowd out the template', async () => {
+    // Spent in key order it is not a bound but a handover to whichever side sorts first, and
+    // `monorepo:` sorts before `template:` for every key.
+    const session = await surveyMonorepo(
+      request({
+        monorepo: side({ 'package.json': 'x'.repeat(5_000), 'README.md': 'x'.repeat(5_000) }),
+        template: side({ 'package.json': '{"name":"template"}' }),
+        limits: { maxSeedChars: 6_000, maxFileChars: 6_000 },
+      }),
+    )
+    expect(citable(session.survey())).toContain('template:package.json')
   })
 
   it('surveys the monorepo alone when the run has no reference template', async () => {
-    const { survey, files: read } = await surveyMonorepo({
-      monorepo: side(MONOREPO),
-      directory: 'services/payments',
-    })
-    expect(survey.templatePaths).toEqual([])
-    expect(Object.keys(read).every((key) => key.startsWith('monorepo:'))).toBe(true)
+    const session = await surveyMonorepo(request())
+    expect(session.sides).toEqual(['monorepo'])
+    expect(Object.keys(session.seedFiles()).every((key) => key.startsWith('monorepo:'))).toBe(true)
   })
 
-  it('probes a BOUNDED, declared set, so its cost does not scale with the monorepo', async () => {
-    // No crawl and no recursive walk: a survey of a repository with ten thousand files must cost
-    // the same as one of a repository with ten.
+  it('probes a BOUNDED set, so the SEED’s cost does not scale with the monorepo', async () => {
+    // The model's own budget is what bounds the rest; the opening context must not grow with the
+    // repository, or a survey of ten thousand files costs a thousand times one of ten.
     const wide: Record<string, string> = { 'package.json': '{}' }
     for (let i = 0; i < 400; i++) wide[`noise-${i}.txt`] = 'x'
     const reader = files(wide)
     const getFile = vi.spyOn(reader, 'getFile')
     await surveyMonorepo({ monorepo: { files: reader }, directory: 'services/payments' })
-    // Only files on the convention list are fetched; the 400 unlisted ones are never read.
     expect(getFile.mock.calls.every(([path]) => !String(path).startsWith('noise-'))).toBe(true)
     expect(getFile.mock.calls.length).toBeLessThan(20)
+  })
+})
+
+describe('the model’s own reads', () => {
+  it('records what it fetched as citable, and charges the exploration budget', async () => {
+    const session = await surveyMonorepo(request())
+    const answer = await session.explore({
+      side: 'monorepo',
+      kind: 'read',
+      path: 'services/billing/Dockerfile',
+    })
+    expect(answer.outcome).toBe('read')
+    expect(answer.key).toBe('monorepo:services/billing/Dockerfile')
+    const survey = session.survey()
+    expect(citable(survey)).toContain('monorepo:services/billing/Dockerfile')
+    expect(entry(survey, 'monorepo:services/billing/Dockerfile')?.origin).toBe('model')
+    expect(survey.exploration.calls).toBe(1)
+    expect(survey.exploration.chars).toBe(MONOREPO['services/billing/Dockerfile'].length)
+  })
+
+  it('refuses past the call ceiling, STATES it to the model, and reports it on the survey', async () => {
+    // Exhaustion has to reach the model, or the loop ends with a plan that reads as confident
+    // about areas it never looked at.
+    const session = await surveyMonorepo(request({ limits: { maxExplorationCalls: 1 } }))
+    await session.explore({ side: 'monorepo', kind: 'read', path: 'services/billing/Dockerfile' })
+    const refused = await session.explore({
+      side: 'monorepo',
+      kind: 'read',
+      path: 'services/billing/src/index.ts',
+    })
+    expect(refused.outcome).toBe('refused')
+    expect(refused.note).toContain('exploration budget is spent')
+    const survey = session.survey()
+    expect(survey.exploration.exhausted).toBe('calls')
+    expect(survey.exploration.calls).toBe(2)
+    expect(citable(survey)).not.toContain('monorepo:services/billing/src/index.ts')
+  })
+
+  it('refuses past the content ceiling as its own exhaustion, not as a missing file', async () => {
+    const session = await surveyMonorepo(request({ limits: { maxExplorationChars: 5 } }))
+    const refused = await session.explore({
+      side: 'monorepo',
+      kind: 'read',
+      path: 'services/billing/Dockerfile',
+    })
+    expect(refused.outcome).toBe('refused')
+    expect(session.survey().exploration.exhausted).toBe('chars')
+  })
+
+  it('counts a refused call, so nonsense paths cannot buy an unbounded loop', async () => {
+    const session = await surveyMonorepo(request({ limits: { maxExplorationCalls: 2 } }))
+    await session.explore({ side: 'monorepo', kind: 'read', path: '../../etc/passwd' })
+    await session.explore({ side: 'monorepo', kind: 'read', path: '..\\..\\secrets' })
+    const third = await session.explore({ side: 'monorepo', kind: 'read', path: 'package.json' })
+    expect(third.outcome).toBe('refused')
+    expect(session.survey().exploration.exhausted).toBe('calls')
+  })
+
+  it('refuses to read the service being created back as an existing convention', async () => {
+    // A retry surveys after a partial run, so the target directory can hold the previous
+    // attempt's draft. Citing it would be the platform quoting itself to itself.
+    const session = await surveyMonorepo(
+      request({ monorepo: side({ ...MONOREPO, 'services/payments/package.json': '{}' }) }),
+    )
+    const answer = await session.explore({
+      side: 'monorepo',
+      kind: 'read',
+      path: 'services/payments/package.json',
+    })
+    expect(answer.outcome).toBe('refused')
+    expect(answer.note).toContain('the service being created')
+  })
+
+  it('refuses a side this run has no repository for', async () => {
+    const session = await surveyMonorepo(request())
+    const answer = await session.explore({ side: 'template', kind: 'read', path: 'package.json' })
+    expect(answer.outcome).toBe('refused')
+    expect(answer.note).toContain('no template repository')
+  })
+
+  it('distinguishes an absent file from a failed read, and neither is citable', async () => {
+    const session = await surveyMonorepo(request({ monorepo: side(MONOREPO, ['Cargo.toml']) }))
+    const absent = await session.explore({ side: 'monorepo', kind: 'read', path: 'nope.json' })
+    expect(absent).toMatchObject({ outcome: 'absent', key: null })
+    const failed = await session.explore({ side: 'monorepo', kind: 'read', path: 'Cargo.toml' })
+    expect(failed.outcome).toBe('unreadable')
+    expect(failed.note).toContain('UNKNOWN')
+    expect(citable(session.survey())).not.toContain('monorepo:Cargo.toml')
+  })
+
+  it('answers a re-read from the transcript rather than spending the budget twice', async () => {
+    // The seed already paid for `package.json`; a model that asks for it again is not owed a
+    // second read out of a bounded budget, and refusing it would teach the model the file went
+    // away.
+    const session = await surveyMonorepo(request())
+    const answer = await session.explore({ side: 'monorepo', kind: 'read', path: 'package.json' })
+    expect(answer.outcome).toBe('read')
+    expect(session.survey().exploration.chars).toBe(0)
+  })
+
+  it('serves a body the seed refused without paying for a second fetch of it', async () => {
+    // The seed already spent the round trip and the prompt tells the model to ask, so re-fetching
+    // is a request for bytes this process is holding. Charged all the same, and recorded as a READ
+    // of its own: the citation check upstream keys on the outcome, so a body answered from the
+    // seed's `refused` row alone would be dropped as invention.
+    const body = 'x'.repeat(400)
+    const reader = files({ 'package.json': '{}', 'README.md': body })
+    const getFile = vi.spyOn(reader, 'getFile')
+    const session = await surveyMonorepo({
+      monorepo: { files: reader },
+      directory: 'services/payments',
+      limits: { maxSeedChars: 300, maxFileChars: 1_000 },
+    })
+    expect(entry(session.survey(), 'monorepo:README.md')?.outcome).toBe('refused')
+    const before = getFile.mock.calls.length
+    const answer = await session.explore({ side: 'monorepo', kind: 'read', path: 'README.md' })
+    expect(answer).toMatchObject({ outcome: 'read', key: 'monorepo:README.md' })
+    expect(answer.body).toBe(body)
+    expect(getFile.mock.calls.length).toBe(before)
+    expect(citable(session.survey())).toContain('monorepo:README.md')
+    expect(session.survey().exploration.chars).toBe(body.length)
+  })
+
+  it('caps a directory LISTING like a file, so one wide directory cannot fake exhaustion', async () => {
+    // Uncapped, a generated directory renders a body wider than the whole budget, and the only
+    // answer a charge has to that is to refuse it and LATCH `exhausted`, reporting a content
+    // budget that ran out when nothing had been spent.
+    const wide: Record<string, string> = { 'package.json': '{}' }
+    for (let i = 0; i < 500; i++) wide[`generated/file-${i}.ts`] = 'x'
+    const session = await surveyMonorepo(
+      request({ monorepo: side(wide), limits: { maxFileChars: 200, maxExplorationChars: 5_000 } }),
+    )
+    const answer = await session.explore({ side: 'monorepo', kind: 'list', path: 'generated' })
+    expect(answer.outcome).toBe('read')
+    expect(answer.body).toContain('truncated')
+    expect(session.survey().exploration.exhausted).toBeNull()
+  })
+
+  it('COUNTS the transcript rows it could not keep rather than shortening the record silently', async () => {
+    // One model turn can emit any number of tool calls, so the array needs a bound the call budget
+    // does not give it. The only surface that renders the transcript summarises the ARRAY, so a
+    // survey that made 140 reads and kept 96 would otherwise read as a survey that made 96.
+    const session = await surveyMonorepo(request({ limits: { maxExplorationCalls: 400 } }))
+    for (let i = 0; i < 120; i++) {
+      await session.explore({ side: 'monorepo', kind: 'read', path: `missing-${i}.json` })
+    }
+    const survey = session.survey()
+    expect(reads(survey).length).toBe(96)
+    expect(survey.exploration.recordsDropped).toBeGreaterThan(0)
+  })
+
+  it('scrubs secrets at READ time, on the model’s own reads as much as the seed’s', async () => {
+    // The exploration half has no compose step a caller could scrub at, which is exactly how a
+    // credential would reach a model through the new path while the old one stayed clean.
+    const session = await surveyMonorepo(
+      request({
+        monorepo: side({
+          'package.json': '{}',
+          'deploy/env.md': 'token: ghp_abcdefghijklmnopqrstuvwxyz012345',
+        }),
+      }),
+    )
+    const answer = await session.explore({ side: 'monorepo', kind: 'read', path: 'deploy/env.md' })
+    expect(answer.body).not.toContain('ghp_abcdefghijklmnopqrstuvwxyz012345')
+    expect(answer.body).toContain('[REDACTED]')
+  })
+
+  it('records a side the platform could never reach, so it does not read as an absence', async () => {
+    const session = await surveyMonorepo(request())
+    session.noteUnavailable('template', 'acme/service-template', 'not linked to this workspace')
+    const read = entry(session.survey(), 'template:acme/service-template')
+    expect(read?.outcome).toBe('unreadable')
+    expect(read?.note).toContain('not linked')
   })
 })
