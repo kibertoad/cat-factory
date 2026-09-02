@@ -419,17 +419,20 @@ export class HttpEnvironmentProvider implements EnvironmentProvider {
     // a `fields` entry: `fields` is teardown state, encrypted and absent from every handle, so an
     // address written there reaches nobody who could dial it.
     //
-    // Present whenever the manifest DECLARES an `addressesPath`, empty list included, and absent
-    // when it declares none. That is a statement about none versus no statement at all, and
+    // Present whenever the manifest DECLARES an `addressesPath` or a `hostsPath`, empty list
+    // included, and absent when it declares neither. That is a statement about none versus no statement at all, and
     // `foldStatedAddresses` needs the difference: an absent field keeps what is stored, so a
     // provider whose status endpoint answers a narrower shape than its create endpoint cannot
     // silently erase the balancer list the create response supplied.
-    const addresses = environmentsLogic.extractAddresses(json, r.addressesPath)
+    const addresses = [
+      ...environmentsLogic.extractAddresses(json, r.addressesPath),
+      ...environmentsLogic.extractAddresses(json, r.hostsPath, 'host'),
+    ]
 
     return {
       externalId,
       url,
-      ...(r.addressesPath ? { addresses } : {}),
+      ...(r.addressesPath || r.hostsPath ? { addresses } : {}),
       status,
       expiresAt,
       access: this.mapAccess(r.access, json),

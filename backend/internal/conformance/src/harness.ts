@@ -16,6 +16,7 @@ import type {
   DocumentRepository,
   DeployCloneTarget,
   EnvironmentProvider,
+  HostResolver,
   RouteProbe,
   ExecutionEventPublisher,
   ExecutionInstance,
@@ -686,6 +687,14 @@ export interface ConformanceAppOptions {
    * a probe that says so, which is also the only way to assert it deterministically.
    */
   routeProbe?: RouteProbe
+  /**
+   * Turns a stated balancer NAME into addresses. ALWAYS injected, never left to the facade's real
+   * wiring, on exactly the terms and for exactly the reason {@link routeProbe} is: the Worker's
+   * resolver would ask a public one about fixture names on reserved TLDs, so the suite would be
+   * asserting what somebody's DNS says today. The default each harness supplies answers
+   * `unresolved`, since a case that wants a name to resolve has to say what it resolves TO.
+   */
+  hostResolver?: HostResolver
   resolveRepoFilesForCoords?: (
     workspaceId: string,
     coords: { owner: string; repo: string; provider?: 'github' | 'gitlab' },

@@ -89,6 +89,9 @@ function buildWorkerConformanceDeps(recorder: RecordingEventPublisher, opts: Wor
     // instead of on anything the suite asserts. A case driving the unreachable path supplies its
     // own probe.
     routeProbe: o.routeProbe ?? (async () => ({ state: 'carried' as const })),
+    // Resolving a stated balancer NAME, injected on the same terms and for the same reason: the
+    // real one would ask a public resolver about a fixture name on a reserved TLD.
+    hostResolver: o.hostResolver ?? (async () => ({ state: 'unresolved' as const })),
     // Each override below lands only when the suite supplies it:
     // - resolveRunRepoContext: the engine's run-repo resolver (a fake) so a registered custom
     //   kind's pre/post-op hooks run + commit identically to a real GitHub-wired facade.

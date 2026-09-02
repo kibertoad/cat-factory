@@ -1,70 +1,102 @@
 // Proving that a provisioned environment can be reached, and keeping the claim and the proof in
 // step as the provider re-states one and the platform re-runs the other.
 //
-// The RULE lives in kernel (`planRouteProbes` / `reduceRouteProof`), which is also where the
-// reasoning is: why the name is tried first, why the provider's order is kept for the addresses,
-// which addresses the platform will not dial, and why an unwired prober records `unproved` rather
-// than a failure. What lives here is the sequencing.
+// The RULE lives in kernel (`planHostResolutions` / `planRouteProbes` / `reduceRouteProof`), which
+// is also where the reasoning is: why the name is tried first, why the provider's order is kept for
+// the candidates, which addresses the platform will not dial, how a stated NAME expands into the
+// addresses it resolves to, and why an unwired prober records `unproved` rather than a failure.
+// What lives here is the sequencing.
 //
 // Where the URL is turned into coordinates is `@cat-factory/contracts`
 // (`deriveEnvironmentCoordinates`), the ONE deriver, shared with the Tester prompt that states
 // those same coordinates to an agent. A second parser here would let the platform dial one host
 // and tell the agent another.
 
-import { deriveEnvironmentCoordinates } from '@cat-factory/contracts'
+import { deriveEnvironmentCoordinates, statedRouteTarget } from '@cat-factory/contracts'
 import type {
   Clock,
-  EnvironmentAddress,
+  EnvironmentRouteCandidate,
   EnvironmentReachability,
   EnvironmentRouteAttempt,
   EnvironmentRouteProof,
+  HostResolveOutcome,
+  HostResolver,
   RouteProbe,
 } from '@cat-factory/kernel'
 import {
+  HOST_RESOLVE_TIMEOUT_MS,
+  planHostResolutions,
   planRouteProbes,
-  recordRefusedAttempt,
   recordRouteAttempt,
+  recordUndialledAttempt,
   reduceRouteProof,
   unprovedRoute,
 } from '@cat-factory/kernel'
 
 /**
- * Dial an environment's name and then, in the provider's order, each address it stated for that
- * name. Stops at the first target that CARRIES and publishes that one.
+ * Resolve every stated NAME the plan is willing to look up, then dial the environment's own name
+ * and, in the provider's order, each candidate it stated for that name. Stops at the first target
+ * that CARRIES and publishes that one.
  *
- * Sequential rather than raced, deliberately. The provider's order is its own statement about
- * which balancer it wants used (an internal one ahead of a public one, say), and racing would
- * publish whichever answered fastest, which is a different question and one nobody asked. The cost
- * is bounded by `MAX_PROBED_ADDRESSES` times the per-probe timeout, against a misdiagnosis that
- * currently costs a whole tester step.
+ * The dials are sequential rather than raced, deliberately. The provider's order is its own
+ * statement about which balancer it wants used (an internal one ahead of a public one, say), and
+ * racing would publish whichever answered fastest, which is a different question and one nobody
+ * asked. The cost is bounded by `MAX_PROBED_ADDRESSES` times the per-probe timeout, against a
+ * misdiagnosis that currently costs a whole tester step.
+ *
+ * The lookups ahead of them are concurrent, and that is not the same trade. Nothing is CHOSEN by
+ * answering first: the answers land in a map the plan reads by name, so the provider's order is
+ * expressed entirely by the plan and a resolver race could not disturb it. Serialising them would
+ * only add up to `MAX_RESOLVED_HOSTS` timeouts to a settle path that is already waiting on dials.
  *
  * With no prober wired the result is `unproved`, never a failure: a facade that cannot open a
- * socket behaves exactly as it did before this existed.
+ * socket behaves exactly as it did before this existed. Resolution is skipped in that case too,
+ * because nothing would be dialled with the answers.
  *
- * A target the plan REFUSED is recorded without a socket being opened. That is the one place the
- * two kinds of target must not be conflated, and why the plan makes a refused one carry no
+ * A target the plan will not dial is recorded without a socket being opened. That is the one place
+ * the two kinds of target must not be conflated, and why the plan makes an undialled one carry no
  * request to dial.
  */
 export async function proveEnvironmentRoute(
   url: string | null | undefined,
-  candidates: readonly EnvironmentAddress[],
-  deps: { probe?: RouteProbe; clock: Clock },
+  candidates: readonly EnvironmentRouteCandidate[],
+  deps: { probe?: RouteProbe; resolveHost?: HostResolver; clock: Clock },
 ): Promise<EnvironmentRouteProof> {
   const now = deps.clock.now()
   if (!deps.probe) return unprovedRoute(now)
   const coords = deriveEnvironmentCoordinates(url)
-  const targets = planRouteProbes(coords?.host, coords?.port, candidates)
+  const resolutions = await resolveStatedHosts(candidates, deps.resolveHost)
+  const targets = planRouteProbes(coords?.host, coords?.port, candidates, { resolutions })
   const attempts: EnvironmentRouteAttempt[] = []
   for (const target of targets) {
-    if (target.kind === 'refused') {
-      attempts.push(recordRefusedAttempt(target))
+    if (target.kind === 'undialled') {
+      attempts.push(recordUndialledAttempt(target))
       continue
     }
     const outcome = await deps.probe(target.request)
     attempts.push(recordRouteAttempt(target, outcome))
-    if (outcome.state === 'carried') return reduceRouteProof(attempts, target.address, now)
+    if (outcome.state === 'carried') return reduceRouteProof(attempts, target, now)
   }
   return reduceRouteProof(attempts, null, now)
+}
+
+/**
+ * Look up the names kernel's plan is willing to look up, and hand back what each one answered.
+ *
+ * An EMPTY map with no resolver wired, rather than one entry saying so per name: the plan already
+ * knows which names it asked about, so a missing entry IS "nothing resolved this", and inventing a
+ * per-name placeholder here would put the same fact in two shapes.
+ */
+async function resolveStatedHosts(
+  candidates: readonly EnvironmentRouteCandidate[],
+  resolveHost: HostResolver | undefined,
+): Promise<Map<string, HostResolveOutcome>> {
+  if (!resolveHost) return new Map()
+  const hosts = planHostResolutions(candidates)
+  const outcomes = await Promise.all(
+    hosts.map((host) => resolveHost({ host, timeoutMs: HOST_RESOLVE_TIMEOUT_MS })),
+  )
+  return new Map(hosts.map((host, index) => [host, outcomes[index] as HostResolveOutcome]))
 }
 
 /**
@@ -93,11 +125,18 @@ export async function proveEnvironmentRoute(
  *
  * So the URL has to be unchanged (every finding was about that name), and then:
  *
- *   - a `reached` proof is a finding about ONE target: the address in `via`, or the name itself
- *     when `via` is null. It survives while that target is still on offer, which for `via` means
- *     still being among the stated candidates and for the name means nothing further, the URL
- *     having already been checked. A provider adding a fallback candidate is strictly MORE
- *     information and cannot invalidate a proof about an address it did not touch.
+ *   - a `reached` proof is a finding about ONE target: the candidate `via` came from, or the URL's
+ *     own name when `via` is null. It survives while that candidate is still on offer, and for the
+ *     name that means nothing further, the URL having already been checked. A provider adding a
+ *     fallback candidate is strictly MORE information and cannot invalidate a proof about a target
+ *     it did not touch.
+ *
+ *     Which candidate that is comes off the proof, never off the address: `viaHost` names the
+ *     stated NAME the address was resolved from, and for those the NAME is the target. A balancer
+ *     the provider still states, that has scaled or gained a zone since the proof, answers with a
+ *     different address set, and matching the stored `via` against it would drop a good proof on a
+ *     routine event that says nothing about whether the route still carries. An older proof carries
+ *     no `viaHost`, which reads as the address case, which is what it was.
  *   - every other proof is a finding about the whole list that was TRIED, so it survives only
  *     while the candidate SET is unchanged. A new candidate is a target nothing ever dialled, and
  *     "nothing reaches this environment" is no longer established once one exists.
@@ -110,7 +149,7 @@ export async function proveEnvironmentRoute(
 export function foldStatedAddresses(
   previous: EnvironmentReachability | null,
   previousUrl: string | null,
-  addresses: readonly EnvironmentAddress[] | null | undefined,
+  addresses: readonly EnvironmentRouteCandidate[] | null | undefined,
   url: string | null,
 ): EnvironmentReachability | null {
   const stored = previous?.candidates ?? []
@@ -141,37 +180,43 @@ export function lastLookedAt(stored: EnvironmentReachability | null): number | n
 /** A stored proof that still says something about the freshly stated candidates, or null. */
 function survivingProof(
   proof: EnvironmentRouteProof | null,
-  stored: readonly EnvironmentAddress[],
-  candidates: readonly EnvironmentAddress[],
+  stored: readonly EnvironmentRouteCandidate[],
+  candidates: readonly EnvironmentRouteCandidate[],
 ): EnvironmentRouteProof | null {
   if (!proof) return null
   if (proof.state === 'reached') {
-    return !proof.via || candidates.some((entry) => normalized(entry) === proof.via) ? proof : null
+    if (!proof.via) return proof
+    const target = proof.viaHost ? `h:${proof.viaHost}` : `a:${proof.via}`
+    return candidates.some((entry) => candidateKey(entry) === target) ? proof : null
   }
-  return sameAddressSet(stored, candidates) ? proof : null
+  return sameCandidateSet(stored, candidates) ? proof : null
 }
 
 /**
- * One candidate's address as the PROOF spells it.
+ * One candidate's identity, as both the PROOF and the plan spell it.
  *
- * `planRouteProbes` trims before it dials, so `via` is a trimmed value and a raw comparison
- * against the stored candidate crosses that boundary: a provider stating `' 10.4.19.22'` proved
- * `'10.4.19.22'`, matched neither its own candidate nor itself, and paid a fresh probe on every
- * single poll for a proof it already had. The manifest provider trims on capture, which is why
- * this only ever bit an adapter stating addresses directly.
+ * Kind-prefixed so a name and an address that happen to read alike are two candidates rather than
+ * one, and read through `statedRouteTarget` so the trimming and lower-casing happen once. That
+ * boundary is not cosmetic: `planRouteProbes` trims before it dials, so `via` is a trimmed value,
+ * and a raw comparison against the stored candidate crossed it. A provider stating `' 10.4.19.22'`
+ * proved `'10.4.19.22'`, matched neither its own candidate nor itself, and paid a fresh probe on
+ * every single poll for a proof it already had.
  */
-function normalized(entry: EnvironmentAddress): string {
-  return entry.address.trim()
+function candidateKey(entry: EnvironmentRouteCandidate): string {
+  const stated = statedRouteTarget(entry)
+  if (stated.kind === 'address') return `a:${stated.address}`
+  if (stated.kind === 'host') return `h:${stated.host}`
+  return 'x:'
 }
 
-/** Whether two candidate lists name the same SET of addresses (order and labels are cosmetic). */
-function sameAddressSet(
-  a: readonly EnvironmentAddress[],
-  b: readonly EnvironmentAddress[],
+/** Whether two candidate lists name the same SET of targets (order and labels are cosmetic). */
+function sameCandidateSet(
+  a: readonly EnvironmentRouteCandidate[],
+  b: readonly EnvironmentRouteCandidate[],
 ): boolean {
-  const left = new Set(a.map(normalized))
-  const right = new Set(b.map(normalized))
-  return left.size === right.size && [...left].every((address) => right.has(address))
+  const left = new Set(a.map(candidateKey))
+  const right = new Set(b.map(candidateKey))
+  return left.size === right.size && [...left].every((key) => right.has(key))
 }
 
 /**

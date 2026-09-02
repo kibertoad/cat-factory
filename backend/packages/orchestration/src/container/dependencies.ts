@@ -153,6 +153,7 @@ import type {
   TaskTypeRegistry,
   InlineUseCaseGenerator,
   InlineUseCaseRegistry,
+  HostResolver,
   RouteProbe,
   TestSecretRef,
   TicketTrackerProvider,
@@ -860,6 +861,17 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    * a frame and leaves the deploy path byte-for-byte as it was.
    */
   routeProbe?: RouteProbe
+  /**
+   * Turns one stated NAME into the addresses it answers with, so a provider fronted by balancer
+   * names states the stable identity its vendor documents instead of re-pinning a rotating address
+   * set on every poll.
+   *
+   * Both facades wire it (Node over `dns.lookup`, the Worker over DNS-over-HTTPS, which is the same
+   * view its own `connect()` resolves through), so absent means a facade with no way to resolve at
+   * all: a stated name is then recorded as unresolvable, which leaves the route unruled-out and
+   * never fails a frame.
+   */
+  hostResolver?: HostResolver
   // Deployment-level, ADDITIVE extensions to the built-in provisioning-detection conventions
   // (extra compose file names/dirs, seed dirs, env-template dirs), read from
   // `config.environments.detectionConventions` by each facade and threaded into BOTH detection

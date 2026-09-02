@@ -123,11 +123,40 @@ describe('renderEnvironmentInvestigationPrompt', () => {
       },
     })
     expect(prompt).toContain('Reaching this environment')
-    expect(prompt).toContain('addresses the provider stated for this environment')
+    expect(prompt).toContain('addresses and names the provider stated for this environment')
     expect(prompt).toContain('2026-09-02T11:15:53.453Z')
     expect(prompt).toContain('A DETERMINATE CAUSE the platform already computed')
-    expect(prompt).toContain('the provider stated no addresses for it')
+    expect(prompt).toContain('stated no addresses and no balancer names for it')
     expect(prompt).toContain('make it the headline')
+  })
+
+  it('marks a stated NAME as one, and says where its addresses went', () => {
+    // The section's own sentence says "addresses", so a balancer FQDN printed bare into it reads
+    // as an address somebody typed wrong. The attempt list is where the addresses the platform
+    // resolved it to actually appear, and a reader has to be told to look there.
+    const prompt = render({
+      route: {
+        candidates: [{ host: 'alb-4.elb.example', label: 'public ALB' }],
+        proof: {
+          state: 'reached',
+          via: '10.4.19.23',
+          viaHost: 'alb-4.elb.example',
+          reason: null,
+          attempts: [
+            { target: 'pr-42.example.test:443', outcome: 'name_unresolved' },
+            {
+              target: 'pr-42.example.test@10.4.19.23:443 (alb-4.elb.example)',
+              outcome: 'carried',
+            },
+          ],
+          checkedAt: 1_788_347_753_453,
+        },
+      },
+    })
+    expect(prompt).toContain('alb-4.elb.example (name, public ALB)')
+    expect(prompt).toContain(
+      'carried via 10.4.19.23 (resolved from the stated name alb-4.elb.example)',
+    )
   })
 
   it('offers no determinate cause when the evidence does not settle one', () => {

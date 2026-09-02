@@ -405,7 +405,7 @@ describe('createEnvironmentDiagnostics.collect: the derived timeline and route e
     const bundle = await collectBundle(diagnostics, { environmentId: 'env_1' })
 
     expect(bundle.route.candidates).toHaveLength(20)
-    expect(bundle.evidenceCaps?.join(' ')).toContain('stated 25 addresses')
+    expect(bundle.evidenceCaps?.join(' ')).toContain('stated 25 targets')
     const detail = bundle.route.proof?.attempts[0]?.detail ?? ''
     expect(detail).not.toContain('hunter2')
     expect(detail).toContain('[REDACTED]')

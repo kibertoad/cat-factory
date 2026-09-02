@@ -9,6 +9,7 @@ import {
   describeMisresolvingEnvironmentUrl,
   type EnvironmentIdentity,
   interpolateTemplate,
+  extractAddresses,
   shouldTeardownSuperseded,
 } from './environments.logic.js'
 
@@ -293,5 +294,50 @@ describe('boundStatusNote', () => {
     // A capped value that trailed off would read as the provider's whole account.
     expect(bounded).toContain('note truncated: 800 of 1200 characters dropped')
     expect(bounded.startsWith('x'.repeat(400))).toBe(true)
+  })
+})
+
+describe('extractAddresses', () => {
+  const balancers = {
+    data: {
+      addresses: ['10.4.19.22', { address: '10.4.19.23', label: 'public ALB' }],
+      names: ['alb-4.elb.example', { host: 'alb-9.elb.example', label: 'internal ALB' }],
+    },
+  }
+
+  it('reads a bare string as whichever kind the DECLARED manifest key means', () => {
+    // A bare string is unlabelled, so nothing about the VALUE says whether it is an address or a
+    // name someone is about to resolve. Which manifest key was declared is what says so, and
+    // guessing would be the one place the bridge rule rests on a parse.
+    expect(extractAddresses(balancers, 'data.addresses')).toEqual([
+      { address: '10.4.19.22' },
+      { address: '10.4.19.23', label: 'public ALB' },
+    ])
+    expect(extractAddresses(balancers, 'data.names', 'host')).toEqual([
+      { host: 'alb-4.elb.example' },
+      { host: 'alb-9.elb.example', label: 'internal ALB' },
+    ])
+  })
+
+  it('reads an OBJECT entry as it is written, so ONE path can interleave both kinds', () => {
+    // The only shape that can express a provider's preference order across the two, which is the
+    // reason the manifest offers a second path rather than a second list on the port.
+    expect(
+      extractAddresses({ out: [{ host: 'alb-4.elb.example' }, { address: '10.4.19.30' }] }, 'out'),
+    ).toEqual([{ host: 'alb-4.elb.example' }, { address: '10.4.19.30' }])
+  })
+
+  it('drops an entry naming both or neither, rather than carrying one the plan can only refuse', () => {
+    expect(
+      extractAddresses(
+        { out: [{ address: '10.4.19.30', host: 'alb.example' }, { label: 'nothing' }, 42] },
+        'out',
+      ),
+    ).toEqual([])
+  })
+
+  it('reads nothing at all for a path the manifest does not declare', () => {
+    expect(extractAddresses(balancers, undefined)).toEqual([])
+    expect(extractAddresses(balancers, 'data.missing')).toEqual([])
   })
 })

@@ -1,5 +1,56 @@
 import { describe, expect, it } from 'vitest'
-import { deriveEnvironmentCoordinates, reachabilityNote } from './environment-reachability.js'
+import {
+  describeRouteCandidate,
+  deriveEnvironmentCoordinates,
+  reachabilityNote,
+  statedRouteTarget,
+} from './environment-reachability.js'
+
+describe('statedRouteTarget', () => {
+  it('reads the one thing a candidate names, trimming and lower-casing a host', () => {
+    // Read through this rather than off the fields, so the trimming a probe applies and the
+    // case-insensitivity DNS applies happen in one place and cannot disagree with themselves.
+    expect(statedRouteTarget({ address: ' 10.4.19.22 ' })).toEqual({
+      kind: 'address',
+      address: '10.4.19.22',
+    })
+    expect(statedRouteTarget({ host: ' ALB-4.elb.Example ' })).toEqual({
+      kind: 'host',
+      host: 'alb-4.elb.example',
+    })
+  })
+
+  it('refuses to GUESS when a candidate names both or neither', () => {
+    // Both is two claims with no way to tell which was meant, and neither names nothing at all.
+    // Guessing either onto a kind is what would rest the bridge rule on a parse: a resolver handed
+    // a non-canonical literal answers loopback happily, where the address rule refuses it.
+    expect(statedRouteTarget({ address: '10.4.19.22', host: 'alb.example' })).toEqual({
+      kind: 'unusable',
+    })
+    expect(statedRouteTarget({ label: 'internal ALB' })).toEqual({ kind: 'unusable' })
+    expect(statedRouteTarget({ address: '   ' })).toEqual({ kind: 'unusable' })
+  })
+})
+
+describe('describeRouteCandidate', () => {
+  it('marks a NAME as one, so it does not read as an address somebody typed wrong', () => {
+    // ONE renderer, because three surfaces print this list and each of them says "addresses".
+    expect(describeRouteCandidate({ address: '10.4.19.22', label: 'internal ALB' })).toBe(
+      '10.4.19.22 (internal ALB)',
+    )
+    expect(describeRouteCandidate({ host: 'alb-4.elb.example' })).toBe('alb-4.elb.example (name)')
+    expect(describeRouteCandidate({ host: 'alb-4.elb.example', label: 'public ALB' })).toBe(
+      'alb-4.elb.example (name, public ALB)',
+    )
+  })
+
+  it('renders a candidate naming nothing rather than splicing undefined into a prompt', () => {
+    expect(describeRouteCandidate({ label: 'internal ALB' })).toBe(
+      'an entry stating no usable target (internal ALB)',
+    )
+    expect(describeRouteCandidate({})).toBe('an entry stating no usable target')
+  })
+})
 
 describe('deriveEnvironmentCoordinates', () => {
   it('reads the host, the explicit port and the scheme', () => {

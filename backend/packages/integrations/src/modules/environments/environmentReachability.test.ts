@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { RouteProbeOutcome, RouteProbeRequest } from '@cat-factory/kernel'
+import type { HostResolveRequest, RouteProbeOutcome, RouteProbeRequest } from '@cat-factory/kernel'
 import {
   foldStatedAddresses,
   proveEnvironmentRoute,
@@ -94,6 +94,92 @@ describe('proveEnvironmentRoute', () => {
     ])
     // The name did not resolve and no address was usable: the environment really is unreachable.
     expect(proof.state).toBe('not_reached')
+  })
+})
+
+describe('proveEnvironmentRoute with stated NAMES', () => {
+  it('resolves each stated name ONCE and dials what it answered with, in the plan order', async () => {
+    const probe = prober({
+      'pr-14.test.example.cloud': { state: 'unresolved' },
+      '10.4.19.22': { state: 'no_route' },
+      '10.4.19.23': { state: 'carried' },
+    })
+    const resolveHost = vi.fn(async (_req: HostResolveRequest) => ({
+      state: 'resolved' as const,
+      addresses: ['10.4.19.22', '10.4.19.23'],
+    }))
+    const proof = await proveEnvironmentRoute(
+      'https://pr-14.test.example.cloud/health',
+      [{ host: 'ALB-4.elb.example', label: 'public ALB' }],
+      { probe, resolveHost, clock },
+    )
+    // Lower-cased once, by the shared classifier, so two spellings of one balancer are one lookup.
+    expect(resolveHost).toHaveBeenCalledTimes(1)
+    expect(resolveHost.mock.calls[0]?.[0]).toMatchObject({ host: 'alb-4.elb.example' })
+    expect(proof).toMatchObject({
+      state: 'reached',
+      via: '10.4.19.23',
+      viaHost: 'alb-4.elb.example',
+    })
+    // The attempt names BOTH, because the address alone cannot be traced back to the candidate a
+    // reader is looking at and the name alone is not what was dialled.
+    expect(proof.attempts.at(-1)?.target).toBe(
+      'pr-14.test.example.cloud@10.4.19.23:443 (alb-4.elb.example)',
+    )
+  })
+
+  it('resolves NOTHING when no prober is wired, because nothing would be dialled with it', async () => {
+    const resolveHost = vi.fn(async () => ({ state: 'unresolved' as const }))
+    const proof = await proveEnvironmentRoute(
+      'https://pr-14.test.example.cloud',
+      [{ host: 'alb-4.elb.example' }],
+      { resolveHost, clock },
+    )
+    expect(resolveHost).not.toHaveBeenCalled()
+    expect(proof.state).toBe('unproved')
+  })
+
+  it('says a stated name went undialled because nothing was WIRED to resolve it', async () => {
+    // An admission about the DEPLOYMENT, never a verdict about the environment: a facade with no
+    // resolver has not ruled the candidate out, it has declined to look at it. Graded as a verdict
+    // it would fail every deploy of a name-fronted environment on such a deployment.
+    const proof = await proveEnvironmentRoute(
+      'https://pr-14.test.example.cloud',
+      [{ host: 'alb-4.elb.example' }],
+      { probe: prober({ 'pr-14.test.example.cloud': { state: 'unresolved' } }), clock },
+    )
+    expect(proof).toMatchObject({ state: 'inconclusive', reason: 'resolver_unavailable' })
+    expect(proof.attempts.map((a) => a.outcome)).toEqual([
+      'name_unresolved',
+      'resolver_unavailable',
+    ])
+  })
+
+  it('falls through to the next candidate when one name resolves nowhere', async () => {
+    // Per candidate, exactly as a refused address is: one balancer being retired does not make the
+    // environment unreachable, and the fall-through is what the module already does per target.
+    const probe = prober({
+      'pr-14.test.example.cloud': { state: 'unresolved' },
+      '10.4.19.30': { state: 'carried' },
+    })
+    const proof = await proveEnvironmentRoute(
+      'https://pr-14.test.example.cloud',
+      [{ host: 'gone.elb.example' }, { host: 'live.elb.example' }],
+      {
+        probe,
+        resolveHost: async (req) =>
+          req.host === 'gone.elb.example'
+            ? { state: 'unresolved' }
+            : { state: 'resolved', addresses: ['10.4.19.30'] },
+        clock,
+      },
+    )
+    expect(proof.attempts.map((a) => a.outcome)).toEqual([
+      'name_unresolved',
+      'name_unresolved',
+      'carried',
+    ])
+    expect(proof).toMatchObject({ state: 'reached', via: '10.4.19.30' })
   })
 })
 
@@ -274,6 +360,85 @@ describe('foldStatedAddresses', () => {
         'https://env.example',
       )?.proof,
     ).toEqual(proof)
+  })
+})
+
+describe('foldStatedAddresses across a resolved NAME', () => {
+  const reachedVia = (via: string, viaHost?: string) => ({
+    candidates: [{ host: 'alb-4.elb.example' }],
+    proof: {
+      state: 'reached' as const,
+      via,
+      ...(viaHost ? { viaHost } : {}),
+      reason: null,
+      attempts: [],
+      checkedAt: 10,
+    },
+  })
+
+  it('keeps a proof taken through a name while the NAME is still stated, whatever it resolves to now', () => {
+    // The whole reason `viaHost` is recorded. A balancer that scaled or gained a zone answers with
+    // a different address set, which is a routine event that says nothing about whether the proved
+    // route carries; matching the stored address against the candidate list would drop the proof on
+    // every one of them and pay a fresh probe sequence for it.
+    const folded = foldStatedAddresses(
+      reachedVia('10.4.19.23', 'alb-4.elb.example'),
+      'https://env.example',
+      [{ host: 'alb-4.elb.example', label: 'public ALB' }],
+      'https://env.example',
+    )
+    expect(folded?.proof).toMatchObject({ via: '10.4.19.23', viaHost: 'alb-4.elb.example' })
+  })
+
+  it('drops it once the provider stops stating that name', () => {
+    const folded = foldStatedAddresses(
+      reachedVia('10.4.19.23', 'alb-4.elb.example'),
+      'https://env.example',
+      [{ host: 'alb-9.elb.example' }],
+      'https://env.example',
+    )
+    expect(folded?.proof).toBeNull()
+  })
+
+  it('reads a proof with no viaHost as the ADDRESS case, which is what it was', () => {
+    // A proof written before names existed. It must behave byte-for-byte as it did, which means
+    // matching `via` against the stated ADDRESSES and never against a name that reads alike.
+    expect(
+      foldStatedAddresses(
+        reachedVia('10.4.19.23'),
+        'https://env.example',
+        [{ address: '10.4.19.23' }],
+        'https://env.example',
+      )?.proof,
+    ).toMatchObject({ via: '10.4.19.23' })
+    expect(
+      foldStatedAddresses(
+        reachedVia('alb-4.elb.example'),
+        'https://env.example',
+        [{ host: 'alb-4.elb.example' }],
+        'https://env.example',
+      )?.proof,
+    ).toBeNull()
+  })
+
+  it('treats a name and an address that read alike as two candidates in the SET comparison', () => {
+    const stored = {
+      candidates: [{ host: 'alb-4.elb.example' }],
+      proof: {
+        state: 'not_reached' as const,
+        via: null,
+        reason: 'name_unresolved',
+        attempts: [],
+        checkedAt: 10,
+      },
+    }
+    const folded = foldStatedAddresses(
+      stored,
+      'https://env.example',
+      [{ address: 'alb-4.elb.example' }],
+      'https://env.example',
+    )
+    expect(folded?.proof).toBeNull()
   })
 })
 

@@ -247,7 +247,8 @@ export type {
   // Whether a `ready` environment can be REACHED, which is a different question from whether it
   // was provisioned: the addresses its provider states for its URL host, and what dialling them
   // proved.
-  EnvironmentAddress,
+  EnvironmentRouteCandidate,
+  StatedRouteTarget,
   EnvironmentReachability,
   EnvironmentReachabilityNote,
   EnvironmentRouteAttempt,

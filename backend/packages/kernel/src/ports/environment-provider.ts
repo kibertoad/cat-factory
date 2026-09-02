@@ -1,7 +1,7 @@
 import type {
   ConnectionTestResult,
   EnvironmentAccessHandle,
-  EnvironmentAddress,
+  EnvironmentRouteCandidate,
   EnvironmentFailureReason,
   EnvironmentManifest,
   EnvironmentStatus,
@@ -266,7 +266,8 @@ export interface ProvisionedEnvironment {
   externalId: string | null
   url: string | null
   /**
-   * Addresses this provider states carry traffic for {@link url}'s host, in ITS preference order.
+   * Where this provider states traffic for {@link url}'s host goes, in ITS preference order: an
+   * ADDRESS the platform dials as written, or a NAME it resolves when it dials.
    *
    * The half of addressing a URL cannot express, and the reason it is a first-class field rather
    * than a {@link ProvisionFields} key. `fields` is free-form and a provider can already write an
@@ -274,11 +275,16 @@ export interface ProvisionedEnvironment {
    * are absent from `EnvironmentHandle`, and the engine projects a fixed handful of keys into agent
    * context. An address that reaches nobody is not an address.
    *
+   * State a `host` where a name is the STABLE identity, which is the ordinary shape of a managed
+   * load balancer: resolving it inside the response mapping pins a snapshot of a set that rotates
+   * and re-pins it on every poll. Exactly one of the two per entry, and which one is this
+   * provider's statement: the platform never reads the kind off the value's spelling.
+   *
    * Absent (the ordinary case) means the name in `url` is the only thing anyone has to try. Stating
    * one is a CLAIM, never a conclusion: what the platform publishes downstream is the candidate
    * that was PROVED to carry (see `EnvironmentRouteProof`).
    */
-  addresses?: readonly EnvironmentAddress[] | null
+  addresses?: readonly EnvironmentRouteCandidate[] | null
   status: EnvironmentStatus
   expiresAt: number | null
   access: EnvironmentAccessHandle | null
