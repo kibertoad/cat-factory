@@ -120,6 +120,23 @@ export {
   worstToolRetryLoop,
 } from './domain/tool-call-rollup.js'
 export { bugHuntScore, parseBugHuntVerdicts, rankBugCandidates } from './domain/bug-hunt-logic.js'
+
+// The monorepo bootstrap's adoption rules: reading a model's proposal into the stored plan,
+// settling a human review against it, and rendering the settled result as the apply phase's
+// brief. See `domain/monorepo-adoption.logic.ts`.
+export {
+  MAX_ADOPTION_DECISIONS,
+  describeAdoptionArea,
+  describeAdoptionSource,
+  isAdoptionArea,
+  isAdoptionSource,
+  monorepoBootstrapBranch,
+  parseAdoptionDecisions,
+  renderAdoptionBrief,
+  renderAdoptionPrSection,
+  resolveAdoptionReview,
+  type ParsedAdoptionDecisions,
+} from './domain/monorepo-adoption.logic.js'
 export {
   BLOCK_TYPE_LABEL,
   DEFAULT_RISK_POLICY,
@@ -816,12 +833,16 @@ export {
   applyConsensusGroup,
 } from './domain/consensus-groups.js'
 
-// The marker-delimited splice that makes the engine's PR verification report idempotent.
+// The marker-delimited splice that makes an engine-owned region of a PR body idempotent: the
+// verification report, and the monorepo bootstrap's settled adoption decisions.
 export {
+  PR_ADOPTION_MARKERS,
   PR_REPORT_MARKER_START,
   PR_REPORT_MARKER_END,
+  PR_REPORT_MARKERS,
   spliceManagedSection,
   readManagedSection,
+  type ManagedSectionMarkers,
 } from './domain/pr-report.js'
 
 // The PRE-DISPATCH INPUT GATE's pure check: is there anything in a task's authored input an agent

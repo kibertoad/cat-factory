@@ -175,6 +175,8 @@ type ConformanceAppOpts = {
   judgeRegistry?: CoreDependencies['judgeRegistry']
   judgeAssessor?: CoreDependencies['judgeAssessor']
   bugHuntAssessor?: CoreDependencies['bugHuntAssessor']
+  monorepoAdoptionAdvisor?: CoreDependencies['monorepoAdoptionAdvisor']
+  repoBootstrapper?: CoreDependencies['repoBootstrapper']
   inlineUseCaseGenerator?: CoreDependencies['inlineUseCaseGenerator']
   fragmentBriefGenerator?: CoreDependencies['fragmentBriefGenerator']
   stepResolverRegistry?: CoreDependencies['stepResolverRegistry']
@@ -224,7 +226,7 @@ function buildConformanceOverrides(
     bootstrapRunner: new NoopBootstrapRunner(),
     // A deterministic bootstrapper so the suite can drive the dispatch→poll→finalise
     // lifecycle without GitHub or a container (the suite drives it via driveBootstrap).
-    repoBootstrapper: new FakeRepoBootstrapper(),
+    repoBootstrapper: o.repoBootstrapper ?? new FakeRepoBootstrapper(),
     // Fake browsable-preview transport + job builder so the runtime-neutral PreviewService
     // lifecycle + its ephemeral `environments`-row persistence run on real Postgres without a
     // container/GitHub (the real transport is a per-runtime differentiator, wired only in local).
@@ -269,6 +271,7 @@ function buildConformanceOverrides(
       // The bug hunt's ranking producer: a deterministic fake, so the hunt's ranked/unranked
       // outcomes drive with no model on every runtime.
       bugHuntAssessor: o.bugHuntAssessor,
+      monorepoAdoptionAdvisor: o.monorepoAdoptionAdvisor,
       inlineUseCaseGenerator: o.inlineUseCaseGenerator,
       // The fragment-brief condensation model: a deterministic fake, so the generate /
       // reuse / regenerate-on-change loop drives against real Postgres with no model.

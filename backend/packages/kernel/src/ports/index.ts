@@ -603,14 +603,18 @@ export type {
   ReferenceArchitectureRecord,
   ReferenceArchitectureRecordPatch,
   ReferenceArchitectureRepository,
+  SurveyClaim,
 } from './bootstrap-repositories.js'
 export type {
   BootstrapJobHandle,
   BootstrapJobUpdate,
   BootstrapRepoOutcome,
   BootstrapRepoRequest,
+  MonorepoBootstrapLeg,
+  MonorepoTargetRepo,
   RepoBootstrapper,
 } from './repo-bootstrapper.js'
+export type { MonorepoAdoptionAdvisor, MonorepoAdoptionSubject } from './monorepo-adoption.js'
 export { type BootstrapRunner, NoopBootstrapRunner } from './bootstrap-runner.js'
 export type {
   EnvConfigRepairJobRecord,

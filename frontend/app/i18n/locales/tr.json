@@ -687,7 +687,10 @@
         "webhook_limit_reached": "Webhook sınırına ulaşıldı",
         "risk_policy_inherited": "Bu ilke hesaba ait",
         "risk_policy_not_inherited": "Bu ilke bu panoya ait",
-        "kaizen_entry_not_settled": "Kaizen kaydı henüz değerlendirilmedi"
+        "kaizen_entry_not_settled": "Kaizen kaydı henüz değerlendirilmedi",
+        "bootstrap_not_awaiting_review": "Bu bootstrap bir inceleme beklemiyor",
+        "adoption_plan_unavailable": "Onaylanacak bir plan yok",
+        "monorepo_directory_taken": "Bu dizin zaten var"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -729,7 +732,10 @@
         "webhook_limit_reached": "Bu çalışma alanında zaten en fazla sayıda giden webhook kayıtlı. Artık ihtiyaç duymadığınız birini kaldırın ve bunu yeniden kaydedin.",
         "risk_policy_inherited": "Hesaptaki tüm panolarla paylaşıldığı için buradan değiştirilemez. Bu panoya kopyalayıp kopyayı düzenleyin.",
         "risk_policy_not_inherited": "Zaten bu panonun kendi ilkesi: doğrudan düzenleyin ya da artık sunulmasını istemiyorsanız silin.",
-        "kaizen_entry_not_settled": "Değerlendirmesi hâlâ sırada veya sürüyor, bu yüzden onaylanacak bir öneri yok. Tamamlandığında yeniden deneyin."
+        "kaizen_entry_not_settled": "Değerlendirmesi hâlâ sırada veya sürüyor, bu yüzden onaylanacak bir öneri yok. Tamamlandığında yeniden deneyin.",
+        "bootstrap_not_awaiting_review": "Bu inceleme açıldığından beri çalışma ilerledi. Panoyu yeniden yükle.",
+        "adoption_plan_unavailable": "İnceleme bir plan üretemedi, bu yüzden gönderilecek karar yok.",
+        "monorepo_directory_taken": "Bootstrap yeni bir servis oluşturur. Henüz var olmayan bir dizin seç ya da mevcut olanı servis olarak içe aktar."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",
@@ -6922,7 +6928,8 @@
       "pending": "beklemede",
       "running": "çalışıyor",
       "succeeded": "başarılı",
-      "failed": "başarısız"
+      "failed": "başarısız",
+      "awaitingReview": "inceleme bekliyor"
     },
     "arch": {
       "title": "Referans mimariler",
@@ -6956,11 +6963,100 @@
       "startedDesc": "Bir konteyner {repo} deposunu başlatıyor; ilerlemesini panoda izleyin.",
       "bootstrapFailed": "Başlatılamadı",
       "saveArchFailed": "Referans mimari kaydedilemedi",
-      "deleteFailed": "Silinemedi"
+      "deleteFailed": "Silinemedi",
+      "startedMonorepoDesc": "Monorepo inceleniyor; hiçbir şey yazılmadan önce {directory} için neyin benimseneceği sana sorulacak."
     },
     "repoType": {
       "label": "Depo türü",
       "help": "Bu deponun türü: bir backend servisi, bir frontend uygulaması, paylaşılan bir kütüphane veya bir doküman deposu (yalnızca doküman/spike)."
+    },
+    "target": {
+      "label": "Servis nereye gidecek",
+      "newRepo": {
+        "label": "Yeni bir depo",
+        "description": "Kendine ait bir depo oluştur ve servisi ilk commit olarak gönder."
+      },
+      "monorepo": {
+        "label": "Mevcut bir monorepo içindeki dizin",
+        "description": "Servisi hâlihazırda sahip olduğun bir depoya ekle ve pull request aç."
+      }
+    },
+    "serviceName": {
+      "label": "Servis adı",
+      "description": "Servisi panoda adlandırır ve dizinini önerir."
+    },
+    "monorepo": {
+      "intro": "Servis mevcut bir deponun dizinine yazılır ve pull request olarak teslim edilir. Senin yerine hiçbir şey birleştirilmez ve yeni dizinin dışında hiçbir şey değişmez.",
+      "repo": {
+        "label": "Monorepo",
+        "description": "Yeni servisin yaşayacağı depo. Bu çalışma alanına önceden bağlanmış olmalı.",
+        "placeholder": "Bir depo seç",
+        "empty": "Bu çalışma alanına henüz bir depo bağlanmadı. Önce bir tane bağla."
+      },
+      "directory": {
+        "label": "Servis dizini",
+        "description": "Servisin depo köküne göre nerede olduğu. Henüz var olmamalı.",
+        "placeholder": "services/payments",
+        "error": {
+          "empty": "Depo içinde bir dizin belirt.",
+          "escapes": "Dizin deponun içinde kalmalı."
+        }
+      }
+    },
+    "adoption": {
+      "title": "Bu servis neyi benimsemeli?",
+      "subtitle": "{target} içindeki {directory} konumundaki yeni servis.",
+      "intro": "Her alan için, yeni servisin çevresindeki monorepoyu mu izleyeceğine yoksa şablonun getirdiğini mi koruyacağına karar ver. Sen karar verene kadar hiçbir şey yazılmaz.",
+      "acceptAll": "Tüm önerileri kabul et",
+      "needsYou": "Kararın bekleniyor",
+      "overridden": "Öneriden ayrılıyor",
+      "evidence": "Şuradan okundu:",
+      "notePlaceholder": "Ajanın bu alan hakkında bilmesi gerekenler (isteğe bağlı)",
+      "remaining": "{count} karar hâlâ yanıtını bekliyor | {count} karar hâlâ yanıtını bekliyor",
+      "approve": "Onayla ve oluştur",
+      "cardPrompt": "Bu bootstrap seni bekliyor: yeni servisin monorepodan neyi benimseyeceğine karar ver.",
+      "cardAction": "İncele",
+      "side": {
+        "monorepo": "Monorepoda",
+        "template": "Şablonda",
+        "nothing": "Bu alan için bir şey yok"
+      },
+      "source": {
+        "monorepo": "Monorepoyu izle",
+        "template": "Şablonu koru",
+        "both": "İkisini birleştir",
+        "neither": "Hiçbiri"
+      },
+      "area": {
+        "build-tooling": "Derleme araçları",
+        "dependencies": "Bağımlılıklar",
+        "lint-format": "Lint ve biçimlendirme",
+        "typecheck": "Tip denetimi",
+        "testing": "Testler",
+        "ci": "CI",
+        "containerization": "Konteynerleştirme",
+        "runtime-config": "Çalışma zamanı yapılandırması",
+        "observability": "Gözlemlenebilirlik",
+        "source-layout": "Kaynak düzeni",
+        "docs": "Dokümantasyon",
+        "other": "Diğer"
+      },
+      "unavailable": {
+        "model_unavailable": "İnceleme için bir model yapılandırılmamış, bu yüzden gözden geçirilecek bir öneri yok. Kararlar yine senin: aşağıdaki notlarda ne istediğini yaz.",
+        "repo_unreadable": "Monorepo okunamadı, bu yüzden bir öneri üretilemedi. Bu çalışma alanının depoya erişebildiğini kontrol et.",
+        "budget_exhausted": "Bu çalışma alanı model bütçesini aştı, bu yüzden platform bir benimseme önerisi için ödeme yapmadı. Kararlar hâlâ senin: aşağıdaki notlarda ne istediğini yaz ya da bütçeyi yükseltip çalıştırmayı yeniden dene.",
+        "analysis_unusable": "İnceleme kullanılabilir bir öneri döndürmedi. Yine de aşağıdaki notlarda ne istediğini yazabilirsin."
+      },
+      "notes": {
+        "label": "Servisin tamamı için notlar",
+        "description": "Kararlarınla birlikte ajana olduğu gibi iletilir.",
+        "unavailableDescription": "Yanıtlanacak bir öneri yok; ajan bu metinden yola çıkar. Ona olduğu gibi iletilir."
+      },
+      "toast": {
+        "approved": "Kararlar onaylandı",
+        "approvedDesc": "Ajan şimdi {directory} dizinini yazıyor ve bir pull request açacak.",
+        "failed": "İnceleme gönderilemedi"
+      }
     }
   },
   "riskPolicy": {

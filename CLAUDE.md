@@ -710,9 +710,9 @@ an AUTHORING rule (`validatePipelineAuthoring`) binds create/update, the run doo
 subset that dead-ends ANY run, or every stored pipeline predating it stops running. Doc: [`pipeline-catalog-lifecycle.md`](./backend/docs/pipeline-catalog-lifecycle.md).
 
 **Repo bootstrap** mirrors the execution pattern: `BootstrapService` → `bootstrap_jobs` →
-`BootstrapWorkflow` polling the idempotent `pollBootstrapJob()`, then links the repo to the block and
-flips the frame to `ready`. Pre-flights that the target repo is empty; the prompt goes to Pi's global
-`~/.pi/agent/AGENTS.md`, outside the checkout, so it never lands in the bootstrapped repo.
+`BootstrapWorkflow` polling the idempotent `pollBootstrapJob()`, then links the repo and flips the frame
+`ready`; pre-flights an EMPTY target, its prompt riding Pi's global `AGENTS.md` so it never lands there.
+Targeting a DIRECTORY of an EXISTING repo splits the run into two drives around a human adoption review (survey → park `awaiting_review` → write + PR); trap: a parked run is neither `running` nor terminal, so it takes its OWN `driveId`. [Doc](./docs/initiatives/monorepo-service-bootstrap.md).
 
 **Service blueprints**: a Blueprinter agent decomposes a repo into service → modules and persists it IN
 THE REPO under `blueprints/`: no table, because the files are the truth and the board is the projection.

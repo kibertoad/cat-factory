@@ -16,6 +16,7 @@ import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import type {
   AppCaches,
   BugHuntAssessor,
+  MonorepoAdoptionAdvisor,
   ExecutionEventPublisher,
   EnvironmentInvestigator,
   JudgeAssessor,
@@ -72,6 +73,7 @@ import { ForkChatService } from '../modules/execution/ForkChatService.js'
 import { JudgeService } from '../modules/execution/JudgeService.js'
 import { EnvironmentInvestigationService } from '../modules/execution/EnvironmentInvestigationService.js'
 import { BugHuntAssessorService } from '../modules/bugHunt/BugHuntAssessorService.js'
+import { MonorepoAdoptionAdvisorService } from '../modules/bootstrap/MonorepoAdoptionAdvisorService.js'
 import { TesterQualityReviewService } from '../modules/execution/TesterQualityReviewService.js'
 import { KaizenService } from '../modules/kaizen/KaizenService.js'
 import { NotificationService } from '../modules/notifications/NotificationService.js'
@@ -494,6 +496,25 @@ function createBugHuntAssessor(deps: CoreDependencies): BugHuntAssessor | undefi
 }
 
 /**
+ * The inline monorepo-adoption advisor, built from the same model dependencies the bug-hunt and
+ * judge assessors ride, so a facade that wired a model gets a working adoption suggestion with
+ * no bootstrap-specific wiring. Absent provider ⇒ undefined, and the run parks with a plan that
+ * says the suggestion is unavailable rather than one that says there was nothing to decide.
+ */
+function createMonorepoAdoptionAdvisor(
+  deps: CoreDependencies,
+): MonorepoAdoptionAdvisor | undefined {
+  if (deps.monorepoAdoptionAdvisor) return deps.monorepoAdoptionAdvisor
+  if (!deps.modelProviderResolver && !deps.modelProvider) return undefined
+  return new MonorepoAdoptionAdvisorService({
+    modelProviderResolver: deps.modelProviderResolver,
+    modelProvider: deps.modelProvider,
+    ...inlineModelResolutionDeps(deps),
+    ...(deps.logger ? { logger: deps.logger } : {}),
+  })
+}
+
+/**
  * Assemble the environment integration when its provider, both repositories and
  * the secret cipher are present; otherwise return undefined so the feature stays
  * cleanly opt-in (the deterministic deployer and env discovery in the engine are
@@ -660,10 +681,15 @@ export function createRunnersModule(deps: CoreDependencies): RunnersModule | und
 export function createBootstrapModule(
   deps: CoreDependencies,
   eventPublisher: ExecutionEventPublisher,
-  onBootstrapSucceeded?: (workspaceId: string, blockId: string) => Promise<void>,
+  wiring: {
+    onBootstrapSucceeded?: (workspaceId: string, blockId: string) => Promise<void>
+    /** The workspace spend safeguard, for the monorepo survey's billable model call. */
+    isOverBudget?: (workspaceId: string) => Promise<boolean>
+  } = {},
 ): BootstrapModule | undefined {
   const { referenceArchitectureRepository, bootstrapJobRepository } = deps
   if (!referenceArchitectureRepository || !bootstrapJobRepository) return undefined
+  const advisor = createMonorepoAdoptionAdvisor(deps)
 
   const service = new BootstrapService({
     referenceArchitectureRepository,
@@ -678,7 +704,20 @@ export function createBootstrapModule(
     repoBootstrapper: deps.repoBootstrapper,
     bootstrapRunner: deps.bootstrapRunner,
     eventPublisher,
-    ...(onBootstrapSucceeded ? { onBootstrapSucceeded } : {}),
+    // The monorepo flow's own collaborators. The checkout-free READER gates the flow (the
+    // target-directory pre-flight is what stands between a bootstrap and somebody else's
+    // service, so an unwired reader refuses the request rather than skipping the check), while
+    // the advisor and the budget probe only affect the SUGGESTION: without either, the run still
+    // parks for a human with a plan that states why there is nothing to suggest.
+    monorepo: {
+      ...(deps.resolveRepoFilesForCoords
+        ? { resolveRepoFilesForCoords: deps.resolveRepoFilesForCoords }
+        : {}),
+      ...(advisor ? { adoptionAdvisor: advisor } : {}),
+      ...(wiring.isOverBudget ? { isOverBudget: wiring.isOverBudget } : {}),
+    },
+    ...(deps.logger ? { logger: deps.logger } : {}),
+    ...(wiring.onBootstrapSucceeded ? { onBootstrapSucceeded: wiring.onBootstrapSucceeded } : {}),
   })
   return { service }
 }

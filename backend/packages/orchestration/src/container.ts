@@ -916,6 +916,7 @@ export function createCore(injected: CoreDependencies): Core {
     notifications,
     initiativeService,
     setInitiativeLoop,
+    spend: spendService,
   })
 
   // The always-present spine, plus every optional module the registry assembled in ONE place

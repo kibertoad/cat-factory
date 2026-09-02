@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { agentFailureSchema, stepSubtasksSchema } from './execution.js'
+import { adoptionPlanSchema, resolvedAdoptionSchema } from './monorepo-adoption.js'
 import { frameRepoTypeSchema } from './primitives.js'
 
 // ---------------------------------------------------------------------------
@@ -76,9 +77,66 @@ export type UpdateReferenceArchitectureInput = v.InferOutput<
 
 // ---- Bootstrap jobs --------------------------------------------------------
 
-/** Lifecycle of a single "bootstrap repo" run. */
-export const bootstrapStatusSchema = v.picklist(['pending', 'running', 'succeeded', 'failed'])
+/**
+ * Lifecycle of a single "bootstrap repo" run.
+ *
+ * `awaiting_review` is the monorepo flow's park: the run has surveyed the monorepo and the
+ * reference template and is holding on a human's adoption decisions. It is NOT terminal and it
+ * is not `running` either: nothing is executing, so a sweeper must not treat it as a dropped
+ * run, and a caller polling for completion must not treat it as one. It waits indefinitely by
+ * design (see `awaiting_review` in `docs/initiatives/monorepo-service-bootstrap.md`).
+ */
+export const bootstrapStatusSchema = v.picklist([
+  'pending',
+  'running',
+  'awaiting_review',
+  'succeeded',
+  'failed',
+])
 export type BootstrapStatus = v.InferOutput<typeof bootstrapStatusSchema>
+
+/**
+ * Which half of a monorepo bootstrap a run is in. Null for a plain new-repo bootstrap, which
+ * is one phase and has no adoption decision to make.
+ *
+ *  - `survey`: read both sides, produce the adoption plan, park for review.
+ *  - `apply`:  write the service into the monorepo under the settled plan and open a PR.
+ */
+export const bootstrapPhaseSchema = v.picklist(['survey', 'apply'])
+export type BootstrapPhase = v.InferOutput<typeof bootstrapPhaseSchema>
+
+/**
+ * Bootstrap INTO an existing monorepo instead of into a new repository of its own.
+ *
+ * The target is a repository the workspace already projects (so it is already reachable, and
+ * its `isMonorepo` flag is already the board's) plus the subdirectory the new service will
+ * live in. There is no repo creation and no force-push: the run opens a pull request against
+ * the monorepo's default branch, which is the only shape that is safe against a repository
+ * holding other people's services.
+ */
+export const monorepoBootstrapTargetSchema = v.object({
+  /** The monorepo's numeric VCS id, as the workspace's repo projection lists it. */
+  repoGithubId: v.number(),
+  /**
+   * The new service's subdirectory, relative to the repo root (e.g. `services/billing`).
+   * Must not already exist: a bootstrap writes a service, it never merges into one.
+   */
+  directory: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(400)),
+})
+export type MonorepoBootstrapTarget = v.InferOutput<typeof monorepoBootstrapTargetSchema>
+
+/** The resolved monorepo target as a run reports it (the input plus what it resolved to). */
+export const monorepoBootstrapRefSchema = v.object({
+  repoGithubId: v.number(),
+  directory: v.string(),
+  /** Owner of the monorepo, resolved from the projection at start. */
+  repoOwner: v.string(),
+  /** Name of the monorepo, resolved from the projection at start. */
+  repoName: v.string(),
+  /** The branch the run pushes its work to; null until the apply phase dispatches. */
+  branch: v.nullable(v.string()),
+})
+export type MonorepoBootstrapRef = v.InferOutput<typeof monorepoBootstrapRefSchema>
 
 /**
  * How a bootstrap run faulted, so the board can classify the failure (and decide
@@ -147,6 +205,23 @@ export const bootstrapJobSchema = v.object({
   error: v.nullable(v.string()),
   /** Structured failure diagnostics when `status` is `failed`; null otherwise. */
   failure: v.nullable(bootstrapFailureSchema),
+  /**
+   * The monorepo this run is bootstrapping a service INTO, or null for a run that creates a
+   * repository of its own. Its presence is what puts the run on the two-phase, human-reviewed
+   * path; every other field below is null on a new-repo run.
+   */
+  monorepo: v.nullable(monorepoBootstrapRefSchema),
+  /** Which half of the monorepo flow the run is in; null on a new-repo run. */
+  phase: v.nullable(bootstrapPhaseSchema),
+  /** The suggestion the human is reviewing (or the stated reason there is none). */
+  adoptionPlan: v.nullable(adoptionPlanSchema),
+  /** What the human settled; null until the review is submitted. */
+  adoptionReview: v.nullable(resolvedAdoptionSchema),
+  /**
+   * The pull request the apply phase opened against the monorepo; null until it does.
+   * A monorepo bootstrap's deliverable IS a PR: nothing is merged for the reviewer.
+   */
+  prUrl: v.nullable(v.string()),
   createdAt: v.number(),
   updatedAt: v.number(),
 })
@@ -164,8 +239,18 @@ export const bootstrapRepoSchema = v.pipe(
   v.object({
     /** Reference architecture to clone from; omit to bootstrap from a freeform prompt. */
     referenceArchitectureId: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1)))),
-    /** Name for the new repository. */
+    /**
+     * Name of the thing being created: the new REPOSITORY on a plain run, and the new SERVICE
+     * (the board frame's title, and the default leaf of its directory) on a monorepo run.
+     */
     repoName: slugField,
+    /**
+     * Bootstrap into an existing monorepo at this subdirectory instead of creating a new
+     * repository. Present ⇒ the run is two-phase: it surveys the monorepo and the reference
+     * template, parks on `awaiting_review` with an adoption plan, and only writes the service
+     * once a human has settled it.
+     */
+    monorepo: v.optional(monorepoBootstrapTargetSchema),
     /**
      * The repository role for the bootstrapped frame (backend service / frontend / library /
      * document repository). Omitted → `service`, so existing callers are unchanged.

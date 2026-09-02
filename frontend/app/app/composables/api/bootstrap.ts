@@ -5,9 +5,11 @@ import {
   retryAgentRunContract,
   startBootstrapJobContract,
   stopAgentRunContract,
+  submitAdoptionReviewContract,
   updateReferenceArchitectureContract,
 } from '@cat-factory/contracts'
 import type {
+  AdoptionReviewInput,
   BootstrapRepoInput,
   CreateReferenceArchitectureInput,
   UpdateReferenceArchitectureInput,
@@ -46,6 +48,14 @@ export function bootstrapApi({ send, sendWith, ws, pwHeaders }: ApiContext) {
 
     bootstrapRepo: (workspaceId: string, body: BootstrapRepoInput) =>
       send(startBootstrapJobContract, { pathPrefix: ws(workspaceId), body }),
+
+    // Settle a parked monorepo bootstrap's adoption plan and let the run write the service.
+    submitAdoptionReview: (workspaceId: string, jobId: string, body: AdoptionReviewInput) =>
+      send(submitAdoptionReviewContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { id: jobId },
+        body,
+      }),
 
     // ---- agent runs (unified failure + retry) -----------------------------
     // Retry any failed run (bootstrap or execution); the backend resolves the

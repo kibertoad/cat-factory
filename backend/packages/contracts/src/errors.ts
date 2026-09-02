@@ -79,6 +79,20 @@ export const CONFLICT_REASONS = [
   'github_not_connected',
   'bootstrap_not_retryable',
   'bootstrap_reference_missing',
+  // A monorepo bootstrap's adoption review was submitted for a run that is not parked on one
+  // (it is still surveying, already applying, or terminal). Kept apart from
+  // `bootstrap_not_retryable` because the remedy is to look at the run rather than to retry it:
+  // `details.status` names where the run actually is.
+  'bootstrap_not_awaiting_review',
+  // The survey could not produce a plan (no model wired, the monorepo was unreadable, or the
+  // reply was unusable), so there is nothing to approve. The run still parks (a human may
+  // still bootstrap unaided), but an approval naming decisions is refused rather than treated
+  // as an empty approval. `details.unavailableReason` names which of the three it was.
+  'adoption_plan_unavailable',
+  // A monorepo bootstrap named a subdirectory that already exists in the target repository.
+  // Kept apart from every other bootstrap refusal because the remedy is a different DIRECTORY,
+  // not a different repository or a retry: `details.directory` names the path that is taken.
+  'monorepo_directory_taken',
   // A document is already attached to a DIFFERENT live task. A document row carries a single
   // `linkedBlockId`, so attaching it again would MOVE the link rather than copy it, silently
   // stripping the earlier task of a document it was created with. Same rule and same shape as

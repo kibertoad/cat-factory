@@ -687,7 +687,10 @@
         "webhook_limit_reached": "Webhook の上限に達しました",
         "risk_policy_inherited": "このポリシーはアカウントのものです",
         "risk_policy_not_inherited": "このポリシーはこのボードのものです",
-        "kaizen_entry_not_settled": "この Kaizen エントリはまだ採点されていません"
+        "kaizen_entry_not_settled": "この Kaizen エントリはまだ採点されていません",
+        "bootstrap_not_awaiting_review": "このブートストラップはレビュー待ちではありません",
+        "adoption_plan_unavailable": "承認できる計画がありません",
+        "monorepo_directory_taken": "そのディレクトリはすでに存在します"
       },
       "description": {
         "dependencies_unmet": "このタスクは、まだ完了していない他のタスクに依存しています。それらを完了または解除してから、もう一度開始してください。",
@@ -729,7 +732,10 @@
         "webhook_limit_reached": "このワークスペースには送信 Webhook がすでに上限数まで登録されています。不要なものを削除してから、もう一度登録してください。",
         "risk_policy_inherited": "アカウント内のすべてのボードで共有されているため、ここからは変更できません。このボードに複製してコピーを編集してください。",
         "risk_policy_not_inherited": "すでにこのボード自身のポリシーです。直接編集するか、提示したくない場合は削除してください。",
-        "kaizen_entry_not_settled": "採点が待機中または実行中のため、確認できる改善提案がまだありません。完了してから再試行してください。"
+        "kaizen_entry_not_settled": "採点が待機中または実行中のため、確認できる改善提案がまだありません。完了してから再試行してください。",
+        "bootstrap_not_awaiting_review": "このレビューを開いてから実行が先に進みました。ボードを再読み込みしてください。",
+        "adoption_plan_unavailable": "調査で計画を作成できなかったため、送信できる判断がありません。",
+        "monorepo_directory_taken": "ブートストラップは新しいサービスを作成します。まだ存在しないディレクトリを選ぶか、既存のものをサービスとして取り込んでください。"
       },
       "action": {
         "connectGitHub": "GitHub に接続",
@@ -6922,7 +6928,8 @@
       "pending": "保留中",
       "running": "実行中",
       "succeeded": "成功",
-      "failed": "失敗"
+      "failed": "失敗",
+      "awaitingReview": "レビュー待ち"
     },
     "arch": {
       "title": "リファレンスアーキテクチャ",
@@ -6956,11 +6963,100 @@
       "startedDesc": "コンテナが {repo} をブートストラップしています。進捗はボードで確認できます。",
       "bootstrapFailed": "ブートストラップできませんでした",
       "saveArchFailed": "リファレンスアーキテクチャを保存できませんでした",
-      "deleteFailed": "削除できませんでした"
+      "deleteFailed": "削除できませんでした",
+      "startedMonorepoDesc": "モノレポを調査しています。書き込みの前に、{directory} が何を取り入れるかを確認します。"
     },
     "repoType": {
       "label": "リポジトリの種類",
       "help": "このリポジトリの種類: バックエンドサービス、フロントエンドアプリ、共有ライブラリ、またはドキュメントリポジトリ（ドキュメント/スパイクのみ）。"
+    },
+    "target": {
+      "label": "サービスの配置先",
+      "newRepo": {
+        "label": "新しいリポジトリ",
+        "description": "専用のリポジトリを作成し、サービスを最初のコミットとしてプッシュします。"
+      },
+      "monorepo": {
+        "label": "既存モノレポ内のディレクトリ",
+        "description": "すでにあるリポジトリにサービスを追加し、プルリクエストを開きます。"
+      }
+    },
+    "serviceName": {
+      "label": "サービス名",
+      "description": "ボード上のサービス名になり、ディレクトリの初期値にもなります。"
+    },
+    "monorepo": {
+      "intro": "サービスは既存リポジトリのディレクトリに書き込まれ、プルリクエストとして届きます。代わりにマージすることはなく、新しいディレクトリの外は変更しません。",
+      "repo": {
+        "label": "モノレポ",
+        "description": "新しいサービスを置くリポジトリ。このワークスペースにすでにリンクされている必要があります。",
+        "placeholder": "リポジトリを選択",
+        "empty": "このワークスペースにはまだリポジトリがリンクされていません。先にリンクしてください。"
+      },
+      "directory": {
+        "label": "サービスディレクトリ",
+        "description": "リポジトリルートからの相対パス。まだ存在していない必要があります。",
+        "placeholder": "services/payments",
+        "error": {
+          "empty": "リポジトリ内のディレクトリを指定してください。",
+          "escapes": "ディレクトリはリポジトリの内側に収める必要があります。"
+        }
+      }
+    },
+    "adoption": {
+      "title": "このサービスは何を取り入れますか？",
+      "subtitle": "{target} 内の {directory} にある新しいサービス。",
+      "intro": "各領域について、新しいサービスが周囲のモノレポに合わせるか、テンプレートのものを保つかを決めてください。決めるまで何も書き込まれません。",
+      "acceptAll": "すべての提案を採用",
+      "needsYou": "あなたの判断待ち",
+      "overridden": "提案を上書き",
+      "evidence": "参照元:",
+      "notePlaceholder": "この領域についてエージェントに伝えたいこと（任意）",
+      "remaining": "{count} 件の判断がまだ残っています",
+      "approve": "承認して作成",
+      "cardPrompt": "このブートストラップはあなたを待っています。新しいサービスがモノレポから何を取り入れるか決めてください。",
+      "cardAction": "確認",
+      "side": {
+        "monorepo": "モノレポでは",
+        "template": "テンプレートでは",
+        "nothing": "この領域には該当なし"
+      },
+      "source": {
+        "monorepo": "モノレポに合わせる",
+        "template": "テンプレートを保つ",
+        "both": "両方を組み合わせる",
+        "neither": "どちらも使わない"
+      },
+      "area": {
+        "build-tooling": "ビルドツール",
+        "dependencies": "依存関係",
+        "lint-format": "Lint とフォーマット",
+        "typecheck": "型チェック",
+        "testing": "テスト",
+        "ci": "CI",
+        "containerization": "コンテナ化",
+        "runtime-config": "実行時設定",
+        "observability": "オブザーバビリティ",
+        "source-layout": "ソース構成",
+        "docs": "ドキュメント",
+        "other": "その他"
+      },
+      "unavailable": {
+        "model_unavailable": "調査用のモデルが設定されていないため、確認できる提案はありません。判断はあなた次第です。下のメモに希望を書いてください。",
+        "repo_unreadable": "モノレポを読み取れなかったため、提案を作成できませんでした。このワークスペースからリポジトリに到達できるか確認してください。",
+        "budget_exhausted": "このワークスペースはモデル予算を超えているため、プラットフォームは採用方針の提案を購入しませんでした。判断は引き続きあなたが行えます。下のメモに希望を記入するか、予算を引き上げて実行を再試行してください。",
+        "analysis_unusable": "調査から使える提案が返りませんでした。下のメモに希望を書くことはできます。"
+      },
+      "notes": {
+        "label": "サービス全体へのメモ",
+        "description": "判断とあわせて、そのままエージェントに渡されます。",
+        "unavailableDescription": "答えるべき提案がないため、エージェントはこの内容を出発点にします。そのまま渡されます。"
+      },
+      "toast": {
+        "approved": "判断を承認しました",
+        "approvedDesc": "エージェントが {directory} を作成し、プルリクエストを開きます。",
+        "failed": "レビューを送信できませんでした"
+      }
     }
   },
   "riskPolicy": {

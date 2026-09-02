@@ -22,6 +22,7 @@ import type { ModuleRegistry } from './module-registry.js'
 import type { createEnvironmentsModule, createTasksModule } from './modules.js'
 import type { ExecutionService } from '../modules/execution/ExecutionService.js'
 import { makeExternalMergeObserver } from '../modules/merge/externalMergeObserver.js'
+import type { SpendService } from '@cat-factory/spend'
 import type { CoreDependencies } from '../container.js'
 import type { MergeTrackRecordModule, NotificationsModule } from './module-shapes.js'
 import type { resolveCoreRuntime } from './runtime.js'
@@ -45,6 +46,8 @@ export interface EngineDependentModulesInput {
   mergeTrackRecords: MergeTrackRecordModule | undefined
   initiativeService: InitiativeService | undefined
   setInitiativeLoop: (loop: InitiativeLoopService | undefined) => void
+  /** The spend safeguard, so the monorepo survey's billable call honours the budget a run does. */
+  spend: SpendService
 }
 
 export function registerEngineDependentModules(input: EngineDependentModulesInput): void {
@@ -60,6 +63,7 @@ export function registerEngineDependentModules(input: EngineDependentModulesInpu
     mergeTrackRecords,
     initiativeService,
     setInitiativeLoop,
+    spend,
   } = input
   const externalMergeObserver = mergeTrackRecords
     ? makeExternalMergeObserver({
@@ -74,9 +78,13 @@ export function registerEngineDependentModules(input: EngineDependentModulesInpu
   // step, and the preset that used to wrap it sat in the task picker beside the build presets
   // offering something nobody picks (see the `pl_blueprint` tombstone).
   modules.build('bootstrap', () =>
-    createBootstrapModule(dependencies, executionEventPublisher, (ws, blockId) =>
-      executionService.startAgentKind(ws, blockId, BLUEPRINT_AGENT_KIND).then(() => undefined),
-    ),
+    createBootstrapModule(dependencies, executionEventPublisher, {
+      onBootstrapSucceeded: (ws, blockId) =>
+        executionService.startAgentKind(ws, blockId, BLUEPRINT_AGENT_KIND).then(() => undefined),
+      // A monorepo bootstrap's adoption survey is a billable model call that no run start gates,
+      // so it answers to the SAME workspace budget safeguard `RunAdmission` applies before a run.
+      isOverBudget: (workspaceId) => spend.isOverBudget(workspaceId),
+    }),
   )
   modules.build('tracker', () => createTrackerModule(dependencies))
   modules.build('recurring', () =>

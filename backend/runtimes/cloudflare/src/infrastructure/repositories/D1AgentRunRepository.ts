@@ -88,7 +88,8 @@ export class D1AgentRunRepository implements AgentRunRepository {
       const { results } = await this.db
         .prepare(
           `SELECT id FROM agent_runs
-           WHERE status IN ('running', 'blocked', 'paused', 'pending') AND id IN (${placeholders})`,
+           WHERE status IN ('running', 'blocked', 'paused', 'pending', 'awaiting_review')
+             AND id IN (${placeholders})`,
         )
         .bind(...chunk)
         .all<{ id: string }>()

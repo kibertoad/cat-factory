@@ -7,6 +7,7 @@ import {
   referenceArchitectureSchema,
   updateReferenceArchitectureSchema,
 } from '../bootstrap.js'
+import { adoptionReviewSchema } from '../monorepo-adoption.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -69,4 +70,23 @@ export const startBootstrapJobContract = defineApiContract({
   pathResolver: () => '/bootstrap/jobs',
   requestBodySchema: bootstrapRepoSchema,
   responsesByStatusCode: { 201: bootstrapJobSchema, ...errorResponses },
+})
+
+/**
+ * Settle a parked monorepo bootstrap's adoption plan and resume the run.
+ *
+ * The one human decision the flow is built around: which of the reference template's answers
+ * the new service keeps and which it takes from the monorepo it is landing in. Answering every
+ * decision is required (the service refuses a partial review rather than defaulting the gaps to
+ * the model's recommendation), and the run only writes code after this returns.
+ *
+ * 409 `bootstrap_not_awaiting_review` when the run is not parked; 422 when the choices do not
+ * cover the stored plan.
+ */
+export const submitAdoptionReviewContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: bootstrapJobIdParams,
+  pathResolver: ({ id }) => `/bootstrap/jobs/${id}/adoption-review`,
+  requestBodySchema: adoptionReviewSchema,
+  responsesByStatusCode: { 200: bootstrapJobSchema, ...errorResponses },
 })

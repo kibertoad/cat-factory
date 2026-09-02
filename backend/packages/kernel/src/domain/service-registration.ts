@@ -35,7 +35,18 @@ export async function registerServiceForFrame(
   deps: ServiceRegistrationDeps,
   workspaceId: string,
   frame: Pick<Block, 'id' | 'position' | 'size'>,
-  repo?: { installationId: number; githubId: number; directory?: string | null },
+  /**
+   * What the frame is pinned to. The two repo ids and the `directory` are INDEPENDENTLY
+   * optional: a monorepo bootstrap knows the subdirectory its service will occupy from the
+   * moment it is pre-flighted, but must not claim a repo binding until the run has actually
+   * written code there: a service bound to a repo whose directory is still empty dispatches
+   * tasks into nothing.
+   */
+  repo?: {
+    installationId?: number | null
+    githubId?: number | null
+    directory?: string | null
+  },
 ): Promise<string | undefined> {
   const { serviceRepository, workspaceMountRepository } = deps
   if (!serviceRepository || !workspaceMountRepository) return undefined

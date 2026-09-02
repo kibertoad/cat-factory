@@ -79,6 +79,56 @@ const typeItems = useFrameRepoTypeItems()
 
 const usingReference = computed(() => mode.value === 'reference')
 
+// ---- where the service LANDS ----------------------------------------------
+// A second, independent axis from `mode` (which says where the CONTENT comes from): a run
+// either creates a repository of its own, or writes the service into a subdirectory of an
+// existing monorepo and opens a pull request against it. The monorepo path adds the human
+// adoption review between the survey and the write, which is why the two are not one control.
+type Target = 'new-repo' | 'monorepo'
+const target = ref<Target>('new-repo')
+const targetItems = computed(() => [
+  {
+    label: t('bootstrap.target.newRepo.label'),
+    value: 'new-repo' as const,
+    description: t('bootstrap.target.newRepo.description'),
+  },
+  {
+    label: t('bootstrap.target.monorepo.label'),
+    value: 'monorepo' as const,
+    description: t('bootstrap.target.monorepo.description'),
+  },
+])
+const intoMonorepo = computed(() => target.value === 'monorepo')
+
+/** The projected repo the new service lands in, by numeric id. */
+const monorepoRepoId = ref<number | undefined>(undefined)
+const monorepoDirectory = ref('')
+
+const monorepoRepoItems = computed(() =>
+  github.repos.map((r) => ({ label: `${r.owner}/${r.name}`, value: r.githubId })),
+)
+
+// Mirrors the backend's `normalizeServiceDirectory`: the path becomes an agent's working
+// directory, so a value that could escape the checkout is refused here rather than at the API.
+const directoryError = computed<string | undefined>(() => {
+  const value = monorepoDirectory.value.trim()
+  if (!value) return undefined
+  const segments = value
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter((s) => s && s !== '.')
+  if (!segments.length) return t('bootstrap.monorepo.directory.error.empty')
+  if (segments.some((s) => s === '..')) return t('bootstrap.monorepo.directory.error.escapes')
+  return undefined
+})
+
+// Landing in a monorepo needs no NEW repository, so the repo name is the SERVICE's name (and
+// seeds the directory's leaf); the create-repo affordances below are for the other target.
+watch([intoMonorepo, repoName], ([into, name]) => {
+  if (!into || !name.trim() || monorepoDirectory.value.trim()) return
+  monorepoDirectory.value = `services/${name.trim()}`
+})
+
 // UX-18: prompt before discarding a half-filled launch form on Escape / backdrop / the X.
 // The modal keeps its fields across opens (no reset watcher), so the baseline is whatever
 // the form held when it opened — a close only prompts once the user has typed something
@@ -227,6 +277,10 @@ function openManageInstall() {
 const canLaunch = computed(() => {
   if (needsConnection.value) return false
   if (!repoName.value.trim() || repoNameError.value) return false
+  if (intoMonorepo.value) {
+    if (!monorepoRepoId.value) return false
+    if (!monorepoDirectory.value.trim() || directoryError.value) return false
+  }
   return usingReference.value ? !!selectedArchId.value : instructions.value.trim().length > 0
 })
 
@@ -241,6 +295,14 @@ async function launch() {
       private: isPrivate.value,
       instructions: instructions.value.trim(),
       type: selectedType.value,
+      ...(intoMonorepo.value && monorepoRepoId.value
+        ? {
+            monorepo: {
+              repoGithubId: monorepoRepoId.value,
+              directory: monorepoDirectory.value.trim(),
+            },
+          }
+        : {}),
     })
     if (job.status === 'failed') {
       // The container couldn't even start (pre-flight failure, e.g. the target
@@ -257,13 +319,19 @@ async function launch() {
       // background and becomes a real, droppable service when it finishes.
       toast.add({
         title: t('bootstrap.toast.started'),
-        description: t('bootstrap.toast.startedDesc', { repo: job.repoName }),
+        // A monorepo run does not run straight through: it surveys, then waits for the
+        // reviewer. Saying "bootstrapping…" there would set the wrong expectation about who
+        // the next move belongs to.
+        description: job.monorepo
+          ? t('bootstrap.toast.startedMonorepoDesc', { directory: job.monorepo.directory })
+          : t('bootstrap.toast.startedDesc', { repo: job.repoName }),
         icon: 'i-lucide-loader-circle',
         color: 'info',
       })
       repoName.value = ''
       description.value = ''
       instructions.value = ''
+      monorepoDirectory.value = ''
       // Reset the repo role too, so a later bootstrap doesn't silently inherit this one's type.
       selectedType.value = 'service'
       // The provisional frame arrived (bootstrap() refreshed the board). Re-home it to
@@ -390,9 +458,12 @@ async function removeArch(a: ReferenceArchitecture) {
   }
 }
 
-const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'error'> = {
+const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'error' | 'warning'> = {
   pending: 'neutral',
   running: 'info',
+  // A parked run is not "in progress": it is waiting on a person, which is what `warning`
+  // says on every other surface where the platform is blocked on its user.
+  awaiting_review: 'warning',
   succeeded: 'success',
   failed: 'error',
 }
@@ -401,6 +472,7 @@ const statusColor: Record<BootstrapStatus, 'neutral' | 'info' | 'success' | 'err
 const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
   pending: t('bootstrap.status.pending'),
   running: t('bootstrap.status.running'),
+  awaiting_review: t('bootstrap.status.awaitingReview'),
   succeeded: t('bootstrap.status.succeeded'),
   failed: t('bootstrap.status.failed'),
 }))
@@ -417,11 +489,13 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
              (the button is absent for exactly the same reason). -->
         <p class="text-sm text-slate-400">
           {{
-            github.canCreateRepos
-              ? t('vcs.bootstrap.introCanCreate', { provider: providerLabel })
-              : createRepoUrl
-                ? t('vcs.bootstrap.introManual', { provider: providerLabel })
-                : t('vcs.bootstrap.introManualAny')
+            intoMonorepo
+              ? t('bootstrap.monorepo.intro')
+              : github.canCreateRepos
+                ? t('vcs.bootstrap.introCanCreate', { provider: providerLabel })
+                : createRepoUrl
+                  ? t('vcs.bootstrap.introManual', { provider: providerLabel })
+                  : t('vcs.bootstrap.introManualAny')
           }}
         </p>
 
@@ -445,6 +519,44 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
           <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
             {{ t('bootstrap.section.newRepo') }}
           </h3>
+
+          <UFormField :label="t('bootstrap.target.label')" required>
+            <URadioGroup v-model="target" :items="targetItems" />
+          </UFormField>
+
+          <!-- Landing in an existing monorepo: pick the repository and the subdirectory. The
+               run surveys the monorepo's conventions against the template's and PARKS for a
+               human adoption review before it writes anything. -->
+          <template v-if="intoMonorepo">
+            <UFormField
+              :label="t('bootstrap.monorepo.repo.label')"
+              :description="t('bootstrap.monorepo.repo.description')"
+              required
+            >
+              <div v-if="!monorepoRepoItems.length" class="text-sm text-slate-400">
+                {{ t('bootstrap.monorepo.repo.empty') }}
+              </div>
+              <USelect
+                v-else
+                v-model="monorepoRepoId"
+                :items="monorepoRepoItems"
+                :placeholder="t('bootstrap.monorepo.repo.placeholder')"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField
+              :label="t('bootstrap.monorepo.directory.label')"
+              :description="t('bootstrap.monorepo.directory.description')"
+              required
+              :error="directoryError"
+            >
+              <UInput
+                v-model="monorepoDirectory"
+                :placeholder="t('bootstrap.monorepo.directory.placeholder')"
+                class="w-full"
+              />
+            </UFormField>
+          </template>
 
           <UFormField :label="t('bootstrap.mode.label')" required>
             <URadioGroup v-model="mode" :items="modeItems" />
@@ -470,11 +582,15 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
           </template>
 
           <UFormField
-            :label="t('bootstrap.targetRepo.label')"
+            :label="
+              intoMonorepo ? t('bootstrap.serviceName.label') : t('bootstrap.targetRepo.label')
+            "
             :description="
-              repoOwner
-                ? t('bootstrap.targetRepo.descWithOwner', { owner: repoOwner })
-                : t('bootstrap.targetRepo.descNoOwner')
+              intoMonorepo
+                ? t('bootstrap.serviceName.description')
+                : repoOwner
+                  ? t('bootstrap.targetRepo.descWithOwner', { owner: repoOwner })
+                  : t('bootstrap.targetRepo.descNoOwner')
             "
             required
             :error="repoNameError"
@@ -490,7 +606,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                      host's own form needs one, so that variant waits until a host is
                      resolved rather than guessing which page to open. -->
                 <UButton
-                  v-if="github.canCreateRepos || createRepoUrl"
+                  v-if="!intoMonorepo && (github.canCreateRepos || createRepoUrl)"
                   color="neutral"
                   variant="subtle"
                   :icon="github.canCreateRepos ? 'i-lucide-plus' : 'i-lucide-external-link'"
@@ -511,7 +627,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                 </UButton>
               </div>
               <UButton
-                v-if="manageInstallUrl && !github.canCreateRepos"
+                v-if="!intoMonorepo && manageInstallUrl && !github.canCreateRepos"
                 color="neutral"
                 variant="ghost"
                 size="sm"

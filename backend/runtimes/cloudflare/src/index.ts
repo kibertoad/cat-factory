@@ -717,6 +717,24 @@ function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): v
     const repairRunner = env.ENV_CONFIG_REPAIR_WORKFLOW
       ? new WorkflowsEnvConfigRepairRunner(env.ENV_CONFIG_REPAIR_WORKFLOW)
       : null
+    /**
+     * The durable key a stale run is driven under. Only the bootstrap flow can differ from the
+     * run id (its apply phase is a second drive), and only it is asked, because the container
+     * assembly is not free, so a lookup per execution run would make every sweep pay for a fact
+     * only bootstrap runs have.
+     *
+     * The container is assembled LAZILY and at most once per tick, beside the hoisted lookups
+     * above: this is called twice per stale bootstrap (`instanceState`, then `redrive`), so
+     * building inside would assemble one container per call rather than per sweep, while
+     * building unconditionally would charge every tick for a container a sweep with no stale
+     * bootstrap never reads.
+     */
+    let bootstrapService: ReturnType<typeof buildContainer>['bootstrap'] | undefined
+    const driveKeyOf = async (ref: { kind: string; workspaceId: string; id: string }) => {
+      if (ref.kind !== 'bootstrap') return ref.id
+      bootstrapService ??= buildContainer(env).bootstrap
+      return (await bootstrapService?.service.driveIdOf(ref.workspaceId, ref.id)) ?? ref.id
+    }
     tick.run(
       {
         name: 'stale-run',
@@ -727,7 +745,7 @@ function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): v
       },
       sweepStuckRuns({
         agentRunRepository: new D1AgentRunRepository({ db: env.DB }),
-        instanceState: (ref) => {
+        instanceState: async (ref) => {
           const lookup =
             ref.kind === 'bootstrap'
               ? bootLookup
@@ -739,12 +757,16 @@ function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): v
           // kind was silently exempt from sweeping forever; `unknown` says it and counts it.
           if (!lookup) {
             warnUnsweepableKind(ref.kind)
-            return Promise.resolve({ state: 'unknown' as const })
+            return { state: 'unknown' as const }
           }
-          return lookup.instanceState(ref.id)
+          // A run's Workflows instance is keyed by its DRIVE, which is the run id for every
+          // drive except a monorepo bootstrap's apply phase. Probing by run id there would find
+          // no instance and the sweep would finalize a healthy run as an orphan.
+          return lookup.instanceState(await driveKeyOf(ref))
         },
         redrive: async (ref) => {
-          if (ref.kind === 'bootstrap') await bootRunner?.startRun(ref.workspaceId, ref.id)
+          const key = await driveKeyOf(ref)
+          if (ref.kind === 'bootstrap') await bootRunner?.startRun(ref.workspaceId, ref.id, key)
           else if (ref.kind === 'env-config-repair')
             await repairRunner?.startRun(ref.workspaceId, ref.id)
           else await execRunner?.startRun(ref.workspaceId, ref.id)

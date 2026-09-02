@@ -804,6 +804,10 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     get: { scope: { kind: 'workspace', arg: 0 } },
     insert: { scope: { kind: 'workspaceField', arg: 0 } },
     update: { scope: { kind: 'workspace', arg: 0 } },
+    // The monorepo survey's exclusive claim. Remote like the rest of the row's writes, and it
+    // MUST be: the claim is what stops two nodes each paying for the same survey, so a node
+    // taking it against a local database would defeat the whole point of it.
+    claimSurvey: { scope: { kind: 'workspace', arg: 0 } },
   },
   // The reference-architecture library the bootstrap modal reads + edits, and that a retry
   // re-resolves the base repo from (`referenceArchitectureRepository.get`). Reads/updates/deletes

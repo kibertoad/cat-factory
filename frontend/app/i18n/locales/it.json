@@ -5070,7 +5070,8 @@
       "pending": "in attesa",
       "running": "in esecuzione",
       "succeeded": "riuscito",
-      "failed": "fallito"
+      "failed": "fallito",
+      "awaitingReview": "in attesa di revisione"
     },
     "arch": {
       "title": "Architetture di riferimento",
@@ -5104,7 +5105,96 @@
       "startedDesc": "Un container sta avviando {repo}; segui i suoi progressi sulla lavagna.",
       "bootstrapFailed": "Impossibile avviare",
       "saveArchFailed": "Impossibile salvare l'architettura di riferimento",
-      "deleteFailed": "Impossibile eliminare"
+      "deleteFailed": "Impossibile eliminare",
+      "startedMonorepoDesc": "Sto analizzando il monorepo; prima di scrivere qualcosa ti chiederò cosa deve adottare {directory}."
+    },
+    "target": {
+      "label": "Dove va il servizio",
+      "newRepo": {
+        "label": "Un nuovo repository",
+        "description": "Creare un repository dedicato e caricare il servizio come primo commit."
+      },
+      "monorepo": {
+        "label": "Una cartella di un monorepo esistente",
+        "description": "Aggiungere il servizio a un repository che hai già e aprire una pull request."
+      }
+    },
+    "serviceName": {
+      "label": "Nome del servizio",
+      "description": "Dà il nome al servizio sulla lavagna e propone la sua cartella."
+    },
+    "monorepo": {
+      "intro": "Il servizio viene scritto in una cartella di un repository esistente e consegnato come pull request. Nulla viene unito al posto tuo e nulla viene modificato fuori dalla nuova cartella.",
+      "repo": {
+        "label": "Monorepo",
+        "description": "Il repository in cui vivrà il nuovo servizio. Deve essere già collegato a questo spazio di lavoro.",
+        "placeholder": "Scegli un repository",
+        "empty": "Nessun repository è ancora collegato a questo spazio di lavoro. Collegane uno prima."
+      },
+      "directory": {
+        "label": "Cartella del servizio",
+        "description": "Dove vive il servizio, rispetto alla radice del repository. Non deve ancora esistere.",
+        "placeholder": "services/payments",
+        "error": {
+          "empty": "Indica una cartella dentro il repository.",
+          "escapes": "La cartella deve restare dentro il repository."
+        }
+      }
+    },
+    "adoption": {
+      "title": "Cosa deve adottare questo servizio?",
+      "subtitle": "Il nuovo servizio in {directory}, dentro {target}.",
+      "intro": "Per ogni area decidi se il nuovo servizio segue il monorepo circostante o mantiene ciò che porta il modello. Nulla viene scritto finché non decidi.",
+      "acceptAll": "Accetta tutti i suggerimenti",
+      "needsYou": "Manca la tua decisione",
+      "overridden": "Si discosta dal suggerimento",
+      "evidence": "Letto da:",
+      "notePlaceholder": "Cosa dovrebbe sapere l'agente su quest'area (facoltativo)",
+      "remaining": "{count} decisione attende ancora la tua risposta | {count} decisioni attendono ancora la tua risposta",
+      "approve": "Approva e costruisci",
+      "cardPrompt": "Questo bootstrap ti sta aspettando: decidi cosa il nuovo servizio prende dal monorepo.",
+      "cardAction": "Rivedi",
+      "side": {
+        "monorepo": "Nel monorepo",
+        "template": "Nel modello",
+        "nothing": "Niente per quest'area"
+      },
+      "source": {
+        "monorepo": "Segui il monorepo",
+        "template": "Mantieni il modello",
+        "both": "Combina entrambi",
+        "neither": "Nessuno dei due"
+      },
+      "area": {
+        "build-tooling": "Strumenti di build",
+        "dependencies": "Dipendenze",
+        "lint-format": "Lint e formattazione",
+        "typecheck": "Controllo dei tipi",
+        "testing": "Test",
+        "ci": "CI",
+        "containerization": "Containerizzazione",
+        "runtime-config": "Configurazione di runtime",
+        "observability": "Osservabilità",
+        "source-layout": "Struttura del codice",
+        "docs": "Documentazione",
+        "other": "Altro"
+      },
+      "unavailable": {
+        "model_unavailable": "Nessun modello è configurato per l'analisi, quindi non c'è alcun suggerimento da rivedere. Le decisioni restano tue: descrivile nelle note.",
+        "repo_unreadable": "Non è stato possibile leggere il monorepo, quindi non è stato prodotto alcun suggerimento. Verifica che questo spazio di lavoro raggiunga il repository.",
+        "budget_exhausted": "Questo workspace ha superato il budget dei modelli, quindi la piattaforma non ha pagato per un suggerimento di adozione. Le decisioni restano tue: descrivi cosa vuoi nelle note qui sotto, oppure aumenta il budget e riprova l'esecuzione.",
+        "analysis_unusable": "L'analisi non ha restituito un suggerimento utilizzabile. Puoi comunque descrivere cosa vuoi nelle note."
+      },
+      "notes": {
+        "label": "Note per l'intero servizio",
+        "description": "Passate all'agente alla lettera, insieme alle tue decisioni.",
+        "unavailableDescription": "Non c'è alcun suggerimento a cui rispondere, quindi è da qui che parte l'agente. Gli viene passato alla lettera."
+      },
+      "toast": {
+        "approved": "Decisioni approvate",
+        "approvedDesc": "L'agente sta scrivendo {directory} e aprirà una pull request.",
+        "failed": "Impossibile inviare la revisione"
+      }
     }
   },
   "fragments": {
@@ -6000,7 +6090,10 @@
         "webhook_limit_reached": "Limite di webhook raggiunto",
         "risk_policy_inherited": "Questo criterio appartiene all'account",
         "risk_policy_not_inherited": "Questo criterio appartiene a questa bacheca",
-        "kaizen_entry_not_settled": "La voce Kaizen non è ancora stata valutata"
+        "kaizen_entry_not_settled": "La voce Kaizen non è ancora stata valutata",
+        "bootstrap_not_awaiting_review": "Questo bootstrap non attende una revisione",
+        "adoption_plan_unavailable": "Non c’è alcun piano da approvare",
+        "monorepo_directory_taken": "Quella cartella esiste già"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -6042,7 +6135,10 @@
         "webhook_limit_reached": "Questo spazio di lavoro ha già registrato il numero massimo di webhook in uscita. Rimuovine uno che non ti serve più, poi registra di nuovo questo.",
         "risk_policy_inherited": "È condiviso con tutte le bacheche dell'account, quindi non può essere modificato da qui. Clonalo in questa bacheca e modifica la copia.",
         "risk_policy_not_inherited": "È già il criterio proprio di questa bacheca: modificalo direttamente, oppure eliminalo se non vuoi più che venga offerto.",
-        "kaizen_entry_not_settled": "La sua valutazione è ancora in coda o in corso, quindi non ci sono raccomandazioni da confermare. Riprova quando sarà terminata."
+        "kaizen_entry_not_settled": "La sua valutazione è ancora in coda o in corso, quindi non ci sono raccomandazioni da confermare. Riprova quando sarà terminata.",
+        "bootstrap_not_awaiting_review": "L'esecuzione è andata avanti da quando questa revisione è stata aperta. Ricarica la lavagna.",
+        "adoption_plan_unavailable": "L'analisi non è riuscita a produrne uno, quindi non ci sono decisioni da inviare.",
+        "monorepo_directory_taken": "Un bootstrap crea un nuovo servizio. Scegli una cartella che non esiste ancora, o importa quella esistente come servizio."
       },
       "action": {
         "connectGitHub": "Collega GitHub",

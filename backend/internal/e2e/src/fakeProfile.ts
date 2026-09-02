@@ -342,6 +342,14 @@ export class E2eRepoBootstrapper implements WorkspaceScopedFakes {
     return this.forWorkspace(workspaceId).isWorkspaceConnected()
   }
 
+  resolveMonorepoTarget(workspaceId: string, repoGithubId: number) {
+    return this.forWorkspace(workspaceId).resolveMonorepoTarget(workspaceId, repoGithubId)
+  }
+
+  markRepoAsMonorepo(workspaceId: string, repoGithubId: number) {
+    return this.forWorkspace(workspaceId).markRepoAsMonorepo(workspaceId, repoGithubId)
+  }
+
   startBootstrap(request: BootstrapRequest) {
     return this.forWorkspace(request.workspaceId).startBootstrap(request)
   }

@@ -762,7 +762,10 @@
         "webhook_limit_reached": "Webhook limit reached",
         "risk_policy_inherited": "This policy belongs to the account",
         "risk_policy_not_inherited": "This policy belongs to this board",
-        "kaizen_entry_not_settled": "The Kaizen entry has not been graded yet"
+        "kaizen_entry_not_settled": "The Kaizen entry has not been graded yet",
+        "bootstrap_not_awaiting_review": "This bootstrap is not waiting for a review",
+        "adoption_plan_unavailable": "There is no adoption plan to approve",
+        "monorepo_directory_taken": "That directory already exists"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -807,7 +810,10 @@
         "webhook_limit_reached": "This workspace already has the maximum number of outbound webhooks registered. Remove one you no longer need, then register this again.",
         "risk_policy_inherited": "It is shared with every board in the account, so it cannot be changed from here. Clone it to this board and edit the copy.",
         "risk_policy_not_inherited": "It is already this board's own policy: edit it directly, or delete it if you no longer want it offered.",
-        "kaizen_entry_not_settled": "Its grading is still queued or running, so there are no recommendations to acknowledge. Try again once it finishes."
+        "kaizen_entry_not_settled": "Its grading is still queued or running, so there are no recommendations to acknowledge. Try again once it finishes.",
+        "bootstrap_not_awaiting_review": "The run has moved on since this review was opened. Reload the board to see where it is now.",
+        "adoption_plan_unavailable": "The survey could not produce one, so there are no decisions to submit.",
+        "monorepo_directory_taken": "Bootstrapping creates a new service. Pick a directory that does not exist yet, or import the existing one as a service."
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -7246,7 +7252,8 @@
       "pending": "pending",
       "running": "running",
       "succeeded": "succeeded",
-      "failed": "failed"
+      "failed": "failed",
+      "awaitingReview": "waiting for review"
     },
     "arch": {
       "title": "Reference architectures",
@@ -7280,7 +7287,96 @@
       "startedDesc": "A container is bootstrapping {repo}; watch its progress on the board.",
       "bootstrapFailed": "Could not bootstrap",
       "saveArchFailed": "Could not save reference architecture",
-      "deleteFailed": "Could not delete"
+      "deleteFailed": "Could not delete",
+      "startedMonorepoDesc": "Surveying the monorepo; you will be asked what {directory} should adopt before anything is written."
+    },
+    "target": {
+      "label": "Where the service goes",
+      "newRepo": {
+        "label": "A new repository",
+        "description": "Create a repository of its own and push the service as its first commit."
+      },
+      "monorepo": {
+        "label": "A directory in an existing monorepo",
+        "description": "Add the service to a repository you already have, and open a pull request."
+      }
+    },
+    "serviceName": {
+      "label": "Service name",
+      "description": "Names the service on the board and seeds its directory."
+    },
+    "monorepo": {
+      "intro": "The service is written into a directory of an existing repository and delivered as a pull request. Nothing is merged for you, and nothing outside the new directory is changed.",
+      "repo": {
+        "label": "Monorepo",
+        "description": "The repository the new service lives in. It must already be linked to this workspace.",
+        "placeholder": "Pick a repository",
+        "empty": "No repositories are linked to this workspace yet. Link one first, then bootstrap into it."
+      },
+      "directory": {
+        "label": "Service directory",
+        "description": "Where the service lives, relative to the repository root. It must not exist yet.",
+        "placeholder": "services/payments",
+        "error": {
+          "empty": "Name a directory inside the repository.",
+          "escapes": "The directory must stay inside the repository."
+        }
+      }
+    },
+    "adoption": {
+      "title": "What should this service adopt?",
+      "subtitle": "The new service at {directory} in {target}.",
+      "intro": "For each area below, decide whether the new service follows the surrounding monorepo or keeps what the reference template ships. Nothing is written until you decide.",
+      "acceptAll": "Accept all suggestions",
+      "needsYou": "Needs your decision",
+      "overridden": "Overrides the suggestion",
+      "evidence": "Read from:",
+      "notePlaceholder": "Anything the agent should know about this area (optional)",
+      "remaining": "{count} decision still needs your answer | {count} decisions still need your answer",
+      "approve": "Approve and build",
+      "cardPrompt": "This bootstrap is waiting on you: decide what the new service adopts from the monorepo.",
+      "cardAction": "Review",
+      "side": {
+        "monorepo": "In the monorepo",
+        "template": "In the template",
+        "nothing": "Nothing for this area"
+      },
+      "source": {
+        "monorepo": "Follow the monorepo",
+        "template": "Keep the template",
+        "both": "Compose both",
+        "neither": "Take neither"
+      },
+      "area": {
+        "build-tooling": "Build tooling",
+        "dependencies": "Dependencies",
+        "lint-format": "Linting and formatting",
+        "typecheck": "Type checking",
+        "testing": "Testing",
+        "ci": "CI",
+        "containerization": "Containerization",
+        "runtime-config": "Runtime configuration",
+        "observability": "Observability",
+        "source-layout": "Source layout",
+        "docs": "Documentation",
+        "other": "Other"
+      },
+      "unavailable": {
+        "model_unavailable": "No model is configured for the adoption survey, so there is no suggestion to review. The decisions are still yours: describe what you want in the notes below.",
+        "repo_unreadable": "The monorepo could not be read, so no suggestion could be produced. Check that this workspace can reach the repository.",
+        "budget_exhausted": "This workspace is over its model budget, so the platform did not pay for an adoption suggestion. The decisions are still yours: describe what you want in the notes below, or raise the budget and retry the run.",
+        "analysis_unusable": "The adoption survey did not return a usable suggestion. You can still describe what you want in the notes below."
+      },
+      "notes": {
+        "label": "Notes for the whole service",
+        "description": "Passed to the agent verbatim, alongside your decisions.",
+        "unavailableDescription": "There is no suggestion to answer, so this is what the agent works from. Passed to it verbatim."
+      },
+      "toast": {
+        "approved": "Adoption decisions approved",
+        "approvedDesc": "The agent is now writing {directory} and will open a pull request.",
+        "failed": "Could not submit the review"
+      }
     }
   },
   "initiative": {

@@ -34,7 +34,8 @@ const DRIVE_QUEUES: [string, (boss: PgBoss) => Promise<void>][] = [
   ],
   [
     'bootstrap.advance',
-    (boss) => new PgBossBootstrapRunner(boss, QUEUE_OPTIONS).startRun('ws1', 'bj1'),
+    // A single-drive run keys its drive on the run id, which is what every plain bootstrap does.
+    (boss) => new PgBossBootstrapRunner(boss, QUEUE_OPTIONS).startRun('ws1', 'bj1', 'bj1'),
   ],
   [
     'envtest.advance',

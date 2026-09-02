@@ -5,6 +5,7 @@ import {
   listBootstrapJobsContract,
   listReferenceArchitecturesContract,
   startBootstrapJobContract,
+  submitAdoptionReviewContract,
   updateReferenceArchitectureContract,
 } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
@@ -95,6 +96,22 @@ export function bootstrapController(): Hono<AppEnv> {
     }
     const job = await bootstrap.service.bootstrap(param(c, 'workspaceId'), c.req.valid('json'))
     return c.json(job, 201)
+  })
+
+  // Settle a parked monorepo bootstrap's adoption plan and let the run write the service.
+  // The reviewing user is recorded on the run: this is a human decision about how a service
+  // fits an organisation's monorepo, so who made it is part of what was decided. The session
+  // is optional rather than required (a headless key may approve too), and the record says
+  // `null` there instead of attributing the decision to nobody in particular.
+  buildHonoRoute(app, submitAdoptionReviewContract, async (c) => {
+    const bootstrap = requireBootstrap(c)
+    const job = await bootstrap.service.submitAdoptionReview(
+      param(c, 'workspaceId'),
+      c.req.valid('param').id,
+      c.req.valid('json'),
+      c.get('user')?.id ?? null,
+    )
+    return c.json(job, 200)
   })
 
   // Retrying a failed run goes through the unified `POST /agent-runs/:id/retry`

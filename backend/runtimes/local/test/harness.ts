@@ -187,6 +187,8 @@ type ConformanceAppOpts = {
   judgeRegistry?: CoreDependencies['judgeRegistry']
   judgeAssessor?: CoreDependencies['judgeAssessor']
   bugHuntAssessor?: CoreDependencies['bugHuntAssessor']
+  monorepoAdoptionAdvisor?: CoreDependencies['monorepoAdoptionAdvisor']
+  repoBootstrapper?: CoreDependencies['repoBootstrapper']
   inlineUseCaseGenerator?: CoreDependencies['inlineUseCaseGenerator']
   fragmentBriefGenerator?: CoreDependencies['fragmentBriefGenerator']
   stepResolverRegistry?: CoreDependencies['stepResolverRegistry']
@@ -253,7 +255,7 @@ function buildConformanceOverrides(
     pullRequestMerger: undefined,
     // Deterministic bootstrapper so the suite drives the bootstrap lifecycle through the
     // local composition root without GitHub/Docker (driven via driveBootstrap).
-    repoBootstrapper: new FakeRepoBootstrapper(),
+    repoBootstrapper: o.repoBootstrapper ?? new FakeRepoBootstrapper(),
     // Deterministic env-config-repairer + no-op runner so the suite drives the repair
     // lifecycle through the local composition root (driven via driveEnvConfigRepair); the
     // module only builds when an env provider is also wired.
@@ -299,6 +301,7 @@ function buildConformanceOverrides(
       // The bug hunt's ranking producer: a deterministic fake, so the hunt's ranked/unranked
       // outcomes drive with no model on every runtime.
       bugHuntAssessor: o.bugHuntAssessor,
+      monorepoAdoptionAdvisor: o.monorepoAdoptionAdvisor,
       inlineUseCaseGenerator: o.inlineUseCaseGenerator,
       fragmentBriefGenerator: o.fragmentBriefGenerator,
       deployJobClient: o.deployJobClient,
