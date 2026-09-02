@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/acceptance-kit",
-  "version": "0.6.11",
+  "version": "0.6.12",
   "description": "Building blocks for writing your own HEADLESS acceptance suite against a live cat-factory deployment: the scenario driver, the resumable ledger and progress journal, a prerequisite gate whose refusals carry rendered remedies, waits that state their last observation, and an SDK-driven run driver that answers only the decisions a suite was designed for. The platform's own acceptance suite is built from it, so a deployment can cover its own providers, agent kinds and gates the same way.",
   "keywords": [
     "acceptance-testing",
