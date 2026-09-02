@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import * as nodeServer from '@cat-factory/node-server'
 import type { StartOptions } from '@cat-factory/node-server'
 import * as localServer from '../src/index.js'
+import type { RegistrationProblem, RegistrationWarning } from '../src/index.js'
 import type { StartLocalOptions } from '../src/server.js'
 
 // ---------------------------------------------------------------------------
@@ -60,7 +61,24 @@ function isRegistryConstructor(name: string): boolean {
   )
 }
 
+/**
+ * The TYPE half of the same seam, which neither rule above can see: `Object.keys` reads runtime
+ * values, and a type-only re-export has none, so deleting one leaves this file green while a local
+ * deployment loses the ability to name what its own `escalateRegistrationWarning` predicate is
+ * handed. Enumerated rather than derived for the reason the Node guard's block is (a type union is
+ * not reflectable), and imported from THIS facade, so the compile error lands here.
+ */
+const _bootValidationVocabulary:
+  | { registrationProblem: RegistrationProblem; registrationWarning: RegistrationWarning }
+  | undefined = undefined
+
 describe('local boot entry point', () => {
+  it('re-exports the BOOT-VALIDATION types a deployment predicate names', () => {
+    // The compile-time assertion above carries the guard; this gives it a failing assertion to
+    // point at rather than only a red typecheck in a separate CI job.
+    expect(_bootValidationVocabulary).toBeUndefined()
+  })
+
   it('exposes every app-owned seam the Node entry point does', () => {
     // The compile-time assertion carries the guard; this gives it a failing assertion to point at
     // rather than only a red typecheck in a separate CI job.

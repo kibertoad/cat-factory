@@ -284,6 +284,66 @@ describe('custom task types (reusable operations)', () => {
     expect(warned).toEqual([])
   })
 
+  it('reports ONE warn per unresolved id, so a MIXED declaration is escalated per id', () => {
+    // The case the per-deployment predicate could not serve while these arrived batched. A
+    // declaration naming code-registered standards beside a `src:<sourceId>:<slug>` reference is
+    // what the reusable-operations guide sanctions, and the tier is a fact about the ID, not about
+    // the deployment: escalating the batch would have failed boot on the legitimate late-bound id,
+    // and not escalating it would have left the typo at warn forever.
+    const taskTypeRegistry = defaultTaskTypeRegistry()
+    promptFragmentRegistry.register(fragment('org.api-guidelines'))
+    taskTypeRegistry.register({
+      ...base,
+      taskType: 'org:introduce-api',
+      defaultFragmentIds: ['org.api-guidelines', 'org.testng', 'src:acme-standards:security'],
+    })
+    const registries = {
+      agentKindRegistry: defaultAgentKindRegistry(),
+      gateRegistry: defaultGateRegistry(),
+      taskTypeRegistry,
+      promptFragmentRegistry,
+    }
+
+    // Two problems, one per unresolved id, each carrying that id as its structured subject. The
+    // resolved id produces nothing, and the platform's severity has not moved: both are warns,
+    // because boot still cannot tell which cause each one has.
+    const problems = collectRegistrationProblems({ registries }).filter(
+      (p) => p.code === 'task_type_unknown_fragment',
+    )
+    expect(problems.map((p) => (p.severity === 'warn' ? p.subject : p.severity))).toEqual([
+      'org.testng',
+      'src:acme-standards:security',
+    ])
+    // Each message names its own id and nothing else, which is what makes one warn actionable on
+    // its own line.
+    for (const problem of problems) {
+      if (problem.severity !== 'warn') continue
+      expect(problem.message).toContain(`"${problem.subject}"`)
+      expect(problem.message).not.toContain('org.api-guidelines')
+    }
+
+    // The disposition the deployment could not express: fail boot on the typo, keep the warn on the
+    // late-bound id. The predicate reads `subject`, not prose, and tests the namespace this
+    // deployment registers its OWN standards under, POSITIVELY. The inverse test
+    // (`!p.subject.startsWith('src:')`) is the trap the guide and ADR 0063 now both warn about: it
+    // escalates a hand-authored account-tier row, which carries a plain slug like any other.
+    const warned: string[] = []
+    let message = ''
+    try {
+      validateRegistrations({
+        registries,
+        onWarn: (p) => warned.push(p.subject),
+        escalateWarning: (p) =>
+          p.code === 'task_type_unknown_fragment' && p.subject.startsWith('org.'),
+      })
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error)
+    }
+    expect(message).toContain('org.testng')
+    expect(message).not.toContain('src:acme-standards:security')
+    expect(warned).toEqual(['src:acme-standards:security'])
+  })
+
   it('throws an escalated warn TOGETHER with the genuine errors, in one report', () => {
     // A boot failure that named the error and swallowed the escalated warn (or reported them in two
     // passes) would send the reader back for a second round trip, which is the thing the aggregated

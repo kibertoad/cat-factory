@@ -237,10 +237,14 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   severities are the design: an unresolvable pipeline id is an `error` because the created task
   would silently fall back to the positional default, while a task type's unresolvable
   `defaultFragmentIds` is a `warn` naming both causes, since an account/workspace-tier fragment
-  merges per workspace at run time and boot structurally cannot see one. Two sections live beside
-  it: `validateToolServers.ts` (a kind's declared MCP servers, their per-dispatch budget, and the
-  credential rules, which are the sharpest here because a tool-server declaration names both the key
-  it wants and the endpoint that key is sent to) and `validateBinaryGenerators.ts`, the one section
+  merges per workspace at run time and boot structurally cannot see one. A `warn` is a
+  `RegistrationWarning`, which carries a required SINGULAR `subject`: the escalation unit is the
+  problem, so a warning about N ids is N warnings and a deployment mixing the two fragment tiers can
+  escalate per id ([ADR 0063](../../docs/adr/0063-registration-warning-subjects.md)). Two sections live beside
+  it: `validateToolServers.ts` (what a KIND declares, per kind: unregistered ids and the
+  per-dispatch budget; plus each DEFINITION once across every kind that shares it, whose credential
+  rules are the sharpest here because a tool-server declaration names both the key it wants and the
+  endpoint that key is sent to) and `validateBinaryGenerators.ts`, the one section
   with a rule spanning DEFINITIONS: two integrations may share an injected variable only when they
   look the value up under the same key, and different keys behind one name is refused here rather
   than arbitrated at dispatch.

@@ -22,7 +22,7 @@ import {
 import type { RegistrationProblem } from './validateRegistrations.js'
 
 // ---------------------------------------------------------------------------
-// Boot-time validation of one agent kind's declared TOOL SERVERS (MCP), the section of
+// Boot-time validation of the deployment's declared TOOL SERVERS (MCP), the section of
 // `collectRegistrationProblems` that grew its own gravity: the whole-list checks (unregistered
 // ids, the per-dispatch budget, the container surface), each definition's own checks (id, url,
 // transport, harness reachability, `allowedTools`), and the credential rules, which are the
@@ -30,14 +30,16 @@ import type { RegistrationProblem } from './validateRegistrations.js'
 // endpoint that key is sent to.
 //
 // Split out of `validateRegistrations.ts` when it crossed the file-size budget, along the seam the
-// checks already had: nothing here is called from anywhere but `checkKindToolServers`, which the
-// capability walk calls once per kind.
+// checks already had. TWO entry points, because the checks answer to two different things: what a
+// KIND declares ({@link checkKindToolServers}, called per kind) and what a DEFINITION says
+// ({@link checkToolServerDefinitions}, called once for the whole registry).
 // ---------------------------------------------------------------------------
 
 /**
  * A kind's declared TOOL SERVERS: the whole-list checks (unregistered ids, the per-dispatch budget,
- * the container surface), with each definition's own checks in
- * {@link checkToolServerDefinition}. "Declared for" includes assigned servers, which is why the
+ * the container surface). Each definition's OWN checks are not here; they belong to the definition
+ * rather than to the kind, so they run once over the registry in
+ * {@link checkToolServerDefinitions}. "Declared for" includes assigned servers, which is why the
  * capability walk in `validateRegistrations.ts` calls this per KIND rather than per registration.
  *
  * - an unregistered id is an ERROR, like an unregistered skill;
@@ -69,12 +71,13 @@ export function checkKindToolServers(
         `declare the server inline.`,
     })
   }
-  for (const server of tools.servers) problems.push(...checkToolServerDefinition(kind, server))
   problems.push(...checkToolServerBudget(kind, tools.servers))
   if (tools.servers.length && !runsInContainer(kind, registry)) {
     problems.push({
       severity: 'warn',
       code: 'tool_servers_without_container',
+      // The AGENT KIND whose surface and tool-server list disagree.
+      subject: kind,
       message:
         `Agent kind "${kind}" declares tool servers but does not run in a container — an ` +
         `inline LLM step has no agent CLI to wire them into, so they will never be available. ` +
@@ -83,6 +86,52 @@ export function checkKindToolServers(
     })
   }
   return problems
+}
+
+/**
+ * Every tool-server DEFINITION declared anywhere in the registry, checked ONCE, with every kind it
+ * is declared for named in the message.
+ *
+ * Once rather than per kind because the faults here are properties of the DEFINITION: a transport
+ * no harness can serve, a cleartext url, a credential naming the header its OAuth token rides. A
+ * server registered with `registerToolServer` and attached to three kinds through
+ * `assignToolServers` is ONE registration and one edit, and checking it per kind reported it three
+ * times, as three warnings carrying the same `subject`. A deployment escalating by subject then saw
+ * one defect arrive as three, and the boot failure counted mentions rather than defects (ADR 0063).
+ *
+ * Grouped by definition IDENTITY rather than by id, because two kinds declaring their own INLINE
+ * server under one id are two registrations that happen to share a name, and collapsing them would
+ * check one and stay silent about the other. A shared registered definition is the same object for
+ * every kind that resolves it, which is what makes identity the right key.
+ */
+export function checkToolServerDefinitions(
+  kinds: readonly AgentKind[],
+  registry: AgentKindRegistry,
+): RegistrationProblem[] {
+  const declaredFor = new Map<McpServerDefinition, AgentKind[]>()
+  for (const kind of kinds) {
+    for (const server of registry.toolServersFor(kind).servers) {
+      const already = declaredFor.get(server)
+      if (already) already.push(kind)
+      else declaredFor.set(server, [kind])
+    }
+  }
+  return [...declaredFor].flatMap(([server, on]) =>
+    checkToolServerDefinition(declaredOn(on), server),
+  )
+}
+
+/**
+ * Where a definition is declared, for the message: the kinds it is attached to, all of them.
+ *
+ * All of them rather than the first, because the reader's next move depends on it. A server that
+ * only ONE kind declares is fixed on that kind; a shared one attached to five is a registration
+ * whose blast radius is those five, and a message naming one of them reads as a narrower fault than
+ * it is.
+ */
+function declaredOn(kinds: readonly AgentKind[]): string {
+  const names = kinds.map((kind) => `"${kind}"`).join(', ')
+  return kinds.length === 1 ? `(on agent kind ${names})` : `(on agent kinds ${names})`
 }
 
 /**
@@ -106,6 +155,8 @@ function checkToolServerBudget(
     problems.push({
       severity: 'warn',
       code: 'too_many_tool_servers',
+      // The AGENT KIND that is over budget; boot does not claim which servers a run loses.
+      subject: kind,
       message:
         `Agent kind "${kind}" has ${servers.length} tool servers declared for it, past the ` +
         `per-dispatch budget of ${TOOL_SERVER_BUDGET.maxServers}. A dispatch wires the first ` +
@@ -118,6 +169,8 @@ function checkToolServerBudget(
     problems.push({
       severity: 'warn',
       code: 'tool_servers_over_byte_budget',
+      // The AGENT KIND that is over budget, for the same reason as the count check above.
+      subject: kind,
       message:
         `Agent kind "${kind}" declares tool servers whose transport config alone measures ${bytes} ` +
         `bytes, past the per-dispatch budget of ${TOOL_SERVER_BUDGET.maxTotalBytes}. A dispatch ` +
@@ -148,12 +201,8 @@ function checkToolServerBudget(
  *   request as a header, and the harness refuses the same URL at the job boundary — so allowing
  *   it here only moves the failure to a place with no registration to point at.
  */
-function checkToolServerDefinition(
-  kind: AgentKind,
-  server: McpServerDefinition,
-): RegistrationProblem[] {
+function checkToolServerDefinition(on: string, server: McpServerDefinition): RegistrationProblem[] {
   const problems: RegistrationProblem[] = []
-  const on = `(on agent kind "${kind}")`
   if (!isValidMcpServerId(server.id)) {
     problems.push({
       severity: 'error',
@@ -182,6 +231,8 @@ function checkToolServerDefinition(
     problems.push({
       severity: 'warn',
       code: 'tool_server_unservable',
+      // The TOOL SERVER id whose transport/harness combination no harness can serve.
+      subject: server.id,
       message:
         `Tool server "${server.id}" ${on} declares transport "${server.transport.kind}" for ` +
         `harnesses [${(server.harnesses ?? MCP_SUPPORTED_HARNESSES).join(', ')}], and no harness ` +
@@ -201,9 +252,9 @@ function checkToolServerDefinition(
     })
   }
   for (const secret of server.secretKeys ?? []) {
-    problems.push(...checkToolServerSecret(kind, server, secret))
+    problems.push(...checkToolServerSecret(on, server, secret))
   }
-  problems.push(...checkToolServerOAuth(kind, server))
+  problems.push(...checkToolServerOAuth(on, server))
   return problems
 }
 
@@ -224,11 +275,10 @@ function checkToolServerDefinition(
  *   land in one header map and the granted token wins, so the static credential silently does
  *   nothing — which reads, to whoever declared it, as the platform ignoring their credential.
  */
-function checkToolServerOAuth(kind: AgentKind, server: McpServerDefinition): RegistrationProblem[] {
+function checkToolServerOAuth(on: string, server: McpServerDefinition): RegistrationProblem[] {
   const oauth = server.oauth
   if (!oauth) return []
   const problems: RegistrationProblem[] = []
-  const on = `(on agent kind "${kind}")`
   if (server.transport.kind !== 'http') {
     problems.push({
       severity: 'error',
@@ -269,6 +319,10 @@ function checkToolServerOAuth(kind: AgentKind, server: McpServerDefinition): Reg
     problems.push({
       severity: 'warn',
       code: 'oauth_header_collision',
+      // The TOOL SERVER id, not the credential key: the key is a store lookup name that several
+      // servers may legitimately share, so it names no ONE registration, while the declaration that
+      // has to move or go is this server's `secretKeys` entry. The message names the key.
+      subject: server.id,
       message:
         `Tool server "${server.id}" ${on} declares credential "${secret.key}" on header ` +
         `"${secret.header}", which is also where its OAuth access token is sent. The granted ` +
@@ -334,12 +388,11 @@ function checkCredentialChannel(
 }
 
 function checkToolServerSecret(
-  kind: AgentKind,
+  on: string,
   server: McpServerDefinition,
   secret: McpSecretRef,
 ): RegistrationProblem[] {
   const problems: RegistrationProblem[] = []
-  const on = `(on agent kind "${kind}")`
   if (isReservedPlatformEnvKey(secret.key)) {
     problems.push({
       severity: 'error',
@@ -377,10 +430,13 @@ function checkToolServerSecret(
     problems.push({
       severity: 'warn',
       code: 'unused_credential_env_name',
+      // The TOOL SERVER id, for the same reason as the OAuth collision above: the credential key is
+      // shareable and this server's declaration is what carries the inert envName.
+      subject: server.id,
       message:
-        `Tool server "${server.id}" ${on} declares credential envName "${secret.envName}" on a ` +
-        `key that names a header. An http server's value is sent as that header, so the injection ` +
-        `name is never used.`,
+        `Tool server "${server.id}" ${on} declares credential "${secret.key}" with envName ` +
+        `"${secret.envName}" on a key that names a header. An http server's value is sent as ` +
+        `that header, so the injection name is never used.`,
     })
   }
   return problems

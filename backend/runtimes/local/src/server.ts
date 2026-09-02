@@ -41,7 +41,11 @@ import {
   type ToolSecretResolver,
   type VcsProviderRegistry,
 } from '@cat-factory/kernel'
-import { type RegistrationProblem, validateRegistrationsOnce } from '@cat-factory/orchestration'
+import {
+  type RegistrationWarning,
+  logRegistrationWarning,
+  validateRegistrationsOnce,
+} from '@cat-factory/orchestration'
 import { BUILTIN_BINARY_GENERATORS } from '@cat-factory/binary-generators'
 import { deploymentRegisteredIds } from './mothershipRegistrations.js'
 import { FRAGMENTS_BY_ID } from '@cat-factory/prompt-fragments'
@@ -203,9 +207,11 @@ export interface StartLocalOptions {
    * the warning names an operation silently running short of its own standing guidance.
    *
    * A laptop is the cheapest place to learn about such a typo, so escalating here and on `start()`
-   * from one shared predicate is the intended shape.
+   * from one shared predicate is the intended shape. A warning names ONE `subject`, so a
+   * declaration mixing the two tiers is escalated per id; the Node facade's option documents the
+   * predicate shape.
    */
-  escalateRegistrationWarning?: (problem: RegistrationProblem) => boolean
+  escalateRegistrationWarning?: (problem: RegistrationWarning) => boolean
   /**
    * Build the resolver that supplies a registered capability's CREDENTIALS at dispatch. A tool
    * server's (MCP) and a generative binary integration's alike. Threaded through to
@@ -557,7 +563,7 @@ async function startLocalMothership(
     // picker, a `showWhen` on an undeclared field) booted CLEAN on a laptop and failed on the
     // Postgres path. There is now nothing here to fall behind.
     registries: container,
-    onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
+    onWarn: logRegistrationWarning(logger),
     // Same deployment policy the Postgres path applies, threaded here too: a boot that validates
     // the same registrations must reach the same verdict about them, or a laptop is the one place
     // an escalated defect stays quiet.

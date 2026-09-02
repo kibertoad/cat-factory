@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as worker from '../src/index'
 import * as kernel from '@cat-factory/kernel'
-import type { RegistrationProblem } from '@cat-factory/orchestration'
 import type {
   CustomTaskType,
   DescriptorField,
@@ -9,6 +8,11 @@ import type {
   GateDefinition,
   JudgeDefinition,
   PromptFragment,
+  // From the FACADE, not `@cat-factory/orchestration`: importing these from the package that
+  // defines them would have let the facade stop exporting them with this guard still green, which
+  // is the very reachability hole ADR 0044 closed.
+  RegistrationProblem,
+  RegistrationWarning,
   StepCompletionResolver,
   TaskTypeFieldDescriptor,
   TaskTypeFieldOption,
@@ -103,8 +107,11 @@ const _authoringVocabulary:
       judge: JudgeDefinition
       resolver: StepCompletionResolver
       // What `escalateRegistrationWarning` is handed. A deployment writing that predicate names it,
-      // so it belongs to this surface exactly as the registration shapes above do.
+      // so it belongs to this surface exactly as the registration shapes above do. The predicate
+      // takes the WARN half (the one carrying `subject`), and a deployment that collects problems
+      // itself sees the whole union, whose error branch stays unexported.
       registrationProblem: RegistrationProblem
+      registrationWarning: RegistrationWarning
     }
   | undefined = undefined
 
