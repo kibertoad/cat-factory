@@ -143,30 +143,33 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
   }
 
   /**
-   * Resolve a monorepo bootstrap target out of the WORKSPACE's own repo projection, and mark it
-   * as a monorepo in the same call (see the port's note on why those are one decision).
+   * Resolve a monorepo bootstrap target out of the WORKSPACE's own repo projection.
    *
    * Nothing here consults the provider: the projection is the workspace's declared set of
    * repositories, so a numeric id it does not hold is absent regardless of what the deployment's
    * credential could reach. The dispatch's own pre-flight is where write access and the target
    * directory are checked, against the provider, at the moment the run actually pushes.
    */
-  async prepareMonorepoTarget(
+  async resolveMonorepoTarget(
     workspaceId: string,
     repoGithubId: number,
   ): Promise<MonorepoTargetRepo | null> {
     const repo = await this.deps.repoRepository.get(workspaceId, repoGithubId)
     if (!repo) return null
-    if (!repo.isMonorepo) {
-      await this.deps.repoRepository.setMonorepo(workspaceId, repoGithubId, true)
-      await this.deps.repoProjectionCache?.invalidateGroup(workspaceId)
-    }
     return {
       owner: repo.owner,
       name: repo.name,
       installationId: repo.installationId,
       defaultBranch: repo.defaultBranch,
     }
+  }
+
+  /** Flip the projection's monorepo flag, once the caller's pre-flights have all passed. */
+  async markRepoAsMonorepo(workspaceId: string, repoGithubId: number): Promise<void> {
+    const repo = await this.deps.repoRepository.get(workspaceId, repoGithubId)
+    if (!repo || repo.isMonorepo) return
+    await this.deps.repoRepository.setMonorepo(workspaceId, repoGithubId, true)
+    await this.deps.repoProjectionCache?.invalidateGroup(workspaceId)
   }
 
   /**

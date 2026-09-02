@@ -35,12 +35,27 @@ const overallNotes = ref('')
 // it, pre-selecting the suggestion would make "approve" mean nothing.
 const touched = ref<Set<string>>(new Set())
 
+/**
+ * What the reviewer is answering, as an identity rather than as an object.
+ *
+ * The watcher below RESETS every answer, so what it keys on decides when a reviewer's work is
+ * thrown away. `decisions` is a computed array, so it is a fresh reference every time the store
+ * upserts a re-parsed job for this block, which any live `bootstrap` event or debounced board
+ * refresh does, including ones about other runs. Keying on it wiped a half-finished 10-decision
+ * review, silently reverting every override, while leaving the per-decision notes attached to
+ * re-seeded recommendations they were never written for.
+ */
+const planIdentity = computed(() => `${props.job.id}:${plan.value?.generatedAt ?? 0}`)
+
 watch(
-  decisions,
-  (list) => {
+  planIdentity,
+  () => {
     const seeded: Record<string, AdoptionSource> = {}
-    for (const decision of list) seeded[decision.id] = decision.recommended
+    for (const decision of decisions.value) seeded[decision.id] = decision.recommended
     choices.value = seeded
+    // Reset WITH the choices, never after them: a note left beside a re-seeded recommendation
+    // reads as an instruction the reviewer gave for a decision they no longer made.
+    notes.value = {}
     touched.value = new Set()
   },
   { immediate: true },
@@ -64,7 +79,11 @@ function acceptAll() {
 }
 
 const remaining = computed(() => decisions.value.filter((d) => !touched.value.has(d.id)).length)
-const canSubmit = computed(() => !unavailable.value && remaining.value === 0)
+// An unavailable plan carries no decisions, so there is nothing to answer and nothing to wait
+// for: submitting it is the reviewer saying "go ahead, I am deciding this unaided", which is the
+// only exit from the park. Disabling it here left a deployment with no adoption model unable to
+// finish a monorepo bootstrap at all.
+const canSubmit = computed(() => remaining.value === 0)
 
 /** The monorepo this service is landing in, for the header line. */
 const target = computed(() => {
@@ -76,6 +95,9 @@ async function submit() {
   if (!canSubmit.value) return
   submitting.value = true
   try {
+    // Derived from the PLAN's decisions, so an unavailable plan sends an empty set: the server
+    // refuses answers naming decisions the plan does not carry, which is what makes a review
+    // submitted against a re-surveyed plan fail loudly instead of applying half of it.
     await agentRuns.submitAdoptionReview(props.job.id, {
       choices: decisions.value.map((decision) => ({
         id: decision.id,
@@ -137,6 +159,16 @@ watch(open, (isOpen) => {
             {{ plan.unavailableDetail }}
           </p>
         </div>
+
+        <!-- The reviewer's own instructions, on BOTH paths. With no suggestion to answer this is
+             the only thing they can say, and it reaches the agent's brief verbatim. -->
+        <UFormField
+          v-if="unavailable"
+          :label="t('bootstrap.adoption.notes.label')"
+          :description="t('bootstrap.adoption.notes.unavailableDescription')"
+        >
+          <UTextarea v-model="overallNotes" :rows="3" class="w-full" />
+        </UFormField>
 
         <template v-else>
           <div class="flex items-center justify-between gap-3">

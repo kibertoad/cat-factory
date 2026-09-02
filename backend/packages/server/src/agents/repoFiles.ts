@@ -122,6 +122,13 @@ export function makeRepoFiles(
             client.listReviewThreads!(installationId, ref, number),
         }
       : {}),
+    // The read-splice-write of an engine-managed body region (the monorepo bootstrap's settled
+    // adoption decisions). Bound as a PAIR, and unconditionally: both underlying client methods
+    // are required members, so a caller that has a `RepoFiles` at all can publish a region.
+    getPullRequestBody: (number: number) => client.getPullRequestBody(installationId, ref, number),
+    updatePullRequestBody: async (number: number, body: string) => {
+      await client.updatePullRequest(installationId, ref, number, { body })
+    },
   }
   if (!cache) return base
 

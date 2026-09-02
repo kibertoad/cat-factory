@@ -1,6 +1,8 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { BootstrapRunner } from '@cat-factory/kernel'
 import type { Workflow } from '@cloudflare/workers-types'
 import type { BootstrapWorkflowParams } from './BootstrapWorkflow'
+import { logger } from '../observability/logger'
 
 /**
  * Drives "bootstrap repo" runs durably via Cloudflare Workflows, mirroring
@@ -24,9 +26,18 @@ export class WorkflowsBootstrapRunner implements BootstrapRunner {
         id: driveId,
         params: { workspaceId, jobId } satisfies BootstrapWorkflowParams,
       })
-    } catch {
-      // An instance with this id already exists (a duplicate start or a sweeper
-      // re-drive racing a live instance). The existing instance is authoritative.
+    } catch (error) {
+      // Usually an instance with this id already exists (a duplicate start, or a sweeper
+      // re-drive racing a live instance), and the existing instance is authoritative. Log it
+      // regardless, on the same rule as `WorkflowsEnvironmentTestRunner`: a GENUINE create
+      // failure (a rejected id, a rate limit, an outage) strands the run, and on a monorepo
+      // run's APPLY drive that means an approved bootstrap that never writes anything while
+      // the sweeper re-drives it under the same key on every tick. This line is the only
+      // trace of why.
+      logger.warn(
+        'bootstrap workflow create was rejected; relying on the existing instance or the sweeper',
+        { workspaceId, runId: jobId, driveId, err: getErrorMessage(error) },
+      )
     }
   }
 

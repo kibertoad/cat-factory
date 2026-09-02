@@ -3241,6 +3241,8 @@ export interface StartPublicRepoBootstrapResponse {
   failureKind: DebugRunFailureKind | null
   jobId: string
   /** Always present; `null` when the server has no value for it. */
+  prUrl: string | null
+  /** Always present; `null` when the server has no value for it. */
   progress: DebugSubtaskCounts | null
   repoName: string
   /** Always present; `null` when the server has no value for it. */

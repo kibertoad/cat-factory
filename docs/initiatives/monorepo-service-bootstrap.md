@@ -55,9 +55,32 @@ model only JUDGES it, and every recommendation must cite a path the survey actua
 container agent's claims about "the monorepo's convention" would be unfalsifiable at review
 time, which is precisely the failure this feature exists to avoid.
 
+What the survey reads, per side, is therefore load-bearing and worth stating: the root
+convention files (by intersection with a real listing, so naming a file no repository has costs
+nothing), up to two CI workflows, and one existing sibling service. Two rules keep the sibling
+honest, and both are corrections to the first cut. It is chosen by PROBING candidates rather
+than taking the alphabetically first directory (`.github` sorts below every letter, so a
+root-level target reported a workflows folder as "what a service here looks like"), and a
+candidate qualifies only by holding a convention file of its own; when none does, the plan says
+`siblingService: null` rather than naming a guess. Each side also contributes its own directory
+LISTING as a citable entry, off a listing the survey already fetched: no root manifest states
+where a service puts its code, its tests or its entry point, so without it `source-layout` was
+an area the model was asked to judge with no evidence it could cite, and the honest answer would
+have been `template` on every monorepo.
+
+The aggregate prompt budget is RESERVED PER SIDE for the same reason. Spent in key order it was
+not a bound at all but a handover to whichever side sorts first, and `monorepo:` sorts before
+`template:` for every key: a large monorepo spent the whole allowance and the template landed
+entirely in `omitted`, on exactly the repositories this feature targets.
+
 Cost: the survey sees a bounded set. A convention expressed only in a file the inventory does
 not name is invisible to it. That is stated to the reviewer rather than hidden: `AdoptionSurvey`
 lists what was read and, separately, what could not be.
+
+The survey's model call is also the platform's second billable call that no run start gates, so
+it takes the same `isOverBudget` safeguard `BugHuntService` does, and reports an exhausted
+budget as its OWN unavailable reason: "no model configured" and "over budget" send an operator
+to different places.
 
 ### D3: The apply phase is an ORDINARY coding job
 
@@ -88,7 +111,12 @@ once for the apply a review releases, possibly days later), and neither facade's
 re-keyed on the run id: a Cloudflare Workflows instance id cannot be recreated once its instance
 is terminal, and a pg-boss `exclusive` singleton key would dedupe the resumed drive against the
 finished one. `driveId === jobId` for every single-drive run, so plain bootstraps are unchanged;
-the apply phase takes `<jobId>:apply`.
+the apply phase takes `<jobId>-apply`. A HYPHEN, not a colon: the string becomes a Workflows
+instance id, whose accepted character set is narrower than a run id's, and `startRun` swallows a
+rejected `create` by design (a duplicate start is the normal case), so the failure would have
+been an approved bootstrap that silently never dispatches. That swallow now logs, on the same
+rule as `WorkflowsEnvironmentTestRunner`: a genuine create failure is otherwise a run the
+sweeper re-drives under the same rejected key forever with nothing naming the cause.
 
 The stale-run sweeper on both facades resolves the key through `BootstrapService.driveIdOf`
 rather than assuming the run id, or an apply-phase run would be probed under a key with no
@@ -117,6 +145,16 @@ model configured still gets the decision: the run parks, the reviewer is told th
 nothing to offer and why, and their notes still reach the agent. Presenting that as an empty
 plan would have a reviewer approve a survey nobody made.
 
+**And "gets the decision" has to mean the review is ACCEPTED.** The first cut refused a review
+against an `unavailable` plan, which made the park a dead end: the review is the only exit (a
+retry re-enters the same phase carrying the same plan), so a deployment with no adoption model
+could not bootstrap into a monorepo at all. There is nothing to answer, so the answer set is
+empty and the reviewer's notes are the whole instruction; what still refuses is an answer naming
+a decision the plan does not carry, which is D5's check doing the work the status guard was
+wrongly doing. A retry additionally CLEARS a non-ready plan, because every cause of one is
+fixed outside the run (wire a model, grant the permission, raise the budget) and carrying it
+forward would re-park on a failure that no longer exists.
+
 ### D7: The run's state rides `agent_runs.detail`, so there is NO migration
 
 **Decision: `monorepo`, `phase`, `driveId`, `adoptionPlan`, `adoptionReview` and `prUrl` are
@@ -132,6 +170,50 @@ needs `json(?)` for an object (a bare `?` stores the object's TEXT), while Postg
 suite drives a real plan through a real store on both, which is what makes that asymmetry a test
 failure rather than a runtime where the reviewer is shown nothing.
 
+### D8: The survey is guarded by an ATOMIC CLAIM, not by the plan it writes
+
+**Decision: `BootstrapJobRepository.claimSurvey` is one conditional UPDATE, taken before the
+model call, with a TTL that makes a dead claimer's claim re-takeable.**
+
+A stored plan short-circuits a LATER drive, which is what makes the phase idempotent, but it
+cannot guard the FIRST one: both facades' drivers replay (a Workflows step re-run, a pg-boss
+retry, the stale-run sweeper re-driving a run whose drive died), and two drives that each read
+"no plan yet" both survey. That bills twice, and the loser's `park` replaces the plan under a
+reviewer already looking at the winner's, whose answers then 422 as `adoption_choice_unknown`.
+The rule this follows is the general one: an external side effect in a replaying driver is
+guarded by a claim taken BEFORE the effect, never a marker written after.
+
+The claim rides `detail.surveyClaimedAt` through `json_set` / `jsonb_set` conditioned in the
+`WHERE`, so the winner is decided by the database rather than by a read the caller did first.
+It expires, because a claimer can die between the claim and the plan and a claim with no expiry
+would park that run on nothing with no way back in.
+
+### D9: The settled decisions are an engine-owned REGION of the pull request body
+
+**Decision: the engine splices them into a marker-delimited region of the PR body after the
+apply completes, using the same `spliceManagedSection` the verification report rides (with its
+own marker pair).**
+
+The dispatch-time `pr.body` alone does not survive. The harness folds an agent-authored
+`.cat-pr-description.md` over it FIELD-WISE, and it asks the agent to write one whenever the
+target repository ships a pull request template, which a mature monorepo generally does. So the
+reviewed decisions (the one thing on that pull request the agent did not choose and cannot
+restate) were routinely replaced by the agent's own narrative. A region is owned by whoever
+writes those markers, so the agent keeps the narrative and the engine keeps the decisions;
+read-splice-write against the CURRENT body preserves both, and the markers make a retry replace
+the region rather than append a second copy. Distinct markers from the report's, because a task
+run on the same repository later publishes one and must not land on top of these.
+
+Publishing is BEST-EFFORT and logs: the pull request is open either way and the decisions are on
+the run record the board renders, so failing the run over a description write would discard a
+delivered service.
+
+The body is also the HOST rendering of the brief, not the agent's. `renderAdoptionBrief` sends
+its holes verbatim because its reader is a model; `renderAdoptionPrSection` routes every hole
+through `hostMarkdown` and the caller scrubs secrets at compose time, because a reviewer's note
+reading "fixes #412" would otherwise close an unrelated issue on the monorepo when the bootstrap
+PR merged.
+
 ## Slices
 
 - [x] **Slice 1, the flow end to end.** Contracts (`monorepo` target, adoption plan/review,
@@ -144,12 +226,23 @@ failure rather than a runtime where the reviewer is shown nothing.
 
 - **The repo projection does not reach `CoreDependencies` unless a VCS connection is
   configured.** Resolving a monorepo target therefore lives on the `RepoBootstrapper` port
-  (`prepareMonorepoTarget`), not beside the projection: an unconfigured deployment must refuse
+  (`resolveMonorepoTarget`), not beside the projection: an unconfigured deployment must refuse
   the whole flow rather than half-resolve it, and the conformance harness can fake the port.
-- **Resolving the target and marking the repo a monorepo are ONE call.** `resolveRepoTarget`
-  hands an agent a service's subdirectory only while the repo's `isMonorepo` flag is set, so a
-  caller that resolved without marking would produce a service whose agents silently run at the
-  repository ROOT.
+- **Marking the repo a monorepo is one DECISION with the resolution, but not one moment.**
+  `resolveRepoTarget` hands an agent a service's subdirectory only while the repo's `isMonorepo`
+  flag is set, so the mark cannot be skipped: a service pinned inside an unmarked repo has its
+  agents dispatched at the repository ROOT. But it also cannot be written first, which the
+  single `prepareMonorepoTarget` call did: the caller still has refusals to raise between the
+  two, and a flag written before them survived the refusal, silently re-pointing every service
+  already pinned to that repository. Hence two port methods and one ordering rule (resolve →
+  pre-flight → mark), all inside `resolveTarget`.
+- **The target-directory pre-flight may not be OPTIONAL on the reader that performs it.** It was
+  wrapped in `if (files)`, so it disappeared whenever `resolveRepoFilesForCoords` was unwired or
+  could not bind the repo, and it is the only thing standing between a bootstrap and somebody
+  else's service. An unbindable repo is now refused, which also closes the provider hole: the
+  binding is provider-matched, so a repo projected under a provider this bootstrapper cannot
+  push to is refused here rather than at a dispatch that would build its clone URL off the
+  wrong host.
 - **A completed apply with no pull request is a FAILURE.** The deliverable is the PR (nothing is
   merged for the reviewer), so a run reporting done without one has left the work where nobody
   can find it. The container reports `prUrl` alone on that path rather than a fabricated
@@ -159,7 +252,16 @@ failure rather than a runtime where the reviewer is shown nothing.
   settled days later and something may have landed there in between.
 - **A retry carries the settled review FORWARD.** The failure being retried is a container fault,
   not a change of mind; re-surveying would throw away a decision a human already made and ask for
-  it again.
+  it again. It does NOT carry a non-ready plan forward (see D6).
+- **`repoUrl` is not where a pull request goes.** The public API documents it as the web URL of
+  the CREATED repository, and a monorepo run creates none: writing the PR link there re-scoped a
+  released field in place, and an integration that clones what it reads would clone a PR URL. It
+  stays null and `prUrl` is projected publicly beside it (1.65.0).
+- **A parse that drops every entry needs its own cap.** The decision cap counts KEPT decisions,
+  so a reply whose entries are all invalid never trips it while contributing one drop line each,
+  every one persisted on the plan and rendered to the reviewer. The drop list is capped and the
+  overflow COUNTED, because "the reply was mostly invention" and "the reply proposed little"
+  need opposite reactions.
 
 ## Not in this slice
 

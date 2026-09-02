@@ -7364,11 +7364,13 @@
       "unavailable": {
         "model_unavailable": "No model is configured for the adoption survey, so there is no suggestion to review. The decisions are still yours: describe what you want in the notes below.",
         "repo_unreadable": "The monorepo could not be read, so no suggestion could be produced. Check that this workspace can reach the repository.",
+        "budget_exhausted": "This workspace is over its model budget, so the platform did not pay for an adoption suggestion. The decisions are still yours: describe what you want in the notes below, or raise the budget and retry the run.",
         "analysis_unusable": "The adoption survey did not return a usable suggestion. You can still describe what you want in the notes below."
       },
       "notes": {
         "label": "Notes for the whole service",
-        "description": "Passed to the agent verbatim, alongside your decisions."
+        "description": "Passed to the agent verbatim, alongside your decisions.",
+        "unavailableDescription": "There is no suggestion to answer, so this is what the agent works from. Passed to it verbatim."
       },
       "toast": {
         "approved": "Adoption decisions approved",

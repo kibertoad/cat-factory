@@ -13361,6 +13361,8 @@ class StartPublicRepoBootstrapResponse:
     #: Always present; ``None`` when the server has no value for it.
     failure_kind: DebugRunFailureKind | None = None
     #: Always present; ``None`` when the server has no value for it.
+    pr_url: str | None = None
+    #: Always present; ``None`` when the server has no value for it.
     progress: DebugSubtaskCounts | None = None
     #: Always present; ``None`` when the server has no value for it.
     repo_owner: str | None = None
@@ -13377,7 +13379,7 @@ class StartPublicRepoBootstrapResponse:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "StartPublicRepoBootstrapResponse":
         """Decode a `StartPublicRepoBootstrapResponse` from its JSON object."""
-        known = {"createdAt", "jobId", "repoName", "status", "updatedAt", "error", "failureDetail", "failureHint", "failureKind", "progress", "repoOwner", "repoUrl", "serviceId"}
+        known = {"createdAt", "jobId", "repoName", "status", "updatedAt", "error", "failureDetail", "failureHint", "failureKind", "prUrl", "progress", "repoOwner", "repoUrl", "serviceId"}
         return cls(
             created_at=data.get("createdAt"),
             job_id=data.get("jobId"),
@@ -13388,6 +13390,7 @@ class StartPublicRepoBootstrapResponse:
             failure_detail=data.get("failureDetail"),
             failure_hint=data.get("failureHint"),
             failure_kind=None if data.get("failureKind") is None else _enum(DebugRunFailureKind, data.get("failureKind")),
+            pr_url=data.get("prUrl"),
             progress=None if data.get("progress") is None else DebugSubtaskCounts.from_dict(data.get("progress")),
             repo_owner=data.get("repoOwner"),
             repo_url=data.get("repoUrl"),
@@ -13407,6 +13410,7 @@ class StartPublicRepoBootstrapResponse:
         out["failureDetail"] = self.failure_detail
         out["failureHint"] = self.failure_hint
         out["failureKind"] = _encode(self.failure_kind)
+        out["prUrl"] = self.pr_url
         out["progress"] = _encode(self.progress)
         out["repoOwner"] = self.repo_owner
         out["repoUrl"] = self.repo_url

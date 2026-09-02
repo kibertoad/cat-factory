@@ -14062,6 +14062,16 @@
                     "jobId": {
                       "type": "string"
                     },
+                    "prUrl": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "progress": {
                       "anyOf": [
                         {
@@ -14164,6 +14174,7 @@
                     "repoName",
                     "repoOwner",
                     "repoUrl",
+                    "prUrl",
                     "serviceId",
                     "progress",
                     "error",
@@ -14289,6 +14300,16 @@
                     "jobId": {
                       "type": "string"
                     },
+                    "prUrl": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "progress": {
                       "anyOf": [
                         {
@@ -14391,6 +14412,7 @@
                     "repoName",
                     "repoOwner",
                     "repoUrl",
+                    "prUrl",
                     "serviceId",
                     "progress",
                     "error",

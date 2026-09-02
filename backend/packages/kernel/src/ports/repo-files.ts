@@ -122,6 +122,22 @@ export interface RepoFiles {
    * without the capability) omits it, so the preOp passes through and the reviewer reviews cold.
    */
   listReviewThreads?(number: number): Promise<GitHubReviewThread[]>
+  /**
+   * A pull request's current description/body verbatim, or null when it has none or can't be
+   * read. The READ half of an engine-managed body region (kernel's `spliceManagedSection`): the
+   * new body must be computed from the body as it is RIGHT NOW, or the write clobbers whatever a
+   * human or an agent put there in the meantime.
+   *
+   * Optional: a bound client that can't read a PR body omits it, and the caller then reports the
+   * region as unpublished rather than writing a body it composed from nothing.
+   */
+  getPullRequestBody?(number: number): Promise<string | null>
+  /**
+   * Replace a pull request's description with `body`. Paired with {@link getPullRequestBody} and
+   * used only for the read-splice-write of an engine-managed region, never to author a whole
+   * description: the agent owns the narrative.
+   */
+  updatePullRequestBody?(number: number, body: string): Promise<void>
 }
 
 /**

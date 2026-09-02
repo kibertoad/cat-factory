@@ -7044,11 +7044,13 @@
       "unavailable": {
         "model_unavailable": "İnceleme için bir model yapılandırılmamış, bu yüzden gözden geçirilecek bir öneri yok. Kararlar yine senin: aşağıdaki notlarda ne istediğini yaz.",
         "repo_unreadable": "Monorepo okunamadı, bu yüzden bir öneri üretilemedi. Bu çalışma alanının depoya erişebildiğini kontrol et.",
+        "budget_exhausted": "Bu çalışma alanı model bütçesini aştı, bu yüzden platform bir benimseme önerisi için ödeme yapmadı. Kararlar hâlâ senin: aşağıdaki notlarda ne istediğini yaz ya da bütçeyi yükseltip çalıştırmayı yeniden dene.",
         "analysis_unusable": "İnceleme kullanılabilir bir öneri döndürmedi. Yine de aşağıdaki notlarda ne istediğini yazabilirsin."
       },
       "notes": {
         "label": "Servisin tamamı için notlar",
-        "description": "Kararlarınla birlikte ajana olduğu gibi iletilir."
+        "description": "Kararlarınla birlikte ajana olduğu gibi iletilir.",
+        "unavailableDescription": "Yanıtlanacak bir öneri yok; ajan bu metinden yola çıkar. Ona olduğu gibi iletilir."
       },
       "toast": {
         "approved": "Kararlar onaylandı",

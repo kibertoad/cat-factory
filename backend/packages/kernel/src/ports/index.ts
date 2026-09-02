@@ -602,6 +602,7 @@ export type {
   ReferenceArchitectureRecord,
   ReferenceArchitectureRecordPatch,
   ReferenceArchitectureRepository,
+  SurveyClaim,
 } from './bootstrap-repositories.js'
 export type {
   BootstrapJobHandle,

@@ -29,10 +29,11 @@ const DECISION_ID = 'test-runner'
  * platform DROPS a recommendation citing nothing the survey read, and a fake citing a fixed
  * path would silently exercise the drop path instead of the plan path the assertions are about.
  */
-function fakeAdvisor(): MonorepoAdoptionAdvisor {
+function fakeAdvisor(calls?: { count: number }): MonorepoAdoptionAdvisor {
   return {
     enabled: true,
     async advise({ survey }) {
+      if (calls) calls.count += 1
       const cited = survey.monorepoPaths[0]
       return {
         model: 'fake:advisor',
@@ -55,8 +56,15 @@ function fakeAdvisor(): MonorepoAdoptionAdvisor {
   }
 }
 
-/** A `RepoFiles` over a fixed file map, so the survey's reads are the same on every runtime. */
-function fakeRepoFiles(files: Record<string, string>): RepoFiles {
+/**
+ * A `RepoFiles` over a fixed file map, so the survey's reads are the same on every runtime.
+ *
+ * `bodies` is the pull-request description store the engine's adoption region is spliced into.
+ * Seeded with an AGENT-authored body on purpose: the harness lets an agent's own
+ * `.cat-pr-description.md` replace the dispatch-time body field-wise, so the region has to
+ * survive beside prose the engine did not write, which is the whole reason it is a region.
+ */
+function fakeRepoFiles(files: Record<string, string>, bodies?: Map<number, string>): RepoFiles {
   return {
     async getFile(path: string) {
       const content = files[path]
@@ -90,6 +98,12 @@ function fakeRepoFiles(files: Record<string, string>): RepoFiles {
     async openPullRequest() {
       throw new Error('not used by the survey')
     },
+    async getPullRequestBody(number: number) {
+      return bodies?.get(number) ?? null
+    },
+    async updatePullRequestBody(number: number, body: string) {
+      bodies?.set(number, body)
+    },
   } as unknown as RepoFiles
 }
 
@@ -115,7 +129,9 @@ export function defineMonorepoBootstrapConformance(harness: ConformanceHarness):
      * in the projection on each facade's OWN stores, which is what makes the target resolution
      * below a real cross-runtime read rather than a fixture.
      */
-    async function setup(options: { advisor?: MonorepoAdoptionAdvisor } = {}) {
+    async function setup(
+      options: { advisor?: MonorepoAdoptionAdvisor; prBodies?: Map<number, string> } = {},
+    ) {
       // The bootstrapper both RESOLVES the target repo (the workspace's projection, scoped) and
       // dispatches the apply container, so the suite supplies one fake pre-loaded with the
       // monorepo `acme/platform` at id 777 and nothing else.
@@ -140,7 +156,7 @@ export function defineMonorepoBootstrapConformance(harness: ConformanceHarness):
                   : null
             if (!files) return null
             return {
-              repo: fakeRepoFiles(files),
+              repo: fakeRepoFiles(files, options.prBodies),
               baseBranch: 'main',
               repoId: coords.repo,
               owner: coords.owner,
@@ -358,17 +374,102 @@ export function defineMonorepoBootstrapConformance(harness: ConformanceHarness):
       expect(parked.body.adoptionPlan?.unavailableDetail).toBeTruthy()
       expect(parked.body.adoptionPlan?.decisions).toEqual([])
 
-      // And approving a plan that does not exist is refused rather than treated as approving
-      // nothing: the run stays parked with its reason intact.
-      const approved = await app.call(
+      // And the human can still SETTLE it, unaided. This is the only exit from the park (a retry
+      // re-enters the same phase), so refusing it left a deployment with no adoption model unable
+      // to bootstrap into a monorepo at all, which is the opposite of what an `unavailable` plan
+      // is documented to mean. There are no decisions to answer, so the answer set is empty and
+      // the reviewer's own notes are what the agent works from.
+      const approved = await app.call<BootstrapJob>(
         'POST',
         `/workspaces/${wsId}/bootstrap/jobs/${started.body.id}/adoption-review`,
-        { choices: [] },
+        { choices: [], notes: 'Follow the monorepo; skip the template CI.' },
       )
-      expect(approved.status).toBe(409)
+      expect(approved.status).toBe(200)
+      expect(approved.body.phase).toBe('apply')
+      expect(approved.body.adoptionReview?.decisions).toEqual([])
+      expect(approved.body.adoptionReview?.notes).toBe('Follow the monorepo; skip the template CI.')
+
+      // …and it really does build: the run reaches its pull request with no suggestion ever made.
+      await app.driveBootstrap(wsId, started.body.id)
+      const done = await app.call<BootstrapJob>(
+        'GET',
+        `/workspaces/${wsId}/bootstrap/jobs/${started.body.id}`,
+      )
+      expect(done.body.status).toBe('succeeded')
+      expect(done.body.prUrl).toContain('/pull/')
+    })
+
+    it('refuses a directory that already holds a service, and leaves the repo unmarked', async () => {
+      // The pre-flight is what stands between a bootstrap and somebody else's work, so it is
+      // asserted from the OUTSIDE (no row, no board card) and from the projection's side: the
+      // monorepo flag is the thing `resolveRepoTarget` reads to scope every agent working on this
+      // repository, so writing it before the refusal would silently re-point every service
+      // already pinned there.
+      const { app, wsId, architectureId, bootstrapper } = await setup({ advisor: fakeAdvisor() })
+      const refused = await start(app, wsId, architectureId, 'services/billing')
+      expect(refused.status).toBe(409)
       expect(
-        (approved.body as { error: { details?: { reason?: string } } }).error.details?.reason,
-      ).toBe('adoption_plan_unavailable')
+        (refused.body as { error: { details?: { reason?: string } } }).error.details?.reason,
+      ).toBe('monorepo_directory_taken')
+      expect(bootstrapper.markedMonorepo).toEqual([])
+      const jobs = await app.call<BootstrapJob[]>('GET', `/workspaces/${wsId}/bootstrap/jobs`)
+      expect(jobs.body.filter((job) => job.monorepo !== null)).toEqual([])
+    })
+
+    it('surveys once when two drives race, so the model call is never paid for twice', async () => {
+      // The survey's cost is a vendor call, and both facades' drivers replay: a Workflows step
+      // re-run, a pg-boss retry, the stale-run sweeper re-driving a run whose drive died. The
+      // guard is an atomic claim taken BEFORE the call, which only a real store can decide, so it
+      // is pinned here rather than in a unit test with an in-memory repository.
+      const calls = { count: 0 }
+      const { app, wsId, architectureId } = await setup({ advisor: fakeAdvisor(calls) })
+      const started = await start(app, wsId, architectureId)
+
+      await Promise.all([
+        app.driveBootstrap(wsId, started.body.id),
+        app.driveBootstrap(wsId, started.body.id),
+      ])
+
+      expect(calls.count).toBe(1)
+      const parked = await app.call<BootstrapJob>(
+        'GET',
+        `/workspaces/${wsId}/bootstrap/jobs/${started.body.id}`,
+      )
+      expect(parked.body.status).toBe('awaiting_review')
+      expect(parked.body.adoptionPlan?.decisions).toHaveLength(1)
+    })
+
+    it('publishes the settled decisions as a region of the pull request body', async () => {
+      // The decisions are the one thing on that pull request the agent did not choose and cannot
+      // restate, and the dispatch-time body is NOT where they survive: the harness folds an
+      // agent-authored description over it field-wise, and asks the agent to write one whenever
+      // the repository ships a PR template. So the engine owns a marker region instead, and what
+      // this pins is that the splice preserves the agent's prose on both sides of it.
+      // 7 is the number the fake bootstrapper's `prUrl` carries.
+      const bodies = new Map<number, string>([[7, 'Agent prose.\n\nWhat this adds and why.']])
+      const { app, wsId, architectureId } = await setup({
+        advisor: fakeAdvisor(),
+        prBodies: bodies,
+      })
+      const started = await start(app, wsId, architectureId)
+      await app.driveBootstrap(wsId, started.body.id)
+      await app.call(
+        'POST',
+        `/workspaces/${wsId}/bootstrap/jobs/${started.body.id}/adoption-review`,
+        {
+          choices: [{ id: DECISION_ID, choice: 'template', note: 'Fixes #412 on our board.' }],
+        },
+      )
+      await app.driveBootstrap(wsId, started.body.id)
+
+      const body = bodies.get(7) ?? ''
+      expect(body).toContain('Agent prose.')
+      expect(body).toContain('<!-- cat-factory:adoption-decisions:start -->')
+      expect(body).toContain('Test runner')
+      // The reviewer's note is NEUTRALISED, not relayed: a closing keyword before an issue
+      // reference would close issue 412 on this monorepo when the bootstrap PR merged.
+      expect(body).not.toContain('#412')
+      expect(body).toContain('412')
     })
 
     it('refuses a target repository this workspace has not linked', async () => {

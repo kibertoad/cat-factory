@@ -7044,11 +7044,13 @@
       "unavailable": {
         "model_unavailable": "Do analizy nie skonfigurowano żadnego modelu, więc nie ma propozycji do przejrzenia. Decyzje wciąż należą do Ciebie: opisz je w notatkach.",
         "repo_unreadable": "Nie udało się odczytać monorepo, więc nie powstała żadna propozycja. Sprawdź, czy ta przestrzeń robocza sięga tego repozytorium.",
+        "budget_exhausted": "Ten obszar roboczy przekroczył budżet modeli, więc platforma nie opłaciła propozycji adopcji. Decyzje nadal należą do Ciebie: opisz swoje oczekiwania w notatkach poniżej albo zwiększ budżet i ponów uruchomienie.",
         "analysis_unusable": "Analiza nie zwróciła użytecznej propozycji. Nadal możesz opisać w notatkach, czego oczekujesz."
       },
       "notes": {
         "label": "Uwagi do całej usługi",
-        "description": "Przekazywane agentowi dosłownie, razem z Twoimi decyzjami."
+        "description": "Przekazywane agentowi dosłownie, razem z Twoimi decyzjami.",
+        "unavailableDescription": "Nie ma propozycji do rozstrzygnięcia, więc agent pracuje na tej treści. Przekazujemy ją dosłownie."
       },
       "toast": {
         "approved": "Decyzje zatwierdzone",

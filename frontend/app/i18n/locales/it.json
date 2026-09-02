@@ -5182,11 +5182,13 @@
       "unavailable": {
         "model_unavailable": "Nessun modello è configurato per l'analisi, quindi non c'è alcun suggerimento da rivedere. Le decisioni restano tue: descrivile nelle note.",
         "repo_unreadable": "Non è stato possibile leggere il monorepo, quindi non è stato prodotto alcun suggerimento. Verifica che questo spazio di lavoro raggiunga il repository.",
+        "budget_exhausted": "Questo workspace ha superato il budget dei modelli, quindi la piattaforma non ha pagato per un suggerimento di adozione. Le decisioni restano tue: descrivi cosa vuoi nelle note qui sotto, oppure aumenta il budget e riprova l'esecuzione.",
         "analysis_unusable": "L'analisi non ha restituito un suggerimento utilizzabile. Puoi comunque descrivere cosa vuoi nelle note."
       },
       "notes": {
         "label": "Note per l'intero servizio",
-        "description": "Passate all'agente alla lettera, insieme alle tue decisioni."
+        "description": "Passate all'agente alla lettera, insieme alle tue decisioni.",
+        "unavailableDescription": "Non c'è alcun suggerimento a cui rispondere, quindi è da qui che parte l'agente. Gli viene passato alla lettera."
       },
       "toast": {
         "approved": "Decisioni approvate",

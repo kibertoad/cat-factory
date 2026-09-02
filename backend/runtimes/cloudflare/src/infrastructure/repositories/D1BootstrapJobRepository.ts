@@ -6,6 +6,7 @@ import type {
   BootstrapPhase,
   MonorepoBootstrapRef,
   ResolvedAdoption,
+  SurveyClaim,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 import { parseSubtasks } from '@cat-factory/kernel'
@@ -80,7 +81,11 @@ function parseDetail(raw: string): BootstrapDetail {
     const o = JSON.parse(raw) as Partial<BootstrapDetail>
     return {
       ...EMPTY_DETAIL,
-      ...Object.fromEntries(Object.entries(o).filter(([, value]) => value !== undefined)),
+      // `null` is dropped alongside `undefined`, which is safe because every NULLABLE field's
+      // empty default already IS null: what it protects are the two fields typed as plain
+      // strings (`repoName`, `instructions`), where a row storing a null would otherwise flow
+      // one through as a string and reach a prompt as the word "null".
+      ...Object.fromEntries(Object.entries(o).filter(([, value]) => value != null)),
     }
   } catch {
     return { ...EMPTY_DETAIL }
@@ -198,6 +203,26 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
         record.blockId,
       )
       .run()
+  }
+
+  /**
+   * One conditional UPDATE: stamp the survey claim only while the row carries none, or carries one
+   * that has gone stale. `meta.changes` is the verdict, so the winner is decided by SQLite rather
+   * than by a read this caller did first. See the port for why a marker written after the model
+   * call cannot serve.
+   */
+  async claimSurvey(workspaceId: string, id: string, claim: SurveyClaim): Promise<boolean> {
+    const result = await this.db
+      .prepare(
+        `UPDATE agent_runs
+            SET detail = json_set(COALESCE(detail, '{}'), '$.surveyClaimedAt', ?)
+          WHERE workspace_id = ? AND id = ? AND kind = 'bootstrap'
+            AND (json_extract(detail, '$.surveyClaimedAt') IS NULL
+                 OR json_extract(detail, '$.surveyClaimedAt') <= ?)`,
+      )
+      .bind(claim.at, workspaceId, id, claim.staleBefore)
+      .run()
+    return (result.meta?.changes ?? 0) > 0
   }
 
   async update(workspaceId: string, id: string, patch: BootstrapJobRecordPatch): Promise<void> {

@@ -43,8 +43,16 @@ Two refusals are load-bearing. A review that leaves a decision unanswered is ref
 defaulted onto the recommendation, because agreeing with a suggestion and never having read it are
 the two things this step exists to tell apart. And an answer naming a decision the plan does not
 carry is refused whole, since the reviewer was looking at a different proposal. Where no model is
-configured at all, the run still parks and the reviewer is told the platform had nothing to offer
-and why. An empty decision list and "the analysis never ran" lead to opposite conclusions.
+configured, over budget, or unable to read the repository, the run still parks and the reviewer is
+told what the platform could not offer and why. An empty decision list and "the analysis never
+ran" lead to opposite conclusions, and each cause needs a different fix, so each is its own
+reason. The reviewer can settle such a plan anyway: there is nothing to answer, their notes are
+the whole instruction, and the review is the only exit from the park.
+
+The survey's own model call is guarded twice. It answers to the same workspace budget a run start
+does, since nothing else gates it; and it is claimed atomically before the call rather than marked
+after it, because both durable drivers replay and two drives that each saw no plan yet would bill
+twice and leave a reviewer answering a plan that had been replaced underneath them.
 
 The apply phase is an ORDINARY coding job rather than a bootstrap one: the monorepo as the
 writable primary at a work branch, the reference template beside it as a read-only checkout the
@@ -52,8 +60,18 @@ run is structurally incapable of pushing to, and one pull request. Nothing outsi
 directory is touched beyond the registration the monorepo's own tooling needs, and nothing is
 merged for the reviewer.
 
-`BootstrapStatus` gains `awaiting_review`, which reaches `/api/v1` (surface 1.65.0) because a run
-started in the app is read through it. It is additive (the clients tolerate unknown enum values),
+The settled decisions ride the pull request as an engine-owned marker region rather than as its
+body. The harness lets an agent-authored description replace the body field-wise, and it asks for
+one whenever the target repository ships a pull request template, so the reviewed decisions (the
+one thing on that PR the agent did not choose) would otherwise be routinely overwritten. The
+region also means every hole in it crosses the host-markdown boundary: a reviewer's note reading
+"fixes #412" would close an unrelated issue on the monorepo when the bootstrap PR merged.
+
+`BootstrapStatus` gains `awaiting_review` and `BootstrapJob` gains `prUrl`, both reaching
+`/api/v1` (surface 1.65.0) because a run started in the app is read through it. `prUrl` is a new
+field rather than a reuse of `repoUrl`: a monorepo run creates no repository, and putting a pull
+request link in a field documented as the created repository's URL would leave an integration
+that clones what it reads cloning a PR. It is additive (the clients tolerate unknown enum values),
 but a poller's terminal test has to change: `awaiting_review` is neither running nor finished, so a
 loop treating "not succeeded and not failed" as "still working" would wait forever on a run that is
 waiting for a person.

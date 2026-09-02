@@ -25,6 +25,17 @@ const shortText = v.pipe(v.string(), v.maxLength(600))
 const pathText = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(400))
 
 /**
+ * How many drop lines one plan may carry, plus one slot for the "and N more" summary.
+ *
+ * Lives here rather than in kernel's logic because it bounds what a ROW may hold and kernel's
+ * parser is what has to respect it, so the parser imports this instead of restating it. Stated at
+ * all because the previous shape capped each LINE and not the array: a reply whose every entry is
+ * invalid contributes one line each and never trips the decision cap, so the wall the decision cap
+ * exists to prevent arrived through the drop list instead.
+ */
+export const MAX_ADOPTION_DROP_LINES = 24
+
+/**
  * The convention areas a bootstrap decides between the monorepo and the template.
  *
  * CLOSED and deliberately coarse: an area exists when a human would reasonably answer it
@@ -105,9 +116,12 @@ export const adoptionSurveySchema = v.object({
   unreadablePaths: v.array(pathText),
   /**
    * The existing sibling service the survey used as the monorepo's worked example (the
-   * directory it read a real service's own config from), or null when the target's parent
-   * directory holds no sibling yet, in which case the survey saw the ROOT conventions only,
-   * which is a materially thinner read and says so here rather than by omission.
+   * directory it read a real service's own config and shape from), or null when nothing beside
+   * the target qualified, in which case the survey saw the ROOT conventions only. That is a
+   * materially thinner read and says so here rather than by omission, and it is reported rather
+   * than filled with the first directory found: naming a CI or tooling folder as "what a service
+   * here looks like" is a claim the survey cannot support, and a wrong worked example is worse
+   * than none because the reviewer has no way to tell it was a guess.
    */
   siblingService: v.nullable(pathText),
 })
@@ -115,12 +129,14 @@ export type AdoptionSurvey = v.InferOutput<typeof adoptionSurveySchema>
 
 /**
  * Why a survey produced no plan. Distinct causes, because they need different fixes: an
- * unconfigured model is an operator action, an unreadable monorepo is a permissions problem,
- * and an unusable reply is a retry.
+ * unconfigured model is an operator action, an unreadable monorepo is a permissions problem, an
+ * exhausted budget is a ceiling to raise or a window to wait out, and an unusable reply is a
+ * retry. Collapsing any pair of them would send someone to fix a build with nothing wrong in it.
  */
 export const adoptionPlanUnavailableReasonSchema = v.picklist([
   'model_unavailable',
   'repo_unreadable',
+  'budget_exhausted',
   'analysis_unusable',
 ])
 export type AdoptionPlanUnavailableReason = v.InferOutput<
@@ -146,8 +162,15 @@ export const adoptionPlanSchema = v.object({
    * Recommendations the platform DROPPED because their evidence named nothing the survey
    * read. Reported rather than silently removed: a cap that hides what it dropped reads to a
    * reviewer exactly like a survey that found less.
+   *
+   * Bounded in BOTH dimensions: kernel's parser reports the first {@link MAX_ADOPTION_DROP_LINES}
+   * and COUNTS the rest into one closing line, reading the cap from here so the parser and the
+   * schema cannot disagree about it.
    */
-  droppedUnevidenced: v.array(v.pipe(v.string(), v.maxLength(200))),
+  droppedUnevidenced: v.pipe(
+    v.array(v.pipe(v.string(), v.maxLength(200))),
+    v.maxLength(MAX_ADOPTION_DROP_LINES + 1),
+  ),
   /** `provider:model` the plan was generated with; null when the plan is unavailable. */
   model: v.nullable(v.string()),
   generatedAt: v.number(),

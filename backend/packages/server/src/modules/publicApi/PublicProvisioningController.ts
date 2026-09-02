@@ -279,6 +279,7 @@ export function toPublicBootstrapJob(job: BootstrapJob): PublicBootstrapJob {
     repoName: job.repoName,
     repoOwner: job.repoOwner,
     repoUrl: job.repoUrl,
+    prUrl: job.prUrl,
     serviceId: job.blockId,
     progress: job.subtasks,
     error: job.error,

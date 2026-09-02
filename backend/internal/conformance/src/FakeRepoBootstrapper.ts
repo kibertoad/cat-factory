@@ -40,7 +40,7 @@ export class FakeRepoBootstrapper implements RepoBootstrapper {
    * resolving anything it asks for.
    */
   readonly monorepoRepos = new Map<number, MonorepoTargetRepo>()
-  /** Repo ids `prepareMonorepoTarget` marked as monorepos, in order. */
+  /** Repo ids `markRepoAsMonorepo` marked, in order (empty when a pre-flight refused first). */
   readonly markedMonorepo: number[] = []
 
   private readonly requests = new Map<string, BootstrapRepoRequest>()
@@ -50,14 +50,15 @@ export class FakeRepoBootstrapper implements RepoBootstrapper {
     return this.connected
   }
 
-  async prepareMonorepoTarget(
+  async resolveMonorepoTarget(
     _workspaceId: string,
     repoGithubId: number,
   ): Promise<MonorepoTargetRepo | null> {
-    const repo = this.monorepoRepos.get(repoGithubId)
-    if (!repo) return null
+    return this.monorepoRepos.get(repoGithubId) ?? null
+  }
+
+  async markRepoAsMonorepo(_workspaceId: string, repoGithubId: number): Promise<void> {
     this.markedMonorepo.push(repoGithubId)
-    return repo
   }
 
   async startBootstrap(request: BootstrapRepoRequest): Promise<BootstrapJobHandle> {

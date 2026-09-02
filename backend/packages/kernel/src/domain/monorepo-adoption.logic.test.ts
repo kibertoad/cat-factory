@@ -1,6 +1,11 @@
-import { adoptionAreaSchema, adoptionSourceSchema, type AdoptionPlan } from '@cat-factory/contracts'
+import {
+  adoptionAreaSchema,
+  adoptionSourceSchema,
+  MAX_ADOPTION_DROP_LINES,
+  type AdoptionPlan,
+} from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
-import { ConflictError, ValidationError } from './errors.js'
+import { ValidationError } from './errors.js'
 import {
   describeAdoptionArea,
   describeAdoptionSource,
@@ -10,6 +15,7 @@ import {
   monorepoBootstrapBranch,
   parseAdoptionDecisions,
   renderAdoptionBrief,
+  renderAdoptionPrSection,
   resolveAdoptionReview,
 } from './monorepo-adoption.logic.js'
 
@@ -190,14 +196,116 @@ describe('resolveAdoptionReview', () => {
     expect((error as ValidationError).details).toMatchObject({ reason: 'adoption_choice_unknown' })
   })
 
-  it('refuses to settle a plan that was never produced', () => {
+  it('settles a plan that was never produced, so the human still gets the decision', () => {
+    // An `unavailable` plan carries no decisions, so there is nothing to answer and nothing to
+    // refuse. Refusing it anyway stranded the run: the review is the only exit from the park and
+    // a retry re-enters the same phase, so a deployment with no adoption model could not
+    // bootstrap into a monorepo at all. Their notes are what the agent then works from.
     const unavailable: AdoptionPlan = {
       ...plan,
       status: 'unavailable',
       unavailableReason: 'model_unavailable',
       decisions: [],
     }
-    expect(() => resolveAdoptionReview(unavailable, [], context)).toThrow(ConflictError)
+    const settled = resolveAdoptionReview(unavailable, [], {
+      ...context,
+      notes: 'Follow the house.',
+    })
+    expect(settled.decisions).toEqual([])
+    expect(settled.notes).toBe('Follow the house.')
+    expect(settled.reviewedAt).toBe(context.reviewedAt)
+  })
+
+  it('still refuses an answer naming a decision an unavailable plan does not carry', () => {
+    // The pair of checks that replaced the status guard: nothing to answer means nothing may BE
+    // answered, so a review submitted against a plan that has since been re-surveyed is refused
+    // whole rather than applied in part.
+    const unavailable: AdoptionPlan = {
+      ...plan,
+      status: 'unavailable',
+      unavailableReason: 'model_unavailable',
+      decisions: [],
+    }
+    let error: unknown
+    try {
+      resolveAdoptionReview(unavailable, [{ id: 'a', choice: 'monorepo' }], context)
+    } catch (e) {
+      error = e
+    }
+    expect(error).toBeInstanceOf(ValidationError)
+    expect((error as ValidationError).details).toMatchObject({ reason: 'adoption_choice_unknown' })
+  })
+})
+
+describe('parseAdoptionDecisions drop reporting', () => {
+  it('bounds the drop list and counts the overflow instead of listing it', () => {
+    // A reply whose every entry is invalid never accumulates a kept decision, so the DECISION cap
+    // never fires; without a second cap the wall it exists to prevent arrives through the drop
+    // list, which is persisted whole on the plan and rendered to the reviewer.
+    const survey = {
+      monorepoPaths: ['package.json'],
+      templatePaths: [],
+      unreadablePaths: [],
+      siblingService: null,
+    }
+    const decisions = Array.from({ length: 300 }, (_, index) => ({
+      id: `d${index}`,
+      area: 'testing',
+      title: `Invented ${index}`,
+      recommended: 'monorepo',
+      rationale: 'r',
+      evidence: ['monorepo:does-not-exist.json'],
+    }))
+    const parsed = parseAdoptionDecisions({ decisions }, survey)
+    expect(parsed.decisions).toEqual([])
+    expect(parsed.dropped.length).toBe(MAX_ADOPTION_DROP_LINES + 1)
+    expect(parsed.dropped.at(-1)).toContain('further proposals were dropped')
+  })
+})
+
+describe('renderAdoptionPrSection', () => {
+  it('neutralises the auto-link triggers in model- and reviewer-authored text', () => {
+    // A pull request body is a PARSED surface: a closing keyword before an issue reference closes
+    // that issue on merge, and `@name` mentions a stranger. Both holes here are untrusted (the
+    // title is model-authored, the notes are the reviewer's), so both cross `hostMarkdown`.
+    const section = renderAdoptionPrSection(
+      {
+        decisions: [
+          {
+            id: 'a',
+            area: 'testing',
+            title: 'Test runner',
+            choice: 'monorepo',
+            overrodeRecommendation: true,
+            note: 'fixes #412, ask @acme/platform',
+          },
+        ],
+        notes: 'closes #99',
+        reviewedByUserId: 'u1',
+        reviewedAt: 5,
+      },
+      'services/payments',
+    )
+    expect(section).not.toContain('#412')
+    expect(section).not.toContain('@acme')
+    expect(section).not.toContain('#99')
+    // The information survives; only the triggers are inert.
+    expect(section).toContain('412')
+    expect(section).toContain('Test runner')
+    expect(section).toContain('reviewer overrode the suggestion')
+  })
+
+  it('leaves the AGENT brief verbatim, because its reader is a model', () => {
+    const brief = renderAdoptionBrief(
+      {
+        decisions: [],
+        notes: 'fixes #412, ask @acme/platform',
+        reviewedByUserId: 'u1',
+        reviewedAt: 5,
+      },
+      'services/payments',
+    )
+    expect(brief).toContain('fixes #412, ask @acme/platform')
   })
 })
 

@@ -123,25 +123,36 @@ export interface RepoBootstrapper {
    */
   isWorkspaceConnected(workspaceId: string): Promise<boolean>
   /**
-   * Resolve a repository the WORKSPACE projects as a monorepo bootstrap target, and mark it as a
-   * monorepo. Returns null when the workspace projects no such repo, which is what scopes the
-   * feature: without it, naming a numeric id would be a way to open a pull request against any
-   * repository the deployment's credential happens to reach.
+   * Resolve a repository the WORKSPACE projects as a monorepo bootstrap target. Returns null when
+   * the workspace projects no such repo, which is what scopes the feature: without it, naming a
+   * numeric id would be a way to open a pull request against any repository the deployment's
+   * credential happens to reach.
    *
-   * Resolving and marking are ONE call because they are one decision. Pinning a service to a
-   * subdirectory IS the declaration that the repo hosts several services, and `resolveRepoTarget`
-   * hands an agent a service's subdirectory only while the repo's monorepo flag is set, so a
-   * caller that resolved without marking would produce a service whose agents silently run at the
-   * repository ROOT.
+   * READ-ONLY, and separate from {@link markRepoAsMonorepo} for that reason. The two are one
+   * DECISION but not one moment: the caller still has refusals to raise between them (a directory
+   * that already holds somebody's service, a path that escapes the repository), and a flag written
+   * before those would survive the refusal. `resolveRepoTarget` hands an agent a service's
+   * subdirectory only while the flag is set, so a repo left marked by a rejected request changes
+   * the working directory every service already pinned to it is dispatched at.
    *
    * Lives on this port rather than beside the repo projection because the projection reaches the
    * engine only where a VCS connection is configured, and this is exactly the path that needs it:
    * an unconfigured deployment must refuse the whole monorepo flow, not half-resolve it.
    */
-  prepareMonorepoTarget(
+  resolveMonorepoTarget(
     workspaceId: string,
     repoGithubId: number,
   ): Promise<MonorepoTargetRepo | null>
+  /**
+   * Declare that a resolved repo hosts several services, once the request that needed it has
+   * survived every pre-flight. Idempotent: a repo already marked is left alone.
+   *
+   * Pinning a service to a subdirectory IS this declaration, so the mark cannot be skipped: a
+   * service pinned inside a repo that is not marked as a monorepo would have its agents dispatched
+   * at the repository ROOT, building in the wrong place with nothing to say so. It is the LAST
+   * thing the resolution does, never the first.
+   */
+  markRepoAsMonorepo(workspaceId: string, repoGithubId: number): Promise<void>
   /**
    * Pre-flight the target repo (exists, reachable, empty-or-boilerplate) and
    * dispatch the bootstrap container. Returns once the job is accepted — the work

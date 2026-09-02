@@ -176,8 +176,19 @@ export const publicBootstrapJobSchema = v.object({
   repoName: v.string(),
   /** The owner the repository was created under, resolved at run time; null until known. */
   repoOwner: v.nullable(v.string()),
-  /** Web URL of the created repository; null until it succeeds. */
+  /** Web URL of the created repository; null until it succeeds, and on a monorepo run always. */
   repoUrl: v.nullable(v.string()),
+  /**
+   * The pull request a MONOREPO bootstrap opened; null on a run that created a repository of
+   * its own, and until the pull request exists.
+   *
+   * Projected beside `repoUrl` rather than reusing it, which is the whole point: a monorepo run
+   * creates no repository, so it has no `repoUrl` to report, and writing the pull request there
+   * would silently re-scope a field this surface documents as "the created repository": a
+   * caller that clones what it reads would clone a pull-request link. Two fields, one of which
+   * is always null, states which shape of run answered.
+   */
+  prUrl: v.nullable(v.string()),
   /** The board service frame this run materialises; null when none was created. */
   serviceId: v.nullable(v.string()),
   /** Live subtask counts from the agent's todo list; null until it first reports. */

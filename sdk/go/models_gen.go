@@ -5848,6 +5848,8 @@ type StartPublicRepoBootstrapResponse struct {
 	// FailureKind always present; nil when the server has no value for it.
 	FailureKind *DebugRunFailureKind `json:"failureKind"`
 	JobID       string               `json:"jobId"`
+	// PRURL always present; nil when the server has no value for it.
+	PRURL *string `json:"prUrl"`
 	// Progress always present; nil when the server has no value for it.
 	Progress *DebugSubtaskCounts `json:"progress"`
 	RepoName string              `json:"repoName"`

@@ -94,6 +94,61 @@ describe('surveyMonorepo', () => {
     expect(survey.siblingService).toBeNull()
   })
 
+  it('never names a dot-directory or a CI folder as the monorepo’s worked example', async () => {
+    // `.` sorts below every letter, so the alphabetically first entry of a root listing is
+    // `.changeset`/`.github` in any repository that keeps tooling there. Naming one as the
+    // sibling told the reviewer that a workflows folder is "the best available statement of what
+    // a service in this monorepo looks like", and the model then cited CI config as a service's
+    // conventions.
+    const { survey } = await surveyMonorepo({
+      monorepo: side({
+        'package.json': '{}',
+        '.changeset/config.json': '{}',
+        '.github/workflows/ci.yml': 'name: ci',
+        'billing/package.json': '{"name":"billing"}',
+      }),
+      directory: 'payments',
+    })
+    expect(survey.siblingService).toBe('billing')
+  })
+
+  it('skips a candidate that holds no convention file of its own', async () => {
+    // A directory that says nothing about how a service here is built is worse than no example,
+    // because "no sibling" is a fact the plan REPORTS while a bad sibling is one it asserts.
+    const { survey } = await surveyMonorepo({
+      monorepo: side({
+        'package.json': '{}',
+        'services/assets/logo.svg': '<svg/>',
+        'services/billing/package.json': '{"name":"@acme/billing"}',
+      }),
+      directory: 'services/payments',
+    })
+    expect(survey.siblingService).toBe('services/billing')
+  })
+
+  it('records each side’s SHAPE, which is the only evidence either offers about layout', async () => {
+    // No root manifest states where a service puts its code, its tests or its entry point, and
+    // the sibling's own config files do not either. Without a citable listing, a `source-layout`
+    // recommendation has nothing behind it and is dropped upstream as invention, so the model
+    // could only ever answer `template` for one of the twelve areas it is asked about.
+    const { survey, files: read } = await surveyMonorepo({
+      monorepo: side({
+        'package.json': '{}',
+        'services/billing/package.json': '{}',
+        'services/billing/src/index.ts': 'export {}',
+        'services/billing/test/index.test.ts': 'export {}',
+      }),
+      template: side({ 'package.json': '{}', 'lib/main.ts': 'export {}' }),
+      directory: 'services/payments',
+    })
+    expect(survey.monorepoPaths).toContain('services/billing/')
+    expect(read['monorepo:services/billing/']).toContain('src/')
+    expect(read['monorepo:services/billing/']).toContain('test/')
+    // Both sides, or the one that has any evidence wins the area by default.
+    expect(survey.templatePaths).toContain('./')
+    expect(read['template:./']).toContain('lib/')
+  })
+
   it('separates a read that FAILED from a file that is simply absent', async () => {
     // Collapsing the two lets a survey blinded by an expired token present itself as a monorepo
     // with no conventions, which is the opposite conclusion.

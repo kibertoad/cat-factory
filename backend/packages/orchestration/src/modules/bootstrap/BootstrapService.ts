@@ -35,8 +35,12 @@ import {
   ConflictError,
   getErrorMessage,
   isDispatchFailure,
+  noopLogger,
+  redactSecrets,
   renderAdoptionBrief,
+  renderAdoptionPrSection,
   resolveAdoptionReview,
+  runBestEffort,
   sameSubtasks,
 } from '@cat-factory/kernel'
 import { registerServiceForFrame, requireWorkspace } from '@cat-factory/kernel'
@@ -104,8 +108,9 @@ export interface BootstrapServiceDependencies {
    */
   onBootstrapSucceeded?: (workspaceId: string, blockId: string) => Promise<void>
   /**
-   * The monorepo flow's collaborators (repo projection, checkout-free reads, the adoption
-   * advisor). Absent ⇒ a request naming a `monorepo` target is refused; a plain new-repo
+   * The monorepo flow's collaborators (checkout-free reads, the adoption advisor, the budget
+   * probe). Absent ⇒ a request naming a `monorepo` target is refused with a 503, because
+   * `resolveTarget` cannot pre-flight the target directory without the reader; a plain new-repo
    * bootstrap is unaffected, which is what keeps the two flows independently wireable.
    */
   monorepo?: Omit<MonorepoBootstrapDeps, 'clock' | 'logger'>
@@ -176,11 +181,24 @@ function composeInstructions(defaults: string, extra: string): string {
   return [defaults.trim(), extra.trim()].filter((part) => part.length > 0).join('\n\n')
 }
 
+/**
+ * How long a survey claim holds before another drive may take it.
+ *
+ * Sized against what the claim covers: a bounded set of checkout-free reads plus one inline model
+ * call, so minutes rather than hours. It exists because a claimer can die between taking the claim
+ * and writing the plan (an evicted isolate, a restarted worker), and a claim with no expiry would
+ * leave that run parked on nothing with no way back in.
+ */
+const SURVEY_CLAIM_TTL_MS = 10 * 60_000
+
 export class BootstrapService {
   /** The monorepo flow's decisions; a plain new-repo run never reaches it. */
   private readonly monorepo: MonorepoBootstrapController
+  /** Normalised once, so the best-effort paths stay unit-testable with no logger wired. */
+  private readonly log: Logger
 
   constructor(private readonly deps: BootstrapServiceDependencies) {
+    this.log = deps.logger ?? noopLogger
     this.monorepo = new MonorepoBootstrapController({
       ...deps.monorepo,
       clock: deps.clock,
@@ -525,9 +543,16 @@ export class BootstrapService {
       // them for it again, which is the one thing a retry must not do: the failure being
       // retried is a container fault, not a change of mind. The phase is preserved too: a run
       // that failed during the survey retries the survey.
+      //
+      // A plan that is NOT ready is dropped instead, and that is what makes a retry the way out
+      // of an unavailable one: the causes are an unwired model, an unreadable repository and an
+      // exhausted budget, all of which an operator fixes OUTSIDE the run, so carrying the stale
+      // plan forward would re-park on the old failure and no state transition would ever reach
+      // the working advisor. The new row also carries no survey claim (it is a new id), so the
+      // re-survey is claimable.
       monorepo: previous.monorepo,
       phase: previous.phase,
-      adoptionPlan: previous.adoptionPlan,
+      adoptionPlan: previous.adoptionPlan?.status === 'ready' ? previous.adoptionPlan : null,
       adoptionReview: previous.adoptionReview,
       createdAt: now,
       updatedAt: now,
@@ -821,21 +846,35 @@ export class BootstrapService {
    * the phase and the suggestion is only an aid: a human bootstrapping into a monorepo on a
    * deployment with no model still gets to make the call, unaided and told so.
    *
-   * Idempotent by CONTENT: a run that already carries a plan re-parks rather than paying for a
-   * second survey, so a replayed step or a sweeper re-drive cannot spend a second model call.
+   * Guarded by an ATOMIC CLAIM taken BEFORE the model call, not by the plan written after it. A
+   * stored plan short-circuits a LATER drive, but two drives racing the FIRST one both read no
+   * plan, and the survey's cost is a vendor call plus a `park` that would replace the plan under
+   * a reviewer already looking at the other one (whose answers then 422). `claimSurvey` is one
+   * conditional UPDATE, so exactly one drive proceeds and the loser leaves the run alone.
    */
   private async runSurvey(
     workspaceId: string,
     record: BootstrapJobRecord,
   ): Promise<BootstrapPollResult> {
     if (record.adoptionPlan) {
-      // The plan is the claim, and it is already made. Bring the row's status in line with it
-      // (a driver that died between producing the plan and recording the park re-enters here)
-      // and stop.
+      // A plan is already recorded. Bring the row's status in line with it (a driver that died
+      // between producing the plan and recording the park re-enters here) and stop. That holds
+      // for an `unavailable` plan too: re-surveying would spend again on a park a human can
+      // already settle, and `retry` is the deliberate re-survey (it clears a non-ready plan).
       if (record.status !== 'awaiting_review') {
         await this.park(workspaceId, record, record.adoptionPlan)
       }
       return { state: 'awaiting_review' }
+    }
+    const now = this.deps.clock.now()
+    const claimed = await this.deps.bootstrapJobRepository.claimSurvey(workspaceId, record.id, {
+      at: now,
+      staleBefore: now - SURVEY_CLAIM_TTL_MS,
+    })
+    if (!claimed) {
+      // Another drive holds the claim and will park the run. Reported as still RUNNING because
+      // that is what the row says: the next poll reads the winner's plan and parks.
+      return { state: 'running' }
     }
     const reference = record.referenceArchitectureId
       ? await this.deps.referenceArchitectureRepository.get(
@@ -941,7 +980,11 @@ export class BootstrapService {
         )
       : null
     const branch = this.monorepo.branchFor(record.id)
-    const driveId = `${record.id}:apply`
+    // `-apply`, not `:apply`: this string becomes a Cloudflare Workflows INSTANCE ID, whose
+    // accepted character set is narrower than a run id's and does not include a colon, and a
+    // rejected `create` is swallowed by design (a duplicate start is normal), so the failure
+    // would be an approved bootstrap that silently never dispatches.
+    const driveId = `${record.id}-apply`
     const leg: MonorepoBootstrapLeg = {
       repoGithubId: monorepo.repoGithubId,
       owner: monorepo.repoOwner,
@@ -950,7 +993,12 @@ export class BootstrapService {
       branch,
       pr: {
         title: monorepoBootstrapPrTitle(record.repoName, monorepo.directory),
-        body: renderAdoptionBrief(resolved, monorepo.directory),
+        // The HOST rendering (neutralised holes, scrubbed at compose time), never the agent
+        // brief: this string lands on a pull request body, where a reviewer's note reading
+        // "fixes #412" would close an unrelated issue on merge. It is the FALLBACK body; the
+        // engine also publishes the same decisions as its own marker region once the pull
+        // request exists, because the harness lets an agent-authored description replace this.
+        body: redactSecrets(renderAdoptionPrSection(resolved, monorepo.directory)) ?? '',
       },
     }
     const started: MonorepoBootstrapRef = { ...monorepo, branch }
@@ -1060,11 +1108,26 @@ export class BootstrapService {
     const patch = {
       status: 'succeeded' as const,
       repoOwner: monorepo.repoOwner,
-      repoUrl: prUrl,
+      // `repoUrl` stays null. It is the public API's "web URL of the created repository", and a
+      // monorepo run creates none: writing the pull request there would re-scope a released
+      // field in place, and an integration that clones `repoUrl` would clone a PR link. `prUrl`
+      // is the field this run's deliverable belongs in, and it is projected publicly beside it.
       prUrl,
       updatedAt: this.deps.clock.now(),
     }
     await this.deps.bootstrapJobRepository.update(workspaceId, record.id, patch)
+    const review = record.adoptionReview
+    if (review) {
+      // Best-effort: the pull request is open, the decisions are on the run record the board
+      // renders, and failing the run over a description write would discard a delivered service.
+      // The warning is what makes the omission visible rather than silent.
+      await runBestEffort(
+        this.log,
+        'monorepo bootstrap: publish adoption decisions onto the pull request',
+        () => this.monorepo.publishAdoptionDecisions(workspaceId, monorepo, prUrl, review),
+        { workspaceId, jobId: record.id, prUrl },
+      )
+    }
     if (record.blockId) {
       // Best-effort, as on the new-repo path: the pull request is open either way, and a
       // linkage failure must not report the run as failed. The `directory` is what makes the

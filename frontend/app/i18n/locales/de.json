@@ -5182,11 +5182,13 @@
       "unavailable": {
         "model_unavailable": "Für die Analyse ist kein Modell konfiguriert, daher gibt es keinen Vorschlag. Die Entscheidungen bleiben deine: beschreibe unten, was du möchtest.",
         "repo_unreadable": "Das Monorepo konnte nicht gelesen werden, daher entstand kein Vorschlag. Prüfe, ob dieser Workspace das Repository erreicht.",
+        "budget_exhausted": "Dieser Workspace hat sein Modell-Budget überschritten, daher hat die Plattform keinen Übernahmevorschlag bezahlt. Die Entscheidungen liegen weiterhin bei dir: beschreibe unten in den Notizen, was du möchtest, oder erhöhe das Budget und starte den Lauf erneut.",
         "analysis_unusable": "Die Analyse lieferte keinen brauchbaren Vorschlag. Du kannst unten trotzdem beschreiben, was du möchtest."
       },
       "notes": {
         "label": "Hinweise zum gesamten Service",
-        "description": "Wird zusammen mit deinen Entscheidungen wörtlich an den Agenten übergeben."
+        "description": "Wird zusammen mit deinen Entscheidungen wörtlich an den Agenten übergeben.",
+        "unavailableDescription": "Es gibt keinen Vorschlag zu beantworten, also arbeitet der Agent hiermit. Wird ihm wörtlich übergeben."
       },
       "toast": {
         "approved": "Entscheidungen freigegeben",

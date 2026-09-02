@@ -681,7 +681,11 @@ export function createRunnersModule(deps: CoreDependencies): RunnersModule | und
 export function createBootstrapModule(
   deps: CoreDependencies,
   eventPublisher: ExecutionEventPublisher,
-  onBootstrapSucceeded?: (workspaceId: string, blockId: string) => Promise<void>,
+  wiring: {
+    onBootstrapSucceeded?: (workspaceId: string, blockId: string) => Promise<void>
+    /** The workspace spend safeguard, for the monorepo survey's billable model call. */
+    isOverBudget?: (workspaceId: string) => Promise<boolean>
+  } = {},
 ): BootstrapModule | undefined {
   const { referenceArchitectureRepository, bootstrapJobRepository } = deps
   if (!referenceArchitectureRepository || !bootstrapJobRepository) return undefined
@@ -700,18 +704,20 @@ export function createBootstrapModule(
     repoBootstrapper: deps.repoBootstrapper,
     bootstrapRunner: deps.bootstrapRunner,
     eventPublisher,
-    // The monorepo flow's own collaborators. Both are independently optional and only affect the
-    // SUGGESTION: an unwired reader or advisor still parks the run for a human, with a plan that
-    // states why there is nothing to suggest. What gates the flow itself is the bootstrapper,
-    // which owns resolving the target repository.
+    // The monorepo flow's own collaborators. The checkout-free READER gates the flow (the
+    // target-directory pre-flight is what stands between a bootstrap and somebody else's
+    // service, so an unwired reader refuses the request rather than skipping the check), while
+    // the advisor and the budget probe only affect the SUGGESTION: without either, the run still
+    // parks for a human with a plan that states why there is nothing to suggest.
     monorepo: {
       ...(deps.resolveRepoFilesForCoords
         ? { resolveRepoFilesForCoords: deps.resolveRepoFilesForCoords }
         : {}),
       ...(advisor ? { adoptionAdvisor: advisor } : {}),
+      ...(wiring.isOverBudget ? { isOverBudget: wiring.isOverBudget } : {}),
     },
     ...(deps.logger ? { logger: deps.logger } : {}),
-    ...(onBootstrapSucceeded ? { onBootstrapSucceeded } : {}),
+    ...(wiring.onBootstrapSucceeded ? { onBootstrapSucceeded: wiring.onBootstrapSucceeded } : {}),
   })
   return { service }
 }

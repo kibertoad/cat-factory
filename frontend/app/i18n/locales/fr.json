@@ -7044,11 +7044,13 @@
       "unavailable": {
         "model_unavailable": "Aucun modèle n’est configuré pour l’analyse, il n’y a donc pas de suggestion à examiner. Les décisions restent les vôtres : décrivez-les dans les notes.",
         "repo_unreadable": "Le monorepo n’a pas pu être lu, aucune suggestion n’a donc été produite. Vérifiez que cet espace de travail atteint le dépôt.",
+        "budget_exhausted": "Cet espace de travail a dépassé son budget de modèles, la plateforme n'a donc pas payé de suggestion d'adoption. Les décisions vous appartiennent toujours : décrivez ce que vous voulez dans les notes ci-dessous, ou augmentez le budget et relancez l'exécution.",
         "analysis_unusable": "L’analyse n’a pas renvoyé de suggestion exploitable. Vous pouvez tout de même décrire ce que vous voulez dans les notes."
       },
       "notes": {
         "label": "Notes pour l’ensemble du service",
-        "description": "Transmises telles quelles à l’agent, avec vos décisions."
+        "description": "Transmises telles quelles à l’agent, avec vos décisions.",
+        "unavailableDescription": "Il n'y a aucune suggestion à trancher : c'est donc ce dont l'agent partira. Transmis mot pour mot."
       },
       "toast": {
         "approved": "Décisions approuvées",

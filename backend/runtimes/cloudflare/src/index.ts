@@ -719,14 +719,21 @@ function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): v
       : null
     /**
      * The durable key a stale run is driven under. Only the bootstrap flow can differ from the
-     * run id (its apply phase is a second drive), and only it is asked, because the container assembly
-     * is not free, so a lookup per execution run would make every sweep pay for a fact only
-     * bootstrap runs have.
+     * run id (its apply phase is a second drive), and only it is asked, because the container
+     * assembly is not free, so a lookup per execution run would make every sweep pay for a fact
+     * only bootstrap runs have.
+     *
+     * The container is assembled LAZILY and at most once per tick, beside the hoisted lookups
+     * above: this is called twice per stale bootstrap (`instanceState`, then `redrive`), so
+     * building inside would assemble one container per call rather than per sweep, while
+     * building unconditionally would charge every tick for a container a sweep with no stale
+     * bootstrap never reads.
      */
+    let bootstrapService: ReturnType<typeof buildContainer>['bootstrap'] | undefined
     const driveKeyOf = async (ref: { kind: string; workspaceId: string; id: string }) => {
       if (ref.kind !== 'bootstrap') return ref.id
-      const bootstrap = buildContainer(env).bootstrap
-      return (await bootstrap?.service.driveIdOf(ref.workspaceId, ref.id)) ?? ref.id
+      bootstrapService ??= buildContainer(env).bootstrap
+      return (await bootstrapService?.service.driveIdOf(ref.workspaceId, ref.id)) ?? ref.id
     }
     tick.run(
       {

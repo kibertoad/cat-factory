@@ -41,6 +41,10 @@ export const MONOREPO_ADOPTION_SYSTEM_PROMPT =
   'file keys from the list you were shown, verbatim, in its `evidence` array. A proposal citing ' +
   'a file that was not given to you is discarded unread, so never cite one you did not see and ' +
   'never invent a path. ' +
+  'A key ending in `/` is a DIRECTORY LISTING, not a file: its body is the entry names, one per ' +
+  'line, with a trailing slash on subdirectories. Those listings are the only evidence you have ' +
+  'about source layout and module structure, so cite them for that area rather than inferring ' +
+  'layout from a config file that does not state it. ' +
   'Never recommend "monorepo" for an area where the given monorepo files say nothing about it: ' +
   'that is a claim you cannot support. Recommend "template" there, or "neither" if the new ' +
   'service does not need it, and say in the rationale that the monorepo showed nothing. ' +
@@ -68,6 +72,57 @@ export const MONOREPO_ADOPTION_SYSTEM_PROMPT =
  * service beside it must not crowd out the template it is being compared against.
  */
 const MAX_TOTAL_FILE_CHARS = 90_000
+
+/**
+ * The two sides, each with the share of the budget it is guaranteed.
+ *
+ * A single budget spent in key order does not bound the aggregate, it hands it to whichever side
+ * sorts first, and `monorepo:` sorts before `template:` for every key: a large monorepo would
+ * spend the whole allowance and the template would land entirely in `omitted`, which is exactly
+ * the crowding-out the cap exists to prevent. So each side gets a reserved half, spent in its own
+ * priority order, and whatever one side leaves unspent is then offered to the other. The result is
+ * that a thin template still costs the monorepo nothing, and a fat monorepo can no longer make
+ * the comparison one-sided.
+ */
+const SIDES = [
+  { prefix: 'monorepo:', share: 0.5 },
+  { prefix: 'template:', share: 0.5 },
+] as const
+
+/** Which keys go in, and which were read but did not fit, under the per-side reservation. */
+function selectWithinBudget(files: Record<string, string>): {
+  included: string[]
+  omitted: string[]
+} {
+  const keys = Object.keys(files).sort()
+  const included: string[] = []
+  const omitted: string[] = []
+  // Reserve first, then let each side spend its own share; `spare` carries what the earlier
+  // sides did not need, so the reservation is a floor rather than a ceiling.
+  let spare = 0
+  const groups = SIDES.map((side) => ({
+    budget: Math.floor(MAX_TOTAL_FILE_CHARS * side.share),
+    keys: keys.filter((key) => key.startsWith(side.prefix)),
+  }))
+  // Anything matching no declared prefix is not silently dropped: it rides the spare pool, so a
+  // future third side reaching this renderer un-reserved still gets shown rather than omitted.
+  const claimed = new Set(groups.flatMap((group) => group.keys))
+  groups.push({ budget: 0, keys: keys.filter((key) => !claimed.has(key)) })
+  for (const group of groups) {
+    let budget = group.budget + spare
+    for (const key of group.keys) {
+      const body = files[key] ?? ''
+      if (body.length > budget) {
+        omitted.push(key)
+        continue
+      }
+      budget -= body.length
+      included.push(key)
+    }
+    spare = budget
+  }
+  return { included: included.sort(), omitted: omitted.sort() }
+}
 
 /** Render one file as a keyed, fenced block the model can cite by its exact key. */
 function renderFile(key: string, body: string): string {
@@ -98,19 +153,7 @@ export function renderMonorepoAdoptionPrompt(input: {
   files: Record<string, string>
 }): string {
   const { directory, instructions, survey, files } = input
-  const keys = Object.keys(files).sort()
-  const included: string[] = []
-  const omitted: string[] = []
-  let budget = MAX_TOTAL_FILE_CHARS
-  for (const key of keys) {
-    const body = files[key] ?? ''
-    if (body.length > budget) {
-      omitted.push(key)
-      continue
-    }
-    budget -= body.length
-    included.push(key)
-  }
+  const { included, omitted } = selectWithinBudget(files)
 
   const lines: string[] = [
     `A new service is being created at \`${directory}\` inside an existing monorepo.`,
@@ -161,11 +204,13 @@ export function renderMonorepoAdoptionPrompt(input: {
 }
 
 /**
- * The pull-request title and body a monorepo bootstrap opens its change with.
+ * The pull-request TITLE a monorepo bootstrap opens its change with.
  *
- * The body names the reviewed decisions rather than restating the diff: a reviewer of this PR is
- * being asked whether the service fits the monorepo, and what settles that is which side each
- * area came from and who chose it, which the diff itself cannot show.
+ * The body is not composed here. The reviewed decisions land on the pull request as an
+ * engine-owned marker region (kernel's `renderAdoptionPrSection` + `spliceManagedSection`),
+ * because the harness lets an agent-authored `.cat-pr-description.md` replace a dispatch-time
+ * body field-wise and asks the agent for one whenever the target repository ships a PR template.
+ * The narrative is the agent's; the decisions are the human's, and only a region keeps both.
  */
 export function monorepoBootstrapPrTitle(serviceName: string, directory: string): string {
   return `Bootstrap ${serviceName} at ${directory}`

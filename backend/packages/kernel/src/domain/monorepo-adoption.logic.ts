@@ -1,6 +1,7 @@
 import {
   adoptionAreaSchema,
   adoptionSourceSchema,
+  MAX_ADOPTION_DROP_LINES,
   type AdoptionArea,
   type AdoptionChoice,
   type AdoptionDecision,
@@ -10,7 +11,8 @@ import {
   type ResolvedAdoption,
   type ResolvedAdoptionDecision,
 } from '@cat-factory/contracts'
-import { ConflictError, ValidationError } from './errors.js'
+import * as hostMarkdown from '../shared/host-markdown.logic.js'
+import { ValidationError } from './errors.js'
 
 // ---------------------------------------------------------------------------
 // The rules over a monorepo bootstrap's adoption plan: reading a model's proposal into the
@@ -162,6 +164,12 @@ export function parseAdoptionDecisions(
   survey: AdoptionSurvey,
 ): ParsedAdoptionDecisions {
   const dropped: string[] = []
+  let unreported = 0
+  /** Record a drop, or count it once the report is full (contracts' `MAX_ADOPTION_DROP_LINES`). */
+  const drop = (line: string): void => {
+    if (dropped.length < MAX_ADOPTION_DROP_LINES) dropped.push(line)
+    else unreported += 1
+  }
   const container = raw as { decisions?: unknown } | null
   const list = Array.isArray(container?.decisions) ? container.decisions : null
   if (!list) return { decisions: [], dropped: ['the reply carried no `decisions` array'] }
@@ -171,7 +179,7 @@ export function parseAdoptionDecisions(
   const seen = new Set<string>()
   for (const entry of list) {
     if (decisions.length >= MAX_ADOPTION_DECISIONS) {
-      dropped.push(
+      drop(
         `the reply proposed more than ${MAX_ADOPTION_DECISIONS} decisions; the rest were not read`,
       )
       break
@@ -181,28 +189,26 @@ export function parseAdoptionDecisions(
     const id = asString(item.id, 80)
     const title = asString(item.title, 200)
     if (!id || !title) {
-      dropped.push(`a proposed decision had no id or title (${id || title || 'unnamed'})`)
+      drop(`a proposed decision had no id or title (${id || title || 'unnamed'})`)
       continue
     }
     if (seen.has(id)) {
-      dropped.push(`'${id}' was proposed twice; only the first was kept`)
+      drop(`'${id}' was proposed twice; only the first was kept`)
       continue
     }
     if (!isAdoptionArea(item.area)) {
-      dropped.push(`'${title}' named an area this deployment does not define`)
+      drop(`'${title}' named an area this deployment does not define`)
       continue
     }
     if (!isAdoptionSource(item.recommended)) {
-      dropped.push(`'${title}' recommended a choice this deployment does not define`)
+      drop(`'${title}' recommended a choice this deployment does not define`)
       continue
     }
     const evidence = Array.isArray(item.evidence)
       ? item.evidence.filter((path): path is string => typeof path === 'string' && known.has(path))
       : []
     if (evidence.length === 0) {
-      dropped.push(
-        `'${title}' cited no file the survey actually read, so it was not carried through`,
-      )
+      drop(`'${title}' cited no file the survey actually read, so it was not carried through`)
       continue
     }
     seen.add(id)
@@ -216,6 +222,9 @@ export function parseAdoptionDecisions(
       rationale: asString(item.rationale, 600),
       evidence,
     })
+  }
+  if (unreported > 0) {
+    dropped.push(`and ${unreported} further proposals were dropped for the same kinds of reason`)
   }
   return { decisions, dropped }
 }
@@ -235,13 +244,13 @@ export function resolveAdoptionReview(
   choices: readonly AdoptionChoice[],
   context: { reviewedByUserId: string | null; reviewedAt: number; notes?: string | undefined },
 ): ResolvedAdoption {
-  if (plan.status !== 'ready') {
-    throw new ConflictError(
-      'This run has no adoption plan to approve; the survey could not produce one.',
-      'adoption_plan_unavailable',
-      { unavailableReason: plan.unavailableReason },
-    )
-  }
+  // Deliberately NOT gated on `plan.status === 'ready'`. An `unavailable` plan carries no
+  // decisions, so settling it answers nothing, but it is still the human's decision to make, and
+  // refusing it strands the run: the review is the ONLY exit from the park, and a retry re-enters
+  // the same phase. A deployment with no adoption model would then be unable to bootstrap into a
+  // monorepo at all, which is the opposite of the "they just make it unaided" this flow promises.
+  // The two checks below are what keep that safe: nothing to answer means nothing may be
+  // answered, so a review aimed at a plan that has since been re-surveyed is still refused whole.
   const byId = new Map(choices.map((choice) => [choice.id, choice]))
   const unknown = choices.filter((choice) => !plan.decisions.some((d) => d.id === choice.id))
   if (unknown.length > 0) {
@@ -284,23 +293,42 @@ export function resolveAdoptionReview(
 }
 
 /**
- * Render the settled review as the adoption section of the apply phase's brief.
+ * How the settled review's model- and human-authored holes are written out.
  *
- * Every decision is stated as a SIDE plus the reviewer's own words where they left any, and the
- * overrides are called out: an agent told only "use the monorepo's test runner" cannot tell a
- * default it may reason around from a human who deliberately overruled the recommendation, and
- * the second is not negotiable. The list is exhaustive on purpose: an area the reviewer settled
- * and the brief omits is an area the agent decides again, unreviewed.
+ * Two sinks, two rules, which is why this is a parameter rather than one renderer. The agent's
+ * brief is a PROMPT: the text has to reach it as written, or a reviewer's instruction arrives
+ * full of numeric entities and reads as noise. A pull request body is a RENDERED HOST SURFACE,
+ * where the same characters are live: `#123` auto-links, a closing keyword before an issue
+ * reference CLOSES that issue on merge, `@name` mentions a stranger, and an unbalanced fence
+ * swallows everything after it. So the PR side neutralises every hole and the prompt side does
+ * not, and neither can be mistaken for the other at the call site.
  */
-export function renderAdoptionBrief(resolved: ResolvedAdoption, directory: string): string {
+interface AdoptionTextSink {
+  /** A short single-line hole: a decision title, a per-decision note. */
+  inline(value: string): string
+  /** A multi-line hole: the reviewer's notes for the service as a whole. */
+  prose(value: string): string
+}
+
+/** The prompt sink: verbatim, because the reader is a model and the text is its instruction. */
+const AGENT_SINK: AdoptionTextSink = { inline: (value) => value, prose: (value) => value }
+
+/** The host sink: every auto-link trigger neutralised, every hole capped and fence-balanced. */
+const HOST_SINK: AdoptionTextSink = {
+  inline: (value) => hostMarkdown.inline(value),
+  prose: (value) => hostMarkdown.prose(value),
+}
+
+/** The shared body of both renderings; only the holes differ (see {@link AdoptionTextSink}). */
+function renderAdoptionDecisions(
+  resolved: ResolvedAdoption,
+  sink: AdoptionTextSink,
+  lead: string,
+): string {
   const lines: string[] = [
     `## Adoption decisions (settled by a human reviewer; follow them exactly)`,
     '',
-    `The new service lives at \`${directory}\`. For each area below, a reviewer has decided ` +
-      `whether it follows the surrounding monorepo or the reference template. These are ` +
-      `decisions, not suggestions: do not substitute your own judgement for one of them, and ` +
-      `if a decision turns out to be impossible as stated, do the closest thing that honours it ` +
-      `and say so in the pull request description rather than quietly picking the other side.`,
+    lead,
     '',
   ]
   if (resolved.decisions.length === 0) {
@@ -313,15 +341,66 @@ export function renderAdoptionBrief(resolved: ResolvedAdoption, directory: strin
   for (const decision of resolved.decisions) {
     const override = decision.overrodeRecommendation ? ' (reviewer overrode the suggestion)' : ''
     lines.push(
-      `- **${decision.title}** (${describeAdoptionArea(decision.area)}): ` +
+      `- **${sink.inline(decision.title)}** (${describeAdoptionArea(decision.area)}): ` +
         `${describeAdoptionSource(decision.choice)}${override}.` +
-        (decision.note ? `\n  Reviewer's note: ${decision.note}` : ''),
+        (decision.note ? `\n  Reviewer's note: ${sink.inline(decision.note)}` : ''),
     )
   }
   if (resolved.notes) {
-    lines.push('', '### Reviewer notes for the service as a whole', '', resolved.notes)
+    lines.push('', '### Reviewer notes for the service as a whole', '', sink.prose(resolved.notes))
   }
   return lines.join('\n')
+}
+
+/**
+ * Render the settled review as the adoption section of the apply phase's brief.
+ *
+ * Every decision is stated as a SIDE plus the reviewer's own words where they left any, and the
+ * overrides are called out: an agent told only "use the monorepo's test runner" cannot tell a
+ * default it may reason around from a human who deliberately overruled the recommendation, and
+ * the second is not negotiable. The list is exhaustive on purpose: an area the reviewer settled
+ * and the brief omits is an area the agent decides again, unreviewed.
+ *
+ * The holes are VERBATIM here. {@link renderAdoptionPrSection} is the rendering for the pull
+ * request; do not send this one to a host.
+ */
+export function renderAdoptionBrief(resolved: ResolvedAdoption, directory: string): string {
+  return renderAdoptionDecisions(
+    resolved,
+    AGENT_SINK,
+    `The new service lives at \`${directory}\`. For each area below, a reviewer has decided ` +
+      `whether it follows the surrounding monorepo or the reference template. These are ` +
+      `decisions, not suggestions: do not substitute your own judgement for one of them, and ` +
+      `if a decision turns out to be impossible as stated, do the closest thing that honours it ` +
+      `and say so in the pull request description rather than quietly picking the other side.`,
+  )
+}
+
+/**
+ * Render the settled review for the PULL REQUEST the apply phase opens.
+ *
+ * The same list, addressed to the human reviewing the change rather than to the agent making it:
+ * what a reviewer of a bootstrap PR is being asked is whether the service fits the monorepo, and
+ * what settles that is which side each area came from and who chose it, which the diff cannot
+ * show. Every hole crosses {@link HOST_SINK}, because both the titles (model-authored) and the
+ * notes (reviewer-authored) are untrusted text landing on a parsed surface. The caller scrubs
+ * secrets at compose time, before any of this is capped.
+ */
+export function renderAdoptionPrSection(resolved: ResolvedAdoption, directory: string): string {
+  const overrides = resolved.decisions.filter((decision) => decision.overrodeRecommendation).length
+  const stance =
+    resolved.decisions.length === 0
+      ? 'with no suggestion to review: the platform could not produce one'
+      : overrides > 0
+        ? `${overrides} of which overrode the platform's suggestion`
+        : "all of which accepted the platform's suggestion"
+  return renderAdoptionDecisions(
+    resolved,
+    HOST_SINK,
+    `This service was bootstrapped into \`${hostMarkdown.inline(directory)}\` under decisions ` +
+      `settled by a human before any code was written, ${stance}. Each line below names the ` +
+      `area, the side the new service follows for it, and anything the reviewer added.`,
+  )
 }
 
 /**

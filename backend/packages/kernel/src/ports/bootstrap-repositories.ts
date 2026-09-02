@@ -110,9 +110,36 @@ export type BootstrapJobRecordPatch = Partial<
   >
 >
 
+/** The window a survey claim holds before another drive may take it (see `claimSurvey`). */
+export interface SurveyClaim {
+  /** Now, stamped on the winning claim. */
+  at: number
+  /**
+   * A claim stamped at or before this instant is re-claimable. Answers the "what if the claimer
+   * dies" question every claim has to: the drive that took the claim can be killed between the
+   * claim and the plan (an isolate eviction, a container restart), and without a TTL the run
+   * would then park on nothing forever with no way back in.
+   */
+  staleBefore: number
+}
+
 export interface BootstrapJobRepository {
   insert(record: BootstrapJobRecord): Promise<void>
   update(workspaceId: string, id: string, patch: BootstrapJobRecordPatch): Promise<void>
+  /**
+   * Take the exclusive right to run this run's adoption SURVEY, returning whether this caller won.
+   *
+   * One conditional UPDATE, which is the whole point: the survey ends in a billable model call and
+   * both durable drivers replay (a Workflows step re-run, a pg-boss retry, the stale-run sweeper
+   * re-driving a run whose drive died). Two drives that each read "no plan yet" and then each
+   * surveyed would bill twice AND have the loser's `park` replace the plan under a reviewer who
+   * had already loaded the winner's, whose answers then 422 as `adoption_choice_unknown`. A marker
+   * written AFTER the call cannot prevent either; only a claim taken before it can.
+   *
+   * A lost claim is not an error: the winner is authoritative and the caller returns without
+   * doing anything, leaving the run for the winner to park.
+   */
+  claimSurvey(workspaceId: string, id: string, claim: SurveyClaim): Promise<boolean>
   get(workspaceId: string, id: string): Promise<BootstrapJobRecord | null>
   listByWorkspace(workspaceId: string): Promise<BootstrapJobRecord[]>
   /**

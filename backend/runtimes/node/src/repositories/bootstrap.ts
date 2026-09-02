@@ -9,6 +9,7 @@ import type {
   ReferenceArchitectureRecordPatch,
   ReferenceArchitectureRepository,
   ResolvedAdoption,
+  SurveyClaim,
 } from '@cat-factory/kernel'
 import { parseSubtasks } from '@cat-factory/kernel'
 import { parseStoredAgentFailure } from '@cat-factory/contracts'
@@ -174,7 +175,11 @@ function parseDetail(raw: string): BootstrapDetail {
     const o = JSON.parse(raw) as Partial<BootstrapDetail>
     return {
       ...EMPTY_DETAIL,
-      ...Object.fromEntries(Object.entries(o).filter(([, value]) => value !== undefined)),
+      // `null` is dropped alongside `undefined`, which is safe because every NULLABLE field's
+      // empty default already IS null: what it protects are the two fields typed as plain
+      // strings (`repoName`, `instructions`), where a row storing a null would otherwise flow
+      // one through as a string and reach a prompt as the word "null".
+      ...Object.fromEntries(Object.entries(o).filter(([, value]) => value != null)),
     }
   } catch {
     return { ...EMPTY_DETAIL }
@@ -263,6 +268,31 @@ export class DrizzleBootstrapJobRepository implements BootstrapJobRepository {
       // service's in-flight bootstrap surfaces on every board that mounts it.
       service_id: this.blockServiceId(record.workspaceId, record.blockId),
     })
+  }
+
+  /**
+   * The D1 mirror's conditional claim (see the port): stamp the survey claim only while the row
+   * carries none or carries a stale one, and let the number of updated rows decide the winner.
+   * `RETURNING` rather than a rowcount because the pg driver's affected-row count is not part of
+   * Drizzle's typed surface, and an empty result set says the same thing unambiguously.
+   */
+  async claimSurvey(workspaceId: string, id: string, claim: SurveyClaim): Promise<boolean> {
+    const claimed = sql`(${agentRuns.detail}::jsonb -> 'surveyClaimedAt')`
+    const rows = await this.db
+      .update(agentRuns)
+      .set({
+        detail: sql`(jsonb_set(${agentRuns.detail}::jsonb, '{surveyClaimedAt}', to_jsonb(${claim.at}::bigint)))::text`,
+      })
+      .where(
+        and(
+          eq(agentRuns.workspace_id, workspaceId),
+          eq(agentRuns.id, id),
+          eq(agentRuns.kind, 'bootstrap'),
+          sql`(${claimed} IS NULL OR ${claimed} = 'null'::jsonb OR (${claimed})::bigint <= ${claim.staleBefore})`,
+        ),
+      )
+      .returning({ id: agentRuns.id })
+    return rows.length > 0
   }
 
   async update(workspaceId: string, id: string, patch: BootstrapJobRecordPatch): Promise<void> {

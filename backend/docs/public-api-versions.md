@@ -36,6 +36,7 @@ as the note at the top of this file says it does.
 ## 1.65.0
 
 `BootstrapJob.status` gains `awaiting_review`: a repo-bootstrap run parked on a human decision.
+`BootstrapJob` gains `prUrl` beside it.
 
 It is reachable only for the new monorepo bootstrap (a run that adds a service to an existing
 repository rather than creating one), which this surface does not yet offer a way to START:
@@ -43,8 +44,17 @@ repository rather than creating one), which this surface does not yet offer a wa
 caller anyway, because a run started in the app is READ through this surface, and a status the
 spec did not name would be the one thing a poller cannot handle honestly.
 
-Additive: the clients tolerate unknown enum values by design, so a consumer built against 1.64.0
-keeps parsing. What a poller has to CHANGE is its terminal test, and that is the point of naming
-the value: `awaiting_review` is neither running nor finished, so a loop that treats "not
-`succeeded` and not `failed`" as "still working" now waits forever on a run that is waiting for a
-person. Branch on it and surface the run to a human instead.
+`prUrl` is the same run shape's deliverable. A monorepo bootstrap creates no repository, so it
+has no `repoUrl` to report: it delivers a pull request against a repository that already exists,
+and nothing is merged for the reviewer. The pull request therefore gets its own field rather than
+riding `repoUrl`, which this surface documents as the web URL of the CREATED repository. Putting a
+PR link there would have re-scoped a released field in place, and a caller that clones what it
+reads would clone a pull-request URL. Exactly one of the two is set on any run, which is also how
+a caller tells the two shapes apart without reading `status`.
+
+Additive on both counts: the clients tolerate unknown enum values by design and ignore unknown
+response fields, so a consumer built against 1.64.0 keeps parsing. What a poller has to CHANGE is
+its terminal test, and that is the point of naming the value: `awaiting_review` is neither running
+nor finished, so a loop that treats "not `succeeded` and not `failed`" as "still working" now
+waits forever on a run that is waiting for a person. Branch on it and surface the run to a human
+instead.
