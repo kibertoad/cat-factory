@@ -150,6 +150,22 @@ export const environmentReachabilitySchema = v.object({
   candidates: v.array(environmentAddressSchema),
   /** What proving found, or null when nothing has probed this environment yet. */
   proof: v.nullable(environmentRouteProofSchema),
+  /**
+   * When the platform last LOOKED at reaching this environment, carried forward even once the
+   * proof it produced no longer applies.
+   *
+   * The third half, and it exists because the other two cannot answer "has anything ever tried".
+   * `proof.checkedAt` dates a verdict that still STANDS, so a proof the fold had to drop takes its
+   * date with it, leaving a row indistinguishable from one nothing ever probed. Anything pacing
+   * itself against that value degenerates: the status poll re-takes a dropped proof on a bounded
+   * interval, and the first time it decides to wait, the drop is persisted, the next poll reads an
+   * environment nothing has ever dialled, and the re-take never fires again.
+   *
+   * Optional because a value written before this existed carries none, which reads as "unknown
+   * when" and lets the poll re-prove at its first opportunity: the right disposition for a row
+   * whose probe history cannot be dated.
+   */
+  probedAt: v.optional(v.number()),
 })
 export type EnvironmentReachability = v.InferOutput<typeof environmentReachabilitySchema>
 

@@ -102,10 +102,10 @@ export async function proveEnvironmentRoute(
  *     while the candidate SET is unchanged. A new candidate is a target nothing ever dialled, and
  *     "nothing reaches this environment" is no longer established once one exists.
  *
- * A dropped proof costs a re-probe, and {@link EnvironmentProvisioningService.refreshStatus} takes
- * one for a `ready` environment rather than leaving the row to be re-proved by a deployer settle
- * that will not run again for that frame: a dropped proof and a proof never taken are the same
- * value, so nothing downstream could tell that the feature had stopped working.
+ * A dropped proof costs a re-probe, and the status poll takes one (on the terms
+ * {@link routeReproveDecision} sets) rather than leaving the row to be re-proved by a deployer
+ * settle that will not run again for that frame: a dropped proof and a proof never taken are the
+ * same value, so nothing downstream could tell that the feature had stopped working.
  */
 export function foldStatedAddresses(
   previous: EnvironmentReachability | null,
@@ -117,8 +117,25 @@ export function foldStatedAddresses(
   const candidates = addresses ? [...addresses] : [...stored]
   const proof =
     previousUrl === url ? survivingProof(previous?.proof ?? null, stored, candidates) : null
-  if (candidates.length === 0 && !proof) return null
-  return { candidates, proof }
+  // Carried across a drop, and across a MOVED URL, because it is not a claim about either: it
+  // says when the platform last looked, which stays true however little the verdict survives.
+  // Without it a dropped proof leaves a row that reads as an environment nothing ever dialled.
+  const probedAt = lastLookedAt(previous)
+  if (candidates.length === 0 && !proof && probedAt === null) return null
+  return { candidates, proof, ...(probedAt === null ? {} : { probedAt }) }
+}
+
+/**
+ * When the platform last looked at reaching this environment, or null when nothing ever has.
+ *
+ * Falls back to the proof's own date for a value written before `probedAt` existed, and counts an
+ * `unproved` proof as a look: what it records is the SETTLE path having run and found no prober
+ * wired, which is the fact the poll needs (the settle owns the first look and will not run again
+ * for a frame that already settled, so a poll that treats `unproved` as "never looked" is a poll
+ * that leaves such an environment unproved forever, even once the facade can open a socket).
+ */
+export function lastLookedAt(stored: EnvironmentReachability | null): number | null {
+  return stored?.probedAt ?? stored?.proof?.checkedAt ?? null
 }
 
 /** A stored proof that still says something about the freshly stated candidates, or null. */
@@ -129,9 +146,22 @@ function survivingProof(
 ): EnvironmentRouteProof | null {
   if (!proof) return null
   if (proof.state === 'reached') {
-    return !proof.via || candidates.some((entry) => entry.address === proof.via) ? proof : null
+    return !proof.via || candidates.some((entry) => normalized(entry) === proof.via) ? proof : null
   }
   return sameAddressSet(stored, candidates) ? proof : null
+}
+
+/**
+ * One candidate's address as the PROOF spells it.
+ *
+ * `planRouteProbes` trims before it dials, so `via` is a trimmed value and a raw comparison
+ * against the stored candidate crosses that boundary: a provider stating `' 10.4.19.22'` proved
+ * `'10.4.19.22'`, matched neither its own candidate nor itself, and paid a fresh probe on every
+ * single poll for a proof it already had. The manifest provider trims on capture, which is why
+ * this only ever bit an adapter stating addresses directly.
+ */
+function normalized(entry: EnvironmentAddress): string {
+  return entry.address.trim()
 }
 
 /** Whether two candidate lists name the same SET of addresses (order and labels are cosmetic). */
@@ -139,7 +169,58 @@ function sameAddressSet(
   a: readonly EnvironmentAddress[],
   b: readonly EnvironmentAddress[],
 ): boolean {
-  const left = new Set(a.map((entry) => entry.address))
-  const right = new Set(b.map((entry) => entry.address))
+  const left = new Set(a.map(normalized))
+  const right = new Set(b.map(normalized))
   return left.size === right.size && [...left].every((address) => right.has(address))
+}
+
+/**
+ * How long a proof holds the prober off, once one has run.
+ *
+ * The bound on the poll path's re-prove. A status poll runs on a ten-second cadence inside the
+ * deployer's readiness wait, and a proof costs up to `MAX_PROBED_ADDRESSES + 1` sequential dials
+ * at `ROUTE_PROBE_TIMEOUT_MS` each: an environment whose provider genuinely re-states a different
+ * candidate set every answer (a balancer scaling across zones) would drop and re-take its proof on
+ * every poll, turning a poll that took milliseconds into twenty seconds of blocking I/O inside a
+ * durable step, over and over. A minute means at most one probe sequence per environment per
+ * minute, which is still promptly enough for the case the re-prove exists for: a proof invalidated
+ * once, by a provider that then stays put.
+ */
+export const ROUTE_REPROVE_MIN_INTERVAL_MS = 60_000
+
+/**
+ * Whether this poll should re-take the route proof, leave what the fold produced, or hold off.
+ *
+ * `held` is its own answer rather than a second `keep`, so the caller can SAY that a probe was due
+ * and skipped instead of leaving a poll that looks identical to one with nothing to prove.
+ *
+ * Four narrowings, each of which was a real cost or a real omission:
+ *
+ *   - **Only a `ready` environment.** One that has gone back to `provisioning` is not worth
+ *     dialling yet and its own settle path will prove it when it comes up; probing here would
+ *     record a `not_reached` about an environment mid-rollout.
+ *   - **Never the FIRST look.** Nothing has looked at a provisioning environment, and looking here
+ *     would put a probe on every poll of every environment whose deployer has not settled it. The
+ *     settle path owns that one.
+ *   - **A surviving proof is left alone, EXCEPT `unproved`.** `unproved` records that nothing was
+ *     wired to open a socket, so it is a proof never taken and it survives the fold forever on set
+ *     equality; treating it as a live proof is what would leave every environment settled before a
+ *     deployment wired its prober permanently unproved, which is exactly the "a dropped proof and
+ *     a proof never taken are the same value" trap one level up.
+ *   - **{@link ROUTE_REPROVE_MIN_INTERVAL_MS} since the last look**, read off `probedAt` rather
+ *     than off the proof, because a hold PERSISTS the drop: anchored on the proof's own date, the
+ *     first hold would erase the anchor and no later poll would ever re-take anything.
+ */
+export function routeReproveDecision(args: {
+  stored: EnvironmentReachability | null
+  folded: EnvironmentReachability | null
+  ready: boolean
+  now: number
+}): 'reprove' | 'keep' | 'held' {
+  if (!args.ready) return 'keep'
+  const lookedAt = lastLookedAt(args.stored)
+  if (lookedAt === null) return 'keep'
+  const surviving = args.folded?.proof
+  if (surviving && surviving.state !== 'unproved') return 'keep'
+  return args.now - lookedAt < ROUTE_REPROVE_MIN_INTERVAL_MS ? 'held' : 'reprove'
 }

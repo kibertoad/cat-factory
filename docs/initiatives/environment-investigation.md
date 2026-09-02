@@ -206,14 +206,17 @@ to one bullet. Three separate defects, filed together, all landed:
 - [x] **[#2163](https://github.com/kibertoad/cat-factory/issues/2163)**: the ordering half. The
       bundle now carries the route evidence and folds the proof into ONE derived timeline dated
       from `proof.checkedAt`, so an ordering claim contradicted by a timestamp the platform held is
-      structurally hard to state; a successful status poll leaves a marker on the row, so "nothing
-      polled" and "polling is not logged" stop being the same data; and the platform COMPUTES the
-      determinate cause (`determinateRouteCause`) and tells the model it outranks anything inferred
-      from apparent ordering. Prompt bumped to `environment-investigation@v2`.
+      structurally hard to state; an ANSWERED status poll leaves a marker on the row, so "nothing
+      polled" and "polling is not logged" stop being the same data; the provisioning log's own
+      state (kept / read / empty / unreadable) is a timeline entry rather than something inferred
+      from the list being short; and the platform COMPUTES the determinate cause
+      (`determinateRouteCause`) and tells the model it outranks anything inferred from apparent
+      ordering. Prompt bumped to `environment-investigation@v2`.
 - [x] **[#2165](https://github.com/kibertoad/cat-factory/issues/2165)**: a stored route proof was
       dropped by any later poll whose candidate list merely REORDERED, and nothing re-took one.
       Survival is now decided on what the proof established, and `refreshStatus` re-proves a
-      `ready` environment whose proof it had to drop.
+      `ready` environment whose proof it had to drop, at most once a minute and paced off a stored
+      `probedAt` that outlives the dropped verdict.
 
 ## Slice 3: more providers, more evidence
 

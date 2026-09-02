@@ -11,9 +11,14 @@ import type {
   ProvisionFields,
   RouteProbe,
 } from '@cat-factory/kernel'
-import { assertFound, getErrorMessage, noopLogger } from '@cat-factory/kernel'
+import { assertFound, getErrorMessage, noopLogger, runBestEffort } from '@cat-factory/kernel'
 import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningLogService.js'
-import { foldStatedAddresses, proveEnvironmentRoute } from './environmentReachability.js'
+import {
+  foldStatedAddresses,
+  lastLookedAt,
+  proveEnvironmentRoute,
+  routeReproveDecision,
+} from './environmentReachability.js'
 import type { ResolvedEnvironmentProvider } from './environmentRemediation.js'
 import {
   boundStatusNote,
@@ -83,7 +88,13 @@ export function createEnvironmentStatusPoller(deps: EnvironmentStatusPollerDeps)
     // Resolve the provider from the record's stored provision type/engine (the handler that stood
     // it up), not the workspace-primary, matching the per-type resolution provisioning uses.
     const resolved = await deps.resolveProvider(record)
-    const provisioned = await readStatus(workspaceId, record, resolved)
+    // Opened BEFORE the guarded call, and deliberately outside it. Decrypting is the platform's
+    // own work against its own cipher (a mothership node opens a row the mothership sealed), so a
+    // failure here is a key-routing fault; inside the try it would be filed in the provisioning
+    // log as an `environment.status` PROVIDER failure and land on the run's "Infrastructure
+    // attempts" as the provider's fault, which is the misattribution this whole change is about.
+    const provisionFields = await deps.decryptFields(record)
+    const provisioned = await readStatus(workspaceId, record, resolved, provisionFields)
     deps.assertPublishableUrl(provisioned.url)
 
     const patch = await buildPatch(record, resolved, provisioned)
@@ -97,12 +108,13 @@ export function createEnvironmentStatusPoller(deps: EnvironmentStatusPollerDeps)
     workspaceId: string,
     record: EnvironmentRecord,
     resolved: ResolvedEnvironmentProvider,
+    provisionFields: ProvisionFields,
   ): Promise<ProvisionedEnvironment> {
     try {
       return await resolved.provider.status({
         manifest: resolved.manifest,
         externalId: record.externalId,
-        provisionFields: await deps.decryptFields(record),
+        provisionFields,
         resolveSecret: resolved.resolveSecret,
       })
     } catch (error) {
@@ -161,13 +173,18 @@ export function createEnvironmentStatusPoller(deps: EnvironmentStatusPollerDeps)
       // to `failed` alone). This is the write that makes the readiness ceiling able to name the
       // state a run was stuck in, because every poll that KEEPS a readiness wait alive lands here.
       statusNote: boundStatusNote(provisioned.statusNote),
-      // The trail a poll that SUCCEEDS leaves. Everything else on this path records only a poll
-      // that threw or one that transitioned the environment to `failed`, so a readiness wait that
-      // polled cleanly for four minutes left two log rows a second apart at the create and nothing
-      // after them; an investigation then read that absence as the absence of polling and stated
-      // it as fact. A row per poll is the wrong shape at a ten-second cadence, and this pair is
-      // enough to tell a four-minute wait from no wait at all. See
-      // {@link EnvironmentRecord.lastPolledAt} for why the count is a floor and the stamp is not.
+      // The trail a poll the provider ANSWERED leaves. Everything else on this path records only a
+      // poll that threw or one that transitioned the environment to `failed`, so a readiness wait
+      // that polled cleanly for four minutes left two log rows a second apart at the create and
+      // nothing after them; an investigation then read that absence as the absence of polling and
+      // stated it as fact. A row per poll is the wrong shape at a ten-second cadence, and this pair
+      // is enough to tell a four-minute wait from no wait at all.
+      //
+      // Stamped for an answer of ANY status, `failed` included: the pair says how much polling
+      // happened, never how much of it went well, and the two readings are not interchangeable
+      // (see {@link EnvironmentRecord.lastPolledAt}, and `describePollMarker`, which renders it).
+      // Whoever polls and gets a verdict has polled. A poll that THREW never reaches here, having
+      // a provisioning-log row of its own naming the cause.
       lastPolledAt: deps.clock.now(),
       pollCount: record.pollCount + 1,
     }
@@ -183,9 +200,9 @@ export function createEnvironmentStatusPoller(deps: EnvironmentStatusPollerDeps)
    * everything built on it (the note an agent is handed, the address a container bridge is built
    * from) would just stop, with nothing to say it had.
    *
-   * Narrowed to a `ready` environment with a prober wired and a proof that ACTUALLY went: nothing
-   * has proved a provisioning environment yet, and taking a first proof here would put a probe on
-   * every poll of every environment whose deployer has not settled it.
+   * WHEN it re-takes is `routeReproveDecision`, which also bounds how often: this runs on the
+   * ten-second cadence of a readiness wait, and an unbounded re-take is up to twenty seconds of
+   * sequential dialling on every one of them.
    */
   async function foldRoute(
     record: EnvironmentRecord,
@@ -193,7 +210,27 @@ export function createEnvironmentStatusPoller(deps: EnvironmentStatusPollerDeps)
   ): Promise<EnvironmentReachability | null> {
     const stored = parseReachability(record.reachability)
     const folded = foldStatedAddresses(stored, record.url, provisioned.addresses, provisioned.url)
-    if (!deps.probe || !stored?.proof || folded?.proof || provisioned.status !== 'ready') {
+    if (!deps.probe) return folded
+    const now = deps.clock.now()
+    const decision = routeReproveDecision({
+      stored,
+      folded,
+      ready: provisioned.status === 'ready',
+      now,
+    })
+    if (decision === 'keep') return folded
+    if (decision === 'held') {
+      // SAID rather than skipped silently: a poll that was due a probe and did not take one is
+      // otherwise indistinguishable from one with nothing to prove, and this is the state an
+      // environment whose candidate set moves on every answer sits in.
+      log.debug('held off re-proving an environment route: a probe ran too recently', {
+        workspaceId: record.workspaceId,
+        environmentId: record.id,
+        // The value the DECISION measured, read through its own accessor rather than re-derived:
+        // a log line naming a different date than the one that held the probe off is a line that
+        // sends the next reader looking in the wrong place.
+        lastLookedAt: lastLookedAt(stored),
+      })
       return folded
     }
     const candidates = folded?.candidates ?? []
@@ -207,7 +244,9 @@ export function createEnvironmentStatusPoller(deps: EnvironmentStatusPollerDeps)
       state: proof.state,
       ...(proof.reason ? { reason: proof.reason } : {}),
     })
-    return { candidates, proof }
+    // `probedAt` is stamped from the proof rather than from `now`: they are the same instant, and
+    // taking it from the proof keeps the two dates on one row unable to disagree.
+    return { candidates, proof, probedAt: proof.checkedAt }
   }
 
   /**
@@ -229,24 +268,30 @@ export function createEnvironmentStatusPoller(deps: EnvironmentStatusPollerDeps)
     provisioned: ProvisionedEnvironment,
   ): Promise<void> {
     if (provisioned.status !== 'failed' || record.status === 'failed') return
-    try {
-      await deps.provisioningLog?.record({
-        workspaceId,
-        subsystem: 'environment',
-        operation: 'status',
-        targetId: record.id,
-        providerId: resolved.manifest.providerId,
-        blockId: record.blockId,
-        executionId: record.executionId,
-        outcome: 'failure',
-        error:
-          provisioned.error?.trim() ||
-          'Environment provisioning did not complete (it never became ready).',
-        detail: null,
-      })
-    } catch {
-      // swallow: the env is already persisted as `failed`; the log entry is advisory
-    }
+    // The swallow stays (the env is already persisted as `failed` and the row is advisory), but it
+    // is a swallow that SAYS SO: a recorder that starts failing would otherwise silently stop
+    // recording every failed transition, which is the one surfacing this block exists to
+    // guarantee, with nothing anywhere to say it had stopped.
+    await runBestEffort(
+      log,
+      'environmentStatusPoll.recordFailedTransition',
+      () =>
+        deps.provisioningLog?.record({
+          workspaceId,
+          subsystem: 'environment',
+          operation: 'status',
+          targetId: record.id,
+          providerId: resolved.manifest.providerId,
+          blockId: record.blockId,
+          executionId: record.executionId,
+          outcome: 'failure',
+          error:
+            provisioned.error?.trim() ||
+            'Environment provisioning did not complete (it never became ready).',
+          detail: null,
+        }),
+      { workspaceId, environmentId: record.id },
+    )
   }
 
   return { refresh }

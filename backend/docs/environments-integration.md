@@ -146,9 +146,11 @@ assumed. Four facts about that interpretation belong to this repository:
   keeps it, by the same absent-is-not-empty rule as the addresses above; the contract an adapter
   author writes against is
   [`native-environment-adapter.md`](./native-environment-adapter.md#what-fields-is-for-and-what-a-poll-does-to-it).
-  The poll also stamps the row with the fact that it SUCCEEDED (`lastPolledAt` plus a count), which
-  is the only record a clean poll leaves: the provisioning log carries attempts and failures, so
-  without it a four-minute readiness wait and no polling at all are the same data.
+  The poll also stamps the row with the fact that the provider ANSWERED (`lastPolledAt` plus a
+  count), which is the only record polling leaves: the provisioning log carries attempts and
+  failures, so without it a four-minute readiness wait and no polling at all are the same data. It
+  counts answers rather than successes, a `failed` verdict included, because what a reader gets
+  wrong is how much polling happened and not how much of it went well.
 
 ### Auth schemes (calling the management API)
 

@@ -155,7 +155,7 @@ function registerDisposerTests(harness: ConformanceHarness): void {
     expect(deployStep.output).toContain('https://preview.example')
   })
 
-  it('records that a status poll SUCCEEDED, on every facade', async () => {
+  it('records that a status poll was ANSWERED, on every facade', async () => {
     // Issue #2163. The provisioning log records a poll that THREW and one that turned an
     // environment `failed`; a clean answer wrote nothing anywhere, so a readiness wait that
     // polled for four minutes left two log rows a second apart at the create and nothing after
@@ -216,7 +216,7 @@ function registerDisposerTests(harness: ConformanceHarness): void {
     const envs = await app.call<EnvironmentHandle[]>('GET', `/workspaces/${wsId}/environments`)
     const env = envs.body!.find((e) => e.url === 'https://preview.example')!
     // Derived from the provider's own call count rather than pinned: how many polls a readiness
-    // wait takes is the engine's business and not this test's, and every poll here succeeds, so
+    // wait takes is the engine's business and not this test's, and every poll here is answered, so
     // the RELATION worth asserting is that each one was recorded.
     expect(env.pollCount).toBe(reads)
     expect(env.pollCount).toBeGreaterThan(1)

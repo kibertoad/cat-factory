@@ -716,6 +716,7 @@ export {
   MAX_PROBED_ADDRESSES,
   ROUTE_PROBE_TIMEOUT_MS,
   describeInconclusiveRoute,
+  describeRouteTargets,
   describeUnreachableEnvironment,
   determinateRouteCause,
   planRouteProbes,

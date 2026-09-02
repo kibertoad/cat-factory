@@ -217,21 +217,28 @@ export interface EnvironmentRecord {
    */
   reachability: string | null
   /**
-   * When the provider last answered a status poll for this environment WITHOUT failing, and how
-   * many such answers have been recorded.
+   * When the provider last ANSWERED a status poll for this environment, and how many answers have
+   * been recorded.
    *
-   * The trail a successful poll used to leave nowhere. The provisioning log records a poll that
-   * THROWS and a poll that transitions the environment to `failed`, so a readiness wait that
+   * The trail a poll that did not fail used to leave nowhere. The provisioning log records a poll
+   * that THROWS and a poll that transitions the environment to `failed`, so a readiness wait that
    * polled cleanly for four minutes left two log rows a second apart at the create and nothing
    * afterwards. Nothing in the data then distinguished "nothing polled" from "polling is not
    * logged", and the environment investigation read that absence as the absence of polling and
    * said so as established fact. A row per poll is the wrong shape at a ten-second cadence; this
    * pair is what makes the claim CHECKABLE.
    *
+   * **An ANSWER, not a success.** A poll the provider answered with `status: 'failed'` counts here
+   * too: the pair exists to say how much polling HAPPENED, which is the claim a reader gets wrong,
+   * and nothing about how much of it went well. Reading it as a success count would hand an
+   * investigation "22 successful polls" for an environment that failed all 22, which is the same
+   * class of over-claim the pair was added to remove. A poll that THREW is not counted, because it
+   * has a provisioning-log row of its own naming the cause.
+   *
    * `pollCount` is a FLOOR rather than a ledger: it is written from the count the poll read at its
    * start, so two polls racing each other can cost it an increment. `lastPolledAt` is exact,
-   * because a lost race there still leaves the later of the two stamps. Null / 0 means no
-   * successful poll is RECORDED, which is what a reader may conclude and no more.
+   * because a lost race there still leaves the later of the two stamps. Null / 0 means no answered
+   * poll is RECORDED, which is what a reader may conclude and no more.
    */
   lastPolledAt: number | null
   pollCount: number

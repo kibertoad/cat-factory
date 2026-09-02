@@ -3,7 +3,7 @@ import type {
   EnvironmentEvidenceBundle,
   EnvironmentInvestigationSubject,
 } from '@cat-factory/kernel'
-import { determinateRouteCause } from '@cat-factory/kernel'
+import { describeRouteTargets, determinateRouteCause } from '@cat-factory/kernel'
 import { type BespokeSystemPrompt, composeBespokePrompt } from './bespoke.js'
 import { FINAL_ANSWER_IN_REPLY, NO_ASSUMED_PRODUCT } from './shared.js'
 
@@ -35,8 +35,11 @@ export const ENVIRONMENT_INVESTIGATION_PROMPT: BespokeSystemPrompt = {
     'You are a platform engineer investigating why an ephemeral environment a delivery pipeline ' +
     'provisioned never became usable. You are given everything the platform knows about it: the ' +
     "environment record it keeps itself, the whole field bag the provider's own response was " +
-    "mapped into, the run's provisioning attempts in order, and (when the provider can answer " +
-    "at all) the provider's own account of the environment and its logs.\n\n" +
+    'mapped into, what the platform knows about REACHING it (the addresses its provider stated ' +
+    "and what dialling them proved), one dated timeline holding the record's own dates, the " +
+    "run's provisioning attempts and a marker for how much status polling happened, and (when " +
+    "the provider can answer at all) the provider's own account of the environment and its " +
+    'logs.\n\n' +
     'Your job is to settle WHERE the fault is and WHETHER anything is worth trying. Work the way ' +
     'a human would with the same evidence:\n' +
     '- READ PAST THE SUMMARY FIELD. A provider that reports one healthy top-level status while ' +
@@ -47,9 +50,10 @@ export const ENVIRONMENT_INVESTIGATION_PROMPT: BespokeSystemPrompt = {
     'infrastructure one. The timeline is ONE derived list with every timestamp the platform holds ' +
     'folded into it, so an ordering claim that contradicts an entry in it is simply wrong.\n' +
     '- NEVER INFER THAT SOMETHING DID NOT HAPPEN from its absence in a record that does not log ' +
-    'it. The provisioning entries record ATTEMPTS and failures, not each successful status poll; ' +
-    'how much polling happened is stated by the poll marker and nowhere else. "There is no entry ' +
-    'for it" is a fact about the record, not about the environment. Say that, or say nothing.\n' +
+    'it. The provisioning entries record ATTEMPTS and failures, not each answered status poll; ' +
+    'how much polling happened is stated by the poll marker and nowhere else, and the timeline ' +
+    'says in its own words whether that log was kept, read, or empty. "There is no entry for it" ' +
+    'is a fact about the record, not about the environment. Say that, or say nothing.\n' +
     '- PREFER A DETERMINATE CAUSE TO AN INFERRED ONE. A cause the platform computed from its own ' +
     'inputs (an address it never had, a field it never captured) names an owner and a concrete ' +
     'fix; a fault inferred from the ORDER things appear to have happened in names neither, and ' +
@@ -69,9 +73,9 @@ export const ENVIRONMENT_INVESTIGATION_PROMPT: BespokeSystemPrompt = {
     'and a person has to act: that is a legitimate, useful answer and it is far better than a ' +
     'speculative retry, because the named cause it carries is the whole reason you were asked.\n' +
     'Cite what you actually read. Every `evidence` entry names its `source` (a key from the ' +
-    'provision fields, a provider fact, a timeline entry) and states the fact in your words. Do ' +
-    'not invent a field you were not shown, and return an EMPTY evidence array rather than a ' +
-    'padded one when the bundle genuinely supported nothing.\n' +
+    'provision fields, a provider fact, a timeline entry, the route evidence, the poll marker) ' +
+    'and states the fact in your words. Do not invent a field you were not shown, and return an ' +
+    'EMPTY evidence array rather than a padded one when the bundle genuinely supported nothing.\n' +
     'Reply with ONLY a JSON object of this shape, with no prose around it and no code fences:\n' +
     '{\n' +
     '  "faultLayer": "provider" | "platform" | "deployment" | "unknown",\n' +
@@ -133,13 +137,23 @@ function renderProvisionFields(bundle: EnvironmentEvidenceBundle): string {
   )
 }
 
+/**
+ * The one dated list, or the statement that the platform passed on nothing dated at all.
+ *
+ * The empty branch is a guard, not a case the gatherer produces: it folds in the record's own
+ * dates, the poll marker and the provisioning log's own state, so a bundle carrying a record has
+ * entries whatever the log did. It therefore may not say anything about provisioning attempts,
+ * which is what it used to say. What it means is that nothing dated was passed on, and the reason
+ * for THAT is stated elsewhere in the bundle (the environment record could not be read).
+ */
 function renderTimeline(bundle: EnvironmentEvidenceBundle): string {
   if (bundle.timeline.length === 0) {
     return section(
-      "The run's provisioning timeline",
-      'No provisioning attempts were recorded for this run. Either this deployment keeps no ' +
-        'provisioning log, or nothing was ever appended. The two are indistinguishable here, so ' +
-        'draw no conclusion from the silence.',
+      'This environment has no dated record',
+      'The platform passed on no dated evidence about this environment at all: not its own ' +
+        'record, not a route proof, not one provisioning attempt. That is a fact about what could ' +
+        'be READ (see the sections above for which read failed), never a quiet run, so draw no ' +
+        'conclusion from the silence, including about how long anything took.',
     )
   }
   const body = bundle.timeline
@@ -153,8 +167,9 @@ function renderTimeline(bundle: EnvironmentEvidenceBundle): string {
     `${body}\n\nEvery timestamp the platform holds is already folded into this one list: the ` +
       "record's own dates, the run's provisioning attempts, when the route was dialled, and the " +
       'marker for how much status polling happened. It is the whole dated record, and it is NOT a ' +
-      'log of everything that happened: a successful status poll appears in the poll marker and ' +
-      'nowhere else.',
+      'log of everything that happened: an answered status poll appears in the poll marker and ' +
+      'nowhere else. An entry with no timestamp of its own is undated rather than first; it says ' +
+      'what the platform knows about a source, including whether a log was kept at all.',
   )
 }
 
@@ -193,9 +208,10 @@ function renderRoute(bundle: EnvironmentEvidenceBundle): string {
         `${proof.via ? `, carried via ${proof.via}` : ''}.`,
       proof.attempts.length === 0
         ? 'No target was tried.'
-        : `Targets tried, in order: ${proof.attempts
-            .map((a) => `${a.target} (${a.outcome}${a.detail ? `: ${a.detail}` : ''})`)
-            .join(', ')}.`,
+        : // Kernel's renderer, shared with the operator-facing sentences and the timeline entry,
+          // so one template renders this field everywhere. The bundle's own gatherer redacted and
+          // capped these strings (`EnvironmentRouteEvidence`), which is why nothing happens here.
+          `Targets tried, in order: ${describeRouteTargets(proof.attempts)}.`,
       'A `not_reached` proof is a verdict about the environment; `inconclusive` and `unproved` ' +
         'are admissions about the platform and settle nothing about it.',
     )

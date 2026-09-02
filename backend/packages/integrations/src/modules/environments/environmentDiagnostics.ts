@@ -12,6 +12,7 @@ import type {
 } from '@cat-factory/kernel'
 import {
   describeError,
+  describeRouteTargets,
   getErrorMessage,
   noopLogger,
   redactSecretFields,
@@ -107,9 +108,9 @@ const DIAGNOSTIC_LOG_CAP = 4000
  *
  * Each cap is per SECTION rather than one running total, so a fat fact set cannot starve the
  * provision fields of their share. Together with the log and timeline caps above the assembled
- * bundle is bounded at roughly 147k characters (~37k tokens): 120x460 facts + 60x460 fields +
- * 5x4000 logs + 40x440 gaps + 40x660 timeline. Every cut is STATED, in the values themselves
- * where it is one value, and in the bundle's `evidenceCaps` where it is a whole entry.
+ * bundle is bounded at roughly 156k characters (~39k tokens): 120x460 facts + 60x460 fields +
+ * 5x4000 logs + 40x440 gaps + 40x660 timeline + 40x260 route. Every cut is STATED, in the values
+ * themselves where it is one value, and in the bundle's `evidenceCaps` where it is a whole entry.
  */
 const DIAGNOSIS_FACT_CAP = 120
 const DIAGNOSIS_FACT_VALUE_CAP = 400
@@ -118,6 +119,18 @@ const DIAGNOSIS_GAP_CAP = 40
 const DIAGNOSIS_GAP_REASON_CAP = 400
 const PROVISION_FIELD_CAP = 60
 const PROVISION_FIELD_VALUE_CAP = 400
+
+/**
+ * The route section's share of that budget. Twenty of each is well past what the platform itself
+ * can produce (`planRouteProbes` plans at most nine targets), and the point of a cap on a list the
+ * platform bounds is that `candidates` is not one: it comes straight off a provider's response
+ * mapping, so its length is the provider's to choose. The per-string cap is `MAX_PROBE_DETAIL_CHARS`
+ * plus room for a label, since an address the platform will dial is short by construction and a
+ * long one is a sign the mapping picked up something else entirely.
+ */
+const ROUTE_CANDIDATE_CAP = 20
+const ROUTE_ATTEMPT_CAP = 20
+const ROUTE_TEXT_CAP = 260
 
 /**
  * Why there is no environment record, in the three ways there can fail to be one.
@@ -183,8 +196,17 @@ export function createEnvironmentDiagnostics(deps: EnvironmentDiagnosticsDeps) {
     const { workspaceId, environmentId, executionId, failure } = args
     const read = await readRecordSafely(workspaceId, environmentId)
     const record = read.record
-    const route = readRoute(record)
-    const timeline = await readTimeline(workspaceId, executionId, record, route)
+    // Opened before the first read that can cut something. The route evidence is prepared on the
+    // way in (scrubbed and bounded) exactly like every other provider-authored section, so it
+    // needs somewhere to record what it dropped.
+    const caps: string[] = []
+    const route = readRoute(record, caps)
+    const timeline = await readTimeline(deps.listProvisioningLog, {
+      workspaceId,
+      executionId: executionId ?? record?.executionId ?? undefined,
+      record,
+      route,
+    })
     if (!record) {
       return {
         providerActions: [],
@@ -204,6 +226,7 @@ export function createEnvironmentDiagnostics(deps: EnvironmentDiagnosticsDeps) {
           timeline,
           route,
           diagnosisUnavailable: describeUnreadableEnvironment(environmentId, read.error),
+          ...(caps.length > 0 ? { evidenceCaps: caps } : {}),
           failure,
         },
       }
@@ -222,7 +245,6 @@ export function createEnvironmentDiagnostics(deps: EnvironmentDiagnosticsDeps) {
     }
     const provider = await resolveProviderSafely(record)
     const diagnosis = provider ? await describeSafely(record, provider, fields.values) : null
-    const caps: string[] = []
     const prepared = diagnosis?.diagnosis ? prepareDiagnosis(diagnosis.diagnosis, caps) : undefined
 
     return {
@@ -331,75 +353,142 @@ export function createEnvironmentDiagnostics(deps: EnvironmentDiagnosticsDeps) {
     }
   }
 
-  /**
-   * The ONE derived timeline: the record's own dates, the run's provisioning attempts, the route
-   * proof, and the marker saying status polls happened at all, sorted into one order.
-   *
-   * The proof and the poll marker are folded in rather than left beside the log for a reader to
-   * reconcile, and that is the whole point of the shape. An investigation asked to line the
-   * timestamps up against a two-entry log said the reachability verdict "settled roughly at the
-   * moment of the create request, with no wait", while `proof.checkedAt` in the same bundle put it
-   * 4m18s later, and built its headline on the contradiction.
-   */
-  async function readTimeline(
-    workspaceId: string,
-    executionId: string | undefined,
-    record: EnvironmentRecord | null,
-    route: EnvironmentRouteEvidence,
-  ): Promise<EnvironmentTimelineEntry[]> {
-    const entries: EnvironmentTimelineEntry[] = []
-    if (record) {
-      entries.push({ at: record.createdAt, label: 'environment record created' })
-      entries.push(describePollMarker(record))
-      if (record.deletedAt) {
-        entries.push({ at: record.deletedAt, label: 'environment record tombstoned' })
-      }
-    }
-    if (route.proof) entries.push(describeRouteProof(route.proof, route.candidates))
-    const rows = await readLogRows(workspaceId, executionId ?? record?.executionId ?? undefined)
-    if (rows.failure) {
-      entries.push({ at: null, label: 'provisioning log could not be read', detail: rows.failure })
-    }
-    if (rows.dropped > 0) {
-      entries.push({
-        at: null,
-        label: `${rows.dropped} older provisioning-log rows for this run were not included`,
-        detail: `The timeline keeps the ${TIMELINE_ROW_CAP} most recent rows; the ones dropped are the OLDEST.`,
-      })
-    }
-    for (const row of rows.records) {
-      entries.push({
-        at: row.createdAt,
-        label: `${row.subsystem}.${row.operation} ${row.outcome}${
-          row.targetId ? ` (${row.targetId})` : ''
-        }`,
-        ...(row.error || row.detail
-          ? { detail: capText(row.error ?? row.detail ?? '', TIMELINE_DETAIL_CAP) }
-          : {}),
-      })
-    }
-    return entries.sort((a, b) => (a.at ?? 0) - (b.at ?? 0))
-  }
-
-  async function readLogRows(
-    workspaceId: string,
-    executionId: string | undefined,
-  ): Promise<{ records: ProvisioningLogRecord[]; dropped: number; failure?: string }> {
-    if (!deps.listProvisioningLog || !executionId) return { records: [], dropped: 0 }
-    try {
-      const rows = await deps.listProvisioningLog(workspaceId, executionId)
-      // Newest first from the repository; the timeline reads oldest first, and the cap has to drop
-      // the OLDEST rows rather than the newest, which are the ones about this failure.
-      return {
-        records: rows.slice(0, TIMELINE_ROW_CAP),
-        dropped: Math.max(0, rows.length - TIMELINE_ROW_CAP),
-      }
-    } catch (error) {
-      return { records: [], dropped: 0, failure: getErrorMessage(error) }
-    }
-  }
-
   return { collect, remediate: createEnvironmentRemediator(deps) }
+}
+
+/** How the provisioning log was read, as its own fact rather than a length to infer from. */
+type ProvisioningLogRead =
+  | { state: 'read'; records: ProvisioningLogRecord[]; dropped: number }
+  | { state: 'unwired' }
+  | { state: 'unattached' }
+  | { state: 'failed'; error: string }
+
+/**
+ * The ONE derived timeline: the record's own dates, the run's provisioning attempts, the route
+ * proof, the marker saying status polls happened at all, and what READING the provisioning log
+ * did, sorted into one order.
+ *
+ * The proof and the poll marker are folded in rather than left beside the log for a reader to
+ * reconcile, and that is the whole point of the shape. An investigation asked to line the
+ * timestamps up against a two-entry log said the reachability verdict "settled roughly at the
+ * moment of the create request, with no wait", while `proof.checkedAt` in the same bundle put it
+ * 4m18s later, and built its headline on the contradiction.
+ *
+ * The log's OWN state is an entry too, always, for the same reason the poll marker is one. Once
+ * the record's dates and that marker joined this list, an absent provisioning log stopped being
+ * distinguishable from an empty one by the list coming back empty, which is what the renderer's
+ * "draw no conclusion from the silence" guard had been doing. A deployment that keeps no log, an
+ * environment attached to no run, a read that threw, and a run that genuinely appended nothing
+ * are four facts wanting four different reactions, and only the last is about the environment.
+ *
+ * A module-level function rather than a closure over `deps`, because everything it needs is one
+ * optional reader and the collaborator it used to sit inside is at its own function-size budget.
+ */
+async function readTimeline(
+  listProvisioningLog: EnvironmentDiagnosticsDeps['listProvisioningLog'],
+  args: {
+    workspaceId: string
+    executionId: string | undefined
+    record: EnvironmentRecord | null
+    route: EnvironmentRouteEvidence
+  },
+): Promise<EnvironmentTimelineEntry[]> {
+  const { workspaceId, executionId, record, route } = args
+  const entries: EnvironmentTimelineEntry[] = []
+  if (record) {
+    entries.push({ at: record.createdAt, label: 'environment record created' })
+    entries.push(describePollMarker(record))
+    if (record.deletedAt) {
+      entries.push({ at: record.deletedAt, label: 'environment record tombstoned' })
+    }
+  }
+  if (route.proof) entries.push(describeRouteProof(route.proof, route.candidates))
+  entries.push(...describeLogRead(await readLogRows(listProvisioningLog, workspaceId, executionId)))
+  return entries.sort((a, b) => (a.at ?? 0) - (b.at ?? 0))
+}
+
+/**
+ * The provisioning log's rows, and the state it was read in. Every state but `read` is a fact
+ * about the PLATFORM rather than about the run, which is why each is its own member.
+ */
+async function readLogRows(
+  listProvisioningLog: EnvironmentDiagnosticsDeps['listProvisioningLog'],
+  workspaceId: string,
+  executionId: string | undefined,
+): Promise<ProvisioningLogRead> {
+  if (!listProvisioningLog) return { state: 'unwired' }
+  if (!executionId) return { state: 'unattached' }
+  try {
+    const rows = await listProvisioningLog(workspaceId, executionId)
+    // Newest first from the repository; the timeline reads oldest first, and the cap has to drop
+    // the OLDEST rows rather than the newest, which are the ones about this failure.
+    return {
+      state: 'read',
+      records: rows.slice(0, TIMELINE_ROW_CAP),
+      dropped: Math.max(0, rows.length - TIMELINE_ROW_CAP),
+    }
+  } catch (error) {
+    return { state: 'failed', error: getErrorMessage(error) }
+  }
+}
+
+/** The provisioning log's contribution to the timeline: how it was read, then what it held. */
+function describeLogRead(rows: ProvisioningLogRead): EnvironmentTimelineEntry[] {
+  if (rows.state === 'unwired') {
+    return [
+      {
+        at: null,
+        label: 'this deployment keeps NO provisioning log',
+        detail:
+          'There is no record of provisioning attempts to read, so nothing below is one. That is ' +
+          'a fact about the deployment and not about this environment: draw no conclusion from ' +
+          'the absence of attempts, including about how long anything took.',
+      },
+    ]
+  }
+  if (rows.state === 'unattached') {
+    return [
+      {
+        at: null,
+        label: 'this environment is attached to no run, so no provisioning log was read',
+        detail:
+          'The provisioning log is keyed by RUN. An environment carrying no run has no log to ' +
+          'read, which is again a fact about the record rather than about the attempt.',
+      },
+    ]
+  }
+  if (rows.state === 'failed') {
+    return [{ at: null, label: 'provisioning log could not be read', detail: rows.error }]
+  }
+  const entries: EnvironmentTimelineEntry[] = []
+  if (rows.records.length === 0) {
+    entries.push({
+      at: null,
+      label: 'the provisioning log was READ and holds nothing for this run',
+      detail:
+        'It is wired, it answered, and it had no rows. So nothing was ever appended for this run: ' +
+        'an unusual fact, but a real one rather than a read that did not happen.',
+    })
+  }
+  if (rows.dropped > 0) {
+    entries.push({
+      at: null,
+      label: `${rows.dropped} older provisioning-log rows for this run were not included`,
+      detail: `The timeline keeps the ${TIMELINE_ROW_CAP} most recent rows; the ones dropped are the OLDEST.`,
+    })
+  }
+  for (const row of rows.records) {
+    entries.push({
+      at: row.createdAt,
+      label: `${row.subsystem}.${row.operation} ${row.outcome}${
+        row.targetId ? ` (${row.targetId})` : ''
+      }`,
+      ...(row.error || row.detail
+        ? { detail: capText(row.error ?? row.detail ?? '', TIMELINE_DETAIL_CAP) }
+        : {}),
+    })
+  }
+  return entries
 }
 
 /**
@@ -410,7 +499,7 @@ export function createEnvironmentDiagnostics(deps: EnvironmentDiagnosticsDeps) {
  * with a named owner that the investigation is meant to rank first, and a parse failure
  * masquerading as it would have a reader send someone to fix a mapping that is fine.
  */
-function readRoute(record: EnvironmentRecord | null): EnvironmentRouteEvidence {
+function readRoute(record: EnvironmentRecord | null, caps: string[]): EnvironmentRouteEvidence {
   if (!record?.reachability) return { candidates: [], proof: null }
   const parsed = parseReachability(record.reachability)
   if (!parsed) {
@@ -423,40 +512,99 @@ function readRoute(record: EnvironmentRecord | null): EnvironmentRouteEvidence {
         'as UNKNOWN: this is a platform read failure, NOT a provider that stated no addresses.',
     }
   }
-  return { candidates: parsed.candidates, proof: parsed.proof }
+  return prepareRoute(parsed.candidates, parsed.proof, caps)
 }
 
 /**
- * The timeline entry for the platform's own status polling: WHEN it last got a clean answer, and
- * how many it has had.
+ * The route evidence, scrubbed and bounded, like every other provider-authored section.
+ *
+ * It reads as platform data and is not. `candidates` is whatever a provider's response mapping
+ * pointed at (an array with no declared length, holding strings with no declared length), and an
+ * attempt's `detail` is the probe's own error text, which on some runtimes echoes the target back
+ * with whatever the URL carried. Both cross into a model prompt and the telemetry store from here,
+ * which is the boundary `prepareDiagnosis` and `prepareFields` already guard; this section shipped
+ * past it unredacted and uncapped while its own neighbour in the timeline was scrubbed.
+ *
+ * Scrub BEFORE the cap, per CLAUDE.md's compose-time rule. `state`, `reason` and `checkedAt` are
+ * left alone: two are closed vocabularies and the third is a number.
+ */
+function prepareRoute(
+  candidates: readonly EnvironmentAddress[],
+  proof: EnvironmentRouteProof | null,
+  caps: string[],
+): EnvironmentRouteEvidence {
+  const kept = candidates.slice(0, ROUTE_CANDIDATE_CAP).map((entry) => ({
+    address: capText(scrub(entry.address), ROUTE_TEXT_CAP),
+    ...(entry.label ? { label: capText(scrub(entry.label), ROUTE_TEXT_CAP) } : {}),
+  }))
+  if (candidates.length > kept.length) {
+    caps.push(
+      `The provider stated ${candidates.length} addresses for this environment; only the first ` +
+        `${kept.length} are below. The rest are UNKNOWN, not absent, and the proof below was ` +
+        'taken against the addresses the platform actually dialled, which it lists itself.',
+    )
+  }
+  if (!proof) return { candidates: kept, proof: null }
+  const attempts = proof.attempts.slice(0, ROUTE_ATTEMPT_CAP).map((attempt) => ({
+    target: capText(scrub(attempt.target), ROUTE_TEXT_CAP),
+    outcome: attempt.outcome,
+    ...(attempt.detail ? { detail: capText(scrub(attempt.detail), ROUTE_TEXT_CAP) } : {}),
+  }))
+  if (proof.attempts.length > attempts.length) {
+    caps.push(
+      `The route proof recorded ${proof.attempts.length} attempts; only the first ` +
+        `${attempts.length} are below.`,
+    )
+  }
+  return {
+    candidates: kept,
+    proof: {
+      ...proof,
+      via: proof.via === null ? null : capText(scrub(proof.via), ROUTE_TEXT_CAP),
+      attempts,
+    },
+  }
+}
+
+/**
+ * The timeline entry for the platform's own status polling: WHEN the provider last answered one,
+ * and how many answers there have been.
  *
  * Always present for a record that was read, including the case where the answer is none. An
  * absent marker and a marker saying zero are the two readings the failure that filed this could
  * not tell apart, and it picked the one that supported a fault: "there is no later poll of any
- * kind" against an environment that had been polled successfully for nearly four minutes.
+ * kind" against an environment that had been polled for nearly four minutes.
+ *
+ * An ANSWER, never a success, matching the row it renders. A provider that reports a deterministic
+ * rejection on `provisioned.error` rather than throwing is answering, so its polls are counted,
+ * and "22 successful polls" for an environment that failed all 22 is the same over-claim this
+ * marker exists to remove.
  */
 function describePollMarker(record: EnvironmentRecord): EnvironmentTimelineEntry {
   if (!record.lastPolledAt || record.pollCount <= 0) {
     return {
       at: null,
-      label: 'no successful provider status poll is RECORDED for this environment',
+      label: 'no provider status poll is RECORDED for this environment',
       detail:
-        'The platform records the last successful poll and a count of them on the environment ' +
-        'row. Neither is set here, so either nothing polled it or it was created before this ' +
-        'marker existed. A successful poll writes no log row of its own at any cadence, so the ' +
+        'The platform records the last answered poll and a count of them on the environment row. ' +
+        'Neither is set here, so either nothing polled it or it was created before this marker ' +
+        'existed. An answered poll writes no log row of its own at any cadence, so the ' +
         'provisioning entries below are not a record of polling either way.',
     }
   }
-  const polls =
-    record.pollCount === 1 ? '1 successful poll' : `${record.pollCount} successful polls`
+  const polls = record.pollCount === 1 ? '1 answer' : `${record.pollCount} answers`
   return {
     at: record.lastPolledAt,
-    label: `last successful provider status poll (${polls} recorded)`,
+    label: `last answered provider status poll (${polls} recorded)`,
     detail:
-      'Successful polls write this marker rather than one log row each. The count is a FLOOR: ' +
-      'concurrent polls can cost it an increment, so it never over-reports. The stamp is exact, ' +
-      'and the span from the record being created to here is how long the platform was actively ' +
-      'asking the provider about this environment.',
+      'Answered polls write this marker rather than one log row each, and an answer of any ' +
+      'status counts: this says how much polling HAPPENED, not how much of it went well. The ' +
+      'count is a FLOOR, since concurrent polls can cost it an increment, so it never ' +
+      'over-reports. The stamp is exact, and it is the LAST answer only: polling is not ' +
+      'necessarily continuous between the record being created and this moment, because several ' +
+      'unrelated surfaces refresh an environment (a readiness wait, a human-test gate opening ' +
+      'hours later, an environment self-test), and any one of them moves the stamp. Read the span ' +
+      'as a window polling happened INSIDE, never as its duration.',
   }
 }
 
@@ -472,9 +620,10 @@ function describeRouteProof(
   proof: EnvironmentRouteProof,
   candidates: readonly EnvironmentAddress[],
 ): EnvironmentTimelineEntry {
-  const tried = proof.attempts
-    .map((a) => `${a.target} (${a.outcome}${a.detail ? `: ${scrub(a.detail)}` : ''})`)
-    .join(', ')
+  // Kernel's renderer, which the two operator sentences and the investigation prompt also use:
+  // one template for one field. Already scrubbed and capped by `prepareRoute`, which owns this
+  // bundle's boundary onto a prompt.
+  const tried = describeRouteTargets(proof.attempts)
   const stated = candidates.length
     ? candidates.map((c) => c.address).join(', ')
     : "none (the URL's own name was the only target that existed)"

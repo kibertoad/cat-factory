@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   MAX_PROBED_ADDRESSES,
   describeInconclusiveRoute,
+  describeRouteTargets,
   describeUnreachableEnvironment,
   determinateRouteCause,
   planRouteProbes,
@@ -322,6 +323,25 @@ describe('describeInconclusiveRoute', () => {
   })
 })
 
+describe('describeRouteTargets', () => {
+  it('renders every target with its outcome, and its detail where it has one', () => {
+    // ONE renderer, exported because three surfaces show this list: the two operator sentences
+    // here, the investigation's timeline entry, and the investigation prompt's route section. As
+    // three copies of the template, one of them shipped the detail unscrubbed while its neighbour
+    // scrubbed it, and a change to the attempt shape had to be found in three packages.
+    expect(
+      describeRouteTargets([
+        { target: 'env.example:443', outcome: 'name_unresolved' },
+        { target: 'env.example@10.4.19.22:443', outcome: 'probe_failed', detail: 'EPERM' },
+      ]),
+    ).toBe('env.example:443 (name_unresolved), env.example@10.4.19.22:443 (probe_failed: EPERM)')
+  })
+
+  it('is empty when nothing was tried, so a caller can branch on it', () => {
+    expect(describeRouteTargets([])).toBe('')
+  })
+})
+
 describe('determinateRouteCause', () => {
   const notReached = {
     state: 'not_reached' as const,
@@ -344,6 +364,23 @@ describe('determinateRouteCause', () => {
     // Then the finding is a verdict about the environment or its network, which is exactly the
     // judgement this function must not pre-empt.
     expect(determinateRouteCause([{ address: '10.4.19.22' }], notReached)).toBeNull()
+  })
+
+  it('does not claim "no address was stated" when the provider stated several', () => {
+    // `no_candidate` is filed whenever the URL yields no host and port, WHATEVER the candidate
+    // list holds (`planRouteProbes` needs both before it plans anything). The cause is still
+    // determinate and it is a different one: nothing was published to dial the stated addresses
+    // ON. Told the provider stated none, a reader goes and fixes a response mapping that is
+    // already doing its job, and the prompt is instructed to make this the headline.
+    const cause = determinateRouteCause([{ address: '10.4.19.22' }, { address: '10.4.19.23' }], {
+      ...notReached,
+      state: 'inconclusive',
+      reason: 'no_candidate',
+      attempts: [],
+    })
+    expect(cause).toContain('published no URL with a host and port')
+    expect(cause).toContain('2 addresses its provider DID state')
+    expect(cause).not.toContain('no address stated for one')
   })
 
   it('settles nothing for a proof that CARRIED, or for one that established nothing', () => {

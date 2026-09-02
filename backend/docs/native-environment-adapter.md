@@ -164,7 +164,10 @@ write rule matters.
 
 - **A stated bag REPLACES the stored one, whole.** It is what THIS response captured, not an
   accumulator, so a key you stop stating stops being stored. The same clear-unless-restated rule as
-  `error` and `statusNote`.
+  `error` and `statusNote`. The corollary binds you: state the COMPLETE bag, or `null`. If your
+  status call reads a narrower shape than your create call, carry the keys it said nothing about
+  over from `req.provisionFields` yourself, exactly as the generic manifest provider does with its
+  two mapped paths; a partial statement is a retraction of everything missing from it.
 - **`null` states nothing and keeps what is stored.** Return it from a call that read nothing (the
   generic provider's no-`status`-template fallback does; so does the built-in Kubernetes adapter
   when the row carries no namespace to read a status from). Absent is not empty, and the difference

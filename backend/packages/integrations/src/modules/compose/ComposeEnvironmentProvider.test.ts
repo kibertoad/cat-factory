@@ -212,6 +212,26 @@ describe('ComposeEnvironmentProvider', () => {
     expect(env.error).toContain('does not publish container port 8080')
   })
 
+  it('states NOTHING about the captured fields when there is no project to read', async () => {
+    // An empty bag is a STATEMENT under the replace rule, and it REPLACES what is stored, so this
+    // branch would erase the one key `teardown` reads to find the containers. Every one of this
+    // project's containers and volumes would then be held by the host permanently, with the row
+    // saying the environment failed. `null` states nothing and keeps the bag, which is what the
+    // Kubernetes sibling's no-namespace branch answers for the same reason.
+    const { runtime, calls } = fakeRuntime(() => ({ code: 0, stdout: '', stderr: '' }))
+    const provider = new ComposeEnvironmentProvider(runtime)
+    const res = await provider.status({
+      manifest,
+      externalId: null,
+      provisionFields: {},
+      resolveSecret: () => undefined,
+    })
+    expect(res.status).toBe('failed')
+    expect(res.fields).toBeNull()
+    // And nothing was asked of the daemon, which is why the answer states nothing.
+    expect(calls).toEqual([])
+  })
+
   it('tears down by project with down -v (idempotent)', async () => {
     const { runtime, calls } = fakeRuntime(() => ({ code: 0, stdout: '', stderr: '' }))
     const provider = new ComposeEnvironmentProvider(runtime)

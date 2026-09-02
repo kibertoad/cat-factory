@@ -45,9 +45,11 @@ prerequisites are configured.
   `environments/environmentStatusPoll.ts` is ONE status poll, split off because it is the only
   lifecycle step whose rules are all about what a second look may overwrite: the captured field bag
   is replaced by any answer that states one and kept by one that does not, `lastError` and
-  `statusNote` are cleared unless restated, the fact that the poll succeeded is stamped on the row
-  (nothing else records a clean poll), and a proof the fold had to drop is re-taken here because
-  the deployer's settle path will not run again.
+  `statusNote` are cleared unless restated, the fact that the provider ANSWERED is stamped on the
+  row (nothing else records a poll that did not fail), and a proof the fold had to drop is re-taken
+  here because the deployer's settle path will not run again. The re-take is paced by
+  `routeReproveDecision` off the stored `probedAt`, which is the one value that survives the drop:
+  anchored on the proof's own date it would erase its own anchor the first time it waited.
 - `shared/environmentBridge.ts`: which names a container must have re-pointed to reach the
   environments a job was handed, and what to re-point each AT. HERE rather than beside a transport
   because TWO of them build the same bridges from the same dispatch options (the local Docker

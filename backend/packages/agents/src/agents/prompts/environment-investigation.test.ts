@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { Block, EnvironmentEvidenceBundle } from '@cat-factory/kernel'
-import { renderEnvironmentInvestigationPrompt } from './environment-investigation.js'
+import {
+  ENVIRONMENT_INVESTIGATION_SYSTEM_PROMPT,
+  renderEnvironmentInvestigationPrompt,
+} from './environment-investigation.js'
 
 // The prompt's job is to make the bundle's ABSENCES visible. A section quietly omitted reads
 // exactly like a section that came back clean, and an investigator reasoning from that silence
@@ -151,7 +154,26 @@ describe('renderEnvironmentInvestigationPrompt', () => {
   })
 
   it('refuses to let an empty timeline read as a quiet run', () => {
-    expect(render()).toContain('draw no conclusion from the silence')
+    const prompt = render()
+    expect(prompt).toContain('draw no conclusion from the silence')
+    // And it no longer says anything about PROVISIONING ATTEMPTS. The gatherer folds the record's
+    // own dates, the poll marker and the provisioning log's own state into this list, so a bundle
+    // that reaches this branch is one where nothing dated could be read at all; the old copy
+    // ("No provisioning attempts were recorded for this run") named a source that was never the
+    // problem, and stated it about a run whose log may well be full.
+    expect(prompt).not.toContain('No provisioning attempts were recorded')
+    expect(prompt).toContain('no dated evidence about this environment at all')
+  })
+
+  it('lets an investigation cite the two evidence sections it was given', () => {
+    // The role's inventory and the directives' `source` vocabulary are the prompt's own answer to
+    // "do not invent a field you were not shown": a section the role never mentions, under no
+    // `source` the directives list, is evidence the model has been told not to cite. The route
+    // facts and the poll marker were added to the bundle without being added to either.
+    const prompt = ENVIRONMENT_INVESTIGATION_SYSTEM_PROMPT
+    expect(prompt).toContain('what the platform knows about REACHING it')
+    expect(prompt).toContain('a marker for how much status polling happened')
+    expect(prompt).toContain('the route evidence, the poll marker')
   })
 
   it("renders the provider's facts with its own verdict on each, undecided included", () => {

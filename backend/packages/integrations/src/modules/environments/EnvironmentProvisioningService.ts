@@ -1100,7 +1100,14 @@ export class EnvironmentProvisioningService {
       clock: this.deps.clock,
     })
     const patch = {
-      reachability: serializeReachability({ candidates: stored?.candidates ?? [], proof }),
+      // `probedAt` from the proof's own date, so the record that the platform LOOKED survives a
+      // later fold having to drop the verdict (see `EnvironmentReachability.probedAt`); the poll
+      // path's re-prove paces itself against it.
+      reachability: serializeReachability({
+        candidates: stored?.candidates ?? [],
+        proof,
+        probedAt: proof.checkedAt,
+      }),
     }
     await this.deps.environmentRegistryRepository.update(workspaceId, id, patch)
     return recordToHandle({ ...record, ...patch })

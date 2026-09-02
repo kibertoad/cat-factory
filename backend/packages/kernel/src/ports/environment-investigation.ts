@@ -55,9 +55,17 @@ export interface EnvironmentRouteEvidence {
   /**
    * The addresses the provider stated carry traffic for the URL's host, in ITS order. Empty means
    * it stated none, so the URL's own name was the only target that existed.
+   *
+   * Provider-authored, so already redacted and bounded by whoever gathered this bundle, exactly
+   * like {@link EnvironmentTimelineEntry.detail} and a diagnosis's facts. Anything cut is named in
+   * {@link EnvironmentEvidenceBundle.evidenceCaps}; a reader RENDERS these, it does not re-scrub
+   * them.
    */
   candidates: readonly EnvironmentAddress[]
-  /** What dialling established, or null when nothing has dialled this environment. */
+  /**
+   * What dialling established, or null when nothing has dialled this environment. Its attempts'
+   * `target` and `detail` are redacted and capped on the same terms as `candidates` above.
+   */
   proof: EnvironmentRouteProof | null
   /**
    * Why there is neither, when the stored value could not be READ. Its own member because an
