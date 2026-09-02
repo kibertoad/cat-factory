@@ -95,8 +95,7 @@ export interface RegistrationError {
  * and a warning naming several ids in its prose hands a deployment a decision it cannot make: the
  * `task_type_unknown_fragment` batch covered a code-tier typo and a legitimately late-bound
  * `src:<sourceId>:<slug>` id together, and the deployment mixing the two (which
- * [the reusable-operations guide](../../../../docs/reusable-operations.md) sanctions) could only
- * escalate both or neither. So a warning about N things is N warnings, one subject each, and the
+ * `backend/docs/reusable-operations.md` sanctions) could only escalate both or neither. So a warning about N things is N warnings, one subject each, and the
  * type is what makes the batch unrepresentable rather than a convention to remember (ADR 0063).
  *
  * What the id NAMES is fixed per `code` (an agent kind, a tool-server id, a credential key, a
