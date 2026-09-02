@@ -275,3 +275,10 @@ PR merged.
   surveyed as empty; the apply phase still clones it with the installation token.
 - **A second reviewer, or a review that can be revised after approval.** Approval is one act by
   one person; changing your mind means retrying the run.
+- **Letting the model choose what to read** ([#2171](https://github.com/kibertoad/cat-factory/issues/2171)).
+  D2's read is DECLARED, so what the survey cannot see is decided before it looks, and the two
+  findings this slice fixed there (an alphabetical sibling landing on `.github`, `source-layout`
+  having no citable evidence at all) were symptoms of that rather than of the shape. A bounded tool
+  loop over the same `RepoFiles` port would keep every property D2 argues for while deriving the
+  read set from the repository: the issue holds the four gaps a declared list structurally cannot
+  close, and what it would cost.
