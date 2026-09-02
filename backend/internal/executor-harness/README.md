@@ -155,6 +155,21 @@ Three rules bind anything added to it:
   payload on this machine, a daemon whose architecture the payload is not built for, `docker load`
   refusing the archive) AND the halves of a failed run that are ours rather than the daemon's,
   which is what docker's exit 126/127, a tag that did not resolve and an unexecutable payload are.
+- **A daemon that runs containers is not a daemon whose containers have a NETWORK**, which is the
+  same mistake one level in again. Loading and running a local image needs no network at all, so the
+  workload check above passes identically on a daemon whose nested containers are cut off: every
+  published image ran its rootless daemon with `--iptables=false`, which drops the MASQUERADE rule
+  for its bridge, and the harness reported `usable` while every `docker build` that fetched a
+  dependency was guaranteed to fail (issue #2174). So `usable` carries its own egress verdict,
+  measured from INSIDE a nested container (a TCP connect to a raw address, and a name to resolve),
+  and the rendered line says something different for each. The `blocked` wording is precise about
+  which commands break, because "docker has no network" is false and would have an agent skip work
+  it could do: the daemon pulls base images and `docker compose up` of pre-built images works, while
+  every `RUN` line that fetches anything fails, SLOWLY, since npm reports `EAI_AGAIN` only once its
+  retry backoff gives up and the build reads as a hang. `reachable` needs the connect AND the
+  lookup, since nothing an agent installs is fetched by address; a resolved name with a refused
+  connect is undetermined rather than blocked, because the resolution proves a path out exists and
+  the likelier cause is a deployment that filters the address the check was pointed at.
 - **A daemon that is STARTING is not a daemon that is absent.** Because the entrypoint does not
   wait, the backend dispatches seconds before there is a socket, and `docker info` is then refused
   at once rather than slowly. So a refusal is read against `DOCKER_HOST`, which the entrypoint sets
@@ -389,12 +404,15 @@ Docker socket would hand the container root on the host.
   concluded about itself.
 - The compose stand-up REFUSES on a decided negative and says why, instead of running compose
   against nothing and handing the agent a connection error to interpret. The refusal rides back on
-  the Tester step as the cause plus the two facts that decide where a human should look:
-  `infraSetup.dockerAvailable` (was anything answering) and `infraSetup.dockerWorkload` (what a
-  container did on it). Two fields rather than one, because the daemon has two ways to stop a
-  stand-up: nothing to talk to, and a daemon that answers and cannot run a container. Flattening
-  the second onto `dockerAvailable: false` renders as "no Docker daemon in the executor" and sends
-  an operator to restart a daemon that is already up.
+  the Tester step as the cause plus the three facts that decide where a human should look:
+  `infraSetup.dockerAvailable` (was anything answering), `infraSetup.dockerWorkload` (what a
+  container did on it) and `infraSetup.dockerEgress` (what that container could REACH). Three
+  fields rather than one, because the daemon has three ways to stop the work: nothing to talk to, a
+  daemon that answers and cannot run a container, and a daemon that runs containers and gives them
+  no network. Flattening the second onto `dockerAvailable: false` renders as "no Docker daemon in
+  the executor" and sends an operator to restart a daemon that is already up; flattening the third
+  onto `dockerWorkload: 'usable'` renders as a sandbox where the stack works, which is the reading
+  that let every `docker build` in a `--iptables=false` container fail unexplained for months.
 
 **What the entrypoint probes for is a SOCKET, and serving is not usable.** That is the whole of
 what a boot record can know, and it is weaker than what either consumer wants: a rootless daemon in
@@ -432,6 +450,39 @@ refusal: `resolveDockerVerdict` re-checks it against a live daemon at the moment
 about to run, and the record supplies what only the record holds, the cause and the daemon's own
 log tail. `GET /health` deliberately keeps reporting the boot record rather than probing per poll,
 since it is not the surface that acts on the answer.
+
+**Which daemon the container ends up with is a choice made on evidence.** `--iptables=false`
+arrived because the daemon could not start at all without it: a sandbox like Cloudflare Containers
+gives it no way to install its firewall rules, and it refuses to start. What went unnoticed is what
+the flag costs once the daemon DOES start. The rule it drops is the MASQUERADE for the bridge, so a
+nested container is never NATed and has no egress whatsoever, no DNS and no raw IP either. The
+daemon's own `docker pull` keeps working, which is most of why it stayed hidden for so long, and the
+cost lands on a `docker build` whose `RUN npm ci` sits in npm's retry backoff for some seven minutes
+before failing (issue #2173). So the entrypoint starts the daemon that manages its own rules first
+and falls back to `--iptables=false` only when that one EXITS without serving.
+
+The death, and not a clock, is what decides. A sandbox with no iptables binary and no NAT module
+does not make the daemon slow, it makes `dockerd` exit at once with the reason on its log, so an
+exit is the one observation here that is actually about the flags. A first arm still starting when
+the budget runs out is a cold sandbox as often as a wedged one, and swapping there would take a
+capable daemon away for the container's whole life on a guess; it is recorded as undecided and LEFT
+RUNNING instead, so `resolveDockerVerdict`'s live re-probe can still find it with its NAT intact. A
+sandbox that genuinely cannot do iptables ends up exactly where it was; a privileged Docker or
+Podman host, which is what local mode runs on, gets working nested networking.
+
+Each arm gets its OWN rootlesskit state directory, image store and pid file, and the abandon path
+waits for the process to be gone after `kill -9`. SIGKILL is not propagated, so a launcher that had
+already forked the real `dockerd` dies while its child holds an exclusive lock on the data root and
+a live pid file: sharing either would make the fallback fail with `pid file found` for a reason that
+has nothing to do with why it was started, which is the worst outcome available here (both arms
+record `failed` and the container ends up with no daemon at all). The socket is the one thing that
+cannot be per-arm, since `DOCKER_HOST` names it, and dockerd unlinks and rebinds it.
+
+The two arms record different `reason` words (`serving` and `serving-without-nat`) with a detail
+that names the CONSEQUENCE, which the workload check measures from inside a nested container without
+ever learning why. What the detail does NOT do is name a cause: "iptables is unavailable here" is
+not something the entrypoint measures, and the real cause is the daemon's own log tail, which rides
+the stderr line announcing the switch.
 
 Why it is written down at all: the image shipped for months with `docker-ce-rootless-extras` (the
 wrappers that START a daemon) and no `docker-ce` (the daemon itself), and no `iproute2` for the
@@ -483,8 +534,8 @@ verdict is stated.
 | `src/agent-shared.ts` | The few helpers every agent MODE shares (effort-report folding, the capability fields forwarded to `runAgentInWorkspace`). |
 | `src/logger.ts`    | Structured logging.                                                                                     |
 | `src/docker-status.ts` | This container's own verdict about its Docker daemon, as recorded by `entrypoint.sh`. Three-valued on purpose: a daemon that FAILED and a daemon nobody asked about are different facts, and only a DECIDED negative refuses a stand-up. See [Local infra: the container's Docker daemon](#local-infra-the-containers-docker-daemon). |
-| `src/docker-capability.ts` | Whether the daemon can RUN A CONTAINER, which is the fact every caller wanted and `docker info` does not answer. Loads a one-layer image built in-process and runs it; `usable` / `unusable` / `unknown`, and only the container RUN may produce the middle one, AND only where the daemon is what refused it (docker's 126/127, a tag that did not resolve and an unexecutable payload are the platform's own machinery, so they say "could not tell"). Total: it answers even if it throws. One budget for the whole pass, cancelled when the last caller abandons it, memoised per container for a positive and re-measured for a negative. |
-| `src/docker-probe-image.ts` | The one-layer docker-archive that check loads, assembled here from a statically linked binary already in the image, so the whole thing is local: no registry, no network, no second image. Pure, byte-stable, and it names the architecture the DAEMON reported rather than this process's. |
+| `src/docker-capability.ts` | Whether the daemon can RUN A CONTAINER, which is the fact every caller wanted and `docker info` does not answer. Loads a one-layer image built in-process and runs it; `usable` / `unusable` / `unknown`, and only the container RUN may produce the middle one, AND only where the daemon is what refused it (docker's 126/127, a tag that did not resolve and an unexecutable payload are the platform's own machinery, so they say "could not tell"). `usable` then carries what a SECOND container, on the default network, could reach: `reachable` / `blocked` / `undetermined`, on the same asymmetry (a missing busybox applet is the platform's gap, never an absent network). Total: it answers even if it throws. One budget for the whole pass plus a separate one for the egress container, cancelled when the last caller abandons it, memoised per container once SETTLED: any positive, plus every negative whose cause cannot change under a running container (a rejected target, a payload with no `nc`, a filtered address). Only a genuinely transient failure is re-measured, because re-measuring is two container starts and an image load per job on the critical path. |
+| `src/docker-probe-image.ts` | The one-layer docker-archive that check loads, assembled here from a statically linked binary already in the image, so the whole thing is local: no registry, no network, no second image. Pure, byte-stable, and it names the architecture the DAEMON reported rather than this process's. Also builds the egress container's argv, and validates the address it aims at (an IPv4 literal, never a name: a connect that has to resolve first cannot separate a broken route from broken DNS). The connect uses busybox `nc -z` where the payload has it and no `-w` where it does not, both under `busybox timeout`, because `-w` covers the FINAL NET READ: on a TLS port, a connect that succeeded then exits non-zero and reads as a route that is not there. |
 | `src/docker-command.ts` | How the harness runs one `docker …` command on its own behalf: an argv (no shell), a stdin body, stdout kept apart from stderr, one required timeout, the job's signal, and `killChildProcess` for the kill. Not a second `captured-command.ts`, which stays the one way a DECLARED shell command runs; the header says which of its choices this needs to differ on and why. |
 | `src/agent-env.ts` | The env for anything the harness spawns into the agent's CHECKOUT: its own environment minus the variables that are facts about the HARNESS. Today that is `NODE_ENV` (the harness runs in production mode, and an inherited `NODE_ENV=production` makes npm omit devDependencies in a checkout that never asked for it) and `PORT` (the port this harness is listening on, so a service that reads it would bind the one address in the container's network namespace that is already taken). |
 
@@ -510,8 +561,10 @@ runner):
 | `REPRODUCTION_TOTAL_BUDGET_MS` | `2700000` (45m) | Wall-clock ceiling on the WHOLE proof phase (every attempt, both trees, setup included). Attempts multiply two full tree runs each and the heartbeat above deliberately stops the inactivity watchdog from firing, so this is what bounds the phase. Checked at phase boundaries; exceeding it settles `inconclusive`, never a run failure. |
 | `HARNESS_TRANSCRIPT_TTL_MS` | `259200000` (3d) | How long lifted subscription-CLI session transcripts are kept before the retention sweep prunes them. |
 | `HARNESS_TRANSCRIPT_ROOT`   | `<tmpdir>/cf-agent-transcripts` | Where retained session transcripts are moved to (one dir per run). Meaningful only on a reused (warm-pool) container; a per-run container is torn down with the job. The TTL sweep deletes only dirs it created (each carries a `.cf-retained` marker), so pointing this at a shared directory never touches unrelated content, though a dedicated dir is still recommended. An override on a different filesystem than the config home falls back to copy-then-remove. |
-| `HARNESS_DOCKER_READY_TIMEOUT_SECONDS` | `60` | How long `entrypoint.sh` waits for the container's Docker daemon before recording it unavailable. Only a HUNG daemon pays this in full: the wait ends early both when the socket answers and when the daemon process is gone. It runs in the BACKGROUND, so it never delays the container's boot. |
+| `HARNESS_DOCKER_READY_TIMEOUT_SECONDS` | `60` | How long `entrypoint.sh` spends GETTING a Docker daemon to answer, in total, before recording it unavailable. One budget for the whole sequence, not one per arm: the rootless path may start a second daemon after the first exits, and the fallback gets what is left of this (floored at 10s, the only thing that can push the sequence past it, and only when a daemon took the whole window to die). Only a HUNG daemon pays it in full: the wait ends early both when the socket answers and when the daemon process is gone. It runs in the BACKGROUND, so it never delays the container's boot. |
 | `HARNESS_DOCKER_STATUS_FILE` | `/tmp/harness-docker-status.json` | Where that verdict is recorded. `entrypoint.sh` writes it and the harness reads it, so an override must be set for BOTH (they share one process env). |
+| `HARNESS_DOCKER_EGRESS_TARGET` | `1.1.1.1:443` | Where the egress check connects FROM INSIDE a nested container, to find out whether this daemon's containers have a route out. An `IPv4:port`, never a name (a connect that has to resolve first cannot separate a broken route from broken DNS). The default aims at the PUBLIC internet: a deployment that deliberately has none should point this, and the DNS name below, at what it does run, or the verdict is an honest `blocked` about two addresses that were never the ones that matter. A value that is not an address is REPORTED as a check that could not be carried out, never silently replaced. |
+| `HARNESS_DOCKER_EGRESS_DNS_NAME` | `registry.npmjs.org` | The name that same container resolves, which is the other half of egress: nothing an agent installs is fetched by address, so a working route with broken DNS is still reported as blocked, with the detail naming DNS as the half to fix. |
 | `HARNESS_DOCKER_PROBE_BINARY` | `/bin/busybox` | The statically linked binary the platform builds its one-layer probe image from, for the check that answers whether this daemon can RUN a container. Only an image variant that ships it elsewhere needs this. Absent is a supported answer, not a failure: the check then reports that it could not be carried out, which is what the native host transport gets on a developer laptop. |
 
 ## Build / test

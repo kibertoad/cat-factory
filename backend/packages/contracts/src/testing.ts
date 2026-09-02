@@ -210,6 +210,17 @@ export const testerInfraSetupSchema = v.object({
    * nothing was measured at all (an older image, or the native host transport).
    */
   dockerWorkload: v.optional(v.nullable(v.picklist(['usable', 'unusable', 'undetermined']))),
+  /**
+   * What a container started ON that daemon could REACH, when the platform measured it.
+   *
+   * The fourth diagnosis, and the one `dockerWorkload: 'usable'` structurally cannot carry: a
+   * rootless daemon started with `--iptables=false` runs containers perfectly and installs no
+   * MASQUERADE rule for its bridge, so none of them has a route out. The stack comes up and every
+   * `docker build` that fetches a dependency fails, slowly, which reads on the step as a stack
+   * that is fine. Present only alongside `usable`, the one verdict with an egress half;
+   * absent/null means nothing measured it.
+   */
+  dockerEgress: v.optional(v.nullable(v.picklist(['reachable', 'blocked', 'undetermined']))),
   /** The repo-relative compose file that was stood up, when known. */
   composePath: v.optional(v.nullable(v.string())),
   /** Epoch ms the stand-up attempt finished. */

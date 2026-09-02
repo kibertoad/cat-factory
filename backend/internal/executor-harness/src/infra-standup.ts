@@ -80,6 +80,9 @@ export async function standUpInfra(
       // boot record's own words for a daemon that answers and cannot run anything are `serving`
       // and nothing else, so a log line carrying the record alone describes the wrong failure.
       dockerWorkload: docker.workload?.status ?? 'unmeasured',
+      ...(docker.workload?.status === 'usable'
+        ? { dockerEgress: docker.workload.egress.status }
+        : {}),
       ...(docker.workload?.status === 'unusable' ? { dockerDetail: docker.workload.detail } : {}),
     })
     return {
@@ -162,11 +165,24 @@ export async function standUpInfra(
  * container DID on it is `usable`, `unusable`, or a check that could not be carried out. Absent
  * when nothing was measured at all (an undecided boot record probes nothing), which is not the
  * same as a check that ran and could not tell.
+ *
+ * THREE fields rather than two, because `usable` is not one fact. A daemon running with
+ * `--iptables=false` runs containers perfectly and gives them no network, so it is `usable` and
+ * every `docker build` that fetches anything on it is guaranteed to fail. The agent's prompt and
+ * `GET /health` both learn that; without `dockerEgress` the record a human reads on the Tester
+ * step, and every backend consumer of it, sees the same undifferentiated `usable` as a sandbox
+ * where the stack actually works. Present only on `usable`, which is the one verdict that has an
+ * egress half at all: on any other, a word here would report "no measurement" and "measured, and
+ * it cannot get out" in the same field.
  */
 function workloadRecord(workload: DockerWorkload | undefined): {
   dockerWorkload?: InfraSetupRecord['dockerWorkload']
+  dockerEgress?: InfraSetupRecord['dockerEgress']
 } {
   if (!workload) return {}
+  if (workload.status === 'usable') {
+    return { dockerWorkload: 'usable', dockerEgress: workload.egress.status }
+  }
   return { dockerWorkload: workload.status === 'unknown' ? 'undetermined' : workload.status }
 }
 

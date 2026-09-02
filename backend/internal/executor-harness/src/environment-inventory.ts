@@ -2,7 +2,11 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { log, type Logger } from './logger.js'
 import { harnessListenPort } from './harness-port.js'
-import { probeDockerWorkload, type DockerWorkload } from './docker-capability.js'
+import {
+  probeDockerWorkload,
+  type ContainerEgress,
+  type DockerWorkload,
+} from './docker-capability.js'
 
 // ---------------------------------------------------------------------------
 // What this machine actually has, probed ONCE per job and stated to the agent.
@@ -39,6 +43,12 @@ import { probeDockerWorkload, type DockerWorkload } from './docker-capability.js
 //     all fail (issue #2120). Only a container that RAN settles that, so the reachable case is
 //     split by a real workload (docker-capability.ts) into `usable`, `unusable`, and a daemon
 //     that answered while the check itself could not be carried out.
+//   - And a daemon that runs containers is still not one whose containers have a NETWORK, which
+//     is the same mistake one level in again. Loading and running a local image needs no network,
+//     so a daemon started with `--iptables=false` passes the workload check while every nested
+//     container is cut off (issue #2174): what an agent then hits is a `docker build` whose
+//     `RUN npm ci` sits in retry backoff for about seven minutes before failing. So `usable`
+//     carries its own egress verdict, and the line below says something different for each.
 //
 // Deliberately NOT here: the agent's own tools (web search, file tools, MCP servers). Those are
 // the CLI's, they differ per harness, and each is already stated where it is true. Claiming one
@@ -89,9 +99,14 @@ export type ToolPresence =
  *   - `serving`:  it answered, and the workload check could not be carried out (no payload on
  *                   this machine, an unmapped architecture, a timeout). Neither of the other two,
  *                   and rendered as "try it if you need it".
+ *
+ * `usable` then carries what a nested container could REACH, which is a second fact and not a
+ * sixth state: what an agent may do with the daemon and what its containers can fetch are
+ * different questions, and each of the three egress answers changes the advice without changing
+ * the verdict on the daemon.
  */
 export type DockerCapability =
-  | { status: 'usable'; server?: string }
+  | { status: 'usable'; server?: string; egress: ContainerEgress }
   | { status: 'unusable'; server?: string; detail: string }
   | { status: 'serving'; server?: string; reason: string }
   | { status: 'absent' }
@@ -411,7 +426,7 @@ async function probeDockerCapability(
   if (daemon.status === 'unknown') return { status: 'unknown', reason: daemon.reason }
   const server = daemon.version ? { server: daemon.version } : {}
   const workload = await (opts.workload ?? probeDockerWorkload)(opts.signal)
-  if (workload.status === 'usable') return { status: 'usable', ...server }
+  if (workload.status === 'usable') return { status: 'usable', ...server, egress: workload.egress }
   if (workload.status === 'unusable')
     return { status: 'unusable', ...server, detail: workload.detail }
   return { status: 'serving', ...server, reason: workload.reason }
@@ -561,10 +576,7 @@ function dockerDaemonLine(daemon: DockerCapability): string {
   const server = 'server' in daemon && daemon.server ? ` (server ${daemon.server})` : ''
   switch (daemon.status) {
     case 'usable':
-      return (
-        `A Docker daemon is reachable${server} and the platform ran a container on it: ` +
-        '`docker build`, `docker run` and `docker compose up` work here.'
-      )
+      return `A Docker daemon is reachable${server} and the platform ran a container on it: ${usableCommands(daemon.egress)} work here. ${egressSentence(daemon.egress)}`
     case 'unusable':
       return (
         `A Docker daemon is reachable${server} but it CANNOT run a container: the platform ` +
@@ -602,6 +614,76 @@ function unnamedCapability(daemon: never): string {
 }
 
 /**
+ * Which commands the `usable` line may claim, which is the EGRESS verdict's business and not the
+ * daemon's.
+ *
+ * Split out because the line used to open with the full list and then, one sentence later, tell
+ * the agent that every `RUN` line which fetches anything fails. A block that also says not to
+ * spend turns re-checking it cannot afford to state and then retract the same fact: an agent
+ * reading the first sentence has already been told `docker build` works here, which is the exact
+ * shape of the lie issue #2174 is about. TOTAL over {@link ContainerEgress}, like its sibling.
+ */
+function usableCommands(egress: ContainerEgress): string {
+  switch (egress.status) {
+    case 'blocked':
+      // Deliberately omits `docker build`: it is the one the missing NAT rule actually breaks,
+      // and the sentence that follows explains which part of it and why.
+      return '`docker run` and `docker compose up` of images that are already built'
+    case 'reachable':
+    case 'undetermined':
+      return '`docker build`, `docker run` and `docker compose up`'
+    default:
+      return unnamedEgressCommands(egress)
+  }
+}
+
+/** The commands claimed for an egress verdict this build does not know: none of them. */
+function unnamedEgressCommands(egress: never): string {
+  return `the docker commands the platform could name for its verdict ${JSON.stringify(egress)}`
+}
+
+/**
+ * The second half of the `usable` line: what a container started HERE can reach, and what to do
+ * about it. TOTAL over {@link ContainerEgress} for the same reason the line above is over the
+ * daemon's states.
+ *
+ * The `blocked` arm is the one this exists for, and it is precise about WHICH commands break,
+ * because "docker has no network" is not true and an agent that believed it would skip work it
+ * could have done. The daemon has a network: it pulls base images and compose pulls its services
+ * normally. What has none is the container each `RUN` line executes in. The seven minutes are
+ * named because the failure does not look like a failure from inside the agent's loop: npm turns
+ * "no route" into `EAI_AGAIN` only once its retry backoff gives up, so the build reads as a hang
+ * and the natural response is to wait longer.
+ */
+function egressSentence(egress: ContainerEgress): string {
+  switch (egress.status) {
+    case 'reachable':
+      return 'A container started here also reaches the network, so a build that installs dependencies works.'
+    case 'blocked':
+      return (
+        'A container started here could reach NOTHING the platform tried, and that is a fact ' +
+        `about this sandbox rather than about your work (${egress.detail}). The daemon itself is ` +
+        'fine: it pulls base images, and `docker compose up` of pre-built images works. What ' +
+        'fails is every `RUN` line in a `docker build` that fetches from the public internet ' +
+        '(`npm ci`, `apk add`, `pip install`), and it fails SLOWLY: npm reports `EAI_AGAIN` only ' +
+        'after some seven minutes of retry backoff, so it reads as a hang. Do not wait it out ' +
+        'and do not retry. Vendor what you need, skip the image build, verify some other way, or ' +
+        'say in one line that you could not verify it here. If this project already builds ' +
+        'against a mirror inside this network, that is not one of the addresses tried above and ' +
+        'is worth one attempt.'
+      )
+    case 'undetermined':
+      return `Whether a container started here can reach the network was NOT established (${egress.reason}), so try it if you need it and do not read a failure as a defect in the work.`
+    default:
+      return unnamedEgress(egress)
+  }
+}
+
+function unnamedEgress(egress: never): string {
+  return `Whether a container started here can reach the network could not be determined (the platform reported an unrecognised verdict ${JSON.stringify(egress)}).`
+}
+
+/**
  * Probe the machine and fold the inventory onto `systemPrompt`. THE composition point: the harness
  * calls this once per job, in `handleAgent`, before any mode branches, so every mode and every CLI
  * (claude-code, codex, Pi) inherits it from the job's own system prompt instead of each folding a
@@ -633,6 +715,12 @@ export async function appendEnvironmentInventory(
         .map((t) => t.name)
         .join(','),
       dockerDaemon: inventory.dockerDaemon.status,
+      // Present only when a nested container was actually asked, which is the one state that has
+      // an egress answer at all. A word here for every other state would report "no measurement"
+      // and "measured, and it cannot get out" in the same field.
+      ...(inventory.dockerDaemon.status === 'usable'
+        ? { dockerEgress: inventory.dockerDaemon.egress.status }
+        : {}),
       // The unknowns, by NAME: the block tells the agent a probe failed, and this is the only place
       // an operator can see WHICH, since the reason the agent reads is deliberately wordy prose.
       unknown: inventory.tools

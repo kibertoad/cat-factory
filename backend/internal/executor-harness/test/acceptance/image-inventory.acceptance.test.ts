@@ -199,8 +199,19 @@ describe.skipIf(!docker)('executor container boot', () => {
       status?: string
       reason?: string
       detail?: string
+      egress?: { status?: string }
     }
     expect(['usable', 'unusable', 'unknown']).toContain(verdict.status)
+
+    // A daemon that ran a container has to have said something about EGRESS, which is the half a
+    // local workload check structurally cannot see: loading and running an image the platform
+    // built needs no network, so a daemon whose nested containers are cut off passes the marker
+    // run exactly as a working one does (issue #2174). WHICH of the three it reports is a fact
+    // about the machine this suite runs on and is deliberately not pinned; what IS pinned is that
+    // the field cannot go missing, since an absent egress verdict reads as a clean one.
+    if (verdict.status === 'usable') {
+      expect(['reachable', 'blocked', 'undetermined']).toContain(verdict.egress?.status)
+    }
 
     // What the assertion is FOR. With no daemon there is nothing to measure and `unknown` is
     // the whole answer; with one, the archive must be something docker accepts, whatever it

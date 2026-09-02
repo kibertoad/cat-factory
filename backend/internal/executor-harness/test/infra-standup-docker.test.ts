@@ -148,7 +148,7 @@ describe('standUpInfra against the container docker verdict', () => {
       // the record alone would deny this container local infra for the rest of its life.
       await withStatus('{"available":false,"source":"external","reason":"unreachable"}')
       const result = await standUpInfra(tmpdir(), infra, undefined, silentLogger, () =>
-        Promise.resolve({ status: 'usable' }),
+        Promise.resolve({ status: 'usable', egress: { status: 'reachable' } }),
       )
       // The compose file does not exist, so the attempt fails. The point is that it was MADE, and
       // that the record claims the daemon it actually reached.
