@@ -52,9 +52,14 @@ export function registerEnvironmentReachabilityTests(harness: ConformanceHarness
     // by the component that owns provisioning, instead of a tester spending ten and a model budget
     // arriving at a confident diagnosis of the DNS layer. `environment_unreachable` is deliberately
     // not repo-fixable, so the remediation loop stays out of it.
+    //
+    // Every attempt has to ESTABLISH something for the proof to be a verdict about the
+    // environment, so the name resolves nowhere and each stated address is dialled and answers
+    // nothing. A probe reporting `unresolved` for a literal address would be a malfunction of the
+    // probe (`probe_failed`), which is an admission about the platform and settles no frame.
     const app = harness.makeApp(undefined, {
       environmentProvider: statedAddressProvider() as unknown as EnvironmentProvider,
-      routeProbe: async () => ({ state: 'unresolved' }),
+      routeProbe: async (req) => (req.address ? { state: 'no_route' } : { state: 'unresolved' }),
     })
     const { exec } = await driveDeployOnly(app)
     expect(exec.status).toBe('failed')
@@ -127,7 +132,7 @@ export function registerEnvironmentReachabilityTests(harness: ConformanceHarness
     })
     const { wsId, exec } = await driveDeployOnly(app)
     expect(exec.steps.find((s) => s.agentKind === 'deployer')?.state).toBe('done')
-    expect(exec.failure).toBeUndefined()
+    expect(exec.failure ?? null).toBeNull()
 
     const envs = await app.call<EnvironmentHandle[]>('GET', `/workspaces/${wsId}/environments`)
     const env = envs.body!.find((e) => e.url === 'https://pr-9.preview.test')!
