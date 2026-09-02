@@ -151,6 +151,13 @@ ENV CLAUDE_CLI_VERSION=${CLAUDE_CODE_VERSION}
 #     was even reached. `slirp4netns` is the userspace networking it then uses.
 #   - `uidmap` provides the newuidmap/newgidmap helpers user namespaces need;
 #     `fuse-overlayfs` is the rootless storage driver.
+#   - `docker-buildx-plugin` is what `docker build` and `docker compose build` ARE now: without
+#     it both die on "Docker Compose requires buildx plugin to be installed" before touching a
+#     Dockerfile, which an agent reads as its own build being wrong.
+#   - `busybox-static` is not for the agent. It is the payload the platform builds its one-layer
+#     probe image from (src/docker-probe-image.ts) to find out whether this daemon can actually
+#     run a container, and static is the requirement: the image it goes into has nothing else in
+#     it, no loader and no libc.
 # Runtime is still best-effort (a sandbox that forbids user namespaces has no daemon and
 # never blocks the container from booting), but it is no longer SILENT: entrypoint.sh waits
 # for the daemon on a bounded window and records the verdict, and the harness refuses a
@@ -163,8 +170,38 @@ RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     chmod a+r /etc/apt/keyrings/docker.asc; \
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable" > /etc/apt/sources.list.d/docker.list; \
     apt-get update && apt-get install -y --no-install-recommends docker-ce containerd.io docker-ce-cli \
-    docker-compose-plugin docker-ce-rootless-extras uidmap fuse-overlayfs iproute2 slirp4netns \
+    docker-compose-plugin docker-buildx-plugin docker-ce-rootless-extras uidmap fuse-overlayfs \
+    iproute2 slirp4netns busybox-static \
     && rm -rf /var/lib/apt/lists/*'
+
+# Compose v1 has been gone for years and the plugin is a drop-in for it, but plenty of repo
+# scripts still spell it `docker-compose`, and in this container that is a `command not found`
+# an agent has to diagnose and shim for itself before it can run the project's own script. One
+# line removes the class.
+RUN printf '#!/bin/sh\nexec docker compose "$@"\n' > /usr/local/bin/docker-compose \
+    && chmod 0755 /usr/local/bin/docker-compose
+
+# Take the rootless daemon OFF the containerd image store.
+#
+# Docker 29 made it the default, and it is the wrong default HERE: its `overlayfs` snapshotter
+# mounts or fails, with no fallback, and inside a nested user namespace (this container's
+# rootless daemon, itself inside the deployment's sandbox) the mount returns EINVAL. The daemon
+# serves throughout while `docker pull` of a multi-layer image, `docker run` of a single-layer
+# one and `docker build` all fail on it: issue #2120, where three agents in one run each paid
+# to discover that for themselves.
+#
+# The graphdriver path this restores is the one that PROBES: dockerd tries overlay2, then the
+# `fuse-overlayfs` installed above, then `vfs`, and settles on whichever the sandbox permits.
+# `vfs` is slow and correct, and correct beats fast for a build that otherwise cannot run.
+#
+# Written as a config KEY rather than a `--feature` flag on the entrypoint's command line, and
+# that is the safe half: an unknown key inside `features` is ignored, where an unknown flag
+# takes the daemon down at startup and leaves the container with no docker at all. Whether it
+# worked is not assumed either way. The platform runs a container and reports what happened.
+RUN mkdir -p /home/harness/.config/docker \
+    && printf '{\n  "features": { "containerd-snapshotter": false }\n}\n' \
+       > /home/harness/.config/docker/daemon.json \
+    && chown -R harness:harness /home/harness/.config
 
 WORKDIR /app
 # Copy the compiled wrapper owned by the unprivileged user (no recursive chown

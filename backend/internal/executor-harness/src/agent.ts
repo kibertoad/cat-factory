@@ -187,8 +187,11 @@ export async function handleAgent(job: AgentJob, opts: RunOptions = {}): Promise
     // This sits on the critical path AHEAD of the clone, which is the cost of having one
     // composition point instead of one per mode (each mode owns its own clone, so there is no
     // single post-clone place to put this). The pass is sized for that: everything in it runs
-    // concurrently, every probe is a call that answers in milliseconds or is wedged, and the one
-    // deliberate wait is a single short retry for a daemon that is still starting.
+    // concurrently, and every probe either answers in milliseconds or is bounded. Two of them are
+    // deliberate waits rather than instant answers: one short retry for a daemon that is still
+    // starting, and, only once a daemon has answered, the container the platform runs to find out
+    // whether it can run one at all (`docker-capability.ts`, budgeted and memoised per container
+    // for a positive). Both take the job's signal, so an abandoned run stops paying at once.
 
     const staged: AgentJob = {
       ...job,

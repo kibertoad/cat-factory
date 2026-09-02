@@ -201,6 +201,15 @@ export const testerInfraSetupSchema = v.object({
    * the harness with no entrypoint to probe. Never read absence as `false`.
    */
   dockerAvailable: v.optional(v.nullable(v.boolean())),
+  /**
+   * What a real container DID on that daemon, when the platform measured it. The third
+   * diagnosis, and the one `dockerAvailable` structurally cannot carry: a rootless daemon nested
+   * in a sandbox answers throughout while unable to mount any image layer, so it is reachable and
+   * no stack can come up on it. Reporting that as an absent daemon sends a human to restart one
+   * that is already up. `undetermined` is a check that ran and could not tell; absent/null means
+   * nothing was measured at all (an older image, or the native host transport).
+   */
+  dockerWorkload: v.optional(v.nullable(v.picklist(['usable', 'unusable', 'undetermined']))),
   /** The repo-relative compose file that was stood up, when known. */
   composePath: v.optional(v.nullable(v.string())),
   /** Epoch ms the stand-up attempt finished. */

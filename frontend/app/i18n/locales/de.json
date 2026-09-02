@@ -6643,6 +6643,7 @@
       "up": "Abhängigkeiten gestartet",
       "failed": "Abhängigkeiten konnten nicht gestartet werden",
       "noDocker": "Kein Docker-Daemon im Executor",
+      "unusableDocker": "Docker-Daemon kann keinen Container starten",
       "took": "Dauerte {seconds}s",
       "showLogs": "Stand-up-Logs anzeigen",
       "hideLogs": "Stand-up-Logs verbergen"

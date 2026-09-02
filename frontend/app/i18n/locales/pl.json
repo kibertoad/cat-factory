@@ -6064,6 +6064,7 @@
       "up": "Zależności uruchomione",
       "failed": "Nie udało się uruchomić zależności",
       "noDocker": "Brak demona Dockera w wykonawcy",
+      "unusableDocker": "Demon Dockera nie może uruchomić kontenera",
       "took": "Czas: {seconds}s",
       "showLogs": "Pokaż dzienniki uruchamiania",
       "hideLogs": "Ukryj dzienniki uruchamiania"

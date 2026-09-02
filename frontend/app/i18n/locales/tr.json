@@ -6062,6 +6062,7 @@
       "up": "Bağımlılıklar başlatıldı",
       "failed": "Bağımlılıklar başlatılamadı",
       "noDocker": "Yürütücüde Docker arka plan hizmeti yok",
+      "unusableDocker": "Docker arka plan hizmeti kapsayıcı çalıştıramıyor",
       "took": "{seconds}sn sürdü",
       "showLogs": "Başlatma günlüklerini göster",
       "hideLogs": "Başlatma günlüklerini gizle"

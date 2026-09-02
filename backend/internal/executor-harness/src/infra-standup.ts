@@ -6,9 +6,10 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { AgentInfraSpec, InfraSetupRecord, ServiceInfraSpec } from './job.js'
+import type { DockerWorkload } from './docker-capability.js'
 import {
   type DockerProbe,
-  probeDockerServing,
+  probeLiveDockerCapability,
   readDockerStatus,
   resolveDockerVerdict,
 } from './docker-status.js'
@@ -26,19 +27,22 @@ const exec = promisify(execFile)
  * still run unit-level tests and report what it could. A no-op for ephemeral / no-infra /
  * no-compose-path runs.
  *
- * A CONFIRMED absence of a Docker daemon short-circuits it: the container's own probe
- * ({@link readDockerStatus}, recorded by `entrypoint.sh`) already knows there is nothing to
- * talk to, so running compose against it would only turn a fact this container holds into a
- * connection error the agent has to interpret. The record then carries `dockerAvailable: false`
- * and the stated cause, which is what makes the Tester step say why it ran no infra instead of
- * looking like a Tester that simply chose not to. Anything OTHER than a confirmed absence
- * attempts as before (`DockerStatus.available` in docker-status.ts states why "undecided" is its
- * own value).
+ * A CONFIRMED absence of a USABLE Docker daemon short-circuits it: the container already knows
+ * compose cannot work, so running it would only turn a fact this container holds into an error
+ * the agent has to interpret. The record then carries the stated cause plus the two facts that
+ * decide where a human should look (`dockerAvailable`: was anything answering, `dockerWorkload`:
+ * what a container did on it), which is what makes the Tester step say why it ran no infra
+ * instead of looking like a Tester that simply chose not to. Anything OTHER than a confirmed
+ * negative attempts as before (`DockerStatus.available` in docker-status.ts states why
+ * "undecided" is its own value).
  *
- * "Confirmed", not merely recorded: {@link resolveDockerVerdict} re-checks a recorded absence
- * against a live daemon first, so a warm-pool container whose sidecar came up late is not
- * latched into refusing infra that works. `probe` is that check, injected so the unit suite can
- * state both answers on a machine that has its own daemon either way.
+ * "Confirmed", not merely recorded: {@link resolveDockerVerdict} re-checks the boot record
+ * against a live daemon first, so a warm-pool container whose sidecar came up late is not latched
+ * into refusing infra that works. It re-checks a recorded PRESENCE too, by running an actual
+ * container: a rootless daemon in a sandbox answers `docker version` while being unable to mount
+ * an image, and compose against that one died on a mount error inside the very mechanism that
+ * exists to explain why infra did not come up. `probe` is that check, injected so the unit suite
+ * can state every answer on a machine that has its own daemon either way.
  *
  * Whether it succeeds or fails, the (redacted, bounded) command output is captured into a
  * {@link InfraSetupRecord} returned alongside the prompt `note`, so the backend can surface
@@ -54,27 +58,43 @@ export async function standUpInfra(
   infra: ServiceInfraSpec,
   signal: AbortSignal | undefined,
   logger: Logger,
-  probe: DockerProbe = probeDockerServing,
+  probe: DockerProbe = probeLiveDockerCapability,
 ): Promise<{ started: boolean; note?: string; record?: InfraSetupRecord }> {
   if (infra.environment !== 'local' || infra.noInfraDependencies || !infra.composePath) {
     return { started: false }
   }
   const startedAt = Date.now()
   const recorded = await readDockerStatus()
-  const docker = await resolveDockerVerdict(recorded, probe)
+  const docker = await resolveDockerVerdict(recorded, {
+    probe,
+    ...(signal ? { signal } : {}),
+    logger,
+  })
   if (docker.refusal) {
     const note = `the dependencies could not be started: ${docker.refusal}`
-    logger.warn('agent(explore): infra stand-up refused, no docker daemon', {
+    logger.warn('agent(explore): infra stand-up refused, no usable docker daemon', {
       composePath: infra.composePath,
       dockerSource: recorded.source,
       dockerReason: recorded.reason,
+      // What the LIVE check found, which is the only place the second refusal cause exists: the
+      // boot record's own words for a daemon that answers and cannot run anything are `serving`
+      // and nothing else, so a log line carrying the record alone describes the wrong failure.
+      dockerWorkload: docker.workload?.status ?? 'unmeasured',
+      ...(docker.workload?.status === 'unusable' ? { dockerDetail: docker.workload.detail } : {}),
     })
     return {
       started: false,
       note,
       record: {
         started: false,
-        dockerAvailable: false,
+        // NOT a flat `false`. Two refusals reach this branch and they have opposite fixes: with
+        // nothing answering, the executor image or the sandbox running it is what to go and look
+        // at; with a daemon that answers and cannot run a container, that daemon is up and an
+        // operator sent to restart it finds nothing wrong. `dockerAvailable` answers only the
+        // first question and `dockerWorkload` the second, so neither has to carry the other's
+        // fact (the same rule the compose-failure branch below states for its own `false`).
+        dockerAvailable: docker.daemon === true,
+        ...workloadRecord(docker.workload),
         composePath: infra.composePath,
         at: Date.now(),
         durationMs: Date.now() - startedAt,
@@ -97,6 +117,7 @@ export async function standUpInfra(
       record: {
         started: true,
         dockerAvailable: true,
+        ...workloadRecord(docker.workload),
         composePath: infra.composePath,
         at: Date.now(),
         durationMs: Date.now() - startedAt,
@@ -116,12 +137,13 @@ export async function standUpInfra(
       note,
       record: {
         started: false,
-        // A compose failure with a REACHABLE daemon: the two `false`s above and here are
-        // different diagnoses (nothing to talk to vs the stack itself did not come up), and
-        // only stating both keeps the second from being read as the first. Read off the
-        // RESOLVED verdict, so a container whose daemon came up after boot claims the daemon it
-        // actually reached rather than the one its boot record still denies.
-        ...(docker.available === true ? { dockerAvailable: true } : {}),
+        // A compose failure with a REACHABLE daemon, which is a third diagnosis again: the stack
+        // itself did not come up. Read off the RESOLVED verdict, so a container whose daemon came
+        // up after boot claims the daemon it actually reached rather than the one its boot record
+        // still denies, and OMITTED rather than `false` when nothing answered the live check,
+        // because the boot record's word for that is a hypothesis and not a measurement.
+        ...(docker.daemon === true ? { dockerAvailable: true } : {}),
+        ...workloadRecord(docker.workload),
         composePath: infra.composePath,
         at: Date.now(),
         durationMs: Date.now() - startedAt,
@@ -130,6 +152,22 @@ export async function standUpInfra(
       },
     }
   }
+}
+
+/**
+ * What the live check measured, for the record the Tester step shows.
+ *
+ * Its own field beside `dockerAvailable` because the two answer different questions and only one
+ * of them has a boolean's worth of answers: a daemon either answered or it did not, while what a
+ * container DID on it is `usable`, `unusable`, or a check that could not be carried out. Absent
+ * when nothing was measured at all (an undecided boot record probes nothing), which is not the
+ * same as a check that ran and could not tell.
+ */
+function workloadRecord(workload: DockerWorkload | undefined): {
+  dockerWorkload?: InfraSetupRecord['dockerWorkload']
+} {
+  if (!workload) return {}
+  return { dockerWorkload: workload.status === 'unknown' ? 'undetermined' : workload.status }
 }
 
 /**

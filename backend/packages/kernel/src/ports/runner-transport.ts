@@ -273,6 +273,12 @@ interface RunnerInfraSetup {
    * come up as an executor with no daemon.
    */
   dockerAvailable?: boolean
+  /**
+   * What a real container DID on that daemon, when the harness measured it. Kept apart from
+   * `dockerAvailable` because a daemon that ANSWERS is not a daemon that can run a container, and
+   * reporting the second as an absence of the first sends a human to restart a daemon that is up.
+   */
+  dockerWorkload?: 'usable' | 'unusable' | 'undetermined'
   /** The repo-relative compose file that was stood up. */
   composePath?: string
   /** Epoch ms the stand-up attempt finished. */

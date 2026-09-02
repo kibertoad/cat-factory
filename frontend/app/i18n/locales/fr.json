@@ -6064,6 +6064,7 @@
       "up": "Dépendances démarrées",
       "failed": "Échec du démarrage des dépendances",
       "noDocker": "Aucun démon Docker dans l’exécuteur",
+      "unusableDocker": "Le démon Docker ne peut pas exécuter de conteneur",
       "took": "Durée : {seconds}s",
       "showLogs": "Afficher les journaux de démarrage",
       "hideLogs": "Masquer les journaux de démarrage"

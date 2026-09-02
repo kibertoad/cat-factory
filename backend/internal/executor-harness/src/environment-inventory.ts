@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { log, type Logger } from './logger.js'
 import { harnessListenPort } from './harness-port.js'
+import { probeDockerWorkload, type DockerWorkload } from './docker-capability.js'
 
 // ---------------------------------------------------------------------------
 // What this machine actually has, probed ONCE per job and stated to the agent.
@@ -32,6 +33,12 @@ import { harnessListenPort } from './harness-port.js'
 //     a daemon this machine is CONFIGURED for but which has not answered yet is a fourth state
 //     that resolves to `unknown`, never to the absence a refused connection looks like: the
 //     image's daemon is started in the background and the job begins before it is ready.
+//   - A daemon that ANSWERS is still not a daemon that WORKS, which is the same mistake one level
+//     in. A rootless daemon nested in a sandbox serves while its snapshotter cannot mount any
+//     image layer, so `docker info` succeeds and `docker build` / `docker run` / `docker pull`
+//     all fail (issue #2120). Only a container that RAN settles that, so the reachable case is
+//     split by a real workload (docker-capability.ts) into `usable`, `unusable`, and a daemon
+//     that answered while the check itself could not be carried out.
 //
 // Deliberately NOT here: the agent's own tools (web search, file tools, MCP servers). Those are
 // the CLI's, they differ per harness, and each is already stated where it is true. Claiming one
@@ -68,6 +75,28 @@ export type ToolPresence =
   | { status: 'absent' }
   | { status: 'unknown'; reason: string }
 
+/**
+ * What this machine's Docker daemon is good for, which is FIVE answers and not three.
+ *
+ * `absent` and `unknown` mean for the daemon what they mean for any other tool. The three that
+ * are particular to Docker split the case where a daemon ANSWERED, because answering is not the
+ * question anyone is asking:
+ *
+ *   - `usable`:   a container was built and run on it here. `docker build` / `run` / `compose`
+ *                   work, and this is the only state that may say so.
+ *   - `unusable`: a container could NOT be run, with the daemon serving throughout. The state
+ *                   issue #2120 is about; stated as a prohibition, with the cause.
+ *   - `serving`:  it answered, and the workload check could not be carried out (no payload on
+ *                   this machine, an unmapped architecture, a timeout). Neither of the other two,
+ *                   and rendered as "try it if you need it".
+ */
+export type DockerCapability =
+  | { status: 'usable'; server?: string }
+  | { status: 'unusable'; server?: string; detail: string }
+  | { status: 'serving'; server?: string; reason: string }
+  | { status: 'absent' }
+  | { status: 'unknown'; reason: string }
+
 /** One probed entry: the name the agent would type, and what came back. */
 export interface ProbedTool {
   name: string
@@ -80,12 +109,13 @@ export interface ProbedTool {
 export interface EnvironmentInventory {
   tools: ProbedTool[]
   /**
-   * Whether a Docker daemon actually answered: the readiness fact, not the CLI's presence. The
-   * image's `entrypoint.sh` starts a rootless daemon BEST-EFFORT and execs the server without
-   * waiting for it, so at job start this probe is the only thing that knows how that went, and
-   * "has not answered yet" is one of its answers (see {@link probeDockerDaemon}).
+   * What the Docker daemon is good for: not the CLI's presence, and not merely whether the
+   * daemon answered. The image's `entrypoint.sh` starts a rootless daemon BEST-EFFORT and execs
+   * the server without waiting for it, so at job start this probe is the only thing that knows
+   * how that went; "has not answered yet" is one of its answers (see {@link probeDockerDaemon})
+   * and "answered, but cannot run a container" is another (see {@link DockerCapability}).
    */
-  dockerDaemon: ToolPresence
+  dockerDaemon: DockerCapability
   /**
    * The port the harness's own job server holds in this network namespace. Not probed: the
    * process reads its own {@link harnessListenPort}, which is the only honest answer when a
@@ -310,6 +340,18 @@ export interface ProbeEnvironmentOptions {
    * only so the suite can assert the rendered line without an ambient `PORT` deciding its text.
    */
   harnessPort?: number
+  /**
+   * Whether the daemon can actually RUN a container, defaulting to the process-wide probe
+   * (docker-capability.ts). Asked only once a daemon has answered, since there is nothing to run
+   * a workload on otherwise, and memoised per container so a warm pool pays for it once.
+   */
+  workload?: (signal?: AbortSignal) => Promise<DockerWorkload>
+  /**
+   * The job's signal, forwarded to the probes that spawn something. The workload check starts a
+   * CONTAINER, so a cancelled job must stop paying for it rather than hold the daemon for the
+   * rest of its budget.
+   */
+  signal?: AbortSignal
 }
 
 /**
@@ -346,9 +388,33 @@ export async function probeEnvironment(
         presence: toolPresence(await run(probe.command, probe.args)),
       })),
     ),
-    probeDockerDaemon(run, opts),
+    probeDockerCapability(run, opts),
   ])
   return { tools, dockerDaemon, harnessPort: opts.harnessPort ?? harnessListenPort() }
+}
+
+/**
+ * The daemon's full answer: whether one is reachable, and then whether it can run a container.
+ *
+ * The two steps are kept apart because they fail for unrelated reasons and only the FIRST has a
+ * cheap answer. A daemon nobody can reach has no workload to run, so the check that costs a
+ * container start is asked only where there is something to ask it of; a daemon that answered
+ * carries its server version into every one of the three states that follow it, because the
+ * agent reading the line is entitled to know which daemon the verdict is about.
+ */
+async function probeDockerCapability(
+  run: ProbeRunner,
+  opts: ProbeEnvironmentOptions,
+): Promise<DockerCapability> {
+  const daemon = await probeDockerDaemon(run, opts)
+  if (daemon.status === 'absent') return { status: 'absent' }
+  if (daemon.status === 'unknown') return { status: 'unknown', reason: daemon.reason }
+  const server = daemon.version ? { server: daemon.version } : {}
+  const workload = await (opts.workload ?? probeDockerWorkload)(opts.signal)
+  if (workload.status === 'usable') return { status: 'usable', ...server }
+  if (workload.status === 'unusable')
+    return { status: 'unusable', ...server, detail: workload.detail }
+  return { status: 'serving', ...server, reason: workload.reason }
 }
 
 /**
@@ -482,26 +548,57 @@ function harnessPortLine(port: number): string {
   )
 }
 
-/** The Docker line, which says something different in each of the three cases. */
-function dockerDaemonLine(daemon: ToolPresence): string {
-  if (daemon.status === 'present') {
-    const server = daemon.version ? ` (server ${daemon.version})` : ''
-    return (
-      `A Docker daemon is reachable${server}: \`docker build\`, \`docker run\` and ` +
-      '`docker compose up` work here.'
-    )
+/**
+ * The Docker line, which says something different in each of the five cases, and is TOTAL over
+ * them: adding a state without deciding what an agent should do about it stops the build.
+ *
+ * Only `usable` may claim the commands work, and it may only be reached by having RUN one. The
+ * line that used to stand here made that claim off `docker info` alone, which is how every agent
+ * in a run was told, as fact, that a daemon which could not mount a single image layer would
+ * build and run one.
+ */
+function dockerDaemonLine(daemon: DockerCapability): string {
+  const server = 'server' in daemon && daemon.server ? ` (server ${daemon.server})` : ''
+  switch (daemon.status) {
+    case 'usable':
+      return (
+        `A Docker daemon is reachable${server} and the platform ran a container on it: ` +
+        '`docker build`, `docker run` and `docker compose up` work here.'
+      )
+    case 'unusable':
+      return (
+        `A Docker daemon is reachable${server} but it CANNOT run a container: the platform ` +
+        `built a one-layer image and tried to run it here, and that failed (${daemon.detail}). ` +
+        '`docker build`, `docker run`, `docker pull` of a multi-layer image and ' +
+        '`docker compose up` all fail for the same reason, so there is nothing to retry and no ' +
+        'flag that works around it. Produce the Dockerfile or compose file you were asked for, ' +
+        'say in one line that it could not be built or run here, and move on.'
+      )
+    case 'serving':
+      return (
+        `A Docker daemon is reachable${server}, but whether it can actually build or run an ` +
+        `image was NOT established (${daemon.reason}). Reaching the daemon is not the same fact: ` +
+        'a sandboxed one answers while being unable to mount any image layer. Try it if you need ' +
+        'it, and do not read a failure as a defect in the work.'
+      )
+    case 'unknown':
+      return (
+        'Whether a Docker daemon is reachable could not be determined ' +
+        `(${daemon.reason}): try it if you need it, and do not read a failure as a defect in the work.`
+      )
+    case 'absent':
+      return (
+        'NO Docker daemon is reachable: `docker build`, `docker run` and `docker compose up` ' +
+        'will fail here whatever the CLI reports. Produce the Dockerfile or compose file you ' +
+        'were asked for, say in one line that you could not build it here, and move on.'
+      )
+    default:
+      return unnamedCapability(daemon)
   }
-  if (daemon.status === 'unknown') {
-    return (
-      'Whether a Docker daemon is reachable could not be determined ' +
-      `(${daemon.reason}): try it if you need it, and do not read a failure as a defect in the work.`
-    )
-  }
-  return (
-    'NO Docker daemon is reachable: `docker build`, `docker run` and `docker compose up` will ' +
-    'fail here whatever the CLI reports. Produce the Dockerfile or compose file you were asked ' +
-    'for, say in one line that you could not build it here, and move on.'
-  )
+}
+
+function unnamedCapability(daemon: never): string {
+  return `Whether a Docker daemon is reachable could not be determined (the platform reported an unrecognised verdict ${JSON.stringify(daemon)}): try it if you need it.`
 }
 
 /**
@@ -520,15 +617,16 @@ function dockerDaemonLine(daemon: ToolPresence): string {
  */
 export async function appendEnvironmentInventory(
   systemPrompt: string,
-  opts: { signal?: AbortSignal; log?: Logger; run?: ProbeRunner } & ProbeEnvironmentOptions = {},
+  opts: { log?: Logger; run?: ProbeRunner } & ProbeEnvironmentOptions = {},
 ): Promise<string> {
   const logger = opts.log ?? log
+  // Everything that is not this function's OWN is forwarded by construction, rather than key by
+  // key. The list of copied keys silently dropped `workload`, whose whole point is that a suite
+  // can inject one: a test driving THIS entry point (the only one `handleAgent` uses) got the
+  // real probe instead, which starts a container on whatever machine the suite runs on.
+  const { log: _log, run, ...probeOptions } = opts
   try {
-    const inventory = await probeEnvironment(opts.run ?? spawnProbeRunner(opts.signal), {
-      ...(opts.sleep ? { sleep: opts.sleep } : {}),
-      ...(opts.daemonExpected === undefined ? {} : { daemonExpected: opts.daemonExpected }),
-      ...(opts.harnessPort === undefined ? {} : { harnessPort: opts.harnessPort }),
-    })
+    const inventory = await probeEnvironment(run ?? spawnProbeRunner(opts.signal), probeOptions)
     logger.info('agent: probed the environment', {
       installed: inventory.tools
         .filter((t) => t.presence.status === 'present')

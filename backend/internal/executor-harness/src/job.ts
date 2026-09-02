@@ -955,6 +955,16 @@ export interface InfraSetupRecord {
    * mistake that let a daemon-less image read as an ordinary infra failure for months.
    */
   dockerAvailable?: boolean
+  /**
+   * What a real container DID on that daemon, when the platform measured it.
+   *
+   * The third diagnosis, and the one `dockerAvailable` structurally cannot carry: a rootless
+   * daemon nested in a sandbox answers throughout while unable to mount any image layer, so it is
+   * `dockerAvailable: true` and no stack can come up on it (issue #2120). Reporting that as an
+   * absent daemon sends a human to restart one that is already up. `undetermined` is a check that
+   * ran and could not tell; ABSENT means nothing was measured at all.
+   */
+  dockerWorkload?: 'usable' | 'unusable' | 'undetermined'
   /** The repo-relative compose file that was stood up. */
   composePath?: string
   /** Epoch ms the stand-up attempt finished. */
