@@ -75,6 +75,8 @@ export function checkKindToolServers(
     problems.push({
       severity: 'warn',
       code: 'tool_servers_without_container',
+      // The AGENT KIND whose surface and tool-server list disagree.
+      subject: kind,
       message:
         `Agent kind "${kind}" declares tool servers but does not run in a container — an ` +
         `inline LLM step has no agent CLI to wire them into, so they will never be available. ` +
@@ -106,6 +108,8 @@ function checkToolServerBudget(
     problems.push({
       severity: 'warn',
       code: 'too_many_tool_servers',
+      // The AGENT KIND that is over budget; boot does not claim which servers a run loses.
+      subject: kind,
       message:
         `Agent kind "${kind}" has ${servers.length} tool servers declared for it, past the ` +
         `per-dispatch budget of ${TOOL_SERVER_BUDGET.maxServers}. A dispatch wires the first ` +
@@ -118,6 +122,8 @@ function checkToolServerBudget(
     problems.push({
       severity: 'warn',
       code: 'tool_servers_over_byte_budget',
+      // The AGENT KIND that is over budget, for the same reason as the count check above.
+      subject: kind,
       message:
         `Agent kind "${kind}" declares tool servers whose transport config alone measures ${bytes} ` +
         `bytes, past the per-dispatch budget of ${TOOL_SERVER_BUDGET.maxTotalBytes}. A dispatch ` +
@@ -182,6 +188,8 @@ function checkToolServerDefinition(
     problems.push({
       severity: 'warn',
       code: 'tool_server_unservable',
+      // The TOOL SERVER id whose transport/harness combination no harness can serve.
+      subject: server.id,
       message:
         `Tool server "${server.id}" ${on} declares transport "${server.transport.kind}" for ` +
         `harnesses [${(server.harnesses ?? MCP_SUPPORTED_HARNESSES).join(', ')}], and no harness ` +
@@ -269,6 +277,8 @@ function checkToolServerOAuth(kind: AgentKind, server: McpServerDefinition): Reg
     problems.push({
       severity: 'warn',
       code: 'oauth_header_collision',
+      // The CREDENTIAL's lookup key, the declaration that has to move or go.
+      subject: secret.key,
       message:
         `Tool server "${server.id}" ${on} declares credential "${secret.key}" on header ` +
         `"${secret.header}", which is also where its OAuth access token is sent. The granted ` +
@@ -377,6 +387,8 @@ function checkToolServerSecret(
     problems.push({
       severity: 'warn',
       code: 'unused_credential_env_name',
+      // The CREDENTIAL's lookup key, the declaration carrying the inert envName.
+      subject: secret.key,
       message:
         `Tool server "${server.id}" ${on} declares credential envName "${secret.envName}" on a ` +
         `key that names a header. An http server's value is sent as that header, so the injection ` +

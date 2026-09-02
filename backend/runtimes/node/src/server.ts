@@ -28,7 +28,11 @@ import { startOtelLogExport } from './logExport.js'
 import { startBootClock } from './bootTimings.js'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { type RegistrationProblem, validateRegistrationsOnce } from '@cat-factory/orchestration'
+import {
+  type RegistrationWarning,
+  logRegistrationWarning,
+  validateRegistrationsOnce,
+} from '@cat-factory/orchestration'
 import { PgBoss } from 'pg-boss'
 import { type AppCachesProfile, createAppCaches } from '@cat-factory/caching'
 import { buildCacheNotifications } from './cacheNotifications.js'
@@ -389,9 +393,15 @@ export interface StartOptions {
    *       escalateRegistrationWarning: (p) => p.code === 'task_type_unknown_fragment',
    *     })
    *
+   * A declaration that MIXES the two tiers (code-registered standards beside a
+   * `src:<sourceId>:<slug>` reference) is escalated per id, because a warning names ONE `subject`:
+   *
+   *     escalateRegistrationWarning: (p) =>
+   *       p.code === 'task_type_unknown_fragment' && !p.subject.startsWith('src:'),
+   *
    * Escalated problems join the aggregated boot failure rather than producing a second one.
    */
-  escalateRegistrationWarning?: (problem: RegistrationProblem) => boolean
+  escalateRegistrationWarning?: (problem: RegistrationWarning) => boolean
   /**
    * Build the resolver that supplies a registered capability's CREDENTIALS at dispatch. A tool
    * server's (MCP) and a generative binary integration's alike. Called once at composition with
@@ -908,7 +918,7 @@ async function bootServer(
     // wholly, so a registry the validator gains later is checked here with no edit, and this call
     // site cannot fall behind its siblings the way the local mothership one did.
     registries: container,
-    onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
+    onWarn: logRegistrationWarning(logger),
     // Deployment policy over platform judgement: a warning the platform must keep soft (because it
     // structurally cannot see the answer) may be a hard defect for THIS deployment, which knows
     // whether its own registrations use the tenant tier at all.

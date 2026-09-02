@@ -10,6 +10,7 @@ import type {
   GateRegistry,
   InitiativePresetRegistry,
   InlineUseCaseRegistry,
+  Logger,
   PipelineRegistry,
   PromptFragmentRegistry,
   PromptFragmentSource,
@@ -68,11 +69,45 @@ const BUILT_IN_HELPER_KINDS: ReadonlySet<string> = new Set([
   FIXER_AGENT_KIND,
 ])
 
-/** A single problem found during validation. `error` aborts boot; `warn` is logged only. */
-export interface RegistrationProblem {
-  severity: 'error' | 'warn'
+/**
+ * A single problem found during validation. `error` aborts boot; `warn` is logged only, unless a
+ * deployment escalates it ({@link ValidateRegistrationsOptions.escalateWarning}).
+ *
+ * A union rather than one interface with a `'error' | 'warn'` severity, because only the warn half
+ * is ever handed to deployment code and only the warn half therefore owes it a machine-readable
+ * {@link RegistrationWarning.subject}.
+ */
+export type RegistrationProblem = RegistrationError | RegistrationWarning
+
+/** A registration fault fully knowable at boot. Aborts boot; never reaches a deployment predicate. */
+export interface RegistrationError {
+  severity: 'error'
   code: string
   message: string
+}
+
+/**
+ * A registration fault boot can see but not judge, so the platform reports it and a deployment
+ * decides ({@link ValidateRegistrationsOptions.escalateWarning}).
+ *
+ * `subject` is the id of the ONE registered thing this warning is about, and it is REQUIRED and
+ * SINGULAR on purpose. A predicate is called per problem, so the problem is the escalation unit,
+ * and a warning naming several ids in its prose hands a deployment a decision it cannot make: the
+ * `task_type_unknown_fragment` batch covered a code-tier typo and a legitimately late-bound
+ * `src:<sourceId>:<slug>` id together, and the deployment mixing the two (which
+ * [the reusable-operations guide](../../../../docs/reusable-operations.md) sanctions) could only
+ * escalate both or neither. So a warning about N things is N warnings, one subject each, and the
+ * type is what makes the batch unrepresentable rather than a convention to remember (ADR 0063).
+ *
+ * What the id NAMES is fixed per `code` (an agent kind, a tool-server id, a credential key, a
+ * fragment id), since a predicate reads `code` before it reads `subject`; each producer says which
+ * at its emit site. It is the same id the `message` interpolates, so a reader loses nothing.
+ */
+export interface RegistrationWarning {
+  severity: 'warn'
+  code: string
+  message: string
+  subject: string
 }
 
 /**
@@ -195,7 +230,7 @@ export interface ValidateRegistrationsOptions {
    * `console`/a logger directly — the facade passes its logger). Omitted ⇒ warnings are dropped
    * (errors still throw).
    */
-  onWarn?: (problem: RegistrationProblem) => void
+  onWarn?: (problem: RegistrationWarning) => void
   /**
    * Raise a `warn` to an ERROR: return `true` and the problem joins the aggregated boot failure
    * instead of the log.
@@ -215,11 +250,19 @@ export interface ValidateRegistrationsOptions {
    * purpose: a deployment can escalate one code, a prefix, or everything, and a warn added later is
    * covered by a predicate that never mentioned it.
    *
+   * **It is called once per WARNING, and a warning names one `subject`**, so the predicate can be
+   * finer than the deployment: a mixed `defaultFragmentIds` array (code-registered standards beside
+   * a `src:<sourceId>:<slug>` reference, which the reusable-operations guide sanctions) is
+   * escalated per id, `(p) => p.code === 'task_type_unknown_fragment' && isCodeTier(p.subject)`,
+   * failing boot on the typo while the late-bound id stays a warn. While a warning could name
+   * several ids that was unexpressible, and the only two dispositions available were both wrong
+   * (ADR 0063).
+   *
    * Escalated problems are collected and thrown TOGETHER with the genuine errors, so a boot failure
    * still names every problem at once. A predicate that throws is a bug in the predicate and
    * propagates unchanged, rather than being swallowed into a warn about warnings.
    */
-  escalateWarning?: (problem: RegistrationProblem) => boolean
+  escalateWarning?: (problem: RegistrationWarning) => boolean
 }
 
 /**
@@ -682,6 +725,8 @@ function checkKindSkills(kind: AgentKind, registry: AgentKindRegistry): Registra
     problems.push({
       severity: 'warn',
       code: 'skills_without_container',
+      // The AGENT KIND whose surface and skill list disagree.
+      subject: kind,
       message:
         `Agent kind "${kind}" declares skills but does not run in a container — only a container ` +
         `dispatch installs a skill and folds its instructions into the prompt, so an inline LLM ` +
@@ -711,6 +756,8 @@ function checkPostOpsStructuredOutput(
       problems.push({
         severity: 'warn',
         code: 'postops_without_structured_output',
+        // The AGENT KIND whose postOps would read nothing.
+        subject: def.kind,
         message:
           `Agent kind "${def.kind}" declares postOps but its agent step has no structured ` +
           `output — postOps that read result.custom will see nothing. Declare structuredOutput ` +
@@ -803,6 +850,15 @@ function checkPipelineRetirements(opts: ValidateRegistrationsOptions): Registrat
  * would reject a legitimate tenant-tier reference. The message therefore names both causes rather
  * than asserting the typo it cannot distinguish. Run-time behaviour is unchanged either way: an
  * id that resolves against nothing is skipped when bodies are composed.
+ *
+ * ONE warning PER ID, which is what lets a deployment act on it at all. The platform cannot tell
+ * the two causes apart, but the deployment can, per id: a declaration mixing three code-registered
+ * standards with one `src:<sourceId>:<slug>` reference is exactly what the reusable-operations
+ * guide sanctions, and while these arrived as one batched problem such a deployment could only
+ * escalate the whole batch (failing boot on its legitimate late-bound id) or none of it (leaving
+ * the typo at warn forever). The cost is that the two-cause paragraph repeats per id in the log,
+ * which is the granularity `fragments.dropped_from_run` already reports at RUN time, per fragment,
+ * for the same reason: five short standards are five defects, not one (ADR 0063).
  */
 function checkTaskTypeFragments(
   taskType: CustomTaskType,
@@ -812,21 +868,21 @@ function checkTaskTypeFragments(
   /** Which declaration the ids came from, so the message names the key the reader must go edit. */
   declaredBy: 'defaultFragmentIds' | 'conditionalFragmentIds' = 'defaultFragmentIds',
 ): RegistrationProblem[] {
-  const unresolved = ids.filter((id) => !pool.has(id))
-  if (unresolved.length === 0) return []
-  return [
-    {
-      severity: 'warn',
+  return ids
+    .filter((id) => !pool.has(id))
+    .map((id) => ({
+      severity: 'warn' as const,
       code: 'task_type_unknown_fragment',
+      // The unresolved FRAGMENT ID: what a deployment's predicate tests the tier of.
+      subject: id,
       message:
-        `Custom task type "${taskType.taskType}" declares ${declaredBy} ` +
-        `${unresolved.map((id) => `"${id}"`).join(', ')}, which this deployment's registered ` +
-        `fragment pool does not resolve. Either the id is a typo (a task of this type would then ` +
-        `be seeded with a fragment that folds nothing), or it names an account/workspace-tier ` +
-        `fragment, which merges per workspace at run time and is invisible here. Check the id ` +
-        `against what the deployment passes to promptFragmentRegistry.registerAll().`,
-    },
-  ]
+        `Custom task type "${taskType.taskType}" declares ${declaredBy} "${id}", which this ` +
+        `deployment's registered fragment pool does not resolve. Either the id is a typo (a task ` +
+        `of this type would then be seeded with a fragment that folds nothing), or it names an ` +
+        `account/workspace-tier fragment, which merges per workspace at run time and is invisible ` +
+        `here. Check the id against what the deployment passes to ` +
+        `promptFragmentRegistry.registerAll().`,
+    }))
 }
 
 /**
@@ -915,9 +971,10 @@ function checkConditionalFragments(
     }
   }
   if (!pool) return problems
-  // Reported as ONE list rather than per rule: the unresolvable-id message names the cause it
-  // cannot distinguish (typo vs tenant tier), and repeating that paragraph per rule would bury the
-  // ids it exists to name.
+  // Flattened across the rules and then checked PER ID by the shared checker, which is where the
+  // escalation granularity comes from: the tier of a conditional id is as much a per-id fact as an
+  // unconditional one's, and a typo here is less visible still, folding nothing only for the
+  // subset of cases whose answers match the rule.
   const conditionalIds = rules.flatMap((rule) => rule.fragmentIds)
   return [
     ...problems,
@@ -1145,6 +1202,19 @@ function checkCustomTaskTypes(opts: ValidateRegistrationsOptions): RegistrationP
 }
 
 /**
+ * The {@link ValidateRegistrationsOptions.onWarn} sink every facade passes: one `warn` line per
+ * warning, with `code` and `subject` as structured FIELDS so an operator can group a boot log by
+ * either rather than reading the ids back out of prose.
+ *
+ * Shared rather than re-spelled per facade for the reason `ValidatedRegistries` is one object: this
+ * was three identical arrow functions, and adding `subject` to two of them left the Worker logging
+ * the coarser line, which is exactly the asymmetry a facade-parity gap looks like from the outside.
+ */
+export function logRegistrationWarning(logger: Logger): (problem: RegistrationWarning) => void {
+  return (problem) => logger.warn(problem.message, { code: problem.code, subject: problem.subject })
+}
+
+/**
  * Validate the registered extensions, throwing an aggregated error on any `error`-severity
  * problem and logging `warn`-severity ones. Call once at facade boot, after every `register*`
  * import side effect + provider wiring, before serving requests.
@@ -1161,7 +1231,7 @@ export function validateRegistrations(opts: ValidateRegistrationsOptions): void 
   // them. The predicate is called once per warning for the same reason: it is deployment code, and
   // calling it twice would make an impure one disagree with itself between the log and the throw.
   const errors: RegistrationProblem[] = []
-  const warnings: RegistrationProblem[] = []
+  const warnings: RegistrationWarning[] = []
   for (const problem of problems) {
     if (problem.severity === 'error') errors.push(problem)
     else if (escalate?.(problem)) errors.push(problem)

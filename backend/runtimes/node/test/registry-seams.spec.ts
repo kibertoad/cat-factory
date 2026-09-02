@@ -13,6 +13,8 @@ import type {
   PipelineSpec,
   PipelineStepSpec,
   PromptFragment,
+  RegistrationProblem,
+  RegistrationWarning,
   StepCompletionResolver,
   StepOptions,
   TaskTypeFieldDescriptor,
@@ -271,6 +273,13 @@ const _authoringVocabulary:
       gate: GateDefinition
       judge: JudgeDefinition
       resolver: StepCompletionResolver
+      // The BOOT-VALIDATION half: a deployment writing an `escalateRegistrationWarning` predicate
+      // names what it is handed, which is the WARN branch (the one carrying `subject`). Both halves
+      // of the union belong here, since a deployment that collects problems itself sees the whole
+      // one. Imported from the FACADE, so dropping either re-export fails this file rather than
+      // only a consumer's build.
+      registrationProblem: RegistrationProblem
+      registrationWarning: RegistrationWarning
       // The PIPELINE authoring half: a deployment replacing a shipped preset writes its steps by
       // name and fills in the per-step options its kinds read, so the spec shapes are as much part
       // of the seam as the registry constructor is.

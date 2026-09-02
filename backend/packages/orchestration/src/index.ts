@@ -4,9 +4,12 @@
 // pipelines). A facade calls `validateRegistrationsOnce()` after all `register*` imports +
 // provider wiring, before serving.
 export {
+  type RegistrationError,
   type RegistrationProblem,
+  type RegistrationWarning,
   type ValidateRegistrationsOptions,
   collectRegistrationProblems,
+  logRegistrationWarning,
   validateRegistrations,
   validateRegistrationsOnce,
   resetRegistrationValidationGuard,

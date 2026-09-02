@@ -97,7 +97,9 @@ constructors.
 `start({ escalateRegistrationWarning })` lets a deployment raise selected boot-validation warnings
 to errors. Severity is platform judgement (boot warns only where it structurally cannot see the
 answer); the disposition belongs to the deployment, which may know the cause the platform cannot
-rule out does not apply to it.
+rule out does not apply to it. The predicate is handed a `RegistrationWarning`, which names ONE
+`subject`, so the disposition can be finer than the deployment: a `defaultFragmentIds` array mixing
+code-tier ids with a late-bound `src:…` one is escalated per id ([ADR 0063](../../docs/adr/0063-registration-warning-subjects.md)).
 
 ## Resolving conflicting Drizzle migrations (post-merge)
 

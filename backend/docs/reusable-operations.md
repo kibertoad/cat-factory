@@ -284,15 +284,30 @@ start({
 ```
 
 An escalated problem joins the aggregated boot failure with the genuine errors (one report, every
-problem at once) and is not also logged. The predicate takes the whole `RegistrationProblem`, so a
+problem at once) and is not also logged. The predicate takes the whole `RegistrationWarning`, so a
 deployment can escalate one code, a family of them, or everything, and a warning added in a later
 release is covered by a predicate that never mentioned it.
 
+**A declaration that MIXES the tiers is disposed of per id**, because the warning names ONE
+`subject` (here the unresolved fragment id) and one unresolved id is one warning:
+
+```ts
+escalateRegistrationWarning: (p) =>
+  p.code === 'task_type_unknown_fragment' && !p.subject.startsWith('src:'),
+```
+
+That is the shape to reach for whenever `defaultFragmentIds` holds code-registered standards beside
+a `src:…` reference, which the tier vocabulary above sanctions: the typo fails boot and the
+late-bound id stays a warning. **The platform's own severity has not moved** and does not depend on
+the id's shape. It cannot: a hand-authored account-tier row and a repo-sourced file pinning an
+explicit frontmatter `id` both carry a plain slug, so "matches no late-bound prefix" is not evidence
+of a typo, and only the deployment knows which of its own ids are code-tier. Design record:
+[ADR 0063](./adr/0063-registration-warning-subjects.md).
+
 The severity stays platform judgement and the disposition becomes deployment policy. That split is
 why this is a predicate rather than a second `strictFragmentIds` array on the descriptor: splitting
-the declaration would make every operation restate, per id, a fact that is true of the whole
-deployment, and would have to be repeated for `conditionalFragmentIds` and for every future
-late-bound reference.
+the declaration would make every operation restate a fact the predicate states once, and would have
+to be repeated for `conditionalFragmentIds` and for every future late-bound reference.
 
 Set the SAME predicate on `start()` and `startLocal()`. A laptop is the cheapest place to learn
 about a typo, and a boot that validates the same registrations must reach the same verdict.

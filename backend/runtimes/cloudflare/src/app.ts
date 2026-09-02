@@ -8,7 +8,7 @@ import {
   mountRequestLogging,
   registerCoreControllers,
 } from '@cat-factory/server'
-import type { CoreDependencies, RegistrationProblem } from '@cat-factory/orchestration'
+import type { CoreDependencies, RegistrationWarning } from '@cat-factory/orchestration'
 import { publicDiagnostic } from '@cat-factory/kernel'
 import type { ToolSecretResolver } from '@cat-factory/kernel'
 import type { Env } from './infrastructure/env'
@@ -78,9 +78,11 @@ export interface CreateAppOptions {
    * whose operations reference only fragments it registers itself has no second cause.
    *
    * Read by {@link createWorker}, which owns the once-guarded validation; an app assembled by
-   * `createApp` alone never validates, so setting it there has no effect.
+   * `createApp` alone never validates, so setting it there has no effect. A warning names ONE
+   * `subject`, so a declaration mixing the two tiers is escalated per id; the Node facade's option
+   * documents the predicate shape.
    */
-  escalateRegistrationWarning?: (problem: RegistrationProblem) => boolean
+  escalateRegistrationWarning?: (problem: RegistrationWarning) => boolean
 }
 
 // The Worker builds its container per request, so a persistent misconfiguration would throw on

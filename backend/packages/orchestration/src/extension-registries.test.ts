@@ -452,6 +452,62 @@ describe('validateRegistrations', () => {
     ).not.toThrow()
   })
 
+  it('names a subject on EVERY warning it produces, and names it in the message too', () => {
+    // The half of the warn contract the type cannot state. `RegistrationWarning.subject` being
+    // required makes a subject-less warning unconstructible, and being SINGULAR makes a batch
+    // covering several ids unrepresentable. But nothing in the type says the subject is the id the
+    // MESSAGE names, and a warning whose prose points at one thing while its subject points at
+    // another is worse than no subject at all: a deployment's predicate would silently escalate the
+    // wrong registration (ADR 0063).
+    //
+    // Deliberately provokes several warning codes at once and asserts the RELATION over whatever it
+    // finds, rather than pinning a count: the warn catalog grows, and a count would fail on every
+    // ordinary addition while saying nothing about what broke.
+    registry.register({
+      kind: 'inline-auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'inline' },
+      skills: [{ catalogSkillId: 'src:acme:house-style' }],
+      toolServers: [{ id: 'issues', transport: { kind: 'stdio', command: 'x' } }],
+    })
+    registry.register({
+      kind: 'render-only',
+      systemPrompt: 'x',
+      agent: { surface: 'container-explore', clone: { branch: 'pr' } },
+      postOps: [async () => {}],
+    })
+    registry.register({
+      kind: 'explorer',
+      systemPrompt: 'explore',
+      agent: { surface: 'container-explore' },
+      toolServers: [
+        // No harness can serve http-over-codex, so the declaration never applies to any run.
+        {
+          id: 'stdio-only',
+          transport: { kind: 'http', url: 'https://mcp.example.com/mcp' },
+          harnesses: ['codex'],
+        },
+        {
+          id: 'docs',
+          transport: { kind: 'http', url: 'https://docs.example.com/mcp' },
+          oauth: { grant: 'authorization_code', clientId: 'cid' },
+          secretKeys: [{ key: 'DOCS_TOKEN', envName: 'DOCS_TOKEN', header: 'authorization' }],
+        },
+      ],
+    })
+    const warnings = collectRegistrationProblems({
+      registries: { agentKindRegistry: registry, gateRegistry: gates },
+    }).flatMap((p) => (p.severity === 'warn' ? [p] : []))
+
+    // More than one code, so the relation below is not being asserted over a single producer.
+    expect(new Set(warnings.map((w) => w.code)).size).toBeGreaterThan(1)
+    expect(
+      warnings
+        .filter((w) => w.subject.length === 0 || !w.message.includes(w.subject))
+        .map((w) => w.code),
+    ).toEqual([])
+  })
+
   // A `retire()` call that names a still-live pipeline does NOTHING — `retiredPipelines` keeps a
   // live pipeline over a tombstone for it, so a deployment cannot withdraw the curated built-ins.
   // That is deliberate; being silent about it is not, and boot is the last point where the author

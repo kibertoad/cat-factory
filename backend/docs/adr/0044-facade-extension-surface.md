@@ -110,6 +110,12 @@ while stopping at the top-level shape.
   a deployment-scoped CREDENTIAL HOME. [ADR 0045](./0045-deployment-scoped-documents.md) supplies
   one, so a code-registered fragment may now name a living document for every source except
   `github`, whose credential is a workspace's App installation.
+- `escalateRegistrationWarning` was a PER-DEPLOYMENT switch over a per-id fact, which the same
+  consumer's next round reported: a `defaultFragmentIds` array mixing code-registered standards with
+  a `src:<sourceId>:<slug>` reference could only escalate both or neither, and the batched warning
+  named its ids in prose alone. [ADR 0063](./0063-registration-warning-subjects.md) gives the warn
+  branch a required singular `subject` and reports one warning per unresolved id, keeping this ADR's
+  severity bar and its rejection of a second `strictFragmentIds` array intact.
 - The descriptor condition vocabulary stays `equals` / `includes`. A third predicate is a live
   option that rides the first operation that genuinely needs it, because it is published in
   `/api/v1/task-types`, rendered by four SDKs, and has to state how it contradicts the existing two

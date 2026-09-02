@@ -259,9 +259,15 @@ export type {
   PipelineStep,
   AgentKind,
 } from '@cat-factory/kernel'
-// The boot-validation problem shape, so a deployment can type the `escalateRegistrationWarning`
-// predicate it passes to `start()` without a direct `@cat-factory/orchestration` dependency.
-export type { RegistrationProblem } from '@cat-factory/orchestration'
+// The boot-validation problem shapes, so a deployment can type the `escalateRegistrationWarning`
+// predicate it passes to `start()` without a direct `@cat-factory/orchestration` dependency. The
+// predicate is handed a `RegistrationWarning` specifically: only the warn half of the union carries
+// the `subject` a per-id disposition reads (ADR 0063).
+export type {
+  RegistrationError,
+  RegistrationProblem,
+  RegistrationWarning,
+} from '@cat-factory/orchestration'
 // The pure rules over a descriptor's fields, so a deployment's own tests can check a form it
 // declares against the same validator the platform's four doors run.
 export {
