@@ -19,6 +19,13 @@ import type {
   SharedStackService,
 } from '@cat-factory/integrations'
 import { EnvironmentTestService } from '../modules/environments/EnvironmentTestService.js'
+
+/**
+ * How many provisioning-log rows the environment investigation's timeline reads. The collector
+ * caps again on its own side for the prompt; this cap is the QUERY's, so a run with thousands of
+ * container attempts does not page them all into memory to throw most away.
+ */
+const ENVIRONMENT_TIMELINE_LOG_LIMIT = 100
 import type { CoreDependencies } from '../container.js'
 
 /**
@@ -117,6 +124,20 @@ export function buildEnvironmentProvisioningService(args: {
     // them fails loudly instead of silently skipping a machine-prerequisite gate.
     ...(preflightService ? { runPreflights: (_ws, refs) => preflightService.run(refs) } : {}),
     ...(provisioningLog ? { provisioningLog } : {}),
+    // The READ side of the same log, for the environment investigation's timeline. Wired straight
+    // off the repository rather than through `ProvisioningLogService`, whose only other job is the
+    // controller's clamp + the retention prune, neither of which this read wants.
+    ...(deps.provisioningLogRepository
+      ? {
+          readProvisioningLog: (workspaceId: string, executionId: string) =>
+            deps.provisioningLogRepository!.list(workspaceId, {
+              subsystem: 'environment' as const,
+              executionId,
+              limit: ENVIRONMENT_TIMELINE_LOG_LIMIT,
+            }),
+        }
+      : {}),
+    logger: deps.logger,
   })
 }
 

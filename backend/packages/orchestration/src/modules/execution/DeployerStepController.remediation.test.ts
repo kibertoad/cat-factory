@@ -5,6 +5,10 @@ import {
   type DeployerStepControllerDeps,
 } from './DeployerStepController.js'
 import type { DeployFixFailure } from './DeployFixController.js'
+import type {
+  EnvironmentInvestigationFailure,
+  EnvironmentInvestigationOutcome,
+} from './EnvironmentInvestigationController.js'
 
 // A provisioning failure reaches the remediation loop by TWO routes, and only one of them is a
 // thrown error. A provider that refuses inline throws, and the dispatch path reads its class off
@@ -43,8 +47,9 @@ function instance(): ExecutionInstance {
  * `deployFix` that records what it was offered and declines (so the caller's terminal path runs
  * either way and the assertion is about the hand-off, not about what the loop then does).
  */
-function controller(reason: string | null) {
+function controller(reason: string | null, investigation?: EnvironmentInvestigationOutcome | null) {
   const offered: DeployFixFailure[] = []
+  const investigated: EnvironmentInvestigationFailure[] = []
   const deps = {
     blockRepository: { get: async () => FRAME, listByWorkspace: async () => [FRAME] },
     contextBuilder: { resolveServiceFrameId: async () => FRAME.id },
@@ -69,12 +74,18 @@ function controller(reason: string | null) {
         return null
       },
     },
+    environmentInvestigation: {
+      investigate: async (args: { failure: EnvironmentInvestigationFailure }) => {
+        investigated.push(args.failure)
+        return investigation ?? null
+      },
+    },
     recordStepResult: async () => ({ kind: 'noop' as const }),
     applyContainerRunning: () => false,
     applySubtaskProgress: () => false,
     recoverContainerEviction: async () => null,
   } as unknown as DeployerStepControllerDeps
-  return { controller: new DeployerStepController(deps), offered }
+  return { controller: new DeployerStepController(deps), offered, investigated }
 }
 
 describe('DeployerStepController: a failure the provider settled rather than threw', () => {
@@ -99,5 +110,38 @@ describe('DeployerStepController: a failure the provider settled rather than thr
 
     expect(offered).toHaveLength(1)
     expect(offered[0]!.reason).toBeUndefined()
+  })
+})
+
+describe('DeployerStepController: the investigation hand-off', () => {
+  it('offers the failure the fixer declined to the investigation, with the environment named', async () => {
+    // The two loops are mutually exclusive by construction: the fixer runs for the one cause a
+    // checkout edit can fix, this for every other. Without the hand-off, everything outside that
+    // one class ends the run with nobody able to say why.
+    const c = controller(null)
+    await c.controller.pollDeployerJob('ws-1', instance(), step())
+
+    expect(c.offered).toHaveLength(1)
+    expect(c.investigated).toHaveLength(1)
+    expect(c.investigated[0]).toMatchObject({
+      frameId: FRAME.id,
+      frameTitle: FRAME.title,
+      environmentId: 'env-1',
+      error: expect.stringContaining('catalog-api'),
+    })
+  })
+
+  it('records the investigation’s named cause in place of the bare provider error', async () => {
+    // The second of the two outcomes the feature owes: still a stop, but a stop with a cause.
+    const c = controller(null, { kind: 'reported', message: 'the VM went offline' })
+    const result = await c.controller.pollDeployerJob('ws-1', instance(), step())
+    expect(result).toMatchObject({ kind: 'job_failed', detail: 'the VM went offline' })
+  })
+
+  it('returns the loop’s advance when it acted, instead of failing the step', async () => {
+    const c = controller(null, { kind: 'retrying', advance: { kind: 'continue' } })
+    expect(await c.controller.pollDeployerJob('ws-1', instance(), step())).toEqual({
+      kind: 'continue',
+    })
   })
 })

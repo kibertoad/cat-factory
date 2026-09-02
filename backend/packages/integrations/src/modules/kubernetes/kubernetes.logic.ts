@@ -442,6 +442,36 @@ function classifyDeploymentReadiness(deployment: unknown): PodReadiness {
 }
 
 /**
+ * One Deployment's rollout state as a DIAGNOSTIC row: the per-object verdict plus the two replica
+ * counts behind it.
+ *
+ * The one sanctioned reader of the private classifier above, and it is not the lifecycle path:
+ * a diagnosis is a table of per-object facts an investigator reconciles, which is exactly what
+ * {@link reduceRolloutProgress} reduces away on purpose. Never use this to answer "is the
+ * environment ready" (that is `reduceRolloutProgress`, note and all).
+ *
+ * `desired` comes off `spec`, which is why the counts ride along rather than being re-read at the
+ * call site: a Deployment whose ReplicaSet never created a pod (a quota or an admission webhook
+ * refusing it) carries no `status.replicas` at all, and a `0/0 ready` row reads byte-for-byte like
+ * one deliberately scaled to zero.
+ */
+export function describeDeploymentRollout(deployment: unknown): {
+  readiness: PodReadiness
+  desired: number
+  ready: number
+} {
+  const obj = deployment as
+    | { spec?: { replicas?: number }; status?: { readyReplicas?: number } }
+    | null
+    | undefined
+  return {
+    readiness: classifyDeploymentReadiness(deployment),
+    desired: typeof obj?.spec?.replicas === 'number' ? obj.spec.replicas : 1,
+    ready: typeof obj?.status?.readyReplicas === 'number' ? obj.status.readyReplicas : 0,
+  }
+}
+
+/**
  * How many workload names a rollout note lists before it stops naming them. A note is read in a
  * step panel and a run-failure message, so an unbounded list of a large namespace's Deployments
  * would push the sentence that matters off the surface.

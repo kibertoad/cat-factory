@@ -11,6 +11,7 @@ import type {
   GateRegistry,
   IdGenerator,
   IssueWritebackProvider,
+  EnvironmentInvestigator,
   JudgeAssessor,
   JudgeRegistry,
   Logger,
@@ -102,6 +103,12 @@ export interface RunDispatcherDeps {
    */
   judgeRegistry: JudgeRegistry
   judgeAssessor?: JudgeAssessor
+  /**
+   * The inline diagnosis behind the deployer's environment-investigation loop. Absent (no model
+   * provider / no routing default) ⇒ a provisioning failure no checkout edit can address stays
+   * terminal and unexplained, exactly as before the loop existed.
+   */
+  environmentInvestigator?: EnvironmentInvestigator
   /**
    * The prompt-fragment library, used by the judge driver for ONE thing: resolving a rubric's
    * per-workspace override body (see `JudgeRubric.fragmentId`). Absent ⇒ the registration's

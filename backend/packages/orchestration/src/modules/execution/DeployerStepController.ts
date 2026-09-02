@@ -35,6 +35,10 @@ import { deployDispatchEpoch, deployJobId, orderProvisionTargets } from './deplo
 import { type ContainerFailureView, containerShutdownFailure } from './job.logic.js'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import type { DeployFixController } from './DeployFixController.js'
+import type {
+  EnvironmentInvestigationController,
+  EnvironmentReadinessWait,
+} from './EnvironmentInvestigationController.js'
 import { TESTER_AGENT_KIND, UI_TESTER_AGENT_KIND } from './ci.logic.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
@@ -185,6 +189,12 @@ export interface DeployerStepControllerDeps {
    */
   deployFix?: DeployFixController
   /**
+   * The other half of the remediation story: a provisioning failure NO checkout edit can address
+   * is diagnosed against the provider's own evidence and, where there is something to try, tried.
+   * Absent ⇒ every such failure is terminal and unexplained, exactly as before it existed.
+   */
+  environmentInvestigation?: EnvironmentInvestigationController
+  /**
    * Where the two provisioning-lease releases below report a failure. Both are best-effort by
    * design, so without this a leaked lease (billed-but-useless compute, or a permanently held
    * self-hosted pool slot) is invisible. Absent ⇒ `noopLogger`.
@@ -212,6 +222,7 @@ export class DeployerStepController {
   private readonly applySubtaskProgress: DeployerStepControllerDeps['applySubtaskProgress']
   private readonly recoverContainerEviction: DeployerStepControllerDeps['recoverContainerEviction']
   private readonly deployFix?: DeployFixController
+  private readonly environmentInvestigation?: EnvironmentInvestigationController
   private readonly log: Logger
 
   constructor(deps: DeployerStepControllerDeps) {
@@ -225,6 +236,7 @@ export class DeployerStepController {
     this.applySubtaskProgress = deps.applySubtaskProgress
     this.recoverContainerEviction = deps.recoverContainerEviction
     this.deployFix = deps.deployFix
+    this.environmentInvestigation = deps.environmentInvestigation
     this.log = (deps.logger ?? noopLogger).child({ scope: 'deployerStep' })
   }
 
@@ -590,6 +602,9 @@ export class DeployerStepController {
     return this.settleDeployerFailure(ctx, target, {
       url: handle.url,
       environmentId: handle.id,
+      // The initial settle passes zero, and "the readiness wait ran for 0 seconds" is a different
+      // (and false) statement from "there was a live verdict and nothing waited on it".
+      wait: waitedMs > 0 ? { kind: 'waited', waitedMs } : { kind: 'verdict_without_wait' },
       error: verdict.error,
       // The two are different faults and the vocabulary keeps them apart: `timeout` is OUR
       // deadline expiring on a provider still answering `provisioning`, `environment_not_ready`
@@ -815,6 +830,15 @@ export class DeployerStepController {
       /** Machine-readable cause (e.g. `deploy_runner_unwired`) carried to the failure record. */
       reason?: string
       /**
+       * What the readiness wait contributed to this failure. Evidence for the investigation
+       * rather than for the record: a ceiling that expired seconds after the provider's own work
+       * began, one that expired after twenty minutes of silence, and a failure that never reached
+       * a readiness judgement at all are three different faults, and nothing else on the failure
+       * says which happened. Defaults to `not_reached`, which is what every route that is not the
+       * readiness judge is: a caller that forgets it states no wait rather than inventing one.
+       */
+      wait?: EnvironmentReadinessWait
+      /**
        * The kind a PRIMARY frame's failure is reported under, when this failure is not the
        * provisioning itself going wrong. Defaults to `environment`, which is what a provider
        * refusing, timing out or returning a broken env is; a deploy container whose harness was
@@ -826,6 +850,7 @@ export class DeployerStepController {
   ): Promise<AdvanceResult> {
     const { workspaceId, instance, step } = ctx
     const { url, environmentId, error, reason, failureKind } = failure
+    const wait = failure.wait ?? { kind: 'not_reached' }
     const done = step.deployEnvs ?? {}
     step.deployEnvs = {
       ...done,
@@ -857,8 +882,29 @@ export class DeployerStepController {
         },
       })
       if (remediated) return remediated
+      // Everything the fixer declined is now offered to the INVESTIGATION, which is the other half
+      // of the same decision: the fixer runs for the one cause a checkout edit can fix, this for
+      // every other, and between them a failed provision gets a repair or an explanation instead
+      // of a run that ends at the tester with nobody able to say why.
+      const investigated = await this.environmentInvestigation?.investigate({
+        workspaceId,
+        instance,
+        step,
+        block: ctx.block,
+        failure: {
+          frameId: target.frameId,
+          frameTitle: target.frame.title,
+          environmentId: environmentId ?? null,
+          error,
+          reason,
+          wait,
+        },
+      })
+      if (investigated?.kind === 'retrying') return investigated.advance
       return this.failDeployerStep(workspaceId, instance, step, target.frameId, {
-        message: error,
+        // A reported verdict REPLACES the message (it leads with the same provider error and adds
+        // the cause underneath), so the run's recorded failure names what was actually wrong.
+        message: investigated?.kind === 'reported' ? investigated.message : error,
         reason,
         failureKind,
       })

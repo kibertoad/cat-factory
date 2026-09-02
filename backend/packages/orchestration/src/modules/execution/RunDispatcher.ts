@@ -51,10 +51,8 @@ import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
 import { reviewableArtifactOutput } from './artifact-review.logic.js'
 import { HUMAN_TEST_AGENT_KIND } from './ci.logic.js'
 import { AgentContextBuilder } from './AgentContextBuilder.js'
-import { DeployerStepController } from './DeployerStepController.js'
-import { DeployFixController } from './DeployFixController.js'
+import { buildDeployerFamily, type DeployerFamily } from './deployer-family.js'
 import { SettledHelperRouter } from './SettledHelperRouter.js'
-import { DisposerStepController } from './DisposerStepController.js'
 import type { FollowUpGateController } from './FollowUpGateController.js'
 import { RunRepoOpsController } from './RunRepoOpsController.js'
 import { CompanionController } from './CompanionController.js'
@@ -187,22 +185,19 @@ export class RunDispatcher {
   // typecheck flags (TypeScript does not report an assigned-but-unread private member).
 
   /**
-   * The deterministic `deployer` step family (the multi-frame provision fan-out, the async
-   * deploy-job poll, and the environment projection env-aware steps surface), extracted to
-   * {@link DeployerStepController}. The completion hub + the shared poll folds are injected
-   * back as callbacks so the agent and deployer paths share one implementation of each.
+   * The ENVIRONMENT-LIFECYCLE step controllers, built together by {@link buildDeployerFamily}: the
+   * `deployer` fan-out (the multi-frame provision, the async deploy-job poll, and the environment
+   * projection env-aware steps surface), its two remediation loops (repair the checkout, or
+   * investigate the provider), and the `disposer` that reclaims at the other end. The completion
+   * hub + the shared poll folds are injected back as callbacks so the agent and deployer paths
+   * share one implementation of each.
+   *
+   * Held as ONE member rather than four: they are constructed as one and read as one, and four
+   * assignments in a constructor already at its statement ceiling buys nothing over a field read.
    */
-  private readonly deployer: DeployerStepController
-  /** The deployer bounded repair loop (escalation + re-provision) for repo-fixable failures. */
-  private readonly deployFix: DeployFixController
+  private readonly environments: DeployerFamily
   /** Routes a settled job that belongs to a step's helper rather than to the step itself. */
   private readonly settledHelpers: SettledHelperRouter
-  /**
-   * The deterministic `disposer` step — the deployer's counterpart, reclaiming the environments
-   * the run stood up at the point in the pipeline its author chose. Extracted to
-   * {@link DisposerStepController} for the same reason the deployer is.
-   */
-  private readonly disposer: DisposerStepController
   private readonly repoOps: RunRepoOpsController
   /** Driver-side PR deep-review resolution (`fix` / `post`), extracted as a cohesive collaborator. */
   private readonly prReviewResolution: PrReviewResolutionController
@@ -294,35 +289,13 @@ export class RunDispatcher {
     this.blueprintReconciler = deps.blueprintReconciler
     this.initiativeService = deps.initiativeService
     this.resolveRiskPolicy = deps.resolveRiskPolicy
-    this.deployFix = new DeployFixController({
-      agentExecutor: deps.agentExecutor,
-      contextBuilder: deps.contextBuilder,
-      runStateMachine: deps.runStateMachine,
-      clock: deps.clock,
-      notificationService: deps.notificationService,
-      logger: deps.logger,
-    })
-    this.deployer = new DeployerStepController({
-      blockRepository: deps.blockRepository,
-      contextBuilder: deps.contextBuilder,
-      runStateMachine: deps.runStateMachine,
-      clock: deps.clock,
-      environmentProvisioning: deps.environmentProvisioning,
-      deployFix: this.deployFix,
+    this.environments = buildDeployerFamily(deps, {
       recordStepResult: (ws, instance, step, isFinalStep, result) =>
         this.recordStepResult(ws, instance, step, isFinalStep, result),
       applyContainerRunning: (step, update) => applyContainerRunning(step, update),
       applySubtaskProgress: (step, counts) => applySubtaskProgress(step, counts),
       recoverContainerEviction: (ws, instance, step, failure, onBeforeRedispatch) =>
         this.pollRunning.recoverContainerEviction(ws, instance, step, failure, onBeforeRedispatch),
-      logger: deps.logger,
-    })
-    this.disposer = new DisposerStepController({
-      runStateMachine: deps.runStateMachine,
-      environmentTeardown: deps.environmentTeardown,
-      recordStepResult: (ws, instance, step, isFinalStep, result) =>
-        this.recordStepResult(ws, instance, step, isFinalStep, result),
-      logger: deps.logger,
     })
     this.followUpGate = buildFollowUpGate(deps, (ws, block, run) =>
       this.resolveRiskPolicy(ws, block, run),
@@ -340,7 +313,7 @@ export class RunDispatcher {
       blockRepository: deps.blockRepository,
       clock: deps.clock,
       contextBuilder: deps.contextBuilder,
-      deployer: this.deployer,
+      deployer: this.environments.deployer,
       repoOps: this.repoOps,
       runStateMachine: deps.runStateMachine,
       runInitiatorScope: this.runInitiatorScope,
@@ -363,7 +336,7 @@ export class RunDispatcher {
       blockRepository: deps.blockRepository,
       clock: deps.clock,
       runStateMachine: deps.runStateMachine,
-      deployer: this.deployer,
+      deployer: this.environments.deployer,
       followUpGate: this.followUpGate,
       runInitiatorScope: this.runInitiatorScope,
       gateFor: (agentKind) => this.gateFor(agentKind),
@@ -406,7 +379,7 @@ export class RunDispatcher {
     this.settledHelpers = new SettledHelperRouter({
       resolveInvestigateHelperCompletion: (ws, instance, step, update) =>
         this.pollRunning.resolveInvestigateHelperCompletion(ws, instance, step, update),
-      resolveDeployFixCompletion: (ctx) => this.deployFix.resolveFixerCompletion(ctx),
+      resolveDeployFixCompletion: (ctx) => this.environments.deployFix.resolveFixerCompletion(ctx),
       gateFor: (kind) => this.gateFor(kind),
       reprobeGateAfterHelper: (gate, ctx) => this.pollRunning.reprobeGateAfterHelper(gate, ctx),
       resolveHelperPhaseCompletion: (ws, instance, step, update) =>
@@ -459,8 +432,8 @@ export class RunDispatcher {
       runInitiatorScope: this.runInitiatorScope,
       environmentProvisioning: this.environmentProvisioning,
       initiativeService: this.initiativeService,
-      deployer: this.deployer,
-      disposer: this.disposer,
+      deployer: this.environments.deployer,
+      disposer: this.environments.disposer,
       companionController: this.companionController,
       testerController: this.testerController,
       ralphController: this.ralphController,
@@ -588,7 +561,7 @@ export class RunDispatcher {
     // is the provider's own `status()`. Routed BEFORE the `jobId` guard below, which would
     // otherwise read the absent job as "already recorded" and advance past a step still waiting.
     if (step.deployWait && isDeployStep(step.agentKind) && this.environmentProvisioning) {
-      return this.deployer.pollDeployerEnvironment(workspaceId, instance, step)
+      return this.environments.deployer.pollDeployerEnvironment(workspaceId, instance, step)
     }
     // No job in flight: a prior poll already recorded it (and advanced). Let the
     // driver loop and advance whatever step is now current.
@@ -607,7 +580,7 @@ export class RunDispatcher {
       step.deployFix?.phase !== 'fixing' &&
       this.environmentProvisioning
     ) {
-      return this.deployer.pollDeployerJob(workspaceId, instance, step)
+      return this.environments.deployer.pollDeployerJob(workspaceId, instance, step)
     }
 
     const executor = this.agentExecutor

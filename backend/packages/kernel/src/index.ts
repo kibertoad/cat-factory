@@ -973,6 +973,7 @@ export type {
 } from './shared/environment-host-bridge.logic.js'
 export {
   isSecretShapedFilename,
+  redactSecretFields,
   redactSecrets,
   redactSecretsDeep,
 } from './shared/redact-secrets.logic.js'

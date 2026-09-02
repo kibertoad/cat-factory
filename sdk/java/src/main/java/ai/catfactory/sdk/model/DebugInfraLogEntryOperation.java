@@ -18,6 +18,7 @@ public enum DebugInfraLogEntryOperation {
     TEARDOWN("teardown"),
     TEARDOWN_VERIFY("teardown-verify"),
     STATUS("status"),
+    REMEDIATE("remediate"),
     DISPATCH("dispatch"),
     RELEASE("release"),
     POLL_FAILURE("poll-failure"),

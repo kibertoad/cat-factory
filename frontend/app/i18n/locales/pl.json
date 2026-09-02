@@ -6319,6 +6319,7 @@
       "teardown": "Zatrzymaj",
       "teardown-verify": "Sprawdzenie zatrzymania",
       "status": "Sprawdzenie stanu",
+      "remediate": "Naprawa na miejscu",
       "dispatch": "Uruchom",
       "release": "Zatrzymaj",
       "poll-failure": "Kontrola kondycji"
