@@ -68,6 +68,10 @@ import {
   type EnvironmentEvidence,
   type EnvironmentFailureFacts,
 } from './environmentDiagnostics.js'
+import {
+  createEnvironmentStatusPoller,
+  type EnvironmentStatusPoller,
+} from './environmentStatusPoll.js'
 
 // EnvironmentProvisioningService: orchestrates provisioning an environment from a
 // workspace's registered provider. Deterministic and side-effecting via the
@@ -313,6 +317,9 @@ export class EnvironmentProvisioningService {
   /** The forensic reads, behind the thin delegates at the bottom of this class. */
   private readonly diagnostics: EnvironmentDiagnostics
 
+  /** One status poll, behind {@link refreshStatus}. */
+  private readonly statusPoller: EnvironmentStatusPoller
+
   constructor(private readonly deps: EnvironmentProvisioningServiceDependencies) {
     this.orgSecrets = createOrgSecretCipher({
       cipher: deps.secretCipher,
@@ -339,6 +346,20 @@ export class EnvironmentProvisioningService {
         })
       },
       ...(deps.readProvisioningLog ? { listProvisioningLog: deps.readProvisioningLog } : {}),
+      ...(deps.logger ? { logger: deps.logger } : {}),
+    })
+    this.statusPoller = createEnvironmentStatusPoller({
+      registry: deps.environmentRegistryRepository,
+      resolveProvider: (record) => deps.connectionService.resolveProviderForRecord(record),
+      decryptFields: (record) => this.decryptFields(record),
+      sealFields: (workspaceId, fields) => this.encryptProvisionFields(workspaceId, fields),
+      sealAccess: (workspaceId, access) => this.encryptAccess(workspaceId, access),
+      assertPublishableUrl: (url) => this.assertPublishableUrl(url),
+      resolveExpiry: (provisioned, defaultTtlMs, base) =>
+        this.resolveExpiry(provisioned, defaultTtlMs, base),
+      clock: deps.clock,
+      ...(deps.routeProbe ? { probe: deps.routeProbe } : {}),
+      ...(deps.provisioningLog ? { provisioningLog: deps.provisioningLog } : {}),
       ...(deps.logger ? { logger: deps.logger } : {}),
     })
   }
@@ -887,7 +908,13 @@ export class EnvironmentProvisioningService {
       url: provisioned.url,
       status: provisioned.status,
       accessCipher: await this.encryptAccess(workspaceId, provisioned.access),
-      provisionFieldsCipher: await this.encryptProvisionFields(workspaceId, provisioned.fields),
+      // `null` on a create is a provider that captured nothing, not one that made no statement:
+      // there is no stored bag for "keep what you have" to mean anything against, which is why
+      // the field is nullable rather than optional (see {@link ProvisionedEnvironment.fields}).
+      provisionFieldsCipher: await this.encryptProvisionFields(
+        workspaceId,
+        provisioned.fields ?? {},
+      ),
       // The provider's CLAIM about where this URL is reachable, stored with no proof beside it.
       // Nothing has dialled anything yet: the proof runs once the environment is `ready`, in the
       // deployer's settle path, and publishing an unproved address before then is precisely the
@@ -988,108 +1015,13 @@ export class EnvironmentProvisioningService {
     throw new ValidationError(`Repo validation failed: ${summary}`)
   }
 
-  /** Re-poll the provider for an environment's status and persist any change. */
+  /**
+   * Re-poll the provider for an environment's status and persist what the answer says. Thin
+   * delegate; the rules about what a second look may overwrite live in
+   * {@link createEnvironmentStatusPoller}.
+   */
   async refreshStatus(workspaceId: string, id: string): Promise<EnvironmentHandle> {
-    const record = assertFound(
-      await this.deps.environmentRegistryRepository.get(workspaceId, id),
-      'Environment',
-      id,
-    )
-    // Resolve the provider from the record's stored provision type/engine (the handler that stood
-    // it up), not the workspace-primary — matching the per-type resolution provisioning uses.
-    const { manifest, provider, resolveSecret } =
-      await this.deps.connectionService.resolveProviderForRecord(record)
-    const provisionFields = await this.decryptFields(record)
-
-    let provisioned: ProvisionedEnvironment
-    try {
-      provisioned = await provider.status({
-        manifest,
-        externalId: record.externalId,
-        provisionFields,
-        resolveSecret,
-      })
-    } catch (error) {
-      await this.deps.provisioningLog?.record({
-        workspaceId,
-        subsystem: 'environment',
-        operation: 'status',
-        targetId: record.id,
-        providerId: manifest.providerId,
-        blockId: record.blockId,
-        executionId: record.executionId,
-        outcome: 'failure',
-        error: getErrorMessage(error),
-        detail: null,
-      })
-      throw error
-    }
-    this.assertPublishableUrl(provisioned.url)
-
-    const patch = {
-      status: provisioned.status,
-      url: provisioned.url,
-      externalId: provisioned.externalId ?? record.externalId,
-      expiresAt: this.resolveExpiry(provisioned, manifest.defaultTtlMs, record.createdAt),
-      accessCipher: await this.encryptAccess(record.workspaceId, provisioned.access),
-      // Re-read the provider's stated addresses, and keep the proof beside them only while both
-      // of its inputs are unchanged (see `foldStatedAddresses`): a moved URL or a re-stated
-      // candidate list makes the stored verdict a claim about a target that no longer exists.
-      reachability: serializeReachability(
-        foldStatedAddresses(
-          parseReachability(record.reachability),
-          record.url,
-          provisioned.addresses,
-          provisioned.url,
-        ),
-      ),
-      // Persist the provider's failure reason on a poll-time transition to `failed` (cleared once
-      // not failed), mirroring the provisionSync path — WITHOUT this, a reconcile that flips an env
-      // to `failed` (a provider reporting the verdict on `provisioned.error` rather than throwing)
-      // left `lastError` stale/empty, so the env-detail surface and the env self-test showed a
-      // generic "provisioning failed" instead of the real cause (e.g. a "404 No commit found
-      // for the ref …" pointing at a project↔repo mismatch).
-      lastError:
-        provisioned.status === 'failed' ? provisioned.error?.trim() || 'Provisioning failed' : null,
-      // Rewritten from THIS poll on every poll, whatever the status: it is the provider's current
-      // account of where the environment is, so a note it has stopped saying stops being stored
-      // (the same clear-unless-restated rule as `lastError`, applied to every status rather than
-      // to `failed` alone). This is the write that makes the readiness ceiling able to name the
-      // state a run was stuck in, because every poll that KEEPS a readiness wait alive lands here.
-      statusNote: boundStatusNote(provisioned.statusNote),
-    }
-    await this.deps.environmentRegistryRepository.update(workspaceId, id, patch)
-
-    // A reconciliation that flips the env to `failed` (e.g. a rollout that exceeded its progress
-    // deadline, or a vanished namespace — the cases the provider maps to `failed` WITHOUT
-    // throwing) records a provisioning-log failure on the TRANSITION, so the run's "Infrastructure
-    // attempts" shows the env stopped spinning up instead of leaving it silently stuck. Repeated
-    // polls of an already-failed env don't re-log. (A read that THROWS is logged in the catch
-    // above; this covers the non-throwing failed verdict.) This runs AFTER the status patch is
-    // persisted and is best-effort: a logging hiccup must not throw back through refreshStatus and
-    // leave the env stuck at `provisioning` again — the exact bug this surfacing is meant to fix.
-    if (provisioned.status === 'failed' && record.status !== 'failed') {
-      try {
-        await this.deps.provisioningLog?.record({
-          workspaceId,
-          subsystem: 'environment',
-          operation: 'status',
-          targetId: record.id,
-          providerId: manifest.providerId,
-          blockId: record.blockId,
-          executionId: record.executionId,
-          outcome: 'failure',
-          error:
-            provisioned.error?.trim() ||
-            'Environment provisioning did not complete (it never became ready).',
-          detail: null,
-        })
-      } catch {
-        // swallow: the env is already persisted as `failed`; the log entry is advisory
-      }
-    }
-
-    return recordToHandle({ ...record, ...patch })
+    return this.statusPoller.refresh(workspaceId, id)
   }
 
   /**
@@ -1168,7 +1100,14 @@ export class EnvironmentProvisioningService {
       clock: this.deps.clock,
     })
     const patch = {
-      reachability: serializeReachability({ candidates: stored?.candidates ?? [], proof }),
+      // `probedAt` from the proof's own date, so the record that the platform LOOKED survives a
+      // later fold having to drop the verdict (see `EnvironmentReachability.probedAt`); the poll
+      // path's re-prove paces itself against it.
+      reachability: serializeReachability({
+        candidates: stored?.candidates ?? [],
+        proof,
+        probedAt: proof.checkedAt,
+      }),
     }
     await this.deps.environmentRegistryRepository.update(workspaceId, id, patch)
     return recordToHandle({ ...record, ...patch })
@@ -1269,9 +1208,19 @@ export class EnvironmentProvisioningService {
    * `EnvironmentRecord` becomes a compile error at both call sites instead of a silent miss.
    */
   private buildEnvironmentRecord(
-    fields: Omit<EnvironmentRecord, 'id' | 'deletedAt'>,
+    fields: Omit<EnvironmentRecord, 'id' | 'deletedAt' | 'lastPolledAt' | 'pollCount'>,
   ): EnvironmentRecord {
-    return { id: this.deps.idGenerator.next('env'), deletedAt: null, ...fields }
+    // The poll marker joins the scaffolding rather than the discriminating fields: an environment
+    // being recorded has by construction never been polled, so there is no per-call-site decision
+    // to force. Both are written explicitly rather than left to a column default, so the row a
+    // facade inserts and the record its repo reads back can never disagree about them.
+    return {
+      id: this.deps.idGenerator.next('env'),
+      deletedAt: null,
+      lastPolledAt: null,
+      pollCount: 0,
+      ...fields,
+    }
   }
 
   /**

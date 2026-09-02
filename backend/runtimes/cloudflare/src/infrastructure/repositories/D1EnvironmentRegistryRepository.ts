@@ -23,6 +23,8 @@ interface EnvironmentRow {
   last_error: string | null
   status_note: string | null
   deleted_at: number | null
+  last_polled_at: number | null
+  poll_count: number | null
   provision_type: string | null
   engine: string | null
 }
@@ -41,6 +43,10 @@ function rowToRecord(row: EnvironmentRow): EnvironmentRecord {
     accessCipher: row.access_cipher,
     provisionFieldsCipher: row.provision_fields_cipher,
     reachability: row.reachability ?? null,
+    lastPolledAt: row.last_polled_at ?? null,
+    // `?? 0` for a row written before the column existed, where the count is genuinely zero: this
+    // marker's whole job is to say how much polling is RECORDED, and none is.
+    pollCount: row.poll_count ?? 0,
     createdAt: row.created_at,
     expiresAt: row.expires_at,
     lastError: row.last_error,
@@ -59,6 +65,8 @@ const PATCH_COLUMNS: Record<keyof EnvironmentRecordPatch, string> = {
   accessCipher: 'access_cipher',
   provisionFieldsCipher: 'provision_fields_cipher',
   reachability: 'reachability',
+  lastPolledAt: 'last_polled_at',
+  pollCount: 'poll_count',
   expiresAt: 'expires_at',
   lastError: 'last_error',
   statusNote: 'status_note',
@@ -80,8 +88,8 @@ export class D1EnvironmentRegistryRepository implements EnvironmentRegistryRepos
         `INSERT INTO environments
           (id, workspace_id, block_id, frame_id, execution_id, provider_id, external_id, url, status,
            access_cipher, provision_fields_cipher, reachability, created_at, expires_at, last_error,
-           status_note, deleted_at, provision_type, engine)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+           status_note, deleted_at, last_polled_at, poll_count, provision_type, engine)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
       )
       .bind(
         record.id,
@@ -100,6 +108,8 @@ export class D1EnvironmentRegistryRepository implements EnvironmentRegistryRepos
         record.expiresAt,
         record.lastError,
         record.statusNote,
+        record.lastPolledAt,
+        record.pollCount,
         record.provisionType,
         record.engine,
       )

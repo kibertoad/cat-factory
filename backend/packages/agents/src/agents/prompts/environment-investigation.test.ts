@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { Block, EnvironmentEvidenceBundle } from '@cat-factory/kernel'
-import { renderEnvironmentInvestigationPrompt } from './environment-investigation.js'
+import {
+  ENVIRONMENT_INVESTIGATION_SYSTEM_PROMPT,
+  renderEnvironmentInvestigationPrompt,
+} from './environment-investigation.js'
 
 // The prompt's job is to make the bundle's ABSENCES visible. A section quietly omitted reads
 // exactly like a section that came back clean, and an investigator reasoning from that silence
@@ -21,6 +24,7 @@ function bundle(overrides: Partial<EnvironmentEvidenceBundle> = {}): Environment
     },
     provisionFields: {},
     timeline: [],
+    route: { candidates: [], proof: null },
     failure: {
       error: 'Environment was still provisioning after 20 minutes',
       reason: 'timeout',
@@ -101,8 +105,75 @@ describe('renderEnvironmentInvestigationPrompt', () => {
     expect(prompt).toContain('This is an ABSENCE, not a clean result')
   })
 
+  it('states the addresses there were to dial, and calls an empty list what it is', () => {
+    // Issue #2163's third half. `no address was captured at all` was the entire cause of the
+    // motivating failure and the investigation found it, as one bullet subordinated to a headline
+    // blaming a platform gate that had worked. So the platform COMPUTES the determinate cause and
+    // says it ranks first, rather than asking the model to rank it.
+    const prompt = render({
+      route: {
+        candidates: [],
+        proof: {
+          state: 'not_reached',
+          via: null,
+          reason: 'name_unresolved',
+          attempts: [{ target: 'pr-42.example.test:443', outcome: 'name_unresolved' }],
+          checkedAt: 1_788_347_753_453,
+        },
+      },
+    })
+    expect(prompt).toContain('Reaching this environment')
+    expect(prompt).toContain('addresses the provider stated for this environment')
+    expect(prompt).toContain('2026-09-02T11:15:53.453Z')
+    expect(prompt).toContain('A DETERMINATE CAUSE the platform already computed')
+    expect(prompt).toContain('the provider stated no addresses for it')
+    expect(prompt).toContain('make it the headline')
+  })
+
+  it('offers no determinate cause when the evidence does not settle one', () => {
+    // `inconclusive` is an admission about the PLATFORM, and dressing it as a determinate cause is
+    // how "we could not tell" comes to read as a verdict about the environment.
+    const prompt = render({
+      route: {
+        candidates: [{ address: '10.4.19.22', label: 'internal ALB' }],
+        proof: {
+          state: 'inconclusive',
+          via: null,
+          reason: 'probe_failed',
+          attempts: [],
+          checkedAt: 1_788_347_753_453,
+        },
+      },
+    })
+    expect(prompt).toContain('10.4.19.22 (internal ALB)')
+    expect(prompt).not.toContain('A DETERMINATE CAUSE')
+  })
+
+  it('calls an unprobed route an absence of a check, never a passed one', () => {
+    expect(render()).toContain('That is an ABSENCE of a check, never a passed one')
+  })
+
   it('refuses to let an empty timeline read as a quiet run', () => {
-    expect(render()).toContain('draw no conclusion from the silence')
+    const prompt = render()
+    expect(prompt).toContain('draw no conclusion from the silence')
+    // And it no longer says anything about PROVISIONING ATTEMPTS. The gatherer folds the record's
+    // own dates, the poll marker and the provisioning log's own state into this list, so a bundle
+    // that reaches this branch is one where nothing dated could be read at all; the old copy
+    // ("No provisioning attempts were recorded for this run") named a source that was never the
+    // problem, and stated it about a run whose log may well be full.
+    expect(prompt).not.toContain('No provisioning attempts were recorded')
+    expect(prompt).toContain('no dated evidence about this environment at all')
+  })
+
+  it('lets an investigation cite the two evidence sections it was given', () => {
+    // The role's inventory and the directives' `source` vocabulary are the prompt's own answer to
+    // "do not invent a field you were not shown": a section the role never mentions, under no
+    // `source` the directives list, is evidence the model has been told not to cite. The route
+    // facts and the poll marker were added to the bundle without being added to either.
+    const prompt = ENVIRONMENT_INVESTIGATION_SYSTEM_PROMPT
+    expect(prompt).toContain('what the platform knows about REACHING it')
+    expect(prompt).toContain('a marker for how much status polling happened')
+    expect(prompt).toContain('the route evidence, the poll marker')
   })
 
   it("renders the provider's facts with its own verdict on each, undecided included", () => {

@@ -27,6 +27,9 @@ function record(overrides: Partial<EnvironmentRecord> = {}): EnvironmentRecord {
     expiresAt: null,
     lastError: null,
     statusNote: null,
+    reachability: null,
+    lastPolledAt: null,
+    pollCount: 0,
     deletedAt: null,
     provisionType: 'preview',
     engine: 'remote-custom',
@@ -55,6 +58,8 @@ function deps(args: {
   providerError?: Error
   log?: ProvisioningLogRecord[]
   logError?: Error
+  /** Wire NO provisioning log, as a facade that keeps none does. */
+  noLog?: boolean
 }) {
   return {
     readRecord: async () => {
@@ -73,10 +78,14 @@ function deps(args: {
       if (args.fieldsError) throw args.fieldsError
       return args.fields ?? {}
     },
-    listProvisioningLog: async () => {
-      if (args.logError) throw args.logError
-      return args.log ?? []
-    },
+    ...(args.noLog
+      ? {}
+      : {
+          listProvisioningLog: async () => {
+            if (args.logError) throw args.logError
+            return args.log ?? []
+          },
+        }),
     recordRemediation: remediationRows,
   }
 }
@@ -187,7 +196,12 @@ describe('createEnvironmentDiagnostics.collect', () => {
     expect(log?.text.endsWith('THE-CRASH')).toBe(true)
     expect(log?.text.length).toBeLessThan(text.length)
   })
+})
 
+// The bundle's DATED evidence: one derived list, and what each source in it contributes. Its own
+// suite because these are the assertions about ORDER and about telling an absent source from an
+// empty one, which is what the investigation that filed #2163 got wrong.
+describe('createEnvironmentDiagnostics.collect: the derived timeline and route evidence', () => {
   it('builds the timeline oldest-first from the run log', async () => {
     const diagnostics = createEnvironmentDiagnostics(
       deps({
@@ -227,8 +241,80 @@ describe('createEnvironmentDiagnostics.collect', () => {
       environmentId: 'env_1',
       executionId: 'exec_1',
     })
-    expect(bundle.timeline.map((entry) => entry.at)).toEqual([1_000, 2_000, 3_000])
-    expect(bundle.timeline[2]?.label).toContain('environment.status failure')
+    const dated = bundle.timeline.filter((entry) => entry.at !== null)
+    expect(dated.map((entry) => entry.at)).toEqual([1_000, 2_000, 3_000])
+    expect(dated[2]?.label).toContain('environment.status failure')
+    // The poll marker rides the same list, undated here because this environment records no
+    // answered poll. An undated entry sorts ahead of every stamp, which is the honest place for
+    // a fact with no time of its own.
+    expect(bundle.timeline.map((entry) => entry.label)).toContain(
+      'no provider status poll is RECORDED for this environment',
+    )
+  })
+
+  it("folds the route proof into the timeline, dated from the proof's OWN checkedAt", async () => {
+    // Issue #2163. An investigation asked to line the timestamps up against a two-entry log said
+    // the reachability verdict "settled roughly at the moment of the create request, with no
+    // wait", while `checkedAt` in the same stored value put it 4m18s later. The fix is structural:
+    // there is one derived list and the proof is in it, so the ordering cannot be reconciled wrong.
+    const diagnostics = createEnvironmentDiagnostics(
+      deps({
+        found: record({
+          reachability: JSON.stringify({
+            candidates: [],
+            proof: {
+              state: 'not_reached',
+              via: null,
+              reason: 'name_unresolved',
+              attempts: [{ target: 'pr-42.example.test:443', outcome: 'name_unresolved' }],
+              checkedAt: 259_000,
+            },
+          }),
+        }),
+      }),
+    )
+    const bundle = await collectBundle(diagnostics, { environmentId: 'env_1' })
+
+    const proofEntry = bundle.timeline.find((e) => e.label.startsWith('route proof'))
+    expect(proofEntry?.at).toBe(259_000)
+    expect(proofEntry?.label).toBe('route proof: not_reached (name_unresolved)')
+    expect(proofEntry?.detail).toContain('pr-42.example.test:443 (name_unresolved)')
+    // And it is carried as facts too, because the timeline answers WHEN the platform dialled
+    // while this answers what it had to dial.
+    expect(bundle.route).toMatchObject({ candidates: [], proof: { checkedAt: 259_000 } })
+  })
+
+  it('states how much POLLING is recorded, which no log row says', async () => {
+    const diagnostics = createEnvironmentDiagnostics(
+      deps({ found: record({ lastPolledAt: 225_000, pollCount: 22 }) }),
+    )
+    const bundle = await collectBundle(diagnostics, { environmentId: 'env_1' })
+
+    const marker = bundle.timeline.find((e) => e.label.includes('status poll'))
+    expect(marker?.at).toBe(225_000)
+    // ANSWERS, never successes. The row counts every poll the provider answered, a `failed`
+    // verdict included, so "22 successful polls" would hand an investigation twenty-two successes
+    // for an environment that could have failed all twenty-two.
+    expect(marker?.label).toBe('last answered provider status poll (22 answers recorded)')
+    expect(marker?.detail).toContain('not how much of it went well')
+    // The count is stated as a FLOOR: concurrent polls can cost it an increment, so a reader must
+    // not treat it as a ledger.
+    expect(marker?.detail).toContain('FLOOR')
+    // And the SPAN is stated as a window rather than a duration: three unrelated surfaces refresh
+    // an environment, so a stamp hours after the create says nothing was polling in between.
+    expect(marker?.detail).toContain('never as its duration')
+  })
+
+  it('NAMES an unreadable reachability value rather than reporting no stated addresses', async () => {
+    // The two are opposite facts and only one of them is a determinate cause with an owner: "the
+    // provider stated no addresses" sends someone to a response mapping, a parse failure sends
+    // them to the platform.
+    const diagnostics = createEnvironmentDiagnostics(
+      deps({ found: record({ reachability: '{not json' }) }),
+    )
+    const bundle = await collectBundle(diagnostics, { environmentId: 'env_1' })
+    expect(bundle.route.unreadable).toContain('could not be parsed')
+    expect(bundle.route).toMatchObject({ candidates: [], proof: null })
   })
 
   it('names a provisioning log it could not read rather than reporting an empty history', async () => {
@@ -240,6 +326,100 @@ describe('createEnvironmentDiagnostics.collect', () => {
     expect(bundle.timeline.some((e) => e.detail === 'D1 is down')).toBe(true)
   })
 
+  /**
+   * The provisioning log's own state is an ENTRY, in each of the four ways it can have one.
+   *
+   * It used to be inferred from the timeline coming back empty, which the renderer turned into
+   * "draw no conclusion from the silence". Once the record's dates and the poll marker joined this
+   * list that inference became unreachable: every bundle with a record has entries, whatever the
+   * log did, so the deployment that keeps no log looked exactly like the run that appended nothing.
+   * Four facts, four reactions, and only the last is about the environment.
+   */
+  const LOG_STATES = [
+    {
+      what: 'a deployment that keeps no provisioning log',
+      args: { noLog: true },
+      label: 'this deployment keeps NO provisioning log',
+    },
+    {
+      what: 'an environment attached to no run',
+      args: {},
+      executionId: undefined,
+      found: record({ executionId: undefined }),
+      label: 'this environment is attached to no run, so no provisioning log was read',
+    },
+    {
+      what: 'a log that was read and held nothing',
+      args: { log: [] as ProvisioningLogRecord[] },
+      label: 'the provisioning log was READ and holds nothing for this run',
+    },
+    {
+      what: 'a log read that threw',
+      args: { logError: new Error('D1 is down') },
+      label: 'provisioning log could not be read',
+    },
+  ]
+
+  for (const state of LOG_STATES) {
+    it(`states the provisioning log's own state for ${state.what}`, async () => {
+      const diagnostics = createEnvironmentDiagnostics(
+        deps({ ...state.args, ...('found' in state ? { found: state.found } : {}) }),
+      )
+      const bundle = await collectBundle(diagnostics, {
+        environmentId: 'env_1',
+        ...('executionId' in state ? {} : { executionId: 'exec_1' }),
+      })
+      expect(bundle.timeline.map((entry) => entry.label)).toContain(state.label)
+      // Undated in every case: none of the four is a thing that happened at a time.
+      expect(bundle.timeline.find((entry) => entry.label === state.label)?.at).toBeNull()
+    })
+  }
+
+  it('SCRUBS and BOUNDS the route evidence, and says what it dropped', async () => {
+    // The one evidence section that reached the prompt raw. `candidates` comes straight off a
+    // provider's response mapping (an array with no declared length, of strings with no declared
+    // length) and an attempt's `detail` is the probe's own error text, which is where a
+    // credentialed URL shows up. Everything beside it was already scrubbed and capped here.
+    const diagnostics = createEnvironmentDiagnostics(
+      deps({
+        found: record({
+          reachability: JSON.stringify({
+            candidates: Array.from({ length: 25 }, (_, i) => ({ address: `10.4.19.${i}` })),
+            proof: {
+              state: 'inconclusive',
+              via: null,
+              reason: 'probe_failed',
+              attempts: [
+                {
+                  target: 'pr-42.example.test:443',
+                  outcome: 'probe_failed',
+                  detail: 'connect failed for https://user:hunter2@pr-42.example.test/health',
+                },
+              ],
+              checkedAt: 259_000,
+            },
+          }),
+        }),
+      }),
+    )
+    const bundle = await collectBundle(diagnostics, { environmentId: 'env_1' })
+
+    expect(bundle.route.candidates).toHaveLength(20)
+    expect(bundle.evidenceCaps?.join(' ')).toContain('stated 25 addresses')
+    const detail = bundle.route.proof?.attempts[0]?.detail ?? ''
+    expect(detail).not.toContain('hunter2')
+    expect(detail).toContain('[REDACTED]')
+    // And the timeline entry rendering the same proof is the same string, because both go through
+    // kernel's one renderer over the already-prepared evidence.
+    const proofEntry = bundle.timeline.find((e) => e.label.startsWith('route proof'))
+    expect(proofEntry?.detail).not.toContain('hunter2')
+  })
+})
+
+// What the bundle says when a read FAILED or a value was too big to pass on. Its own suite because
+// every one of them asserts the same rule from a different direction: a degradation is NAMED, and
+// an absence never renders as a clean result.
+describe('createEnvironmentDiagnostics.collect: degraded reads and caps', () => {
   it('names undecryptable provision fields rather than presenting an empty bag', async () => {
     const diagnostics = createEnvironmentDiagnostics(
       deps({ fieldsError: new Error('the org key is unavailable') }),

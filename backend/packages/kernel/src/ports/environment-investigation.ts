@@ -1,3 +1,4 @@
+import type { EnvironmentAddress, EnvironmentRouteProof } from '@cat-factory/contracts'
 import type { Block } from '../domain/types.js'
 import type { EnvironmentDiagnosis } from './environment-diagnostics.js'
 
@@ -34,6 +35,46 @@ export interface EnvironmentRecordFacts {
   engine: string | null
 }
 
+/**
+ * What the platform knows about REACHING this environment: the addresses its provider stated to
+ * dial, and what dialling them proved.
+ *
+ * In the bundle because it is the one evidence source carrying its OWN timestamp for something
+ * the platform did, and an ordering claim made without it is a claim made against data the
+ * platform held. The failure that filed this said the reachability verdict "settled roughly at the
+ * moment of the create request", with no wait; `proof.checkedAt` sat in the same stored value as
+ * the attempt list the same investigation quoted correctly, and it read 4m18s after the create.
+ * The proof is therefore FOLDED into {@link EnvironmentEvidenceBundle.timeline} as well as
+ * carried here, so the ordering is read off one sorted list rather than reconciled by hand.
+ *
+ * It is also where the most determinate cause of an unreachable environment lives: an empty
+ * `candidates` beside a `not_reached` proof means nothing but the environment's own name was ever
+ * available to try. See `determinateRouteCause`.
+ */
+export interface EnvironmentRouteEvidence {
+  /**
+   * The addresses the provider stated carry traffic for the URL's host, in ITS order. Empty means
+   * it stated none, so the URL's own name was the only target that existed.
+   *
+   * Provider-authored, so already redacted and bounded by whoever gathered this bundle, exactly
+   * like {@link EnvironmentTimelineEntry.detail} and a diagnosis's facts. Anything cut is named in
+   * {@link EnvironmentEvidenceBundle.evidenceCaps}; a reader RENDERS these, it does not re-scrub
+   * them.
+   */
+  candidates: readonly EnvironmentAddress[]
+  /**
+   * What dialling established, or null when nothing has dialled this environment. Its attempts'
+   * `target` and `detail` are redacted and capped on the same terms as `candidates` above.
+   */
+  proof: EnvironmentRouteProof | null
+  /**
+   * Why there is neither, when the stored value could not be READ. Its own member because an
+   * unparseable blob and a provider that stated no addresses are opposite facts, and the second is
+   * a determinate cause this bundle is about to hand a reader.
+   */
+  unreadable?: string
+}
+
 /** One dated thing that happened to this environment, oldest first. */
 export interface EnvironmentTimelineEntry {
   /** Epoch ms, or null for a fact with no timestamp of its own. */
@@ -64,8 +105,18 @@ export interface EnvironmentEvidenceBundle {
    * into a field no reader existed for.
    */
   provisionFields: Record<string, string>
-  /** The run's own provisioning attempts for this environment, oldest first. */
+  /**
+   * The run's own provisioning attempts for this environment, oldest first, with everything else
+   * the platform has a timestamp for folded in: the record's own dates, the route proof, and the
+   * marker recording that status polls happened at all.
+   *
+   * ONE derived list rather than a log the reader has to reconcile against separate fields. An
+   * ordering claim contradicted by a timestamp in the same bundle is the defect this shape exists
+   * to make structurally hard to state.
+   */
   timeline: EnvironmentTimelineEntry[]
+  /** What the platform knows about reaching it. See {@link EnvironmentRouteEvidence}. */
+  route: EnvironmentRouteEvidence
   /** The provider's own account, when it implements the diagnostics capability. */
   diagnosis?: EnvironmentDiagnosis
   /** Why there is none: the provider offers no diagnostics, or the describe call failed. */

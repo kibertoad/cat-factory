@@ -141,6 +141,10 @@ function rowToEnvironment(row: EnvironmentRow): EnvironmentRecord {
     accessCipher: row.access_cipher,
     provisionFieldsCipher: row.provision_fields_cipher,
     reachability: row.reachability ?? null,
+    lastPolledAt: row.last_polled_at ?? null,
+    // `?? 0` for a row written before the column existed, where the count is genuinely zero: this
+    // marker's whole job is to say how much polling is RECORDED, and none is.
+    pollCount: row.poll_count ?? 0,
     createdAt: row.created_at,
     expiresAt: row.expires_at,
     lastError: row.last_error,
@@ -159,6 +163,8 @@ const PATCH_COLUMNS = {
   accessCipher: 'access_cipher',
   provisionFieldsCipher: 'provision_fields_cipher',
   reachability: 'reachability',
+  lastPolledAt: 'last_polled_at',
+  pollCount: 'poll_count',
   expiresAt: 'expires_at',
   lastError: 'last_error',
   statusNote: 'status_note',
@@ -184,6 +190,8 @@ export class DrizzleEnvironmentRegistryRepository implements EnvironmentRegistry
       access_cipher: record.accessCipher,
       provision_fields_cipher: record.provisionFieldsCipher,
       reachability: record.reachability,
+      last_polled_at: record.lastPolledAt,
+      poll_count: record.pollCount,
       created_at: record.createdAt,
       expires_at: record.expiresAt,
       last_error: record.lastError,

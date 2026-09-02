@@ -313,7 +313,10 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
         status: 'failed',
         expiresAt: null,
         access: null,
-        fields: {},
+        // `null` rather than an empty bag: nothing in the cluster was read, so this answer states
+        // nothing about the captured fields, and an empty statement would REPLACE (erase) whatever
+        // the provision managed to capture about a namespace that is already unfindable.
+        fields: null,
         error:
           'this environment record carries no namespace, so there is nothing in the cluster to ' +
           'read its status from: the provision never got as far as creating one.',

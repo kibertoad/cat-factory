@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { RouteProbeOutcome, RouteProbeRequest } from '@cat-factory/kernel'
-import { foldStatedAddresses, proveEnvironmentRoute } from './environmentReachability.js'
+import {
+  foldStatedAddresses,
+  proveEnvironmentRoute,
+  ROUTE_REPROVE_MIN_INTERVAL_MS,
+  routeReproveDecision,
+} from './environmentReachability.js'
 
 const clock = { now: () => 1_000 }
 
@@ -109,7 +114,13 @@ describe('foldStatedAddresses', () => {
         [{ address: '10.4.19.22', label: 'internal ALB' }],
         'https://env.example',
       ),
-    ).toEqual({ candidates: [{ address: '10.4.19.22', label: 'internal ALB' }], proof })
+      // `probedAt` rides along, carried from the proof's own date: it says when the platform last
+      // LOOKED, which is what survives a verdict the next poll has to drop.
+    ).toEqual({
+      candidates: [{ address: '10.4.19.22', label: 'internal ALB' }],
+      proof,
+      probedAt: proof.checkedAt,
+    })
   })
 
   it('drops the proof when the URL moves', () => {
@@ -136,6 +147,78 @@ describe('foldStatedAddresses', () => {
     ).toBeNull()
   })
 
+  it('keeps a `reached` proof when the same addresses come back in a different ORDER', () => {
+    // The latent trap this rule replaced. A provider stating addresses from a live DNS answer is
+    // stating a value whose order it does not control: `getaddrinfo` sorts destinations against
+    // the local interface set, and resolvers rotate records between answers. A sequence
+    // comparison dropped the proof on a network change, months later, on someone else's machine,
+    // and nothing took another one, so the address a container bridge is built from just stopped.
+    expect(
+      foldStatedAddresses(
+        { candidates: [{ address: '10.4.19.22' }, { address: '10.4.19.23' }], proof },
+        'https://env.example',
+        [{ address: '10.4.19.23' }, { address: '10.4.19.22' }],
+        'https://env.example',
+      ),
+    ).toEqual({
+      // The FRESH order is kept for the next probe: it is the provider's current preference about
+      // what to try first. It is just not evidence.
+      candidates: [{ address: '10.4.19.23' }, { address: '10.4.19.22' }],
+      proof,
+      probedAt: proof.checkedAt,
+    })
+  })
+
+  it('keeps a `reached` proof when the provider ADDS a candidate it never touched', () => {
+    // Strictly more information cannot invalidate a finding about one address. A balancer gaining
+    // a zone is a routine event and says nothing about whether the proved address still carries.
+    expect(
+      foldStatedAddresses(
+        { candidates: [{ address: '10.4.19.22' }], proof },
+        'https://env.example',
+        [{ address: '10.4.19.22' }, { address: '10.4.19.30', label: 'new AZ' }],
+        'https://env.example',
+      )?.proof,
+    ).toEqual(proof)
+  })
+
+  it('keeps a `reached` proof taken on the NAME itself whatever the candidates do', () => {
+    // `via: null` on a `reached` proof means the name carried, so the candidate list was never
+    // part of the finding; the URL is what it was about and the URL is checked above.
+    const byName = { ...proof, via: null }
+    expect(
+      foldStatedAddresses(
+        { candidates: [{ address: '10.4.19.22' }], proof: byName },
+        'https://env.example',
+        [{ address: '10.4.19.30' }],
+        'https://env.example',
+      )?.proof,
+    ).toEqual(byName)
+  })
+
+  it('DROPS a negative proof once a candidate it never dialled appears', () => {
+    // The asymmetry is the point: "nothing reaches this environment" is a finding about the whole
+    // list that was tried, so it stops being established the moment there is a target nothing
+    // tried. A reorder of the same SET leaves it standing (below).
+    const negative = { ...proof, state: 'not_reached' as const, via: null, reason: 'no_route' }
+    expect(
+      foldStatedAddresses(
+        { candidates: [{ address: '10.4.19.22' }], proof: negative },
+        'https://env.example',
+        [{ address: '10.4.19.22' }, { address: '10.4.19.30' }],
+        'https://env.example',
+      )?.proof,
+    ).toBeNull()
+    expect(
+      foldStatedAddresses(
+        { candidates: [{ address: '10.4.19.22' }, { address: '10.4.19.30' }], proof: negative },
+        'https://env.example',
+        [{ address: '10.4.19.30' }, { address: '10.4.19.22' }],
+        'https://env.example',
+      )?.proof,
+    ).toEqual(negative)
+  })
+
   it('is null when there is nothing worth a column', () => {
     expect(foldStatedAddresses(null, null, [], 'https://env.example')).toBeNull()
     expect(foldStatedAddresses(null, null, undefined, null)).toBeNull()
@@ -156,6 +239,7 @@ describe('foldStatedAddresses', () => {
     ).toEqual({
       candidates: [{ address: '10.4.19.22' }, { address: '10.4.19.23' }],
       proof,
+      probedAt: proof.checkedAt,
     })
   })
 
@@ -170,6 +254,119 @@ describe('foldStatedAddresses', () => {
         [],
         'https://env.example',
       ),
-    ).toBeNull()
+      // Both halves gone and the value still worth a column, because the third one is the record
+      // that something DID look: a poll that drops a proof and then paces its re-take against a
+      // date the drop erased would never re-take anything.
+    ).toEqual({ candidates: [], proof: null, probedAt: proof.checkedAt })
+  })
+
+  it('normalizes an address the same way the PROBE does before matching a proof', () => {
+    // `planRouteProbes` trims before it dials, so `via` is a trimmed value. Compared against a raw
+    // stored candidate, a provider stating a padded address proved one string and stored another,
+    // so a good `reached` proof was dropped on every poll and re-probed on every poll. The
+    // manifest provider trims on capture, which is why this only ever bit an adapter that states
+    // addresses directly.
+    expect(
+      foldStatedAddresses(
+        { candidates: [{ address: ' 10.4.19.22' }], proof },
+        'https://env.example',
+        [{ address: ' 10.4.19.22' }],
+        'https://env.example',
+      )?.proof,
+    ).toEqual(proof)
+  })
+})
+
+describe('routeReproveDecision', () => {
+  const reached = {
+    state: 'reached' as const,
+    via: '10.4.19.22',
+    reason: null,
+    attempts: [],
+    checkedAt: 1_000,
+  }
+  const at = (now: number) => now
+
+  it('re-proves a dropped proof once the interval has passed', () => {
+    expect(
+      routeReproveDecision({
+        stored: { candidates: [{ address: '10.4.19.22' }], proof: reached },
+        folded: { candidates: [{ address: '10.4.19.30' }], proof: null, probedAt: 1_000 },
+        ready: true,
+        now: at(1_000 + ROUTE_REPROVE_MIN_INTERVAL_MS),
+      }),
+    ).toBe('reprove')
+  })
+
+  it('HOLDS a re-prove while the last look is inside the interval', () => {
+    // The bound. This decision is taken on a ten-second poll cadence, and a proof costs up to five
+    // sequential dials at four seconds each, so an environment whose provider re-states a
+    // different candidate set on every answer would spend twenty seconds per poll on probes.
+    expect(
+      routeReproveDecision({
+        stored: { candidates: [{ address: '10.4.19.22' }], proof: reached },
+        folded: { candidates: [{ address: '10.4.19.30' }], proof: null, probedAt: 1_000 },
+        ready: true,
+        now: at(1_000 + ROUTE_REPROVE_MIN_INTERVAL_MS - 1),
+      }),
+    ).toBe('held')
+  })
+
+  it('paces itself off `probedAt`, which is what survives a HELD drop', () => {
+    // The trap the anchor exists for: a hold persists the drop, so a decision anchored on the
+    // proof's own date would find nothing to measure against on the very next poll and answer
+    // `keep` forever, leaving the environment permanently unproved with nothing saying why.
+    expect(
+      routeReproveDecision({
+        stored: { candidates: [{ address: '10.4.19.30' }], proof: null, probedAt: 1_000 },
+        folded: { candidates: [{ address: '10.4.19.31' }], proof: null, probedAt: 1_000 },
+        ready: true,
+        now: at(1_000 + ROUTE_REPROVE_MIN_INTERVAL_MS),
+      }),
+    ).toBe('reprove')
+  })
+
+  it('replaces a stored `unproved` proof, which is a proof never TAKEN', () => {
+    // It survives the fold forever on set equality, so read as a live proof it left every
+    // environment settled before a deployment wired its prober permanently unproved.
+    const unproved = { ...reached, state: 'unproved' as const, via: null }
+    expect(
+      routeReproveDecision({
+        stored: { candidates: [{ address: '10.4.19.22' }], proof: unproved },
+        folded: { candidates: [{ address: '10.4.19.22' }], proof: unproved, probedAt: 1_000 },
+        ready: true,
+        now: at(1_000 + ROUTE_REPROVE_MIN_INTERVAL_MS),
+      }),
+    ).toBe('reprove')
+  })
+
+  it('keeps a proof that still establishes something, and never takes the FIRST look', () => {
+    expect(
+      routeReproveDecision({
+        stored: { candidates: [{ address: '10.4.19.22' }], proof: reached },
+        folded: { candidates: [{ address: '10.4.19.22' }], proof: reached, probedAt: 1_000 },
+        ready: true,
+        now: at(9_000_000),
+      }),
+    ).toBe('keep')
+    // Nothing has ever looked: the deployer's settle path owns that one, and probing here would
+    // dial on every poll of every environment whose frame has not settled.
+    expect(
+      routeReproveDecision({
+        stored: { candidates: [{ address: '10.4.19.22' }], proof: null },
+        folded: { candidates: [{ address: '10.4.19.22' }], proof: null },
+        ready: true,
+        now: at(9_000_000),
+      }),
+    ).toBe('keep')
+    // And an environment that has gone back to `provisioning` is not worth dialling yet.
+    expect(
+      routeReproveDecision({
+        stored: { candidates: [{ address: '10.4.19.22' }], proof: reached },
+        folded: { candidates: [{ address: '10.4.19.30' }], proof: null, probedAt: 1_000 },
+        ready: false,
+        now: at(9_000_000),
+      }),
+    ).toBe('keep')
   })
 })
