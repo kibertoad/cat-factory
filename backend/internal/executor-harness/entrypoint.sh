@@ -281,7 +281,11 @@ start_rootless_docker() {
   # status file and into the fallback's stderr line rather than staying in a file nobody reads.
   detail="$(rootless_log_tail)"
   if [ "$arm_verdict" -eq 2 ]; then
-    write_docker_status false rootless failed "$detail"
+    # Its OWN reason word, not `failed`. A daemon still starting and two daemons that both
+    # exited are opposite situations with opposite next steps, and the reader reports this
+    # verbatim rather than branching on it, so the entrypoint can say which one this is.
+    write_docker_status false rootless still-starting \
+      "the daemon that manages its own firewall rules had not answered after ${DOCKER_READY_TIMEOUT_SECONDS}s and is still running, so nothing in this container knows why yet. its log so far: ${detail}"
     echo "entrypoint: the rootless daemon had not answered after" \
       "${DOCKER_READY_TIMEOUT_SECONDS}s and is still running, so nothing here knows why;" \
       "local infra is unavailable in this container until it answers. detail: ${detail}" >&2

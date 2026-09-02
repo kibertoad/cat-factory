@@ -60,15 +60,18 @@ export interface DockerStatus {
   available: boolean | undefined
   source: DockerSource
   /**
-   * Why, in the entrypoint's own closed vocabulary (`serving`, `serving-without-nat`, `failed`,
-   * `missing`, `unreachable`, `probing`).
+   * Why, in the entrypoint's own closed vocabulary (`serving`, `serving-without-nat`,
+   * `still-starting`, `failed`, `missing`, `unreachable`, `probing`).
    *
    * Reported and never branched on, which is what lets the entrypoint add a word without anything
-   * here having to know it. `serving-without-nat` is the one worth knowing about: the rootless
-   * daemon would not start with its own firewall rules and runs with `--iptables=false`, so it
-   * serves while its NESTED containers have no egress. That is a CAUSE, and the only place one
-   * exists; what MEASURES the consequence is the egress half of the workload check
-   * (docker-capability.ts), from inside a container, with no way to learn why.
+   * here having to know it. Two are worth knowing about. `serving-without-nat`: the daemon that
+   * manages its own firewall rules exited without serving, so the one that came up runs with
+   * `--iptables=false` and its NESTED containers have no egress. That is a CAUSE, and the only
+   * place one exists; what MEASURES the consequence is the egress half of the workload check
+   * (docker-capability.ts), from inside a container, with no way to learn why. `still-starting`
+   * is a daemon that had not answered when the boot budget ran out and is STILL RUNNING, which is
+   * the one absence that routinely stops being true: it is exactly what the live re-probe below
+   * exists to catch.
    */
   reason: string
   /** A human detail for the failing cases: the dockerd log tail, or what was unreachable. */

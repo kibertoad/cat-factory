@@ -305,7 +305,14 @@ describe('entrypoint start_rootless_docker', () => {
     const run = driveRootless('hangs')
     expect(run.launches).toHaveLength(1)
     expect(fallbackLaunch(run)).toBeUndefined()
-    expect(run.status).toMatchObject({ available: false, source: 'rootless', reason: 'failed' })
+    // Its own reason word: a daemon still starting and two daemons that both exited are opposite
+    // situations, and this is the one absence that routinely stops being true.
+    expect(run.status).toMatchObject({
+      available: false,
+      source: 'rootless',
+      reason: 'still-starting',
+    })
+    expect(run.status.detail).toContain('is still running')
     expect(run.stderr).toContain('is still running')
   })
 
