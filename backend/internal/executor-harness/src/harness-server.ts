@@ -6,6 +6,7 @@ import { handleAgent } from './agent.js'
 import { handleInline } from './inline.js'
 import { redactSecrets } from './git.js'
 import { readDockerStatus } from './docker-status.js'
+import { reportedDockerWorkload } from './docker-capability.js'
 import { harnessListenPort } from './harness-port.js'
 import { JobRegistry, loadRunnerLimits, type JobResultBase, type RunOptions } from './runner.js'
 import { log } from './logger.js'
@@ -141,11 +142,16 @@ const server = createServer((req, res) => {
       // would spawn a process per poll to answer a question this endpoint is not the one to act
       // on; the stand-up re-confirms a recorded absence at the moment it matters
       // (`resolveDockerVerdict`), so a stale negative here never becomes a stale refusal there.
+      //
+      // `workload` is the other half, and the reason the block used to mislead: what the record
+      // says is `serving`, and serving is not usable. It reports the last measurement any job
+      // took (docker-capability.ts) and NEVER takes one itself, for the same polling reason,
+      // which is why `unmeasured` is one of the words it can answer.
       return send(res, 200, {
         status: 'ok',
         ...(HARNESS_VERSION ? { version: HARNESS_VERSION } : {}),
         capabilities: HARNESS_BODY_CAPABILITIES,
-        docker: await readDockerStatus(),
+        docker: { ...(await readDockerStatus()), workload: reportedDockerWorkload() },
       })
     }
     // All non-health endpoints are gated by the optional shared secret.

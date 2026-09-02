@@ -142,6 +142,17 @@ Three rules bind anything added to it:
   installed in this image unconditionally, `entrypoint.sh` starts the rootless daemon best-effort
   and execs the server without waiting for it, so at job start this probe is the only thing that
   knows how that went.
+- **A daemon that ANSWERS is not a daemon that WORKS**, which is the same mistake one level in and
+  the one this block used to make. A rootless daemon nested inside a sandbox serves throughout
+  while its snapshotter cannot mount an image layer, so `docker info` succeeds and `docker build`,
+  `docker run` and `docker pull` of anything multi-layer all fail on one EINVAL. Issue #2120 is
+  three agents in a single run each paying to disprove the claim, against a block that also tells
+  them not to re-check it. Only a container that RAN settles it, so the reachable case is split by
+  a real workload (`src/docker-capability.ts`) into `usable`, `unusable` and a daemon that answered
+  while the check could not be carried out. **Only `usable` may say the commands work**, and the
+  asymmetry runs the other way too: a failure of the platform's own machinery (no probe payload on
+  this machine, an architecture it has no image for, `docker load` refusing the archive) reports
+  that it could not tell, never that the daemon is broken.
 - **A daemon that is STARTING is not a daemon that is absent.** Because the entrypoint does not
   wait, the backend dispatches seconds before there is a socket, and `docker info` is then refused
   at once rather than slowly. So a refusal is read against `DOCKER_HOST`, which the entrypoint sets
@@ -374,19 +385,33 @@ Docker socket would hand the container root on the host.
 
 - `GET /health` reports it, so an operator (and a boot-time probe) can see what the container
   concluded about itself.
-- The compose stand-up REFUSES on a decided absence and says why, instead of running compose
+- The compose stand-up REFUSES on a decided negative and says why, instead of running compose
   against nothing and handing the agent a connection error to interpret. The refusal rides back on
   the Tester step as `infraSetup.dockerAvailable: false` with the cause.
+
+**What the entrypoint probes for is a SOCKET, and serving is not usable.** That is the whole of
+what a boot record can know, and it is weaker than what either consumer wants: a rootless daemon in
+a sandbox answers `docker version` while being unable to mount an image, so compose ran and died on
+a mount error inside the one mechanism whose job is to explain why the dependencies did not come up
+(issue #2120). The live half of the verdict is therefore a real workload (load a one-layer image
+and run a container from it, `src/docker-capability.ts`), and `resolveDockerVerdict` consults it in
+BOTH directions: a recorded absence a working daemon contradicts, and a recorded presence that
+cannot run anything. `GET /health` reports the last measurement beside the boot record under
+`docker.workload` and never takes one itself, since it is polled; `unmeasured` is one of its answers.
+
+The workload check is memoised per container for a POSITIVE answer only. A daemon that has run a
+container proved something that does not stop being true; a negative is re-measured for the same
+reason a recorded absence is, and it fails fast anyway.
 
 The verdict is three-valued, and that is the point. `false` is a decided absence. `undefined` is
 "nothing decided" — the probe is still in flight, or nothing recorded anything at all, which is the
 normal state under the native host transport (`LOCAL_NATIVE_AGENTS`) where the harness runs on a
-developer's machine with no entrypoint. Undecided attempts the stand-up; only a decided absence
-refuses it.
+developer's machine with no entrypoint. Undecided attempts the stand-up, and nothing probes it into
+a refusal; only a decided negative refuses.
 
 What is recorded describes BOOT, and a container outlives its boot: a warm pool serves many jobs
 from one, and a sidecar daemon that took longer to come up than the entrypoint's bounded wait
-allows is serving perfectly well by the second job. So a recorded absence is a hypothesis, not the
+allows is serving perfectly well by the second job. So a recorded verdict is a hypothesis, not the
 refusal: `resolveDockerVerdict` re-checks it against a live daemon at the moment a stand-up is
 about to run, and the record supplies what only the record holds, the cause and the daemon's own
 log tail. `GET /health` deliberately keeps reporting the boot record rather than probing per poll,
@@ -438,10 +463,12 @@ verdict is stated.
 | `src/bootstrap-mode.ts` | The repo-bootstrap MODE: clone-a-reference-or-scaffold → run the agent → refuse to push an empty tree → reinit + force-push to the pre-created target repo. |
 | `src/artifact-upload.ts` | The OUTBOUND half of the artifact seam: parses the body's `artifactUpload` and projects it onto the agent's env as `ARTIFACT_UPLOAD_URL` / `ARTIFACT_UPLOAD_TOKEN`, registering the token for redaction first. Passes through what the body carries and decides nothing: which kinds get the seam is the backend's call. |
 | `src/codex-images.ts` | Codex's own `image_gen` output, staged where the agent can reach it: creates `$CODEX_HOME/generated_images` as a symlink into `.cat-context/binary-output/generated/` before the CLI starts, sweeps anything a failed redirect left behind, and unlinks (never follows) the redirect at teardown — a failed unlink is REPORTED, because that unlink is what stops the recursive delete reaching the checkout. Exists because codex exposes no path for what it generated AND `$CODEX_HOME` holds the run's decrypted credential, so neither asking the agent nor sending it there is available. |
-| `src/environment-inventory.ts` | What the MACHINE holds, probed once per job and appended to the agent's system prompt as an ENVIRONMENT INVENTORY block. The only layer that can state it: the backend composes its prompt before a transport is chosen, and the same body serves this image, a deployment's own variant and the developer's laptop under `LOCAL_NATIVE_AGENTS`. Three-valued on purpose, so a probe that failed renders as unknown rather than as an absence, and the Docker DAEMON is answered by running `docker info` rather than by finding the CLI, which is installed here either way. See [The environment is probed once, not by the agent](#the-environment-is-probed-once-not-by-the-agent). |
+| `src/environment-inventory.ts` | What the MACHINE holds, probed once per job and appended to the agent's system prompt as an ENVIRONMENT INVENTORY block. The only layer that can state it: the backend composes its prompt before a transport is chosen, and the same body serves this image, a deployment's own variant and the developer's laptop under `LOCAL_NATIVE_AGENTS`. Three-valued on purpose, so a probe that failed renders as unknown rather than as an absence; Docker gets FIVE, because a daemon that answers `docker info` is not a daemon that can run a container. See [The environment is probed once, not by the agent](#the-environment-is-probed-once-not-by-the-agent). |
 | `src/agent-shared.ts` | The few helpers every agent MODE shares (effort-report folding, the capability fields forwarded to `runAgentInWorkspace`). |
 | `src/logger.ts`    | Structured logging.                                                                                     |
-| `src/docker-status.ts` | This container's own verdict about its Docker daemon, as recorded by `entrypoint.sh`. Three-valued on purpose: a daemon that FAILED and a daemon nobody asked about are different facts, and only a DECIDED absence refuses a stand-up. See [Local infra: the container's Docker daemon](#local-infra-the-containers-docker-daemon). |
+| `src/docker-status.ts` | This container's own verdict about its Docker daemon, as recorded by `entrypoint.sh`. Three-valued on purpose: a daemon that FAILED and a daemon nobody asked about are different facts, and only a DECIDED negative refuses a stand-up. See [Local infra: the container's Docker daemon](#local-infra-the-containers-docker-daemon). |
+| `src/docker-capability.ts` | Whether the daemon can RUN A CONTAINER, which is the fact every caller wanted and `docker info` does not answer. Loads a one-layer image built in-process and runs it; `usable` / `unusable` / `unknown`, and only the container RUN may produce the middle one, so a bug in the platform's own machinery says "could not tell" rather than condemning a working daemon. Memoised per container for a positive, re-measured for a negative. |
+| `src/docker-probe-image.ts` | The one-layer docker-archive that check loads, assembled here from a statically linked binary already in the image, so the whole thing is local: no registry, no network, no second image. Pure. |
 | `src/agent-env.ts` | The env for anything the harness spawns into the agent's CHECKOUT: its own environment minus the variables that are facts about the HARNESS. Today that is `NODE_ENV` (the harness runs in production mode, and an inherited `NODE_ENV=production` makes npm omit devDependencies in a checkout that never asked for it) and `PORT` (the port this harness is listening on, so a service that reads it would bind the one address in the container's network namespace that is already taken). |
 
 ## Runner lifecycle knobs
@@ -468,6 +495,7 @@ runner):
 | `HARNESS_TRANSCRIPT_ROOT`   | `<tmpdir>/cf-agent-transcripts` | Where retained session transcripts are moved to (one dir per run). Meaningful only on a reused (warm-pool) container; a per-run container is torn down with the job. The TTL sweep deletes only dirs it created (each carries a `.cf-retained` marker), so pointing this at a shared directory never touches unrelated content, though a dedicated dir is still recommended. An override on a different filesystem than the config home falls back to copy-then-remove. |
 | `HARNESS_DOCKER_READY_TIMEOUT_SECONDS` | `60` | How long `entrypoint.sh` waits for the container's Docker daemon before recording it unavailable. Only a HUNG daemon pays this in full: the wait ends early both when the socket answers and when the daemon process is gone. It runs in the BACKGROUND, so it never delays the container's boot. |
 | `HARNESS_DOCKER_STATUS_FILE` | `/tmp/harness-docker-status.json` | Where that verdict is recorded. `entrypoint.sh` writes it and the harness reads it, so an override must be set for BOTH (they share one process env). |
+| `HARNESS_DOCKER_PROBE_BINARY` | `/bin/busybox` | The statically linked binary the platform builds its one-layer probe image from, for the check that answers whether this daemon can RUN a container. Only an image variant that ships it elsewhere needs this. Absent is a supported answer, not a failure: the check then reports that it could not be carried out, which is what the native host transport gets on a developer laptop. |
 
 ## Build / test
 

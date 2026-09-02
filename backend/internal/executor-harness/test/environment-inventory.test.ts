@@ -12,12 +12,16 @@ import {
   type ProbeRunner,
 } from '../src/environment-inventory.js'
 import type { Logger } from '../src/logger.js'
+import type { DockerWorkload } from '../src/docker-capability.js'
 import { DEFAULT_HARNESS_PORT, harnessListenPort } from '../src/harness-port.js'
 
 // The block the harness appends to every agent's system prompt: what this machine HAS, so no
 // agent pays to find out. The property the whole thing turns on is that its three answers stay
 // three: a failed probe may never render as an absence, because "python3 is not installed" and
 // "we could not tell whether python3 is installed" lead an agent to opposite next moves.
+//
+// Docker has FIVE, for the same reason one level in: a daemon that answers is not a daemon that
+// works, and the block used to state the second off the first (issue #2120).
 
 /** A runner answering from a table, so every branch is drivable without the real binaries. */
 function fakeRunner(table: Record<string, ProbeResult>): ProbeRunner {
@@ -28,6 +32,24 @@ function fakeRunner(table: Record<string, ProbeResult>): ProbeRunner {
 }
 
 const RAN = (output: string): ProbeResult => ({ outcome: 'ran', exitCode: 0, output })
+
+/**
+ * Workload answers, injected into every pass that reaches a reachable daemon.
+ *
+ * Injected rather than defaulted because the real one starts a container: a suite that let it run
+ * would grade the machine it happens to run on, which is the failure mode this whole file exists
+ * to close. `ranAContainer` is the neutral one, used wherever the case under test is about the
+ * REACHABILITY probe and not about what the daemon can then do.
+ */
+const ranAContainer = async (): Promise<DockerWorkload> => ({ status: 'usable' })
+const ranNothing = async (): Promise<DockerWorkload> => ({
+  status: 'unusable',
+  detail: 'failed to mount overlay: invalid argument',
+})
+const couldNotTell = async (): Promise<DockerWorkload> => ({
+  status: 'unknown',
+  reason: 'the platform ships no probe payload here',
+})
 
 describe('classifying one probe', () => {
   it('reads a clean exit as installed, with the version off the banner', () => {
@@ -123,7 +145,7 @@ describe('reading the Windows `where` oracle', () => {
 
 describe('probing the machine', () => {
   /** No daemon configured and no waiting, so a case says which branch it is testing. */
-  const noDaemon = { daemonExpected: false, sleep: async () => {} }
+  const noDaemon = { daemonExpected: false, sleep: async () => {}, workload: ranAContainer }
 
   it('reports no daemon when the CLI is not there, having asked docker itself', async () => {
     // The CLI's absence is not consulted through the tool list any more: `docker info` returning
@@ -150,7 +172,7 @@ describe('probing the machine', () => {
       }),
       noDaemon,
     )
-    expect(inventory.dockerDaemon).toEqual({ status: 'present', version: '28.0.1' })
+    expect(inventory.dockerDaemon).toEqual({ status: 'usable', server: '28.0.1' })
   })
 
   it('does not read a trimmed probe list as an absent daemon', async () => {
@@ -163,7 +185,36 @@ describe('probing the machine', () => {
       noDaemon,
     )
     expect(inventory.tools.some((t) => t.name === 'docker')).toBe(true)
-    expect(inventory.dockerDaemon.status).toBe('present')
+    expect(inventory.dockerDaemon.status).toBe('usable')
+  })
+
+  it('splits a reachable daemon by what a real container did on it', async () => {
+    // The defect this file is about. `docker info` exiting 0 proves a daemon ANSWERS; a rootless
+    // daemon nested in a sandbox answers throughout while no image layer can be mounted.
+    const reachable = fakeRunner({ 'docker info --format {{.ServerVersion}}': RAN('29.7.2') })
+    expect(
+      (await probeEnvironment(reachable, { ...noDaemon, workload: ranNothing })).dockerDaemon,
+    ).toEqual({
+      status: 'unusable',
+      server: '29.7.2',
+      detail: 'failed to mount overlay: invalid argument',
+    })
+    expect(
+      (await probeEnvironment(reachable, { ...noDaemon, workload: couldNotTell })).dockerDaemon,
+    ).toEqual({
+      status: 'serving',
+      server: '29.7.2',
+      reason: 'the platform ships no probe payload here',
+    })
+  })
+
+  it('does not start a container for a daemon nothing can reach', async () => {
+    // The workload check costs a container start. There is nothing to start it on when the daemon
+    // is absent or undetermined, and asking anyway would put that cost on the critical path of
+    // every job on a machine with no docker at all.
+    const workload = vi.fn(ranAContainer)
+    await probeEnvironment(async () => ({ outcome: 'missing' }), { ...noDaemon, workload })
+    expect(workload).not.toHaveBeenCalled()
   })
 
   it('runs the tool pass and the daemon pass CONCURRENTLY, not one after the other', async () => {
@@ -186,7 +237,7 @@ describe('probing the machine', () => {
     }
     const inventory = await probeEnvironment(run, noDaemon)
     expect(daemonAsked).toBe(true)
-    expect(inventory.dockerDaemon.status).toBe('present')
+    expect(inventory.dockerDaemon.status).toBe('usable')
   })
 })
 
@@ -203,6 +254,7 @@ describe('a daemon that is still coming up', () => {
     const slept: number[] = []
     const inventory = await probeEnvironment(run, {
       daemonExpected: true,
+      workload: ranAContainer,
       sleep: async (ms) => {
         slept.push(ms)
       },
@@ -230,9 +282,10 @@ describe('a daemon that is still coming up', () => {
     }
     const inventory = await probeEnvironment(run, {
       daemonExpected: true,
+      workload: ranAContainer,
       sleep: async () => {},
     })
-    expect(inventory.dockerDaemon).toEqual({ status: 'present', version: '28.0.1' })
+    expect(inventory.dockerDaemon).toEqual({ status: 'usable', server: '28.0.1' })
   })
 
   it('keeps a plain ABSENCE where no daemon was ever coming', async () => {
@@ -240,7 +293,11 @@ describe('a daemon that is still coming up', () => {
     // rootless daemon at all. Nothing is going to answer, so the definite statement is the honest
     // one, and this is the case the whole `docker info` probe was added for.
     const run = vi.fn<ProbeRunner>(async () => refused)
-    const inventory = await probeEnvironment(run, { daemonExpected: false, sleep: async () => {} })
+    const inventory = await probeEnvironment(run, {
+      daemonExpected: false,
+      workload: ranAContainer,
+      sleep: async () => {},
+    })
     expect(inventory.dockerDaemon).toEqual({ status: 'absent' })
     expect(run.mock.calls.filter((call) => call[1].includes('info'))).toHaveLength(1)
   })
@@ -310,8 +367,9 @@ describe('rendering the inventory', () => {
   })
 
   it('says what a reachable daemon means and what an unreachable one means', () => {
-    const up = renderEnvironmentInventory(inventory([], { status: 'present', version: '28.0.1' }))
+    const up = renderEnvironmentInventory(inventory([], { status: 'usable', server: '28.0.1' }))
     expect(up).toContain('A Docker daemon is reachable (server 28.0.1)')
+    expect(up).toContain('`docker build`, `docker run` and `docker compose up` work here')
 
     const down = renderEnvironmentInventory(inventory([], { status: 'absent' }))
     expect(down).toContain('NO Docker daemon is reachable')
@@ -324,6 +382,49 @@ describe('rendering the inventory', () => {
     )
     expect(unsure).toContain('could not be determined (the probe timed out)')
     expect(unsure).not.toContain('NO Docker daemon')
+  })
+
+  it('claims the commands work ONLY where a container was actually run', () => {
+    // Issue #2120, as one assertion. Every state other than `usable` reaches an agent that was
+    // also told not to spend turns re-checking any of this, so the claim has to be earned by the
+    // one thing that proves it.
+    const claim = '`docker build`, `docker run` and `docker compose up` work here'
+    for (const daemon of [
+      { status: 'unusable' as const, server: '29.7.2', detail: 'failed to mount overlay' },
+      { status: 'serving' as const, server: '29.7.2', reason: 'no payload here' },
+      { status: 'unknown' as const, reason: 'the probe timed out' },
+      { status: 'absent' as const },
+    ]) {
+      expect(renderEnvironmentInventory(inventory([], daemon))).not.toContain(claim)
+    }
+  })
+
+  it('tells an agent to stop, and why, when the daemon cannot run a container', () => {
+    const text = renderEnvironmentInventory(
+      inventory([], {
+        status: 'unusable',
+        server: '29.7.2',
+        detail: 'failed to mount overlayfs: invalid argument',
+      }),
+    )
+    // Reachable AND unusable, both said: an agent told only "no docker" would have watched
+    // `docker info` succeed and concluded the platform was wrong about its own machine.
+    expect(text).toContain('A Docker daemon is reachable (server 29.7.2) but it CANNOT run')
+    expect(text).toContain('failed to mount overlayfs: invalid argument')
+    expect(text).toContain('nothing to retry')
+    expect(text).toMatch(/Produce the Dockerfile or compose file you were asked for/)
+  })
+
+  it('keeps "answered" and "works" apart when the workload check could not be run', () => {
+    // The developer's laptop under LOCAL_NATIVE_AGENTS, where there is no probe payload. Docker
+    // there usually works, so the honest line is one cheap check, not a prohibition.
+    const text = renderEnvironmentInventory(
+      inventory([], { status: 'serving', server: '28.0.1', reason: 'no probe payload here' }),
+    )
+    expect(text).toContain('was NOT established (no probe payload here)')
+    expect(text).toContain('Try it if you need it')
+    expect(text).not.toContain('CANNOT run')
+    expect(text).not.toContain('NO Docker daemon')
   })
 
   it('omits a version where presence is the whole answer', () => {

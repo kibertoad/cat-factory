@@ -26,19 +26,20 @@ const exec = promisify(execFile)
  * still run unit-level tests and report what it could. A no-op for ephemeral / no-infra /
  * no-compose-path runs.
  *
- * A CONFIRMED absence of a Docker daemon short-circuits it: the container's own probe
- * ({@link readDockerStatus}, recorded by `entrypoint.sh`) already knows there is nothing to
- * talk to, so running compose against it would only turn a fact this container holds into a
- * connection error the agent has to interpret. The record then carries `dockerAvailable: false`
- * and the stated cause, which is what makes the Tester step say why it ran no infra instead of
- * looking like a Tester that simply chose not to. Anything OTHER than a confirmed absence
- * attempts as before (`DockerStatus.available` in docker-status.ts states why "undecided" is its
- * own value).
+ * A CONFIRMED absence of a USABLE Docker daemon short-circuits it: the container already knows
+ * compose cannot work, so running it would only turn a fact this container holds into an error
+ * the agent has to interpret. The record then carries `dockerAvailable: false` and the stated
+ * cause, which is what makes the Tester step say why it ran no infra instead of looking like a
+ * Tester that simply chose not to. Anything OTHER than a confirmed negative attempts as before
+ * (`DockerStatus.available` in docker-status.ts states why "undecided" is its own value).
  *
- * "Confirmed", not merely recorded: {@link resolveDockerVerdict} re-checks a recorded absence
- * against a live daemon first, so a warm-pool container whose sidecar came up late is not
- * latched into refusing infra that works. `probe` is that check, injected so the unit suite can
- * state both answers on a machine that has its own daemon either way.
+ * "Confirmed", not merely recorded: {@link resolveDockerVerdict} re-checks the boot record
+ * against a live daemon first, so a warm-pool container whose sidecar came up late is not latched
+ * into refusing infra that works. It re-checks a recorded PRESENCE too, by running an actual
+ * container: a rootless daemon in a sandbox answers `docker version` while being unable to mount
+ * an image, and compose against that one died on a mount error inside the very mechanism that
+ * exists to explain why infra did not come up. `probe` is that check, injected so the unit suite
+ * can state every answer on a machine that has its own daemon either way.
  *
  * Whether it succeeds or fails, the (redacted, bounded) command output is captured into a
  * {@link InfraSetupRecord} returned alongside the prompt `note`, so the backend can surface
@@ -64,7 +65,7 @@ export async function standUpInfra(
   const docker = await resolveDockerVerdict(recorded, probe)
   if (docker.refusal) {
     const note = `the dependencies could not be started: ${docker.refusal}`
-    logger.warn('agent(explore): infra stand-up refused, no docker daemon', {
+    logger.warn('agent(explore): infra stand-up refused, no usable docker daemon', {
       composePath: infra.composePath,
       dockerSource: recorded.source,
       dockerReason: recorded.reason,

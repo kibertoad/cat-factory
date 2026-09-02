@@ -7,6 +7,7 @@ import {
   readDockerStatus,
   resolveDockerVerdict,
 } from '../src/docker-status.js'
+import type { DockerWorkload } from '../src/docker-capability.js'
 
 // The reader for the verdict `entrypoint.sh` records about this container's Docker daemon.
 // The whole value of it is the THREE-valued answer, so most of what is asserted here is that
@@ -117,13 +118,16 @@ describe('describeDockerAbsence', () => {
 })
 
 describe('resolveDockerVerdict', () => {
-  const serving = () => Promise.resolve(true)
-  const dead = () => Promise.resolve(false)
+  const usable = (): Promise<DockerWorkload> => Promise.resolve({ status: 'usable' })
+  const unusable = (): Promise<DockerWorkload> =>
+    Promise.resolve({ status: 'unusable', detail: 'failed to mount overlay: invalid argument' })
+  const undeterminable = (): Promise<DockerWorkload> =>
+    Promise.resolve({ status: 'unknown', reason: 'the docker CLI is not on PATH' })
 
   it('refuses a recorded absence a live daemon does not contradict', async () => {
     const verdict = await resolveDockerVerdict(
       { available: false, source: 'rootless', reason: 'failed', detail: 'rootlesskit: no ip' },
-      dead,
+      undeterminable,
     )
     expect(verdict.available).toBe(false)
     expect(verdict.refusal).toContain('rootlesskit: no ip')
@@ -136,28 +140,58 @@ describe('resolveDockerVerdict', () => {
     // local infra that works, for its whole life.
     const verdict = await resolveDockerVerdict(
       { available: false, source: 'external', reason: 'unreachable' },
-      serving,
+      usable,
     )
     expect(verdict).toEqual({ available: true })
   })
 
   it('leaves an undecided verdict undecided rather than probing it into a refusal', async () => {
-    const probe = vi.fn(dead)
+    const probe = vi.fn(unusable)
     const verdict = await resolveDockerVerdict(
       { available: undefined, source: 'rootless', reason: 'probing' },
       probe,
     )
     expect(verdict).toEqual({ available: undefined })
     // The third value exists so that nothing turns "not decided" into a refusal, and a probe here
-    // is exactly what would.
+    // is exactly what would: the entrypoint's bounded wait may still be running, and a workload
+    // that fails against a half-started daemon says nothing about the next second.
     expect(probe).not.toHaveBeenCalled()
   })
 
-  it('carries a recorded success through without a probe', async () => {
-    const probe = vi.fn(dead)
+  it('refuses a RECORDED SUCCESS whose daemon cannot actually run a container', async () => {
+    // Issue #2120. The entrypoint records `serving` off a socket that answers, and that is the
+    // whole of what it can know. A rootless daemon nested in a sandbox answers throughout while
+    // no image layer can be mounted, so compose against it died on a mount error inside the one
+    // mechanism whose job is to explain why the dependencies did not come up.
+    const verdict = await resolveDockerVerdict(
+      { available: true, source: 'rootless', reason: 'serving' },
+      unusable,
+    )
+    expect(verdict.available).toBe(false)
+    expect(verdict.refusal).toContain('cannot run a container')
+    expect(verdict.refusal).toContain('failed to mount overlay')
+    // Not the absence sentence: an operator sent to restart a daemon that is already serving
+    // would find nothing wrong with it.
+    expect(verdict.refusal).not.toContain('could not start')
+  })
+
+  it('carries a recorded success through when a container runs on it', async () => {
     expect(
-      await resolveDockerVerdict({ available: true, source: 'rootless', reason: 'serving' }, probe),
+      await resolveDockerVerdict(
+        { available: true, source: 'rootless', reason: 'serving' },
+        usable,
+      ),
     ).toEqual({ available: true })
-    expect(probe).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the boot record when the workload check could not be carried out', async () => {
+    // "The check did not run" is a fact about the check. Reading it as a fact about the daemon
+    // would trade the old lie for its mirror image and refuse a stand-up that works.
+    expect(
+      await resolveDockerVerdict(
+        { available: true, source: 'external', reason: 'serving' },
+        undeterminable,
+      ),
+    ).toEqual({ available: true })
   })
 })

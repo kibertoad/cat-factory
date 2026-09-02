@@ -4,13 +4,18 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { standUpInfra } from '../src/infra-standup.js'
 import { silentLogger } from './helpers.js'
+import type { DockerWorkload } from '../src/docker-capability.js'
 
 // The Tester's local docker-compose stand-up against the container's OWN verdict about its Docker
 // daemon. For months the image shipped with no `dockerd` binary at all and this path ran compose
 // anyway, so every local-infra Tester run degraded to a no-infra run whose only trace was a
-// connection error in a prompt note. The stand-up now refuses a DECIDED absence and says why —
-// and, just as importantly, still attempts when nothing has decided (the native host transport
-// runs this harness with no entrypoint to probe, on a machine where Docker usually works).
+// connection error in a prompt note. The stand-up now refuses a DECIDED negative and says why;
+// just as importantly, it still attempts when nothing has decided (the native host transport runs
+// this harness with no entrypoint to probe, on a machine where Docker usually works).
+//
+// "Negative" covers two facts and they are asserted apart: nothing is answering here, and
+// something is answering here that cannot run a container. The second is issue #2120, and the
+// boot record cannot see it at all, because all it ever probed for was a socket.
 
 async function withStatus(contents: string): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), 'cf-standup-status-'))
@@ -27,7 +32,8 @@ const infra = { environment: 'local' as const, composePath: 'docker-compose.yml'
  * on has a working daemon of its own: without it, "the image has no daemon" would be contradicted
  * by the host and the assertions would swap meaning depending on where they ran.
  */
-const noDaemon = () => Promise.resolve(false)
+const noDaemon = (): Promise<DockerWorkload> =>
+  Promise.resolve({ status: 'unknown', reason: 'the docker CLI is not on PATH' })
 
 describe('standUpInfra against the container docker verdict', () => {
   afterEach(() => {
@@ -79,13 +85,30 @@ describe('standUpInfra against the container docker verdict', () => {
     expect(result).toEqual({ started: false })
   })
 
+  it('refuses a daemon that is serving but cannot run a container, and says which', async () => {
+    // Issue #2120. The boot record says `serving`, because a socket answered, and that is all it
+    // can know. This daemon then cannot mount an image, so compose died on a mount error inside
+    // the one mechanism whose job is to explain why the dependencies did not come up.
+    await withStatus('{"available":true,"source":"rootless","reason":"serving"}')
+    const result = await standUpInfra(tmpdir(), infra, undefined, silentLogger, () =>
+      Promise.resolve({ status: 'unusable', detail: 'failed to mount overlay: invalid argument' }),
+    )
+    expect(result.started).toBe(false)
+    expect(result.record?.dockerAvailable).toBe(false)
+    expect(result.note).toContain('cannot run a container')
+    expect(result.note).toContain('failed to mount overlay')
+    // The daemon IS reachable, so the absence sentence would send a human to fix a daemon that
+    // is running perfectly well.
+    expect(result.note).not.toContain('could not start')
+  })
+
   it('attempts anyway when the recorded absence is contradicted by a live daemon', async () => {
     // A warm-pool container whose sidecar took longer to come up than the entrypoint's bounded
     // wait allows. The boot record still says unreachable; the daemon is serving. Refusing off
     // the record alone would deny this container local infra for the rest of its life.
     await withStatus('{"available":false,"source":"external","reason":"unreachable"}')
     const result = await standUpInfra(tmpdir(), infra, undefined, silentLogger, () =>
-      Promise.resolve(true),
+      Promise.resolve({ status: 'usable' }),
     )
     // The compose file does not exist, so the attempt fails. The point is that it was MADE, and
     // that the record claims the daemon it actually reached.
