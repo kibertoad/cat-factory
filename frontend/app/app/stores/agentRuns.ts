@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type {
+  AdoptionReviewInput,
   AgentFailure,
   AgentRunKind,
   BootstrapJob,
@@ -158,6 +159,34 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
   })
 
   /**
+   * The parked monorepo bootstrap for a block, when it is waiting on an adoption review.
+   *
+   * Read off the stored run rather than off `byBlock`, because the review needs the PLAN and
+   * `byBlock` is deliberately the coarse cross-flow summary (status + failure + progress) that a
+   * card renders. Newest-first, so a retried run's park wins over a stale one's.
+   */
+  function awaitingReview(blockId: string): BootstrapJob | undefined {
+    return bootstrapJobs.value.find(
+      (job) => job.blockId === blockId && job.status === 'awaiting_review',
+    )
+  }
+
+  /**
+   * Settle a parked monorepo bootstrap's adoption decisions and resume the run.
+   *
+   * The returned job is patched in immediately (it comes back `running`/`apply`), so the board
+   * card flips out of "waiting for you" on the response rather than on the next event: the
+   * reviewer just acted, and a card that still says it is waiting for them is the one state this
+   * whole surface cannot afford to show.
+   */
+  async function submitAdoptionReview(jobId: string, input: AdoptionReviewInput) {
+    const workspaceId = useWorkspaceStore().requireId()
+    const job = await api.submitAdoptionReview(workspaceId, jobId, input)
+    upsertBootstrap(job)
+    return job
+  }
+
+  /**
    * Retry a failed run (bootstrap or execution) via the unified endpoint, then
    * refresh the snapshot so both stores rehydrate — the card flips from failed
    * back to "working…" as a fresh run is dispatched server-side.
@@ -192,6 +221,8 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
 
   return {
     bootstrapJobs,
+    awaitingReview,
+    submitAdoptionReview,
     hydrate,
     upsertBootstrap,
     envConfigRepairJobs,

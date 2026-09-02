@@ -1,4 +1,5 @@
 import type {
+  AdoptionReviewInput,
   Block,
   BlockType,
   BootstrapFailure,
@@ -6,6 +7,7 @@ import type {
   BootstrapJob,
   BootstrapRepoInput,
   CreateReferenceArchitectureInput,
+  MonorepoBootstrapRef,
   ReferenceArchitecture,
   StepSubtasks,
   UpdateReferenceArchitectureInput,
@@ -24,21 +26,37 @@ import type {
   ReferenceArchitectureRecord,
   ReferenceArchitectureRepository,
 } from '@cat-factory/kernel'
-import type { RepoBootstrapper } from '@cat-factory/kernel'
+import type { MonorepoBootstrapLeg, RepoBootstrapper } from '@cat-factory/kernel'
 import type { BootstrapRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
+import type { Logger } from '@cat-factory/kernel'
 import {
   assertFound,
   ConflictError,
   getErrorMessage,
   isDispatchFailure,
+  renderAdoptionBrief,
+  resolveAdoptionReview,
   sameSubtasks,
 } from '@cat-factory/kernel'
 import { registerServiceForFrame, requireWorkspace } from '@cat-factory/kernel'
+import { monorepoBootstrapPrTitle } from '@cat-factory/agents'
+import {
+  MonorepoBootstrapController,
+  type MonorepoBootstrapDeps,
+} from './MonorepoBootstrapController.js'
 
-/** The poll's terminal-ness, returned to the durable driver so it knows when to stop. */
+/**
+ * The poll's terminal-ness, returned to the durable driver so it knows when to stop.
+ *
+ * `awaiting_review` is a STOP that is not an end: the monorepo flow's survey has parked the run
+ * on a human decision, so the driver returns (a park can last days, and holding a Workflows
+ * instance or a pg-boss job open across it buys nothing) and the review's own resume starts a
+ * fresh drive. Kept distinct from `done` because the run has produced no service yet: a caller
+ * that collapsed the two would report a bootstrap as finished with nothing committed.
+ */
 export interface BootstrapPollResult {
-  state: 'running' | 'done' | 'failed'
+  state: 'running' | 'awaiting_review' | 'done' | 'failed'
   /** Present when `state === 'failed'`. */
   error?: string
 }
@@ -85,6 +103,14 @@ export interface BootstrapServiceDependencies {
    * blueprint-only pipeline; absent in tests / when blueprints aren't configured.
    */
   onBootstrapSucceeded?: (workspaceId: string, blockId: string) => Promise<void>
+  /**
+   * The monorepo flow's collaborators (repo projection, checkout-free reads, the adoption
+   * advisor). Absent ⇒ a request naming a `monorepo` target is refused; a plain new-repo
+   * bootstrap is unaffected, which is what keeps the two flows independently wireable.
+   */
+  monorepo?: Omit<MonorepoBootstrapDeps, 'clock' | 'logger'>
+  /** Facade logger; the survey's reads and drops are otherwise unowned. */
+  logger?: Logger
 }
 
 function toReferenceArchitecture(record: ReferenceArchitectureRecord): ReferenceArchitecture {
@@ -116,8 +142,32 @@ function toBootstrapJob(record: BootstrapJobRecord): BootstrapJob {
     subtasks: record.subtasks,
     error: record.error,
     failure: record.failure,
+    monorepo: record.monorepo,
+    phase: record.phase,
+    adoptionPlan: record.adoptionPlan,
+    adoptionReview: record.adoptionReview,
+    prUrl: record.prUrl,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
+  }
+}
+
+/** The fields every new bootstrap run starts with; the monorepo half overrides what it owns. */
+function newRunDefaults(
+  id: string,
+): Pick<
+  BootstrapJobRecord,
+  'monorepo' | 'phase' | 'driveId' | 'adoptionPlan' | 'adoptionReview' | 'prUrl'
+> {
+  return {
+    monorepo: null,
+    phase: null,
+    // A single-drive run keys its driver on its own id, which is what every existing bootstrap
+    // did before the monorepo flow needed a second drive.
+    driveId: id,
+    adoptionPlan: null,
+    adoptionReview: null,
+    prUrl: null,
   }
 }
 
@@ -127,7 +177,16 @@ function composeInstructions(defaults: string, extra: string): string {
 }
 
 export class BootstrapService {
-  constructor(private readonly deps: BootstrapServiceDependencies) {}
+  /** The monorepo flow's decisions; a plain new-repo run never reaches it. */
+  private readonly monorepo: MonorepoBootstrapController
+
+  constructor(private readonly deps: BootstrapServiceDependencies) {
+    this.monorepo = new MonorepoBootstrapController({
+      ...deps.monorepo,
+      clock: deps.clock,
+      logger: deps.logger,
+    })
+  }
 
   /** True when a bootstrap run can actually be performed (the bootstrapper is wired). */
   get canBootstrap(): boolean {
@@ -290,9 +349,18 @@ export class BootstrapService {
       reference?.defaultInstructions ?? '',
       input.instructions,
     )
+    // Pre-flight the monorepo BEFORE any row is written, the same ordering the new-repo path
+    // gets from dispatching before it creates a frame: a refused target (unlinked repo, a
+    // directory that already holds a service) leaves neither a job nor a board card behind.
+    const monorepo = input.monorepo
+      ? await this.monorepo.resolveTarget(bootstrapper, workspaceId, input.monorepo)
+      : null
+
     const now = this.deps.clock.now()
+    const id = this.deps.idGenerator.next('boot')
     const record: BootstrapJobRecord = {
-      id: this.deps.idGenerator.next('boot'),
+      ...newRunDefaults(id),
+      id,
       workspaceId,
       referenceArchitectureId: reference?.id ?? null,
       referenceArchitectureName: reference?.name ?? null,
@@ -305,10 +373,31 @@ export class BootstrapService {
       subtasks: null,
       error: null,
       failure: null,
+      ...(monorepo ? { monorepo: monorepo.ref, phase: 'survey' as const } : {}),
       createdAt: now,
       updatedAt: now,
     }
     await this.deps.bootstrapJobRepository.insert(record)
+
+    // A monorepo run dispatches NOTHING yet. Its first phase is the survey, which is a bounded
+    // set of checkout-free reads plus one inline model call (no container, no clone), so the
+    // durable driver runs it on its first poll and the request returns immediately, exactly as
+    // the container path does. The frame is materialised now rather than after a dispatch,
+    // because the pre-flight above has already taken every refusal this phase can raise.
+    if (monorepo) {
+      const frame = await this.createServiceFrame(
+        workspaceId,
+        input.repoName,
+        input.type ?? 'service',
+        monorepo.ref,
+      )
+      const started = { blockId: frame.id, updatedAt: this.deps.clock.now() }
+      await this.deps.bootstrapJobRepository.update(workspaceId, record.id, started)
+      const job = toBootstrapJob({ ...record, ...started })
+      await this.deps.bootstrapRunner?.startRun(workspaceId, record.id, record.driveId)
+      await this.emitBootstrap(workspaceId, job, frame)
+      return job
+    }
 
     // Dispatch the container first: its pre-flight (target exists, reachable,
     // empty-or-boilerplate) is the gate that most runs fail on, so failing here
@@ -317,6 +406,7 @@ export class BootstrapService {
       await bootstrapper.startBootstrap({
         workspaceId,
         jobId: record.id,
+        containerJobId: record.driveId,
         referenceRepo: reference
           ? { owner: reference.repoOwner, name: reference.repoName }
           : undefined,
@@ -343,7 +433,7 @@ export class BootstrapService {
       }
       await this.deps.bootstrapJobRepository.update(workspaceId, record.id, patch)
       // A failed dispatch may still have spun a container up; reclaim it best-effort.
-      await this.stopContainer(workspaceId, record.id)
+      await this.stopContainer(workspaceId, record.id, record.driveId)
       const failed = toBootstrapJob({ ...record, ...patch })
       await this.emitBootstrap(workspaceId, failed, null)
       return failed
@@ -362,7 +452,7 @@ export class BootstrapService {
 
     // Hand off the long poll loop to the durable driver (the worker's
     // BootstrapWorkflow). Without a runner (tests) the caller polls directly.
-    await this.deps.bootstrapRunner?.startRun(workspaceId, record.id)
+    await this.deps.bootstrapRunner?.startRun(workspaceId, record.id, record.driveId)
     await this.emitBootstrap(workspaceId, job, frame)
     return job
   }
@@ -412,8 +502,10 @@ export class BootstrapService {
     }
 
     const now = this.deps.clock.now()
+    const id = this.deps.idGenerator.next('boot')
     const record: BootstrapJobRecord = {
-      id: this.deps.idGenerator.next('boot'),
+      ...newRunDefaults(id),
+      id,
       workspaceId,
       referenceArchitectureId: previous.referenceArchitectureId,
       referenceArchitectureName: previous.referenceArchitectureName,
@@ -428,10 +520,43 @@ export class BootstrapService {
       subtasks: null,
       error: null,
       failure: null,
+      // A monorepo retry carries the SETTLED review forward, and the plan it was settled
+      // against with it. Re-surveying would throw away a decision a human already made and ask
+      // them for it again, which is the one thing a retry must not do: the failure being
+      // retried is a container fault, not a change of mind. The phase is preserved too: a run
+      // that failed during the survey retries the survey.
+      monorepo: previous.monorepo,
+      phase: previous.phase,
+      adoptionPlan: previous.adoptionPlan,
+      adoptionReview: previous.adoptionReview,
       createdAt: now,
       updatedAt: now,
     }
     await this.deps.bootstrapJobRepository.insert(record)
+
+    // A monorepo retry re-enters at its own phase rather than dispatching: a survey retry
+    // re-runs the reads on the next poll, and an apply retry re-dispatches through the same
+    // path the review's resume uses, so neither has a second copy of the dispatch here.
+    if (record.monorepo) {
+      const frame = previous.blockId
+        ? await this.markFrame(
+            workspaceId,
+            previous.blockId,
+            'in_progress',
+            'Bootstrapping into the monorepo… retrying after a failed run.',
+          )
+        : null
+      const blockId = frame?.id ?? previous.blockId
+      await this.deps.bootstrapJobRepository.update(workspaceId, record.id, { blockId })
+      const resumed = { ...record, blockId }
+      if (record.phase === 'apply' && record.adoptionReview) {
+        return await this.dispatchApply(workspaceId, resumed, record.adoptionReview)
+      }
+      await this.deps.bootstrapRunner?.startRun(workspaceId, record.id, record.driveId)
+      const job = toBootstrapJob(resumed)
+      await this.emitBootstrap(workspaceId, job, frame)
+      return job
+    }
 
     // Dispatch a fresh container under the new job id (description/private aren't
     // forwarded — the target repo already exists — so defaults are harmless).
@@ -439,6 +564,7 @@ export class BootstrapService {
       await bootstrapper.startBootstrap({
         workspaceId,
         jobId: record.id,
+        containerJobId: record.driveId,
         referenceRepo,
         target: { name: record.repoName, description: '', private: true },
         instructions: record.instructions,
@@ -453,7 +579,7 @@ export class BootstrapService {
         updatedAt: this.deps.clock.now(),
       }
       await this.deps.bootstrapJobRepository.update(workspaceId, record.id, patch)
-      await this.stopContainer(workspaceId, record.id)
+      await this.stopContainer(workspaceId, record.id, record.driveId)
       // Re-mark the reused frame blocked (it briefly belonged to this attempt).
       const block = previous.blockId
         ? await this.markFrame(
@@ -486,7 +612,7 @@ export class BootstrapService {
     await this.deps.bootstrapJobRepository.update(workspaceId, record.id, started)
     const job = toBootstrapJob({ ...record, ...started })
 
-    await this.deps.bootstrapRunner?.startRun(workspaceId, record.id)
+    await this.deps.bootstrapRunner?.startRun(workspaceId, record.id, record.driveId)
     await this.emitBootstrap(workspaceId, job, frame)
     return job
   }
@@ -507,11 +633,23 @@ export class BootstrapService {
     )
     if (record.status === 'succeeded') return { state: 'done' }
     if (record.status === 'failed') return { state: 'failed', error: record.error ?? undefined }
+    if (record.status === 'awaiting_review') return { state: 'awaiting_review' }
+
+    // The monorepo flow's SURVEY phase has no container to poll: it reads both repositories
+    // through the checkout-free port and asks a model to judge. Doing it here rather than in
+    // `bootstrap()` keeps the start request fast and puts the work on the durable driver, which
+    // is what makes it survive an eviction. Re-entering an already-surveyed run is a no-op
+    // (the stored plan is the claim), so the driver's retries and replays are safe.
+    if (record.phase === 'survey') return await this.runSurvey(workspaceId, record)
 
     const bootstrapper = this.deps.repoBootstrapper
     if (!bootstrapper) throw new Error('Repository bootstrapping is not configured')
 
-    const update = await bootstrapper.pollBootstrap({ workspaceId, jobId })
+    const update = await bootstrapper.pollBootstrap({
+      workspaceId,
+      jobId,
+      containerJobId: record.driveId,
+    })
 
     if (update.state === 'running') {
       // Only persist + push when the counts actually changed, to avoid a write +
@@ -541,7 +679,7 @@ export class BootstrapService {
       await this.deps.bootstrapJobRepository.update(workspaceId, jobId, patch)
       // Reclaim the per-run container so a faulted/leaked instance doesn't idle
       // until its sleep timer (best-effort; an evicted container is already gone).
-      await this.stopContainer(workspaceId, jobId)
+      await this.stopContainer(workspaceId, jobId, record.driveId)
       const block = await this.markFrame(
         workspaceId,
         record.blockId,
@@ -551,6 +689,11 @@ export class BootstrapService {
       await this.emitBootstrap(workspaceId, toBootstrapJob({ ...record, ...patch }), block)
       return { state: 'failed', error: message }
     }
+
+    // Done on a MONOREPO run: the deliverable is a pull request against a repository that
+    // already exists, so there is no repo to create, project or name: the frame is bound to the
+    // monorepo it was pre-flighted against, pinned to its directory.
+    if (record.monorepo) return await this.finishMonorepoApply(workspaceId, record, update.prUrl)
 
     // Done: record the repo, link it to the frame (so dropped tasks target it),
     // and flip the frame to a ready, droppable service.
@@ -566,7 +709,7 @@ export class BootstrapService {
     // Reclaim the per-run container on success too (the failure path above already
     // does): a bootstrapped repo otherwise leaves its container to idle out its
     // sleep timer. Best-effort — an evicted/auto-slept container is already gone.
-    await this.stopContainer(workspaceId, jobId)
+    await this.stopContainer(workspaceId, jobId, record.driveId)
     if (record.blockId) {
       // Best-effort: a failure to link must not flip a successful run to failed —
       // the repo is bootstrapped; the projection reconciles on the next sync. Project
@@ -582,7 +725,7 @@ export class BootstrapService {
           })
         }
       } catch {
-        // swallow — see above
+        // swallow: see above
       }
     }
     const block = await this.markFrame(
@@ -603,7 +746,7 @@ export class BootstrapService {
       try {
         await this.deps.onBootstrapSucceeded?.(workspaceId, record.blockId)
       } catch {
-        // swallow — see above
+        // swallow: see above
       }
     }
     return { state: 'done' }
@@ -632,8 +775,8 @@ export class BootstrapService {
 
     // Kill the per-run container first, then the durable driver, so neither is left
     // running once the job is marked terminal. Both are best-effort/idempotent.
-    await this.stopContainer(workspaceId, jobId)
-    await this.deps.bootstrapRunner?.cancelRun(workspaceId, jobId)
+    await this.stopContainer(workspaceId, jobId, record.driveId)
+    await this.deps.bootstrapRunner?.cancelRun(workspaceId, record.driveId)
 
     const message = opts.reason ?? 'Stopped by the user.'
     const patch = {
@@ -653,6 +796,302 @@ export class BootstrapService {
     return toBootstrapJob({ ...record, ...patch })
   }
 
+  /**
+   * The durable-driver key a run is CURRENTLY driven under, for the stale-run sweeper.
+   *
+   * The sweeper reads `agent_runs` generically and only ever learns a run's id, but a monorepo
+   * run in its apply phase is driven under a different key, so probing and re-driving it by run
+   * id would find no instance and finalize a perfectly healthy run as an orphan. Falls back to
+   * the run id for a run it cannot read, which is the key every single-drive run uses.
+   */
+  async driveIdOf(workspaceId: string, jobId: string): Promise<string> {
+    const record = await this.deps.bootstrapJobRepository.get(workspaceId, jobId)
+    return record?.driveId ?? jobId
+  }
+
+  // ---- the monorepo flow's three moves ------------------------------------
+
+  /**
+   * The SURVEY phase, run on the durable driver's first poll: read the monorepo and the
+   * reference template, ask the advisor what the new service should adopt from each, and park
+   * the run on the human decision.
+   *
+   * It never fails the run. A missing model, an unreadable repository or an unusable reply all
+   * park with a plan recorded `unavailable` and the cause, because the DECISION is the point of
+   * the phase and the suggestion is only an aid: a human bootstrapping into a monorepo on a
+   * deployment with no model still gets to make the call, unaided and told so.
+   *
+   * Idempotent by CONTENT: a run that already carries a plan re-parks rather than paying for a
+   * second survey, so a replayed step or a sweeper re-drive cannot spend a second model call.
+   */
+  private async runSurvey(
+    workspaceId: string,
+    record: BootstrapJobRecord,
+  ): Promise<BootstrapPollResult> {
+    if (record.adoptionPlan) {
+      // The plan is the claim, and it is already made. Bring the row's status in line with it
+      // (a driver that died between producing the plan and recording the park re-enters here)
+      // and stop.
+      if (record.status !== 'awaiting_review') {
+        await this.park(workspaceId, record, record.adoptionPlan)
+      }
+      return { state: 'awaiting_review' }
+    }
+    const reference = record.referenceArchitectureId
+      ? await this.deps.referenceArchitectureRepository.get(
+          workspaceId,
+          record.referenceArchitectureId,
+        )
+      : null
+    const plan = await this.monorepo.buildAdoptionPlan(workspaceId, record, reference)
+    await this.park(workspaceId, record, plan)
+    return { state: 'awaiting_review' }
+  }
+
+  /** Record the plan, flip the run + its frame to "waiting for you", and announce it. */
+  private async park(
+    workspaceId: string,
+    record: BootstrapJobRecord,
+    adoptionPlan: BootstrapJobRecord['adoptionPlan'],
+  ): Promise<void> {
+    const patch = {
+      status: 'awaiting_review' as const,
+      adoptionPlan,
+      updatedAt: this.deps.clock.now(),
+    }
+    await this.deps.bootstrapJobRepository.update(workspaceId, record.id, patch)
+    const block = await this.markFrame(
+      workspaceId,
+      record.blockId,
+      'blocked',
+      adoptionPlan?.status === 'ready'
+        ? `Waiting for review: which conventions this service should adopt from ${record.monorepo?.repoOwner}/${record.monorepo?.repoName} and which to keep from the template.`
+        : `Waiting for review: the platform could not produce an adoption suggestion, so the decisions are yours to make before the service is written.`,
+    )
+    await this.emitBootstrap(workspaceId, toBootstrapJob({ ...record, ...patch }), block)
+  }
+
+  /**
+   * Settle a parked run's adoption decisions and resume it.
+   *
+   * The refusals are the interesting half. A run that is not parked is a 409 naming where it
+   * actually is (the reviewer is looking at a stale tab, and applying their answers to a run
+   * that has moved on would build under a review given for a different proposal), and an
+   * incomplete or mismatched set of choices is a 422 from `resolveAdoptionReview`, never a
+   * silent fill from the recommendation, which would erase the difference between a human
+   * agreeing with the suggestion and never having read it.
+   */
+  async submitAdoptionReview(
+    workspaceId: string,
+    jobId: string,
+    input: AdoptionReviewInput,
+    reviewedByUserId: string | null,
+  ): Promise<BootstrapJob> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const record = assertFound(
+      await this.deps.bootstrapJobRepository.get(workspaceId, jobId),
+      'Bootstrap job',
+      jobId,
+      { reason: 'bootstrap_job_not_found' },
+    )
+    if (record.status !== 'awaiting_review') {
+      throw new ConflictError(
+        `This bootstrap is not waiting for an adoption review (it is '${record.status}').`,
+        'bootstrap_not_awaiting_review',
+        { status: record.status },
+      )
+    }
+    if (!record.monorepo || !record.adoptionPlan) {
+      throw new ConflictError(
+        'This bootstrap has no adoption plan recorded, so there is nothing to approve.',
+        'adoption_plan_unavailable',
+        { unavailableReason: null },
+      )
+    }
+    const resolved = resolveAdoptionReview(record.adoptionPlan, input.choices, {
+      reviewedByUserId,
+      reviewedAt: this.deps.clock.now(),
+      notes: input.notes,
+    })
+    return await this.dispatchApply(workspaceId, record, resolved)
+  }
+
+  /**
+   * The APPLY phase: dispatch the container that writes the service into the monorepo under the
+   * settled decisions and opens the pull request.
+   *
+   * Its own drive id, because this is the run's SECOND durable drive: the survey's already went
+   * terminal, and neither facade's driver can be re-keyed on a key that has (a Workflows
+   * instance id cannot be recreated; a pg-boss singleton would dedupe against the finished job).
+   */
+  private async dispatchApply(
+    workspaceId: string,
+    record: BootstrapJobRecord,
+    resolved: NonNullable<BootstrapJobRecord['adoptionReview']>,
+  ): Promise<BootstrapJob> {
+    const bootstrapper = this.deps.repoBootstrapper
+    const monorepo = record.monorepo
+    if (!bootstrapper || !monorepo) {
+      throw new Error('Repository bootstrapping is not configured')
+    }
+    const reference = record.referenceArchitectureId
+      ? await this.deps.referenceArchitectureRepository.get(
+          workspaceId,
+          record.referenceArchitectureId,
+        )
+      : null
+    const branch = this.monorepo.branchFor(record.id)
+    const driveId = `${record.id}:apply`
+    const leg: MonorepoBootstrapLeg = {
+      repoGithubId: monorepo.repoGithubId,
+      owner: monorepo.repoOwner,
+      name: monorepo.repoName,
+      directory: monorepo.directory,
+      branch,
+      pr: {
+        title: monorepoBootstrapPrTitle(record.repoName, monorepo.directory),
+        body: renderAdoptionBrief(resolved, monorepo.directory),
+      },
+    }
+    const started: MonorepoBootstrapRef = { ...monorepo, branch }
+    const patch = {
+      status: 'running' as const,
+      phase: 'apply' as const,
+      driveId,
+      adoptionReview: resolved,
+      monorepo: started,
+      error: null,
+      failure: null,
+      updatedAt: this.deps.clock.now(),
+    }
+    // Record the settled review BEFORE dispatching. The decisions are the human's, and losing
+    // them to a dispatch failure would send them back to a review they already gave; with them
+    // committed first, a retry re-dispatches under the same decisions.
+    await this.deps.bootstrapJobRepository.update(workspaceId, record.id, patch)
+
+    try {
+      await bootstrapper.startBootstrap({
+        workspaceId,
+        jobId: record.id,
+        containerJobId: driveId,
+        referenceRepo: reference
+          ? { owner: reference.repoOwner, name: reference.repoName }
+          : undefined,
+        target: { name: record.repoName, description: '', private: true },
+        monorepo: leg,
+        // The agent's brief is the run's own instructions PLUS the settled decisions, rendered
+        // as instructions rather than as context: an agent told only what the areas are decides
+        // them again, which is precisely what the review exists to prevent.
+        instructions: `${record.instructions}\n\n${renderAdoptionBrief(
+          resolved,
+          monorepo.directory,
+        )}`,
+      })
+    } catch (error) {
+      const message = getErrorMessage(error)
+      const kind: BootstrapFailureKind = isDispatchFailure(error) ? 'dispatch' : 'preflight'
+      const failed = {
+        status: 'failed' as const,
+        error: message,
+        failure: this.buildFailure(kind, message, null, record.subtasks),
+        updatedAt: this.deps.clock.now(),
+      }
+      await this.deps.bootstrapJobRepository.update(workspaceId, record.id, failed)
+      await this.stopContainer(workspaceId, record.id, driveId)
+      const block = await this.markFrame(
+        workspaceId,
+        record.blockId,
+        'blocked',
+        `Bootstrap failed: ${message}`,
+      )
+      const job = toBootstrapJob({ ...record, ...patch, ...failed })
+      await this.emitBootstrap(workspaceId, job, block)
+      return job
+    }
+
+    const frame = await this.markFrame(
+      workspaceId,
+      record.blockId,
+      'in_progress',
+      `Writing ${monorepo.directory} into ${monorepo.repoOwner}/${monorepo.repoName}…`,
+    )
+    await this.deps.bootstrapRunner?.startRun(workspaceId, record.id, driveId)
+    const job = toBootstrapJob({ ...record, ...patch })
+    await this.emitBootstrap(workspaceId, job, frame)
+    return job
+  }
+
+  /**
+   * Finish a monorepo apply: bind the frame's service to the monorepo AT ITS DIRECTORY and
+   * report the pull request.
+   *
+   * A completed apply with NO pull request is a failure, not a success with a null field: the
+   * deliverable of a monorepo bootstrap is the PR (nothing is merged for the reviewer), so a run
+   * that reports done without one has left the work somewhere nobody can find it. Failing here
+   * says that, where marking the frame ready would claim a service that does not exist.
+   */
+  private async finishMonorepoApply(
+    workspaceId: string,
+    record: BootstrapJobRecord,
+    prUrl: string | undefined,
+  ): Promise<BootstrapPollResult> {
+    const monorepo = record.monorepo
+    await this.stopContainer(workspaceId, record.id, record.driveId)
+    if (!monorepo || !prUrl) {
+      const message =
+        'The bootstrap agent finished without opening a pull request, so the new service was not delivered anywhere.'
+      const patch = {
+        status: 'failed' as const,
+        error: message,
+        failure: this.buildFailure('agent', message, null, record.subtasks),
+        updatedAt: this.deps.clock.now(),
+      }
+      await this.deps.bootstrapJobRepository.update(workspaceId, record.id, patch)
+      const blocked = await this.markFrame(
+        workspaceId,
+        record.blockId,
+        'blocked',
+        `Bootstrap failed: ${message}`,
+      )
+      await this.emitBootstrap(workspaceId, toBootstrapJob({ ...record, ...patch }), blocked)
+      return { state: 'failed', error: message }
+    }
+
+    const patch = {
+      status: 'succeeded' as const,
+      repoOwner: monorepo.repoOwner,
+      repoUrl: prUrl,
+      prUrl,
+      updatedAt: this.deps.clock.now(),
+    }
+    await this.deps.bootstrapJobRepository.update(workspaceId, record.id, patch)
+    if (record.blockId) {
+      // Best-effort, as on the new-repo path: the pull request is open either way, and a
+      // linkage failure must not report the run as failed. The `directory` is what makes the
+      // linkage a monorepo one: `resolveRepoTarget` scopes every agent working on this service
+      // to that subtree, and the repo's monorepo flag was set at pre-flight so it is honoured.
+      try {
+        const service = await this.deps.serviceRepository?.getByFrameBlock(record.blockId)
+        if (service) {
+          await this.deps.serviceRepository?.update(service.id, {
+            repoGithubId: monorepo.repoGithubId,
+            directory: monorepo.directory,
+          })
+        }
+      } catch {
+        // swallow: see above
+      }
+    }
+    const block = await this.markFrame(
+      workspaceId,
+      record.blockId,
+      'ready',
+      `Service bootstrapped into ${monorepo.repoOwner}/${monorepo.repoName} at ${monorepo.directory}. Review and merge the pull request, then drop tasks here.`,
+    )
+    await this.emitBootstrap(workspaceId, toBootstrapJob({ ...record, ...patch }), block)
+    return { state: 'done' }
+  }
+
   // ---- helpers ------------------------------------------------------------
 
   /** The workspace default fragment ids a new service inherits; empty / never throws. */
@@ -665,11 +1104,19 @@ export class BootstrapService {
     }
   }
 
-  /** Create the provisional, in-progress service frame a bootstrap run materialises. */
+  /**
+   * Create the provisional, in-progress service frame a bootstrap run materialises.
+   *
+   * A monorepo run's frame carries its `directory` from the start, while the repo binding waits
+   * for the run to succeed exactly as the new-repo path's does: the directory is a fact the
+   * pre-flight already settled (and what the board card is about), whereas the linkage is a
+   * claim that there is code there, which is only true once the pull request exists.
+   */
   private async createServiceFrame(
     workspaceId: string,
     repoName: string,
     frameType: BlockType = 'service',
+    monorepo?: MonorepoBootstrapRef,
   ): Promise<Block> {
     const blocks = await this.deps.blockRepository.listByWorkspace(workspaceId)
     const frames = blocks.filter((b) => b.level === 'frame').length
@@ -679,8 +1126,9 @@ export class BootstrapService {
       id: this.deps.idGenerator.next('blk'),
       title: repoName,
       type,
-      description:
-        'Bootstrapping repository… a container is adapting and pushing the initial commit.',
+      description: monorepo
+        ? `Bootstrapping ${monorepo.directory} in ${monorepo.repoOwner}/${monorepo.repoName}… surveying the monorepo's conventions.`
+        : 'Bootstrapping repository… a container is adapting and pushing the initial commit.',
       // Stagger so a fresh frame doesn't land exactly on an existing one.
       position: { x: 80 + (frames % 5) * 48, y: 80 + (frames % 5) * 48 },
       status: 'in_progress',
@@ -703,6 +1151,10 @@ export class BootstrapService {
       },
       workspaceId,
       block,
+      // The repo ids stay unset until the run delivers (see the doc comment): a service
+      // pinned to a repo it has not written to yet would dispatch tasks into an empty
+      // directory. `directory` is carried now because it is what the frame IS.
+      monorepo ? { directory: monorepo.directory } : undefined,
     )
     await this.deps.blockRepository.insert(workspaceId, block, serviceId)
     return block
@@ -741,9 +1193,13 @@ export class BootstrapService {
   }
 
   /** Best-effort: reclaim a job's per-run container (never throws). */
-  private async stopContainer(workspaceId: string, jobId: string): Promise<void> {
+  private async stopContainer(
+    workspaceId: string,
+    jobId: string,
+    containerJobId: string,
+  ): Promise<void> {
     try {
-      await this.deps.repoBootstrapper?.stopBootstrap({ workspaceId, jobId })
+      await this.deps.repoBootstrapper?.stopBootstrap({ workspaceId, jobId, containerJobId })
     } catch {
       // The container may already be gone (the common case for an eviction); the
       // job is already recorded failed, so a stop failure changes nothing.

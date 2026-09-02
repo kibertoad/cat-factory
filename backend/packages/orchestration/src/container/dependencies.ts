@@ -39,6 +39,7 @@ import type {
   BranchProjectionRepository,
   BranchUpdater,
   BugHuntAssessor,
+  MonorepoAdoptionAdvisor,
   CheckRunProjectionRepository,
   ClarityReviewRepository,
   Clock,
@@ -356,6 +357,15 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    * unranked, flagged `analysisStatus: 'unavailable'`.
    */
   bugHuntAssessor?: BugHuntAssessor
+  /**
+   * The suggestion producer behind a monorepo bootstrap's adoption review. Optional for the same
+   * reason as {@link CoreDependencies.bugHuntAssessor}: `createCore` builds the inline
+   * `MonorepoAdoptionAdvisorService` from the model-provider dependencies the facade already
+   * wires, so it needs NO per-facade wiring. Injected explicitly only by a test/conformance
+   * harness wanting a deterministic plan. Absent/disabled ⇒ the run still parks for review, with
+   * an `unavailable` plan naming the missing model.
+   */
+  monorepoAdoptionAdvisor?: MonorepoAdoptionAdvisor
   /**
    * The app-owned step-completion-resolver registry (deployment-registered resolvers).
    * Optional + defaulted to `defaultStepResolverRegistry()` (EMPTY — the built-in `merger`

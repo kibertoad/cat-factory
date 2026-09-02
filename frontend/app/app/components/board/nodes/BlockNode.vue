@@ -7,6 +7,7 @@ import InitiativeCard from './InitiativeCard.vue'
 import ResizeGrips from './ResizeGrips.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
+import AdoptionReviewModal from '~/components/bootstrap/AdoptionReviewModal.vue'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameStacking } from '~/composables/useFrameStacking'
 import { useViewport } from '~/composables/useViewport'
@@ -207,6 +208,10 @@ const bootstrapping = computed(
   () => run.value?.kind === 'bootstrap' && run.value.status === 'running',
 )
 const runFailed = computed(() => run.value?.status === 'failed')
+// A monorepo bootstrap parked on its adoption review: the run is waiting on THIS person, so the
+// card says so and offers the review rather than showing a generic "working…" it is not doing.
+const awaitingReview = computed(() => agentRuns.awaitingReview(props.id))
+const reviewOpen = ref(false)
 const bootstrapSubtasks = computed(() =>
   bootstrapping.value ? (run.value?.subtasks ?? null) : null,
 )
@@ -343,6 +348,21 @@ const ITEM_ICON: Record<string, string> = {
         </ul>
         <div v-if="run" class="mt-2 flex justify-end">
           <AgentStopButton :run-id="run.runId" :kind="run.kind" size="xs" variant="ghost" />
+        </div>
+      </div>
+      <!-- parked on a human adoption review: the run is waiting on the viewer, not working -->
+      <div
+        v-else-if="awaitingReview"
+        class="m-3 space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3"
+      >
+        <div class="flex items-start gap-2">
+          <UIcon name="i-lucide-user-check" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+          <p class="text-xs text-amber-200/90">{{ t('bootstrap.adoption.cardPrompt') }}</p>
+        </div>
+        <div class="flex justify-end">
+          <UButton size="xs" color="warning" variant="subtle" @click.stop="reviewOpen = true">
+            {{ t('bootstrap.adoption.cardAction') }}
+          </UButton>
         </div>
       </div>
       <!-- failed run: shared failure banner + retry -->
@@ -546,5 +566,12 @@ const ITEM_ICON: Record<string, string> = {
            opposite border from the one the drag actually moves. -->
       <ResizeGrips :block="block" tone="frame" />
     </div>
+    <!-- Teleported by UModal, so it renders outside the canvas transform; kept inside the node's
+         single root element so the board node stays a one-root component. -->
+    <AdoptionReviewModal
+      v-if="reviewOpen && awaitingReview"
+      :job="awaitingReview"
+      @close="reviewOpen = false"
+    />
   </div>
 </template>

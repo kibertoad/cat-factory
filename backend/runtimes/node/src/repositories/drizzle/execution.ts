@@ -674,7 +674,13 @@ export class DrizzleAgentRunRepository implements AgentRunRepository {
         .from(agentRuns)
         .where(
           and(
-            inArray(agentRuns.status, ['running', 'blocked', 'paused', 'pending']),
+            inArray(agentRuns.status, [
+              'running',
+              'blocked',
+              'paused',
+              'pending',
+              'awaiting_review',
+            ]),
             inArray(agentRuns.id, ids.slice(i, i + 500)),
           ),
         )

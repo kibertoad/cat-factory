@@ -32,3 +32,19 @@ The number moved after the fact: this branch was written against 1.62.0 and main
 with `OutcomeEnvironment.detailKind` while it was in flight. The version line auto-merged clean,
 because both sides produced the same bytes; the collision arrived here, in the paragraph, exactly
 as the note at the top of this file says it does.
+
+## 1.65.0
+
+`BootstrapJob.status` gains `awaiting_review`: a repo-bootstrap run parked on a human decision.
+
+It is reachable only for the new monorepo bootstrap (a run that adds a service to an existing
+repository rather than creating one), which this surface does not yet offer a way to START:
+`POST /api/v1/bootstraps` still creates a repository of its own. The value reaches a public
+caller anyway, because a run started in the app is READ through this surface, and a status the
+spec did not name would be the one thing a poller cannot handle honestly.
+
+Additive: the clients tolerate unknown enum values by design, so a consumer built against 1.64.0
+keeps parsing. What a poller has to CHANGE is its terminal test, and that is the point of naming
+the value: `awaiting_review` is neither running nor finished, so a loop that treats "not
+`succeeded` and not `failed`" as "still working" now waits forever on a run that is waiting for a
+person. Branch on it and surface the run to a human instead.

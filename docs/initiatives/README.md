@@ -50,6 +50,7 @@ a tracker document](../../CLAUDE.md).
 - [Custom initiative definitions (org-registered presets)](./custom-initiative-definitions.md)
 - [Judge registry (the verdict-gate family)](./judge-registry.md)
 - [Library frame support](./library-frame-support.md)
+- [Monorepo service bootstrap (adoption review)](./monorepo-service-bootstrap.md)
 - [Persist, version and reseed fragment definitions](./fragment-definitions-reseed.md)
 - [Pipeline catalog collapse (estimate-gated steps)](./pipeline-catalog-collapse.md)
 - [Pipeline per-step options: one `step_options` bag](./pipeline-step-options.md)

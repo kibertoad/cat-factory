@@ -687,7 +687,10 @@
         "webhook_limit_reached": "Límite de webhooks alcanzado",
         "risk_policy_inherited": "Esta política pertenece a la cuenta",
         "risk_policy_not_inherited": "Esta política pertenece a este tablero",
-        "kaizen_entry_not_settled": "La entrada de Kaizen aún no se ha evaluado"
+        "kaizen_entry_not_settled": "La entrada de Kaizen aún no se ha evaluado",
+        "bootstrap_not_awaiting_review": "Este bootstrap no está esperando una revisión",
+        "adoption_plan_unavailable": "No hay ningún plan que aprobar",
+        "monorepo_directory_taken": "Ese directorio ya existe"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -729,7 +732,10 @@
         "webhook_limit_reached": "Este espacio de trabajo ya tiene registrado el número máximo de webhooks salientes. Elimina uno que ya no necesites y vuelve a registrar este.",
         "risk_policy_inherited": "Se comparte con todos los tableros de la cuenta, así que no puede cambiarse desde aquí. Clónala en este tablero y edita la copia.",
         "risk_policy_not_inherited": "Ya es la política propia de este tablero: edítala directamente o elimínala si no quieres que se ofrezca.",
-        "kaizen_entry_not_settled": "Su evaluación sigue en cola o en curso, así que no hay recomendaciones que confirmar. Inténtalo de nuevo cuando termine."
+        "kaizen_entry_not_settled": "Su evaluación sigue en cola o en curso, así que no hay recomendaciones que confirmar. Inténtalo de nuevo cuando termine.",
+        "bootstrap_not_awaiting_review": "La ejecución avanzó desde que se abrió esta revisión. Recarga el tablero.",
+        "adoption_plan_unavailable": "El análisis no pudo producir uno, así que no hay decisiones que enviar.",
+        "monorepo_directory_taken": "Un bootstrap crea un servicio nuevo. Elige un directorio que aún no exista, o importa el existente como servicio."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",
@@ -6922,7 +6928,8 @@
       "pending": "pendiente",
       "running": "en ejecución",
       "succeeded": "completado",
-      "failed": "fallido"
+      "failed": "fallido",
+      "awaitingReview": "esperando revisión"
     },
     "arch": {
       "title": "Arquitecturas de referencia",
@@ -6956,11 +6963,98 @@
       "startedDesc": "Un contenedor está inicializando {repo}; sigue su progreso en el tablero.",
       "bootstrapFailed": "No se pudo inicializar",
       "saveArchFailed": "No se pudo guardar la arquitectura de referencia",
-      "deleteFailed": "No se pudo eliminar"
+      "deleteFailed": "No se pudo eliminar",
+      "startedMonorepoDesc": "Analizando el monorepo; antes de escribir nada te preguntaremos qué debe adoptar {directory}."
     },
     "repoType": {
       "label": "Tipo de repositorio",
       "help": "Qué es este repositorio: un servicio backend, una aplicación frontend, una biblioteca compartida o un repositorio de documentación (solo documentos/spikes)."
+    },
+    "target": {
+      "label": "Dónde va el servicio",
+      "newRepo": {
+        "label": "Un repositorio nuevo",
+        "description": "Crear un repositorio propio y subir el servicio como su primer commit."
+      },
+      "monorepo": {
+        "label": "Un directorio de un monorepo existente",
+        "description": "Añadir el servicio a un repositorio que ya tienes y abrir un pull request."
+      }
+    },
+    "serviceName": {
+      "label": "Nombre del servicio",
+      "description": "Nombra el servicio en el tablero y propone su directorio."
+    },
+    "monorepo": {
+      "intro": "El servicio se escribe en un directorio de un repositorio existente y se entrega como pull request. No se fusiona nada por ti ni se cambia nada fuera del nuevo directorio.",
+      "repo": {
+        "label": "Monorepo",
+        "description": "El repositorio donde vivirá el nuevo servicio. Ya debe estar vinculado a este espacio de trabajo.",
+        "placeholder": "Elige un repositorio",
+        "empty": "Aún no hay repositorios vinculados a este espacio de trabajo. Vincula uno primero."
+      },
+      "directory": {
+        "label": "Directorio del servicio",
+        "description": "Dónde vive el servicio, relativo a la raíz del repositorio. Todavía no debe existir.",
+        "placeholder": "services/payments",
+        "error": {
+          "empty": "Indica un directorio dentro del repositorio.",
+          "escapes": "El directorio debe quedarse dentro del repositorio."
+        }
+      }
+    },
+    "adoption": {
+      "title": "¿Qué debe adoptar este servicio?",
+      "subtitle": "El nuevo servicio en {directory}, dentro de {target}.",
+      "intro": "Para cada área, decide si el nuevo servicio sigue al monorepo que lo rodea o conserva lo que trae la plantilla. No se escribe nada hasta que decidas.",
+      "acceptAll": "Aceptar todas las sugerencias",
+      "needsYou": "Falta tu decisión",
+      "overridden": "Cambia la sugerencia",
+      "evidence": "Leído de:",
+      "notePlaceholder": "Lo que el agente debería saber sobre esta área (opcional)",
+      "remaining": "Falta tu respuesta en {count} decisión | Faltan tus respuestas en {count} decisiones",
+      "approve": "Aprobar y construir",
+      "cardPrompt": "Este bootstrap te está esperando: decide qué adopta el nuevo servicio del monorepo.",
+      "cardAction": "Revisar",
+      "side": {
+        "monorepo": "En el monorepo",
+        "template": "En la plantilla",
+        "nothing": "Nada para esta área"
+      },
+      "source": {
+        "monorepo": "Seguir el monorepo",
+        "template": "Conservar la plantilla",
+        "both": "Combinar ambos",
+        "neither": "Ninguno de los dos"
+      },
+      "area": {
+        "build-tooling": "Herramientas de compilación",
+        "dependencies": "Dependencias",
+        "lint-format": "Linting y formato",
+        "typecheck": "Comprobación de tipos",
+        "testing": "Pruebas",
+        "ci": "CI",
+        "containerization": "Contenedores",
+        "runtime-config": "Configuración de ejecución",
+        "observability": "Observabilidad",
+        "source-layout": "Estructura del código",
+        "docs": "Documentación",
+        "other": "Otros"
+      },
+      "unavailable": {
+        "model_unavailable": "No hay ningún modelo configurado para el análisis, así que no hay sugerencia que revisar. Las decisiones siguen siendo tuyas: descríbelas en las notas.",
+        "repo_unreadable": "No se pudo leer el monorepo, así que no se produjo ninguna sugerencia. Comprueba que este espacio de trabajo alcanza el repositorio.",
+        "analysis_unusable": "El análisis no devolvió una sugerencia utilizable. Aun así puedes describir lo que quieres en las notas."
+      },
+      "notes": {
+        "label": "Notas para todo el servicio",
+        "description": "Se pasan al agente literalmente, junto con tus decisiones."
+      },
+      "toast": {
+        "approved": "Decisiones aprobadas",
+        "approvedDesc": "El agente está escribiendo {directory} y abrirá un pull request.",
+        "failed": "No se pudo enviar la revisión"
+      }
     }
   },
   "riskPolicy": {

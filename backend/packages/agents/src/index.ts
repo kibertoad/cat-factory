@@ -432,6 +432,12 @@ export {
   renderBugHuntPrompt,
 } from './agents/prompts/bug-hunt.js'
 export {
+  MONOREPO_ADOPTION_AGENT_KIND,
+  MONOREPO_ADOPTION_SYSTEM_PROMPT,
+  monorepoBootstrapPrTitle,
+  renderMonorepoAdoptionPrompt,
+} from './agents/prompts/monorepo-adoption.js'
+export {
   FRAGMENT_TITLE_AGENT_KIND,
   FRAGMENT_TITLE_SYSTEM_PROMPT,
   renderFragmentTitlePrompt,

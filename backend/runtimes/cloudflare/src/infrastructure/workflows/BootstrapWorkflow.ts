@@ -14,7 +14,11 @@ import { logger } from '../observability/logger'
 import { withWorkflowLogExport } from './logExport'
 import { buildWorkflowRuntime } from './runtime'
 
-/** Params passed to a BootstrapWorkflow instance (its id is the bootstrap job id). */
+/**
+ * Params passed to a BootstrapWorkflow instance. Its INSTANCE id is the run's `driveId` (see
+ * {@link WorkflowsBootstrapRunner}), which is the run id for every drive but a monorepo run's
+ * apply phase; `jobId` here is always the RUN, because that is what the poll advances.
+ */
 export interface BootstrapWorkflowParams {
   workspaceId: string
   jobId: string
@@ -106,6 +110,14 @@ export class BootstrapWorkflow extends WorkflowEntrypoint<Env, BootstrapWorkflow
       }
       if (result.state === 'failed') {
         log.warn('bootstrap run failed', { error: result.error })
+        return
+      }
+      if (result.state === 'awaiting_review') {
+        // The monorepo flow has parked on a human decision, which can take days. Returning ends
+        // THIS drive's instance and costs nothing: the run is not `running`, so the stale-run
+        // sweeper leaves it alone, and the review's own resume starts a fresh drive under a new
+        // instance id (which is exactly why the id is the drive key, not the run id).
+        log.info('bootstrap run parked for adoption review')
         return
       }
       // still running — loop and poll again after the next durable sleep.

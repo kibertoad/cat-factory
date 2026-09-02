@@ -1,10 +1,14 @@
 import type {
+  AdoptionPlan,
   BootstrapJobRecord,
   BootstrapJobRecordPatch,
   BootstrapJobRepository,
+  BootstrapPhase,
+  MonorepoBootstrapRef,
   ReferenceArchitectureRecord,
   ReferenceArchitectureRecordPatch,
   ReferenceArchitectureRepository,
+  ResolvedAdoption,
 } from '@cat-factory/kernel'
 import { parseSubtasks } from '@cat-factory/kernel'
 import { parseStoredAgentFailure } from '@cat-factory/contracts'
@@ -134,6 +138,7 @@ export class DrizzleReferenceArchitectureRepository implements ReferenceArchitec
 
 // ---- bootstrap jobs (kind='bootstrap' rows of agent_runs) -----------------
 
+/** Mirrors the D1 repository's `BootstrapDetail`; see the note there on why it is JSON. */
 interface BootstrapDetail {
   referenceArchitectureId: string | null
   referenceArchitectureName: string | null
@@ -141,28 +146,38 @@ interface BootstrapDetail {
   repoOwner: string | null
   repoUrl: string | null
   instructions: string
+  monorepo: MonorepoBootstrapRef | null
+  phase: BootstrapPhase | null
+  driveId: string | null
+  adoptionPlan: AdoptionPlan | null
+  adoptionReview: ResolvedAdoption | null
+  prUrl: string | null
+}
+
+const EMPTY_DETAIL: BootstrapDetail = {
+  referenceArchitectureId: null,
+  referenceArchitectureName: null,
+  repoName: '',
+  repoOwner: null,
+  repoUrl: null,
+  instructions: '',
+  monorepo: null,
+  phase: null,
+  driveId: null,
+  adoptionPlan: null,
+  adoptionReview: null,
+  prUrl: null,
 }
 
 function parseDetail(raw: string): BootstrapDetail {
   try {
     const o = JSON.parse(raw) as Partial<BootstrapDetail>
     return {
-      referenceArchitectureId: o.referenceArchitectureId ?? null,
-      referenceArchitectureName: o.referenceArchitectureName ?? null,
-      repoName: o.repoName ?? '',
-      repoOwner: o.repoOwner ?? null,
-      repoUrl: o.repoUrl ?? null,
-      instructions: o.instructions ?? '',
+      ...EMPTY_DETAIL,
+      ...Object.fromEntries(Object.entries(o).filter(([, value]) => value !== undefined)),
     }
   } catch {
-    return {
-      referenceArchitectureId: null,
-      referenceArchitectureName: null,
-      repoName: '',
-      repoOwner: null,
-      repoUrl: null,
-      instructions: '',
-    }
+    return { ...EMPTY_DETAIL }
   }
 }
 
@@ -182,10 +197,30 @@ function rowToBootstrapJob(row: typeof agentRuns.$inferSelect): BootstrapJobReco
     subtasks: parseSubtasks(row.subtasks ?? null),
     error: row.error,
     failure: parseStoredAgentFailure(row.failure),
+    monorepo: detail.monorepo,
+    phase: detail.phase,
+    // See the D1 mirror: a row predating the monorepo flow was driven under its own id, so the
+    // fallback is what that row's drive key actually was rather than a substitute for it.
+    driveId: detail.driveId ?? row.id,
+    adoptionPlan: detail.adoptionPlan,
+    adoptionReview: detail.adoptionReview,
+    prUrl: detail.prUrl,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
 }
+
+/** Patch fields that live inside `detail` (the Drizzle mirror of D1's `DETAIL_FIELDS`). */
+const DETAIL_FIELDS = [
+  'repoOwner',
+  'repoUrl',
+  'phase',
+  'driveId',
+  'prUrl',
+  'monorepo',
+  'adoptionPlan',
+  'adoptionReview',
+] as const satisfies readonly (keyof BootstrapJobRecordPatch)[]
 
 /** Postgres-backed bootstrap runs, stored as kind='bootstrap' rows of agent_runs. */
 export class DrizzleBootstrapJobRepository implements BootstrapJobRepository {
@@ -205,6 +240,12 @@ export class DrizzleBootstrapJobRepository implements BootstrapJobRepository {
       repoOwner: record.repoOwner,
       repoUrl: record.repoUrl,
       instructions: record.instructions,
+      monorepo: record.monorepo,
+      phase: record.phase,
+      driveId: record.driveId,
+      adoptionPlan: record.adoptionPlan,
+      adoptionReview: record.adoptionReview,
+      prUrl: record.prUrl,
     }
     await this.db.insert(agentRuns).values({
       workspace_id: record.workspaceId,
@@ -230,12 +271,13 @@ export class DrizzleBootstrapJobRepository implements BootstrapJobRepository {
     // single jsonb_set chain so a partial patch leaves the other field untouched.
     let detailExpr = sql`${agentRuns.detail}::jsonb`
     let patchesDetail = false
-    if (patch.repoOwner !== undefined) {
-      detailExpr = sql`jsonb_set(${detailExpr}, '{repoOwner}', ${JSON.stringify(patch.repoOwner)}::jsonb)`
-      patchesDetail = true
-    }
-    if (patch.repoUrl !== undefined) {
-      detailExpr = sql`jsonb_set(${detailExpr}, '{repoUrl}', ${JSON.stringify(patch.repoUrl)}::jsonb)`
+    for (const field of DETAIL_FIELDS) {
+      const value = patch[field]
+      if (value === undefined) continue
+      // `JSON.stringify` of an object/`null` is valid JSON either way, so one chain covers the
+      // scalars and the plan/review objects alike; the D1 mirror needs the `json(?)` split only
+      // because SQLite's `json_set` would otherwise store the object's TEXT.
+      detailExpr = sql`jsonb_set(${detailExpr}, ${`{${field}}`}, ${JSON.stringify(value ?? null)}::jsonb)`
       patchesDetail = true
     }
     if (patchesDetail) set.detail = sql`(${detailExpr})::text`

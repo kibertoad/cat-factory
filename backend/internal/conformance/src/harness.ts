@@ -23,6 +23,8 @@ import type {
   GateRegistry,
   JudgeAssessor,
   BugHuntAssessor,
+  MonorepoAdoptionAdvisor,
+  RepoBootstrapper,
   FragmentBriefGenerator,
   JudgeRegistry,
   InitiativePresetRegistry,
@@ -759,6 +761,21 @@ export interface ConformanceAppOptions {
    * model-derived assessor, which is disabled with no model wired.
    */
   bugHuntAssessor?: BugHuntAssessor
+  /**
+   * Inject the monorepo bootstrap's adoption advisor (a deterministic fake in the suite) so both
+   * survey outcomes (a READY plan a human then settles, and the `unavailable` park a deployment
+   * with no model still gets) are driven on EVERY runtime without a real model. Each facade
+   * harness threads it into its core overrides (the `monorepoAdoptionAdvisor` seam `createCore`
+   * reads); absent ⇒ the facade's model-derived advisor, disabled with no model wired.
+   */
+  monorepoAdoptionAdvisor?: MonorepoAdoptionAdvisor
+  /**
+   * Supply the bootstrap flow's own {@link FakeRepoBootstrapper}, pre-loaded with the
+   * repositories a monorepo target may name. Each facade harness wires a default fake, which
+   * projects NO repository, so a suite that wants a monorepo target has to declare it, and the
+   * refusal path is what an undeclared one exercises.
+   */
+  repoBootstrapper?: RepoBootstrapper
   /**
    * Inject the fragment-BRIEF condensation model (a deterministic fake), so the suite can drive
    * the generated-brief store end to end — condense on first dispatch, reuse on the next,

@@ -394,6 +394,12 @@ export {
   type BootstrapServiceDependencies,
   type BootstrapPollResult,
 } from './modules/bootstrap/BootstrapService.js'
+export { MonorepoAdoptionAdvisorService } from './modules/bootstrap/MonorepoAdoptionAdvisorService.js'
+export {
+  MonorepoBootstrapController,
+  type MonorepoBootstrapDeps,
+} from './modules/bootstrap/MonorepoBootstrapController.js'
+export { parentDirectoryOf, surveyMonorepo } from './modules/bootstrap/monorepoSurvey.js'
 
 export {
   EnvConfigRepairService,

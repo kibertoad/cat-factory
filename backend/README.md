@@ -465,6 +465,7 @@ GET    /workspaces/:ws/bootstrap/reference-architectures     list reference arch
 POST   /workspaces/:ws/bootstrap/reference-architectures     CRUD reference architectures
 POST   /workspaces/:ws/bootstrap/jobs                         start a bootstrap run (returns a running job)
 GET    /workspaces/:ws/bootstrap/jobs/:id                     poll a bootstrap job
+POST   /workspaces/:ws/bootstrap/jobs/:id/adoption-review     settle a parked monorepo run's adoption plan
 
 # Document sources (always on; requires the shared ENCRYPTION_KEY at boot)
 GET    /workspaces/:ws/documents/sources                     connected document sources
@@ -776,6 +777,12 @@ provider-hosted `web_search` tool on Anthropic / OpenAI models via `INLINE_WEB_S
 (see `INLINE_WEB_SEARCH_KINDS` / `INLINE_WEB_SEARCH_MAX_USES`); it is a no-op on other providers.
 
 #### Repo bootstrap (creating a new repo from a reference architecture)
+
+A run can also target a **directory of an existing monorepo** instead (`monorepo` on the start
+body): it surveys the monorepo's conventions against the template's, parks on `awaiting_review`
+until a human settles what the new service adopts from each, then writes the service and opens a
+pull request. It never force-pushes, and its two durable drives are keyed apart from the run id.
+Design and traps: [`monorepo-service-bootstrap.md`](../docs/initiatives/monorepo-service-bootstrap.md).
 
 The "bootstrap repo" task adapts a reference architecture (or scaffolds from scratch) into a
 pre-created, empty GitHub repo and force-pushes the result, running the bootstrapper agent

@@ -57,7 +57,10 @@ export interface AgentRunRepository {
   listPausedExecutions(): Promise<AgentRunRef[]>
   /**
    * The subset of the given run ids that are still LIVE — i.e. not terminal (a run in
-   * `running`/`blocked`/`paused`/`pending`, not `done`/`failed`/etc.). Spans workspaces
+   * `running`/`blocked`/`paused`/`pending`/`awaiting_review`, not `done`/`failed`/etc.).
+   * A bootstrap parked on its adoption review is live: it has produced nothing yet and a
+   * human is expected to release it, so reaping against it would be reaping against a run
+   * that is still going to run. Spans workspaces
    * and batches (chunked `IN`), so local mode can reap per-run containers whose run has
    * since gone terminal or away in a single query rather than a point-read per container.
    */

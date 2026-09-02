@@ -292,6 +292,12 @@ interface StaleRunRecoveryDeps {
   recordRedrive(workspaceId: string, id: string): Promise<number>
   /** Settle a run the recovery could not resume (the hard-stall backstop's terminal write). */
   failRun(workspaceId: string, executionId: string, message: string): Promise<void>
+  /**
+   * The drive key a stale BOOTSTRAP run is currently driven under. Injected rather than read off
+   * a container here so the recovery stays a pure function of its ports; only the bootstrap flow
+   * can differ from the run id (its apply phase is a second drive), so only it is asked.
+   */
+  bootstrapDriveId(workspaceId: string, id: string): Promise<string>
   hardStallMs: number
   /** A heartbeat older than this means a dead worker, not a long drive. */
   staleHeartbeatMs: number
@@ -394,8 +400,16 @@ function createStaleRunRecovery(deps: StaleRunRecoveryDeps) {
     }
 
     if (ref.kind === 'bootstrap') {
-      log.warn('re-driving stale bootstrap', { workspaceId: ref.workspaceId, jobId: ref.id })
-      await reenqueueStaleBootstrap(boss, ref.workspaceId, ref.id, queueOptions)
+      // Re-drive under the run's CURRENT drive key: a monorepo run's apply phase is a second
+      // drive with its own singleton key, and re-sending under the run id would be deduped
+      // against the survey drive rather than reaching the one that is actually stuck.
+      const driveId = await deps.bootstrapDriveId(ref.workspaceId, ref.id)
+      log.warn('re-driving stale bootstrap', {
+        workspaceId: ref.workspaceId,
+        jobId: ref.id,
+        driveId,
+      })
+      await reenqueueStaleBootstrap(boss, ref.workspaceId, ref.id, driveId, queueOptions)
       await countRedrive(ref)
       return
     }
@@ -516,6 +530,8 @@ export function startStaleRunSweeper(
     recordRedrive: (workspaceId, id) => container.agentRunRepository.recordRedrive(workspaceId, id),
     failRun: (workspaceId, executionId, message) =>
       container.executionService.failRun(workspaceId, executionId, message, 'stalled', null),
+    bootstrapDriveId: async (workspaceId, id) =>
+      (await container.bootstrap?.service.driveIdOf(workspaceId, id)) ?? id,
     hardStallMs: cfg.hardStallMs,
     staleHeartbeatMs,
     queueOptions,

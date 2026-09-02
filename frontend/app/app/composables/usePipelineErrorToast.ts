@@ -83,6 +83,21 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.dependencies_unmet',
     descriptionKey: 'errors.conflict.description.dependencies_unmet',
   },
+  // A monorepo bootstrap's review was submitted for a run that has since moved on: the fix is
+  // to look at where the run actually is, not to retry.
+  bootstrap_not_awaiting_review: {
+    titleKey: 'errors.conflict.title.bootstrap_not_awaiting_review',
+    descriptionKey: 'errors.conflict.description.bootstrap_not_awaiting_review',
+  },
+  adoption_plan_unavailable: {
+    titleKey: 'errors.conflict.title.adoption_plan_unavailable',
+    descriptionKey: 'errors.conflict.description.adoption_plan_unavailable',
+  },
+  // The remedy is a different DIRECTORY, not a different repository or a retry.
+  monorepo_directory_taken: {
+    titleKey: 'errors.conflict.title.monorepo_directory_taken',
+    descriptionKey: 'errors.conflict.description.monorepo_directory_taken',
+  },
   input_gate_not_parked: {
     titleKey: 'errors.conflict.title.input_gate_not_parked',
     descriptionKey: 'errors.conflict.description.input_gate_not_parked',

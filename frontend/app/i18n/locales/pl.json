@@ -687,7 +687,10 @@
         "webhook_limit_reached": "Osiągnięto limit webhooków",
         "risk_policy_inherited": "Ta zasada należy do konta",
         "risk_policy_not_inherited": "Ta zasada należy do tej tablicy",
-        "kaizen_entry_not_settled": "Wpis Kaizen nie został jeszcze oceniony"
+        "kaizen_entry_not_settled": "Wpis Kaizen nie został jeszcze oceniony",
+        "bootstrap_not_awaiting_review": "Ten bootstrap nie czeka na przegląd",
+        "adoption_plan_unavailable": "Nie ma planu do zatwierdzenia",
+        "monorepo_directory_taken": "Ten katalog już istnieje"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -729,7 +732,10 @@
         "webhook_limit_reached": "Ta przestrzeń robocza ma już zarejestrowaną maksymalną liczbę wychodzących webhooków. Usuń jeden, którego już nie potrzebujesz, a następnie zarejestruj ten ponownie.",
         "risk_policy_inherited": "Jest wspólna dla wszystkich tablic konta, więc nie można jej tu zmienić. Sklonuj ją do tej tablicy i edytuj kopię.",
         "risk_policy_not_inherited": "To już własna zasada tej tablicy: edytuj ją bezpośrednio albo usuń, jeśli nie ma być dłużej oferowana.",
-        "kaizen_entry_not_settled": "Jego ocena wciąż czeka w kolejce lub trwa, więc nie ma rekomendacji do potwierdzenia. Spróbuj ponownie po jej zakończeniu."
+        "kaizen_entry_not_settled": "Jego ocena wciąż czeka w kolejce lub trwa, więc nie ma rekomendacji do potwierdzenia. Spróbuj ponownie po jej zakończeniu.",
+        "bootstrap_not_awaiting_review": "Uruchomienie poszło dalej, odkąd otwarto ten przegląd. Odśwież tablicę.",
+        "adoption_plan_unavailable": "Analiza nie zdołała go utworzyć, więc nie ma decyzji do wysłania.",
+        "monorepo_directory_taken": "Bootstrap tworzy nową usługę. Wybierz katalog, który jeszcze nie istnieje, albo zaimportuj istniejący jako usługę."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",
@@ -6922,7 +6928,8 @@
       "pending": "oczekuje",
       "running": "w toku",
       "succeeded": "powodzenie",
-      "failed": "niepowodzenie"
+      "failed": "niepowodzenie",
+      "awaitingReview": "czeka na przegląd"
     },
     "arch": {
       "title": "Architektury referencyjne",
@@ -6956,11 +6963,98 @@
       "startedDesc": "Kontener inicjuje {repo}; śledź jego postęp na tablicy.",
       "bootstrapFailed": "Nie udało się zainicjować",
       "saveArchFailed": "Nie udało się zapisać architektury referencyjnej",
-      "deleteFailed": "Nie udało się usunąć"
+      "deleteFailed": "Nie udało się usunąć",
+      "startedMonorepoDesc": "Analizuję monorepo; zanim cokolwiek zostanie zapisane, zapytam, co ma przejąć {directory}."
     },
     "repoType": {
       "label": "Typ repozytorium",
       "help": "Czym jest to repozytorium: usługą backendową, aplikacją frontendową, współdzieloną biblioteką lub repozytorium dokumentacji (tylko dokumenty/spike'i)."
+    },
+    "target": {
+      "label": "Gdzie trafi usługa",
+      "newRepo": {
+        "label": "Nowe repozytorium",
+        "description": "Utwórz osobne repozytorium i wypchnij usługę jako jego pierwszy commit."
+      },
+      "monorepo": {
+        "label": "Katalog w istniejącym monorepo",
+        "description": "Dodaj usługę do repozytorium, które już masz, i otwórz pull request."
+      }
+    },
+    "serviceName": {
+      "label": "Nazwa usługi",
+      "description": "Nazywa usługę na tablicy i podpowiada jej katalog."
+    },
+    "monorepo": {
+      "intro": "Usługa jest zapisywana w katalogu istniejącego repozytorium i dostarczana jako pull request. Nic nie jest za Ciebie scalane ani zmieniane poza nowym katalogiem.",
+      "repo": {
+        "label": "Monorepo",
+        "description": "Repozytorium, w którym zamieszka nowa usługa. Musi być już powiązane z tą przestrzenią roboczą.",
+        "placeholder": "Wybierz repozytorium",
+        "empty": "Z tą przestrzenią roboczą nie powiązano jeszcze żadnego repozytorium. Najpierw powiąż jedno."
+      },
+      "directory": {
+        "label": "Katalog usługi",
+        "description": "Gdzie znajduje się usługa, względem katalogu głównego repozytorium. Nie może jeszcze istnieć.",
+        "placeholder": "services/payments",
+        "error": {
+          "empty": "Podaj katalog wewnątrz repozytorium.",
+          "escapes": "Katalog musi pozostać wewnątrz repozytorium."
+        }
+      }
+    },
+    "adoption": {
+      "title": "Co ma przejąć ta usługa?",
+      "subtitle": "Nowa usługa w {directory}, wewnątrz {target}.",
+      "intro": "Dla każdego obszaru zdecyduj, czy nowa usługa idzie za otaczającym monorepo, czy zachowuje to, co daje szablon. Nic nie zostanie zapisane, dopóki nie zdecydujesz.",
+      "acceptAll": "Przyjmij wszystkie propozycje",
+      "needsYou": "Brakuje Twojej decyzji",
+      "overridden": "Odbiega od propozycji",
+      "evidence": "Odczytano z:",
+      "notePlaceholder": "Co agent powinien wiedzieć o tym obszarze (opcjonalnie)",
+      "remaining": "{count} decyzja wciąż czeka na Twoją odpowiedź | {count} decyzje wciąż czekają na Twoją odpowiedź | {count} decyzji wciąż czeka na Twoją odpowiedź",
+      "approve": "Zatwierdź i buduj",
+      "cardPrompt": "Ten bootstrap czeka na Ciebie: zdecyduj, co nowa usługa przejmie z monorepo.",
+      "cardAction": "Przejrzyj",
+      "side": {
+        "monorepo": "W monorepo",
+        "template": "W szablonie",
+        "nothing": "Nic dla tego obszaru"
+      },
+      "source": {
+        "monorepo": "Idź za monorepo",
+        "template": "Zachowaj szablon",
+        "both": "Połącz oba",
+        "neither": "Żadne z nich"
+      },
+      "area": {
+        "build-tooling": "Narzędzia budowania",
+        "dependencies": "Zależności",
+        "lint-format": "Lint i formatowanie",
+        "typecheck": "Sprawdzanie typów",
+        "testing": "Testy",
+        "ci": "CI",
+        "containerization": "Konteneryzacja",
+        "runtime-config": "Konfiguracja uruchomieniowa",
+        "observability": "Obserwowalność",
+        "source-layout": "Układ kodu źródłowego",
+        "docs": "Dokumentacja",
+        "other": "Inne"
+      },
+      "unavailable": {
+        "model_unavailable": "Do analizy nie skonfigurowano żadnego modelu, więc nie ma propozycji do przejrzenia. Decyzje wciąż należą do Ciebie: opisz je w notatkach.",
+        "repo_unreadable": "Nie udało się odczytać monorepo, więc nie powstała żadna propozycja. Sprawdź, czy ta przestrzeń robocza sięga tego repozytorium.",
+        "analysis_unusable": "Analiza nie zwróciła użytecznej propozycji. Nadal możesz opisać w notatkach, czego oczekujesz."
+      },
+      "notes": {
+        "label": "Uwagi do całej usługi",
+        "description": "Przekazywane agentowi dosłownie, razem z Twoimi decyzjami."
+      },
+      "toast": {
+        "approved": "Decyzje zatwierdzone",
+        "approvedDesc": "Agent zapisuje {directory} i otworzy pull request.",
+        "failed": "Nie udało się wysłać przeglądu"
+      }
     }
   },
   "riskPolicy": {

@@ -16,6 +16,7 @@ import org.jspecify.annotations.Nullable;
 public enum StartPublicRepoBootstrapResponseStatus {
     PENDING("pending"),
     RUNNING("running"),
+    AWAITING_REVIEW("awaiting_review"),
     SUCCEEDED("succeeded"),
     FAILED("failed"),
 

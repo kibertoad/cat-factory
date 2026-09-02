@@ -3,6 +3,7 @@ import type {
   BootstrapJobUpdate,
   BootstrapRepoOutcome,
   BootstrapRepoRequest,
+  MonorepoTargetRepo,
   RepoBootstrapper,
   StepSubtasks,
 } from '@cat-factory/kernel'
@@ -31,6 +32,16 @@ export class FakeRepoBootstrapper implements RepoBootstrapper {
   progressScript: StepSubtasks[] = []
   /** Whether the workspace reports as connected (the pre-flight check); on by default. */
   connected = true
+  /** Report a completed MONOREPO apply with no pull request (the "delivered nowhere" case). */
+  omitPrUrl = false
+  /**
+   * The repos this workspace projects, by numeric id: what a monorepo target may name. Empty by
+   * default, so a suite that has not declared one exercises the refusal rather than accidentally
+   * resolving anything it asks for.
+   */
+  readonly monorepoRepos = new Map<number, MonorepoTargetRepo>()
+  /** Repo ids `prepareMonorepoTarget` marked as monorepos, in order. */
+  readonly markedMonorepo: number[] = []
 
   private readonly requests = new Map<string, BootstrapRepoRequest>()
   private readonly pollCounts = new Map<string, number>()
@@ -39,11 +50,28 @@ export class FakeRepoBootstrapper implements RepoBootstrapper {
     return this.connected
   }
 
+  async prepareMonorepoTarget(
+    _workspaceId: string,
+    repoGithubId: number,
+  ): Promise<MonorepoTargetRepo | null> {
+    const repo = this.monorepoRepos.get(repoGithubId)
+    if (!repo) return null
+    this.markedMonorepo.push(repoGithubId)
+    return repo
+  }
+
   async startBootstrap(request: BootstrapRepoRequest): Promise<BootstrapJobHandle> {
     this.calls.push(request)
     if (this.failWith) throw new Error(this.failWith)
-    this.requests.set(request.jobId, request)
-    return { workspaceId: request.workspaceId, jobId: request.jobId }
+    // Keyed by the CONTAINER job id, which is what a poll addresses: a monorepo run's apply
+    // phase dispatches under its own key, and keying on the run id here would let a fake
+    // apply-phase poll silently answer with the survey drive's scripted outcome.
+    this.requests.set(request.containerJobId, request)
+    return {
+      workspaceId: request.workspaceId,
+      jobId: request.jobId,
+      containerJobId: request.containerJobId,
+    }
   }
 
   async pollBootstrap(handle: BootstrapJobHandle): Promise<BootstrapJobUpdate> {
@@ -57,16 +85,31 @@ export class FakeRepoBootstrapper implements RepoBootstrapper {
         detail: this.failPollWith,
       }
     }
-    const n = this.pollCounts.get(handle.jobId) ?? 0
-    this.pollCounts.set(handle.jobId, n + 1)
+    const n = this.pollCounts.get(handle.containerJobId) ?? 0
+    this.pollCounts.set(handle.containerJobId, n + 1)
     if (n < this.progressScript.length) {
       return { state: 'running', subtasks: this.progressScript[n]! }
     }
-    return { state: 'done', outcome: this.outcomeFor(handle.jobId) }
+    const request = this.requests.get(handle.containerJobId)
+    // A monorepo run's product is a pull request, so the fake reports one rather than a created
+    // repository: the orchestration FAILS a completed monorepo apply that reports none, and a
+    // fake that always answered with an outcome could never exercise either side of that.
+    if (request?.monorepo) {
+      return {
+        state: 'done',
+        outcome: this.outcomeFor(handle.containerJobId),
+        ...(this.omitPrUrl
+          ? {}
+          : {
+              prUrl: `https://github.com/${request.monorepo.owner}/${request.monorepo.name}/pull/7`,
+            }),
+      }
+    }
+    return { state: 'done', outcome: this.outcomeFor(handle.containerJobId) }
   }
 
   async stopBootstrap(handle: BootstrapJobHandle): Promise<void> {
-    this.stopped.push(handle.jobId)
+    this.stopped.push(handle.containerJobId)
   }
 
   async projectBootstrappedRepo(

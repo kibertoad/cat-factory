@@ -1,4 +1,12 @@
-import type { BootstrapFailure, BootstrapStatus, StepSubtasks } from '../domain/types.js'
+import type {
+  AdoptionPlan,
+  BootstrapFailure,
+  BootstrapPhase,
+  BootstrapStatus,
+  MonorepoBootstrapRef,
+  ResolvedAdoption,
+  StepSubtasks,
+} from '../domain/types.js'
 
 // Persistence ports for the repo-bootstrap feature. The worker implements these
 // against D1 (migration 0010); tests supply in-memory fakes. All rows are scoped
@@ -57,6 +65,27 @@ export interface BootstrapJobRecord {
   error: string | null
   /** Structured failure diagnostics when `status` is `failed`; null otherwise. */
   failure: BootstrapFailure | null
+  /** The monorepo this run bootstraps a service INTO; null for a run creating its own repo. */
+  monorepo: MonorepoBootstrapRef | null
+  /** Which half of the monorepo flow the run is in; null on a new-repo run. */
+  phase: BootstrapPhase | null
+  /**
+   * The id of the run's CURRENT drive: the durable driver's instance/singleton key, and the
+   * container job id when a container is dispatched.
+   *
+   * Distinct from `id` because a monorepo run is driven TWICE (once for the survey, once for
+   * the apply that a human's review releases), and neither driver can be re-keyed on the run:
+   * a Workflows instance id cannot be recreated after its instance went terminal, and a pg-boss
+   * singleton key would dedupe the resumed drive against the finished one. Equal to `id` for a
+   * single-drive run, so a plain bootstrap is unchanged.
+   */
+  driveId: string
+  /** The suggestion a human reviews; null until the survey produces one. */
+  adoptionPlan: AdoptionPlan | null
+  /** What the human settled; null until the review is submitted. */
+  adoptionReview: ResolvedAdoption | null
+  /** The pull request the apply phase opened against the monorepo; null until it does. */
+  prUrl: string | null
   createdAt: number
   updatedAt: number
 }
@@ -64,7 +93,20 @@ export interface BootstrapJobRecord {
 export type BootstrapJobRecordPatch = Partial<
   Pick<
     BootstrapJobRecord,
-    'status' | 'repoOwner' | 'repoUrl' | 'blockId' | 'subtasks' | 'error' | 'failure' | 'updatedAt'
+    | 'status'
+    | 'repoOwner'
+    | 'repoUrl'
+    | 'blockId'
+    | 'subtasks'
+    | 'error'
+    | 'failure'
+    | 'monorepo'
+    | 'phase'
+    | 'driveId'
+    | 'adoptionPlan'
+    | 'adoptionReview'
+    | 'prUrl'
+    | 'updatedAt'
   >
 >
 

@@ -5070,7 +5070,8 @@
       "pending": "ausstehend",
       "running": "läuft",
       "succeeded": "erfolgreich",
-      "failed": "fehlgeschlagen"
+      "failed": "fehlgeschlagen",
+      "awaitingReview": "wartet auf Prüfung"
     },
     "arch": {
       "title": "Referenzarchitekturen",
@@ -5104,7 +5105,94 @@
       "startedDesc": "Ein Container bootstrappt {repo}; verfolgen Sie den Fortschritt auf dem Board.",
       "bootstrapFailed": "Bootstrapping fehlgeschlagen",
       "saveArchFailed": "Referenzarchitektur konnte nicht gespeichert werden",
-      "deleteFailed": "Löschen fehlgeschlagen"
+      "deleteFailed": "Löschen fehlgeschlagen",
+      "startedMonorepoDesc": "Das Monorepo wird untersucht; bevor etwas geschrieben wird, wirst du gefragt, was {directory} übernehmen soll."
+    },
+    "target": {
+      "label": "Wo der Service entsteht",
+      "newRepo": {
+        "label": "Ein neues Repository",
+        "description": "Ein eigenes Repository anlegen und den Service als ersten Commit pushen."
+      },
+      "monorepo": {
+        "label": "Ein Verzeichnis in einem bestehenden Monorepo",
+        "description": "Den Service einem vorhandenen Repository hinzufügen und einen Pull Request öffnen."
+      }
+    },
+    "serviceName": {
+      "label": "Servicename",
+      "description": "Benennt den Service auf dem Board und schlägt sein Verzeichnis vor."
+    },
+    "monorepo": {
+      "intro": "Der Service wird in ein Verzeichnis eines bestehenden Repositories geschrieben und als Pull Request geliefert. Es wird nichts für dich gemergt und nichts außerhalb des neuen Verzeichnisses geändert.",
+      "repo": {
+        "label": "Monorepo",
+        "description": "Das Repository, in dem der neue Service liegt. Es muss bereits mit diesem Workspace verknüpft sein.",
+        "placeholder": "Repository auswählen",
+        "empty": "Mit diesem Workspace ist noch kein Repository verknüpft. Verknüpfe zuerst eines."
+      },
+      "directory": {
+        "label": "Serviceverzeichnis",
+        "description": "Wo der Service liegt, relativ zum Repository-Wurzelverzeichnis. Es darf noch nicht existieren.",
+        "placeholder": "services/payments",
+        "error": {
+          "empty": "Gib ein Verzeichnis innerhalb des Repositories an.",
+          "escapes": "Das Verzeichnis muss innerhalb des Repositories bleiben."
+        }
+      }
+    },
+    "adoption": {
+      "title": "Was soll dieser Service übernehmen?",
+      "subtitle": "Der neue Service unter {directory} in {target}.",
+      "intro": "Entscheide für jeden Bereich, ob der neue Service dem umgebenden Monorepo folgt oder das behält, was die Vorlage mitbringt. Bis zu deiner Entscheidung wird nichts geschrieben.",
+      "acceptAll": "Alle Vorschläge übernehmen",
+      "needsYou": "Deine Entscheidung fehlt",
+      "overridden": "Weicht vom Vorschlag ab",
+      "evidence": "Gelesen aus:",
+      "notePlaceholder": "Was der Agent zu diesem Bereich wissen sollte (optional)",
+      "remaining": "Für {count} Entscheidung fehlt noch deine Antwort | Für {count} Entscheidungen fehlt noch deine Antwort",
+      "approve": "Freigeben und bauen",
+      "cardPrompt": "Dieses Bootstrap wartet auf dich: entscheide, was der neue Service aus dem Monorepo übernimmt.",
+      "cardAction": "Prüfen",
+      "side": {
+        "monorepo": "Im Monorepo",
+        "template": "In der Vorlage",
+        "nothing": "Nichts für diesen Bereich"
+      },
+      "source": {
+        "monorepo": "Dem Monorepo folgen",
+        "template": "Vorlage behalten",
+        "both": "Beides kombinieren",
+        "neither": "Keines von beiden"
+      },
+      "area": {
+        "build-tooling": "Build-Werkzeuge",
+        "dependencies": "Abhängigkeiten",
+        "lint-format": "Linting und Formatierung",
+        "typecheck": "Typprüfung",
+        "testing": "Tests",
+        "ci": "CI",
+        "containerization": "Containerisierung",
+        "runtime-config": "Laufzeitkonfiguration",
+        "observability": "Observability",
+        "source-layout": "Quellcode-Struktur",
+        "docs": "Dokumentation",
+        "other": "Sonstiges"
+      },
+      "unavailable": {
+        "model_unavailable": "Für die Analyse ist kein Modell konfiguriert, daher gibt es keinen Vorschlag. Die Entscheidungen bleiben deine: beschreibe unten, was du möchtest.",
+        "repo_unreadable": "Das Monorepo konnte nicht gelesen werden, daher entstand kein Vorschlag. Prüfe, ob dieser Workspace das Repository erreicht.",
+        "analysis_unusable": "Die Analyse lieferte keinen brauchbaren Vorschlag. Du kannst unten trotzdem beschreiben, was du möchtest."
+      },
+      "notes": {
+        "label": "Hinweise zum gesamten Service",
+        "description": "Wird zusammen mit deinen Entscheidungen wörtlich an den Agenten übergeben."
+      },
+      "toast": {
+        "approved": "Entscheidungen freigegeben",
+        "approvedDesc": "Der Agent schreibt jetzt {directory} und öffnet einen Pull Request.",
+        "failed": "Prüfung konnte nicht abgeschickt werden"
+      }
     }
   },
   "fragments": {
@@ -6000,7 +6088,10 @@
         "webhook_limit_reached": "Webhook-Limit erreicht",
         "risk_policy_inherited": "Diese Richtlinie gehört zum Konto",
         "risk_policy_not_inherited": "Diese Richtlinie gehört zu diesem Board",
-        "kaizen_entry_not_settled": "Der Kaizen-Eintrag wurde noch nicht bewertet"
+        "kaizen_entry_not_settled": "Der Kaizen-Eintrag wurde noch nicht bewertet",
+        "bootstrap_not_awaiting_review": "Dieses Bootstrap wartet auf keine Prüfung",
+        "adoption_plan_unavailable": "Es gibt keinen Plan zum Freigeben",
+        "monorepo_directory_taken": "Dieses Verzeichnis existiert bereits"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -6042,7 +6133,10 @@
         "webhook_limit_reached": "Für diesen Workspace ist bereits die maximale Anzahl ausgehender Webhooks registriert. Entfernen Sie einen nicht mehr benötigten und registrieren Sie diesen erneut.",
         "risk_policy_inherited": "Sie gilt für alle Boards des Kontos und kann daher nicht von hier geändert werden. Klone sie in dieses Board und bearbeite die Kopie.",
         "risk_policy_not_inherited": "Sie ist bereits die eigene Richtlinie dieses Boards: bearbeite sie direkt oder lösche sie, wenn sie nicht mehr angeboten werden soll.",
-        "kaizen_entry_not_settled": "Die Bewertung steht noch aus oder läuft gerade, es gibt also keine Empfehlungen zum Bestätigen. Versuchen Sie es erneut, sobald sie abgeschlossen ist."
+        "kaizen_entry_not_settled": "Die Bewertung steht noch aus oder läuft gerade, es gibt also keine Empfehlungen zum Bestätigen. Versuchen Sie es erneut, sobald sie abgeschlossen ist.",
+        "bootstrap_not_awaiting_review": "Der Lauf ist weitergegangen, seit diese Prüfung geöffnet wurde. Lade das Board neu.",
+        "adoption_plan_unavailable": "Die Analyse konnte keinen erstellen, also gibt es keine Entscheidungen zum Absenden.",
+        "monorepo_directory_taken": "Ein Bootstrap legt einen neuen Service an. Wähle ein noch nicht vorhandenes Verzeichnis oder importiere das bestehende als Service."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",

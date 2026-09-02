@@ -78,7 +78,7 @@ function buildWorkerConformanceDeps(recorder: RecordingEventPublisher, opts: Wor
     // (deterministic selector) so the library CRUD assertion runs against D1 too — parity with
     // the Node/local fragment wiring.
     executionEventPublisher: recorder,
-    repoBootstrapper: new FakeRepoBootstrapper(),
+    repoBootstrapper: o.repoBootstrapper ?? new FakeRepoBootstrapper(),
     // A deterministic env-config-repairer so the shared suite can drive the repair
     // dispatch→poll→re-validate lifecycle against D1 without a real container (driven via
     // driveEnvConfigRepair); the module only builds when an env provider is also wired.
@@ -119,6 +119,7 @@ function buildWorkerConformanceDeps(recorder: RecordingEventPublisher, opts: Wor
       judgeRegistry: o.judgeRegistry,
       judgeAssessor: o.judgeAssessor,
       bugHuntAssessor: o.bugHuntAssessor,
+      monorepoAdoptionAdvisor: o.monorepoAdoptionAdvisor,
       inlineUseCaseGenerator: o.inlineUseCaseGenerator,
       // - fragmentBriefGenerator: a deterministic condensation model, so the generated-brief
       //   store's generate / reuse / regenerate-on-change loop is asserted against real D1.
