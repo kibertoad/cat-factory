@@ -135,9 +135,16 @@ export interface ParsedAdoptionDecisions {
  * or `refused` is in the record precisely because there was nothing behind it, so a
  * recommendation citing one is exactly the unsupported claim this check exists to drop: the
  * model would be reasoning from a file it was told it could not see.
+ *
+ * A survey whose transcript was WITHHELD (the list projection's `reads: null`) cites nothing, so
+ * every decision is dropped. That is the safe direction and the only honest one: parsing runs
+ * against the live session's own survey, and a caller reaching here with a projection has no
+ * record to check a claim against.
  */
 function surveyedPaths(survey: AdoptionSurvey): Set<string> {
-  return new Set(survey.reads.filter((read) => read.outcome === 'read').map((read) => read.path))
+  return new Set(
+    (survey.reads ?? []).filter((read) => read.outcome === 'read').map((read) => read.path),
+  )
 }
 
 function asString(value: unknown, max: number): string {

@@ -33,7 +33,14 @@ const SURVEY: AdoptionSurvey = {
     read('template:jest.config.js'),
   ],
   siblingServices: ['services/billing'],
-  exploration: { calls: 2, maxCalls: 24, chars: 40, maxChars: 54_000, exhausted: null },
+  exploration: {
+    calls: 2,
+    maxCalls: 24,
+    chars: 40,
+    maxChars: 54_000,
+    exhausted: null,
+    recordsDropped: 0,
+  },
 }
 
 function decision(overrides: Record<string, unknown> = {}) {
@@ -255,7 +262,14 @@ describe('parseAdoptionDecisions drop reporting', () => {
     const survey: AdoptionSurvey = {
       reads: [read('monorepo:package.json')],
       siblingServices: [],
-      exploration: { calls: 0, maxCalls: 24, chars: 0, maxChars: 54_000, exhausted: null },
+      exploration: {
+        calls: 0,
+        maxCalls: 24,
+        chars: 0,
+        maxChars: 54_000,
+        exhausted: null,
+        recordsDropped: 0,
+      },
     }
     const decisions = Array.from({ length: 300 }, (_, index) => ({
       id: `d${index}`,

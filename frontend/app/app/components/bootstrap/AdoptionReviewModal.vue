@@ -92,6 +92,10 @@ const canSubmit = computed(() => remaining.value === 0)
  * the model chose most of it, so "what was this suggestion built from" is a question only the
  * transcript answers. Split by ORIGIN, because a reviewer weighing a thin plan needs to know
  * whether the read was thin or the reading was.
+ *
+ * `reads` is nullable because the list projection withholds the transcript once a run is past its
+ * review, and this modal opens only for a run that is still awaiting one, which is exactly the
+ * case the projection keeps. So the fallback below is unreachable rather than a silent default.
  */
 const surveyReads = computed(() => plan.value?.survey.reads ?? [])
 const readSummary = computed(() => ({
@@ -100,6 +104,16 @@ const readSummary = computed(() => ({
     .length,
   missed: surveyReads.value.filter((entry) => entry.outcome !== 'read').length,
 }))
+
+/**
+ * How many reads the transcript could not hold.
+ *
+ * The summary above counts the ARRAY, which is capped, so a survey that made 140 reads and kept
+ * 96 would otherwise read as a survey that made 96. Shown for the same reason `exhausted` is: a
+ * record with a missing tail and a complete one lead a reviewer to opposite conclusions about how
+ * much of the monorepo this suggestion was built from.
+ */
+const recordsDropped = computed(() => plan.value?.survey.exploration.recordsDropped ?? 0)
 
 /**
  * Which budget the exploration ran out of, or null when it did not.
@@ -204,14 +218,21 @@ watch(open, (isOpen) => {
           <p v-if="exhausted" class="text-amber-300/90">
             {{ t(`bootstrap.adoption.survey.exhausted.${exhausted}`) }}
           </p>
+          <p v-if="recordsDropped > 0" class="text-amber-300/90">
+            {{ t('bootstrap.adoption.survey.truncated', { count: recordsDropped }) }}
+          </p>
           <details>
             <summary class="cursor-pointer text-slate-500 hover:text-slate-300">
               {{ t('bootstrap.adoption.survey.show') }}
             </summary>
             <ul class="mt-2 space-y-1">
+              <!-- Keyed by POSITION: the transcript is append-only and rendered in order, and
+                   the same path legitimately appears twice (a body refused by the seed and then
+                   served to the model, a path the model retried). Keying on the path patched
+                   those two rows against each other and rendered a note beside the wrong one. -->
               <li
-                v-for="entry in surveyReads"
-                :key="`${entry.origin}:${entry.path}`"
+                v-for="(entry, index) in surveyReads"
+                :key="index"
                 class="flex items-baseline gap-2"
               >
                 <span

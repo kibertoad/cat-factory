@@ -157,6 +157,22 @@ function toBootstrapJob(record: BootstrapJobRecord): BootstrapJob {
   }
 }
 
+/**
+ * Drop the adoption transcript from a run that is past its review.
+ *
+ * This list is EVERY bootstrap run the workspace has ever made, and it rides the workspace
+ * snapshot that every connected browser re-fetches on a full refresh. The transcript is up to
+ * {@link MAX_ADOPTION_READS} rows of reviewer detail read by exactly one surface: the review a
+ * parked run waits on. So a run that is still awaiting one keeps it, and every other run sends
+ * `null`, which is the shape's way of saying "not carried here" rather than `[]`, which is what a
+ * survey that read nothing looks like.
+ */
+function withoutSettledTranscript(job: BootstrapJob): BootstrapJob {
+  const plan = job.adoptionPlan
+  if (!plan || job.status === 'awaiting_review') return job
+  return { ...job, adoptionPlan: { ...plan, survey: { ...plan.survey, reads: null } } }
+}
+
 /** The fields every new bootstrap run starts with; the monorepo half overrides what it owns. */
 function newRunDefaults(
   id: string,
@@ -283,7 +299,7 @@ export class BootstrapService {
     const add = (record: BootstrapJobRecord) => {
       if (seen.has(record.id)) return
       seen.add(record.id)
-      out.push(toBootstrapJob(record))
+      out.push(withoutSettledTranscript(toBootstrapJob(record)))
     }
     for (const record of await this.deps.bootstrapJobRepository.listByWorkspace(workspaceId)) {
       add(record)

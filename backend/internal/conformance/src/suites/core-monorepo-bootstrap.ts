@@ -1,3 +1,4 @@
+import type { AdoptionRead } from '@cat-factory/contracts'
 import type {
   AdoptionPlan,
   BootstrapJob,
@@ -18,6 +19,18 @@ import type { ConformanceHarness } from '../harness.js'
 // D1 writes it through `json_set(…, json(?))` and Postgres through `jsonb_set(…::jsonb)`, and a
 // mismatch in either stores a plan as the TEXT of a plan, which reads back as a parked run whose
 // reviewer is shown nothing, on one runtime only. Everything below rides a real store on both.
+
+/**
+ * The transcript a SINGLE-JOB read always carries.
+ *
+ * `reads` is nullable because the LIST projection withholds it once a run is past review, so a
+ * facade that dropped it here too would leave every assertion below quietly passing over an empty
+ * array. Asserted rather than defaulted.
+ */
+function transcript(plan: AdoptionPlan): AdoptionRead[] {
+  expect(plan.survey.reads).not.toBeNull()
+  return plan.survey.reads ?? []
+}
 
 /** One decision the fake advisor proposes, so the suite can name it in a review. */
 const DECISION_ID = 'test-runner'
@@ -263,7 +276,8 @@ function defineSurveyGroup(harness: ConformanceHarness): void {
       // convention file of its own, which is the read a root-only survey cannot make and what
       // makes a monorepo whose services disagree representable at all.
       expect(plan.survey.siblingServices).toEqual(['services/billing', 'services/inventory'])
-      const read = (path: string) => plan.survey.reads.find((entry) => entry.path === path)
+      const rows = transcript(plan)
+      const read = (path: string) => rows.find((entry) => entry.path === path)
       expect(read('monorepo:package.json')).toMatchObject({ origin: 'seed', outcome: 'read' })
       expect(read('template:jest.config.js')).toMatchObject({ origin: 'seed', outcome: 'read' })
       // …and the transcript records what the MODEL went and fetched beside it, which is the whole
@@ -368,7 +382,7 @@ function defineSurveyGroup(harness: ConformanceHarness): void {
       // A read that came back ABSENT is on the transcript precisely because there was nothing
       // behind it, so it is recorded and still not citable.
       expect(
-        plan.survey.reads.find(
+        transcript(plan).find(
           (entry) => entry.path === 'monorepo:services/billing/never-existed.json',
         ),
       ).toMatchObject({ origin: 'model', outcome: 'absent' })
@@ -471,6 +485,18 @@ function defineReviewGroup(harness: ConformanceHarness): void {
       const service = catalog.body.find((s) => s.frameBlockId === done.body.blockId)
       expect(service?.repoGithubId).toBe(777)
       expect(service?.directory).toBe('services/payments')
+
+      // The transcript rides the SINGLE-JOB read and not the list, which is what every workspace
+      // snapshot carries for every bootstrap run the workspace has ever made. Withheld as `null`
+      // rather than `[]`, because a survey that read nothing is a different fact and the only
+      // surface that renders the transcript is the review this run is already past.
+      expect(transcript(done.body.adoptionPlan as AdoptionPlan).length).toBeGreaterThan(0)
+      const listed = await app.call<BootstrapJob[]>('GET', `/workspaces/${wsId}/bootstrap/jobs`)
+      const row = listed.body.find((job) => job.id === started.body.id)
+      expect(row?.adoptionPlan?.survey.reads).toBeNull()
+      // Everything a card DOES render survives the trim.
+      expect(row?.adoptionPlan?.decisions).toHaveLength(1)
+      expect(row?.adoptionPlan?.survey.siblingServices.length).toBeGreaterThan(0)
     })
 
     it('parks with a stated reason when no model is wired, instead of an empty plan', async () => {

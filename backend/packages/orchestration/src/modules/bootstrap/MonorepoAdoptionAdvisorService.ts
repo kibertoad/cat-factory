@@ -16,7 +16,7 @@ import {
 import {
   catFactoryObservability,
   MONOREPO_ADOPTION_AGENT_KIND,
-  MONOREPO_ADOPTION_SYSTEM_PROMPT,
+  monorepoAdoptionSystemPrompt,
   monorepoExplorationTools,
   renderMonorepoAdoptionPrompt,
 } from '@cat-factory/agents'
@@ -106,7 +106,9 @@ export class MonorepoAdoptionAdvisorService implements MonorepoAdoptionAdvisor {
     try {
       const result = await generateText({
         model: modelProvider.resolve(ref),
-        system: MONOREPO_ADOPTION_SYSTEM_PROMPT,
+        // The SAME sides the tool set is built from, so the prompt cannot promise a repository
+        // the model has no tool for.
+        system: monorepoAdoptionSystemPrompt(subject.explorer.sides),
         prompt: renderMonorepoAdoptionPrompt({
           directory: subject.directory,
           instructions: subject.instructions,

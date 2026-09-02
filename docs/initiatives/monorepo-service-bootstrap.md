@@ -98,17 +98,40 @@ anything the transcript does not hold as READ, and the transcript is now a recor
 happened rather than a prediction.
 
 The bounds are a call ceiling (24 model reads), a content ceiling (54 000 characters for the
-loop, on top of the seed's per-side reserved 36 000) and a structural step cap. Exhausting a
-budget is ANSWERED to the model rather than thrown, so the loop still ends in a plan that names
-the areas it ran short on, and it is reported on `AdoptionSurvey.exploration.exhausted` so the
-reviewer can tell a thin read from a thin reading.
+loop, on top of the seed's own 36 000) and a structural step cap. The seed's number is a TOTAL
+split into an equal reservation per side, so a run with no template reserves all of it for the
+monorepo and a run with one gives each side half; whatever a side leaves unspent carries to the
+next, which makes the reservation a floor rather than a cap. Every body is capped at 6 000
+characters on its own, a directory listing as much as a file: uncapped, one listing of a
+generated directory is wider than the whole loop budget, and the only answer a charge has to that
+is to refuse it and latch `exhausted`.
+
+Exhausting a budget is ANSWERED to the model rather than thrown, so the loop still ends in a plan
+that names the areas it ran short on, and it is reported on `AdoptionSurvey.exploration.exhausted`
+so the reviewer can tell a thin read from a thin reading. The transcript ARRAY has a cap of its
+own (96 rows, since one model turn can emit any number of tool calls), and what that cap cut rides
+on `exploration.recordsDropped`: the gap between `calls` and the array's length cannot state it,
+because the seed adds rows without adding calls and a call answered from what was already read
+adds a call without a row.
 
 The seed is deliberately STRUCTURE-FIRST: each side's root listing and the convention files it
-really holds, the CI directory LISTED rather than sampled, and the listing of every sibling that
-holds a convention file of its own. Listings are cheap, they are the only evidence either side
-offers about layout, and a listing is a menu the model picks from rather than a guess the
-platform makes on its behalf. The cheap case stays cheap: nothing spends a model call
-rediscovering `package.json`.
+really holds, whichever CI declaration the repository's provider uses (`.github/workflows` and
+`.circleci` LISTED rather than sampled, `.gitlab-ci.yml` read, each gated on the root listing
+actually holding it), and the listing of every sibling that holds a convention file of its own.
+Naming every provider matters as much here as the cross-ecosystem convention list does: a
+GitLab-hosted monorepo has no `.github` at all, so a GitHub-only seed leaves the `ci` area with
+nothing citable on a deployment shape the platform supports as first-class. Listings are cheap,
+they are the only evidence either side offers about layout, and a listing is a menu the model
+picks from rather than a guess the platform makes on its behalf. The cheap case stays cheap:
+nothing spends a model call rediscovering `package.json`, and a body the reservation could not
+fit is HELD rather than dropped, so the model taking the prompt's invitation to ask for it is
+answered from memory instead of a second contents-API round trip.
+
+The transcript is reviewer detail, so it rides the SINGLE-JOB read and not the list: `listJobs`
+feeds every workspace snapshot with every bootstrap run the workspace has ever made, and the only
+surface that renders the transcript is the review a parked run waits on. A settled run therefore
+sends `reads: null`, which says "not carried here" where `[]` would say "this survey read
+nothing".
 
 Latency was the open question and the answer is that it is free here. The survey ends in a human
 wait of hours or days, so a handful of extra round trips costs nothing a reviewer will notice.

@@ -5188,6 +5188,7 @@
       "survey": {
         "summary": "Dieser Vorschlag entstand aus {read} Dateien und Verzeichnislisten; {byModel} davon hat das Modell selbst angefordert.",
         "missed": "Lesevorgänge ohne Ergebnis: {count}. Aufklappen, um zu sehen, welche.",
+        "truncated": "Lesevorgänge, die der Datensatz nicht behalten konnte: {count}. Die Erhebung hat sie durchgeführt; der Liste unten fehlt ihr Ende.",
         "show": "Alle Lesevorgänge der Erhebung anzeigen",
         "exhausted": {
           "calls": "Der Erhebung gingen die Lesevorgänge aus, bevor sie fertig war; möglicherweise wurden nicht alle Bereiche geprüft. Starte den Lauf erneut für eine vollständigere Erhebung.",

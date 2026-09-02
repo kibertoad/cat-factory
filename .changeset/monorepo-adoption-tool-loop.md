@@ -17,10 +17,12 @@ saw nothing below a sibling's top level; and it read whichever two CI workflows 
 which is unlikely to be the one that will actually gate the pull request.
 
 The read is now a bounded tool loop. The platform still seeds an opening context (each side's
-root listing and convention files, the CI directory listed rather than sampled, and the listing
-of every sibling holding a convention file of its own), and the model then asks for what it
-needs through `list`/`read` tools bound per side over the same checkout-free `RepoFiles`. It is
-still inline: no container, no clone, no runner-image change.
+root listing and convention files, whichever CI declaration the repository's provider uses
+listed rather than sampled, and the listing of every sibling holding a convention file of its
+own), and the model then asks for what it needs through `list`/`read` tools bound per side over
+the same checkout-free `RepoFiles`. It is still inline: no container, no clone, no runner-image
+change. The prompt is built from the sides that were actually wired, so a run whose reference
+template the workspace never linked is not told it has tools it does not have.
 
 The platform keeps the bookkeeping, which is what keeps the suggestion checkable. Every read,
 seeded or model-chosen, is budgeted (24 model reads, 54 000 characters for the loop), scrubbed
@@ -31,6 +33,9 @@ a thin read from a thin reading.
 
 `AdoptionSurvey` is now that transcript: `reads` replaces `monorepoPaths`/`templatePaths`/
 `unreadablePaths`, `siblingServices` replaces the single `siblingService`, and `exploration`
-carries the budget. Internal wire shape, so a plan stored by an older build reads back
-unusable and the run should be retried; nothing about the review, the park or the pull request
-changes.
+carries the budget plus `recordsDropped`, the count of rows the transcript's own cap could not
+hold. `reads` is nullable: the list projection every workspace snapshot is built from withholds
+the transcript once a run is past its review, and says so rather than sending an empty array,
+which is what a survey that read nothing looks like. Internal wire shape, so a plan stored by an
+older build reads back unusable and the run should be retried; nothing about the review, the park
+or the pull request changes.

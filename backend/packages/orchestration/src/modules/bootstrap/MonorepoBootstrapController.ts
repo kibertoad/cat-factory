@@ -68,11 +68,25 @@ export interface MonorepoBootstrapDeps {
  * A DISTINCT shape from "the survey ran and found nothing": the exploration reports a zero
  * budget rather than an unspent one, so a reader cannot mistake a plan the platform never got as
  * far as reading for one whose model chose to read nothing.
+ *
+ * A FACTORY rather than a shared constant, because the arrays would otherwise be one object
+ * handed to every unavailable plan this process ever builds. The code this replaced pushed onto
+ * exactly this field, so one future append would have leaked a row into every later plan in the
+ * isolate, and nothing about the call site would have said so.
  */
-const EMPTY_SURVEY: AdoptionSurvey = {
-  reads: [],
-  siblingServices: [],
-  exploration: { calls: 0, maxCalls: 0, chars: 0, maxChars: 0, exhausted: null },
+function emptySurvey(): AdoptionSurvey {
+  return {
+    reads: [],
+    siblingServices: [],
+    exploration: {
+      calls: 0,
+      maxCalls: 0,
+      chars: 0,
+      maxChars: 0,
+      exhausted: null,
+      recordsDropped: 0,
+    },
+  }
 }
 
 /**
@@ -299,9 +313,12 @@ export class MonorepoBootstrapController {
       log?.info('monorepo bootstrap: adoption plan ready', {
         decisions: decisions.length,
         dropped: dropped.length,
-        reads: survey.reads.length,
+        // The session's own survey, so the transcript is always here; the LIST projection is what
+        // withholds it, and that happens well after this.
+        reads: survey.reads?.length ?? 0,
         explorationCalls: survey.exploration.calls,
         exhausted: survey.exploration.exhausted,
+        recordsDropped: survey.exploration.recordsDropped,
         model,
       })
       return {
@@ -402,7 +419,7 @@ export class MonorepoBootstrapController {
       status: 'unavailable',
       unavailableReason: reason,
       unavailableDetail: detail,
-      survey: EMPTY_SURVEY,
+      survey: emptySurvey(),
       decisions: [],
       droppedUnevidenced: [],
       model: null,

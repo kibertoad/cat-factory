@@ -1,10 +1,5 @@
-import type {
-  AdoptionExploration,
-  AdoptionRead,
-  AdoptionReadOrigin,
-  AdoptionSurvey,
-} from '@cat-factory/contracts'
-import { MAX_ADOPTION_READS } from '@cat-factory/contracts'
+import type { AdoptionExploration, AdoptionRead, AdoptionSurvey } from '@cat-factory/contracts'
+import { MAX_ADOPTION_READ_PATH, MAX_ADOPTION_READS } from '@cat-factory/contracts'
 import type {
   Logger,
   MonorepoAdoptionExplorer,
@@ -20,13 +15,14 @@ import { getErrorMessage, redactSecrets } from '@cat-factory/kernel'
 // checkout-free `RepoFiles` port.
 //
 // The read is in two halves, and the split is the whole design. The platform SEEDS an opening
-// context (each side's root listing and the convention files it really holds, the CI directory,
-// and the listing of every sibling that looks like a service), because there is no reason to
-// spend model calls rediscovering `package.json` and it keeps the cheap case cheap. The MODEL
-// then widens it: it asks for the CI workflow that will actually gate the pull request, follows
-// a dependency into the shared package that says what adopting it entails, and opens a second
-// and a third sibling when the first two disagree. None of that is enumerable in advance, which
-// is why the previous declared list decided what the survey could not see before it looked.
+// context (each side's root listing and the convention files it really holds, whichever CI
+// declaration its provider uses, and the listing of every sibling that looks like a service),
+// because there is no reason to spend model calls rediscovering `package.json` and it keeps the
+// cheap case cheap. The MODEL then widens it: it asks for the CI workflow that will actually gate
+// the pull request, follows a dependency into the shared package that says what adopting it
+// entails, and opens a second and a third sibling when the first two disagree. None of that is
+// enumerable in advance, which is why the previous declared list decided what the survey could
+// not see before it looked.
 //
 // What the platform keeps is the BOOKKEEPING. Every read, seeded or model-chosen, is budgeted,
 // scrubbed and appended to ONE transcript, and that transcript is what the plan carries, so a
@@ -90,16 +86,32 @@ const CONVENTION_FILES = [
 ] as const
 
 /**
- * The CI directory the seed LISTS (never reads) when the root holds its parent.
+ * The CI directories the seed LISTS (never reads), each gated on the root entry that holds it.
  *
  * Listing rather than reading is the correction the tool loop makes possible: a monorepo with
  * reusable workflows plus thirty per-service ones used to contribute an arbitrary two, and what
  * a new directory is actually REQUIRED to satisfy (a path filter, a required check) was likely
  * in one of the twenty-eight nobody read. The listing is the menu; the model picks off it.
+ *
+ * Every provider the platform pushes to is named, for the same reason {@link CONVENTION_FILES}
+ * is cross-ecosystem: a GitLab-hosted monorepo has no `.github` at all, so a seed that knows
+ * only GitHub hands the model an opening context with NO CI in it and leaves the `ci` area with
+ * nothing citable on exactly the deployments this platform supports as first-class. Probed by
+ * intersection with the root listing, so naming a provider no repository here uses costs nothing.
  */
-const CI_DIRECTORY = '.github/workflows'
-/** The root entry whose presence makes {@link CI_DIRECTORY} worth listing. */
-const CI_ROOT_ENTRY = '.github'
+const CI_DIRECTORIES = [
+  { rootEntry: '.github', path: '.github/workflows' },
+  { rootEntry: '.circleci', path: '.circleci' },
+] as const
+
+/**
+ * CI declarations that are a single root FILE, so there is no directory to offer as a menu.
+ *
+ * Read outside the {@link MAX_ROOT_FILES} convention cap deliberately: this is the whole of what
+ * its provider says about CI, and losing it to fourteen manifests would leave the `ci` area
+ * unevidenced on a repository that states its pipeline perfectly clearly.
+ */
+const CI_FILES = ['.gitlab-ci.yml'] as const
 
 /**
  * How many sibling directories are probed as candidate worked examples.
@@ -111,19 +123,27 @@ const CI_ROOT_ENTRY = '.github'
  */
 const MAX_SIBLING_CANDIDATES = 6
 
-/** Per-file content cap. A convention is legible from its opening; a lockfile-sized read is not. */
+/**
+ * Per-BODY content cap, on a directory listing as much as on a file.
+ *
+ * A convention is legible from its opening and a lockfile-sized read is not, and the same bound
+ * has to reach a listing: a generated or vendored directory with five thousand entries renders a
+ * body two budgets wide, which the exploration charge can only answer by refusing, latching
+ * `exhausted` and reporting a survey that spent almost nothing as one that ran out of content.
+ */
 const MAX_FILE_CHARS = 6_000
 /** How many root files one side contributes to the opening context, most-conventional first. */
 const MAX_ROOT_FILES = 14
 
 /**
- * The opening context's character budget, RESERVED per side.
+ * The opening context's TOTAL character budget, split into an equal reservation per side.
  *
  * Spent in key order it would not be a bound at all but a handover to whichever side sorts
  * first, and `monorepo:` sorts before `template:` for every key: a large monorepo would spend
  * the whole allowance and the template would land entirely refused, which is exactly the
- * crowding-out this exists to prevent. Each side gets a reserved half, spent in its own priority
- * order, and whatever one side leaves unspent is then offered to the other.
+ * crowding-out this exists to prevent. So a run with no template reserves all of it for the
+ * monorepo and a run with one gives each side half, spent in its own priority order; whatever a
+ * side leaves unspent carries to the next, which makes the reservation a floor rather than a cap.
  */
 const MAX_SEED_CHARS = 36_000
 
@@ -173,19 +193,46 @@ export function parentDirectoryOf(directory: string): string {
 }
 
 /**
+ * The longest raw path a model may ask for.
+ *
+ * Derived from the contract rather than restated: what the transcript records is the PREFIXED
+ * key, so the longest side name and a listing's trailing slash both have to fit inside
+ * {@link MAX_ADOPTION_READ_PATH} beside the path itself. Restating 400 here emitted a row the
+ * schema calls too long for any path over 390.
+ */
+const MAX_SURVEY_PATH = MAX_ADOPTION_READ_PATH - 'template:'.length - 1
+
+/**
  * A repository-relative path the platform is willing to fetch, or the reason it will not.
  *
- * The path is MODEL-AUTHORED and becomes a URL path segment on the VCS contents API, so it is
- * validated for magic rather than only for traversal: a control character or a backslash means
- * the model is guessing at a shell or a Windows path, and answering "not found" would tell it the
- * repository lacks a file it never actually asked for. A refusal is REPORTED (it lands on the
- * transcript and the model is told), never a silent shortening.
+ * The path is MODEL-AUTHORED and is interpolated into the VCS contents API's URL, so it is
+ * validated for magic rather than only for traversal, and both halves of that bite:
+ *
+ *  - a control character or a backslash means the model is guessing at a shell or a Windows
+ *    path, and answering "not found" would tell it the repository lacks a file it never actually
+ *    asked for;
+ *  - `?`, `#` and `%` are the URL's own syntax, and the caller appends its `?ref=` AFTER this
+ *    path. A `#` truncates the request to a DIFFERENT file while the transcript records the whole
+ *    string as read, so a citation lands on the plan pointing at a path no reviewer can open; a
+ *    `?ref=` of the model's own is honoured over the branch the survey believes it is reading;
+ *    and a percent escape puts the traversal check below on the wrong side of the decoding the
+ *    host, not this process, performs.
+ *
+ * A refusal is REPORTED (it lands on the transcript and the model is told), never a silent
+ * shortening.
  */
 export function normalizeSurveyPath(raw: string): { path: string } | { refused: string } {
   const trimmed = raw.trim().replace(/^\.\//, '').replace(/^\/+/, '').replace(/\/+$/, '')
-  if (trimmed.length > 400) return { refused: 'the path is too long to be a repository path' }
+  if (trimmed.length > MAX_SURVEY_PATH) {
+    return { refused: 'the path is too long to be a repository path' }
+  }
   if (trimmed.includes('\\') || [...trimmed].some((ch) => ch.charCodeAt(0) < 0x20)) {
     return { refused: 'the path contains characters that are not part of a repository path' }
+  }
+  if (/[?#%]/.test(trimmed)) {
+    return {
+      refused: 'the path contains URL syntax (? # or %), which is not part of a repository path',
+    }
   }
   const segments = trimmed.split('/')
   if (segments.some((segment) => segment === '..')) {
@@ -207,12 +254,22 @@ function clip(content: string, max: number): string {
   return `${content.slice(0, max)}\n…[truncated: ${content.length - max} more characters not shown]`
 }
 
-/** Render a directory's entries as the body a decision can cite for layout. */
-function renderListing(entries: { name: string; type: string }[]): string {
-  return entries
-    .map((entry) => `${entry.name}${entry.type === 'dir' ? '/' : ''}`)
-    .sort()
-    .join('\n')
+/**
+ * Render a directory's entries as the body a decision can cite for layout, under the same
+ * per-body cap a file read answers to.
+ *
+ * Uncapped, one listing of a generated directory could be wider than the whole exploration
+ * budget, and the only answer a charge has to a body it cannot fit is to refuse it and latch
+ * `exhausted`, reporting a content budget that ran out when nothing had been spent.
+ */
+function renderListing(entries: { name: string; type: string }[], max: number): string {
+  return clip(
+    entries
+      .map((entry) => `${entry.name}${entry.type === 'dir' ? '/' : ''}`)
+      .sort()
+      .join('\n'),
+    max,
+  )
 }
 
 /** A body fetched during the seed, awaiting the per-side reservation that decides if it fits. */
@@ -278,10 +335,20 @@ export class MonorepoSurveySession implements MonorepoAdoptionExplorer {
   private readonly log: Logger | undefined
   private readonly reads: AdoptionRead[] = []
   private readonly bodies: Record<string, string> = {}
+  /**
+   * Seed bodies that were FETCHED but did not fit the opening context's reservation.
+   *
+   * Held rather than dropped: the prompt names them and tells the model to ask, so throwing the
+   * bytes away buys a second contents-API round trip for content this process is already
+   * holding. Kept OUT of {@link bodies} so nothing is citable before it has actually been served,
+   * and out of {@link seedKeys} so it stays out of the opening prompt.
+   */
+  private readonly withheld: Record<string, string> = {}
   private readonly seedKeys = new Set<string>()
   private siblings: string[] = []
   private calls = 0
   private explorationChars = 0
+  private recordsDropped = 0
   private exhausted: AdoptionExploration['exhausted'] = null
 
   constructor(private readonly request: MonorepoSurveyRequest) {
@@ -308,6 +375,7 @@ export class MonorepoSurveySession implements MonorepoAdoptionExplorer {
         chars: this.explorationChars,
         maxChars: this.limits.maxExplorationChars,
         exhausted: this.exhausted,
+        recordsDropped: this.recordsDropped,
       },
     }
   }
@@ -361,29 +429,44 @@ export class MonorepoSurveySession implements MonorepoAdoptionExplorer {
 
   private async seedMonorepo(reader: SideReader): Promise<SeedHarvest> {
     const candidates: SeedCandidate[] = []
-    const root = await this.listInto(reader, '', 'seed', candidates)
-    if (root) {
-      await this.takeConventionFiles(reader, '', root, candidates)
-      if (root.some((entry) => entry.name === CI_ROOT_ENTRY)) {
-        await this.listInto(reader, CI_DIRECTORY, 'seed', candidates)
-      }
-    }
+    const root = await this.seedRoot(reader, candidates)
     const parent = parentDirectoryOf(this.request.directory)
     // Re-uses the root listing for a root-level target rather than asking for it twice. The
     // parent's own listing contributes no citable entry (the empty candidate sink): it is the
     // MENU the sibling probe reads, and each qualifying sibling's listing carries the layout
     // evidence. A failure to list it is still recorded, because "no siblings" and "could not see
     // whether there are siblings" are opposite facts.
-    const siblingEntries = parent === '' ? root : await this.listInto(reader, parent, 'seed', [])
+    const siblingEntries = parent === '' ? root : await this.listInto(reader, parent, [])
     const siblings = await this.probeSiblings(reader, siblingEntries, candidates)
     return { candidates, siblings }
   }
 
   private async seedTemplate(reader: SideReader): Promise<SeedHarvest> {
     const candidates: SeedCandidate[] = []
-    const root = await this.listInto(reader, '', 'seed', candidates)
-    if (root) await this.takeConventionFiles(reader, '', root, candidates)
+    await this.seedRoot(reader, candidates)
     return { candidates, siblings: [] }
+  }
+
+  /**
+   * What BOTH sides contribute: the root listing, the conventions it holds, and its CI.
+   *
+   * Shared rather than the monorepo's alone, because `ci` is a decision BETWEEN the two sides and
+   * a seed that evidences only one of them biases it in the direction the prompt spends a
+   * paragraph forbidding: an area nothing was read about is not an area the other side wins.
+   */
+  private async seedRoot(
+    reader: SideReader,
+    candidates: SeedCandidate[],
+  ): Promise<{ name: string; type: string; path: string }[] | null> {
+    const root = await this.listInto(reader, '', candidates)
+    if (!root) return null
+    await this.takeRootFiles(reader, root, candidates)
+    for (const ci of CI_DIRECTORIES) {
+      if (root.some((entry) => entry.name === ci.rootEntry)) {
+        await this.listInto(reader, ci.path, candidates)
+      }
+    }
+    return root
   }
 
   /**
@@ -398,45 +481,86 @@ export class MonorepoSurveySession implements MonorepoAdoptionExplorer {
   private async listInto(
     reader: SideReader,
     path: string,
-    origin: AdoptionReadOrigin,
     candidates: SeedCandidate[],
   ): Promise<{ name: string; type: string; path: string }[] | null> {
     const key = keyFor(reader.prefix, 'list', path)
     const result = await reader.list(path)
     if ('failed' in result) {
-      this.log?.warn('monorepo survey: directory listing failed', {
-        side: reader.prefix,
-        path,
-        err: result.failed,
-      })
-      this.record({ path: key, origin, outcome: 'unreadable', chars: 0, note: result.failed })
+      this.noteListingFailure(reader, path, result.failed)
       return null
     }
     if (result.entries.length === 0) {
       this.record({
         path: key,
-        origin,
+        origin: 'seed',
         outcome: 'absent',
         chars: 0,
         note: 'the directory is empty or does not exist',
       })
       return result.entries
     }
-    candidates.push({ key, body: renderListing(result.entries) })
+    candidates.push({ key, body: renderListing(result.entries, this.limits.maxFileChars) })
     return result.entries
   }
 
-  /** Read the convention files a listed directory actually holds, capped and in priority order. */
-  private async takeConventionFiles(
+  /**
+   * A seed listing that FAILED: warned and recorded as unreadable, never skipped.
+   *
+   * Shared with the sibling probe, which is the read where skipping costs the most. "No sibling
+   * service" is the strongest claim the opening context makes about a monorepo (it tells the
+   * model there is no worked example and it tells the reviewer the survey saw root conventions
+   * only), so a probe blinded by a revoked token or a rate limit has to say so rather than
+   * produce the sentence a genuinely flat repository produces.
+   */
+  private noteListingFailure(reader: SideReader, path: string, cause: string): void {
+    this.log?.warn('monorepo survey: directory listing failed', {
+      side: reader.prefix,
+      path,
+      err: cause,
+    })
+    this.record({
+      path: keyFor(reader.prefix, 'list', path),
+      origin: 'seed',
+      outcome: 'unreadable',
+      chars: 0,
+      note: cause,
+    })
+  }
+
+  /**
+   * The root files one side contributes: its conventions, capped in priority order, plus any
+   * single-file CI declaration.
+   *
+   * The two lists are read together but capped apart. A CI file competing for the convention cap
+   * would be crowded out by fourteen manifests on exactly the repositories whose CI is a single
+   * file, which is the `ci` area losing its only evidence to a tie-break nobody chose.
+   */
+  private async takeRootFiles(
     reader: SideReader,
-    dir: string,
     entries: { name: string; type: string }[],
     candidates: SeedCandidate[],
   ): Promise<void> {
     const present = new Set(
       entries.filter((entry) => entry.type === 'file').map((entry) => entry.name),
     )
-    const wanted = CONVENTION_FILES.filter((name) => present.has(name)).slice(0, MAX_ROOT_FILES)
+    await this.takeFiles(
+      reader,
+      '',
+      [
+        ...CONVENTION_FILES.filter((name) => present.has(name)).slice(0, MAX_ROOT_FILES),
+        ...CI_FILES.filter((name) => present.has(name)),
+      ],
+      candidates,
+    )
+  }
+
+  /** Read a named set of files a directory actually holds, in the order they were named. */
+  private async takeFiles(
+    reader: SideReader,
+    dir: string,
+    wanted: string[],
+    candidates: SeedCandidate[],
+  ): Promise<void> {
     // One fixed fan-out: the set is bounded and declared, so this never grows with the repository.
     const results = await Promise.all(
       wanted.map(async (name) => {
@@ -471,9 +595,14 @@ export class MonorepoSurveySession implements MonorepoAdoptionExplorer {
   /**
    * List every plausible sibling service, keeping the ones that hold a convention file.
    *
-   * Excludes the target itself, every dot-entry, and the CI folder: a directory that says nothing
-   * about how a service here is built is worse than no example, because "no sibling" is a fact
-   * the plan REPORTS while a bad sibling is one it asserts.
+   * Excludes the target itself and every dot-entry (which is also what keeps the CI folder out,
+   * since a listing's entries are one level deep): a directory that says nothing about how a
+   * service here is built is worse than no example, because "no sibling" is a fact the plan
+   * REPORTS while a bad sibling is one it asserts.
+   *
+   * One bounded fan-out rather than a loop of awaits, the shape {@link takeFiles} already uses:
+   * the candidate set is capped above, so six sequential round trips to the VCS host sat in the
+   * opening context's critical path for nothing.
    */
   private async probeSiblings(
     reader: SideReader,
@@ -482,27 +611,28 @@ export class MonorepoSurveySession implements MonorepoAdoptionExplorer {
   ): Promise<string[]> {
     if (!entries) return []
     const target = this.request.directory
-    const qualifying: string[] = []
     const probes = entries
       .filter(
-        (entry) =>
-          entry.type === 'dir' &&
-          entry.path !== target &&
-          !entry.name.startsWith('.') &&
-          entry.path !== CI_DIRECTORY,
+        (entry) => entry.type === 'dir' && entry.path !== target && !entry.name.startsWith('.'),
       )
       .map((entry) => entry.path)
       .sort()
       .slice(0, MAX_SIBLING_CANDIDATES)
-    for (const candidate of probes) {
-      const own = await reader.list(candidate)
-      if ('failed' in own) continue
-      const names = new Set(own.entries.filter((e) => e.type === 'file').map((e) => e.name))
+    const listings = await Promise.all(
+      probes.map(async (path) => ({ path, result: await reader.list(path) })),
+    )
+    const qualifying: string[] = []
+    for (const { path, result } of listings) {
+      if ('failed' in result) {
+        this.noteListingFailure(reader, path, result.failed)
+        continue
+      }
+      const names = new Set(result.entries.filter((e) => e.type === 'file').map((e) => e.name))
       if (!CONVENTION_FILES.some((name) => names.has(name))) continue
-      qualifying.push(candidate)
+      qualifying.push(path)
       candidates.push({
-        key: keyFor(reader.prefix, 'list', candidate),
-        body: renderListing(own.entries),
+        key: keyFor(reader.prefix, 'list', path),
+        body: renderListing(result.entries, this.limits.maxFileChars),
       })
     }
     return qualifying
@@ -513,8 +643,10 @@ export class MonorepoSurveySession implements MonorepoAdoptionExplorer {
    *
    * A body that does not fit is recorded `refused` rather than dropped, for the same reason the
    * survey reports what it could not read: the model must not treat a file it was never shown as
-   * a file that does not exist, and the reviewer sees the same list. Whatever an earlier side
-   * leaves unspent carries forward, so the reservation is a floor rather than a ceiling.
+   * a file that does not exist, and the reviewer sees the same list. The BYTES are kept even so
+   * (see {@link withheld}), because the note invites the model to ask for them and re-fetching
+   * what is already in memory is a round trip for nothing. Whatever an earlier side leaves
+   * unspent carries forward, so the reservation is a floor rather than a ceiling.
    */
   private commitSeed(harvests: SeedHarvest[]): void {
     const share = Math.floor(this.limits.maxSeedChars / Math.max(1, harvests.length))
@@ -524,6 +656,7 @@ export class MonorepoSurveySession implements MonorepoAdoptionExplorer {
       let budget = share + spare
       for (const candidate of harvest.candidates) {
         if (candidate.body.length > budget) {
+          this.withheld[candidate.key] = candidate.body
           this.record({
             path: candidate.key,
             origin: 'seed',
@@ -594,6 +727,18 @@ export class MonorepoSurveySession implements MonorepoAdoptionExplorer {
     if (cached !== undefined) {
       return { outcome: 'read', body: cached, note: null, key }
     }
+    // Fetched during the seed but never shown, so the model taking the prompt's advice and asking
+    // for it costs no round trip. CHARGED all the same: the bytes enter the model's context now,
+    // which is what the exploration budget bounds, and it takes a `read` row of its own beside the
+    // seed's `refused` one, because the citation check upstream keys on the OUTCOME.
+    const withheld = this.withheld[key]
+    if (withheld !== undefined) {
+      const answer = this.charge(key, withheld)
+      // Dropped only once it is SERVED: a charge refused for an exhausted budget must leave the
+      // body where it is, so a later call with room can still answer it without a second fetch.
+      if (answer.outcome === 'read') delete this.withheld[key]
+      return answer
+    }
     return request.kind === 'list'
       ? await this.exploreList(reader, path, key)
       : await this.exploreRead(reader, path, key)
@@ -616,7 +761,7 @@ export class MonorepoSurveySession implements MonorepoAdoptionExplorer {
       })
       return { outcome: 'absent', body: '', note: 'no such directory, or it is empty', key: null }
     }
-    return this.charge(key, renderListing(result.entries))
+    return this.charge(key, renderListing(result.entries, this.limits.maxFileChars))
   }
 
   private async exploreRead(
@@ -693,12 +838,17 @@ export class MonorepoSurveySession implements MonorepoAdoptionExplorer {
   /**
    * Append to the transcript, up to the cap.
    *
-   * Past {@link MAX_ADOPTION_READS} the entry is counted but not recorded: one model turn can
-   * emit any number of tool calls, so the array needs a bound the call budget does not give it.
-   * `exploration.calls` carries the true total, which is what states the truncation.
+   * Past {@link MAX_ADOPTION_READS} the entry is COUNTED and not recorded: one model turn can emit
+   * any number of tool calls, so the array needs a bound the call budget does not give it, and
+   * that count is what states the truncation to the reviewer. The gap between `calls` and the
+   * array's length cannot: the seed adds rows without adding calls, and a call answered from what
+   * was already read adds a call without a row.
    */
   private record(read: AdoptionRead): void {
-    if (this.reads.length >= MAX_ADOPTION_READS) return
+    if (this.reads.length >= MAX_ADOPTION_READS) {
+      this.recordsDropped += 1
+      return
+    }
     this.reads.push(read)
   }
 }

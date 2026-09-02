@@ -51,14 +51,21 @@ const MONOREPO = {
   'services/billing/src/index.ts': 'export {}',
 }
 
+/** The transcript a live session always carries (only a list projection withholds one). */
+function reads(survey: AdoptionSurvey) {
+  return survey.reads ?? []
+}
+
 /** Every path the transcript holds as READ, which is exactly what a decision may cite. */
 function citable(survey: AdoptionSurvey): string[] {
-  return survey.reads.filter((read) => read.outcome === 'read').map((read) => read.path)
+  return reads(survey)
+    .filter((read) => read.outcome === 'read')
+    .map((read) => read.path)
 }
 
 /** One transcript entry by key, so an assertion can name its outcome and origin. */
 function entry(survey: AdoptionSurvey, path: string) {
-  return survey.reads.find((read) => read.path === path)
+  return reads(survey).find((read) => read.path === path)
 }
 
 const request = (overrides: Partial<MonorepoSurveyRequest> = {}): MonorepoSurveyRequest => ({
@@ -93,6 +100,28 @@ describe('normalizeSurveyPath', () => {
       refused: expect.stringContaining('not part of a repository path'),
     })
     expect(normalizeSurveyPath(`services/${'a'.repeat(500)}`)).toMatchObject({
+      refused: expect.stringContaining('too long'),
+    })
+  })
+
+  it('refuses the URL’s own syntax, which the contents API would act on', () => {
+    // The path is interpolated into the contents URL ahead of the `?ref=` the caller appends. A
+    // `#` truncates the request to a DIFFERENT file while the transcript records the whole string
+    // as read; a `?ref=` of the model's own is honoured over the branch the survey believes it is
+    // reading; a percent escape decodes on the HOST, past the traversal check below.
+    for (const raw of ['pkg.json#notes', 'pkg.json?ref=other-branch', 'services/%2e%2e/secrets']) {
+      expect(normalizeSurveyPath(raw)).toMatchObject({
+        refused: expect.stringContaining('URL syntax'),
+      })
+    }
+  })
+
+  it('caps the path so the PREFIXED key still fits what the contract stores', () => {
+    // The transcript records `monorepo:`/`template:` plus the path, plus a trailing `/` on a
+    // listing, and the schema caps that at 400. A path accepted at 400 produced a 410-character
+    // row the contract calls too long.
+    expect(normalizeSurveyPath('a'.repeat(390))).toEqual({ path: 'a'.repeat(390) })
+    expect(normalizeSurveyPath('a'.repeat(391))).toMatchObject({
       refused: expect.stringContaining('too long'),
     })
   })
@@ -133,6 +162,50 @@ describe('the seeded opening context', () => {
     expect(survey.siblingServices).toEqual(['services/billing', 'services/ledger'])
     expect(citable(survey)).toContain('monorepo:services/billing/')
     expect(citable(survey)).toContain('monorepo:services/ledger/')
+  })
+
+  it('seeds whichever provider’s CI the monorepo actually uses, not GitHub’s alone', async () => {
+    // A GitLab-hosted monorepo has no `.github` at all, so a GitHub-only seed hands the model an
+    // opening context with NO CI in it and leaves the `ci` area with nothing to cite.
+    const session = await surveyMonorepo(
+      request({
+        monorepo: side({
+          'package.json': '{}',
+          '.gitlab-ci.yml': 'stages: [test]',
+          '.circleci/config.yml': 'version: 2.1',
+          'services/billing/package.json': '{}',
+        }),
+      }),
+    )
+    const survey = session.survey()
+    expect(citable(survey)).toContain('monorepo:.gitlab-ci.yml')
+    expect(citable(survey)).toContain('monorepo:.circleci/')
+    // The CircleCI directory is LISTED, never read: the listing is the menu the model picks off.
+    expect(citable(survey)).not.toContain('monorepo:.circleci/config.yml')
+  })
+
+  it('records a sibling probe that FAILED, so an outage cannot report no siblings', async () => {
+    // "No sibling service" is the strongest claim the opening context makes about a monorepo, and
+    // a probe blinded by a revoked token would otherwise produce exactly the sentence a genuinely
+    // flat repository produces.
+    const session = await surveyMonorepo(
+      request({
+        monorepo: side(
+          {
+            'package.json': '{}',
+            'services/billing/package.json': '{}',
+            'services/ledger/pom.xml': '<project/>',
+          },
+          ['services/billing'],
+        ),
+      }),
+    )
+    const survey = session.survey()
+    expect(survey.siblingServices).toEqual(['services/ledger'])
+    expect(entry(survey, 'monorepo:services/billing/')).toMatchObject({
+      outcome: 'unreadable',
+      origin: 'seed',
+    })
   })
 
   it('never reads the target directory itself as its own worked example', async () => {
@@ -199,7 +272,7 @@ describe('the seeded opening context', () => {
       }),
     )
     const survey = session.survey()
-    const refused = survey.reads.filter((read) => read.outcome === 'refused')
+    const refused = reads(survey).filter((read) => read.outcome === 'refused')
     expect(refused.length).toBeGreaterThan(0)
     expect(refused[0]?.note).toContain('ask for it if you need it')
   })
@@ -331,6 +404,57 @@ describe('the model’s own reads', () => {
     const answer = await session.explore({ side: 'monorepo', kind: 'read', path: 'package.json' })
     expect(answer.outcome).toBe('read')
     expect(session.survey().exploration.chars).toBe(0)
+  })
+
+  it('serves a body the seed refused without paying for a second fetch of it', async () => {
+    // The seed already spent the round trip and the prompt tells the model to ask, so re-fetching
+    // is a request for bytes this process is holding. Charged all the same, and recorded as a READ
+    // of its own: the citation check upstream keys on the outcome, so a body answered from the
+    // seed's `refused` row alone would be dropped as invention.
+    const body = 'x'.repeat(400)
+    const reader = files({ 'package.json': '{}', 'README.md': body })
+    const getFile = vi.spyOn(reader, 'getFile')
+    const session = await surveyMonorepo({
+      monorepo: { files: reader },
+      directory: 'services/payments',
+      limits: { maxSeedChars: 300, maxFileChars: 1_000 },
+    })
+    expect(entry(session.survey(), 'monorepo:README.md')?.outcome).toBe('refused')
+    const before = getFile.mock.calls.length
+    const answer = await session.explore({ side: 'monorepo', kind: 'read', path: 'README.md' })
+    expect(answer).toMatchObject({ outcome: 'read', key: 'monorepo:README.md' })
+    expect(answer.body).toBe(body)
+    expect(getFile.mock.calls.length).toBe(before)
+    expect(citable(session.survey())).toContain('monorepo:README.md')
+    expect(session.survey().exploration.chars).toBe(body.length)
+  })
+
+  it('caps a directory LISTING like a file, so one wide directory cannot fake exhaustion', async () => {
+    // Uncapped, a generated directory renders a body wider than the whole budget, and the only
+    // answer a charge has to that is to refuse it and LATCH `exhausted`, reporting a content
+    // budget that ran out when nothing had been spent.
+    const wide: Record<string, string> = { 'package.json': '{}' }
+    for (let i = 0; i < 500; i++) wide[`generated/file-${i}.ts`] = 'x'
+    const session = await surveyMonorepo(
+      request({ monorepo: side(wide), limits: { maxFileChars: 200, maxExplorationChars: 5_000 } }),
+    )
+    const answer = await session.explore({ side: 'monorepo', kind: 'list', path: 'generated' })
+    expect(answer.outcome).toBe('read')
+    expect(answer.body).toContain('truncated')
+    expect(session.survey().exploration.exhausted).toBeNull()
+  })
+
+  it('COUNTS the transcript rows it could not keep rather than shortening the record silently', async () => {
+    // One model turn can emit any number of tool calls, so the array needs a bound the call budget
+    // does not give it. The only surface that renders the transcript summarises the ARRAY, so a
+    // survey that made 140 reads and kept 96 would otherwise read as a survey that made 96.
+    const session = await surveyMonorepo(request({ limits: { maxExplorationCalls: 400 } }))
+    for (let i = 0; i < 120; i++) {
+      await session.explore({ side: 'monorepo', kind: 'read', path: `missing-${i}.json` })
+    }
+    const survey = session.survey()
+    expect(reads(survey).length).toBe(96)
+    expect(survey.exploration.recordsDropped).toBeGreaterThan(0)
   })
 
   it('scrubs secrets at READ time, on the model’s own reads as much as the seed’s', async () => {

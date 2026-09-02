@@ -7050,6 +7050,7 @@
       "survey": {
         "summary": "Bu öneri {read} dosya ve dizin listesinden oluşturuldu; bunların {byModel} tanesini modelin kendisi istedi.",
         "missed": "Hiçbir şey döndürmeyen okumalar: {count}. Hangileri olduğunu görmek için genişletin.",
+        "truncated": "Kaydın tutamadığı okuma sayısı: {count}. İnceleme bunları yaptı; aşağıdaki listenin sonu eksik.",
         "show": "İncelemenin yaptığı tüm okumaları göster",
         "exhausted": {
           "calls": "İnceleme, işi bitmeden okuma hakkını tüketti; bu yüzden her alanı kontrol etmemiş olabilir. Daha kapsamlı bir okuma için çalıştırmayı yeniden deneyin.",

@@ -103,7 +103,14 @@ const SUBJECT_BASE = {
       },
     ],
     siblingServices: ['services/billing'],
-    exploration: { calls: 0, maxCalls: 24, chars: 0, maxChars: 54_000, exhausted: null },
+    exploration: {
+      calls: 0,
+      maxCalls: 24,
+      chars: 0,
+      maxChars: 54_000,
+      exhausted: null,
+      recordsDropped: 0,
+    },
   },
   files: { 'monorepo:package.json': '{}' },
 }

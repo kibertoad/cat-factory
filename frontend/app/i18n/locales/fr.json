@@ -7050,6 +7050,7 @@
       "survey": {
         "summary": "Cette suggestion s’appuie sur {read} fichiers et listes de répertoires ; le modèle en a demandé {byModel} lui-même.",
         "missed": "Lectures sans résultat : {count}. Déplie pour voir lesquelles.",
+        "truncated": "Lectures que le relevé n’a pas pu conserver : {count}. L’étude les a faites ; la fin de la liste ci-dessous manque.",
         "show": "Afficher toutes les lectures effectuées",
         "exhausted": {
           "calls": "L’étude a épuisé ses lectures avant d’avoir fini, elle n’a donc peut-être pas vérifié toutes les zones. Relance l’exécution pour une lecture plus complète.",

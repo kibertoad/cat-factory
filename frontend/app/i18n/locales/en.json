@@ -7370,6 +7370,7 @@
       "survey": {
         "summary": "This suggestion was built from {read} files and listings; the model asked for {byModel} of them.",
         "missed": "Reads that produced nothing: {count}. Expand to see which.",
+        "truncated": "Reads the record could not keep: {count}. The survey made them; the list below is missing its tail.",
         "show": "Show every read the survey made",
         "exhausted": {
           "calls": "The survey ran out of reads before it stopped looking, so it may not have checked every area. Retry the run for a fuller read.",

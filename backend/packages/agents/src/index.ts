@@ -433,7 +433,7 @@ export {
 } from './agents/prompts/bug-hunt.js'
 export {
   MONOREPO_ADOPTION_AGENT_KIND,
-  MONOREPO_ADOPTION_SYSTEM_PROMPT,
+  monorepoAdoptionSystemPrompt,
   monorepoBootstrapPrTitle,
   renderMonorepoAdoptionPrompt,
   renderSurveyFile,

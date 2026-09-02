@@ -22,7 +22,18 @@ import * as v from 'valibot'
 // ---------------------------------------------------------------------------
 
 const shortText = v.pipe(v.string(), v.maxLength(600))
-const pathText = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(400))
+
+/**
+ * The longest a transcript key or an evidence citation may be.
+ *
+ * Exported because the producer has to respect it rather than discover it: a transcript key is
+ * the raw repository path PREFIXED with its side (and suffixed with `/` for a listing), so the
+ * survey caps what it accepts by deriving from this instead of restating 400 and quietly
+ * emitting a row the contract says is too long.
+ */
+export const MAX_ADOPTION_READ_PATH = 400
+
+const pathText = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_ADOPTION_READ_PATH))
 
 /**
  * How many drop lines one plan may carry, plus one slot for the "and N more" summary.
@@ -104,9 +115,9 @@ export type AdoptionDecision = v.InferOutput<typeof adoptionDecisionSchema>
  *
  * The exploration budget bounds what the MODEL may ask for, but a single model turn can emit any
  * number of tool calls, and a call refused for a bad path is still a call. So the transcript has
- * a cap of its own, and `AdoptionExploration.calls` carries the true total rather than the
- * transcript's length: it also counts the calls answered from what was already read, which add no
- * row. `calls >= reads.length` by construction, and a large gap is what states a truncated tail.
+ * a cap of its own, and what the cap CUT rides on `AdoptionExploration.recordsDropped`: the gap
+ * between `calls` and `reads.length` cannot state it, since the seed's own reads add rows without
+ * adding calls and a call answered from what was already read adds a call without a row.
  */
 export const MAX_ADOPTION_READS = 96
 
@@ -172,6 +183,16 @@ export const adoptionExplorationSchema = v.object({
   maxChars: v.pipe(v.number(), v.integer(), v.minValue(0)),
   /** Which budget ran out, or null when the loop ended with room to spare. */
   exhausted: v.nullable(v.picklist(['calls', 'chars'])),
+  /**
+   * Reads the transcript could not hold, because `reads` is capped at
+   * {@link MAX_ADOPTION_READS}.
+   *
+   * Carried as its own number rather than left to be inferred from a length, because the only
+   * surface that renders the transcript summarises the ARRAY: a survey that recorded 140 reads
+   * and kept 96 would otherwise read to a reviewer as a survey that made 96, which is the
+   * "absent and zero must not render the same" failure this whole shape exists to avoid.
+   */
+  recordsDropped: v.pipe(v.number(), v.integer(), v.minValue(0)),
 })
 export type AdoptionExploration = v.InferOutput<typeof adoptionExplorationSchema>
 
@@ -186,10 +207,18 @@ export type AdoptionExploration = v.InferOutput<typeof adoptionExplorationSchema
  */
 export const adoptionSurveySchema = v.object({
   /**
-   * Every read, in order. Bounded by {@link MAX_ADOPTION_READS}; `exploration.calls` carries the
-   * true total, so a truncated transcript states itself rather than reading as a shorter survey.
+   * Every read, in order, or `null` where the projection did not carry the transcript at all.
+   *
+   * Bounded by {@link MAX_ADOPTION_READS}, with `exploration.recordsDropped` stating what the cap
+   * cut, so a truncated transcript states itself rather than reading as a shorter survey.
+   *
+   * NULLABLE for the same reason, one level up. The transcript is reviewer detail: the only
+   * surface that renders it is the review a parked run waits on, while the LIST projection that
+   * feeds every workspace snapshot carries every bootstrap run the workspace has ever made,
+   * forever. So the list withholds it once the run is past review, and says so HERE rather than
+   * sending `[]`, which is the shape of a survey that read nothing.
    */
-  reads: v.pipe(v.array(adoptionReadSchema), v.maxLength(MAX_ADOPTION_READS)),
+  reads: v.nullable(v.pipe(v.array(adoptionReadSchema), v.maxLength(MAX_ADOPTION_READS))),
   /**
    * The existing sibling services the survey offered as worked examples: directories beside the
    * new one that hold a convention file of their own.

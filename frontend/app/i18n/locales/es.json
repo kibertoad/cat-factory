@@ -7050,6 +7050,7 @@
       "survey": {
         "summary": "Esta sugerencia se construyó a partir de {read} archivos y listados; el modelo pidió {byModel} de ellos.",
         "missed": "Lecturas que no devolvieron nada: {count}. Despliega para ver cuáles.",
+        "truncated": "Lecturas que el registro no pudo conservar: {count}. El sondeo las hizo; a la lista de abajo le falta el final.",
         "show": "Mostrar todas las lecturas del sondeo",
         "exhausted": {
           "calls": "El sondeo agotó sus lecturas antes de terminar, así que puede no haber revisado todas las áreas. Reintenta la ejecución para una lectura más completa.",
