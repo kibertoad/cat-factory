@@ -127,12 +127,17 @@ export interface ParsedAdoptionDecisions {
   dropped: string[]
 }
 
-/** Every path the survey managed to read, in the prefixed form a decision's evidence uses. */
+/**
+ * Every path a decision may cite: the transcript's reads that actually produced content, in the
+ * prefixed form `evidence` uses.
+ *
+ * Deliberately NOT every path the transcript names. A read that came back `absent`, `unreadable`
+ * or `refused` is in the record precisely because there was nothing behind it, so a
+ * recommendation citing one is exactly the unsupported claim this check exists to drop: the
+ * model would be reasoning from a file it was told it could not see.
+ */
 function surveyedPaths(survey: AdoptionSurvey): Set<string> {
-  return new Set([
-    ...survey.monorepoPaths.map((path) => `monorepo:${path}`),
-    ...survey.templatePaths.map((path) => `template:${path}`),
-  ])
+  return new Set(survey.reads.filter((read) => read.outcome === 'read').map((read) => read.path))
 }
 
 function asString(value: unknown, max: number): string {

@@ -5185,6 +5185,21 @@
         "budget_exhausted": "Dieser Workspace hat sein Modell-Budget überschritten, daher hat die Plattform keinen Übernahmevorschlag bezahlt. Die Entscheidungen liegen weiterhin bei dir: beschreibe unten in den Notizen, was du möchtest, oder erhöhe das Budget und starte den Lauf erneut.",
         "analysis_unusable": "Die Analyse lieferte keinen brauchbaren Vorschlag. Du kannst unten trotzdem beschreiben, was du möchtest."
       },
+      "survey": {
+        "summary": "Dieser Vorschlag entstand aus {read} Dateien und Verzeichnislisten; {byModel} davon hat das Modell selbst angefordert.",
+        "missed": "Lesevorgänge ohne Ergebnis: {count}. Aufklappen, um zu sehen, welche.",
+        "show": "Alle Lesevorgänge der Erhebung anzeigen",
+        "exhausted": {
+          "calls": "Der Erhebung gingen die Lesevorgänge aus, bevor sie fertig war; möglicherweise wurden nicht alle Bereiche geprüft. Starte den Lauf erneut für eine vollständigere Erhebung.",
+          "chars": "Der Erhebung ging das Inhaltsbudget aus, bevor sie fertig war; möglicherweise wurden nicht alle Bereiche geprüft. Starte den Lauf erneut für eine vollständigere Erhebung."
+        },
+        "outcome": {
+          "read": "gelesen",
+          "absent": "nicht vorhanden",
+          "unreadable": "fehlgeschlagen",
+          "refused": "abgelehnt"
+        }
+      },
       "notes": {
         "label": "Hinweise zum gesamten Service",
         "description": "Wird zusammen mit deinen Entscheidungen wörtlich an den Agenten übergeben.",

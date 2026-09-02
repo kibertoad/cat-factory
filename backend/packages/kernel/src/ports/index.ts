@@ -614,7 +614,14 @@ export type {
   MonorepoTargetRepo,
   RepoBootstrapper,
 } from './repo-bootstrapper.js'
-export type { MonorepoAdoptionAdvisor, MonorepoAdoptionSubject } from './monorepo-adoption.js'
+export type {
+  MonorepoAdoptionAdvisor,
+  MonorepoAdoptionExplorer,
+  MonorepoAdoptionSide,
+  MonorepoAdoptionSubject,
+  MonorepoExplorationAnswer,
+  MonorepoExplorationRequest,
+} from './monorepo-adoption.js'
 export { type BootstrapRunner, NoopBootstrapRunner } from './bootstrap-runner.js'
 export type {
   EnvConfigRepairJobRecord,

@@ -5185,6 +5185,21 @@
         "budget_exhausted": "Questo workspace ha superato il budget dei modelli, quindi la piattaforma non ha pagato per un suggerimento di adozione. Le decisioni restano tue: descrivi cosa vuoi nelle note qui sotto, oppure aumenta il budget e riprova l'esecuzione.",
         "analysis_unusable": "L'analisi non ha restituito un suggerimento utilizzabile. Puoi comunque descrivere cosa vuoi nelle note."
       },
+      "survey": {
+        "summary": "Questo suggerimento nasce da {read} file ed elenchi di directory; {byModel} li ha richiesti il modello stesso.",
+        "missed": "Letture che non hanno restituito nulla: {count}. Espandi per vedere quali.",
+        "show": "Mostra tutte le letture eseguite",
+        "exhausted": {
+          "calls": "L’indagine ha esaurito le letture prima di concludere, quindi potrebbe non aver verificato tutte le aree. Riprova l’esecuzione per una lettura più completa.",
+          "chars": "L’indagine ha esaurito il budget di contenuto prima di concludere, quindi potrebbe non aver verificato tutte le aree. Riprova l’esecuzione per una lettura più completa."
+        },
+        "outcome": {
+          "read": "letto",
+          "absent": "assente",
+          "unreadable": "non riuscito",
+          "refused": "rifiutato"
+        }
+      },
       "notes": {
         "label": "Note per l'intero servizio",
         "description": "Passate all'agente alla lettera, insieme alle tue decisioni.",

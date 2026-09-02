@@ -226,7 +226,10 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   frames, events, the durable driver); `MonorepoBootstrapController` + `monorepoSurvey.ts` own the
   monorepo flow's decisions (pre-flight, the checkout-free survey of both repositories, the human
   adoption review), and `MonorepoAdoptionAdvisorService` is the inline model behind its
-  suggestion. A monorepo run is TWO durable drives with a park between them, so it carries a
+  suggestion. The survey is a BOUNDED TOOL LOOP: `MonorepoSurveySession` seeds an opening context
+  and then serves the model's own `list`/`read` calls as the `MonorepoAdoptionExplorer`, budgeting
+  and recording each one, so the plan is checked against a transcript of what was actually fetched
+  (re-read off the session AFTER `advise`, never returned with the plan). A monorepo run is TWO durable drives with a park between them, so it carries a
   `driveId` distinct from its run id: [`monorepo-service-bootstrap.md`](../../../docs/initiatives/monorepo-service-bootstrap.md).
 - `pipelines/`, `board/`, `boardScan/`, `requirements/`,
   `notifications/`, `releaseHealth/`, `review/`, `estimation/`, `kaizen/`, `sandbox/`,

@@ -1,6 +1,7 @@
 import type {
   AdoptionPlan,
   AdoptionPlanUnavailableReason,
+  AdoptionSurvey,
   MonorepoBootstrapRef,
   MonorepoBootstrapTarget,
   ResolvedAdoption,
@@ -59,6 +60,19 @@ export interface MonorepoBootstrapDeps {
   isOverBudget?: (workspaceId: string) => Promise<boolean>
   clock: Clock
   logger?: Logger | undefined
+}
+
+/**
+ * The survey a plan carries when there was nothing to survey.
+ *
+ * A DISTINCT shape from "the survey ran and found nothing": the exploration reports a zero
+ * budget rather than an unspent one, so a reader cannot mistake a plan the platform never got as
+ * far as reading for one whose model chose to read nothing.
+ */
+const EMPTY_SURVEY: AdoptionSurvey = {
+  reads: [],
+  siblingServices: [],
+  exploration: { calls: 0, maxCalls: 0, chars: 0, maxChars: 0, exhausted: null },
 }
 
 /**
@@ -211,15 +225,17 @@ export class MonorepoBootstrapController {
       ? await this.side(workspaceId, reference.repoOwner, reference.repoName)
       : undefined
 
-    const { survey, files } = await surveyMonorepo({
+    const session = await surveyMonorepo({
       monorepo: monoSide,
       ...(templateSide ? { template: templateSide } : {}),
       directory: monorepo.directory,
       logger: log,
     })
     if (reference && !templateSide) {
-      survey.unreadablePaths.push(
-        `template:${reference.repoOwner}/${reference.repoName} (not linked to this workspace, so it was not surveyed)`,
+      session.noteUnavailable(
+        'template',
+        `${reference.repoOwner}/${reference.repoName}`,
+        'not linked to this workspace, so it was not surveyed',
       )
     }
 
@@ -230,7 +246,7 @@ export class MonorepoBootstrapController {
           'model_unavailable',
           'No model is configured for the adoption survey, so the platform has no suggestion to offer. The decisions are still yours to make.',
         ),
-        survey,
+        survey: session.survey(),
       }
     }
 
@@ -245,23 +261,27 @@ export class MonorepoBootstrapController {
           'budget_exhausted',
           'This workspace is over its model budget, so the platform did not pay for an adoption suggestion. The decisions are still yours to make, or raise the budget and retry the run for a suggestion.',
         ),
-        survey,
+        survey: session.survey(),
       }
     }
 
     try {
-      // The file bodies are whatever is committed in two repositories, so they are scrubbed
-      // before they reach a model, and at COMPOSE time, before the survey's own clipping is
-      // read back, so the prompt and anything derived from it stay consistent.
-      const scrubbed: Record<string, string> = {}
-      for (const [key, body] of Object.entries(files)) scrubbed[key] = redactSecrets(body) ?? ''
       const { plan, model } = await advisor.advise({
         workspaceId,
         directory: monorepo.directory,
         instructions: record.instructions,
-        survey,
-        files: scrubbed,
+        // The seeded opening context. The bodies are already scrubbed and budgeted by the
+        // session, which is also what the model widens the read through.
+        survey: session.survey(),
+        files: session.seedFiles(),
+        explorer: session,
       })
+      // Re-read AFTER the advisor returns: the survey the plan is checked against, and the one
+      // the reviewer sees, is the transcript of what the model ACTUALLY fetched, not the opening
+      // context it was handed. Taking the earlier snapshot would drop every exploration read from
+      // the citable set, so a decision evidenced by a file the model went and opened would be
+      // discarded as invention.
+      const survey = session.survey()
       const { decisions, dropped } = parseAdoptionDecisions(plan, survey)
       if (decisions.length === 0) {
         return {
@@ -279,6 +299,9 @@ export class MonorepoBootstrapController {
       log?.info('monorepo bootstrap: adoption plan ready', {
         decisions: decisions.length,
         dropped: dropped.length,
+        reads: survey.reads.length,
+        explorationCalls: survey.exploration.calls,
+        exhausted: survey.exploration.exhausted,
         model,
       })
       return {
@@ -292,8 +315,13 @@ export class MonorepoBootstrapController {
         generatedAt: this.deps.clock.now(),
       }
     } catch (error) {
-      // The advisor already logged the cause; here it becomes the reviewer-facing reason.
-      return { ...this.unavailable('analysis_unusable', getErrorMessage(error)), survey }
+      // The advisor already logged the cause; here it becomes the reviewer-facing reason. The
+      // survey still carries whatever the loop managed to read before it failed, which is what
+      // separates "the model was never reachable" from "it read half the monorepo and then died".
+      return {
+        ...this.unavailable('analysis_unusable', getErrorMessage(error)),
+        survey: session.survey(),
+      }
     }
   }
 
@@ -374,12 +402,7 @@ export class MonorepoBootstrapController {
       status: 'unavailable',
       unavailableReason: reason,
       unavailableDetail: detail,
-      survey: {
-        monorepoPaths: [],
-        templatePaths: [],
-        unreadablePaths: [],
-        siblingService: null,
-      },
+      survey: EMPTY_SURVEY,
       decisions: [],
       droppedUnevidenced: [],
       model: null,

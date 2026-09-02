@@ -7367,6 +7367,21 @@
         "budget_exhausted": "This workspace is over its model budget, so the platform did not pay for an adoption suggestion. The decisions are still yours: describe what you want in the notes below, or raise the budget and retry the run.",
         "analysis_unusable": "The adoption survey did not return a usable suggestion. You can still describe what you want in the notes below."
       },
+      "survey": {
+        "summary": "This suggestion was built from {read} files and listings; the model asked for {byModel} of them.",
+        "missed": "Reads that produced nothing: {count}. Expand to see which.",
+        "show": "Show every read the survey made",
+        "exhausted": {
+          "calls": "The survey ran out of reads before it stopped looking, so it may not have checked every area. Retry the run for a fuller read.",
+          "chars": "The survey ran out of its content budget before it stopped looking, so it may not have checked every area. Retry the run for a fuller read."
+        },
+        "outcome": {
+          "read": "read",
+          "absent": "absent",
+          "unreadable": "failed",
+          "refused": "refused"
+        }
+      },
       "notes": {
         "label": "Notes for the whole service",
         "description": "Passed to the agent verbatim, alongside your decisions.",

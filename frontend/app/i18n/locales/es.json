@@ -7047,6 +7047,21 @@
         "budget_exhausted": "Este espacio de trabajo ha superado su presupuesto de modelos, así que la plataforma no pagó por una sugerencia de adopción. Las decisiones siguen siendo tuyas: describe lo que quieres en las notas de abajo, o aumenta el presupuesto y reintenta la ejecución.",
         "analysis_unusable": "El análisis no devolvió una sugerencia utilizable. Aun así puedes describir lo que quieres en las notas."
       },
+      "survey": {
+        "summary": "Esta sugerencia se construyó a partir de {read} archivos y listados; el modelo pidió {byModel} de ellos.",
+        "missed": "Lecturas que no devolvieron nada: {count}. Despliega para ver cuáles.",
+        "show": "Mostrar todas las lecturas del sondeo",
+        "exhausted": {
+          "calls": "El sondeo agotó sus lecturas antes de terminar, así que puede no haber revisado todas las áreas. Reintenta la ejecución para una lectura más completa.",
+          "chars": "El sondeo agotó su presupuesto de contenido antes de terminar, así que puede no haber revisado todas las áreas. Reintenta la ejecución para una lectura más completa."
+        },
+        "outcome": {
+          "read": "leído",
+          "absent": "ausente",
+          "unreadable": "falló",
+          "refused": "rechazado"
+        }
+      },
       "notes": {
         "label": "Notas para todo el servicio",
         "description": "Se pasan al agente literalmente, junto con tus decisiones.",

@@ -436,7 +436,9 @@ export {
   MONOREPO_ADOPTION_SYSTEM_PROMPT,
   monorepoBootstrapPrTitle,
   renderMonorepoAdoptionPrompt,
+  renderSurveyFile,
 } from './agents/prompts/monorepo-adoption.js'
+export { monorepoExplorationTools } from './agents/runtime/monorepo-exploration-tools.js'
 export {
   FRAGMENT_TITLE_AGENT_KIND,
   FRAGMENT_TITLE_SYSTEM_PROMPT,

@@ -85,6 +85,31 @@ const remaining = computed(() => decisions.value.filter((d) => !touched.value.ha
 // finish a monorepo bootstrap at all.
 const canSubmit = computed(() => remaining.value === 0)
 
+/**
+ * What the survey actually read, for the disclosure beside the plan.
+ *
+ * Shown at all because the evidence set is no longer something the platform declared in advance:
+ * the model chose most of it, so "what was this suggestion built from" is a question only the
+ * transcript answers. Split by ORIGIN, because a reviewer weighing a thin plan needs to know
+ * whether the read was thin or the reading was.
+ */
+const surveyReads = computed(() => plan.value?.survey.reads ?? [])
+const readSummary = computed(() => ({
+  read: surveyReads.value.filter((entry) => entry.outcome === 'read').length,
+  byModel: surveyReads.value.filter((entry) => entry.origin === 'model' && entry.outcome === 'read')
+    .length,
+  missed: surveyReads.value.filter((entry) => entry.outcome !== 'read').length,
+}))
+
+/**
+ * Which budget the exploration ran out of, or null when it did not.
+ *
+ * Surfaced rather than left in the transcript: a survey that stopped because the model had seen
+ * enough and one that stopped at a ceiling look identical in a list of paths, and only the second
+ * means the plan may be missing areas nobody decided not to look at.
+ */
+const exhausted = computed(() => plan.value?.survey.exploration.exhausted ?? null)
+
 /** The monorepo this service is landing in, for the header line. */
 const target = computed(() => {
   const monorepo = props.job.monorepo
@@ -158,6 +183,48 @@ watch(open, (isOpen) => {
           <p v-if="plan?.unavailableDetail" class="pl-6 text-xs text-slate-400">
             {{ plan.unavailableDetail }}
           </p>
+        </div>
+
+        <!-- What the survey read, on BOTH paths. The model chose most of the evidence set, so
+             "what was this built from" is a question only the transcript answers, and an
+             exhausted budget is called out rather than left for someone to infer from a short
+             list: it is the difference between a thin read and a thin reading. -->
+        <div v-if="surveyReads.length" class="space-y-2 text-xs">
+          <p class="text-slate-400">
+            {{
+              t('bootstrap.adoption.survey.summary', {
+                read: readSummary.read,
+                byModel: readSummary.byModel,
+              })
+            }}
+          </p>
+          <p v-if="readSummary.missed > 0" class="text-slate-500">
+            {{ t('bootstrap.adoption.survey.missed', { count: readSummary.missed }) }}
+          </p>
+          <p v-if="exhausted" class="text-amber-300/90">
+            {{ t(`bootstrap.adoption.survey.exhausted.${exhausted}`) }}
+          </p>
+          <details>
+            <summary class="cursor-pointer text-slate-500 hover:text-slate-300">
+              {{ t('bootstrap.adoption.survey.show') }}
+            </summary>
+            <ul class="mt-2 space-y-1">
+              <li
+                v-for="entry in surveyReads"
+                :key="`${entry.origin}:${entry.path}`"
+                class="flex items-baseline gap-2"
+              >
+                <span
+                  class="shrink-0 font-mono text-[10px] uppercase"
+                  :class="entry.outcome === 'read' ? 'text-slate-500' : 'text-amber-400/80'"
+                >
+                  {{ t(`bootstrap.adoption.survey.outcome.${entry.outcome}`) }}
+                </span>
+                <span class="font-mono text-slate-400">{{ entry.path }}</span>
+                <span v-if="entry.note" class="text-slate-600">{{ entry.note }}</span>
+              </li>
+            </ul>
+          </details>
         </div>
 
         <!-- The reviewer's own instructions, on BOTH paths. With no suggestion to answer this is
