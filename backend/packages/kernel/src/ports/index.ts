@@ -574,6 +574,7 @@ export type {
   EnvironmentInvestigator,
   EnvironmentReadinessWaitKind,
   EnvironmentRecordFacts,
+  EnvironmentRouteEvidence,
   EnvironmentTimelineEntry,
 } from './environment-investigation.js'
 export type { PreflightProbeOutcome, PreflightHostProbes } from './preflight.js'

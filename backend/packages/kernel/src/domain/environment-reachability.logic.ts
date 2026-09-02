@@ -309,15 +309,96 @@ export function describeInconclusiveRoute(
   return `${where} could not be established either way: ${cause}.${describeRouteAttempts(proof)}`
 }
 
-/** ` Tried: <target> (<outcome>: <detail>), ….`, or empty when nothing was tried. */
-function describeRouteAttempts(proof: EnvironmentRouteProof): string {
-  const tried = proof.attempts
+/**
+ * `<target> (<outcome>: <detail>), …` for every target a proof tried, or the empty string when it
+ * tried none.
+ *
+ * Exported because THREE surfaces render this same list from the same field, and they had drifted
+ * into three copies of the template: the two operator sentences below, the investigation's
+ * timeline entry, and the investigation prompt's own route section. A change to the attempt shape
+ * that has to be found in three packages is a change that gets made in two, which is how one of
+ * them came to ship the detail unscrubbed while its neighbour scrubbed it.
+ *
+ * Renders whatever it is handed. Redaction and capping belong to whoever owns the BOUNDARY the
+ * string is crossing (the diagnostics gatherer does both for the prompt and the telemetry store),
+ * because an operator reading a failed deploy and a model reading a prompt are owed different
+ * amounts of the probe's own words.
+ */
+export function describeRouteTargets(attempts: readonly EnvironmentRouteAttempt[]): string {
+  return attempts
     .map(
       (attempt) =>
         `${attempt.target} (${attempt.outcome}${attempt.detail ? `: ${attempt.detail}` : ''})`,
     )
     .join(', ')
+}
+
+/** ` Tried: <target> (<outcome>: <detail>), ….`, or empty when nothing was tried. */
+function describeRouteAttempts(proof: EnvironmentRouteProof): string {
+  const tried = describeRouteTargets(proof.attempts)
   return tried ? ` Tried: ${tried}.` : ''
+}
+
+/**
+ * The cause an unreachable environment's own route evidence SETTLES, or null when it settles none.
+ *
+ * The platform computing what it can compute, so a reader is not left to rank a determinate cause
+ * against an inferred one. Both members here name an owner and a concrete fix, and both were
+ * SUBORDINATED to a wrong headline in the failure that filed this: the investigation found "no
+ * balancer or address field was captured at all" and filed it as one bullet under a verdict
+ * blaming a platform readiness gate that had in fact worked, sending a human to change three
+ * behaviours that were already correct.
+ *
+ * Deliberately narrow. It answers only where NOTHING was available to dial, which is a fact about
+ * the platform's own inputs rather than a judgement about the environment: whether the workload is
+ * healthy, whether the provider is lying and whether anything is worth retrying all stay the
+ * model's to settle. `reached` and `inconclusive` therefore settle nothing here, the second
+ * because it is an admission about the platform and naming it a cause is how "we could not tell"
+ * comes to read as a verdict.
+ */
+export function determinateRouteCause(
+  candidates: readonly EnvironmentAddress[],
+  proof: EnvironmentRouteProof | null,
+): string | null {
+  if (!proof) return null
+  // `no_candidate` arrives as `inconclusive` from {@link reduceRouteProof} (nothing was tried, so
+  // nothing was established) and is checked ahead of the state for exactly that reason: it is the
+  // one reason whose cause is determinate WITHOUT a verdict about the environment, because the
+  // environment published no host and port to dial in the first place.
+  if (proof.reason === ('no_candidate' satisfies EnvironmentUnreachableReason)) {
+    if (candidates.length === 0) {
+      return (
+        'This environment carries no address to dial at all: no URL with a host and port, and no ' +
+        'address stated for one. Nothing was tried because there was nothing to try, so this is a ' +
+        'fact about what the provider published, never a verdict about the environment. Whoever ' +
+        'maps this provider onto a URL (and onto stated addresses, if the name is not resolvable ' +
+        'from this deployment) owns the fix.'
+      )
+    }
+    // The SAME reason, a different fact, and telling a reader the provider stated no addresses
+    // when it stated several is the misdirection this whole function exists to prevent. A stated
+    // address is dialled on the port the URL names (`planRouteProbes` needs a host AND a port
+    // before it will plan anything), so an environment with addresses and no parseable URL had
+    // nothing to dial them ON, and the fix is one field over from where the empty-list wording
+    // would send someone.
+    const count = candidates.length === 1 ? '1 address' : `${candidates.length} addresses`
+    return (
+      `This environment published no URL with a host and port, so the ${count} its provider DID ` +
+      'state could not be dialled either: an address is tried on the port the URL names, and ' +
+      'there was none. Nothing was tried because there was nothing to try it on, so this is a ' +
+      'fact about what the provider published, never a verdict about the environment. Whoever ' +
+      "maps this provider onto the environment's URL owns the fix; the stated addresses are not " +
+      'the gap here.'
+    )
+  }
+  if (proof.state !== 'not_reached' || candidates.length > 0) return null
+  return (
+    "The only target that ever existed was the environment's own name, because the provider " +
+    'stated no addresses for it. Nothing else was tried because there was nothing else to try: ' +
+    'the empty candidate list means addresses were never STATED, not that stated addresses were ' +
+    'tried and failed. Whoever maps this provider onto stated addresses owns the fix, and this ' +
+    'ranks ahead of any fault inferred from the ORDER platform events appear to have happened in.'
+  )
 }
 
 /**

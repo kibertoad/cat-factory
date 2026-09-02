@@ -171,7 +171,12 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
         status: 'failed',
         expiresAt: null,
         access: null,
-        fields: {},
+        // `null` rather than an empty bag, the same answer the Kubernetes sibling gives its
+        // no-namespace branch: nothing on the host was read, so this states nothing about the
+        // captured fields. An empty statement REPLACES them, and `project` is the one key
+        // {@link teardown} reads to find the containers, so erasing it here would leak this
+        // project's containers and volumes onto the host permanently.
+        fields: null,
       }
     }
     // `-a` so a container that's briefly recreating (or a completed one-shot) is still visible —

@@ -64,6 +64,12 @@ export const environments = pgTable(
     // The serialized `EnvironmentReachability` (ADR 0062), in the clear: a list of addresses for a
     // host already published in plaintext beside it is neither a credential nor provider state.
     reachability: text('reachability'),
+    // When the provider last answered a status poll WITHOUT failing, and how many such answers
+    // there have been. Mirror of D1 migration 0099. The provisioning log records only a poll that
+    // threw or one that turned the env `failed`, so before these a clean four-minute readiness
+    // wait and no polling at all were the same data; see the kernel `EnvironmentRecord`.
+    last_polled_at: bigint('last_polled_at', { mode: 'number' }),
+    poll_count: bigint('poll_count', { mode: 'number' }).notNull().default(0),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     expires_at: bigint('expires_at', { mode: 'number' }),
     last_error: text('last_error'),

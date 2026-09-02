@@ -113,10 +113,14 @@ export const PROMPT_VERSIONS = {
   // label attribute an outcome to); it does not re-key a Kaizen combo, because a judge is attached
   // to a step and is never a step's own `agentKind`, which is what `promptVersionForKind` reads.
   judge: { id: 'judge', version: 2, text: JUDGE_SYSTEM_PROMPT },
-  // Numbering starts at 1: there is no earlier RECORDED version to succeed.
+  // v2: the two reasoning defects the first shipped verdict had. Ordering claims are now made
+  // against ONE derived timeline the platform folds every timestamp it holds into (the route
+  // proof's `checkedAt` included, which the v1 verdict contradicted), the role is told not to read
+  // the absence of an entry in a record that logs attempts as the absence of the event, and a
+  // cause the PLATFORM computed outranks one inferred from apparent ordering.
   'environment-investigation': {
     id: 'environment-investigation',
-    version: 1,
+    version: 2,
     text: ENVIRONMENT_INVESTIGATION_SYSTEM_PROMPT,
   },
 } as const satisfies Record<string, VersionedPrompt>

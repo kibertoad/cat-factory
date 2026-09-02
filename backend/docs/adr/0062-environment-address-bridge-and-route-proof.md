@@ -174,6 +174,18 @@ definition cannot stay bridgeable here.
   and `foldStatedAddresses` keeps the stored candidates when a response carries no statement. An
   async provider states its balancer list on the CREATE response and answers `{state, url}` from
   its status endpoint, so re-deriving from each poll erased the list before the proof ever ran.
+- **The proof beside those candidates survives on what it ESTABLISHED, never on the order it was
+  handed.** A provider stating addresses from a live DNS answer does not control their order
+  (`getaddrinfo` sorts destinations against the local interface set; resolvers rotate records), so
+  the first cut of the fold compared the list as a SEQUENCE and dropped a good proof on a network
+  change, with nothing to re-take it. The rule is now: the URL must be unchanged, a `reached` proof
+  then survives while the target it names is still on offer (its `via` among the stated candidates,
+  or the name itself), and any other proof survives while the candidate SET is unchanged, a new
+  candidate being a target nothing ever dialled. `refreshStatus` RE-PROVES a `ready` environment
+  whose proof the fold had to drop, because `proveEnvironmentRoute` is otherwise reached only from
+  the deployer's frame settle, which never runs again for a settled frame, and a dropped proof and
+  a proof never taken are the same value. (Filed as
+  [#2165](https://github.com/kibertoad/cat-factory/issues/2165).)
 - **The proved address travels on all three dispatch legs and both prompt legs.** A `frontend`
   binding's resolution reads the address off the same handle it takes the URL from
   (`indexLiveServiceEnvRoutes`, one index so the URL and the address cannot come from different

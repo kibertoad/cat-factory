@@ -97,7 +97,11 @@ export class HttpEnvironmentProvider implements EnvironmentProvider {
         status: 'ready',
         expiresAt: null,
         access: null,
-        fields: req.provisionFields,
+        // `null`, not the bag it was handed: nothing was ASKED, so this response states nothing
+        // about what the provider has captured, and the stored bag stays as it is. Echoing it back
+        // would be indistinguishable from a statement, which is the distinction that keeps a
+        // narrower answer from erasing teardown state (see `ProvisionedEnvironment.fields`).
+        fields: null,
       }
     }
     const json = await this.execute(
@@ -110,7 +114,23 @@ export class HttpEnvironmentProvider implements EnvironmentProvider {
       req.resolveSecret,
     )
     const mapped = this.mapResponse(req.manifest, json, 'ready')
-    return { ...mapped, externalId: mapped.externalId ?? req.externalId }
+    return {
+      ...mapped,
+      externalId: mapped.externalId ?? req.externalId,
+      // The COMPLETE bag this provider knows about the environment now, which is what a statement
+      // has to be: {@link ProvisionedEnvironment.fields} REPLACES the stored bag whole, and
+      // `mapResponse` builds one out of the two paths it happened to resolve on THIS response.
+      // A status endpoint that omits the id or the URL is the ordinary shape (the id is usually in
+      // the request path rather than the body), and a path that did not resolve is not the
+      // provider retracting what it said at create time. Handing the raw mapping over erased the
+      // teardown state instead: the next `status:`/`teardown:` template interpolated an empty
+      // `{{provision.externalId}}`, `GET /environments/` answered a collection listing that mapped
+      // to `ready`, and the environment read healthy forever while nothing could reclaim it.
+      //
+      // The freshly mapped values win, so a provider that MOVES an environment's URL is still
+      // followed. Only a key this response said nothing about is carried over.
+      fields: { ...req.provisionFields, ...mapped.fields },
+    }
   }
 
   /**

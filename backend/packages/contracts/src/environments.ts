@@ -821,6 +821,25 @@ export const environmentHandleSchema = v.object({
    */
   statusNote: v.optional(v.nullable(v.string())),
   /**
+   * When the provider last ANSWERED a status poll for this environment, and how many answers the
+   * platform has recorded.
+   *
+   * The one trail polling leaves. The provisioning log records an attempt that threw and a poll
+   * that turned an environment `failed`; an answer wrote nothing anywhere, so a readiness wait
+   * that polled for four minutes was indistinguishable from no polling at all, and a reader (the
+   * environment investigation, then a human) took the silence for the second.
+   *
+   * An answer reporting `failed` counts: this says how much polling HAPPENED, never how much of it
+   * went well. A poll that THREW does not, having a provisioning-log row of its own.
+   *
+   * `pollCount` is a FLOOR, not a ledger: it is written from the count the poll read at its start,
+   * so two polls racing cost it an increment. `lastPolledAt` is exact, a lost race there leaving
+   * the later of the two stamps. Null / 0 means no answered poll is RECORDED, which is all a
+   * reader may conclude from it.
+   */
+  lastPolledAt: v.optional(v.nullable(v.number())),
+  pollCount: v.optional(v.number()),
+  /**
    * The service's declared provision type this environment was stood up for
    * (`kubernetes` | `docker-compose` | `custom` | `infraless`). Recorded at provision
    * time so run details can show exactly what was provisioned. Null for legacy rows.

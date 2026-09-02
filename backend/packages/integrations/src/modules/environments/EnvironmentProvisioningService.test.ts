@@ -3,15 +3,13 @@ import { ValidationError } from '@cat-factory/kernel'
 import type {
   DeployProvisionJob,
   EnvironmentProvider,
-  EnvironmentRecord,
   EnvironmentRegistryRepository,
-  ProvisionEnvironmentRequest,
   ProvisionedEnvironment,
+  ProvisionEnvironmentRequest,
   RepoValidationResult,
   ResolveRunRepoContext,
   RunnerJobRef,
   RunnerJobView,
-  SecretCipher,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
 import {
@@ -19,122 +17,19 @@ import {
   EnvironmentProvisioningService,
 } from './EnvironmentProvisioningService.js'
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
+import {
+  fakeCipher,
+  fakeRegistry,
+  makeService,
+  MANIFEST,
+  READY,
+  recordingProvider,
+} from './test-support/environment-provisioning-fakes.js'
 
 // EnvironmentProvisioningService is the seam an in-house adapter (e.g. a PR-environment
 // platform) plugs into: it receives the typed provisionContext + the flattened inputs and
 // owns the returned `fields`. These tests assert that contract + the returned-URL policy,
 // independent of any HTTP provider.
-
-const MANIFEST = {
-  providerId: 'acme',
-  label: 'Acme',
-  baseUrl: 'https://envs.test/api',
-  auth: { type: 'none' as const },
-  provision: { method: 'POST' as const, pathTemplate: '/envs' },
-  response: {},
-}
-
-/** A passthrough cipher: persistence round-trips JSON without real crypto. */
-const fakeCipher: SecretCipher = {
-  encrypt: async (plaintext: string) => `enc:${plaintext}`,
-  decrypt: async (cipher: string) => cipher.replace(/^enc:/, ''),
-}
-
-/** In-memory registry repo capturing inserts. */
-function fakeRegistry(): EnvironmentRegistryRepository & { records: EnvironmentRecord[] } {
-  const records: EnvironmentRecord[] = []
-  return {
-    records,
-    async insert(record) {
-      records.push(record)
-    },
-    async update(workspaceId, id, patch) {
-      const i = records.findIndex((r) => r.id === id)
-      if (i >= 0) records[i] = { ...records[i]!, ...patch }
-    },
-    async get(_workspaceId, id) {
-      return records.find((r) => r.id === id) ?? null
-    },
-    async getByBlock(_workspaceId, blockId) {
-      return records.find((r) => r.blockId === blockId && !r.deletedAt) ?? null
-    },
-    async getByBlockAndFrame(_workspaceId, blockId, frameId) {
-      return (
-        records.find((r) => r.blockId === blockId && r.frameId === frameId && !r.deletedAt) ?? null
-      )
-    },
-    async getFramelessByBlock(_workspaceId, blockId) {
-      return (
-        [...records]
-          .reverse()
-          .find((r) => r.blockId === blockId && r.frameId == null && !r.deletedAt) ?? null
-      )
-    },
-    async listByWorkspace() {
-      return records
-    },
-    async listExpired() {
-      return []
-    },
-    async softDelete(_workspaceId, id, at) {
-      const r = records.find((x) => x.id === id)
-      if (r) r.deletedAt = at
-    },
-  }
-}
-
-/** A recording provider returning a fixed environment; captures the request it saw. */
-function recordingProvider(
-  returns: ProvisionedEnvironment,
-): EnvironmentProvider & { lastProvision?: ProvisionEnvironmentRequest } {
-  const provider: EnvironmentProvider & { lastProvision?: ProvisionEnvironmentRequest } = {
-    async provision(req) {
-      provider.lastProvision = req
-      return returns
-    },
-    async status() {
-      return returns
-    },
-    async teardown() {
-      return { status: 'torn_down' }
-    },
-  }
-  return provider
-}
-
-function makeService(
-  provider: EnvironmentProvider,
-  registry: EnvironmentRegistryRepository,
-  urlPolicy?: UrlSafetyPolicy,
-) {
-  const connectionService = {
-    resolveProvider: async () => ({ provider, manifest: MANIFEST }),
-    resolveProviderForRecord: async () => ({
-      provider,
-      manifest: MANIFEST,
-      resolveSecret: () => undefined,
-    }),
-    resolveSecrets: async () => () => undefined,
-  } as unknown as EnvironmentConnectionService
-  let n = 0
-  return new EnvironmentProvisioningService({
-    connectionService,
-    environmentRegistryRepository: registry,
-    secretCipher: fakeCipher,
-    idGenerator: { next: (prefix: string) => `${prefix}_${++n}` },
-    clock: { now: () => 1_700_000_000_000 },
-    ...(urlPolicy ? { urlPolicy } : {}),
-  })
-}
-
-const READY: ProvisionedEnvironment = {
-  externalId: 'env-123',
-  url: 'https://app.public.example/preview',
-  status: 'ready',
-  expiresAt: null,
-  access: null,
-  fields: { externalId: 'env-123', ref: 'feat/login' },
-}
 
 describe('EnvironmentProvisioningService — provision context', () => {
   it('passes the typed provisionContext to the provider and flattens it into inputs', async () => {
@@ -186,121 +81,6 @@ describe('EnvironmentProvisioningService — provision context', () => {
     await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
     // The provider's arbitrary `fields` (here a provider-native ref) round-trip encrypted.
     expect(registry.records[0]!.provisionFieldsCipher).toBe(`enc:${JSON.stringify(READY.fields)}`)
-  })
-})
-
-describe('EnvironmentProvisioningService — refreshStatus', () => {
-  const FAILED_REASON =
-    'invalid environment config: file or ref not found: 404 No commit found for the ref cat-factory/env-test/x'
-
-  /** Provisions `provisioning`, then reports `failed` (with a reason) on the next status poll. */
-  function comesUpFailed(): EnvironmentProvider {
-    const provisioning: ProvisionedEnvironment = {
-      externalId: 'ext-1',
-      url: null,
-      status: 'provisioning',
-      expiresAt: null,
-      access: null,
-      fields: { externalId: 'ext-1' },
-    }
-    return {
-      async provision() {
-        return provisioning
-      },
-      async status() {
-        return { ...provisioning, status: 'failed', error: FAILED_REASON }
-      },
-      async teardown() {
-        return { status: 'torn_down' }
-      },
-    }
-  }
-
-  it("persists the provider's failure reason as lastError on a failed status poll", async () => {
-    const registry = fakeRegistry()
-    const service = makeService(comesUpFailed(), registry)
-    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
-    const id = registry.records[0]!.id
-    // Recorded as `provisioning` with no error yet.
-    expect(registry.records[0]!.status).toBe('provisioning')
-    expect(registry.records[0]!.lastError).toBeNull()
-
-    const handle = await service.refreshStatus('ws1', id)
-
-    expect(handle.status).toBe('failed')
-    // The provider's reason is persisted + surfaced (previously the patch dropped lastError, so a
-    // poll-time failure carried a stale/empty reason).
-    expect(handle.lastError).toBe(FAILED_REASON)
-    expect(registry.records[0]!.lastError).toBe(FAILED_REASON)
-  })
-
-  /** Stays `provisioning`, saying something different about it on each poll. */
-  function narratesItsProgress(notes: readonly (string | undefined)[]): EnvironmentProvider {
-    const base: ProvisionedEnvironment = {
-      externalId: 'ext-1',
-      url: null,
-      status: 'provisioning',
-      expiresAt: null,
-      access: null,
-      fields: { externalId: 'ext-1' },
-    }
-    let poll = 0
-    return {
-      async provision() {
-        return { ...base, statusNote: notes[0] }
-      },
-      async status() {
-        poll += 1
-        return { ...base, statusNote: notes[poll] }
-      },
-      async teardown() {
-        return { status: 'torn_down' }
-      },
-    }
-  }
-
-  it("persists a provisioning provider's note, which is the status lastError is nulled on", async () => {
-    // Issue #2153: `lastError` is written on `failed` alone, so a provider that knew exactly why
-    // an environment was not ready yet had no column to say it in and the readiness ceiling could
-    // only report its own duration.
-    const registry = fakeRegistry()
-    const service = makeService(narratesItsProgress(['  the deploy job is queued  ']), registry)
-    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
-
-    expect(registry.records[0]!.status).toBe('provisioning')
-    expect(registry.records[0]!.statusNote).toBe('the deploy job is queued')
-    // And it is not smuggled in under the error's name, which would report a fault on a healthy
-    // spin-up everywhere `lastError` is rendered.
-    expect(registry.records[0]!.lastError).toBeNull()
-  })
-
-  it('rewrites the note from the current poll, so a stale one cannot outlive its state', async () => {
-    const registry = fakeRegistry()
-    const service = makeService(
-      narratesItsProgress(['the deploy job is queued', 'the deploy job is running', undefined]),
-      registry,
-    )
-    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
-    const id = registry.records[0]!.id
-
-    expect((await service.refreshStatus('ws1', id)).statusNote).toBe('the deploy job is running')
-    // A provider that stops saying anything clears it: the note is the CURRENT account, never a
-    // log, so the last thing said does not linger over a state that has moved on.
-    expect((await service.refreshStatus('ws1', id)).statusNote).toBeNull()
-    expect(registry.records[0]!.statusNote).toBeNull()
-  })
-
-  it('bounds the note at the write boundary, whatever the adapter answered with', async () => {
-    // The note is provider-authored prose, and a code adapter can answer with a controller dump.
-    // Bounding it HERE covers every reader at once (the panel line, the readiness ceiling's
-    // failure message, the outcome row), which is why the cap is not a rendering concern.
-    const registry = fakeRegistry()
-    const service = makeService(narratesItsProgress(['n'.repeat(900)]), registry)
-    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
-
-    const stored = registry.records[0]!.statusNote!
-    expect(stored.length).toBeLessThan(500)
-    expect(stored).toContain('note truncated')
   })
 })
 
@@ -669,6 +449,8 @@ describe('EnvironmentProvisioningService — supersedeForBlock (infraless flip)'
       expiresAt: null,
       lastError: null,
       statusNote: null,
+      lastPolledAt: null,
+      pollCount: 0,
       provisionType: 'kubernetes',
       engine: 'remote-kubernetes',
       deletedAt: null,

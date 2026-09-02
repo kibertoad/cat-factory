@@ -57,6 +57,7 @@ function subject(): EnvironmentInvestigationSubject {
       },
       provisionFields: {},
       timeline: [],
+      route: { candidates: [], proof: null },
       failure: { error: 'never became ready', reason: 'timeout', readinessWait: 'not_reached' },
     },
     offeredActions: ['stop', 'reprovision'],

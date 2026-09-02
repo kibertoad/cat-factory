@@ -282,8 +282,28 @@ export interface ProvisionedEnvironment {
   status: EnvironmentStatus
   expiresAt: number | null
   access: EnvironmentAccessHandle | null
-  /** All fields the response mapping captured, for later status/teardown calls. */
-  fields: ProvisionFields
+  /**
+   * The fields THIS response's mapping captured, sealed on the row for the later status and
+   * teardown calls to interpolate.
+   *
+   * A statement REPLACES the stored bag whole, and `null` is a response that made no statement
+   * about it, which keeps whatever is stored. The same rule as {@link addresses} right above,
+   * for the same reason: a status endpoint answering a narrower shape than the create endpoint
+   * must not be able to erase the teardown state the create response supplied, and a provider
+   * that has stopped observing something must be able to stop stating it.
+   *
+   * Stating one is the ordinary case, on a poll as much as on the create. A status poll is where
+   * everything worth capturing about an asynchronous provision actually arrives: the create
+   * response is the least informative answer such a provider will ever give (no finished deploy
+   * job, no load balancers, no readiness detail), so a bag frozen at create time is a bag holding
+   * none of the facts a diagnosis needs. It is read back on the status and teardown calls, and by
+   * the environment investigation, which is the reader that made the staleness visible.
+   *
+   * Nullable rather than optional so every implementation still has to name the field and DECIDE,
+   * which is the whole distinction: a forgotten `fields` would otherwise read as "keep what is
+   * stored" on the very path (a create) that has nothing stored to keep.
+   */
+  fields: ProvisionFields | null
   /**
    * The verbatim provider error, set when a provider reports `status: 'failed'` WITHOUT
    * throwing (a deterministic rejection — quota exceeded, invalid manifest, …). Surfaced

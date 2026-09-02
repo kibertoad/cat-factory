@@ -469,9 +469,18 @@ export function parseReachability(raw: string | null): EnvironmentReachability |
   }
 }
 
-/** Serialize reachability for the row, or null when there is nothing worth a column. */
+/**
+ * Serialize reachability for the row, or null when there is nothing worth a column.
+ *
+ * `probedAt` alone is worth one. It is the record that the platform has LOOKED at reaching this
+ * environment, which outlives both halves it sits beside (a proof about an address the provider
+ * has stopped stating is dropped, and the candidate list with it), and it is what the status
+ * poll's re-prove paces itself against. Dropping the value for want of the other two would make
+ * the first held re-prove permanent.
+ */
 export function serializeReachability(value: EnvironmentReachability | null): string | null {
-  if (!value || (value.candidates.length === 0 && !value.proof)) return null
+  if (!value) return null
+  if (value.candidates.length === 0 && !value.proof && value.probedAt === undefined) return null
   return JSON.stringify(value)
 }
 
@@ -496,6 +505,8 @@ export function recordToHandle(
     expiresAt: record.expiresAt,
     lastError: record.lastError,
     statusNote: record.statusNote,
+    lastPolledAt: record.lastPolledAt,
+    pollCount: record.pollCount,
     provisionType: record.provisionType as EnvironmentHandle['provisionType'],
     engine: record.engine as EnvironmentHandle['engine'],
   }
