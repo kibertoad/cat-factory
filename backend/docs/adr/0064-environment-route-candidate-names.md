@@ -71,11 +71,32 @@ from, and the fold decides a `reached` proof's survival on THAT. A balancer the 
 which has since scaled answers with a different address set, and matching the stored `via` against
 the candidate list would drop a good proof on that routine event.
 
+**4a. And the literal is REFRESHED where a poll can see it.** Surviving the rescale is the point,
+and it is also what leaves `via` a snapshot of a set the platform does not own: the same scale-in
+that keeps the name good can release that address, so a proof left alone goes on publishing a bridge
+target the vendor may have handed to someone else. A `reached` proof carrying `viaHost` therefore
+does not win the status poll's "a surviving proof is left alone" short-circuit; it is re-taken on
+`ROUTE_REPROVE_MIN_INTERVAL_MS`, the same bound that paces a dropped proof's re-take. Known limit:
+this can only refresh a literal where a poll happens, so an environment nothing polls between the
+settle that proved it and the dispatch that bridges to it keeps whatever the settle recorded.
+
 **5. Every way a name fails to become an address is its own recorded attempt.** The plan's second
 target member is generalized from `refused` to `undialled`, carrying a reason and a detail: a name
 that resolved nowhere is `name_unresolved` (a fact about the name, which settles that candidate), a
 lookup that failed is `probe_failed` with the resolver's own words, and a deployment with nothing
-wired to resolve is a new `resolver_unavailable`, which leaves the route unruled-out.
+wired to resolve is a new `resolver_unavailable`, which leaves the route unruled-out. A resolver
+that REJECTS is folded onto that same `probe_failed`, per name: the port says it never does and
+nothing can enforce that, and a fail-fast over the lookups would cost the whole proof (and, on the
+poll path, the whole poll) for one adapter's bad leg.
+
+**5a. And the plan says when it is a PREFIX.** Three caps here end the candidate list early (names
+beyond `MAX_RESOLVED_HOSTS`, addresses beyond the dial budget, records beyond the recording budget),
+and each one passed over a candidate the platform never looked at. The plan counts them and appends
+one final `not_attempted` target naming the count, which leaves the route unruled-out: a verdict
+that nothing reaches the environment may not be graded against a list the platform stopped reading.
+`resolver_unavailable` gets the same treatment one layer up, where the status poll re-takes such a
+proof once a resolver IS wired rather than leaving an `inconclusive` proof that survives set
+equality for the life of the environment.
 
 **6. The manifest gains `response.hostsPath` beside `addressesPath`.** Both feed the one ordered
 candidate list; addresses are tried ahead of names when both are declared, and a provider wanting a
@@ -136,9 +157,17 @@ determined.
   argument, `RouteProbeTarget`'s `refused` member becomes `undialled`, `recordRefusedAttempt`
   becomes `recordUndialledAttempt`, and `reduceRouteProof` takes the carrying TARGET rather than its
   address alone.
-- `EnvironmentUnreachableReason` gains `resolver_unavailable`. The vocabulary is closed and mapped
-  through exhaustive `Record`s (`LEAVES_ROUTE_UNKNOWN`, `UNREACHABLE_CAUSES`), so both had to pick a
-  side before this compiled.
+- `EnvironmentUnreachableReason` gains `resolver_unavailable` and `not_attempted`. The vocabulary is
+  closed and mapped through exhaustive `Record`s (`LEAVES_ROUTE_UNKNOWN`, `UNREACHABLE_CAUSES`), so
+  both had to pick a side for each before this compiled.
+- `routeReproveDecision` takes `canResolveHosts`. It gates the `resolver_unavailable` re-take on the
+  deployment having the capability the proof records lacking, which is the same shape the
+  `unproved` case gets for free from the caller only consulting it with a prober in hand.
+- The Node resolver bounds itself to two outstanding `dns.lookup` calls process-wide. The deadline
+  cannot cancel one (it is a libuv threadpool call), so an abandoned leg keeps its thread until the
+  platform resolver gives up: four names started at once could hold the whole default four-thread
+  pool and queue every `fs` and `crypto` callback in the server behind a diagnostic. A caller that
+  finds the gate full still answers within its own `timeoutMs`, as `failed`.
 - `EnvironmentRouteProof` gains an optional `viaHost`. A proof written before it reads as the
   address case, which is what it was.
 - Three surfaces that printed `candidate.address` into a sentence about addresses now print

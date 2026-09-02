@@ -157,6 +157,21 @@ describe('renderEnvironmentInvestigationPrompt', () => {
     expect(prompt).toContain(
       'carried via 10.4.19.23 (resolved from the stated name alb-4.elb.example)',
     )
+    expect(prompt).toContain('A target marked `(name)`')
+  })
+
+  it('withholds the `(name)` explainer from a prompt that prints no name', () => {
+    // Appended whenever any candidate existed, it told a model whose provider states addresses to
+    // look for a marker nothing in its prompt carries, which invites the reading that part of the
+    // list was withheld from it.
+    const prompt = render({
+      route: {
+        candidates: [{ address: '10.4.19.22', label: 'internal ALB' }],
+        proof: null,
+      },
+    })
+    expect(prompt).toContain('targets the provider stated, in ITS order: 10.4.19.22')
+    expect(prompt).not.toContain('(name)')
   })
 
   it('offers no determinate cause when the evidence does not settle one', () => {

@@ -137,6 +137,13 @@ export function describeRouteCandidate(candidate: EnvironmentRouteCandidate): st
  *                         into an address. An admission about the PLATFORM, never a verdict about
  *                         the environment, so it leaves the route unruled-out exactly as
  *                         `probe_failed` does.
+ *  - `not_attempted`      the platform stopped short of the list its provider stated: it looks up
+ *                         a bounded number of names and dials a bounded number of addresses, so a
+ *                         longer list is a PREFIX. Recorded ONCE, naming how many were passed
+ *                         over, because a reader who assumes a prefix concludes the tail was
+ *                         never stated. Another admission about the PLATFORM: a candidate nothing
+ *                         looked at cannot be part of a verdict that nothing reaches the
+ *                         environment.
  *  - `probe_failed`       the probe itself errored in a way it could not classify. Kept apart
  *                         from the three above so "we could not tell" never renders as a
  *                         verdict about the environment.
@@ -148,6 +155,7 @@ export const environmentUnreachableReasonSchema = v.picklist([
   'connection_refused',
   'address_refused',
   'resolver_unavailable',
+  'not_attempted',
   'probe_failed',
 ])
 export type EnvironmentUnreachableReason = v.InferOutput<typeof environmentUnreachableReasonSchema>

@@ -3,7 +3,7 @@ import type {
   EnvironmentEvidenceBundle,
   EnvironmentInvestigationSubject,
 } from '@cat-factory/kernel'
-import { describeRouteCandidate } from '@cat-factory/contracts'
+import { describeRouteCandidate, statedRouteTarget } from '@cat-factory/contracts'
 import { describeRouteTargets, determinateRouteCause } from '@cat-factory/kernel'
 import { type BespokeSystemPrompt, composeBespokePrompt } from './bespoke.js'
 import { FINAL_ANSWER_IN_REPLY, NO_ASSUMED_PRODUCT } from './shared.js'
@@ -189,14 +189,22 @@ function renderTimeline(bundle: EnvironmentEvidenceBundle): string {
 function renderRoute(bundle: EnvironmentEvidenceBundle): string {
   const { candidates, proof, unreadable } = bundle.route
   if (unreadable) return section('Reaching this environment', unreadable)
+  // The `(name)` marker is explained only where one is PRINTED. Appended whenever any candidate
+  // existed, it told a model whose provider states addresses to look for a marker nothing in its
+  // prompt carries, which invites the reading that something was withheld from the list.
+  const named = candidates.some((entry) => statedRouteTarget(entry).kind === 'host')
   const lines = [
     candidates.length === 0
       ? "addresses and names the provider stated for this environment's URL: NONE. Its own name " +
         'was the only target that could be tried.'
       : `targets the provider stated, in ITS order: ${candidates
           .map(describeRouteCandidate)
-          .join(', ')}. A target marked \`(name)\` is one the platform RESOLVED when it dialled, ` +
-        'so the addresses it was tried on are in the attempt list rather than here.',
+          .join(', ')}.${
+          named
+            ? ' A target marked `(name)` is one the platform RESOLVED when it dialled, so the ' +
+              'addresses it was tried on are in the attempt list rather than here.'
+            : ''
+        }`,
   ]
   if (!proof) {
     lines.push(

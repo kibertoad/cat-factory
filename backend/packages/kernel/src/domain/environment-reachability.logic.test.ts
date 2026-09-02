@@ -63,6 +63,30 @@ describe('planRouteProbes', () => {
     expect(planRouteProbes('env.example', null)).toEqual([])
   })
 
+  it('SAYS the plan is a prefix, once, whichever cap shortened it', () => {
+    // Every cap here ends the list early, and a prefix nobody is told about is not a cosmetic
+    // omission: `reduceRouteProof` grades `not_reached` only when every attempt established
+    // something, so a silently shortened list is how the deployer comes to fail a frame on a
+    // verdict about candidates the platform never looked at. One entry naming the count, because
+    // the reader's question is whether anything was left unlooked-at and N copies of the same
+    // admission would crowd the attempt log the real evidence lives in.
+    const passedOver = (targets: ReturnType<typeof planRouteProbes>) =>
+      targets.filter((t) => t.kind === 'undialled' && t.reason === 'not_attempted')
+    // Names beyond the resolution bound: two of the six, and neither was ever looked up.
+    const names = planRouteProbes('env.example', 443, hosts('a', 'b', 'c', 'd', 'e', 'f'))
+    expect(passedOver(names).map((t) => t.label)).toEqual(['2 further targets the provider stated'])
+    // Addresses beyond the dial bound, counted the same way.
+    const many = candidates('10.0.0.1', '10.0.0.2', '10.0.0.3', '10.0.0.4', '10.0.0.5')
+    expect(passedOver(planRouteProbes('env.example', 443, many)).map((t) => t.label)).toEqual([
+      '1 further target the provider stated',
+    ])
+    // And it is LAST, which keeps the reason a determinate proof reports the FIRST attempt's: the
+    // URL's own name, rather than a note about the platform's bounds.
+    expect(names.at(-1)).toMatchObject({ reason: 'not_attempted' })
+    // A list inside every bound says nothing, because there is nothing to say.
+    expect(passedOver(planRouteProbes('env.example', 443, candidates('10.0.0.1')))).toEqual([])
+  })
+
   it('REFUSES to dial an address a bridge may not name, and says so instead of dropping it', () => {
     // The safety property of the whole probe. `addresses` is provider-authored data, so with no
     // rule here the orchestrator opens sockets wherever a manifest points and records the answers

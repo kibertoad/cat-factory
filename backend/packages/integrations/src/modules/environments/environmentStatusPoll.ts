@@ -222,6 +222,10 @@ export function createEnvironmentStatusPoller(deps: EnvironmentStatusPollerDeps)
       stored,
       folded,
       ready: provisioned.status === 'ready',
+      // The capability, not a preference: a proof recording that this deployment could not
+      // resolve a stated NAME is re-taken once one is wired and left alone while none is, which
+      // is the same rule the `unproved` case gets from `deps.probe` one line up.
+      canResolveHosts: Boolean(deps.resolveHost),
       now,
     })
     if (decision === 'keep') return folded

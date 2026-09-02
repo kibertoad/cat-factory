@@ -14,6 +14,26 @@ const { nodeHostResolver } = await import('../src/hostResolver.js')
 
 const errno = (code: string) => Object.assign(new Error(code), { code })
 
+/**
+ * Make every lookup hang until the returned release is called, and hand back that release.
+ *
+ * Every test that hangs one RELEASES it before it ends. `dns.lookup` cannot be cancelled, so the
+ * adapter's concurrency gate holds its slot until the lookup itself settles: a spec that walked
+ * away from a hung one would leave that slot held for the rest of the file.
+ */
+const hangingLookups = () => {
+  const pending: (() => void)[] = []
+  lookup.mockImplementation(
+    () => new Promise<{ address: string }[]>((resolve) => pending.push(() => resolve([]))),
+  )
+  return async () => {
+    for (const answer of pending) answer()
+    // Let the release ripple through the gate's queue: a waiter handed a slot only to find its own
+    // deadline already fired passes it straight on, which is several microtask turns away.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+}
+
 // Braced, not an arrow expression: a hook that RETURNS a value hands vitest a teardown, and
 // the value here is the mock itself, which it would then call after every test.
 beforeEach(() => {
@@ -64,9 +84,44 @@ describe('nodeHostResolver', () => {
     // and answers when that answers. A hung lookup would otherwise hold the deployer's settle path
     // open for as long as the resolver felt like, and a thrown one would turn a diagnostic into a
     // second way for a healthy run to die.
-    lookup.mockReturnValue(new Promise(() => {}))
+    const release = hangingLookups()
     await expect(nodeHostResolver({ host: 'slow.example', timeoutMs: 5 })).resolves.toMatchObject({
       state: 'failed',
     })
+    await release()
+  })
+
+  it('never REJECTS when the lookup throws SYNCHRONOUSLY', async () => {
+    // `lookup` validates its arguments before it does anything asynchronous, and that throw used
+    // to escape the resolver: past the fail-fast the caller has since dropped, it would have taken
+    // the whole route proof down. The port promises this never rejects, which is why the sibling
+    // `nodeRouteProbe` wraps `net.connect` the same way.
+    lookup.mockImplementation(() => {
+      throw errno('ERR_INVALID_ARG_TYPE')
+    })
+    await expect(nodeHostResolver({ host: 'alb.example', timeoutMs: 5 })).resolves.toEqual({
+      state: 'failed',
+      detail: 'ERR_INVALID_ARG_TYPE',
+    })
+  })
+
+  it('never holds more than half the libuv threadpool, whatever the proof asks for', async () => {
+    // The deadline abandons a `dns.lookup` that keeps its threadpool thread until the platform
+    // resolver gives up, which against a blackholed one is tens of seconds. The pool is four
+    // threads by default and `fs` and `crypto` share it, so `MAX_RESOLVED_HOSTS` names started at
+    // once could queue every file read and every `pbkdf2` in the server behind a diagnostic.
+    const release = hangingLookups()
+    const hosts = ['a', 'b', 'c', 'd'].map((name) => `${name}.example`)
+    const answers = Promise.all(hosts.map((host) => nodeHostResolver({ host, timeoutMs: 20 })))
+    await vi.waitFor(() => expect(lookup).toHaveBeenCalledTimes(2))
+    // Every name still answers on its OWN deadline: a caller that never reaches a slot reports
+    // "we could not tell", which leaves its candidate unruled-out, rather than waiting for one.
+    await expect(answers).resolves.toEqual(
+      hosts.map(() => ({ state: 'failed', detail: 'host resolution timed out' })),
+    )
+    // And the two that never got a slot never started a lookup, which is the point: the gate is
+    // what bounds the threads held, so releasing it on the deadline would bound nothing.
+    expect(lookup).toHaveBeenCalledTimes(2)
+    await release()
   })
 })

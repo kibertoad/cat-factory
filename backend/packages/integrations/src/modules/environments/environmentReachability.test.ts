@@ -181,6 +181,75 @@ describe('proveEnvironmentRoute with stated NAMES', () => {
     ])
     expect(proof).toMatchObject({ state: 'reached', via: '10.4.19.30' })
   })
+
+  it('costs one NAME its answer when the resolver rejects, never the whole proof', async () => {
+    // The port says a resolver never rejects and nothing can enforce it: a facade adapter with an
+    // unguarded leg, or one a deployment supplies, would take `proveEnvironmentRoute` down with
+    // it, and the status poll's fold is not best-effort, so the whole poll would throw and leave
+    // the environment stuck at whatever it last said. A rejection is the same fact as a lookup
+    // that `failed`: we could not tell, so the candidate is not ruled out.
+    const probe = prober({
+      'pr-14.test.example.cloud': { state: 'unresolved' },
+      '10.4.19.30': { state: 'carried' },
+    })
+    const proof = await proveEnvironmentRoute(
+      'https://pr-14.test.example.cloud',
+      [{ host: 'broken.elb.example' }, { host: 'live.elb.example' }],
+      {
+        probe,
+        resolveHost: async (req) => {
+          if (req.host === 'broken.elb.example') throw new Error('resolver adapter blew up')
+          return { state: 'resolved', addresses: ['10.4.19.30'] }
+        },
+        clock,
+      },
+    )
+    expect(proof.attempts.map((a) => a.outcome)).toEqual([
+      'name_unresolved',
+      'probe_failed',
+      'carried',
+    ])
+    expect(proof.attempts[1]?.detail).toContain('resolver adapter blew up')
+    expect(proof).toMatchObject({ state: 'reached', via: '10.4.19.30' })
+  })
+
+  it('looks up NOTHING for an environment with no host and port to dial', async () => {
+    // The plan is empty for those coordinates whatever the answers say, so the lookups would be up
+    // to `MAX_RESOLVED_HOSTS` timeouts nobody reads: on the settle path, and again on every status
+    // poll that re-proves.
+    const resolveHost = vi.fn(async () => ({ state: 'unresolved' as const }))
+    const probe = prober({})
+    const proof = await proveEnvironmentRoute(null, [{ host: 'alb-4.elb.example' }], {
+      probe,
+      resolveHost,
+      clock,
+    })
+    expect(resolveHost).not.toHaveBeenCalled()
+    expect(probe).not.toHaveBeenCalled()
+    expect(proof).toMatchObject({ state: 'inconclusive', reason: 'no_candidate' })
+  })
+
+  it('never grades a verdict against a name it stopped short of looking up', async () => {
+    // The platform resolves a bounded number of names. Past that bound the candidate is passed
+    // over, so nothing is established about it, so the list cannot add up to "nothing reaches this
+    // environment", the verdict that fails the deployer's frame.
+    const names = ['a', 'b', 'c', 'd', 'e'].map((name) => ({ host: `${name}.elb.example` }))
+    const proof = await proveEnvironmentRoute('https://env.example', names, {
+      probe: prober({ 'env.example': { state: 'unresolved' } }),
+      resolveHost: async () => ({ state: 'unresolved' }),
+      clock,
+    })
+    expect(proof.attempts.map((a) => a.outcome)).toEqual([
+      'name_unresolved',
+      'name_unresolved',
+      'name_unresolved',
+      'name_unresolved',
+      'name_unresolved',
+      'not_attempted',
+    ])
+    expect(proof.attempts.at(-1)).toMatchObject({ target: '1 further target the provider stated' })
+    expect(proof).toMatchObject({ state: 'inconclusive', reason: 'not_attempted' })
+  })
 })
 
 describe('foldStatedAddresses', () => {
@@ -421,6 +490,39 @@ describe('foldStatedAddresses across a resolved NAME', () => {
     ).toBeNull()
   })
 
+  it('sees the NUMBER of candidates naming nothing change, which a set cannot', () => {
+    // Every entry naming no target collapses onto one key, because there is nothing to key it by.
+    // Folded into a set, four of them look like one: a provider that starts stating an extra
+    // unusable entry would keep a stale `not_reached` proof while `planRouteProbes` records one
+    // more `address_refused` attempt than that proof knows about.
+    const negative = {
+      state: 'not_reached' as const,
+      via: null,
+      reason: 'address_refused',
+      attempts: [],
+      checkedAt: 10,
+    }
+    const stored = { candidates: [{ address: '10.4.19.22' }, {}], proof: negative }
+    expect(
+      foldStatedAddresses(
+        stored,
+        'https://env.example',
+        [{ address: '10.4.19.22' }, {}, { label: 'stated with no target' }],
+        'https://env.example',
+      )?.proof,
+    ).toBeNull()
+    // The same count still keeps it: an unusable entry renders identically wherever it sits, so
+    // reordering one is not something a proof could be a finding about.
+    expect(
+      foldStatedAddresses(
+        stored,
+        'https://env.example',
+        [{}, { address: '10.4.19.22' }],
+        'https://env.example',
+      )?.proof,
+    ).toEqual(negative)
+  })
+
   it('treats a name and an address that read alike as two candidates in the SET comparison', () => {
     const stored = {
       candidates: [{ host: 'alb-4.elb.example' }],
@@ -458,6 +560,7 @@ describe('routeReproveDecision', () => {
         stored: { candidates: [{ address: '10.4.19.22' }], proof: reached },
         folded: { candidates: [{ address: '10.4.19.30' }], proof: null, probedAt: 1_000 },
         ready: true,
+        canResolveHosts: true,
         now: at(1_000 + ROUTE_REPROVE_MIN_INTERVAL_MS),
       }),
     ).toBe('reprove')
@@ -472,6 +575,7 @@ describe('routeReproveDecision', () => {
         stored: { candidates: [{ address: '10.4.19.22' }], proof: reached },
         folded: { candidates: [{ address: '10.4.19.30' }], proof: null, probedAt: 1_000 },
         ready: true,
+        canResolveHosts: true,
         now: at(1_000 + ROUTE_REPROVE_MIN_INTERVAL_MS - 1),
       }),
     ).toBe('held')
@@ -486,6 +590,7 @@ describe('routeReproveDecision', () => {
         stored: { candidates: [{ address: '10.4.19.30' }], proof: null, probedAt: 1_000 },
         folded: { candidates: [{ address: '10.4.19.31' }], proof: null, probedAt: 1_000 },
         ready: true,
+        canResolveHosts: true,
         now: at(1_000 + ROUTE_REPROVE_MIN_INTERVAL_MS),
       }),
     ).toBe('reprove')
@@ -500,6 +605,7 @@ describe('routeReproveDecision', () => {
         stored: { candidates: [{ address: '10.4.19.22' }], proof: unproved },
         folded: { candidates: [{ address: '10.4.19.22' }], proof: unproved, probedAt: 1_000 },
         ready: true,
+        canResolveHosts: true,
         now: at(1_000 + ROUTE_REPROVE_MIN_INTERVAL_MS),
       }),
     ).toBe('reprove')
@@ -511,6 +617,7 @@ describe('routeReproveDecision', () => {
         stored: { candidates: [{ address: '10.4.19.22' }], proof: reached },
         folded: { candidates: [{ address: '10.4.19.22' }], proof: reached, probedAt: 1_000 },
         ready: true,
+        canResolveHosts: true,
         now: at(9_000_000),
       }),
     ).toBe('keep')
@@ -521,6 +628,7 @@ describe('routeReproveDecision', () => {
         stored: { candidates: [{ address: '10.4.19.22' }], proof: null },
         folded: { candidates: [{ address: '10.4.19.22' }], proof: null },
         ready: true,
+        canResolveHosts: true,
         now: at(9_000_000),
       }),
     ).toBe('keep')
@@ -530,8 +638,59 @@ describe('routeReproveDecision', () => {
         stored: { candidates: [{ address: '10.4.19.22' }], proof: reached },
         folded: { candidates: [{ address: '10.4.19.30' }], proof: null, probedAt: 1_000 },
         ready: false,
+        canResolveHosts: true,
         now: at(9_000_000),
       }),
     ).toBe('keep')
+  })
+
+  it('re-takes a `resolver_unavailable` proof once a resolver is WIRED, and not before', () => {
+    // The `unproved` trap in the shape the rule above cannot see. The proof is `inconclusive`, so
+    // it is not `unproved`, and it survives the fold forever on set equality: left alone it would
+    // leave an environment settled by a facade with no resolver unproved for the life of the
+    // environment, including after the deployment wired one.
+    const unavailable = {
+      state: 'inconclusive' as const,
+      via: null,
+      reason: 'resolver_unavailable',
+      attempts: [{ target: 'env.example@alb-4.elb.example:443', outcome: 'resolver_unavailable' }],
+      checkedAt: 1_000,
+    }
+    const args = {
+      stored: { candidates: [{ host: 'alb-4.elb.example' }], proof: unavailable },
+      folded: {
+        candidates: [{ host: 'alb-4.elb.example' }],
+        proof: unavailable,
+        probedAt: 1_000,
+      },
+      ready: true,
+      now: at(1_000 + ROUTE_REPROVE_MIN_INTERVAL_MS),
+    }
+    expect(routeReproveDecision({ ...args, canResolveHosts: true })).toBe('reprove')
+    // With nothing still wired the re-probe would pay a full dial sequence a minute to re-derive
+    // the answer it already has.
+    expect(routeReproveDecision({ ...args, canResolveHosts: false })).toBe('keep')
+  })
+
+  it('refreshes a `reached` proof whose `via` was RESOLVED from a name', () => {
+    // `via` is the literal a container host bridge is built from, and for a resolved name it is a
+    // snapshot of an address set the platform does not own. The balancer rescaling this proof
+    // deliberately SURVIVES is the same event that releases that address, so left alone the row
+    // goes on publishing a bridge target the vendor has since handed to someone else.
+    const viaName = { ...reached, via: '10.4.19.23', viaHost: 'alb-4.elb.example' }
+    const args = {
+      stored: { candidates: [{ host: 'alb-4.elb.example' }], proof: viaName },
+      folded: { candidates: [{ host: 'alb-4.elb.example' }], proof: viaName, probedAt: 1_000 },
+      ready: true,
+      canResolveHosts: true,
+    }
+    expect(routeReproveDecision({ ...args, now: at(1_000 + ROUTE_REPROVE_MIN_INTERVAL_MS) })).toBe(
+      'reprove',
+    )
+    // Paced by the same bound as every other re-take, so a polled environment cannot spend a dial
+    // sequence per poll on a proof it already has.
+    expect(
+      routeReproveDecision({ ...args, now: at(1_000 + ROUTE_REPROVE_MIN_INTERVAL_MS - 1) }),
+    ).toBe('held')
   })
 })

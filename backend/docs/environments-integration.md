@@ -141,7 +141,10 @@ assumed. Four facts about that interpretation belong to this repository:
   the address that carried with the name beside it, so the stored candidate stays the stable
   identity a managed balancer is addressed by while the proved value stays a literal. Which kind a
   bare string is comes from the declared KEY and is never sniffed off the value, because the
-  address rule refuses a disguised loopback literal that a resolver would answer for. Design:
+  address rule refuses a disguised loopback literal that a resolver would answer for. The plan
+  looks up and dials a BOUNDED number per environment and states in the proof (as
+  `not_attempted`) when a stated list ran past that, which is also what stops a verdict of
+  unreachable being graded against a candidate nothing looked at. Design:
   [ADR 0064](./adr/0064-environment-route-candidate-names.md).
   **A field present on the response mapping is present only when the manifest DECLARES it**, empty
   list included, because "the provider stated none" and "this response said nothing" are different

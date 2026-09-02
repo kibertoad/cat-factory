@@ -20,6 +20,27 @@ const stubFetch = (byType: Record<string, Response | (() => Response)>) =>
     return typeof entry === 'function' ? entry() : entry
   })
 
+/**
+ * A leg that answers only when the caller's signal aborts, which is what the resolver's own
+ * deadline does to it. Rejecting the way `fetch` does on an abort, so the pair is graded by the
+ * same path a real one takes.
+ */
+const hangUntilAborted = (signal: AbortSignal | undefined) =>
+  new Promise<Response>((_, reject) => {
+    signal?.addEventListener('abort', () => reject(new Error('The operation was aborted')))
+  })
+
+/** Stub `fetch` per record type, with the request's own abort signal handed to each leg. */
+const stubSignalledFetch = (
+  byType: Record<string, (signal: AbortSignal | undefined) => Promise<Response>>,
+) =>
+  vi.stubGlobal('fetch', async (input: string, init?: { signal?: AbortSignal }) => {
+    const type = new URL(input).searchParams.get('type') ?? ''
+    const leg = byType[type]
+    if (!leg) throw new Error(`unexpected DoH query for ${type}`)
+    return leg(init?.signal)
+  })
+
 afterEach(() => vi.unstubAllGlobals())
 
 describe('workerHostResolver', () => {
@@ -95,6 +116,33 @@ describe('workerHostResolver', () => {
     return expect(
       workerHostResolver({ host: 'alb.example', timeoutMs: 500 }),
     ).resolves.toMatchObject({ state: 'failed', detail: expect.stringContaining('subrequest') })
+  })
+
+  it('gives up on its own deadline, and SAYS that is what happened', async () => {
+    // The one path where `timeoutMs` and the shared `AbortController` interact, and it was
+    // asserted nowhere. Each leg's own rejection reads `The operation was aborted`, which points
+    // a reader at the transport when the fact is that this adapter stopped waiting; the proof and
+    // the investigation prompt both render that string verbatim.
+    stubSignalledFetch({ A: hangUntilAborted, AAAA: hangUntilAborted })
+    await expect(workerHostResolver({ host: 'slow.example', timeoutMs: 5 })).resolves.toMatchObject(
+      {
+        state: 'failed',
+        detail: expect.stringContaining('5ms resolution deadline'),
+      },
+    )
+  })
+
+  it('keeps an answer that landed BEFORE the deadline aborted the other leg', async () => {
+    // The deadline is not a verdict either: a dialable balancer must not be lost because the AAAA
+    // query was still in flight when the timer fired.
+    stubSignalledFetch({
+      A: async () => answer(0, [{ type: 1, data: '35.158.50.136' }]),
+      AAAA: hangUntilAborted,
+    })
+    await expect(workerHostResolver({ host: 'alb.example', timeoutMs: 5 })).resolves.toEqual({
+      state: 'resolved',
+      addresses: ['35.158.50.136'],
+    })
   })
 
   it('reads a non-zero, non-NXDOMAIN status as an answer it cannot use', () => {

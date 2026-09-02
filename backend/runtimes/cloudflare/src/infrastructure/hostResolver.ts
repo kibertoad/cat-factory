@@ -95,12 +95,22 @@ async function queryType(
  * strength of a missing AAAA. The pair fails only when NEITHER type could be asked, and it answers
  * `unresolved` only when both agree there is nothing: an NXDOMAIN plus an empty NOERROR is the same
  * fact as two NXDOMAINs.
+ *
+ * The deadline aborts both queries and NAMES itself in the detail, rather than leaving each leg's
+ * own `The operation was aborted` to stand for it. That string is what an operator reads off a
+ * proof and what a model reads in the investigation prompt, and on its own it points at the
+ * transport, where the fact is that this adapter stopped waiting. A partial answer that landed
+ * before the abort still wins: the deadline is not a verdict either.
  */
 export const workerHostResolver: HostResolver = async (
   req: HostResolveRequest,
 ): Promise<HostResolveOutcome> => {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), req.timeoutMs)
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, req.timeoutMs)
   try {
     const results = await Promise.all(
       ADDRESS_TYPES.map((type): Promise<TypeAnswer> =>
@@ -116,7 +126,18 @@ export const workerHostResolver: HostResolver = async (
       if (result.ok) addresses.push(...result.addresses)
       else failures.push(result.detail)
     }
-    if (failures.length === results.length) return { state: 'failed', detail: failures.join('; ') }
+    if (failures.length === results.length) {
+      const detail = failures.join('; ')
+      // Appended rather than substituted, because a leg that failed on its own before the timer
+      // fired said something the deadline does not: an HTTP 503 from the resolver and a query
+      // still in flight at the deadline are different faults and both can be in the same pair.
+      return {
+        state: 'failed',
+        detail: timedOut
+          ? `${detail} (the ${req.timeoutMs}ms resolution deadline was reached)`
+          : detail,
+      }
+    }
     return addresses.length > 0 ? { state: 'resolved', addresses } : { state: 'unresolved' }
   } finally {
     clearTimeout(timer)

@@ -19,11 +19,13 @@ import type {
   EnvironmentReachability,
   EnvironmentRouteAttempt,
   EnvironmentRouteProof,
+  EnvironmentUnreachableReason,
   HostResolveOutcome,
   HostResolver,
   RouteProbe,
 } from '@cat-factory/kernel'
 import {
+  getErrorMessage,
   HOST_RESOLVE_TIMEOUT_MS,
   planHostResolutions,
   planRouteProbes,
@@ -53,6 +55,19 @@ import {
  * socket behaves exactly as it did before this existed. Resolution is skipped in that case too,
  * because nothing would be dialled with the answers.
  *
+ * It is skipped for an environment with NOTHING TO DIAL for the same reason, and that one is
+ * asked of kernel rather than re-derived: the plan is empty when the URL names no host and port,
+ * no resolution can add a target to an empty plan, and up to `MAX_RESOLVED_HOSTS` lookups would
+ * then be paid for answers nobody reads, on the settle path and again on every status poll that
+ * re-proves. Asking the pure plan twice is how that stays ONE condition; a copy of it here is how
+ * the resolver comes to be paid on exactly the path its answers cannot reach.
+ *
+ * The lookups stay AHEAD of the first dial, rather than being deferred until the URL's own name
+ * has failed. Deferring would save a healthy lookup (tens of milliseconds) in the case where the
+ * URL carries, and a deployment that states names is by construction one whose URL does not; the
+ * cost would be handing the plan out in two halves, so that the order the provider stated and the
+ * platform's own "name first" rule stopped living in one function.
+ *
  * A target the plan will not dial is recorded without a socket being opened. That is the one place
  * the two kinds of target must not be conflated, and why the plan makes an undialled one carry no
  * request to dial.
@@ -65,6 +80,9 @@ export async function proveEnvironmentRoute(
   const now = deps.clock.now()
   if (!deps.probe) return unprovedRoute(now)
   const coords = deriveEnvironmentCoordinates(url)
+  if (planRouteProbes(coords?.host, coords?.port, candidates).length === 0) {
+    return reduceRouteProof([], null, now)
+  }
   const resolutions = await resolveStatedHosts(candidates, deps.resolveHost)
   const targets = planRouteProbes(coords?.host, coords?.port, candidates, { resolutions })
   const attempts: EnvironmentRouteAttempt[] = []
@@ -86,6 +104,13 @@ export async function proveEnvironmentRoute(
  * An EMPTY map with no resolver wired, rather than one entry saying so per name: the plan already
  * knows which names it asked about, so a missing entry IS "nothing resolved this", and inventing a
  * per-name placeholder here would put the same fact in two shapes.
+ *
+ * `allSettled`, so a resolver that breaks its own contract costs its OWN name and not the proof.
+ * The port says a resolver never rejects and nothing can enforce that: a facade adapter with an
+ * unguarded leg, or one a deployment supplies, would otherwise reject `proveEnvironmentRoute`
+ * itself, and the status poll's fold is not best-effort, so the whole poll would throw and leave
+ * the environment stuck at whatever it last said. A rejection is the same fact as a lookup that
+ * `failed` ("we could not tell"), which is the outcome that leaves the candidate unruled-out.
  */
 async function resolveStatedHosts(
   candidates: readonly EnvironmentRouteCandidate[],
@@ -93,10 +118,17 @@ async function resolveStatedHosts(
 ): Promise<Map<string, HostResolveOutcome>> {
   if (!resolveHost) return new Map()
   const hosts = planHostResolutions(candidates)
-  const outcomes = await Promise.all(
+  const settled = await Promise.allSettled(
     hosts.map((host) => resolveHost({ host, timeoutMs: HOST_RESOLVE_TIMEOUT_MS })),
   )
-  return new Map(hosts.map((host, index) => [host, outcomes[index] as HostResolveOutcome]))
+  return new Map(
+    hosts.map((host, index): [string, HostResolveOutcome] => {
+      const result = settled[index]
+      if (result?.status === 'fulfilled') return [host, result.value]
+      const detail = getErrorMessage(result?.reason) || 'the host resolver rejected'
+      return [host, { state: 'failed', detail }]
+    }),
+  )
 }
 
 /**
@@ -206,17 +238,42 @@ function candidateKey(entry: EnvironmentRouteCandidate): string {
   const stated = statedRouteTarget(entry)
   if (stated.kind === 'address') return `a:${stated.address}`
   if (stated.kind === 'host') return `h:${stated.host}`
-  return 'x:'
+  return UNUSABLE_KEY
 }
+
+/**
+ * The key every candidate naming no single target collapses onto.
+ *
+ * They have nothing to key BY, which is the whole reason `planRouteProbes` labels one by its
+ * position rather than by a value. Named so the comparison below can COUNT them instead of
+ * folding them into a set that cannot see their number change.
+ */
+const UNUSABLE_KEY = 'x:'
 
 /** Whether two candidate lists name the same SET of targets (order and labels are cosmetic). */
 function sameCandidateSet(
   a: readonly EnvironmentRouteCandidate[],
   b: readonly EnvironmentRouteCandidate[],
 ): boolean {
-  const left = new Set(a.map(candidateKey))
-  const right = new Set(b.map(candidateKey))
-  return left.size === right.size && [...left].every((key) => right.has(key))
+  const left = targetKeys(a)
+  const right = targetKeys(b)
+  if (left.size !== right.size || ![...left].every((key) => right.has(key))) return false
+  // The unusable entries are COUNTED, because a set cannot tell one from four: every one of them
+  // carries {@link UNUSABLE_KEY}, so a provider that starts stating an extra entry naming nothing
+  // would keep a stale `not_reached` proof while `planRouteProbes` records one more
+  // `address_refused` attempt than that proof knows about. Their POSITION is deliberately not part
+  // of it, matching the rest of this comparison: they render identically, so reordering them
+  // changes nothing a proof could be a finding about.
+  return countUnusable(a) === countUnusable(b)
+}
+
+/** The deduplicated keys of the candidates that name a target, ignoring the ones that name none. */
+function targetKeys(entries: readonly EnvironmentRouteCandidate[]): Set<string> {
+  return new Set(entries.map(candidateKey).filter((key) => key !== UNUSABLE_KEY))
+}
+
+function countUnusable(entries: readonly EnvironmentRouteCandidate[]): number {
+  return entries.filter((entry) => candidateKey(entry) === UNUSABLE_KEY).length
 }
 
 /**
@@ -230,6 +287,9 @@ function sameCandidateSet(
  * durable step, over and over. A minute means at most one probe sequence per environment per
  * minute, which is still promptly enough for the case the re-prove exists for: a proof invalidated
  * once, by a provider that then stays put.
+ *
+ * It paces the refresh of a proof that SURVIVED the fold too (see {@link awaitsAnotherLook}), and
+ * for the same reason: a resolved `via` is re-taken as often as this allows and no oftener.
  */
 export const ROUTE_REPROVE_MIN_INTERVAL_MS = 60_000
 
@@ -247,11 +307,9 @@ export const ROUTE_REPROVE_MIN_INTERVAL_MS = 60_000
  *   - **Never the FIRST look.** Nothing has looked at a provisioning environment, and looking here
  *     would put a probe on every poll of every environment whose deployer has not settled it. The
  *     settle path owns that one.
- *   - **A surviving proof is left alone, EXCEPT `unproved`.** `unproved` records that nothing was
- *     wired to open a socket, so it is a proof never taken and it survives the fold forever on set
- *     equality; treating it as a live proof is what would leave every environment settled before a
- *     deployment wired its prober permanently unproved, which is exactly the "a dropped proof and
- *     a proof never taken are the same value" trap one level up.
+ *   - **A surviving proof is left alone unless it {@link awaitsAnotherLook}.** The fold decides
+ *     whether a proof still says something about the candidates beside it; that decides whether
+ *     what it says is still worth standing on.
  *   - **{@link ROUTE_REPROVE_MIN_INTERVAL_MS} since the last look**, read off `probedAt` rather
  *     than off the proof, because a hold PERSISTS the drop: anchored on the proof's own date, the
  *     first hold would erase the anchor and no later poll would ever re-take anything.
@@ -260,12 +318,57 @@ export function routeReproveDecision(args: {
   stored: EnvironmentReachability | null
   folded: EnvironmentReachability | null
   ready: boolean
+  /**
+   * Whether this deployment can turn a stated NAME into an address, i.e. whether its
+   * `HostResolver` is wired. Read by {@link awaitsAnotherLook}, which re-takes a proof recording
+   * that it was NOT only once it is.
+   */
+  canResolveHosts: boolean
   now: number
 }): 'reprove' | 'keep' | 'held' {
   if (!args.ready) return 'keep'
   const lookedAt = lastLookedAt(args.stored)
   if (lookedAt === null) return 'keep'
   const surviving = args.folded?.proof
-  if (surviving && surviving.state !== 'unproved') return 'keep'
+  if (surviving && !awaitsAnotherLook(surviving, args.canResolveHosts)) return 'keep'
   return args.now - lookedAt < ROUTE_REPROVE_MIN_INTERVAL_MS ? 'held' : 'reprove'
+}
+
+/**
+ * Whether a proof that survived the fold is one the poll should take AGAIN.
+ *
+ * Three cases, and each is a proof about the PLATFORM wearing a state that reads like a verdict:
+ *
+ *   - **`unproved`.** Nothing was wired to open a socket, so it is a proof never taken, and it
+ *     survives set equality forever. The caller only consults this with a prober in hand, so
+ *     re-taking it is precisely "the deployment gained the capability the proof records lacking".
+ *   - **`resolver_unavailable`.** The same fact one layer down, and it arrived carrying the same
+ *     trap in a shape the rule above cannot see: the proof is `inconclusive`, so it is not
+ *     `unproved`, so it would be left alone for the life of the environment and an environment
+ *     settled by a facade with no resolver would stay unproved after the deployment wired one.
+ *     Gated on the capability rather than re-taken unconditionally, because with nothing still
+ *     wired the re-probe would pay a full dial sequence a minute to re-derive an answer it has.
+ *   - **A `reached` proof whose `via` was RESOLVED from a name.** `via` is the literal a container
+ *     host bridge is built from, and for a resolved name it is a snapshot of an address set the
+ *     platform does not own. The balancer rescaling this proof deliberately SURVIVES (the name is
+ *     still stated, so the fold keeps it) is the same event that releases that address, and left
+ *     alone the row goes on publishing a bridge target the vendor has since handed to someone
+ *     else: a run heading for failure with a proof on the record saying the environment is
+ *     reachable, which is the worst of the bridge module's failure modes. Re-taking refreshes the
+ *     literal against the name that is still the finding.
+ *
+ * Every other proof is left alone. `probe_failed` is a transient with no signal to pace against,
+ * so re-taking it would be a guess on the poll's own cadence rather than a response to anything,
+ * and `not_attempted` records a bound this build does not move.
+ *
+ * The residual gap is the environment nothing polls between the settle that proved it and the
+ * dispatch that bridges to it: this can only refresh a literal where a poll happens. ADR 0064
+ * records it.
+ */
+function awaitsAnotherLook(proof: EnvironmentRouteProof, canResolveHosts: boolean): boolean {
+  if (proof.state === 'unproved') return true
+  if (proof.reason === ('resolver_unavailable' satisfies EnvironmentUnreachableReason)) {
+    return canResolveHosts
+  }
+  return proof.state === 'reached' && proof.viaHost !== undefined
 }

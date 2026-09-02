@@ -569,6 +569,14 @@ function prepareRoute(
     proof: {
       ...proof,
       via: proof.via === null ? null : capText(scrub(proof.via), ROUTE_TEXT_CAP),
+      // The same treatment as `via`, and for a stronger reason: `viaHost` is a NAME a manifest's
+      // `hostsPath` pointed at, so it is provider-authored text of no declared length, where
+      // `via` at least came back from a resolver. Riding out on the spread above it reached the
+      // investigation prompt and the telemetry store unscrubbed and uncapped, which is the hole
+      // the candidate loop's own comment guards against for the field it was read from.
+      ...(proof.viaHost === undefined
+        ? {}
+        : { viaHost: capText(scrub(proof.viaHost), ROUTE_TEXT_CAP) }),
       attempts,
     },
   }

@@ -379,6 +379,79 @@ describe('the environment status poll: the route re-prove', () => {
     expect(dialled).toEqual(['pr-9.preview.test', '10.4.19.30'])
   })
 
+  it('re-proves an environment whose stored proof says nothing could RESOLVE its balancer', async () => {
+    // The `unproved` trap in the shape the state alone cannot show. A proof recording that this
+    // deployment had nothing to turn a stated NAME into an address is `inconclusive`, so it is not
+    // `unproved`, and it survives the fold forever on set equality: left as a live proof it would
+    // leave such an environment unproved for its whole life, including after the deployment wired
+    // a resolver.
+    const dialled: string[] = []
+    const registry = fakeRegistry()
+    const provider = {
+      async provision() {
+        return {
+          externalId: 'ext-1',
+          url: 'https://pr-9.preview.test',
+          status: 'ready' as const,
+          expiresAt: null,
+          access: null,
+          fields: null,
+          addresses: [{ host: 'alb-4.elb.preview.test', label: 'public ALB' }],
+        }
+      },
+      async status() {
+        return {
+          externalId: 'ext-1',
+          url: 'https://pr-9.preview.test',
+          status: 'ready' as const,
+          expiresAt: null,
+          access: null,
+          fields: null,
+          addresses: [{ host: 'alb-4.elb.preview.test', label: 'public ALB' }],
+        }
+      },
+      async teardown() {
+        return { status: 'torn_down' as const }
+      },
+    } satisfies EnvironmentProvider
+    const probe: RouteProbe = async (req) => {
+      dialled.push(req.address ?? req.host)
+      return req.address ? { state: 'carried' } : { state: 'unresolved' }
+    }
+    let now = 1_700_000_000_000
+    const clock = { now: () => now }
+    const noResolver = makeService(provider, registry, undefined, { clock, routeProbe: probe })
+    await noResolver.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    const id = registry.records[0]!.id
+    const unresolvable = await noResolver.proveReachability('ws1', id)
+    expect(unresolvable.reachability?.proof).toMatchObject({
+      state: 'inconclusive',
+      reason: 'resolver_unavailable',
+    })
+
+    // Nothing is still wired, so the poll leaves it alone rather than paying a dial sequence a
+    // minute to re-derive the answer it has.
+    now += ROUTE_REPROVE_MIN_INTERVAL_MS
+    dialled.length = 0
+    await noResolver.refreshStatus('ws1', id)
+    expect(dialled).toEqual([])
+
+    // The same deployment, one release later, with a resolver.
+    now += ROUTE_REPROVE_MIN_INTERVAL_MS
+    const wired = makeService(provider, registry, undefined, {
+      clock,
+      routeProbe: probe,
+      hostResolver: async () => ({ state: 'resolved', addresses: ['10.4.19.30'] }),
+    })
+    const refreshed = await wired.refreshStatus('ws1', id)
+    expect(refreshed.reachability?.proof).toMatchObject({
+      state: 'reached',
+      via: '10.4.19.30',
+      viaHost: 'alb-4.elb.preview.test',
+    })
+    expect(dialled).toEqual(['pr-9.preview.test', '10.4.19.30'])
+  })
+
   it('takes no FIRST proof on a poll: only one the poll itself invalidated is re-taken', async () => {
     // The narrowing that keeps a socket off the hot path. Nothing has proved a `provisioning`
     // environment yet, and probing here would dial on every poll of every environment whose

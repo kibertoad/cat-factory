@@ -36,10 +36,23 @@ name under `hostsPath`.
 
 Every way a name fails to become an address is recorded as its own attempt rather than dropped: a
 name that resolves nowhere rules that candidate out and the proof moves to the next, a lookup that
-failed carries the resolver's own words, and a deployment with nothing wired to resolve records the
-new `resolver_unavailable` reason, which settles nothing either way and can never fail a frame.
-Both facades wire a resolver (Node through `dns.lookup`, the Worker over DNS-over-HTTPS, which is
-the view its own outbound connections already resolve through).
+failed (or a resolver that rejected, which the port forbids and nothing can enforce) carries the
+resolver's own words, and a deployment with nothing wired to resolve records the new
+`resolver_unavailable` reason, which settles nothing either way and can never fail a frame. Both
+facades wire a resolver (Node through `dns.lookup`, the Worker over DNS-over-HTTPS, which is the
+view its own outbound connections already resolve through).
+
+The platform also says when it stopped reading: the plan bounds how many names it looks up and how
+many addresses it dials, and a list longer than that now ends in one `not_attempted` attempt naming
+how many were passed over. That is a second new reason, and it leaves the route unruled-out for the
+same reason the first does. A verdict that nothing reaches an environment may not be graded against
+candidates nobody looked at, and the deployer fails a frame on that verdict.
+
+Two proofs that used to stand forever are now re-taken by the status poll: one recording that this
+deployment could not resolve a name (once one is wired), and a `reached` proof whose address was
+RESOLVED rather than stated. The second is the price of surviving a balancer rescale, which is what
+`viaHost` is for: the name stays good while the literal beside it, the one a container host bridge
+is built from, can be released by the same scale event.
 
 Internal breaks, no migration: `EnvironmentAddress` / `environmentAddressSchema` are renamed to
 `EnvironmentRouteCandidate` / `environmentRouteCandidateSchema` with `address` now optional;

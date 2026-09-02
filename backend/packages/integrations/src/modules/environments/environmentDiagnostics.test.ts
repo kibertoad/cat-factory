@@ -414,6 +414,34 @@ describe('createEnvironmentDiagnostics.collect: the derived timeline and route e
     const proofEntry = bundle.timeline.find((e) => e.label.startsWith('route proof'))
     expect(proofEntry?.detail).not.toContain('hunter2')
   })
+
+  it('scrubs the NAME a proof carried on, which rode out on the spread beside `via`', async () => {
+    // `viaHost` is a name a manifest's `hostsPath` pointed at, so it is provider-authored text of
+    // no declared length: strictly more exposed than `via`, which at least came back from a
+    // resolver. Both the investigation prompt and the timeline entry print it.
+    const diagnostics = createEnvironmentDiagnostics(
+      deps({
+        found: record({
+          reachability: JSON.stringify({
+            candidates: [{ host: 'alb-4.internal.example' }],
+            proof: {
+              state: 'reached',
+              via: '10.4.19.23',
+              viaHost: 'alb-4.internal.example?token=hunter2',
+              reason: null,
+              attempts: [],
+              checkedAt: 259_000,
+            },
+          }),
+        }),
+      }),
+    )
+    const bundle = await collectBundle(diagnostics, { environmentId: 'env_1' })
+    expect(bundle.route.proof?.viaHost).not.toContain('hunter2')
+    expect(bundle.route.proof?.viaHost).toContain('[REDACTED]')
+    const proofEntry = bundle.timeline.find((e) => e.label.startsWith('route proof'))
+    expect(proofEntry?.detail).not.toContain('hunter2')
+  })
 })
 
 // What the bundle says when a read FAILED or a value was too big to pass on. Its own suite because

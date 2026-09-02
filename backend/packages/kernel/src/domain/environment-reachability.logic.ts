@@ -155,6 +155,14 @@ export interface RouteProbePlan {
  * unresolvable targets are RECORDED (`kind: 'undialled'`) rather than dropped: a shortened list
  * nobody is told about is how a provider's bad candidate becomes an unexplained `name_unresolved`.
  *
+ * **Every cap this plan applies reports what it passed over**, in one final `not_attempted`
+ * target. Three of them bite (names beyond {@link MAX_RESOLVED_HOSTS}, addresses beyond the dial
+ * budget, records beyond the recording budget) and each ends the list early, so without that
+ * report a proof over a longer list is a prefix presented as the whole thing. It is not a
+ * cosmetic omission: {@link reduceRouteProof} grades `not_reached` only when every attempt
+ * established something, and a silently shortened list is how the deployer comes to fail a frame
+ * on a verdict about candidates the platform never looked at.
+ *
  * Empty when there is no host or port to dial, which the caller reads as `no_candidate`: an
  * environment with no URL was never going to be reached, and that is a different fact from one
  * that was tried and failed.
@@ -172,12 +180,15 @@ export function planRouteProbes(
   ]
   const inScope = new Set(planHostResolutions(candidates))
   const seen = new Set<string>()
-  const budget = { dialable: 0, undialled: 0 }
+  const budget = { dialable: 0, undialled: 0, passedOver: 0 }
   // Bounded by `return` rather than `break`, so a manifest listing four refused addresses ahead of
   // a good one still gets the good one dialled. Recording costs no I/O; the dial budget is what the
   // deployer's settle path is actually waiting on.
   const record = (label: string, reason: EnvironmentUnreachableReason, detail?: string) => {
-    if (budget.undialled >= MAX_PROBED_ADDRESSES) return
+    if (budget.undialled >= MAX_PROBED_ADDRESSES) {
+      budget.passedOver += 1
+      return
+    }
     budget.undialled += 1
     targets.push({ kind: 'undialled', label, reason, ...(detail ? { detail } : {}) })
   }
@@ -186,7 +197,10 @@ export function planRouteProbes(
       ? `${host}@${address}:${port} (${statedHost})`
       : `${host}@${address}:${port}`
     if (!isBridgeableAddress(address)) return record(label, 'address_refused')
-    if (budget.dialable >= MAX_PROBED_ADDRESSES) return
+    if (budget.dialable >= MAX_PROBED_ADDRESSES) {
+      budget.passedOver += 1
+      return
+    }
     budget.dialable += 1
     targets.push({
       kind: 'dial',
@@ -210,15 +224,49 @@ export function planRouteProbes(
       dial(stated.address)
       continue
     }
-    if (!inScope.has(stated.host) || seen.has(`h:${stated.host}`)) continue
+    if (seen.has(`h:${stated.host}`)) continue
     seen.add(`h:${stated.host}`)
+    // Beyond the resolution bound. Counted rather than dropped, because the platform is not about
+    // to look this name up: nothing is established about the candidate, and a proof that omits it
+    // reads as one taken against everything the provider offered.
+    if (!inScope.has(stated.host)) {
+      budget.passedOver += 1
+      continue
+    }
     expandHost(stated.host, plan.resolutions?.get(stated.host), `${host}@${stated.host}:${port}`, {
       record,
       dial,
       seen,
     })
   }
+  if (budget.passedOver > 0) targets.push(passedOverTarget(budget.passedOver))
   return targets
+}
+
+/**
+ * The one target that says the plan above is a PREFIX of what the provider stated.
+ *
+ * ONE entry naming the count, never one per passed-over candidate: what a reader needs is whether
+ * anything was left unlooked-at, and N copies of the same admission would spend the attempt log
+ * the real attempts live in (which is itself capped, so the copies would crowd out the evidence).
+ *
+ * Appended LAST, which keeps two rules intact. `reduceRouteProof` reports the FIRST attempt's
+ * reason for a determinate proof, and that must stay the URL's own name; and the dials ahead of it
+ * are what the settle path waits on, so a target that opens no socket may not delay them.
+ */
+function passedOverTarget(count: number): Extract<RouteProbeTarget, { kind: 'undialled' }> {
+  return {
+    kind: 'undialled',
+    label:
+      count === 1
+        ? '1 further target the provider stated'
+        : `${count} further targets the provider stated`,
+    reason: 'not_attempted',
+    detail:
+      `The platform resolves at most ${MAX_RESOLVED_HOSTS} stated names and dials at most ` +
+      `${MAX_PROBED_ADDRESSES} addresses per environment, and this environment's provider stated ` +
+      'more than that.',
+  }
 }
 
 /**
@@ -348,6 +396,10 @@ const LEAVES_ROUTE_UNKNOWN: Record<EnvironmentUnreachableReason, boolean> = {
   // declined to look at it. Grading it as established is how a facade missing a resolver would
   // start failing deploys for environments it never dialled.
   resolver_unavailable: true,
+  // The same shape of admission, from the platform's own bounds rather than its wiring: a
+  // candidate past the cap was passed over, so it is not ruled out, so the list as a whole cannot
+  // add up to "nothing reaches this environment".
+  not_attempted: true,
   probe_failed: true,
 }
 
@@ -371,23 +423,6 @@ function leavesRouteUnknown(outcome: string): boolean {
 }
 
 /**
- * Fold a completed set of attempts into the proof that is stored and narrated.
- *
- * Three outcomes, and which one this returns is the most consequential line in the feature,
- * because only `not_reached` fails a deployer frame:
- *
- *   - **`reached`** as soon as any attempt carried, publishing the target that did.
- *   - **`inconclusive`** when nothing carried AND some attempt left a route unruled-out: a probe
- *     that could not classify its own failure, or nothing to try at all. A workerd connect message
- *     matching none of that facade's markers, or a Node errno outside the mapped five, arrives
- *     here, and reading either as a verdict about the environment is how a diagnostic becomes a
- *     second way for a healthy deploy to die. The reason names the attempt that left it unknown.
- *   - **`not_reached`** only when EVERY attempt established something and none of them carried.
- *     The reported reason is then the FIRST attempt's, which is always the name, so a reader is
- *     told what happened to the address they were given rather than what happened to the last
- *     balancer in someone's preference list. The attempt log carries the rest, in order.
- */
-/**
  * The target that carried, as {@link reduceRouteProof} publishes it: the address, plus the stated
  * NAME it was resolved from when it came from one.
  *
@@ -399,6 +434,24 @@ export type CarryingTarget = Pick<
   'address' | 'statedHost'
 >
 
+/**
+ * Fold a completed set of attempts into the proof that is stored and narrated.
+ *
+ * Three outcomes, and which one this returns is the most consequential line in the feature,
+ * because only `not_reached` fails a deployer frame:
+ *
+ *   - **`reached`** as soon as any attempt carried, publishing the target that did.
+ *   - **`inconclusive`** when nothing carried AND some attempt left a route unruled-out: a probe
+ *     that could not classify its own failure, a candidate the plan passed over, or nothing to try
+ *     at all. A workerd connect message matching none of that facade's markers, or a Node errno
+ *     outside the mapped five, arrives here, and reading either as a verdict about the environment
+ *     is how a diagnostic becomes a second way for a healthy deploy to die. The reason names the
+ *     attempt that left it unknown.
+ *   - **`not_reached`** only when EVERY attempt established something and none of them carried.
+ *     The reported reason is then the FIRST attempt's, which is always the name, so a reader is
+ *     told what happened to the address they were given rather than what happened to the last
+ *     balancer in someone's preference list. The attempt log carries the rest, in order.
+ */
 export function reduceRouteProof(
   attempts: readonly EnvironmentRouteAttempt[],
   carried: CarryingTarget | null,
@@ -453,6 +506,8 @@ const UNREACHABLE_CAUSES: Record<EnvironmentUnreachableReason, string> = {
     'every target its provider stated is one no host bridge may name (loopback, link-local or vendor metadata, or a non-canonical literal, or a candidate naming nothing at all), so none could be dialled',
   resolver_unavailable:
     'its provider identified the environment by NAME and this deployment has nothing wired to turn a name into an address, so nothing was established either way',
+  not_attempted:
+    'its provider stated more targets than the platform will look up and dial for one environment, so at least one of them was never tried and nothing was established either way',
   probe_failed: 'the probe could not complete, so nothing was established either way',
 }
 
