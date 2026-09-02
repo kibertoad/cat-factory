@@ -9,13 +9,18 @@ import { silentLogger } from './helpers.js'
 // Deliberately machine-agnostic. Whether `docker` is on the PATH of the box running this suite is
 // not a property of this module, and a case that assumed either answer would pass on a developer's
 // laptop and fail on a runner (or the reverse) while pinning nothing.
+//
+// It also never touches a DAEMON, which is why the one real spawn below is the client-only
+// `docker --version` rather than the `docker version` the module's caller uses. A unit suite that
+// queues work on the shared daemon of whatever machine it runs on adds latency to every other
+// file's docker call, and `infra-standup-docker.test.ts` is already spending real seconds there.
 
 describe('running one docker command', () => {
   it('answers with an outcome rather than rejecting, whatever this machine has', async () => {
     // The caller classifies a spawn failure and a command that ran differently, and an exception
     // would collapse that distinction into whichever `catch` caught it first. Every branch above
     // this one is written against those two outcomes and nothing else.
-    const outcome = await spawnDockerCommand(['version', '--format', '{{.Server.Arch}}'], {
+    const outcome = await spawnDockerCommand(['--version'], {
       timeoutMs: 10_000,
       logger: silentLogger,
     })

@@ -39,6 +39,18 @@ const noDaemon = (): Promise<DockerWorkload> =>
     daemonAnswered: false,
   })
 
+/**
+ * What the two ATTEMPT cases below are allowed to take.
+ *
+ * They are the only ones here that reach the real `docker compose`, because "the attempt was made"
+ * is the whole assertion and the compose exec has no injection seam. That spawns the docker CLI
+ * against whatever daemon the machine has, and on a shared CI runner the cold start of that pair
+ * does not fit in vitest's 5s default: the case then reports a timeout instead of what it went
+ * looking for. Sized for the SPAWN, not for compose doing any work, since the compose file does
+ * not exist and the command fails as soon as it has read the directory.
+ */
+const ATTEMPT_TIMEOUT_MS = 30_000
+
 describe('standUpInfra against the container docker verdict', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
@@ -66,15 +78,19 @@ describe('standUpInfra against the container docker verdict', () => {
     expect(result.record?.error).toContain('rootlesskit: no ip')
   })
 
-  it('still attempts when no verdict was recorded, and claims nothing about the daemon', async () => {
-    vi.stubEnv('HARNESS_DOCKER_STATUS_FILE', join(tmpdir(), 'cf-no-such-status.json'))
-    // The compose file does not exist, so the attempt fails — the point is that it was MADE and
-    // that the record does not assert a daemon verdict this container never reached.
-    const result = await standUpInfra(tmpdir(), infra, undefined, silentLogger, noDaemon)
-    expect(result.started).toBe(false)
-    expect(result.record?.dockerAvailable).toBeUndefined()
-    expect(result.record?.error).not.toContain('ships no Docker daemon')
-  })
+  it(
+    'still attempts when no verdict was recorded, and claims nothing about the daemon',
+    async () => {
+      vi.stubEnv('HARNESS_DOCKER_STATUS_FILE', join(tmpdir(), 'cf-no-such-status.json'))
+      // The compose file does not exist, so the attempt fails. The point is that it was MADE, and
+      // that the record does not assert a daemon verdict this container never reached.
+      const result = await standUpInfra(tmpdir(), infra, undefined, silentLogger, noDaemon)
+      expect(result.started).toBe(false)
+      expect(result.record?.dockerAvailable).toBeUndefined()
+      expect(result.record?.error).not.toContain('ships no Docker daemon')
+    },
+    ATTEMPT_TIMEOUT_MS,
+  )
 
   it('stays a no-op for a run that declared no compose dependencies', async () => {
     await withStatus('{"available":false,"source":"none","reason":"missing"}')
@@ -124,17 +140,21 @@ describe('standUpInfra against the container docker verdict', () => {
     expect(unusable.record).toMatchObject({ dockerAvailable: true, dockerWorkload: 'unusable' })
   })
 
-  it('attempts anyway when the recorded absence is contradicted by a live daemon', async () => {
-    // A warm-pool container whose sidecar took longer to come up than the entrypoint's bounded
-    // wait allows. The boot record still says unreachable; the daemon is serving. Refusing off
-    // the record alone would deny this container local infra for the rest of its life.
-    await withStatus('{"available":false,"source":"external","reason":"unreachable"}')
-    const result = await standUpInfra(tmpdir(), infra, undefined, silentLogger, () =>
-      Promise.resolve({ status: 'usable' }),
-    )
-    // The compose file does not exist, so the attempt fails. The point is that it was MADE, and
-    // that the record claims the daemon it actually reached.
-    expect(result.record?.dockerAvailable).toBe(true)
-    expect(result.record?.error).not.toContain('unreachable')
-  })
+  it(
+    'attempts anyway when the recorded absence is contradicted by a live daemon',
+    async () => {
+      // A warm-pool container whose sidecar took longer to come up than the entrypoint's bounded
+      // wait allows. The boot record still says unreachable; the daemon is serving. Refusing off
+      // the record alone would deny this container local infra for the rest of its life.
+      await withStatus('{"available":false,"source":"external","reason":"unreachable"}')
+      const result = await standUpInfra(tmpdir(), infra, undefined, silentLogger, () =>
+        Promise.resolve({ status: 'usable' }),
+      )
+      // The compose file does not exist, so the attempt fails. The point is that it was MADE, and
+      // that the record claims the daemon it actually reached.
+      expect(result.record?.dockerAvailable).toBe(true)
+      expect(result.record?.error).not.toContain('unreachable')
+    },
+    ATTEMPT_TIMEOUT_MS,
+  )
 })
