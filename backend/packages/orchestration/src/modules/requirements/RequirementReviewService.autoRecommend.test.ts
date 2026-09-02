@@ -3,8 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // The Requirement Writer LLM is reached through `generateText` from the `ai` package; mock it so
 // the auto-recommendation path runs end-to-end without a provider. `vi.hoisted` lets the (hoisted)
 // `vi.mock` factory reference the spy we assert on below.
+//
+// PARTIAL, over `importOriginal`, rather than a factory listing the one export this file uses:
+// the module graph pulled in here is the whole `@cat-factory/agents` barrel, so any sibling that
+// reaches for another `ai` export at import time (`jsonSchema`, for the monorepo survey's tool
+// definitions) dies here on a mock that never claimed to be complete.
 const { generateTextMock } = vi.hoisted(() => ({ generateTextMock: vi.fn() }))
-vi.mock('ai', () => ({ generateText: generateTextMock }))
+vi.mock('ai', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('ai')>()),
+  generateText: generateTextMock,
+}))
 
 import type { Block, RequirementReview, RequirementReviewItem } from '@cat-factory/kernel'
 import { RequirementReviewService } from './RequirementReviewService.js'
