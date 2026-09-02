@@ -136,6 +136,12 @@ interface RootlessRun {
   status: RecordedStatus
   /** One entry per launch, holding the flags that launch was given. */
   launches: string[]
+  /**
+   * The daemon log both arms write to, which is where a launcher's own output lands: the
+   * entrypoint redirects each daemon's streams into it, so nothing a launcher prints reaches
+   * this process's stderr except by way of the failure branch quoting the tail.
+   */
+  log: string
   stderr: string
 }
 
@@ -207,15 +213,17 @@ start_rootless_docker`,
       LAUNCHES: launches,
     },
   )
-  let recorded: string[] = []
-  try {
-    recorded = readFileSync(launches, 'utf8').split('\n').slice(0, -1)
-  } catch {
-    recorded = []
+  const readOrEmpty = (path: string): string => {
+    try {
+      return readFileSync(path, 'utf8')
+    } catch {
+      return ''
+    }
   }
   return {
     status: JSON.parse(readFileSync(statusFile, 'utf8')) as RecordedStatus,
-    launches: recorded,
+    launches: readOrEmpty(launches).split('\n').slice(0, -1),
+    log: readOrEmpty(join(work, 'dockerd.log')),
     stderr,
   }
 }
@@ -252,7 +260,7 @@ describe('entrypoint start_rootless_docker', () => {
     // that inherited the same state directory would fail for a reason that has nothing to do with
     // why it was started, which is the one failure the fallback must not manufacture.
     const dirs = driveRootless('no-iptables')
-      .stderr.split('\n')
+      .log.split('\n')
       .flatMap((line) => /state-dir=(\S+)/.exec(line)?.[1] ?? [])
     expect(dirs).toHaveLength(2)
     expect(new Set(dirs).size).toBe(2)
