@@ -156,8 +156,13 @@ interface RootlessRun {
  * `dockerd-rootless.sh`, resolved on PATH, and a test that had to be given a hook would be
  * asserting a shape the container does not use. The two fakes are the whole sandbox the script
  * can observe, so a case picks the sandbox and reads back the verdict.
+ *
+ * `readySeconds` is a parameter because ONE case pays the readiness budget in full: a first arm
+ * that neither serves nor exits is the only shape the wait cannot end early on, so it spends the
+ * whole thing in `sleep 1` and would otherwise run past vitest's own per-test ceiling. Every other
+ * case ends on the socket or on the dead pid within a second of starting.
  */
-function driveRootless(daemon: FakeDaemon): RootlessRun {
+function driveRootless(daemon: FakeDaemon, readySeconds = 5): RootlessRun {
   const work = mkdtempSync(join(tmpdir(), 'cf-rootless-'))
   const bin = join(work, 'bin')
   mkdirSync(bin)
@@ -193,7 +198,7 @@ function driveRootless(daemon: FakeDaemon): RootlessRun {
   const { stderr } = runSh(
     `set -eu
 DOCKER_STATUS_FILE="$STATUS_FILE"
-DOCKER_READY_TIMEOUT_SECONDS=5
+DOCKER_READY_TIMEOUT_SECONDS=$READY_SECONDS
 DOCKER_FALLBACK_MIN_SECONDS=2
 DOCKER_STOP_TIMEOUT_SECONDS=2
 DOCKERD_LOG="$WORK/dockerd.log"
@@ -217,6 +222,7 @@ kill "$ROOTLESS_DAEMON_PID" 2>/dev/null || true`,
     {
       PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
       STATUS_FILE: statusFile,
+      READY_SECONDS: String(readySeconds),
       WORK: work,
       XDG_RUNTIME_DIR: runtime,
       SERVING: join(work, 'serving'),
@@ -302,7 +308,7 @@ describe('entrypoint start_rootless_docker', () => {
     // as a wedged one, and swapping there costs a capable daemon its NAT for the container's
     // whole life, on a guess. It is recorded as undecided and LEFT RUNNING instead, so a daemon
     // that comes up late is still found by `resolveDockerVerdict`'s live re-probe.
-    const run = driveRootless('hangs')
+    const run = driveRootless('hangs', 2)
     expect(run.launches).toHaveLength(1)
     expect(fallbackLaunch(run)).toBeUndefined()
     // Its own reason word: a daemon still starting and two daemons that both exited are opposite
