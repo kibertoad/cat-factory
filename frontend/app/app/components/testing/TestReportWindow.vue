@@ -81,16 +81,22 @@ const showProvisioning = ref(false)
 // INSIDE the container — the highest-signal artifact when local infra fails to come up.
 const infraSetup = computed(() => testState.value?.infraSetup ?? null)
 
-// A stand-up that never ran because the executor container had no Docker daemon is a different
-// failure from a compose stack that failed to come up, and the two have opposite fixes (the image
-// or the sandbox running it, versus the service's own compose file). `dockerAvailable` is
-// three-valued for the same reason it is on the wire: absent means the container reached no
-// verdict (an older image, or the native host transport), which is not the same as a daemon that
-// was decidedly missing, so only an explicit `false` changes what this says.
+// A stand-up that never ran because of the executor's Docker daemon is a different failure from a
+// compose stack that failed to come up, and the fixes point in opposite directions (the image or
+// the sandbox running it, versus the service's own compose file). THREE headlines, because the
+// daemon has two ways to stop a stand-up and they need different fixes too: nothing answering,
+// and a daemon that answers while unable to run a container (a sandboxed rootless daemon whose
+// snapshotter cannot mount an image layer). Naming the second as the first sends a human to
+// restart a daemon that is already up, so the more specific field is read first.
+//
+// Both fields are three-valued for the same reason they are on the wire: absent means the
+// container reached no verdict (an older image, or the native host transport), which is not the
+// same as a decided negative, so only an explicit value changes what this says.
 const standupHeadline = computed(() => {
   const infra = infraSetup.value
   if (!infra) return ''
   if (infra.started) return t('testing.standup.up')
+  if (infra.dockerWorkload === 'unusable') return t('testing.standup.unusableDocker')
   return infra.dockerAvailable === false
     ? t('testing.standup.noDocker')
     : t('testing.standup.failed')

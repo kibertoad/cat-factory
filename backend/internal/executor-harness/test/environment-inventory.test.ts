@@ -49,6 +49,7 @@ const ranNothing = async (): Promise<DockerWorkload> => ({
 const couldNotTell = async (): Promise<DockerWorkload> => ({
   status: 'unknown',
   reason: 'the platform ships no probe payload here',
+  daemonAnswered: true,
 })
 
 describe('classifying one probe', () => {
@@ -460,6 +461,39 @@ describe('folding the inventory onto a system prompt', () => {
     })
     expect(prompt.startsWith('ROLE PROMPT\n\n')).toBe(true)
     expect(prompt).toContain('ENVIRONMENT INVENTORY')
+  })
+
+  it('forwards the probe options it was given, workload check included', async () => {
+    // THE composition point, and the only entry point `handleAgent` uses, so an option it drops
+    // is an option no caller can actually set. It once copied its forwarded keys one by one and
+    // omitted this one, which typechecks and silently runs the REAL check: on a Linux developer
+    // machine under LOCAL_NATIVE_AGENTS that means `docker load`, `docker run` and
+    // `docker image rm` against their own daemon, and a verdict grading whatever machine the
+    // suite happened to run on.
+    const workload = vi.fn(ranNothing)
+    const prompt = await appendEnvironmentInventory('ROLE PROMPT', {
+      log: recordingLogger(),
+      run: fakeRunner({ 'docker info --format {{.ServerVersion}}': RAN('29.7.2') }),
+      daemonExpected: false,
+      sleep: async () => {},
+      workload,
+    })
+    expect(workload).toHaveBeenCalledTimes(1)
+    expect(prompt).toContain('CANNOT run a container')
+  })
+
+  it('hands the job signal to the check that starts a container', async () => {
+    const cancelled = new AbortController()
+    const workload = vi.fn(ranAContainer)
+    await appendEnvironmentInventory('ROLE PROMPT', {
+      log: recordingLogger(),
+      run: fakeRunner({ 'docker info --format {{.ServerVersion}}': RAN('29.7.2') }),
+      daemonExpected: false,
+      sleep: async () => {},
+      signal: cancelled.signal,
+      workload,
+    })
+    expect(workload).toHaveBeenCalledWith(cancelled.signal)
   })
 
   it('dispatches without a block rather than failing the job when the pass falls over', async () => {

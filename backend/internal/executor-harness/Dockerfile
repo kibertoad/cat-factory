@@ -187,7 +187,7 @@ RUN printf '#!/bin/sh\nexec docker compose "$@"\n' > /usr/local/bin/docker-compo
 # mounts or fails, with no fallback, and inside a nested user namespace (this container's
 # rootless daemon, itself inside the deployment's sandbox) the mount returns EINVAL. The daemon
 # serves throughout while `docker pull` of a multi-layer image, `docker run` of a single-layer
-# one and `docker build` all fail on it -- issue #2120, where three agents in one run each paid
+# one and `docker build` all fail on it: issue #2120, where three agents in one run each paid
 # to discover that for themselves.
 #
 # The graphdriver path this restores is the one that PROBES: dockerd tries overlay2, then the
@@ -197,7 +197,7 @@ RUN printf '#!/bin/sh\nexec docker compose "$@"\n' > /usr/local/bin/docker-compo
 # Written as a config KEY rather than a `--feature` flag on the entrypoint's command line, and
 # that is the safe half: an unknown key inside `features` is ignored, where an unknown flag
 # takes the daemon down at startup and leaves the container with no docker at all. Whether it
-# worked is not assumed either way -- the platform runs a container and reports what happened.
+# worked is not assumed either way. The platform runs a container and reports what happened.
 RUN mkdir -p /home/harness/.config/docker \
     && printf '{\n  "features": { "containerd-snapshotter": false }\n}\n' \
        > /home/harness/.config/docker/daemon.json \

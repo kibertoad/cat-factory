@@ -150,9 +150,11 @@ Three rules bind anything added to it:
   them not to re-check it. Only a container that RAN settles it, so the reachable case is split by
   a real workload (`src/docker-capability.ts`) into `usable`, `unusable` and a daemon that answered
   while the check could not be carried out. **Only `usable` may say the commands work**, and the
-  asymmetry runs the other way too: a failure of the platform's own machinery (no probe payload on
-  this machine, an architecture it has no image for, `docker load` refusing the archive) reports
-  that it could not tell, never that the daemon is broken.
+  asymmetry runs the other way too: a failure of the platform's own machinery reports that it
+  could not tell, never that the daemon is broken. That covers every step before the run (no probe
+  payload on this machine, a daemon whose architecture the payload is not built for, `docker load`
+  refusing the archive) AND the halves of a failed run that are ours rather than the daemon's,
+  which is what docker's exit 126/127, a tag that did not resolve and an unexecutable payload are.
 - **A daemon that is STARTING is not a daemon that is absent.** Because the entrypoint does not
   wait, the backend dispatches seconds before there is a socket, and `docker info` is then refused
   at once rather than slowly. So a refusal is read against `DOCKER_HOST`, which the entrypoint sets
@@ -387,7 +389,12 @@ Docker socket would hand the container root on the host.
   concluded about itself.
 - The compose stand-up REFUSES on a decided negative and says why, instead of running compose
   against nothing and handing the agent a connection error to interpret. The refusal rides back on
-  the Tester step as `infraSetup.dockerAvailable: false` with the cause.
+  the Tester step as the cause plus the two facts that decide where a human should look:
+  `infraSetup.dockerAvailable` (was anything answering) and `infraSetup.dockerWorkload` (what a
+  container did on it). Two fields rather than one, because the daemon has two ways to stop a
+  stand-up: nothing to talk to, and a daemon that answers and cannot run a container. Flattening
+  the second onto `dockerAvailable: false` renders as "no Docker daemon in the executor" and sends
+  an operator to restart a daemon that is already up.
 
 **What the entrypoint probes for is a SOCKET, and serving is not usable.** That is the whole of
 what a boot record can know, and it is weaker than what either consumer wants: a rootless daemon in
@@ -398,6 +405,15 @@ and run a container from it, `src/docker-capability.ts`), and `resolveDockerVerd
 BOTH directions: a recorded absence a working daemon contradicts, and a recorded presence that
 cannot run anything. `GET /health` reports the last measurement beside the boot record under
 `docker.workload` and never takes one itself, since it is polled; `unmeasured` is one of its answers.
+
+**The weaker fact did not stop mattering, though, and it is what a stale record is read against.**
+A workload check can come back undeterminable for reasons that have nothing to do with whether a
+daemon is up (no probe payload in a deployment's own image variant, an architecture it is not built
+for, a `docker load` the engine refuses, a timeout), so falling straight back to the boot record
+there would re-latch the very refusal the paragraph below rules out. The check therefore reports
+`daemonAnswered` alongside its `unknown`, established on its way past at no extra cost, and a
+daemon that merely ANSWERED overrules a recorded absence exactly as the old `docker version` probe
+did. Only a check that never reached a daemon at all leaves the record to decide.
 
 The workload check is memoised per container for a POSITIVE answer only. A daemon that has run a
 container proved something that does not stop being true; a negative is re-measured for the same
@@ -467,8 +483,9 @@ verdict is stated.
 | `src/agent-shared.ts` | The few helpers every agent MODE shares (effort-report folding, the capability fields forwarded to `runAgentInWorkspace`). |
 | `src/logger.ts`    | Structured logging.                                                                                     |
 | `src/docker-status.ts` | This container's own verdict about its Docker daemon, as recorded by `entrypoint.sh`. Three-valued on purpose: a daemon that FAILED and a daemon nobody asked about are different facts, and only a DECIDED negative refuses a stand-up. See [Local infra: the container's Docker daemon](#local-infra-the-containers-docker-daemon). |
-| `src/docker-capability.ts` | Whether the daemon can RUN A CONTAINER, which is the fact every caller wanted and `docker info` does not answer. Loads a one-layer image built in-process and runs it; `usable` / `unusable` / `unknown`, and only the container RUN may produce the middle one, so a bug in the platform's own machinery says "could not tell" rather than condemning a working daemon. Memoised per container for a positive, re-measured for a negative. |
-| `src/docker-probe-image.ts` | The one-layer docker-archive that check loads, assembled here from a statically linked binary already in the image, so the whole thing is local: no registry, no network, no second image. Pure. |
+| `src/docker-capability.ts` | Whether the daemon can RUN A CONTAINER, which is the fact every caller wanted and `docker info` does not answer. Loads a one-layer image built in-process and runs it; `usable` / `unusable` / `unknown`, and only the container RUN may produce the middle one, AND only where the daemon is what refused it (docker's 126/127, a tag that did not resolve and an unexecutable payload are the platform's own machinery, so they say "could not tell"). Total: it answers even if it throws. One budget for the whole pass, cancelled when the last caller abandons it, memoised per container for a positive and re-measured for a negative. |
+| `src/docker-probe-image.ts` | The one-layer docker-archive that check loads, assembled here from a statically linked binary already in the image, so the whole thing is local: no registry, no network, no second image. Pure, byte-stable, and it names the architecture the DAEMON reported rather than this process's. |
+| `src/docker-command.ts` | How the harness runs one `docker …` command on its own behalf: an argv (no shell), a stdin body, stdout kept apart from stderr, one required timeout, the job's signal, and `killChildProcess` for the kill. Not a second `captured-command.ts`, which stays the one way a DECLARED shell command runs; the header says which of its choices this needs to differ on and why. |
 | `src/agent-env.ts` | The env for anything the harness spawns into the agent's CHECKOUT: its own environment minus the variables that are facts about the HARNESS. Today that is `NODE_ENV` (the harness runs in production mode, and an inherited `NODE_ENV=production` makes npm omit devDependencies in a checkout that never asked for it) and `PORT` (the port this harness is listening on, so a service that reads it would bind the one address in the container's network namespace that is already taken). |
 
 ## Runner lifecycle knobs

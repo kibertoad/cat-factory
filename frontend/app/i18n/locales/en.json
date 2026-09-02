@@ -6363,6 +6363,7 @@
       "up": "Dependencies started",
       "failed": "Dependencies failed to start",
       "noDocker": "No Docker daemon in the executor",
+      "unusableDocker": "Docker daemon cannot run a container",
       "took": "Took {seconds}s",
       "showLogs": "Show stand-up logs",
       "hideLogs": "Hide stand-up logs"

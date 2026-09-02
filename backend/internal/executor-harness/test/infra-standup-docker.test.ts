@@ -33,7 +33,11 @@ const infra = { environment: 'local' as const, composePath: 'docker-compose.yml'
  * by the host and the assertions would swap meaning depending on where they ran.
  */
 const noDaemon = (): Promise<DockerWorkload> =>
-  Promise.resolve({ status: 'unknown', reason: 'the docker CLI is not on PATH' })
+  Promise.resolve({
+    status: 'unknown',
+    reason: 'the docker CLI is not on PATH',
+    daemonAnswered: false,
+  })
 
 describe('standUpInfra against the container docker verdict', () => {
   afterEach(() => {
@@ -94,12 +98,30 @@ describe('standUpInfra against the container docker verdict', () => {
       Promise.resolve({ status: 'unusable', detail: 'failed to mount overlay: invalid argument' }),
     )
     expect(result.started).toBe(false)
-    expect(result.record?.dockerAvailable).toBe(false)
     expect(result.note).toContain('cannot run a container')
     expect(result.note).toContain('failed to mount overlay')
     // The daemon IS reachable, so the absence sentence would send a human to fix a daemon that
     // is running perfectly well.
     expect(result.note).not.toContain('could not start')
+    // And the RECORD says what the sentence says. `dockerAvailable: false` here would be the
+    // same misattribution in structured form: the Tester step renders that as "no Docker daemon
+    // in the executor", for a daemon the agent can watch answer.
+    expect(result.record?.dockerAvailable).toBe(true)
+    expect(result.record?.dockerWorkload).toBe('unusable')
+  })
+
+  it('reports an absent daemon and an unusable one as different records', async () => {
+    // The pair, side by side, because one boolean cannot carry both and the fixes point in
+    // opposite directions: the executor image or its sandbox, versus a daemon that is already up.
+    await withStatus('{"available":false,"source":"none","reason":"missing"}')
+    const absent = await standUpInfra(tmpdir(), infra, undefined, silentLogger, noDaemon)
+    expect(absent.record).toMatchObject({ dockerAvailable: false, dockerWorkload: 'undetermined' })
+
+    await withStatus('{"available":true,"source":"rootless","reason":"serving"}')
+    const unusable = await standUpInfra(tmpdir(), infra, undefined, silentLogger, () =>
+      Promise.resolve({ status: 'unusable', detail: 'failed to mount overlay' }),
+    )
+    expect(unusable.record).toMatchObject({ dockerAvailable: true, dockerWorkload: 'unusable' })
   })
 
   it('attempts anyway when the recorded absence is contradicted by a live daemon', async () => {

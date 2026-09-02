@@ -6062,6 +6062,7 @@
       "up": "依存関係を起動しました",
       "failed": "依存関係の起動に失敗しました",
       "noDocker": "エグゼキューターに Docker デーモンがありません",
+      "unusableDocker": "Docker デーモンがコンテナーを実行できません",
       "took": "所要時間 {seconds}秒",
       "showLogs": "スタンドアップログを表示",
       "hideLogs": "スタンドアップログを非表示"

@@ -82,11 +82,11 @@ export type ToolPresence =
  * are particular to Docker split the case where a daemon ANSWERED, because answering is not the
  * question anyone is asking:
  *
- *   - `usable`   -- a container was built and run on it here. `docker build` / `run` / `compose`
+ *   - `usable`:   a container was built and run on it here. `docker build` / `run` / `compose`
  *                   work, and this is the only state that may say so.
- *   - `unusable` -- a container could NOT be run, with the daemon serving throughout. The state
+ *   - `unusable`: a container could NOT be run, with the daemon serving throughout. The state
  *                   issue #2120 is about; stated as a prohibition, with the cause.
- *   - `serving`  -- it answered, and the workload check could not be carried out (no payload on
+ *   - `serving`:  it answered, and the workload check could not be carried out (no payload on
  *                   this machine, an unmapped architecture, a timeout). Neither of the other two,
  *                   and rendered as "try it if you need it".
  */
@@ -345,7 +345,13 @@ export interface ProbeEnvironmentOptions {
    * (docker-capability.ts). Asked only once a daemon has answered, since there is nothing to run
    * a workload on otherwise, and memoised per container so a warm pool pays for it once.
    */
-  workload?: () => Promise<DockerWorkload>
+  workload?: (signal?: AbortSignal) => Promise<DockerWorkload>
+  /**
+   * The job's signal, forwarded to the probes that spawn something. The workload check starts a
+   * CONTAINER, so a cancelled job must stop paying for it rather than hold the daemon for the
+   * rest of its budget.
+   */
+  signal?: AbortSignal
 }
 
 /**
@@ -404,7 +410,7 @@ async function probeDockerCapability(
   if (daemon.status === 'absent') return { status: 'absent' }
   if (daemon.status === 'unknown') return { status: 'unknown', reason: daemon.reason }
   const server = daemon.version ? { server: daemon.version } : {}
-  const workload = await (opts.workload ?? probeDockerWorkload)()
+  const workload = await (opts.workload ?? probeDockerWorkload)(opts.signal)
   if (workload.status === 'usable') return { status: 'usable', ...server }
   if (workload.status === 'unusable')
     return { status: 'unusable', ...server, detail: workload.detail }
@@ -611,15 +617,16 @@ function unnamedCapability(daemon: never): string {
  */
 export async function appendEnvironmentInventory(
   systemPrompt: string,
-  opts: { signal?: AbortSignal; log?: Logger; run?: ProbeRunner } & ProbeEnvironmentOptions = {},
+  opts: { log?: Logger; run?: ProbeRunner } & ProbeEnvironmentOptions = {},
 ): Promise<string> {
   const logger = opts.log ?? log
+  // Everything that is not this function's OWN is forwarded by construction, rather than key by
+  // key. The list of copied keys silently dropped `workload`, whose whole point is that a suite
+  // can inject one: a test driving THIS entry point (the only one `handleAgent` uses) got the
+  // real probe instead, which starts a container on whatever machine the suite runs on.
+  const { log: _log, run, ...probeOptions } = opts
   try {
-    const inventory = await probeEnvironment(opts.run ?? spawnProbeRunner(opts.signal), {
-      ...(opts.sleep ? { sleep: opts.sleep } : {}),
-      ...(opts.daemonExpected === undefined ? {} : { daemonExpected: opts.daemonExpected }),
-      ...(opts.harnessPort === undefined ? {} : { harnessPort: opts.harnessPort }),
-    })
+    const inventory = await probeEnvironment(run ?? spawnProbeRunner(opts.signal), probeOptions)
     logger.info('agent: probed the environment', {
       installed: inventory.tools
         .filter((t) => t.presence.status === 'present')

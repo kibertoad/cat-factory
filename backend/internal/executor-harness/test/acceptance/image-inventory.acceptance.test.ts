@@ -150,6 +150,12 @@ describe.skipIf(!docker)('executor container boot', () => {
     expect((JSON.parse(recorded) as { available: boolean }).available).toBe(verdict)
   })
 
+  // The inner budgets are sized to SUM to less than the case's own timeout, which is itself under
+  // the suite's `testTimeout`. Boot plus `waitForHealth` (30s) plus the daemon wait (90s, the
+  // entrypoint's 60s window and slack) plus the measurement (60s, against a check whose own
+  // budget is 20s) leaves headroom on a runner that has fallen back to the `vfs` graphdriver, as
+  // this image deliberately allows. Left to the suite default the case dies mid-`docker exec` and
+  // reports a timeout instead of the verdict it exists to report.
   it('measures what the daemon can DO, and never rejects its own probe image', async () => {
     // The end-to-end half of issue #2120: an archive this repo assembles by hand, handed to a
     // real `docker load` and run as a real container. The unit suite can prove the tar parses
@@ -187,7 +193,7 @@ describe.skipIf(!docker)('executor container boot', () => {
           '.then((m) => m.measureDockerWorkload())' +
           '.then((v) => console.log(JSON.stringify(v)))',
       ],
-      { encoding: 'utf8', timeout: 180_000 },
+      { encoding: 'utf8', timeout: 60_000 },
     )
     const verdict = JSON.parse(measured.trim().split('\n').pop() ?? '{}') as {
       status?: string
@@ -196,16 +202,20 @@ describe.skipIf(!docker)('executor container boot', () => {
     }
     expect(['usable', 'unusable', 'unknown']).toContain(verdict.status)
 
-    // What the assertion is FOR. With no daemon there is nothing to measure and `unknown` is the
-    // whole answer; with one, the archive must be something docker accepts, whatever it then
-    // does with it. A rejected archive would be reported as could-not-determine, so the failure
-    // this pins is silent rather than loud.
+    // What the assertion is FOR. With no daemon there is nothing to measure and `unknown` is
+    // the whole answer; with one, the archive must be something docker accepts, whatever it
+    // then does with it. A rejected archive would be reported as could-not-determine, so the
+    // failure this pins is silent rather than loud.
     if (daemon === true) {
       expect(verdict.reason ?? '').not.toContain('could not load its own probe image')
+      // Nor may the check condemn a daemon over its own payload: every platform-side failure is
+      // `unknown`, so a `docker exec` that reached a working daemon has no route to `unusable`
+      // except the daemon actually refusing the container.
+      expect(verdict.reason ?? '').not.toContain('probe binary')
     } else {
       expect(verdict.status).toBe('unknown')
     }
-  })
+  }, 240_000)
 
   it('runs the harness in production mode without handing that to the agent', async () => {
     const hostPort = await freePort()

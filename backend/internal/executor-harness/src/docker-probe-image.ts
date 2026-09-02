@@ -46,15 +46,24 @@ export const PROBE_SENTINEL = 'cat-factory-docker-probe-ok'
 export const PROBE_COMMAND: readonly string[] = [`/${PROBE_BINARY_PATH}`, 'echo', PROBE_SENTINEL]
 
 /**
- * Node's architecture names mapped onto the ones an image config may declare.
+ * Node's architecture names mapped onto the docker name for the same machine.
  *
- * Total by REFUSAL rather than by fallback: an image whose `architecture` does not match the
- * daemon's is refused at run time, so guessing here would report a perfectly good daemon as one
- * that cannot run containers, the exact lie this whole mechanism exists to remove. An unmapped
- * architecture yields no archive, and the caller then says it could not determine anything.
+ * This names THE PAYLOAD, never the daemon. `process.arch` is the architecture of the harness
+ * process, and the binary it hands over is built for that; the daemon it is measured against
+ * answers for itself (`docker version --format {{.Server.Arch}}`), and the caller compares the
+ * two rather than assuming they agree. An external `DOCKER_HOST` is a first-class path here, and
+ * an arm64 harness talking to an amd64 sidecar shares nothing with it but the socket.
+ *
+ * That comparison is also what makes two of these entries safe. `process.arch` reports `ppc64` on
+ * both endiannesses and `arm` with no variant, so those rows are a HYPOTHESIS about the payload,
+ * not a claim: a machine the guess is wrong about answers with a different name and the check
+ * reports that it could not be carried out. Nothing here may produce a verdict about the daemon.
+ * An architecture nothing maps does the same, which is why `386` was worth adding rather than
+ * leaving to a fallback: the mapping is unambiguous and its absence cost a real check.
  */
-const DOCKER_ARCHITECTURES: Readonly<Record<string, string>> = {
+const PAYLOAD_ARCHITECTURES: Readonly<Record<string, string>> = {
   x64: 'amd64',
+  ia32: '386',
   arm64: 'arm64',
   arm: 'arm',
   s390x: 's390x',
@@ -62,9 +71,9 @@ const DOCKER_ARCHITECTURES: Readonly<Record<string, string>> = {
   riscv64: 'riscv64',
 }
 
-/** The image config's `architecture` for this process, or `undefined` when nothing maps. */
-export function dockerArchitecture(arch: string = process.arch): string | undefined {
-  return DOCKER_ARCHITECTURES[arch]
+/** The docker name for the architecture THIS process's payload is built for, when there is one. */
+export function payloadArchitecture(arch: string = process.arch): string | undefined {
+  return PAYLOAD_ARCHITECTURES[arch]
 }
 
 const TAR_BLOCK = 512
@@ -134,14 +143,11 @@ export function tarArchive(entries: readonly TarEntry[]): Buffer {
  * `rootfs.diff_ids` means; an engine that disagrees with it refuses the load, which the caller
  * reads as could-not-determine rather than as a broken daemon.
  *
- * Returns `undefined` for an architecture nothing maps (see {@link DOCKER_ARCHITECTURES}).
+ * `architecture` is the DAEMON's own word for its architecture, in docker's vocabulary, so
+ * nothing here decides it (see {@link PAYLOAD_ARCHITECTURES}). The result is byte-stable for one
+ * `(payload, architecture)` pair, which is what lets the caller build it once per container.
  */
-export function buildProbeArchive(
-  payload: Buffer,
-  arch: string = process.arch,
-): Buffer | undefined {
-  const architecture = dockerArchitecture(arch)
-  if (!architecture) return undefined
+export function buildProbeArchive(payload: Buffer, architecture: string): Buffer {
   const layer = tarArchive([{ name: PROBE_BINARY_PATH, content: payload, mode: 0o755 }])
   const diffId = `sha256:${createHash('sha256').update(layer).digest('hex')}`
   const config = Buffer.from(
