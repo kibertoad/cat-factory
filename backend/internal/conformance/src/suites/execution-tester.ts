@@ -306,6 +306,13 @@ function registerTesterPipelineTests(harness: ConformanceHarness): void {
       at: 1_700_000_000_000,
       durationMs: 4200,
       error: 'service db exited (1)',
+      // The three docker facts ride together, because each is the one a human needs when the
+      // other two look fine: a daemon that answered, a container that ran on it, and a container
+      // that could reach nothing. Dropping any of them in the mapper renders as a stand-up whose
+      // failure has no cause, so they round-trip here rather than only in the harness's own suite.
+      dockerAvailable: true,
+      dockerWorkload: 'usable' as const,
+      dockerEgress: 'blocked' as const,
       logs: 'db-1  | FATAL: database "app" does not exist\ndb-1 exited with code 1',
     }
     const app = harness.makeApp({

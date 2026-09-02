@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -75,7 +76,9 @@ write_docker_status false rootless failed "$DETAIL"`,
   )
   // No `.tmp` may survive: the harness reads this file concurrently, so the write lands by rename.
   expect(readdirSync(dir)).toEqual(['status.json'])
-  return JSON.parse(readFileSync(statusFile, 'utf8')) as RecordedStatus
+  const status = JSON.parse(readFileSync(statusFile, 'utf8')) as RecordedStatus
+  rmSync(dir, { recursive: true, force: true })
+  return status
 }
 
 describe('entrypoint write_docker_status', () => {
@@ -127,14 +130,15 @@ echo booted`,
 /**
  * Which daemon a stand-in `dockerd-rootless.sh` agrees to be, so a case states only the sandbox it
  * is about: one that manages its own firewall rules, one that can only run with `--iptables=false`
- * (the Cloudflare-Containers shape the flag was chosen for), and one that has no daemon at all.
+ * (the Cloudflare-Containers shape the flag was chosen for), one that has no daemon at all, and
+ * one that neither serves nor exits, which is the shape a CLOCK cannot tell from a slow start.
  */
-type FakeDaemon = 'both' | 'no-iptables' | 'neither'
+type FakeDaemon = 'both' | 'no-iptables' | 'neither' | 'hangs'
 
 /** What driving the rootless start produced: the recorded verdict, and how it got there. */
 interface RootlessRun {
   status: RecordedStatus
-  /** One entry per launch, holding the flags that launch was given. */
+  /** One entry per launch, holding the whole argv that launch was given. */
   launches: string[]
   /**
    * The daemon log both arms write to, which is where a launcher's own output lands: the
@@ -162,7 +166,7 @@ function driveRootless(daemon: FakeDaemon): RootlessRun {
     writeFileSync(path, `#!/bin/sh\n${body}\n`)
     chmodSync(path, 0o755)
   }
-  // The launcher records the flags it was given and, in the arm it agrees to serve, touches the
+  // The launcher records the argv it was given and, in the arm it agrees to serve, touches the
   // flag the `docker` stand-in answers on. `exec sleep` so the pid the script watches is a live
   // process, which is what makes the readiness wait real rather than a formality.
   shim(
@@ -176,6 +180,7 @@ function driveRootless(daemon: FakeDaemon): RootlessRun {
       '    case "$*" in *--iptables=false*) : >"$SERVING"; exec sleep 300 ;; esac',
       '    echo "failed to start daemon: iptables not found" >&2; exit 1 ;;',
       '  neither) echo "failed to start daemon: no user namespaces" >&2; exit 1 ;;',
+      '  hangs) exec sleep 300 ;;',
       'esac',
     ].join('\n'),
   )
@@ -189,9 +194,10 @@ function driveRootless(daemon: FakeDaemon): RootlessRun {
     `set -eu
 DOCKER_STATUS_FILE="$STATUS_FILE"
 DOCKER_READY_TIMEOUT_SECONDS=5
-DOCKER_IPTABLES_READY_TIMEOUT_SECONDS=2
+DOCKER_FALLBACK_MIN_SECONDS=2
 DOCKER_STOP_TIMEOUT_SECONDS=2
 DOCKERD_LOG="$WORK/dockerd.log"
+DOCKER_DATA_ROOT_BASE="$WORK/data"
 DOCKER_HOST="unix://$XDG_RUNTIME_DIR/docker.sock"
 ${shellFunctions(
   'json_string',
@@ -201,9 +207,13 @@ ${shellFunctions(
   'await_docker',
   'start_rootless_daemon',
   'stop_rootless_daemon',
+  'rootless_log_tail',
   'start_rootless_docker',
 )}
-start_rootless_docker`,
+start_rootless_docker
+# Whatever arm ended up serving is still sleeping: nothing stops a daemon that WORKED, so
+# without this each case leaves a stray process alive for five minutes on the CI worker.
+kill "$ROOTLESS_DAEMON_PID" 2>/dev/null || true`,
     {
       PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
       STATUS_FILE: statusFile,
@@ -220,12 +230,24 @@ start_rootless_docker`,
       return ''
     }
   }
-  return {
+  const run = {
     status: JSON.parse(readFileSync(statusFile, 'utf8')) as RecordedStatus,
     launches: readOrEmpty(launches).split('\n').slice(0, -1),
     log: readOrEmpty(join(work, 'dockerd.log')),
     stderr,
   }
+  rmSync(work, { recursive: true, force: true })
+  return run
+}
+
+/** The `--iptables=false` arm's argv, or undefined when the fallback was never reached. */
+function fallbackLaunch(run: RootlessRun): string | undefined {
+  return run.launches.find((argv) => argv.includes('--iptables=false'))
+}
+
+/** What one launch was told to keep its exclusive state in: its data root and its pid file. */
+function exclusiveState(argv: string): string[] {
+  return [/--data-root (\S+)/, /--pidfile (\S+)/].map((pattern) => pattern.exec(argv)?.[1] ?? '')
 }
 
 describe('entrypoint start_rootless_docker', () => {
@@ -236,16 +258,18 @@ describe('entrypoint start_rootless_docker', () => {
     // privileged Docker or Podman host, which is what local mode runs on, can do iptables, and it
     // must never be given the crippled daemon on an assumption about a different sandbox.
     const run = driveRootless('both')
-    expect(run.launches).toEqual([''])
+    expect(run.launches).toHaveLength(1)
+    expect(fallbackLaunch(run)).toBeUndefined()
     expect(run.status).toMatchObject({ available: true, source: 'rootless', reason: 'serving' })
     expect(run.status.detail).toContain('have egress')
   })
 
-  it('falls back to --iptables=false on the EVIDENCE that the first daemon did not serve', () => {
+  it('falls back to --iptables=false when the first daemon EXITS without serving', () => {
     // The sandbox the flag was chosen for (Cloudflare Containers), which ends up exactly where it
     // was: a daemon that serves. What it does not end up with is a verdict that hides the cost.
     const run = driveRootless('no-iptables')
-    expect(run.launches).toEqual(['', '--iptables=false'])
+    expect(run.launches).toHaveLength(2)
+    expect(fallbackLaunch(run)).toBeDefined()
     expect(run.status.available).toBe(true)
     // A separate `reason` word, not a shrug in the detail: this is the one place the CAUSE of a
     // container having no nested egress exists at all. The harness's own probe measures the
@@ -255,20 +279,57 @@ describe('entrypoint start_rootless_docker', () => {
     expect(run.stderr).toContain('nested containers have NO egress')
   })
 
-  it('gives each arm its own rootlesskit state directory', () => {
-    // A killed daemon can leave a lock or a detached network namespace behind, and a replacement
-    // that inherited the same state directory would fail for a reason that has nothing to do with
-    // why it was started, which is the one failure the fallback must not manufacture.
-    const dirs = driveRootless('no-iptables')
-      .log.split('\n')
-      .flatMap((line) => /state-dir=(\S+)/.exec(line)?.[1] ?? [])
+  it('claims only what it observed about the first arm, never that iptables is unavailable', () => {
+    // The detail is quoted at an operator, and "iptables is unavailable here" is a CAUSE nothing
+    // in this script measured: all it has is a daemon that exited. Sending someone to fix a
+    // firewall restriction that may not exist is the same class of confident wrong answer the
+    // egress probe was added to stop making.
+    const run = driveRootless('no-iptables')
+    expect(run.status.detail).toContain('exited without serving')
+    expect(run.status.detail).not.toContain('iptables is unavailable')
+  })
+
+  it("quotes the first arm's own log tail when it announces the fallback", () => {
+    // The one place the real cause exists is the daemon's log, and it is written to a file inside
+    // the container that nobody reads. Announcing the fallback without it leaves an operator with
+    // a message that names the switch and not the reason for it.
+    expect(driveRootless('no-iptables').stderr).toContain('iptables not found')
+  })
+
+  it('does NOT swap daemons on a first arm that is merely slow', () => {
+    // A clock says nothing about firewall rules. A sandbox that genuinely forbids them makes
+    // dockerd EXIT at once, so a first arm still running at the ceiling is a cold start as often
+    // as a wedged one, and swapping there costs a capable daemon its NAT for the container's
+    // whole life, on a guess. It is recorded as undecided and LEFT RUNNING instead, so a daemon
+    // that comes up late is still found by `resolveDockerVerdict`'s live re-probe.
+    const run = driveRootless('hangs')
+    expect(run.launches).toHaveLength(1)
+    expect(fallbackLaunch(run)).toBeUndefined()
+    expect(run.status).toMatchObject({ available: false, source: 'rootless', reason: 'failed' })
+    expect(run.stderr).toContain('is still running')
+  })
+
+  it('gives each arm its own rootlesskit state directory, data root and pid file', () => {
+    // An abandoned daemon can leave a lock, a detached network namespace, a flock on its data
+    // root or a live pid file behind, and a replacement that inherited any of them fails for a
+    // reason that has nothing to do with why it was started. That is the worst outcome available
+    // here: BOTH arms record `failed` and the container ends up with no daemon at all, where
+    // before any of this it had a working crippled one.
+    const run = driveRootless('no-iptables')
+    const dirs = run.log.split('\n').flatMap((line) => /state-dir=(\S+)/.exec(line)?.[1] ?? [])
     expect(dirs).toHaveLength(2)
     expect(new Set(dirs).size).toBe(2)
+
+    const state = run.launches.map(exclusiveState)
+    expect(state).toHaveLength(2)
+    expect(state.flat().filter(Boolean)).toHaveLength(4)
+    expect(new Set(state.flat()).size).toBe(4)
   })
 
   it('records a decided absence, with the log tail, when NEITHER arm serves', () => {
     const run = driveRootless('neither')
-    expect(run.launches).toEqual(['', '--iptables=false'])
+    expect(run.launches).toHaveLength(2)
+    expect(fallbackLaunch(run)).toBeDefined()
     expect(run.status).toMatchObject({ available: false, source: 'rootless', reason: 'failed' })
     // Both arms wrote to one log and the tail is the LAST one's, which is the failure being
     // explained; a human reading the whole file still sees why the first was abandoned.
@@ -296,7 +357,8 @@ kill "$child" 2>/dev/null || true`,
     // ZOMBIE, which `kill -0` reports as present — so on `kill -0` the readiness wait's early
     // exit never fires, every packaging failure costs the full 60s, and jobs dispatched inside
     // that window read the verdict as undecided and attempt compose anyway.
-    const pidFile = join(mkdtempSync(join(tmpdir(), 'cf-entrypoint-')), 'child.pid')
+    const pidDir = mkdtempSync(join(tmpdir(), 'cf-entrypoint-'))
+    const pidFile = join(pidDir, 'child.pid')
     const { stdout } = runSh(
       `set -eu
 ${shellFunctions('process_alive')}
@@ -311,5 +373,6 @@ kill "$supervisor" 2>/dev/null || true`,
     )
     expect(stdout).toContain('signal:present')
     expect(stdout).toContain('verdict:dead')
+    rmSync(pidDir, { recursive: true, force: true })
   })
 })

@@ -189,9 +189,12 @@ export async function handleAgent(job: AgentJob, opts: RunOptions = {}): Promise
     // single post-clone place to put this). The pass is sized for that: everything in it runs
     // concurrently, and every probe either answers in milliseconds or is bounded. Two of them are
     // deliberate waits rather than instant answers: one short retry for a daemon that is still
-    // starting, and, only once a daemon has answered, the container the platform runs to find out
-    // whether it can run one at all (`docker-capability.ts`, budgeted and memoised per container
-    // for a positive). Both take the job's signal, so an abandoned run stops paying at once.
+    // starting, and, only once a daemon has answered, the CONTAINERS the platform runs to find out
+    // what this daemon can do (`docker-capability.ts`: one to prove it runs a container at all,
+    // then one on the default network to see what that container reaches). Both are budgeted, and
+    // the pair is memoised per container once it has SETTLED, which is any positive plus every
+    // negative that cannot change under a running container. Both take the job's signal, so an
+    // abandoned run stops paying at once.
 
     const staged: AgentJob = {
       ...job,

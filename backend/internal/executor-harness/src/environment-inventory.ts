@@ -576,7 +576,7 @@ function dockerDaemonLine(daemon: DockerCapability): string {
   const server = 'server' in daemon && daemon.server ? ` (server ${daemon.server})` : ''
   switch (daemon.status) {
     case 'usable':
-      return `A Docker daemon is reachable${server} and the platform ran a container on it: \`docker build\`, \`docker run\` and \`docker compose up\` work here. ${egressSentence(daemon.egress)}`
+      return `A Docker daemon is reachable${server} and the platform ran a container on it: ${usableCommands(daemon.egress)} work here. ${egressSentence(daemon.egress)}`
     case 'unusable':
       return (
         `A Docker daemon is reachable${server} but it CANNOT run a container: the platform ` +
@@ -614,6 +614,35 @@ function unnamedCapability(daemon: never): string {
 }
 
 /**
+ * Which commands the `usable` line may claim, which is the EGRESS verdict's business and not the
+ * daemon's.
+ *
+ * Split out because the line used to open with the full list and then, one sentence later, tell
+ * the agent that every `RUN` line which fetches anything fails. A block that also says not to
+ * spend turns re-checking it cannot afford to state and then retract the same fact: an agent
+ * reading the first sentence has already been told `docker build` works here, which is the exact
+ * shape of the lie issue #2174 is about. TOTAL over {@link ContainerEgress}, like its sibling.
+ */
+function usableCommands(egress: ContainerEgress): string {
+  switch (egress.status) {
+    case 'blocked':
+      // Deliberately omits `docker build`: it is the one the missing NAT rule actually breaks,
+      // and the sentence that follows explains which part of it and why.
+      return '`docker run` and `docker compose up` of images that are already built'
+    case 'reachable':
+    case 'undetermined':
+      return '`docker build`, `docker run` and `docker compose up`'
+    default:
+      return unnamedEgressCommands(egress)
+  }
+}
+
+/** The commands claimed for an egress verdict this build does not know: none of them. */
+function unnamedEgressCommands(egress: never): string {
+  return `the docker commands the platform could name for its verdict ${JSON.stringify(egress)}`
+}
+
+/**
  * The second half of the `usable` line: what a container started HERE can reach, and what to do
  * about it. TOTAL over {@link ContainerEgress} for the same reason the line above is over the
  * daemon's states.
@@ -632,13 +661,16 @@ function egressSentence(egress: ContainerEgress): string {
       return 'A container started here also reaches the network, so a build that installs dependencies works.'
     case 'blocked':
       return (
-        'A container started here has NO network, though, and that is a fact about this sandbox ' +
-        `rather than about your work (${egress.detail}). The daemon itself is fine: it pulls base ` +
-        'images, and `docker compose up` of pre-built images works. What fails is every `RUN` ' +
-        'line in a `docker build` that fetches anything (`npm ci`, `apk add`, `pip install`), and ' +
-        'it fails SLOWLY: npm reports `EAI_AGAIN` only after some seven minutes of retry backoff, ' +
-        'so it reads as a hang. Do not wait it out and do not retry. Vendor what you need, skip ' +
-        'the image build, verify some other way, or say in one line that you could not verify it here.'
+        'A container started here could reach NOTHING the platform tried, and that is a fact ' +
+        `about this sandbox rather than about your work (${egress.detail}). The daemon itself is ` +
+        'fine: it pulls base images, and `docker compose up` of pre-built images works. What ' +
+        'fails is every `RUN` line in a `docker build` that fetches from the public internet ' +
+        '(`npm ci`, `apk add`, `pip install`), and it fails SLOWLY: npm reports `EAI_AGAIN` only ' +
+        'after some seven minutes of retry backoff, so it reads as a hang. Do not wait it out ' +
+        'and do not retry. Vendor what you need, skip the image build, verify some other way, or ' +
+        'say in one line that you could not verify it here. If this project already builds ' +
+        'against a mirror inside this network, that is not one of the addresses tried above and ' +
+        'is worth one attempt.'
       )
     case 'undetermined':
       return `Whether a container started here can reach the network was NOT established (${egress.reason}), so try it if you need it and do not read a failure as a defect in the work.`

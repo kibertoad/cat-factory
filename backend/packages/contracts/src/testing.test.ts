@@ -44,6 +44,26 @@ describe('parseTesterInfraSetup', () => {
     expect(parseTesterInfraSetup(base)?.dockerWorkload).toBeUndefined()
   })
 
+  it('separates a daemon whose containers have no network from one where the stack works', () => {
+    // The third fact, and the one `dockerWorkload: 'usable'` structurally cannot carry: a daemon
+    // running with `--iptables=false` runs containers perfectly and installs no MASQUERADE rule
+    // for its bridge, so every `docker build` that fetches anything on it is guaranteed to fail.
+    // Read off `usable` alone that is a sandbox where everything works.
+    expect(
+      parseTesterInfraSetup({
+        ...base,
+        dockerAvailable: true,
+        dockerWorkload: 'usable',
+        dockerEgress: 'blocked',
+      }),
+    ).toMatchObject({ dockerWorkload: 'usable', dockerEgress: 'blocked' })
+    // Absent is a measurement nobody took, which is not the same as one that could not tell.
+    expect(parseTesterInfraSetup(base)?.dockerEgress).toBeUndefined()
+    expect(parseTesterInfraSetup({ ...base, dockerEgress: 'reachable' })?.dockerEgress).toBe(
+      'reachable',
+    )
+  })
+
   it('accepts a record from an image that predates the field', () => {
     expect(
       parseTesterInfraSetup({
@@ -62,6 +82,7 @@ describe('parseTesterInfraSetup', () => {
     // A closed vocabulary, so a word this build does not know is a malformed record rather than a
     // value the SPA would have to render as something.
     expect(parseTesterInfraSetup({ ...base, dockerWorkload: 'serving' })).toBeNull()
+    expect(parseTesterInfraSetup({ ...base, dockerEgress: 'usable' })).toBeNull()
     expect(parseTesterInfraSetup(undefined)).toBeNull()
   })
 })

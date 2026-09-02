@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { scrubbedExcerpt } from './redact.js'
 
 // ---------------------------------------------------------------------------
 // The one-container image the platform runs to find out whether this machine's Docker daemon
@@ -79,6 +80,13 @@ export const EGRESS_DNS_MARKER = 'cat-factory-egress-dns='
 const EGRESS_CONNECT_TIMEOUT_SECONDS = 3
 
 /**
+ * How long busybox is given to print its own `nc` usage, for the capability check below. Bounded
+ * like everything else in that container: an applet that somehow blocks may not take the budget
+ * of the measurement it is only a preamble to.
+ */
+const EGRESS_USAGE_TIMEOUT_SECONDS = 2
+
+/**
  * How long the in-container lookup may take. Its own ceiling because busybox's `nslookup` retries
  * on its own schedule, and an unbounded one would spend the whole check's budget on the half that
  * is the diagnostic rather than the verdict.
@@ -91,6 +99,12 @@ export interface EgressTarget {
   port: number
   dnsName: string
 }
+
+/**
+ * How much of a rejected setting is quoted back. Enough to recognise which value was refused,
+ * short of letting a pasted blob be most of an agent's system prompt.
+ */
+const SETTING_CHARS = 60
 
 /** An IPv4 literal. Names are refused on purpose: a target that needs DNS cannot TEST DNS. */
 const IPV4 =
@@ -117,26 +131,21 @@ export function parseEgressTarget(
   const [host = '', port = '', ...rest] = target.split(':')
   if (rest.length > 0 || !IPV4.test(host)) {
     return {
-      invalid: `the platform's egress check is configured with \`${bounded(target)}\`, which is not an \`IPv4:port\` address`,
+      invalid: `the platform's egress check is configured with \`${scrubbedExcerpt(target, SETTING_CHARS)}\`, which is not an \`IPv4:port\` address`,
     }
   }
   const parsed = Number(port)
   if (!/^[0-9]{1,5}$/.test(port) || parsed < 1 || parsed > 65535) {
     return {
-      invalid: `the platform's egress check is configured with \`${bounded(target)}\`, whose port is not a number between 1 and 65535`,
+      invalid: `the platform's egress check is configured with \`${scrubbedExcerpt(target, SETTING_CHARS)}\`, whose port is not a number between 1 and 65535`,
     }
   }
   if (!HOSTNAME.test(dnsName)) {
     return {
-      invalid: `the platform's egress check is configured to resolve \`${bounded(dnsName)}\`, which is not a hostname`,
+      invalid: `the platform's egress check is configured to resolve \`${scrubbedExcerpt(dnsName, SETTING_CHARS)}\`, which is not a hostname`,
     }
   }
   return { target: { host, port: parsed, dnsName } }
-}
-
-/** Keep a rejected setting quotable in a system prompt without letting it be the whole prompt. */
-function bounded(value: string): string {
-  return value.length > 60 ? `${value.slice(0, 60)}…` : value
 }
 
 /**
@@ -151,18 +160,45 @@ function bounded(value: string): string {
  * Every applet is called by its full path (`/busybox nc`) rather than by name. The image holds
  * one file and no PATH, and busybox's standalone-shell dispatch is a build-time option nothing
  * here may assume.
+ *
+ * The connect is the half that is easy to get silently wrong, and `nc -w SEC` alone gets it
+ * wrong. busybox documents that flag as the timeout for connects AND FINAL NET READS: once stdin
+ * hits EOF `nc` half-closes and then waits to be spoken to, so a connect that SUCCEEDED to a peer
+ * which expects the client to speak first (every TLS port, the default `1.1.1.1:443` included)
+ * hits the alarm and exits non-zero. Read off the exit status alone that is indistinguishable
+ * from a refusal, so a working network reports a route that is not there. `-z` means "connect,
+ * then stop", which is the question being asked, so it is used wherever the payload's busybox was
+ * built with it; where it was not, the connect runs with no `-w`, which is the build whose `nc`
+ * exits on its own when stdin closes.
+ *
+ * Both halves are wrapped in `${busybox} timeout` either way, since a blackholed route is silent
+ * rather than refused and the applet's own ceiling is the thing this comment exists because we
+ * cannot assume.
  */
 export function buildEgressCommand(target: EgressTarget): readonly string[] {
   const busybox = `/${PROBE_BINARY_PATH}`
-  const connect = `${busybox} nc -w ${EGRESS_CONNECT_TIMEOUT_SECONDS} ${target.host} ${target.port} </dev/null >/dev/null 2>&1`
-  const resolve = `${busybox} timeout ${EGRESS_LOOKUP_TIMEOUT_SECONDS} ${busybox} nslookup ${target.dnsName} >/dev/null 2>&1`
+  const bounded = (seconds: number, command: string): string =>
+    `${busybox} timeout ${seconds} ${command}`
+  const where = `${target.host} ${target.port}`
+  const connectSeconds = EGRESS_CONNECT_TIMEOUT_SECONDS + 1
+  const connect = [
+    'nc_z=no',
+    `case "$(${bounded(EGRESS_USAGE_TIMEOUT_SECONDS, `${busybox} nc`)} 2>&1)" in *-z*) nc_z=yes ;; esac`,
+    'if [ "$nc_z" = yes ]; then',
+    `  ${bounded(connectSeconds, `${busybox} nc -w ${EGRESS_CONNECT_TIMEOUT_SECONDS} -z ${where}`)} >/dev/null 2>&1`,
+    'else',
+    `  ${bounded(connectSeconds, `${busybox} nc ${where}`)} </dev/null >/dev/null 2>&1`,
+    'fi',
+  ].join('\n')
+  const resolve = bounded(EGRESS_LOOKUP_TIMEOUT_SECONDS, `${busybox} nslookup ${target.dnsName}`)
   return [
     busybox,
     'sh',
     '-c',
-    [`${connect}; echo "${EGRESS_TCP_MARKER}$?"`, `${resolve}; echo "${EGRESS_DNS_MARKER}$?"`].join(
-      '\n',
-    ),
+    [
+      `${connect}\necho "${EGRESS_TCP_MARKER}$?"`,
+      `${resolve} >/dev/null 2>&1; echo "${EGRESS_DNS_MARKER}$?"`,
+    ].join('\n'),
   ]
 }
 
